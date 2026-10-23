@@ -747,7 +747,7 @@ mod tests {
             InputEvent::PointerDown {
                 x: 5.0,
                 y: 6.0,
-                button: 0,
+                button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             },
@@ -755,7 +755,7 @@ mod tests {
             InputEvent::PointerUp {
                 x: 5.0,
                 y: 6.0,
-                button: 0,
+                button: ambre_canvas::PointerButton::Primary,
                 ctrl: false,
             },
             InputEvent::DoubleClick { x: 5.0, y: 6.0 },

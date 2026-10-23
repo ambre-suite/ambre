@@ -64,6 +64,32 @@ pub struct RepaintPlan<P = ambre_core::ViewPx> {
     pub backdrop: Color,
 }
 
+/// The button of a pointer press or release, as the DOM `button` field
+/// numbers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PointerButton {
+    /// The main button: the left one, a touch or a pen contact.
+    Primary,
+    /// The middle button, or the wheel pressed.
+    Auxiliary,
+    /// The right button, which opens a context menu.
+    Secondary,
+    /// Any other: back, forward, or none.
+    Other,
+}
+
+impl PointerButton {
+    /// The button the DOM `button` field `button` names.
+    pub const fn from_dom(button: i16) -> Self {
+        match button {
+            0 => Self::Primary,
+            1 => Self::Auxiliary,
+            2 => Self::Secondary,
+            _ => Self::Other,
+        }
+    }
+}
+
 /// A raw input event forwarded from the DOM by the host's event listeners.
 #[derive(Clone)]
 pub enum InputEvent {
@@ -87,7 +113,7 @@ pub enum InputEvent {
     PointerDown {
         x: f64,
         y: f64,
-        button: i16,
+        button: PointerButton,
         shift: bool,
         ctrl: bool,
     },
@@ -98,7 +124,7 @@ pub enum InputEvent {
     PointerUp {
         x: f64,
         y: f64,
-        button: i16,
+        button: PointerButton,
         /// Modifier state at *release* time (Cmd folded into ctrl). Autofill
         /// reads Ctrl here, not at grab time, so toggling it mid-drag counts.
         ctrl: bool,
@@ -134,4 +160,21 @@ pub enum InputEvent {
     CompositionEnd {
         text: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PointerButton;
+
+    /// The DOM numbers its buttons 0, 1 and 2; back, forward and the `-1`
+    /// of a move with no button read as another.
+    #[test]
+    fn the_dom_button_number_reads_as_its_button() {
+        assert_eq!(PointerButton::from_dom(0), PointerButton::Primary);
+        assert_eq!(PointerButton::from_dom(1), PointerButton::Auxiliary);
+        assert_eq!(PointerButton::from_dom(2), PointerButton::Secondary);
+        for other in [-1, 3, 4] {
+            assert_eq!(PointerButton::from_dom(other), PointerButton::Other);
+        }
+    }
 }

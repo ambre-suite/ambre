@@ -21,8 +21,8 @@ use ambre_bus::{
     TextStyle, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, TextInput,
-    Theme, ThemeControl,
+    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PointerButton, RepaintPlan, TextCache,
+    TextInput, Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, Modifiers};
 use ambre_core::{ViewPoint, ViewPx};
@@ -135,12 +135,6 @@ pub type SaveFile = Rc<dyn Fn(&Attachment, Vec<u8>)>;
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
 pub const CHANNEL_CANVAS: ambre_core::CanvasId = ambre_core::CanvasId::CONTENT;
-
-/// The button of a pointer event that opens a menu: the right one.
-const SECONDARY_BUTTON: i16 = 2;
-
-/// The button of a pointer event that selects text: the main one.
-const PRIMARY_BUTTON: i16 = 0;
 
 /// How far down the viewport a message the pane names comes to rest.
 const AT_FRACTION: f32 = 0.25;
@@ -1530,11 +1524,11 @@ impl MurmureView {
                     self.composer.blur();
                     self.dirty = true;
                 }
-                if button == SECONDARY_BUTTON {
+                if button == PointerButton::Secondary {
                     // The page's menu event follows, and opens the actions of
                     // the message found here (`MURMURE-422`).
                     (self.reads.act_on)(self.target_at(x as f32, y as f32, false));
-                } else if button == PRIMARY_BUTTON && !self.on_jump(at) {
+                } else if button == PointerButton::Primary && !self.on_jump(at) {
                     self.selecting = Selecting {
                         press: Some((x as f32, y as f32)),
                         ..Selecting::default()
@@ -1631,14 +1625,14 @@ impl MurmureView {
             // A press on the box under a thread's field checks it, and
             // leaves the keys where they were (`MURMURE-531`).
             InputEvent::PointerDown { y, button, .. }
-                if button == PRIMARY_BUTTON && self.composer.on_also(y as f32) =>
+                if button == PointerButton::Primary && self.composer.on_also(y as f32) =>
             {
                 self.composer.toggle_also(channel);
             }
             InputEvent::DoubleClick { y, .. } if self.composer.on_also(y as f32) => {}
             // A press on a file of the draft takes it off (`MURMURE-132`).
             InputEvent::PointerDown { x, y, button, .. }
-                if button == PRIMARY_BUTTON
+                if button == PointerButton::Primary
                     && self.composer.file_at(x as f32, y as f32).is_some() =>
             {
                 if let Some(index) = self.composer.file_at(x as f32, y as f32) {
@@ -1647,7 +1641,7 @@ impl MurmureView {
             }
             InputEvent::PointerDown { x, y, button, .. } if self.in_composer(y) => {
                 self.hover = Some(Point::new(x, y));
-                if button != PRIMARY_BUTTON {
+                if button != PointerButton::Primary {
                     // No message is under the band.
                     (self.reads.act_on)(None);
                     return Some(false);
@@ -2156,7 +2150,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
@@ -2169,7 +2163,7 @@ mod tests {
         let release = InputEvent::PointerUp {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         };
         view.handle_input(&release);
@@ -2653,7 +2647,7 @@ mod tests {
         let click = InputEvent::PointerUp {
             x: at.x,
             y: at.y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         };
         assert!(page.view.handle_input(&click), "the click is taken");
@@ -2952,7 +2946,7 @@ mod tests {
         (top + bottom) / 2.0
     }
 
-    fn button(page: &mut Page, button: i16, y: f32) -> bool {
+    fn button(page: &mut Page, button: PointerButton, y: f32) -> bool {
         let ev = InputEvent::PointerDown {
             x: 10.0,
             y: y.into(),
@@ -3013,15 +3007,15 @@ mod tests {
         let release = |y: f32| InputEvent::PointerUp {
             x: 10.0,
             y: y.into(),
-            button: PRIMARY_BUTTON,
+            button: PointerButton::Primary,
             ctrl: false,
         };
-        button(&mut page, PRIMARY_BUTTON, band_y);
+        button(&mut page, PointerButton::Primary, band_y);
         assert!(page.view.handle_input(&release(band_y)));
         assert_eq!(retried(&page), [(channel, older)]);
 
         let message_y = middle_of(&page.view, 1);
-        button(&mut page, PRIMARY_BUTTON, message_y);
+        button(&mut page, PointerButton::Primary, message_y);
         assert!(!page.view.handle_input(&release(message_y)));
         assert!(retried(&page).is_empty(), "a message is no band");
 
@@ -3080,7 +3074,7 @@ mod tests {
         let _ = reads(&page);
 
         let y = middle_of(&page.view, 1);
-        assert!(!button(&mut page, 2, y));
+        assert!(!button(&mut page, PointerButton::Secondary, y));
         let target = MessageTarget {
             channel,
             at: MessageAt::Segment(segment),
@@ -3099,9 +3093,9 @@ mod tests {
         // The list rests on its latest row: the top of the region is empty.
         let above = shown(&page.view).rows.first().map_or(0.0, |r| r.1) - 1.0;
         assert!(above > 0.0, "room above the first row");
-        button(&mut page, 2, above);
+        button(&mut page, PointerButton::Secondary, above);
         assert_eq!(page.acted.borrow().last(), Some(&None), "off any message");
-        button(&mut page, 0, y);
+        button(&mut page, PointerButton::Primary, y);
         assert_eq!(page.acted.borrow().len(), 2, "a left click opens nothing");
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
     }
@@ -3297,7 +3291,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             x: 40.0,
             y: y.into(),
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
@@ -3305,7 +3299,7 @@ mod tests {
         let up = InputEvent::PointerUp {
             x: 40.0,
             y: y.into(),
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         };
         page.view.handle_input(&up);
@@ -3502,7 +3496,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             x: hit.0.into(),
             y: hit.1.into(),
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
@@ -4255,7 +4249,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             x: 40.0,
             y: 20.0,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
@@ -4891,7 +4885,7 @@ mod tests {
         let _ = reads(&page);
 
         let y = middle_of(&page.view, 1);
-        button(&mut page, 2, y);
+        button(&mut page, PointerButton::Secondary, y);
         let acted = page.acted.borrow_mut().pop().flatten();
         let target = acted.expect("the copy is the target");
         let at = MessageRef {

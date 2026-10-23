@@ -480,7 +480,7 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         "pointerdown" => InputEvent::PointerDown {
             x,
             y,
-            button: pointer.button(),
+            button: ambre_canvas::PointerButton::from_dom(pointer.button()),
             shift: pointer.shift_key(),
             ctrl,
         },
@@ -488,7 +488,7 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         "pointerup" => InputEvent::PointerUp {
             x,
             y,
-            button: pointer.button(),
+            button: ambre_canvas::PointerButton::from_dom(pointer.button()),
             ctrl,
         },
         // The browser took the gesture over: it ends where it was, as a
@@ -496,7 +496,7 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         "pointercancel" => InputEvent::PointerUp {
             x,
             y,
-            button: 0,
+            button: ambre_canvas::PointerButton::Primary,
             ctrl,
         },
         _ => return None,
@@ -806,7 +806,7 @@ mod tests {
             InputEvent::PointerDown {
                 x: 0.0,
                 y: f64::from(*top),
-                button: 0,
+                button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             },
@@ -863,7 +863,7 @@ mod tests {
             content.handle_input(&InputEvent::PointerDown {
                 x: cx,
                 y: cy,
-                button: 0,
+                button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             });
@@ -918,7 +918,7 @@ mod tests {
         let press = InputEvent::PointerDown {
             x: 10.0,
             y: 10.0,
-            button: 0,
+            button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,
         };

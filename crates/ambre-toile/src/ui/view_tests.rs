@@ -108,7 +108,7 @@ impl Rig {
         self.input(InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
@@ -118,7 +118,7 @@ impl Rig {
         self.input(InputEvent::PointerUp {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         });
     }
@@ -2005,14 +2005,14 @@ fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
     rig.input(InputEvent::PointerDown {
         x,
         y,
-        button: 0,
+        button: PointerButton::Primary,
         shift: false,
         ctrl: true,
     });
     rig.input(InputEvent::PointerUp {
         x,
         y,
-        button: 0,
+        button: PointerButton::Primary,
         ctrl: true,
     });
 }
@@ -2127,14 +2127,14 @@ fn right_click(rig: &mut Rig, x: f64, y: f64) {
     rig.input(InputEvent::PointerDown {
         x,
         y,
-        button: 2,
+        button: PointerButton::Secondary,
         shift: false,
         ctrl: false,
     });
     rig.input(InputEvent::PointerUp {
         x,
         y,
-        button: 2,
+        button: PointerButton::Secondary,
         ctrl: false,
     });
 }
@@ -2921,7 +2921,7 @@ fn a_busy_board_takes_no_input() {
         rig.input(InputEvent::PointerDown {
             x: at.0,
             y: at.1,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         }),

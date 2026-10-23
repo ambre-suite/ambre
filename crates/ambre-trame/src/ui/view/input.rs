@@ -2,6 +2,7 @@
 // TrameView: keyboard/pointer navigation, wheel/momentum scrolling, cursor moves, resize arming.
 
 use super::*;
+use ambre_canvas::PointerButton;
 use ambre_commands::{Modifiers, SelectionMode};
 use ambre_core::DocPx;
 use ambre_draw::kinetic::Release;
@@ -26,7 +27,10 @@ impl TrameView {
             // so there is one filter code path. Tested before the fill handle /
             // cells so the small button wins.
             InputEvent::PointerDown {
-                x, y, button: 0, ..
+                x,
+                y,
+                button: PointerButton::Primary,
+                ..
             } if self.fill_drag.is_none() && self.state.filter_button_at(*x, *y).is_some() => {
                 if let Some(at) = self.state.filter_button_at(*x, *y) {
                     self.text_input.focus();
@@ -36,7 +40,10 @@ impl TrameView {
                 true
             }
             InputEvent::PointerDown {
-                x, y, button: 0, ..
+                x,
+                y,
+                button: PointerButton::Primary,
+                ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
                 self.text_input.focus();
                 // A merged-cell source fills block by block (Excel behaviour), so
@@ -70,7 +77,7 @@ impl TrameView {
             InputEvent::PointerDown {
                 x,
                 y,
-                button: 0,
+                button: PointerButton::Primary,
                 shift,
                 ..
             } if self.fill_drag.is_none() && self.state.header_hit(*x, *y).is_some() => {
@@ -176,7 +183,7 @@ impl TrameView {
             InputEvent::PointerDown {
                 x,
                 y,
-                button: 0,
+                button: PointerButton::Primary,
                 shift,
                 ctrl,
             } => {
@@ -253,7 +260,10 @@ impl TrameView {
             // keeps the existing selection -- the header menu still acts on it. We
             // don't preventDefault here; the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
-                x, y, button: 2, ..
+                x,
+                y,
+                button: PointerButton::Secondary,
+                ..
             } if self.state.header_hit(*x, *y).is_some() => {
                 let Some(hit) = self.state.header_hit(*x, *y) else {
                     return false;
@@ -285,7 +295,10 @@ impl TrameView {
             // context menu opens on it (standard spreadsheet behaviour). We don't
             // preventDefault here -- the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
-                x, y, button: 2, ..
+                x,
+                y,
+                button: PointerButton::Secondary,
+                ..
             } => {
                 self.text_input.focus();
                 // Right-click inside the current multi-cell selection keeps it, so
@@ -530,14 +543,14 @@ impl TrameView {
                 InputEvent::PointerDown {
                     x,
                     y,
-                    button: 0,
+                    button: PointerButton::Primary,
                     shift: false,
                     ctrl: false,
                 },
                 InputEvent::PointerUp {
                     x,
                     y,
-                    button: 0,
+                    button: PointerButton::Primary,
                     ctrl: false,
                 },
             ] {

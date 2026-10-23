@@ -3,6 +3,7 @@
 //! pipe is detached, a frame paints into a recording surface, and the view
 //! reads a clock the test moves.
 
+use ambre_canvas::PointerButton;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -461,14 +462,14 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
     rig.view.handle_input(&InputEvent::PointerDown {
         x: point.0,
         y: point.1,
-        button: 0,
+        button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
     rig.view.handle_input(&InputEvent::PointerUp {
         x: point.0,
         y: point.1,
-        button: 0,
+        button: PointerButton::Primary,
         ctrl: false,
     });
     rig.type_text("X");
@@ -871,14 +872,14 @@ impl Rig {
         self.view.handle_input(&InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         });
     }
@@ -973,7 +974,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         rig.view.handle_input(&InputEvent::PointerDown {
             x: edge,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
@@ -984,7 +985,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         rig.view.handle_input(&InputEvent::PointerUp {
             x: target,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         });
         let sent = rig.sent();
@@ -1098,7 +1099,7 @@ fn a_merged_fill_previews_whole_blocks() {
     rig.view.handle_input(&InputEvent::PointerDown {
         x: hx + w / 2.0,
         y: hy + h / 2.0,
-        button: 0,
+        button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
@@ -1209,7 +1210,7 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
     rig.view.handle_input(&InputEvent::PointerDown {
         x: px,
         y: py,
-        button: 0,
+        button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
@@ -1243,14 +1244,14 @@ impl Rig {
         self.view.handle_input(&InputEvent::PointerDown {
             x,
             y,
-            button: 2,
+            button: PointerButton::Secondary,
             shift: false,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
             x,
             y,
-            button: 2,
+            button: PointerButton::Secondary,
             ctrl: false,
         });
     }
@@ -1260,14 +1261,14 @@ impl Rig {
         self.view.handle_input(&InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: true,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         });
     }
@@ -1493,7 +1494,7 @@ impl Rig {
         self.view.handle_input(&InputEvent::PointerDown {
             x: edge,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
@@ -1503,7 +1504,7 @@ impl Rig {
         self.view.handle_input(&InputEvent::PointerUp {
             x: target,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             ctrl: false,
         });
     }
@@ -1578,7 +1579,7 @@ fn a_refused_fill_leaves_the_selection() {
     rig.view.handle_input(&InputEvent::PointerDown {
         x: hx + w / 2.0,
         y: hy + h / 2.0,
-        button: 0,
+        button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
@@ -1589,7 +1590,7 @@ fn a_refused_fill_leaves_the_selection() {
     rig.view.handle_input(&InputEvent::PointerUp {
         x,
         y,
-        button: 0,
+        button: PointerButton::Primary,
         ctrl: false,
     });
     assert_eq!(rig.view.state.selection.selected_cells(), [at(0, 0)]);

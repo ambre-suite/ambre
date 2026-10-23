@@ -39,8 +39,8 @@ use ambre_bus::{
 };
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, NoticePublisher, OverlayRepaint,
-    PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl,
-    WHEEL_LINE_PX, WheelDelta,
+    PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
+    ThemeControl, WHEEL_LINE_PX, WheelDelta,
 };
 use ambre_core::CssPx;
 use ambre_draw::kinetic::{Release, ScrollStep};
@@ -1648,7 +1648,7 @@ impl ToileView {
         self.handle_input(&InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         })
@@ -1681,14 +1681,14 @@ impl ToileView {
                     self.handle_input(&InputEvent::PointerDown {
                         x,
                         y,
-                        button: 0,
+                        button: PointerButton::Primary,
                         shift: false,
                         ctrl: false,
                     });
                     self.handle_input(&InputEvent::PointerUp {
                         x,
                         y,
-                        button: 0,
+                        button: PointerButton::Primary,
                         ctrl: false,
                     });
                 }
@@ -1697,7 +1697,7 @@ impl ToileView {
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 x,
                 y,
-                button: 0,
+                button: PointerButton::Primary,
                 ctrl: false,
             }),
             None => false,
@@ -1718,7 +1718,7 @@ impl ToileView {
                 self.handle_input(&InputEvent::PointerUp {
                     x: at.x,
                     y: at.y,
-                    button: 0,
+                    button: PointerButton::Primary,
                     ctrl: false,
                 })
             }
@@ -1791,7 +1791,7 @@ impl ToileView {
             } => {
                 let screen = Point::new(*x, *y);
                 self.last_pointer = screen;
-                if *button == 0 {
+                if *button == PointerButton::Primary {
                     self.follow_link_under(
                         screen,
                         Modifiers::from_event(*ctrl, false, *shift, false),
@@ -1810,7 +1810,13 @@ impl ToileView {
         }
     }
 
-    fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, mods: Modifiers) -> bool {
+    fn handle_pointer_down(
+        &mut self,
+        x: f64,
+        y: f64,
+        button: PointerButton,
+        mods: Modifiers,
+    ) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
@@ -1825,7 +1831,7 @@ impl ToileView {
         // (`toile-menus`). The DOM `contextmenu` listener opens the menu;
         // pointerdown fires first, so the scope signal is fresh when the entry
         // `Memo` recomputes.
-        if button == 2 {
+        if button == PointerButton::Secondary {
             self.select_all_pending = false;
             self.handle_right_click(screen);
             return true;
@@ -1835,11 +1841,14 @@ impl ToileView {
         // asks to: a modifier, or presentation mode, where editing is off.
         // A plain click with the select tool falls through and selects, which is
         // what keeps a linked element editable (`TOILE-112`).
-        if button == 0 && self.follow_link_under(screen, mods) {
+        if button == PointerButton::Primary && self.follow_link_under(screen, mods) {
             return true;
         }
         // Space-drag or Hand tool or middle button: begin a pan.
-        if self.space_down || self.machine.tool() == Tool::Hand || button == 1 {
+        if self.space_down
+            || self.machine.tool() == Tool::Hand
+            || button == PointerButton::Auxiliary
+        {
             self.panning = Some(screen);
             return true;
         }
@@ -1869,7 +1878,10 @@ impl ToileView {
         // A press on an endpoint handle of the selected arrow starts a re-aim
         // and consumes the event. The board's own gesture must not also run
         // (`toile-connectors`).
-        if button == 0 && self.machine.tool() == Tool::Select && self.grab_arrow_handle(world) {
+        if button == PointerButton::Primary
+            && self.machine.tool() == Tool::Select
+            && self.grab_arrow_handle(world)
+        {
             self.publish_cursor(screen);
             self.needs_full = true;
             return true;
@@ -1898,7 +1910,7 @@ impl ToileView {
         // selected only where the press found nothing else. A prior element
         // selection does not stop it, and the arrow empties it
         // (`TOILE-UI-350`, `TOILE-UI-354`).
-        if button == 0 && self.machine.tool() == Tool::Select {
+        if button == PointerButton::Primary && self.machine.tool() == Tool::Select {
             self.arrow = if self.machine.pressed_empty_board() {
                 label::connector_at(&self.display.nodes, world, self.pick())
             } else {
@@ -1908,7 +1920,8 @@ impl ToileView {
                 self.selection.clear();
             }
         }
-        self.click_edit_candidate = (button == 0 && self.machine.tool() == Tool::Select)
+        self.click_edit_candidate = (button == PointerButton::Primary
+            && self.machine.tool() == Tool::Select)
             .then(|| match self.selection.as_slice() {
                 [id] if *prev_selection == *self.selection && self.is_text_editable(id) => {
                     Some((id.clone(), screen))

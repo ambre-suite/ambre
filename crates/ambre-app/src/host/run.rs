@@ -254,7 +254,7 @@ where
                     "pointerdown" => InputEvent::PointerDown {
                         x,
                         y,
-                        button: event.button(),
+                        button: ambre_canvas::PointerButton::from_dom(event.button()),
                         shift: event.shift_key(),
                         // Fold Cmd (macOS) into ctrl so disjoint-select works there.
                         ctrl: event.ctrl_key() || event.meta_key(),
@@ -265,7 +265,11 @@ where
                     "pointerup" | "pointercancel" => InputEvent::PointerUp {
                         x,
                         y,
-                        button: if cancelled { 0 } else { event.button() },
+                        button: if cancelled {
+                            ambre_canvas::PointerButton::Primary
+                        } else {
+                            ambre_canvas::PointerButton::from_dom(event.button())
+                        },
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     _ => return,

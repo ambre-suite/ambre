@@ -4,6 +4,7 @@
 use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
+use ambre_canvas::PointerButton;
 use ambre_core::DocPx;
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
@@ -653,7 +654,10 @@ impl TrameView {
             // A press inside the edited cell starts a mouse text selection; a
             // press outside commits and reselects the clicked cell.
             InputEvent::PointerDown {
-                x, y, button: 0, ..
+                x,
+                y,
+                button: PointerButton::Primary,
+                ..
             } => {
                 if self.pointer_in_editor(*x, *y) {
                     if let Some((lx, ly)) = self.editor_local_point(*x, *y)
@@ -703,7 +707,10 @@ impl TrameView {
             // DOM context menu opens on it. We don't preventDefault (the
             // `contextmenu` listener owns the menu).
             InputEvent::PointerDown {
-                x, y, button: 2, ..
+                x,
+                y,
+                button: PointerButton::Secondary,
+                ..
             } => {
                 self.pending_commit = Some(PendingCommit::Stay);
                 self.edit_dirty = true;

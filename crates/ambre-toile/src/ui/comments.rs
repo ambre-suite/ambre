@@ -92,12 +92,12 @@ pub enum BoardPress {
 /// rather than the pointer path burying it.
 pub fn press_target(
     select_tool: bool,
-    button: i16,
+    button: ambre_canvas::PointerButton,
     pins: &[CommentPin],
     w2s: &Affine,
     screen: Point,
 ) -> BoardPress {
-    if !select_tool || button != 0 {
+    if !select_tool || button != ambre_canvas::PointerButton::Primary {
         return BoardPress::Board;
     }
     match hit_pin(pins, w2s, screen) {
@@ -275,6 +275,7 @@ pub fn pin_rect(at: Point, w2s: &Affine) -> Rect {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementId, Viewport};
+    use ambre_canvas::PointerButton;
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -395,21 +396,27 @@ mod tests {
         let pins = vec![pin("t1", at, 1, false)];
         let on_pin = pin_circle(at, &w2s).center;
         assert_eq!(
-            press_target(true, 0, &pins, &w2s, on_pin),
+            press_target(true, PointerButton::Primary, &pins, &w2s, on_pin),
             BoardPress::Thread(ElementId("t1".to_owned()))
         );
         // Off the pin, with another button, or with a creation tool armed: the
         // press is the board's.
         assert_eq!(
-            press_target(true, 0, &pins, &w2s, Point::new(400.0, 400.0)),
+            press_target(
+                true,
+                PointerButton::Primary,
+                &pins,
+                &w2s,
+                Point::new(400.0, 400.0)
+            ),
             BoardPress::Board
         );
         assert_eq!(
-            press_target(true, 2, &pins, &w2s, on_pin),
+            press_target(true, PointerButton::Secondary, &pins, &w2s, on_pin),
             BoardPress::Board
         );
         assert_eq!(
-            press_target(false, 0, &pins, &w2s, on_pin),
+            press_target(false, PointerButton::Primary, &pins, &w2s, on_pin),
             BoardPress::Board
         );
     }

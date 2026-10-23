@@ -85,4 +85,4 @@ pub use request_registry::{RequestRegistry, RequestTag};
 pub use text_cache::{SpanShape, TextCache, registered_family_name};
 pub use text_input::{ContentKind, Embedding, TYPING_ATTR, TextInput};
 pub use theme::{Palette, Theme, ThemeControl};
-pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};
+pub use view::{FrameStats, InputEvent, PerfSnapshot, PointerButton, RepaintPlan};

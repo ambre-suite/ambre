@@ -1098,14 +1098,12 @@ ambre-canvas | src/view.rs | crate::view | InputEvent::Key.key | field | String	
 ambre-canvas | src/view.rs | crate::view | InputEvent::Key.meta | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::Key.shift | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::KeyUp.key | field | String	free-text	text, label or message
-ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.button | field | i16	debt	finding: Pointer button as i16 with magic 0 and 2 (confirmed)
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.ctrl | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.shift | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.x | field | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.y | field | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerMove.x | field | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerMove.y | field | f64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | InputEvent::PointerUp.button | field | i16	debt	finding: Pointer button as i16 with magic 0 and 2 (confirmed)
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerUp.ctrl | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerUp.x | field | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerUp.y | field | f64	math	geometry, layout, GPU or count arithmetic
@@ -1122,6 +1120,7 @@ ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.gpu_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.hdrs_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.input_lat_ms | field | f32	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/view.rs | crate::view | PointerButton::from_dom(button) | param | i16	foreign-api	the DOM PointerEvent.button number, read into the enum here
 ambre-chrome | src/app_shell.rs | crate::app_shell | AppShell(panel_open) | param | Option<Signal<bool>>	math	local value
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
@@ -2517,14 +2516,12 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move() | ret | bo
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move(x) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_up() | ret | Option<(f32,f32)>	math	layout geometry in logical px
-ambre-murmure | src/view.rs | crate::view | PRIMARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.still | field | Rc<dyn Fn()->bool>	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | REVEAL_SLACK_PX | const | f32	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | Rest::Row.anchor_y | field | f32	math	layout geometry in logical px
-ambre-murmure | src/view.rs | crate::view | SECONDARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | SaveFile | alias | Rc<dyn Fn(&Attachment,Vec<u8>)>	generic	opaque file content bytes
 ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
@@ -4342,7 +4339,6 @@ ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() |
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps(resolved) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/comments.rs | crate::ui::comments | badge_color(resolved) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/comments.rs | crate::ui::comments | press_target(button) | param | i16	debt	finding: The DOM pointer button is an i16 with magic numbers (confirmed): DOM pointer button as i16 magic numbers 0/1/2
 ambre-toile | src/ui/comments.rs | crate::ui::comments | press_target(select_tool) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Rename.1 | field | String	free-text	label, message or user text
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckSignals.panel | field | leptos::prelude::RwSignal<bool>	math	local state flag or value, not a mode selector
@@ -4573,7 +4569,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key(key) | pa
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key_up(key) | param | &str	generic	DOM KeyboardEvent.key text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(button) | param | i16	debt	finding: The DOM pointer button is an i16 with magic numbers (confirmed): DOM pointer button as i16 magic numbers 0/1/2
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_move() | ret | bool	generic	predicate or handled-flag result

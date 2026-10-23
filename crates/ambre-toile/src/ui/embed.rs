@@ -1507,7 +1507,7 @@ mod routing_tests {
         let down = |x, y| InputEvent::PointerDown {
             x,
             y,
-            button: 0,
+            button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,
         };

@@ -611,7 +611,7 @@ impl ProseView {
             InputEvent::PointerDown {
                 x,
                 y,
-                button: 0,
+                button: ambre_canvas::PointerButton::Primary,
                 shift,
                 ctrl,
                 ..
@@ -624,7 +624,10 @@ impl ProseView {
             InputEvent::PointerMove { x, y } => ProseInput::Drag {
                 at: view_point(*x as f32, *y as f32),
             },
-            InputEvent::PointerUp { button: 0, .. } => ProseInput::Release,
+            InputEvent::PointerUp {
+                button: ambre_canvas::PointerButton::Primary,
+                ..
+            } => ProseInput::Release,
             _ => return None,
         })
     }
@@ -808,7 +811,7 @@ mod tests {
         let _ = view.handle_input(&InputEvent::PointerDown {
             x: 300.0,
             y: 200.0,
-            button: 0,
+            button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
