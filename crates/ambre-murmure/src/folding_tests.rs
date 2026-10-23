@@ -9,7 +9,10 @@ use ambre_bus::{
     FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict, StyleMark, TextStyle,
     Timestamp,
 };
-use ambre_core::{ChannelId, DocumentId, LeaseId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, LeaseId, MessageId, PeerEntryBytes, SegmentId, Seq,
+    SnapshotBytes, UserId,
+};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -45,7 +48,7 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Vec<u8>> = state
+    let segments: HashMap<SegmentId, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -69,11 +72,11 @@ struct Amended {
     amendments: DocumentId,
     ids: Vec<MessageId>,
     /// The `meta` delta that names the amendments.
-    meta: Vec<u8>,
+    meta: DeltaBytes,
     /// The three amendment deltas, in the relay's order.
-    deltas: Vec<Vec<u8>>,
+    deltas: Vec<DeltaBytes>,
     /// The final snapshot of the segment, as the relay holds it.
-    sealed: Vec<u8>,
+    sealed: SnapshotBytes,
 }
 
 fn amended() -> Amended {
@@ -92,7 +95,11 @@ fn amended() -> Amended {
         .expect("close");
     let peer = next_peer();
     alice
-        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            successor.document_id(),
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
     alice.lease_granted(
@@ -114,7 +121,11 @@ fn amended() -> Amended {
     };
     let peer = next_peer();
     let first = alice
-        .adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            amendments,
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt")
         .expect("the header travels");
     let meta = alice
@@ -171,7 +182,7 @@ impl Amended {
     /// amendments.
     fn loading(&self) -> ChannelState {
         let mut copy = peer_of(&self.alice);
-        copy.apply_remote(copy.meta_id().document_id(), &self.meta)
+        copy.apply_remote(copy.meta_id().document_id(), (&self.meta).into())
             .expect("meta");
         copy.load_older(self.segment, &self.sealed)
             .expect("the final snapshot loads");
@@ -338,9 +349,9 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         (ambre_core::Seq(0), amendments)
     );
     assert_eq!(fold.amendments_seq, ambre_core::Seq(3));
-    assert!(holds(&fold.payload, "uno"));
+    assert!(holds(fold.payload.as_bytes(), "uno"));
     assert!(
-        !holds(&fold.payload, "two"),
+        !holds(fold.payload.as_bytes(), "two"),
         "shallow: the deleted body is gone"
     );
     assert!(
@@ -361,7 +372,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         .expect("a delta");
     let mut carol = peer_of(&bob);
     carol
-        .apply_remote(carol.meta_id().document_id(), &marked)
+        .apply_remote(carol.meta_id().document_id(), (&marked).into())
         .expect("meta");
     let loaded = carol
         .load_older(segment, &fold.payload)
@@ -445,7 +456,9 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     assert_eq!(bob.messages(segment).expect("held"), before, "only read");
 
     let forged = LoroDoc::new();
-    forged.import(loro_part(&fold.payload)).expect("import");
+    forged
+        .import(loro_part((&fold.payload).into()))
+        .expect("import");
     let Some(message) = crate::schema::root_list(&forged, Root::Messages)
         .get(2)
         .and_then(crate::schema::fields_of)
@@ -458,9 +471,11 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     };
     body.insert(0, "planted ").expect("forge");
     forged.commit();
-    let forged = forged
-        .export(ExportMode::shallow_snapshot(&forged.oplog_frontiers()))
-        .expect("export");
+    let forged = SnapshotBytes::new(
+        forged
+            .export(ExportMode::shallow_snapshot(&forged.oplog_frontiers()))
+            .expect("export"),
+    );
     assert_eq!(
         bob.check_snapshot(document_id, ambre_core::Seq(0), &forged)
             .expect("check"),
@@ -545,7 +560,7 @@ fn a_marked_fold_settles_every_copy_and_replays_what_never_left() {
 
     amended
         .alice
-        .apply_remote(amended.alice.meta_id().document_id(), &meta)
+        .apply_remote(amended.alice.meta_id().document_id(), (&meta).into())
         .expect("meta");
     let settled = amended.alice.settle_folds().expect("settle");
     assert_eq!(settled.len(), 1);
@@ -612,7 +627,7 @@ fn amendments_reported_gone_are_marked_folded_and_replay_the_refused_change() {
             draft: Some(draft("tres")),
         }]
     );
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.settle_folds().expect("settle").len(), 1, "every copy");
 }
@@ -630,7 +645,7 @@ fn amendments_still_arriving_are_dropped_once_folded() {
         .mark_folded(segment, amendments)
         .expect("mark")
         .expect("a delta");
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert!(bob.settle_folds().expect("settle").is_empty());
     assert!(bob.older_ready(amendments).is_err(), "no longer arriving");

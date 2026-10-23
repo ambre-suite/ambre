@@ -953,7 +953,7 @@ impl ProseState {
         &mut self,
         payload: &ambre_core::SnapshotBytes,
     ) -> Result<Vec<ProseEvent>, SchemaError> {
-        let payload = schema::gate(payload.as_bytes())?;
+        let payload = schema::gate(payload)?;
         // A snapshot replaces the document whole (`PROSE-055`), so this peer's
         // own scaffolding must not survive it. The paragraph it grew on opening
         // is dropped when it is still empty and still the only root: what
@@ -961,7 +961,7 @@ impl ProseState {
         // merges rather than overwrites and losing a local edit is the worse
         // answer. A paragraph the payload carries is not this peer's: it is
         // the shared scaffolding, the author's own (`PROSE-129`).
-        let carried = LoroDoc::decode_import_blob_meta(&payload, false)
+        let carried = LoroDoc::decode_import_blob_meta(payload.as_bytes(), false)
             .map(|meta| meta.partial_end_vv)
             .unwrap_or_default();
         let tree = doc::blocks(&self.doc);
@@ -976,7 +976,7 @@ impl ProseState {
         self.doc.commit_with(
             loro::CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Load.as_str()),
         );
-        if let Err(e) = self.doc.import(&payload) {
+        if let Err(e) = self.doc.import(payload.as_bytes()) {
             tracing::warn!("Prose: the snapshot import failed: {e:?}");
             return Err(SchemaError::PayloadRejected);
         }
@@ -992,9 +992,7 @@ impl ProseState {
         // content.
         Self::prepare(&self.doc);
         let mut events = vec![ProseEvent::DocUpdated {
-            payload: ambre_core::LoroPayload::Snapshot(ambre_core::SnapshotBytes::new(
-                payload.into_owned(),
-            )),
+            payload: ambre_core::LoroPayload::Snapshot(payload.into_owned()),
         }];
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());

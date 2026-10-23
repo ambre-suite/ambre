@@ -364,9 +364,7 @@ impl LogicState {
         };
         let adopted =
             if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
-                channel
-                    .adopt_session(document_id, peer, entry.to_bytes())
-                    .map(|first| first.map(ambre_core::DeltaBytes::new))
+                channel.adopt_session(document_id, peer, ambre_core::PeerEntryBytes::from(&entry))
             } else if let Some(adopted) = self.adopt_space_session(document_id, peer, &entry) {
                 adopted
             } else {
@@ -475,10 +473,7 @@ impl LogicState {
             // counts from it. One that fails to export is fetched whole.
             let applied = match channel.snapshot(document_id) {
                 Ok(copy) => {
-                    self.send_to_persist(
-                        document_id,
-                        PersistWrite::Snapshot(ambre_core::SnapshotBytes::new(copy)),
-                    );
+                    self.send_to_persist(document_id, PersistWrite::Snapshot(copy));
                     self.send_to_persist(document_id, PersistWrite::Hidden);
                     copies.insert(document_id, horizon);
                     horizon
@@ -557,9 +552,10 @@ impl LogicState {
             return;
         };
         if let Some(copy) = snapshot {
-            opening.receive_at(document_id, Some(Order::Snapshot(horizon)), copy.as_bytes());
+            let _kept =
+                opening.receive_at(document_id, Some(Order::Snapshot(horizon)), (&copy).into());
             for delta in deltas {
-                opening.receive(document_id, delta.as_bytes());
+                let _kept = opening.receive(document_id, delta.into());
             }
             self.channel_ledgers
                 .entry(document_id)
@@ -971,7 +967,7 @@ impl LogicState {
             .channel_ledgers
             .get(&document_id)
             .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
-        Some((ambre_core::SnapshotBytes::new(payload), covered))
+        Some((payload, covered))
     }
 
     /// Check a snapshot of a channel document against the state this client
@@ -996,7 +992,7 @@ impl LogicState {
             SnapshotVerdict::Unchecked
         } else {
             channel
-                .check_snapshot(document_id, covered, payload.as_bytes())
+                .check_snapshot(document_id, covered, payload)
                 .unwrap_or_else(|e| {
                     tracing::warn!("Logic: check of {document_id} failed: {e}");
                     SnapshotVerdict::Unchecked
@@ -1289,7 +1285,7 @@ impl LogicState {
                     Ok(sent) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: sent.segment.document_id(),
-                            payload: sent.delta.into(),
+                            payload: sent.delta,
                             summary: Some(sent.summary),
                         });
                         self.send_to_ui(UiEvent::Channel {
@@ -1420,7 +1416,7 @@ impl LogicState {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: named.meta.document_id(),
-                            payload: named.delta.into(),
+                            payload: named.delta,
                             summary: None,
                         });
                         // Sealed beside meta too, so the name shows before the
@@ -1772,7 +1768,7 @@ impl LogicState {
             Ok(Some(sent)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: sent.document,
-                    payload: sent.delta.into(),
+                    payload: sent.delta,
                     summary: Some(sent.summary),
                 });
                 self.send_to_ui(UiEvent::Channel {
@@ -1891,7 +1887,7 @@ impl LogicState {
             .find(|o| o.expects(document_id))
         {
             for &(order, payload) in payloads {
-                opening.receive_at(document_id, order, payload.as_bytes());
+                let _kept = opening.receive_at(document_id, order, payload);
             }
             return true;
         }
@@ -1904,7 +1900,7 @@ impl LogicState {
         };
         let mut events = Vec::new();
         for &(order, payload) in payloads {
-            match channel.apply_remote_at(document_id, order, payload.as_bytes()) {
+            match channel.apply_remote_at(document_id, order, payload) {
                 Ok(produced) => events.extend(produced),
                 Err(error) => {
                     tracing::warn!("Logic: delta for {document_id} refused: {error}");
@@ -1948,12 +1944,8 @@ impl LogicState {
             // A segment still opening is checked once it is ready, against
             // its registry then.
             for delta in deltas {
-                let kept = opening.receive_signed(
-                    document_id,
-                    delta.seq,
-                    delta.payload.as_bytes(),
-                    signer(delta),
-                );
+                let kept =
+                    opening.receive_signed(document_id, delta.seq, &delta.payload, signer(delta));
                 verdicts.push(kept.map(|()| Vec::new()));
             }
         } else if let Some((&channel_id, channel)) = self
@@ -1965,7 +1957,7 @@ impl LogicState {
                 verdicts.push(channel.apply_signed(
                     document_id,
                     delta.seq,
-                    delta.payload.as_bytes(),
+                    &delta.payload,
                     signer(delta),
                 ));
             }
@@ -2794,7 +2786,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot(document_id).expect("snapshot")).into(),
+            payload: (stored.snapshot(document_id).expect("snapshot")),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
             document_id,
@@ -3455,7 +3447,8 @@ mod tests {
                 NOW,
             )
             .expect("send");
-        let mut update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("json");
+        let mut update: serde_json::Value =
+            serde_json::from_slice(sent.delta.as_bytes()).expect("json");
         update["schema_version"] =
             serde_json::Value::from(ambre_murmure::JSON_SCHEMA_VERSION.get() + 1);
         let document_id = sent.segment.document_id();
@@ -3464,7 +3457,10 @@ mod tests {
             delta: ambre_bus::SignedDelta {
                 peer: m.alice.peer(document_id).expect("a session"),
                 user: Some(m.author),
-                ..crate::remote_delta(1, serde_json::to_vec(&update).expect("bytes"))
+                ..crate::remote_delta(
+                    1,
+                    ambre_core::DeltaBytes::new(serde_json::to_vec(&update).expect("bytes")),
+                )
             },
         });
         assert!(m.message_ids().is_empty());
@@ -4905,7 +4901,11 @@ mod tests {
             .channels
             .get_mut(&channel_id)
             .expect("open")
-            .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                successor.document_id(),
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
         drain(&sync);
         drain(&ui);
@@ -5496,7 +5496,7 @@ mod tests {
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
-        let closed_meta = ambre_core::DeltaBytes::new(closed.meta);
+        let closed_meta = closed.meta;
         drain(&sync);
 
         assert!(state.apply_channel_remote(
@@ -5534,7 +5534,7 @@ mod tests {
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
-        let closed_meta = ambre_core::DeltaBytes::new(closed.meta);
+        let closed_meta = closed.meta;
         assert!(state.apply_channel_remote(
             meta.document_id(),
             &[(None, ambre_core::LoroPayloadRef::Delta(&closed_meta))]
@@ -5957,7 +5957,11 @@ mod tests {
         };
         let peer = crate::test_peer();
         m.alice
-            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                thread,
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
         let named = m
             .alice
@@ -6016,7 +6020,11 @@ mod tests {
         };
         let peer = crate::test_peer();
         channel
-            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                thread,
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
         let probe = channel.snapshot(thread).expect("thread");
@@ -6034,11 +6042,11 @@ mod tests {
         state.hold_channel(crate::identified(reopened));
         drain(&sync);
         drain(&ui);
-        let deliver = |state: &mut LogicState, document_id, payload: &[u8]| {
+        let deliver = |state: &mut LogicState, document_id, payload: &ambre_core::SnapshotBytes| {
             state.handle_logic_event(LogicEvent::RemoteSnapshot {
                 document_id,
                 covered_seq: ambre_core::Seq(1),
-                payload: (payload.to_vec()).into(),
+                payload: payload.clone(),
             });
             state.handle_logic_event(LogicEvent::DocumentReady {
                 document_id,
@@ -6157,7 +6165,11 @@ mod tests {
         };
         let peer = crate::test_peer();
         m.alice
-            .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                thread,
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
         let named = m
             .alice

@@ -85,7 +85,7 @@ fn a_space_reopens_from_its_payloads() {
     let delta = space
         .list_channel(&public, &listing(sealed(1)))
         .expect("list");
-    let reopened = SpaceState::open(space_id, &[&first, &delta]).expect("open");
+    let reopened = SpaceState::open(space_id, &[(&first).into(), (&delta).into()]).expect("open");
     assert_eq!(
         reopened.name().as_ref().map(ambre_core::Name::as_str),
         Some("Acme")
@@ -97,7 +97,7 @@ fn a_space_reopens_from_its_payloads() {
 fn a_document_of_another_space_is_refused() {
     let space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW).expect("create");
     let other = SpaceId::new();
-    let refused = SpaceState::open(other, &[&space.export_all().expect("export")]);
+    let refused = SpaceState::open(other, &[(&space.export_all().expect("export")).into()]);
     assert_eq!(
         refused.err(),
         Some(MurmureError::ForeignSpace {
@@ -113,9 +113,10 @@ fn a_channel_document_is_no_space() {
     let space_id = SpaceId::new();
     let refused = SpaceState::open(
         space_id,
-        &[&public
+        &[(&public
             .snapshot(public.meta_id().document_id())
-            .expect("snapshot")],
+            .expect("snapshot"))
+            .into()],
     );
     assert!(matches!(
         refused,
@@ -211,7 +212,7 @@ fn an_unnamed_channel_lists_with_no_name_key() {
         )
         .expect("list");
     let doc = LoroDoc::new();
-    doc.import(&space.export_all().expect("export"))
+    doc.import(space.export_all().expect("export").as_bytes())
         .expect("import");
     let entry = doc
         .get_map(crate::schema::Root::Catalogue.as_str())
@@ -291,8 +292,17 @@ fn a_reseal_replaces_the_key_and_nothing_else() {
     assert_eq!(space.catalogue(), before, "every field but the key stays");
     assert_eq!(space.sealed_key(budget.channel_id()), Ok(sealed(9)));
     assert_eq!(space.sealed_key(general.channel_id()), Ok(sealed(2)));
-    let peer = SpaceState::open(space_id, &[&first, &named, &listed[0], &listed[1], &delta])
-        .expect("open");
+    let peer = SpaceState::open(
+        space_id,
+        &[
+            (&first).into(),
+            (&named).into(),
+            (&listed[0]).into(),
+            (&listed[1]).into(),
+            (&delta).into(),
+        ],
+    )
+    .expect("open");
     assert_eq!(peer.sealed_key(budget.channel_id()), Ok(sealed(9)));
     assert_eq!(peer.catalogue(), before);
 
@@ -399,7 +409,16 @@ fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
         Err(MurmureError::NotListed(gone.channel_id()))
     );
     assert_eq!(space.sealed_key(kept.channel_id()), Ok(sealed(2)));
-    let peer = SpaceState::open(space_id, &[&first, &listed[0], &listed[1], &delta]).expect("open");
+    let peer = SpaceState::open(
+        space_id,
+        &[
+            (&first).into(),
+            (&listed[0]).into(),
+            (&listed[1]).into(),
+            (&delta).into(),
+        ],
+    )
+    .expect("open");
     assert_eq!(peer.catalogue(), space.catalogue());
 
     let before = space.version();

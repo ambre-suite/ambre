@@ -103,7 +103,7 @@ pub use members::{
     presence_sample,
 };
 pub use mention::{CONFIRM_CHANNEL_PAST, Screened, members_only, screen};
-pub use opening::{Opening, OpeningChannel};
+pub use opening::{Opening, OpeningChannel, Receipt};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use search::Query;
 pub use sequence::{Order, Position};

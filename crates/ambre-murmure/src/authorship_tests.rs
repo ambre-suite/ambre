@@ -4,11 +4,12 @@
 //! Every member here writes under a registry entry that names its user. So a
 //! later session of one author resolves to that user, as the relay serves it.
 
+use crate::Receipt;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::authorship::{PeerEntry, SessionNonce};
-use ambre_core::{ChannelId, DocumentId, Seq, UserId};
+use ambre_core::{ChannelId, DeltaBytes, DocumentId, PeerEntryBytes, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -29,13 +30,12 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A registry entry naming `user`. The signature is Sync's to check, so the
 /// engine reads only the user.
-fn entry(user: UserId) -> Vec<u8> {
-    PeerEntry {
+fn entry(user: UserId) -> PeerEntryBytes {
+    PeerEntryBytes::from(&PeerEntry {
         user,
         nonce: SessionNonce([7; 16]),
         signature: ambre_core::Signature([9; 64]),
-    }
-    .to_bytes()
+    })
 }
 
 /// One member of a channel, with the user its sessions write for.
@@ -76,7 +76,7 @@ impl Member {
     }
 
     /// Every operation written since `before`, as a segment delta travels.
-    fn json_since(&self, before: &VersionVector) -> Vec<u8> {
+    fn json_since(&self, before: &VersionVector) -> DeltaBytes {
         let doc = self.doc();
         doc.commit();
         crate::delta::encode(
@@ -151,7 +151,8 @@ fn a_segment_delta_travels_as_a_json_update_of_the_pinned_version() {
         .state
         .send(&draft("hello"), alice.user, NOW)
         .expect("send");
-    let update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("a JSON update");
+    let update: serde_json::Value =
+        serde_json::from_slice(sent.delta.as_bytes()).expect("a JSON update");
     assert_eq!(update["schema_version"], JSON_SCHEMA_VERSION.get());
     // The peers stay uncompressed, so each operation names its PeerID.
     assert!(update["peers"].is_null());
@@ -164,7 +165,7 @@ fn a_segment_delta_travels_as_a_json_update_of_the_pinned_version() {
         .adopt_session(active, crate::session::next_peer(), entry(UserId::new()))
         .expect("adopt")
         .expect("the first update");
-    let first: serde_json::Value = serde_json::from_slice(&first).expect("a JSON update");
+    let first: serde_json::Value = serde_json::from_slice(first.as_bytes()).expect("a JSON update");
     assert_eq!(first["schema_version"], JSON_SCHEMA_VERSION.get());
 }
 
@@ -179,10 +180,12 @@ fn a_binary_delta_on_a_segment_is_refused() {
         .state
         .send(&draft("binary"), alice.user, NOW)
         .expect("send");
-    let binary = alice
-        .doc()
-        .export(ExportMode::updates(&before))
-        .expect("export");
+    let binary = DeltaBytes::new(
+        alice
+            .doc()
+            .export(ExportMode::updates(&before))
+            .expect("export"),
+    );
     let was = bob.everything();
     let segment = bob.segment();
     assert_eq!(
@@ -207,9 +210,10 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
         .state
         .send(&draft("from a newer build"), alice.user, NOW)
         .expect("send");
-    let mut update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("json");
+    let mut update: serde_json::Value =
+        serde_json::from_slice(sent.delta.as_bytes()).expect("json");
     update["schema_version"] = serde_json::Value::from(JSON_SCHEMA_VERSION.get() + 1);
-    let newer = serde_json::to_vec(&update).expect("bytes");
+    let newer = DeltaBytes::new(serde_json::to_vec(&update).expect("bytes"));
     let was = bob.everything();
     let segment = bob.segment();
     let refused = refusal(
@@ -456,7 +460,7 @@ fn a_registry_entry_its_signer_may_not_write_is_refused() {
     peers
         .insert(
             ambre_core::PeerKey::of(alice.signer().peer).as_str(),
-            entry(bob.user),
+            entry(bob.user).into_bytes(),
         )
         .expect("insert");
     let foreign_key = bob.json_since(&before);
@@ -465,7 +469,7 @@ fn a_registry_entry_its_signer_may_not_write_is_refused() {
     peers
         .insert(
             ambre_core::PeerKey::of(bob.signer().peer).as_str(),
-            entry(alice.user),
+            entry(alice.user).into_bytes(),
         )
         .expect("insert");
     let foreign_user = bob.json_since(&before);
@@ -562,12 +566,15 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
         .expect("send");
 
     let mut opening = OpeningChannel::new(alice.state.channel_id(), meta_id);
-    assert!(opening.receive(meta_id.document_id(), &meta));
+    assert_eq!(
+        opening.receive(meta_id.document_id(), (&meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(meta_id.document_id()),
         Ok(Opening::OpenSegments(_))
     ));
-    assert!(opening.receive(segment, &snapshot));
+    assert_eq!(opening.receive(segment, (&snapshot).into()), Receipt::Kept);
     opening
         .receive_signed(segment, Seq(1), &good.delta, alice.signer())
         .expect("kept until ready");
@@ -576,7 +583,12 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
         .expect("kept until ready");
     // Bytes that read as no update are refused on arrival.
     assert!(matches!(
-        opening.receive_signed(segment, Seq(3), b"loro", alice.signer()),
+        opening.receive_signed(
+            segment,
+            Seq(3),
+            &DeltaBytes::new(b"loro".to_vec()),
+            alice.signer()
+        ),
         Err(MurmureError::Refused(Refusal::Binary))
     ));
     let Ok(Opening::Open(opened)) = opening.ready(segment) else {

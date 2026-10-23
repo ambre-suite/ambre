@@ -18,6 +18,7 @@ use std::borrow::Cow;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 
+use ambre_core::SnapshotBytes;
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, verdict,
@@ -229,9 +230,9 @@ fn move_notes_to_blocks(doc: &LoroDoc) -> Result<(), crate::doc::WriteError> {
 ///   bytes.
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the document.
 /// * A migration variant when the chain cannot carry an older document.
-pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
+pub fn gate(payload: &SnapshotBytes) -> Result<Cow<'_, SnapshotBytes>, SchemaError> {
     let scratch = LoroDoc::new();
-    scratch.import(payload).map_err(|e| {
+    scratch.import(payload.as_bytes()).map_err(|e| {
         tracing::warn!("Prose: the snapshot was rejected by the CRDT engine: {e:?}");
         SchemaError::PayloadRejected
     })?;
@@ -269,7 +270,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
                         to: SCHEMA_VERSION,
                         reason: format!("re-exporting the migrated document failed: {e:?}"),
                     })?;
-            Ok(Cow::Owned(bytes))
+            Ok(Cow::Owned(SnapshotBytes::new(bytes)))
         }
     }
 }
@@ -283,7 +284,7 @@ mod tests {
 
     /// A snapshot carrying `version` in its register. A `None` version writes no
     /// register at all.
-    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
+    fn snapshot_at(version: Option<SchemaVersion>) -> SnapshotBytes {
         let doc = LoroDoc::new();
         crate::doc::meta(&doc)
             .insert(crate::doc::MetaKey::Title, "")
@@ -297,7 +298,7 @@ mod tests {
                 .expect("stamp");
         }
         doc.commit();
-        doc.export(ExportMode::Snapshot).expect("snapshot")
+        SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
     }
 
     #[test]
@@ -311,7 +312,7 @@ mod tests {
         let bytes = snapshot_at(Some(SCHEMA_VERSION));
         let gated = gate(&bytes).expect("current");
         assert!(matches!(gated, Cow::Borrowed(_)));
-        assert_eq!(&*gated, &bytes[..]);
+        assert_eq!(&*gated, &bytes);
     }
 
     #[test]
@@ -320,7 +321,7 @@ mod tests {
         let gated = gate(&bytes).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
-            .import(&gated)
+            .import(gated.as_bytes())
             .expect("the migrated snapshot imports");
         assert_eq!(
             read_version(&migrated).expect("the migrated register reads"),
@@ -353,7 +354,7 @@ mod tests {
         let before = state.export_snapshot();
 
         let err = state
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())).into())
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())))
             .expect_err("a newer document is refused");
 
         assert_eq!(
@@ -377,7 +378,7 @@ mod tests {
             .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), "one")
             .expect("a string register");
         doc.commit();
-        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+        let bytes = SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"));
         assert!(matches!(
             gate(&bytes),
             Err(SchemaError::VersionUnreadable { .. })
@@ -393,7 +394,7 @@ mod tests {
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(
-            gate(&[0xFF, 0x00, 0xFF]),
+            gate(&SnapshotBytes::new(vec![0xFF, 0x00, 0xFF])),
             Err(SchemaError::PayloadRejected)
         ));
     }

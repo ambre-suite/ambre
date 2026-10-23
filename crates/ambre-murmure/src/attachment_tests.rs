@@ -1,6 +1,7 @@
 //! The files a message carries against their contract rows
 //! (`features/ambre-spec-murmure-attachments.md`).
 
+use crate::Receipt;
 use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::{ChannelId, UserId};
 
@@ -37,13 +38,16 @@ fn open_from(state: &ChannelState) -> ChannelState {
     let active = state.active_id().document_id();
     let mut opening = OpeningChannel::new(state.channel_id(), meta_id);
     let meta = state.snapshot(meta_id.document_id()).expect("meta");
-    assert!(opening.receive(meta_id.document_id(), &meta));
+    assert_eq!(
+        opening.receive(meta_id.document_id(), (&meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(meta_id.document_id()),
         Ok(Opening::OpenSegments(_))
     ));
     let segment = state.snapshot(active).expect("segment");
-    assert!(opening.receive(active, &segment));
+    assert_eq!(opening.receive(active, (&segment).into()), Receipt::Kept);
     match opening.ready(active) {
         Ok(Opening::Open(state)) => *state,
         other => panic!("the channel opens: {other:?}"),
@@ -68,7 +72,7 @@ fn a_file_travels_by_its_address_and_reads_back_whole() {
     let read = open_from(&state).messages(state.active_id()).expect("held");
     assert_eq!(read[0].attachments, files);
     // The delta names the address, never what the file holds.
-    let delta = String::from_utf8_lossy(&sent.delta);
+    let delta = String::from_utf8_lossy(sent.delta.as_bytes());
     assert!(delta.contains(files[0].media_ref.as_str()));
 }
 

@@ -13,7 +13,10 @@ use ambre_bus::{
     MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice,
     SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
-use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, LoroPayload, LoroPayloadRef, MessageId, MetaId,
+    PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+};
 use loro::{
     Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer,
 };
@@ -185,7 +188,7 @@ pub struct Sent {
     /// document.
     pub document: DocumentId,
     /// Every operation of the send, as a Loro JSON update (`MURMURE-223`).
-    pub delta: Vec<u8>,
+    pub delta: DeltaBytes,
     /// What the delta holds, readable with no document (`MURMURE-081`).
     pub summary: ActivitySummary,
     /// The new message, for the view.
@@ -200,7 +203,7 @@ pub struct Named {
     pub meta: MetaId,
     /// Every operation of the change, as a Loro update. Empty of operations
     /// when the name was already so.
-    pub delta: Vec<u8>,
+    pub delta: DeltaBytes,
     /// The name now, for the view.
     pub event: MurmureEvent,
 }
@@ -233,7 +236,7 @@ pub struct ChannelState {
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
-    successor_session: Option<(ambre_core::PeerId, Vec<u8>)>,
+    successor_session: Option<(ambre_core::PeerId, PeerEntryBytes)>,
     /// The successor that failed to open, fetched again on a later tick.
     successor_retry: Option<closing::Retry>,
     /// The finalization of the closing segment, as this client drives it.
@@ -324,8 +327,8 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        entry: PeerEntryBytes,
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         let channel_id = self.channel_id;
         let Some(held) = self.held_mut(document_id) else {
             let segment = SegmentId::from_document(document_id);
@@ -373,7 +376,7 @@ impl ChannelState {
         let ids: Vec<DocumentId> = self.live().map(|held| held.id).collect();
         for id in ids {
             let peer = crate::session::next_peer();
-            self.adopt_session(id, peer, peer.0.to_le_bytes().to_vec())
+            self.adopt_session(id, peer, PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()))
                 .expect("adopt");
         }
         self
@@ -453,13 +456,13 @@ impl ChannelState {
     pub fn open(
         channel_id: ChannelId,
         meta_id: MetaId,
-        meta_bytes: &[u8],
-        segments: &HashMap<SegmentId, Vec<u8>>,
+        meta_bytes: &SnapshotBytes,
+        segments: &HashMap<SegmentId, SnapshotBytes>,
     ) -> Result<Self, MurmureError> {
         let meta_id = meta_id.document_id();
         let meta = Held::served(
             meta_id,
-            schema::admit(meta_bytes, DocumentKind::Meta, channel_id, meta_id)?,
+            schema::admit(meta_bytes.into(), DocumentKind::Meta, channel_id, meta_id)?,
         );
         let live = live_segments(&meta.doc, channel_id)?;
         let admit_live = |segment: SegmentId| -> Result<Held, MurmureError> {
@@ -467,7 +470,7 @@ impl ChannelState {
             let bytes = segments
                 .get(&segment)
                 .ok_or(MurmureError::SegmentMissing(id))?;
-            let doc = schema::admit(bytes, DocumentKind::Segment, channel_id, id)?;
+            let doc = schema::admit(bytes.into(), DocumentKind::Segment, channel_id, id)?;
             Ok(Held::served(id, doc))
         };
         let active = admit_live(live.active)?;
@@ -585,11 +588,11 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold,
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn export_all(&self, document_id: DocumentId) -> Result<Vec<u8>, MurmureError> {
+    pub fn export_all(&self, document_id: DocumentId) -> Result<DeltaBytes, MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        Ok(doc.export(ExportMode::all_updates())?)
+        Ok(DeltaBytes::new(doc.export(ExportMode::all_updates())?))
     }
 
     /// The channel this state holds.
@@ -655,11 +658,11 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold,
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn snapshot(&self, document_id: DocumentId) -> Result<Vec<u8>, MurmureError> {
+    pub fn snapshot(&self, document_id: DocumentId) -> Result<SnapshotBytes, MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let loro = doc.export(ExportMode::Snapshot)?;
+        let loro = SnapshotBytes::new(doc.export(ExportMode::Snapshot)?);
         Ok(match self.sequences.get(&document_id) {
             Some(sequence) => sequence.frame(loro),
             None => loro,
@@ -1335,7 +1338,7 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NoThread`] for a thread the channel does not hold.
-    fn changed_at(&self, at: MessageAt, delta: Vec<u8>) -> Result<Sent, MurmureError> {
+    fn changed_at(&self, at: MessageAt, delta: DeltaBytes) -> Result<Sent, MurmureError> {
         let mut sent = self.reacted_at(at, delta)?;
         sent.summary.kind = ActivityKind::Edit;
         Ok(sent)
@@ -1346,7 +1349,7 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NoThread`] for a thread the channel does not hold.
-    fn reacted_at(&self, at: MessageAt, delta: Vec<u8>) -> Result<Sent, MurmureError> {
+    fn reacted_at(&self, at: MessageAt, delta: DeltaBytes) -> Result<Sent, MurmureError> {
         match at {
             MessageAt::Segment(segment) => Ok(self.reacted(segment, delta)),
             MessageAt::Thread(root) => self.thread_reacted(root, delta),
@@ -1356,7 +1359,7 @@ impl ChannelState {
     /// What an edit or a delete produced: the delta, its summary of kind
     /// edit, and the segment's messages for the view. An edit names no one,
     /// so its summary lists no mention.
-    fn changed(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
+    fn changed(&self, segment: SegmentId, delta: DeltaBytes) -> Sent {
         let mut sent = self.reacted(segment, delta);
         sent.summary.kind = ActivityKind::Edit;
         sent
@@ -1364,7 +1367,7 @@ impl ChannelState {
 
     /// What a reaction delta produced: the delta, its summary of kind
     /// reaction (`MURMURE-093`), and the segment's messages for the view.
-    fn reacted(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
+    fn reacted(&self, segment: SegmentId, delta: DeltaBytes) -> Sent {
         let messages = self.read_segment(segment).unwrap_or_default();
         Sent {
             segment,
@@ -1387,7 +1390,7 @@ impl ChannelState {
     pub fn apply_remote(
         &mut self,
         document_id: DocumentId,
-        payload: &[u8],
+        payload: LoroPayloadRef<'_>,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         self.apply_remote_at(document_id, None, payload)
     }
@@ -1402,12 +1405,12 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         order: Option<Order>,
-        payload: &[u8],
+        payload: LoroPayloadRef<'_>,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         // An amendments document still arriving keeps its bytes too. It has
         // no message to number, but a fold names how far it reaches.
         if let Some(pending) = self.amendments_pending.get_mut(&document_id) {
-            pending.arrivals.push(Arrival::Bytes(payload.to_vec()));
+            pending.arrivals.push(Arrival::Bytes(payload.to_payload()));
             if let Some(order) = order {
                 self.sequences
                     .entry(document_id)
@@ -1425,7 +1428,7 @@ impl ChannelState {
             None => self.pending.get_mut(&SegmentId::from_document(document_id)),
         };
         if let Some(arrivals) = arriving {
-            arrivals.push(Arrival::Bytes(payload.to_vec()));
+            arrivals.push(Arrival::Bytes(payload.to_payload()));
             if let Some(order) = order {
                 self.sequences
                     .entry(document_id)
@@ -1447,8 +1450,11 @@ impl ChannelState {
             }
             return self.answer(document_id, false, None::<fn(&mut Sequence)>);
         }
-        if status.pending.is_some() && matches!(order, Some(Order::Snapshot(_))) {
-            self.replace_from_shallow(document_id, sequence::loro_part(payload))?;
+        if status.pending.is_some()
+            && matches!(order, Some(Order::Snapshot(_)))
+            && let LoroPayloadRef::Snapshot(snapshot) = payload
+        {
+            self.replace_from_shallow(document_id, snapshot)?;
         }
         // Only an update needs the messages matched; a snapshot's numbers
         // ride in its table.
@@ -1468,10 +1474,11 @@ impl ChannelState {
     fn replace_from_shallow(
         &mut self,
         document_id: DocumentId,
-        snapshot: &[u8],
+        snapshot: &SnapshotBytes,
     ) -> Result<(), MurmureError> {
         let fresh = LoroDoc::new();
-        if fresh.import(snapshot)?.pending.is_some() {
+        let loro = sequence::loro_part(LoroPayloadRef::Snapshot(snapshot));
+        if fresh.import(loro)?.pending.is_some() {
             return Ok(());
         }
         if let Some(held) = self.held_mut(document_id) {
@@ -1499,14 +1506,14 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: &[u8],
+        payload: &DeltaBytes,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         if document_id == self.meta.id {
             if !delta::binary_by(payload, signer.peer) {
                 return Err(Refusal::NotSigners.into());
             }
-            return self.apply_remote_at(document_id, Some(Order::Update(seq)), payload);
+            return self.apply_remote_at(document_id, Some(Order::Update(seq)), payload.into());
         }
         if !self.holds(document_id) {
             return Err(MurmureError::NotHeld(document_id));
@@ -1780,9 +1787,10 @@ impl ChannelState {
     pub fn load_older(
         &mut self,
         segment: SegmentId,
-        payload: &[u8],
+        payload: &SnapshotBytes,
     ) -> Result<MurmureEvent, MurmureError> {
-        self.load_older_from(segment, vec![Arrival::Bytes(payload.to_vec())])
+        let arrival = Arrival::Bytes(LoroPayload::Snapshot(payload.clone()));
+        self.load_older_from(segment, vec![arrival])
     }
 
     fn load_older_from(

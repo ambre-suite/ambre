@@ -8,7 +8,7 @@
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
 use ambre_core::authorship::PeerEntry;
-use ambre_core::{DocumentId, MessageId, UserId};
+use ambre_core::{DeltaBytes, DocumentId, LoroPayload, MessageId, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
     Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
@@ -119,8 +119,10 @@ impl Refusal {
 ///
 /// # Errors
 /// [`MurmureError::Crdt`] when the update does not serialise.
-pub(crate) fn encode(update: &JsonSchema) -> Result<Vec<u8>, MurmureError> {
-    serde_json::to_vec(update).map_err(|e| MurmureError::Crdt(e.to_string()))
+pub(crate) fn encode(update: &JsonSchema) -> Result<DeltaBytes, MurmureError> {
+    serde_json::to_vec(update)
+        .map(DeltaBytes::new)
+        .map_err(|e| MurmureError::Crdt(e.to_string()))
 }
 
 /// Read a segment delta as a JSON update of the pinned version.
@@ -132,11 +134,12 @@ pub(crate) fn encode(update: &JsonSchema) -> Result<Vec<u8>, MurmureError> {
 /// # Errors
 /// [`Refusal::Binary`] for a Loro blob, [`Refusal::Version`] for another
 /// schema version, and [`Refusal::Malformed`] for anything else unreadable.
-pub(crate) fn read(payload: &[u8]) -> Result<JsonSchema, Refusal> {
+pub(crate) fn read(payload: &DeltaBytes) -> Result<JsonSchema, Refusal> {
     #[derive(Deserialize)]
     struct Version {
         schema_version: JsonSchemaVersion,
     }
+    let payload = payload.as_bytes();
     if payload.starts_with(b"loro") || payload.starts_with(crate::sequence::FRAME_MAGIC) {
         return Err(Refusal::Binary);
     }
@@ -578,7 +581,7 @@ pub(crate) fn range(update: &JsonSchema) -> (VersionVector, VersionVector) {
 pub(crate) enum Arrival {
     /// A snapshot, or a delta read back from the local store: Loro bytes,
     /// checked where they came from.
-    Bytes(Vec<u8>),
+    Bytes(LoroPayload),
     /// A delta a member signed, read and not checked yet.
     Signed { update: JsonSchema, signer: Signer },
 }
@@ -655,7 +658,9 @@ pub(crate) fn import_arrivals(
 ) -> Result<(), MurmureError> {
     for arrival in arrivals {
         match arrival {
-            Arrival::Bytes(bytes) => crate::schema::import_bytes(doc, &bytes, document_id)?,
+            Arrival::Bytes(bytes) => {
+                crate::schema::import_bytes(doc, bytes.borrowed(), document_id)?
+            }
             Arrival::Signed { update, signer } => {
                 let verdict = verdict(doc, rules, &update, signer);
                 if let Err(refusal) = verdict {
@@ -671,8 +676,8 @@ pub(crate) fn import_arrivals(
 
 /// Whether every operation of a binary update was written under `peer`
 /// (`AUTHOR-012`). The `meta` document travels binary, and is checked so.
-pub(crate) fn binary_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
-    LoroDoc::decode_import_blob_meta(payload, false).is_ok_and(|meta| {
+pub(crate) fn binary_by(payload: &DeltaBytes, peer: ambre_core::PeerId) -> bool {
+    LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).is_ok_and(|meta| {
         meta.mode == loro::EncodedBlobMode::Updates
             && meta.partial_end_vv.keys().all(|p| *p == peer.0)
     })

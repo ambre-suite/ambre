@@ -6,6 +6,7 @@
 //! nothing before its PeerID lands: an operation under any other PeerID never
 //! travels (`AUTHOR-029`).
 
+use ambre_core::{DeltaBytes, PeerEntryBytes};
 use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc};
 
 use crate::error::MurmureError;
@@ -30,13 +31,13 @@ impl Session {
     pub(crate) fn adopt(
         doc: &LoroDoc,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: PeerEntryBytes,
     ) -> Result<Self, MurmureError> {
         doc.commit();
         doc.set_peer_id(peer.0)?;
         let sent = doc.oplog_vv().get(&peer.0).copied().unwrap_or(0);
         doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
-            .insert(ambre_core::PeerKey::of(peer).as_str(), entry)?;
+            .insert(ambre_core::PeerKey::of(peer).as_str(), entry.into_bytes())?;
         doc.commit_with(
             CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
         );
@@ -60,13 +61,13 @@ impl Session {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<Vec<u8>, MurmureError> {
+    pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<DeltaBytes, MurmureError> {
         doc.commit();
         let end = doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
         let span = IdSpan::new(self.peer.0, self.sent, end);
         let delta = doc.export(ExportMode::updates_in_range(vec![span]))?;
         self.sent = end;
-        Ok(delta)
+        Ok(DeltaBytes::new(delta))
     }
 
     /// [`Session::export`] as a JSON update, the form a segment delta travels
@@ -75,7 +76,7 @@ impl Session {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when the update does not serialise.
-    pub(crate) fn export_json(&mut self, doc: &LoroDoc) -> Result<Vec<u8>, MurmureError> {
+    pub(crate) fn export_json(&mut self, doc: &LoroDoc) -> Result<DeltaBytes, MurmureError> {
         doc.commit();
         let end = doc.oplog_vv();
         let mut start = end.clone();

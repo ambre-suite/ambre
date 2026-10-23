@@ -17,7 +17,7 @@ impl LogicState {
         let Replied { reply, copy, head } = replied;
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id: reply.document,
-            payload: reply.delta.into(),
+            payload: reply.delta,
             summary: Some(reply.summary),
         });
         self.send_to_ui(UiEvent::Channel {
@@ -27,7 +27,7 @@ impl LogicState {
         if let Some(copy) = copy {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: copy.document,
-                payload: copy.delta.into(),
+                payload: copy.delta,
                 summary: Some(copy.summary),
             });
             self.send_to_ui(UiEvent::Channel {
@@ -64,7 +64,7 @@ impl LogicState {
         if let Some(named) = linked.root {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: named.document,
-                payload: named.delta.into(),
+                payload: named.delta,
                 summary: None,
             });
             self.send_to_ui(UiEvent::Channel {

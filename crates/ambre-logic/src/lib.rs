@@ -632,7 +632,11 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
     for document_id in channel.document_ids() {
         let peer = test_peer();
         channel
-            .adopt_session(document_id, peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                document_id,
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
     }
     channel
@@ -1171,14 +1175,14 @@ fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
 /// A delta the relay delivers at `seq`, signed under the one PeerID its
 /// operations carry, as Sync would hand it over.
 #[cfg(test)]
-fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
-    let peer = loro::LoroDoc::decode_import_blob_meta(&payload, false)
+fn remote_delta(seq: u64, payload: ambre_core::DeltaBytes) -> ambre_bus::SignedDelta {
+    let peer = loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false)
         .ok()
         .and_then(|meta| meta.partial_end_vv.keys().next().copied())
         .unwrap_or_default();
     ambre_bus::SignedDelta {
         seq: ambre_core::Seq(seq),
-        payload: payload.into(),
+        payload,
         nonce: ambre_core::SessionNonce([0; 16]),
         peer: ambre_core::PeerId(peer),
         user: None,

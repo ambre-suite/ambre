@@ -132,6 +132,12 @@ impl PeerEntryBytes {
     pub fn read(&self) -> Option<PeerEntry> {
         PeerEntry::from_bytes(&self.0)
     }
+
+    /// The bytes, owned, for the registry map that stores them.
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
 }
 
 impl From<&PeerEntry> for PeerEntryBytes {

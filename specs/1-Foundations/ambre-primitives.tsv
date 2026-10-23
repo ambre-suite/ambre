@@ -1262,6 +1262,7 @@ ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	
 ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
 ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
+ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::into_bytes() | ret | Vec<u8>	newtype-inner	The bytes of a PeerEntryBytes, handed to the LoroMap insert of a document registry.
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId.0 | field | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::as_str() | ret | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::new(id) | param | &'static str	newtype-inner	CanvasId newtype
@@ -1924,72 +1925,38 @@ ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	math
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.close_asked | field | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.key_rotated | field | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.segment_size | field | usize	math	local count/index/counter
-ambre-murmure | src/channel.rs | crate::channel | ChannelState.successor_session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::adopt_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::answer(resolve) | param | bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::apply_remote(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::apply_remote_at(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::apply_signed(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed_at(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in() | ret | Result<u32,MurmureError>	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::is_pending() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::lacks_closing() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::load_older(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(meta_bytes) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(segments) | param | &HashMap<SegmentId,Vec<u8>>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::reacted(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::reacted_at(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::replace_from_shallow(snapshot) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | Held.probe_at | field | usize	math	local count/index/counter
-ambre-murmure | src/channel.rs | crate::channel | Named.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | Sent.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendable() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendments_failed() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::apply_amendment(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::is_amendments() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::name_amendments() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::note_amendments_session() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::note_amendments_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | Linked.meta | field | Option<Vec<u8>>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | Linked.open | field | bool	math	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | Pending.session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::is_successor() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::owes_rotation_close() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes(messages) | param | usize	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::with_segment_size(messages) | param | usize	math	local count/index/counter
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | Closed.meta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | Retry.failures | field | u32	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SEGMENT_MESSAGES | const | usize	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SUCCESSOR_FAILURES | const | u32	math	local count/index/counter
-ambre-murmure | src/channel/confirming.rs | crate::channel::confirming | ChannelState::check_snapshot(snapshot) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::mark_final() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::refinalize() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | FinalSnapshot.payload | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | Finalizing.failures | field | u32	math	local count/index/counter
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | RETRY_DOUBLINGS | const | u32	math	local count/index/counter
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | ChannelState::amendments_gone() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | ChannelState::mark_folded() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | FoldSnapshot.payload | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/folding.rs | crate::channel::folding | Folding.failures | field | u32	math	local count/index/counter
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::ask_thread() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_probe() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_reacted(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | Pending.session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Seek.lost | field | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ThreadLinked.open | field | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
@@ -2126,19 +2093,15 @@ ambre-murmure | src/composer.rs | crate::composer | kept_mentions(new) | param |
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/delta.rs | crate::delta | Arrival::Bytes.0 | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion.0 | field | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::get() | ret | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::new(version) | param | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | binary_by(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | encode() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | read(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	newtype-inner	the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	math	state flag/predicate
@@ -2263,11 +2226,6 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | O
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	math	state flag/predicate
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive() | ret | bool	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive_at() | ret | bool	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive_at(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::receive_signed(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | PREVIEW_TALL | const | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Painted.bottom | field | Option<usize>	math	local count/index/counter
@@ -2382,11 +2340,7 @@ ambre-murmure | src/schema.rs | crate::schema | DeletedBy::as_str() | ret | &'st
 ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | admit(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/schema.rs | crate::schema | admit_all(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/schema.rs | crate::schema | admit_space(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	debt	finding: Loro map key names are bare `&str` consts and parameters
-ambre-murmure | src/schema.rs | crate::schema | import_bytes(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | read_as_it_is() | ret | Result<(),String>	trait	signature dictated by SchemaMigration.apply
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
@@ -2411,37 +2365,16 @@ ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | 
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,ByteOffset),(usize,ByteOffset))>	math	count, size or local index
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	debt	finding: Two schema-version spaces, and a duplicated frame magic
-ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
+ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the Loro bytes past the table, read only by split and loro_part.
+ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the raw sequence table, cut into fixed rows only by table.
 ambre-murmure | src/sequence.rs | crate::sequence | ROW_LEN | const | usize	math	local count/index/counter
 ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	math	state flag/predicate
-ambre-murmure | src/sequence.rs | crate::sequence | Sequence::frame() | ret | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | Sequence::frame(loro) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | Sequence::note(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | Sequence::note_bare(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | loro_part() | ret | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | loro_part(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | split(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/sequence.rs | crate::sequence | table(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
+ambre-murmure | src/sequence.rs | crate::sequence | loro_part() | ret | &[u8]	foreign-api	The bytes handed to LoroDoc::import, past the frame of a snapshot or a delta as it is.
 ambre-murmure | src/session.rs | crate::session | Session.sent | field | i32	trait	Loro Counter is i32
-ambre-murmure | src/session.rs | crate::session | Session::adopt(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/session.rs | crate::session | Session::export() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/session.rs | crate::session | Session::export_json() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/session.rs | crate::session | Session::rewind(counter) | param | i32	trait	Loro Counter is i32
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	math	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	math	state flag/predicate
-ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::apply_remote(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::export() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	math	state flag/predicate
-ambre-murmure | src/space.rs | crate::space | SpaceState::list_channel() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::open(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::put_category() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::reseal_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::unlist_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result
@@ -3210,8 +3143,6 @@ ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f64)>	math	layout geometry local to algorithm
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
-ambre-prose | src/schema.rs | crate::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	debt	finding: snapshot payloads as Vec<u8> (confirmed)
-ambre-prose | src/schema.rs | crate::schema | gate(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MONOSPACE | const | &str	free-text	text content / label / parser input
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it

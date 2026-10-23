@@ -212,6 +212,18 @@ impl<'a> LoroPayloadRef<'a> {
     }
 }
 
+impl<'a> From<&'a DeltaBytes> for LoroPayloadRef<'a> {
+    fn from(delta: &'a DeltaBytes) -> Self {
+        Self::Delta(delta)
+    }
+}
+
+impl<'a> From<&'a SnapshotBytes> for LoroPayloadRef<'a> {
+    fn from(snapshot: &'a SnapshotBytes) -> Self {
+        Self::Snapshot(snapshot)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DeltaBytes, EphemeralBytes, LoroPayload, SnapshotBytes};

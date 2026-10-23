@@ -9,7 +9,10 @@ use ambre_bus::{
     ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
     MurmureEvent, Timestamp,
 };
-use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, MessageId, MetaId, PeerEntryBytes, SegmentId, Seq,
+    SnapshotBytes, UserId,
+};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{ExportMode, LoroDoc, VersionVector};
 
@@ -48,7 +51,7 @@ fn message_at(state: &ChannelState, index: usize) -> MessageView {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Vec<u8>> = state
+    let segments: HashMap<SegmentId, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -72,13 +75,17 @@ fn signer(state: &ChannelState, document_id: DocumentId, user: UserId) -> Signer
 /// Create the thread of `root`, adopt its session and link it, as the Sync
 /// worker and the relay answer. Returns it, its first update, and the delta
 /// that names it in the root.
-fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, Vec<u8>, Sent) {
+fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, DeltaBytes, Sent) {
     let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
         panic!("a root with no thread creates one");
     };
     let peer = next_peer();
     let first = state
-        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            thread,
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt")
         .expect("the header travels");
     let linked = state
@@ -94,7 +101,7 @@ fn thread_field(state: &ChannelState, index: usize) -> Option<DocumentId> {
 }
 
 /// Every operation of `doc` past `before`, as a delta travels.
-fn json_since(doc: &LoroDoc, before: &VersionVector) -> Vec<u8> {
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> DeltaBytes {
     doc.commit();
     crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
         .expect("encode")
@@ -132,7 +139,11 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
     ));
     let peer = next_peer();
     state
-        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            thread,
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     state
         .thread_linked(state.active_id(), root, thread)
@@ -186,7 +197,11 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            successor.document_id(),
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     state
         .relocate_locked(segment.document_id(), &[])
@@ -489,8 +504,12 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     .expect("waits");
     bob.older_ready(thread).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
-        .expect("adopt");
+    bob.adopt_session(
+        thread,
+        peer,
+        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+    )
+    .expect("adopt");
     let bob_doc = bob.doc(thread).expect("held");
     let before = bob_doc.oplog_vv();
     let Some(map) = crate::schema::root_list(bob_doc, Root::Messages)
@@ -520,7 +539,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
 fn peer_with_thread(
     alice: &ChannelState,
     thread: DocumentId,
-    updates: &[&[u8]],
+    updates: &[&DeltaBytes],
     author: UserId,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
@@ -531,8 +550,12 @@ fn peer_with_thread(
     }
     bob.older_ready(thread).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
-        .expect("adopt");
+    bob.adopt_session(
+        thread,
+        peer,
+        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+    )
+    .expect("adopt");
     bob
 }
 
@@ -814,11 +837,11 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
 // --- MURMURE-545, MURMURE-546 and MURMURE-547 ---
 
 /// The bytes of an empty segment of `channel`.
-fn empty_segment(channel: ChannelId) -> Vec<u8> {
+fn empty_segment(channel: ChannelId) -> SnapshotBytes {
     let doc = LoroDoc::new();
     schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
-    doc.export(ExportMode::Snapshot).expect("snapshot")
+    SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
 }
 
 /// Bob's copy of the channel of `alice`, opened from a new active segment
@@ -838,7 +861,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, S
         push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
     }
     meta.commit();
-    let meta = meta.export(ExportMode::Snapshot).expect("snapshot");
+    let meta = SnapshotBytes::new(meta.export(ExportMode::Snapshot).expect("snapshot"));
     let segments = HashMap::from([(active, empty_segment(channel))]);
     let bob = ChannelState::open(channel, MetaId::new(), &meta, &segments)
         .expect("open")
@@ -848,9 +871,9 @@ fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, S
 
 /// Load the older segment `segment` from `bytes`, as the Sync worker
 /// delivers it.
-fn load(state: &mut ChannelState, segment: SegmentId, bytes: &[u8]) {
+fn load(state: &mut ChannelState, segment: SegmentId, bytes: &SnapshotBytes) {
     let _ = state
-        .apply_remote(segment.document_id(), bytes)
+        .apply_remote(segment.document_id(), bytes.into())
         .expect("kept");
     state.older_ready(segment.document_id()).expect("loaded");
 }

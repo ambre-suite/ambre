@@ -33,7 +33,9 @@ use ambre_bus::{
 };
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use ambre_core::{CategoryId, ChannelId, DocumentId, MessageId, SegmentId, SpaceId, UserId};
+use ambre_core::{
+    CategoryId, ChannelId, DocumentId, MessageId, PeerEntryBytes, SegmentId, SpaceId, UserId,
+};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
@@ -207,7 +209,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         (state.active_id().document_id(), SEGMENT_PEER),
     ] {
         state
-            .adopt_session(id, ambre_core::PeerId(peer), entry())
+            .adopt_session(id, ambre_core::PeerId(peer), PeerEntryBytes::new(entry()))
             .expect("adopt");
     }
     // The first message carries a file, by its address alone.
@@ -282,7 +284,11 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
         panic!("a root with no thread creates one");
     };
     state
-        .adopt_session(thread, ambre_core::PeerId(THREAD_PEER), entry())
+        .adopt_session(
+            thread,
+            ambre_core::PeerId(THREAD_PEER),
+            PeerEntryBytes::new(entry()),
+        )
         .expect("adopt");
     state.thread_linked(segment, root, thread).expect("link");
     let reply = MessageDraft {
@@ -335,7 +341,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         .adopt_session(
             successor.document_id(),
             ambre_core::PeerId(SUCCESSOR_PEER),
-            entry(),
+            PeerEntryBytes::new(entry()),
         )
         .expect("adopt");
     state
@@ -348,7 +354,11 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         panic!("a locked segment with no amendments creates them");
     };
     state
-        .adopt_session(amendments, ambre_core::PeerId(AMENDMENTS_PEER), entry())
+        .adopt_session(
+            amendments,
+            ambre_core::PeerId(AMENDMENTS_PEER),
+            PeerEntryBytes::new(entry()),
+        )
         .expect("adopt");
     state.amendments_linked(segment, amendments).expect("link");
     let messages = state.messages(segment).expect("held");
@@ -418,7 +428,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     )
     .expect("create");
     space
-        .adopt_session(ambre_core::PeerId(SPACE_PEER), entry())
+        .adopt_session(ambre_core::PeerId(SPACE_PEER), PeerEntryBytes::new(entry()))
         .expect("adopt");
     let category = CategoryId::new();
     space

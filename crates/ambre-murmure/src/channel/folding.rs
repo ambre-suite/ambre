@@ -11,7 +11,9 @@
 //! The engine reads no clock: each delay is stamped by the next tick.
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, DocumentId, LeaseId, Millis, SegmentId, Seq};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, LeaseId, Millis, SegmentId, Seq, SnapshotBytes,
+};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -78,7 +80,7 @@ pub struct FoldSnapshot {
     /// The last delta number of those amendments it holds.
     pub amendments_seq: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
-    pub payload: Vec<u8>,
+    pub payload: SnapshotBytes,
 }
 
 /// What a fold `meta` marks did to this copy.
@@ -241,7 +243,8 @@ impl ChannelState {
             folding.step = Step::Asked;
         }
         let doc = self.folded(segment, grant.amendments, reached)?;
-        let shallow = doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?;
+        let shallow =
+            SnapshotBytes::new(doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?);
         let payload = match self.sequences.get(&segment.document_id()) {
             Some(sequence) => sequence.frame(shallow),
             None => shallow,
@@ -342,7 +345,7 @@ impl ChannelState {
         &mut self,
         segment: SegmentId,
         amendments: DocumentId,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         if folded_amendments(&self.meta.doc, segment) == Some(amendments) {
             return Ok(None);
         }
@@ -365,7 +368,7 @@ impl ChannelState {
     pub fn amendments_gone(
         &mut self,
         amendments: DocumentId,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         let segment = self
             .amendments
             .iter()

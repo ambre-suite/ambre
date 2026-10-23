@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, LeaseId, SegmentId, Seq, UserId};
+use ambre_core::{ChannelId, LeaseId, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -45,14 +45,18 @@ fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            successor.document_id(),
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     (state, closing)
 }
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Vec<u8>> = state
+    let segments: HashMap<SegmentId, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -149,7 +153,10 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
     let (mut state, closing) = closed_with(&["kept zanzibar-quokka", "erased marzipan-wombat"]);
     erase_body(&state, closing, 1);
     let full = state.export_all(closing.document_id()).expect("full");
-    assert!(holds(&full, "marzipan-wombat"), "the history keeps it");
+    assert!(
+        holds(full.as_bytes(), "marzipan-wombat"),
+        "the history keeps it"
+    );
 
     let lease = LeaseId::new();
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
@@ -170,8 +177,11 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
     assert_eq!(snapshot.segment, closing);
     assert_eq!(snapshot.lease, lease);
     assert_eq!(snapshot.horizon, ambre_core::Seq(7));
-    assert!(holds(&snapshot.payload, "zanzibar-quokka"));
-    assert!(!holds(&snapshot.payload, "marzipan-wombat"), "shallow");
+    assert!(holds(snapshot.payload.as_bytes(), "zanzibar-quokka"));
+    assert!(
+        !holds(snapshot.payload.as_bytes(), "marzipan-wombat"),
+        "shallow"
+    );
     assert!(
         state
             .final_snapshot(at(2), ambre_core::Seq(7))
@@ -181,7 +191,7 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
     );
 
     let doc = LoroDoc::new();
-    doc.import(&snapshot.payload)
+    doc.import(snapshot.payload.as_bytes())
         .expect("a fresh copy imports it");
 }
 
@@ -251,7 +261,7 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     ));
 
     assert_eq!(bob.settle_final(), None, "meta still names it closing");
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.settle_final(), Some(closing));
     assert_eq!(bob.closing_id(), None);
@@ -290,7 +300,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
         .expect("export")
         .expect("in");
     let meta = alice.mark_final(closing).expect("mark").expect("a delta");
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.settle_final(), Some(closing));
 
@@ -313,7 +323,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
         .expect("export")
         .expect("in");
     assert_eq!((snapshot.segment, snapshot.lease), (closing, lease));
-    assert!(holds(&snapshot.payload, "two"));
+    assert!(holds(snapshot.payload.as_bytes(), "two"));
     assert_eq!(
         bob.mark_final(closing).expect("mark"),
         None,
@@ -334,7 +344,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
 /// Alice's channel of two-message segments, and Bob's copy of it holding
 /// her first `received` deltas, numbered as the relay delivered them. Alice
 /// then closes the segment, and seals its final snapshot at the horizon 2.
-fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u8>) {
+fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, SnapshotBytes) {
     let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(2)
@@ -373,12 +383,14 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Vec<u
 
 /// A shallow snapshot of `state`'s copy of `segment` after `forge` wrote on
 /// a fork of it.
-fn forged(state: &ChannelState, segment: SegmentId, forge: impl FnOnce(&LoroDoc)) -> Vec<u8> {
+fn forged(state: &ChannelState, segment: SegmentId, forge: impl FnOnce(&LoroDoc)) -> SnapshotBytes {
     let fork = state.doc(segment.document_id()).expect("held").fork();
     forge(&fork);
     fork.commit();
-    fork.export(ExportMode::shallow_snapshot(&fork.oplog_frontiers()))
-        .expect("export")
+    SnapshotBytes::new(
+        fork.export(ExportMode::shallow_snapshot(&fork.oplog_frontiers()))
+            .expect("export"),
+    )
 }
 
 // --- MURMURE-071, MURMURE-153 ---
@@ -436,17 +448,23 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
         .expect("operations");
     short.insert(peer, end - 1);
     let early = doc.fork_at(&doc.vv_to_frontiers(&short)).expect("fork");
-    let dropped = early
-        .export(ExportMode::shallow_snapshot(&early.oplog_frontiers()))
-        .expect("export");
+    let dropped = SnapshotBytes::new(
+        early
+            .export(ExportMode::shallow_snapshot(&early.oplog_frontiers()))
+            .expect("export"),
+    );
     assert_eq!(
         bob.check_snapshot(document_id, ambre_core::Seq(2), &dropped)
             .expect("check"),
         SnapshotVerdict::Mismatch
     );
     assert_eq!(
-        bob.check_snapshot(document_id, ambre_core::Seq(2), b"not a snapshot")
-            .expect("check"),
+        bob.check_snapshot(
+            document_id,
+            ambre_core::Seq(2),
+            &SnapshotBytes::new(b"not a snapshot".to_vec())
+        )
+        .expect("check"),
         SnapshotVerdict::Mismatch
     );
 }
@@ -461,8 +479,12 @@ fn a_copy_missing_purged_deltas_loads_the_final_snapshot() {
     let (alice, mut bob, closing, payload) = finalized_for(1);
     let document_id = closing.document_id();
     assert_eq!(bob.messages(closing).expect("held").len(), 1);
-    bob.apply_remote_at(document_id, Some(Order::Snapshot(Seq(2))), &payload)
-        .expect("the snapshot loads");
+    bob.apply_remote_at(
+        document_id,
+        Some(Order::Snapshot(Seq(2))),
+        (&payload).into(),
+    )
+    .expect("the snapshot loads");
     assert_eq!(
         bob.messages(closing).expect("held"),
         alice.messages(closing).expect("held")

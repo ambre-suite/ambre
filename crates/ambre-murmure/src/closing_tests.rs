@@ -5,7 +5,9 @@ use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
-use ambre_core::{ByteSize, ChannelId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ByteSize, ChannelId, DeltaBytes, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -31,7 +33,7 @@ fn channel(size: usize) -> ChannelState {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Vec<u8>> = state
+    let segments: HashMap<SegmentId, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -48,7 +50,7 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// Close the active segment of `state` into a successor it created, and
 /// adopt the successor's identity. Returns the successor, the `meta` delta,
 /// and the successor's first update.
-fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
+fn close_created(state: &mut ChannelState) -> (SegmentId, DeltaBytes, DeltaBytes) {
     let closing = state.active_id();
     let successor = SegmentId::new();
     let closed = state
@@ -57,7 +59,11 @@ fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
     assert_eq!(closed.fetch, None, "the creator fetches nothing");
     let peer = next_peer();
     let first = state
-        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            successor.document_id(),
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt")
         .expect("the successor's first update");
     (successor, closed.meta, first)
@@ -66,7 +72,7 @@ fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
 fn live_of(state: &ChannelState) -> (SegmentId, Option<SegmentId>) {
     let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
     let doc = loro::LoroDoc::new();
-    doc.import(&meta).expect("import");
+    doc.import(meta.as_bytes()).expect("import");
     let live = live_segments(&doc, state.channel_id()).expect("live");
     (live.active, live.closing)
 }
@@ -166,7 +172,7 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
     let mut bob = peer_of(&alice);
     let old = alice.active_id();
     let (successor, meta, first) = close_created(&mut alice);
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.successor_to_open(), Some(successor));
 
@@ -204,7 +210,7 @@ fn a_successor_is_fetched_again_four_times_at_most() {
     alice.send(&draft("one"), UserId::new(), NOW).expect("send");
     let mut bob = peer_of(&alice);
     let (successor, meta, _) = close_created(&mut alice);
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.successor_to_open(), Some(successor));
     let mut now = NOW.0;
@@ -284,8 +290,10 @@ fn two_writers_of_one_close_converge_on_one_successor() {
     assert_eq!(bob_close.fetch, Some(successor));
 
     let meta = alice.meta_id().document_id();
-    alice.apply_remote(meta, &bob_close.meta).expect("merge");
-    bob.apply_remote(meta, &alice_meta).expect("merge");
+    alice
+        .apply_remote(meta, (&bob_close.meta).into())
+        .expect("merge");
+    bob.apply_remote(meta, (&alice_meta).into()).expect("merge");
     for state in [&alice, &bob] {
         assert_eq!(live_of(state), (successor, Some(old)));
         assert_eq!(state.segments_after(old), [successor], "one successor");
@@ -306,7 +314,7 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
     let old = alice.active_id();
     let (successor, meta, first) = close_created(&mut alice);
 
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.successor_to_open(), Some(successor));
     assert_eq!(bob.successor_to_open(), None, "asked once");
@@ -348,7 +356,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     let old = alice.active_id();
     let (successor, meta, first) = close_created(&mut alice);
 
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     bob.successor_to_open();
     // `MURMURE-562`: the moved message keeps its styles.
@@ -383,14 +391,15 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     let peer = next_peer();
-    bob.adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
-        .expect("adopt");
+    bob.adopt_session(
+        successor.document_id(),
+        peer,
+        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+    )
+    .expect("adopt");
 
     let relocated = bob
-        .relocate_locked(
-            old.document_id(),
-            &[waiting.delta.into(), reacted.delta.into()],
-        )
+        .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
         .expect("relocate");
     assert!(relocated.replay.is_empty(), "no older message changed");
     let sent = relocated.sent.expect("a message moves");
@@ -451,7 +460,7 @@ fn a_refused_reaction_alone_moves_nothing() {
         .expect("react")
         .expect("a reaction");
     let moved = alice
-        .relocate_locked(old.document_id(), &[reacted.delta.into()])
+        .relocate_locked(old.document_id(), &[reacted.delta])
         .expect("relocate");
     assert!(moved.sent.is_none());
     assert!(moved.replay.is_empty(), "a reaction is not replayed");

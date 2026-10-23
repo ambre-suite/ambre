@@ -140,8 +140,7 @@ impl LogicState {
         Some(
             space
                 .state
-                .adopt_session(peer, entry.to_bytes())
-                .map(|first| first.map(ambre_core::DeltaBytes::new)),
+                .adopt_session(peer, ambre_core::PeerEntryBytes::from(entry)),
         )
     }
 
@@ -157,10 +156,10 @@ impl LogicState {
         let Some(opening) = self.space_opening.remove(&space_id) else {
             return false;
         };
-        let borrowed: Vec<&[u8]> = opening
+        let borrowed: Vec<ambre_core::LoroPayloadRef<'_>> = opening
             .payloads
             .iter()
-            .map(ambre_core::LoroPayload::as_bytes)
+            .map(ambre_core::LoroPayload::borrowed)
             .collect();
         match SpaceState::open(space_id, &borrowed) {
             Ok(state) => {
@@ -230,7 +229,7 @@ impl LogicState {
             return false;
         };
         for payload in payloads {
-            if let Err(error) = space.state.apply_remote(payload.as_bytes()) {
+            if let Err(error) = space.state.apply_remote(*payload) {
                 tracing::warn!("Logic: delta for space {space_id} refused: {error}");
             }
         }
@@ -254,7 +253,7 @@ impl LogicState {
             .channel_ledgers
             .get(&document_id)
             .map_or(Seq::ZERO, crate::snapshot_check::SeqLedger::contiguous_end);
-        Some((ambre_core::SnapshotBytes::new(payload), covered))
+        Some((payload, covered))
     }
 
     /// Hand the view the name, the categories and the catalogue of a space.
@@ -305,7 +304,7 @@ impl LogicState {
             Ok(Some(payload)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: space_id.document_id(),
-                    payload: payload.into(),
+                    payload,
                     summary: None,
                 });
                 self.show_catalogue(space_id);
@@ -374,7 +373,7 @@ impl LogicState {
                     Ok(delta) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: space_id.document_id(),
-                            payload: delta.into(),
+                            payload: delta,
                             summary: None,
                         });
                         self.show_catalogue(space_id);
@@ -505,7 +504,7 @@ impl LogicState {
         for payload in deltas {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: space_id.document_id(),
-                payload: payload.into(),
+                payload,
                 summary: None,
             });
         }
@@ -764,7 +763,7 @@ impl LogicState {
             };
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: space_id.document_id(),
-                payload: delta.into(),
+                payload: delta,
                 summary: None,
             });
         }
@@ -800,7 +799,7 @@ impl LogicState {
             match space.state.unlist_channel(channel_id) {
                 Ok(Some(delta)) => self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: space_id.document_id(),
-                    payload: delta.into(),
+                    payload: delta,
                     summary: None,
                 }),
                 Ok(None) => {}
@@ -1021,7 +1020,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         ready(state, space_id.document_id(), role);
         let _ = (drain(ui), drain(sync));
@@ -1032,7 +1031,10 @@ mod tests {
     fn identified_space(mut space: SpaceState) -> SpaceState {
         let peer = crate::test_peer();
         space
-            .adopt_session(peer, peer.0.to_le_bytes().to_vec())
+            .adopt_session(
+                peer,
+                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            )
             .expect("adopt");
         space
     }
@@ -1088,7 +1090,7 @@ mod tests {
             "the upload is written under the session's PeerID alone"
         );
         let reopened =
-            SpaceState::open(space_id, &[payload.as_bytes()]).expect("the upload is the space");
+            SpaceState::open(space_id, &[payload.into()]).expect("the upload is the space");
         assert_eq!(
             reopened.name().as_ref().map(ambre_core::Name::as_str),
             Some("Acme")
@@ -1111,7 +1113,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         assert!(
             drain(&ui).is_empty(),
@@ -1238,7 +1240,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         ready(&mut state, space_id.document_id(), Role::Viewer);
         let _ = (drain(&ui), drain(&sync));
@@ -1409,7 +1411,7 @@ mod tests {
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (alice.snapshot().expect("snapshot")).into(),
+            payload: (alice.snapshot().expect("snapshot")),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
         let _ = (drain(&ui), drain(&sync));
@@ -1482,7 +1484,7 @@ mod tests {
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (alice.snapshot().expect("snapshot")).into(),
+            payload: (alice.snapshot().expect("snapshot")),
         });
         ready(&mut bob, space_id.document_id(), role);
         (bob, space_id, listed.channel_id(), sync)
@@ -1684,7 +1686,7 @@ mod tests {
         viewer.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: payload.into(),
+            payload,
         });
         ready(&mut viewer, space_id.document_id(), Role::Viewer);
         assert!(
@@ -2092,7 +2094,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         ready(state, space_id.document_id(), Role::Editor);
         state.handle_logic_event(LogicEvent::MembersChanged {
@@ -2132,7 +2134,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         assert!(
             samples(&drain(&sync)).is_empty(),
@@ -2157,7 +2159,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         let _ = drain(&sync);
         ready(&mut state, space_id.document_id(), Role::Editor);
@@ -2256,7 +2258,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
             covered_seq: ambre_core::Seq(1),
-            payload: (stored.snapshot().expect("snapshot")).into(),
+            payload: (stored.snapshot().expect("snapshot")),
         });
         ready(&mut state, space_id.document_id(), Role::Editor);
         assert!(member_request(&drain(&sync)).is_none(), "no listing asked");

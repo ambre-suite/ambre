@@ -9,7 +9,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq};
+use ambre_core::{ChannelId, DeltaBytes, DocumentId, LoroPayloadRef, MetaId, SegmentId, Seq};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
@@ -27,6 +27,16 @@ pub enum Opening {
     OpenSegments(Vec<SegmentId>),
     /// Every document is in, and the channel is open.
     Open(Box<ChannelState>),
+}
+
+/// What an opening did with a payload it was handed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub enum Receipt {
+    /// The payload belongs to a document of this opening, which keeps it.
+    Kept,
+    /// No document of this opening is the one named, so nothing was kept.
+    NotExpected,
 }
 
 /// The documents of a channel that is opening, and their bytes so far.
@@ -85,9 +95,9 @@ impl OpeningChannel {
         self.payloads.keys().copied().collect()
     }
 
-    /// Keep the bytes of an expected document until it is ready. Returns
-    /// `false` for a document this opening does not expect.
-    pub fn receive(&mut self, document_id: DocumentId, payload: &[u8]) -> bool {
+    /// Keep the bytes of an expected document until it is ready. A document
+    /// this opening does not expect is [`Receipt::NotExpected`].
+    pub fn receive(&mut self, document_id: DocumentId, payload: LoroPayloadRef<'_>) -> Receipt {
         self.receive_at(document_id, None, payload)
     }
 
@@ -98,22 +108,22 @@ impl OpeningChannel {
         &mut self,
         document_id: DocumentId,
         order: Option<Order>,
-        payload: &[u8],
-    ) -> bool {
+        payload: LoroPayloadRef<'_>,
+    ) -> Receipt {
         // `meta` already admitted takes a live delta at once, as an open
         // channel would.
         if document_id == self.meta_id
             && let Some(meta) = &self.meta
         {
-            if let Err(e) = meta.import(payload) {
+            if let Err(e) = meta.import(payload.as_bytes()) {
                 tracing::warn!("[Murmure] delta for meta {document_id} refused: {e:?}");
             }
-            return true;
+            return Receipt::Kept;
         }
         let Some(held) = self.payloads.get_mut(&document_id) else {
-            return false;
+            return Receipt::NotExpected;
         };
-        held.push(Arrival::Bytes(payload.to_vec()));
+        held.push(Arrival::Bytes(payload.to_payload()));
         // `meta` holds no message: only a segment is numbered.
         if let Some(order) = order
             && document_id != self.meta_id
@@ -123,7 +133,7 @@ impl OpeningChannel {
                 .or_default()
                 .note(order, payload);
         }
-        true
+        Receipt::Kept
     }
 
     /// Keep a delta a member signed until its document is ready
@@ -138,7 +148,7 @@ impl OpeningChannel {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: &[u8],
+        payload: &DeltaBytes,
         signer: Signer,
     ) -> Result<(), MurmureError> {
         if !self.expects(document_id) {
@@ -148,7 +158,7 @@ impl OpeningChannel {
             if !delta::binary_by(payload, signer.peer) {
                 return Err(Refusal::NotSigners.into());
             }
-            self.receive(document_id, payload);
+            let _kept = self.receive(document_id, payload.into());
             return Ok(());
         }
         let sequence = self.sequences.entry(document_id).or_default();
@@ -218,13 +228,13 @@ impl OpeningChannel {
     }
 
     fn meta_ready(&mut self) -> Result<Opening, MurmureError> {
-        let payloads: Vec<&[u8]> = self
+        let payloads: Vec<LoroPayloadRef<'_>> = self
             .payloads
             .get(&self.meta_id)
             .ok_or(MurmureError::NotHeld(self.meta_id))?
             .iter()
             .filter_map(|arrival| match arrival {
-                Arrival::Bytes(bytes) => Some(bytes.as_slice()),
+                Arrival::Bytes(bytes) => Some(bytes.borrowed()),
                 Arrival::Signed { .. } => None,
             })
             .collect();

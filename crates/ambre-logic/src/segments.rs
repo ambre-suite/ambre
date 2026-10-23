@@ -85,7 +85,7 @@ impl LogicState {
         let meta = channel.meta_id().document_id();
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id: meta,
-            payload: closed.meta.into(),
+            payload: closed.meta,
             summary: None,
         });
         // The created successor is held already, and its whole content leaves
@@ -141,7 +141,7 @@ impl LogicState {
                 segment: snapshot.segment,
                 lease: snapshot.lease,
                 horizon: snapshot.horizon,
-                payload: snapshot.payload.into(),
+                payload: snapshot.payload,
             }),
             Ok(None) => {}
             Err(error) => {
@@ -189,7 +189,7 @@ impl LogicState {
         let document_id = channel.meta_id().document_id();
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id,
-            payload: meta.into(),
+            payload: meta,
             summary: None,
         });
     }
@@ -235,7 +235,7 @@ impl LogicState {
                 lease: fold.lease,
                 horizon: fold.horizon,
                 amendments_seq: fold.amendments_seq,
-                payload: fold.payload.into(),
+                payload: fold.payload,
             }),
             Ok(None) => {}
             Err(error) => tracing::warn!("Logic: fold snapshot on {channel_id} refused: {error}"),
@@ -293,7 +293,7 @@ impl LogicState {
                 let meta = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: meta,
-                    payload: payload.into(),
+                    payload,
                     summary: None,
                 });
             }
@@ -322,7 +322,7 @@ impl LogicState {
                 let meta = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: meta,
-                    payload: payload.into(),
+                    payload,
                     summary: None,
                 });
             }
@@ -424,7 +424,7 @@ impl LogicState {
         if let Some(sent) = relocated.sent {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: sent.document,
-                payload: sent.delta.into(),
+                payload: sent.delta,
                 summary: Some(sent.summary),
             });
             self.send_to_ui(UiEvent::Channel {
@@ -501,7 +501,7 @@ impl LogicState {
         if let Some(payload) = linked.meta {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: meta,
-                payload: payload.into(),
+                payload,
                 summary: None,
             });
         }

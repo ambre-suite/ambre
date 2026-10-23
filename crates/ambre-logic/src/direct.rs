@@ -124,7 +124,7 @@ impl LogicState {
             Ok(sent) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
                     document_id: sent.segment.document_id(),
-                    payload: sent.delta.into(),
+                    payload: sent.delta,
                     summary: Some(sent.summary),
                 });
                 self.send_to_ui(UiEvent::Channel {

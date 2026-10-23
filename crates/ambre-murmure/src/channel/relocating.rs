@@ -86,7 +86,7 @@ impl ChannelState {
         }
         let mut from = VersionVector::new();
         for payload in refused {
-            let (start, _) = delta::range(&delta::read(payload.as_bytes())?);
+            let (start, _) = delta::range(&delta::read(payload)?);
             for (&peer, &counter) in start.iter() {
                 if from.get(&peer).is_none_or(|c| *c > counter) {
                     from.insert(peer, counter);

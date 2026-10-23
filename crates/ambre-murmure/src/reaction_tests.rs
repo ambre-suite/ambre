@@ -1,8 +1,9 @@
 //! The reactions of a message against their contract rows
 //! (`features/ambre-spec-murmure-reactions.md`).
 
+use crate::Receipt;
 use ambre_bus::{ActivityKind, MessageDraft, MessageView, Reaction, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{ChannelId, DeltaBytes, MessageId, SegmentId, Seq, UserId};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -95,13 +96,16 @@ fn open_from(state: &ChannelState) -> ChannelState {
     let active = state.active_id().document_id();
     let mut opening = OpeningChannel::new(state.channel_id(), meta_id);
     let meta = state.snapshot(meta_id.document_id()).expect("meta");
-    assert!(opening.receive(meta_id.document_id(), &meta));
+    assert_eq!(
+        opening.receive(meta_id.document_id(), (&meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(meta_id.document_id()),
         Ok(Opening::OpenSegments(_))
     ));
     let segment = state.snapshot(active).expect("segment");
-    assert!(opening.receive(active, &segment));
+    assert_eq!(opening.receive(active, (&segment).into()), Receipt::Kept);
     match opening.ready(active) {
         Ok(Opening::Open(state)) => state.identify(),
         other => panic!("the channel opens: {other:?}"),
@@ -246,7 +250,7 @@ fn reactions_map(member: &Member) -> LoroMap {
 }
 
 /// What `member` wrote since `before`, as a segment delta travels.
-fn written_since(member: &Member, before: &VersionVector) -> Vec<u8> {
+fn written_since(member: &Member, before: &VersionVector) -> DeltaBytes {
     let doc = member
         .state
         .doc(member.segment().document_id())

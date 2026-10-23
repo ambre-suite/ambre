@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{MessageId, Seq};
+use ambre_core::{LoroPayloadRef, MessageId, Seq, SnapshotBytes};
 use loro::{ContainerID, ContainerTrait, ID, LoroDoc, VersionVector};
 
 use crate::schema::{self, MessageKey, Root};
@@ -81,7 +81,7 @@ impl Sequence {
     /// Note one payload the relay delivered. An update keeps its range until
     /// [`Sequence::resolve`] matches it. A snapshot raises the horizon and
     /// adopts the numbers its table gives, up to that horizon.
-    pub(crate) fn note(&mut self, order: Order, payload: &[u8]) {
+    pub(crate) fn note(&mut self, order: Order, payload: LoroPayloadRef<'_>) {
         match order {
             Order::Update(seq) => {
                 self.delivered = self.delivered.max(seq);
@@ -107,7 +107,11 @@ impl Sequence {
                 }
                 // A row past the horizon is a number no update of this
                 // snapshot had: a writer's mistake, read as no number.
-                for (id, seq) in table(payload).into_iter().flatten() {
+                let rows = match payload {
+                    LoroPayloadRef::Snapshot(snapshot) => table(snapshot),
+                    LoroPayloadRef::Delta(_) => None,
+                };
+                for (id, seq) in rows.into_iter().flatten() {
                     if seq <= covered {
                         self.adopt(id, seq);
                     }
@@ -127,7 +131,7 @@ impl Sequence {
     /// Note one payload of a document that holds no message, an amendments
     /// document: its number and the end of its operations, and nothing to
     /// match.
-    pub(crate) fn note_bare(&mut self, order: Order, payload: &[u8]) {
+    pub(crate) fn note_bare(&mut self, order: Order, payload: LoroPayloadRef<'_>) {
         let seq = match order {
             Order::Update(seq) | Order::Snapshot(seq) => seq,
         };
@@ -210,7 +214,7 @@ impl Sequence {
 
     /// The numbers this member knows, framed before `loro`: the snapshot it
     /// hands the relay. With no number known, the bare Loro bytes.
-    pub(crate) fn frame(&self, loro: Vec<u8>) -> Vec<u8> {
+    pub(crate) fn frame(&self, loro: SnapshotBytes) -> SnapshotBytes {
         if self.exact.is_empty() {
             return loro;
         }
@@ -229,8 +233,8 @@ impl Sequence {
             out.extend_from_slice(&id);
             out.extend_from_slice(&seq.to_le_bytes());
         }
-        out.extend_from_slice(&loro);
-        out
+        out.extend_from_slice(loro.as_bytes());
+        SnapshotBytes::new(out)
     }
 }
 
@@ -265,8 +269,8 @@ struct Framed<'a> {
     loro: &'a [u8],
 }
 
-fn split(payload: &[u8]) -> Option<Framed<'_>> {
-    let rest = payload.strip_prefix(FRAME_MAGIC)?;
+fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
+    let rest = payload.as_bytes().strip_prefix(FRAME_MAGIC)?;
     let (count, rest) = rest.split_first_chunk::<4>()?;
     let len = usize::try_from(u32::from_le_bytes(*count))
         .ok()?
@@ -277,15 +281,21 @@ fn split(payload: &[u8]) -> Option<Framed<'_>> {
     })
 }
 
-/// The Loro bytes of a payload: past the frame when it has one. A payload
-/// that opens with the magic and holds no whole frame is handed on as it is.
-/// Loro refuses it, so a truncated table never imports.
-pub(crate) fn loro_part(payload: &[u8]) -> &[u8] {
-    split(payload).map_or(payload, |f| f.loro)
+/// The Loro bytes of a payload: past the frame when it has one. Only a
+/// snapshot carries one. A snapshot that opens with the magic and holds no
+/// whole frame is handed on as it is. Loro refuses it, so a truncated table
+/// never imports.
+pub(crate) fn loro_part(payload: LoroPayloadRef<'_>) -> &[u8] {
+    match payload {
+        LoroPayloadRef::Delta(delta) => delta.as_bytes(),
+        LoroPayloadRef::Snapshot(snapshot) => {
+            split(snapshot).map_or(snapshot.as_bytes(), |f| f.loro)
+        }
+    }
 }
 
 /// The rows a framed snapshot carries, `None` for a bare one.
-fn table(payload: &[u8]) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
+fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
     let framed = split(payload)?;
     Some(framed.rows.chunks_exact(ROW_LEN).filter_map(|row| {
         let (id, seq) = row.split_first_chunk::<16>()?;

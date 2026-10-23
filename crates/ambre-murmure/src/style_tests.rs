@@ -1,6 +1,7 @@
 //! The style marks of a message body against their contract rows
 //! (`features/ambre-spec-murmure-composer.md`).
 
+use crate::Receipt;
 use ambre_bus::CharSpan;
 use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
 use ambre_core::{ChannelId, Seq, UserId};
@@ -25,13 +26,16 @@ fn open_from(state: &ChannelState) -> ChannelState {
     let active = state.active_id().document_id();
     let mut opening = OpeningChannel::new(state.channel_id(), meta_id);
     let meta = state.snapshot(meta_id.document_id()).expect("meta");
-    assert!(opening.receive(meta_id.document_id(), &meta));
+    assert_eq!(
+        opening.receive(meta_id.document_id(), (&meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(meta_id.document_id()),
         Ok(Opening::OpenSegments(_))
     ));
     let segment = state.snapshot(active).expect("segment");
-    assert!(opening.receive(active, &segment));
+    assert_eq!(opening.receive(active, (&segment).into()), Receipt::Kept);
     match opening.ready(active) {
         Ok(Opening::Open(state)) => state.identify(),
         other => panic!("the channel opens: {other:?}"),

@@ -1,6 +1,7 @@
 //! The engine core against its contract rows: the documents a channel holds,
 //! the header check, the routing of a remote delta, and the send.
 
+use crate::Receipt;
 use ambre_bus::CharSpan;
 use std::collections::{HashMap, HashSet};
 
@@ -8,7 +9,9 @@ use ambre_bus::{
     Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
 };
 use ambre_core::schema::SchemaError;
-use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, MetaId, SegmentId, Seq, SnapshotBytes, UserId,
+};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::channel::push_segment_entry;
@@ -27,8 +30,8 @@ fn draft(text: &str) -> MessageDraft {
     }
 }
 
-fn snapshot(doc: &LoroDoc) -> Vec<u8> {
-    doc.export(ExportMode::Snapshot).expect("snapshot")
+fn snapshot(doc: &LoroDoc) -> SnapshotBytes {
+    SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
 }
 
 /// A segment document of `channel`, as a peer would have stored it.
@@ -43,11 +46,11 @@ fn segment_doc(channel: ChannelId) -> LoroDoc {
 struct Stored {
     channel: ChannelId,
     meta_id: MetaId,
-    meta: Vec<u8>,
+    meta: SnapshotBytes,
     final_id: SegmentId,
     closing_id: SegmentId,
     active_id: SegmentId,
-    segments: HashMap<SegmentId, Vec<u8>>,
+    segments: HashMap<SegmentId, SnapshotBytes>,
 }
 
 fn stored_channel() -> Stored {
@@ -299,7 +302,13 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
     // A remote peer writes into the closing segment.
     let remote = LoroDoc::new();
     remote
-        .import(stored.segments.get(&stored.closing_id).expect("bytes"))
+        .import(
+            stored
+                .segments
+                .get(&stored.closing_id)
+                .expect("bytes")
+                .as_bytes(),
+        )
         .expect("import");
     let before = remote.oplog_vv();
     let map = crate::schema::Fields::<MessageKey>::of(
@@ -310,7 +319,7 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
     );
     map.insert(MessageKey::Id, "x").expect("insert");
     remote.commit();
-    let delta = remote.export(ExportMode::updates(&before)).expect("delta");
+    let delta = DeltaBytes::new(remote.export(ExportMode::updates(&before)).expect("delta"));
 
     let active_before = state
         .doc(stored.active_id.document_id())
@@ -321,7 +330,7 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
         .expect("meta")
         .get_deep_value();
     state
-        .apply_remote(stored.closing_id.document_id(), &delta)
+        .apply_remote(stored.closing_id.document_id(), (&delta).into())
         .expect("apply");
     assert_eq!(
         state
@@ -353,12 +362,19 @@ fn a_delta_for_a_document_the_channel_does_not_hold_is_refused() {
     let mut state = open(&stored);
     let stranger = DocumentId::new();
     assert_eq!(
-        state.apply_remote(stranger, &[1, 2, 3]).err(),
+        state
+            .apply_remote(stranger, (&DeltaBytes::new(vec![1, 2, 3])).into())
+            .err(),
         Some(MurmureError::NotHeld(stranger))
     );
     // The final segment is listed but not loaded, so it is not held either.
     assert_eq!(
-        state.apply_remote(stored.final_id.document_id(), &[]).err(),
+        state
+            .apply_remote(
+                stored.final_id.document_id(),
+                (&DeltaBytes::new(Vec::new())).into()
+            )
+            .err(),
         Some(MurmureError::NotHeld(stored.final_id.document_id()))
     );
 }
@@ -502,7 +518,7 @@ fn bytes_the_crdt_engine_refuses_never_reach_the_header_check() {
     let refused = ChannelState::open(
         stored.channel,
         stored.meta_id,
-        b"not a loro document",
+        &SnapshotBytes::new(b"not a loro document".to_vec()),
         &stored.segments,
     );
     assert_eq!(
@@ -703,7 +719,7 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
                      other_knew: &loro::VersionVector,
                      at: usize,
                      text: &str|
-     -> Vec<u8> {
+     -> DeltaBytes {
         let doc = state.doc(segment.document_id()).expect("segment");
         let Some(message) = crate::schema::root_list(doc, Root::Messages)
             .get(0)
@@ -718,14 +734,14 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
         };
         content.insert(at, text).expect("type");
         doc.commit();
-        doc.export(ExportMode::updates(other_knew)).expect("delta")
+        DeltaBytes::new(doc.export(ExportMode::updates(other_knew)).expect("delta"))
     };
     let from_alice = type_into(&alice, &bob_knew, 0, "A:");
     let from_bob = type_into(&bob, &alice_knew, 4, ":B");
     alice
-        .apply_remote(segment.document_id(), &from_bob)
+        .apply_remote(segment.document_id(), (&from_bob).into())
         .expect("apply");
-    bob.apply_remote(segment.document_id(), &from_alice)
+    bob.apply_remote(segment.document_id(), (&from_alice).into())
         .expect("apply");
 
     let on_alice = alice.messages(segment).expect("alice");
@@ -790,10 +806,10 @@ fn second_member(state: &ChannelState) -> ChannelState {
     let segments = HashMap::from([(
         state.active_id(),
         state
-            .export_all(state.active_id().document_id())
+            .snapshot(state.active_id().document_id())
             .expect("segment"),
     )]);
-    let meta_bytes = state.export_all(meta.document_id()).expect("meta");
+    let meta_bytes = state.snapshot(meta.document_id()).expect("meta");
     ChannelState::open(state.channel_id(), meta, &meta_bytes, &segments)
         .expect("open")
         .identify()
@@ -817,7 +833,7 @@ fn a_name_one_member_sets_reaches_every_member() {
         }
     );
     let events = bob
-        .apply_remote(named.meta.document_id(), &named.delta)
+        .apply_remote(named.meta.document_id(), (&named.delta).into())
         .expect("apply");
     assert_eq!(
         events,
@@ -834,7 +850,7 @@ fn a_name_one_member_sets_reaches_every_member() {
         .name_direct(Some(&crate::fit_name("holiday")))
         .expect("rename");
     alice
-        .apply_remote(renamed.meta.document_id(), &renamed.delta)
+        .apply_remote(renamed.meta.document_id(), (&renamed.delta).into())
         .expect("apply");
     assert_eq!(
         alice.name().as_ref().map(ambre_core::Name::as_str),
@@ -907,7 +923,8 @@ fn clearing_a_name_removes_its_key() {
     for cleared in [None, Some(crate::fit_name("   "))] {
         let named = alice.name_direct(cleared.as_ref()).expect("clear");
         assert_eq!(named.event, MurmureEvent::Named { name: None });
-        bob.apply_remote(meta, &named.delta).expect("apply");
+        bob.apply_remote(meta, (&named.delta).into())
+            .expect("apply");
         for state in [&alice, &bob] {
             let channel = crate::schema::channel(state.doc(meta).expect("meta"));
             assert!(
@@ -1025,7 +1042,10 @@ fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
 fn opening_takes_meta_then_its_live_segments_and_never_a_final_one() {
     let stored = stored_channel();
     let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
-    assert!(opening.receive(stored.meta_id.document_id(), &stored.meta));
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
+        Receipt::Kept
+    );
 
     let Ok(Opening::OpenSegments(asked)) = opening.ready(stored.meta_id.document_id()) else {
         panic!("meta names the live segments");
@@ -1039,7 +1059,10 @@ fn opening_takes_meta_then_its_live_segments_and_never_a_final_one() {
     assert!(!opening.expects(stored.final_id.document_id()));
 
     for id in [stored.closing_id, stored.active_id] {
-        assert!(opening.receive(id.document_id(), &stored.segments[&id]));
+        assert_eq!(
+            opening.receive(id.document_id(), (&stored.segments[&id]).into()),
+            Receipt::Kept
+        );
     }
     assert!(matches!(
         opening.ready(stored.closing_id.document_id()),
@@ -1059,26 +1082,38 @@ fn opening_takes_meta_then_its_live_segments_and_never_a_final_one() {
 fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
     let stored = stored_channel();
     let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
-    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
+        Receipt::Kept
+    );
     let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
 
     let editor = LoroDoc::new();
-    editor.import(&stored.meta).expect("import");
+    editor.import(stored.meta.as_bytes()).expect("import");
     let before = editor.oplog_vv();
     crate::schema::channel(&editor)
         .insert(ChannelKey::Name, "renamed")
         .expect("rename");
     editor.commit();
-    let delta = editor.export(ExportMode::updates(&before)).expect("delta");
-    assert!(opening.receive(stored.meta_id.document_id(), &delta));
-
-    opening.receive(
-        stored.closing_id.document_id(),
-        &stored.segments[&stored.closing_id],
+    let delta = DeltaBytes::new(editor.export(ExportMode::updates(&before)).expect("delta"));
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&delta).into()),
+        Receipt::Kept
     );
-    opening.receive(
-        stored.active_id.document_id(),
-        &stored.segments[&stored.active_id],
+
+    assert_eq!(
+        opening.receive(
+            stored.closing_id.document_id(),
+            (&stored.segments[&stored.closing_id]).into(),
+        ),
+        Receipt::Kept
+    );
+    assert_eq!(
+        opening.receive(
+            stored.active_id.document_id(),
+            (&stored.segments[&stored.active_id]).into(),
+        ),
+        Receipt::Kept
     );
     let _ = opening
         .ready(stored.closing_id.document_id())
@@ -1097,7 +1132,10 @@ fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
 fn a_meta_of_another_channel_ends_the_opening() {
     let stored = stored_channel();
     let mut opening = OpeningChannel::new(ChannelId::new(), stored.meta_id);
-    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(stored.meta_id.document_id()),
         Err(MurmureError::ForeignChannel { .. })
@@ -1108,10 +1146,13 @@ fn a_meta_of_another_channel_ends_the_opening() {
 fn an_opening_refuses_a_document_it_did_not_ask_for() {
     let stored = stored_channel();
     let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
-    assert!(!opening.receive(
-        stored.active_id.document_id(),
-        &stored.segments[&stored.active_id]
-    ));
+    assert_eq!(
+        opening.receive(
+            stored.active_id.document_id(),
+            (&stored.segments[&stored.active_id]).into()
+        ),
+        Receipt::NotExpected
+    );
     assert_eq!(
         opening.ready(stored.active_id.document_id()).err(),
         Some(MurmureError::NotHeld(stored.active_id.document_id()))
@@ -1123,11 +1164,17 @@ fn an_opening_refuses_a_document_it_did_not_ask_for() {
 /// An opening past `meta`, with the active segment in and ready.
 fn opening_with_active(stored: &Stored) -> OpeningChannel {
     let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
-    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
+        Receipt::Kept
+    );
     let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
-    opening.receive(
-        stored.active_id.document_id(),
-        &stored.segments[&stored.active_id],
+    assert_eq!(
+        opening.receive(
+            stored.active_id.document_id(),
+            (&stored.segments[&stored.active_id]).into(),
+        ),
+        Receipt::Kept
     );
     opening
 }
@@ -1168,7 +1215,13 @@ fn a_closing_segment_with_no_key_opens_the_channel_without_it() {
 fn a_damaged_closing_segment_opens_the_channel_without_it() {
     let stored = stored_channel();
     let mut opening = opening_with_active(&stored);
-    opening.receive(stored.closing_id.document_id(), &[0xff; 8]);
+    assert_eq!(
+        opening.receive(
+            stored.closing_id.document_id(),
+            (&SnapshotBytes::new(vec![0xff; 8])).into()
+        ),
+        Receipt::Kept
+    );
     let _ = opening
         .ready(stored.closing_id.document_id())
         .expect("closing");
@@ -1190,9 +1243,18 @@ fn a_damaged_closing_segment_opens_the_channel_without_it() {
 fn a_damaged_active_segment_still_ends_the_opening() {
     let stored = stored_channel();
     let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
-    opening.receive(stored.meta_id.document_id(), &stored.meta);
+    assert_eq!(
+        opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
+        Receipt::Kept
+    );
     let _ = opening.ready(stored.meta_id.document_id()).expect("meta");
-    opening.receive(stored.active_id.document_id(), &[0xff; 8]);
+    assert_eq!(
+        opening.receive(
+            stored.active_id.document_id(),
+            (&SnapshotBytes::new(vec![0xff; 8])).into()
+        ),
+        Receipt::Kept
+    );
     let _ = opening.give_up(stored.closing_id.document_id());
     assert!(opening.ready(stored.active_id.document_id()).is_err());
 }
@@ -1238,7 +1300,7 @@ fn an_older_segment_asked_for_arrives_then_loads() {
     let produced = state
         .apply_remote(
             stored.final_id.document_id(),
-            &stored.segments[&stored.final_id],
+            (&stored.segments[&stored.final_id]).into(),
         )
         .expect("kept");
     assert!(
@@ -1347,7 +1409,7 @@ fn a_final_band_asked_again_loads_in_place() {
     assert_eq!(state.retry(stored.final_id), None, "asked for once");
     let bytes = &stored.segments[&stored.final_id];
     let _ = state
-        .apply_remote(stored.final_id.document_id(), bytes)
+        .apply_remote(stored.final_id.document_id(), bytes.into())
         .expect("kept");
     assert_eq!(
         state.older_ready(stored.final_id.document_id()),

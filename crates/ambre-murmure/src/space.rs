@@ -10,7 +10,10 @@
 use ambre_bus::{
     CatalogPosition, CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic,
 };
-use ambre_core::{CategoryId, ChannelId, DocumentId, Name, SpaceId};
+use ambre_core::{
+    CategoryId, ChannelId, DeltaBytes, DocumentId, LoroPayloadRef, Name, PeerEntryBytes,
+    SnapshotBytes, SpaceId,
+};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::channel::ChannelState;
@@ -76,7 +79,7 @@ impl SpaceState {
     /// # Errors
     /// Every refusal of the header check, and
     /// [`MurmureError::ForeignSpace`] for a document of another space.
-    pub fn open(space_id: SpaceId, payloads: &[&[u8]]) -> Result<Self, MurmureError> {
+    pub fn open(space_id: SpaceId, payloads: &[LoroPayloadRef<'_>]) -> Result<Self, MurmureError> {
         let doc = schema::admit_space(payloads, space_id)?;
         Ok(Self {
             space_id,
@@ -99,8 +102,8 @@ impl SpaceState {
     pub fn adopt_session(
         &mut self,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        entry: PeerEntryBytes,
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         if self.session.map(Session::peer) == Some(peer) {
             return Ok(None);
         }
@@ -122,7 +125,7 @@ impl SpaceState {
     #[cfg(test)]
     pub(crate) fn identify(mut self) -> Self {
         let peer = crate::session::next_peer();
-        self.adopt_session(peer, peer.0.to_le_bytes().to_vec())
+        self.adopt_session(peer, PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()))
             .expect("adopt");
         self
     }
@@ -152,16 +155,16 @@ impl SpaceState {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn export_all(&self) -> Result<Vec<u8>, MurmureError> {
-        Ok(self.doc.export(ExportMode::all_updates())?)
+    pub fn export_all(&self) -> Result<DeltaBytes, MurmureError> {
+        Ok(DeltaBytes::new(self.doc.export(ExportMode::all_updates())?))
     }
 
     /// The whole document, for the relay's compaction.
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn snapshot(&self) -> Result<Vec<u8>, MurmureError> {
-        Ok(self.doc.export(ExportMode::Snapshot)?)
+    pub fn snapshot(&self) -> Result<SnapshotBytes, MurmureError> {
+        Ok(SnapshotBytes::new(self.doc.export(ExportMode::Snapshot)?))
     }
 
     /// The version the document stands at, so a caller can tell whether a
@@ -174,8 +177,8 @@ impl SpaceState {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] for bytes Loro refuses.
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Result<(), MurmureError> {
-        self.doc.import(payload)?;
+    pub fn apply_remote(&mut self, payload: LoroPayloadRef<'_>) -> Result<(), MurmureError> {
+        self.doc.import(payload.as_bytes())?;
         Ok(())
     }
 
@@ -188,7 +191,7 @@ impl SpaceState {
         category_id: CategoryId,
         name: &Name,
         position: CatalogPosition,
-    ) -> Result<Vec<u8>, MurmureError> {
+    ) -> Result<DeltaBytes, MurmureError> {
         self.writable()?;
         let entry = Fields::<CategoryKey>::of(
             crate::schema::root_map(&self.doc, Root::Categories)
@@ -213,7 +216,7 @@ impl SpaceState {
         &mut self,
         channel: &ChannelState,
         listing: &Listing<'_>,
-    ) -> Result<Vec<u8>, MurmureError> {
+    ) -> Result<DeltaBytes, MurmureError> {
         let channel_id = channel.channel_id();
         if channel.channel_type() != Some(ChannelType::Public) {
             return Err(MurmureError::NotPublic(channel_id));
@@ -249,7 +252,7 @@ impl SpaceState {
     pub fn unlist_channel(
         &mut self,
         channel_id: ChannelId,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         let catalogue = crate::schema::root_map(&self.doc, Root::Catalogue);
         let key = channel_id.to_string();
         if catalogue.get(&key).is_none() {
@@ -271,7 +274,7 @@ impl SpaceState {
         &mut self,
         channel_id: ChannelId,
         key: &SealedChannelKey,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         let Some(entry) = self.listed(channel_id) else {
             return Ok(None);
         };
@@ -366,7 +369,7 @@ impl SpaceState {
 
     /// Commit the pending writes, and export what this session wrote since
     /// its last export.
-    fn export(&mut self) -> Result<Vec<u8>, MurmureError> {
+    fn export(&mut self) -> Result<DeltaBytes, MurmureError> {
         let document_id = self.document_id();
         let session = self
             .session

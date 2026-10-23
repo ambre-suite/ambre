@@ -7,7 +7,7 @@
 //! (`MURMURE-255`).
 
 use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp};
-use ambre_core::{DocumentId, MessageId, SegmentId, UserId};
+use ambre_core::{DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, UserId};
 use loro::LoroDoc;
 
 use super::{
@@ -37,7 +37,7 @@ pub(super) struct Pending {
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
-    session: Option<(ambre_core::PeerId, Vec<u8>)>,
+    session: Option<(ambre_core::PeerId, PeerEntryBytes)>,
 }
 
 impl Pending {
@@ -348,7 +348,7 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: PeerEntryBytes,
     ) -> bool {
         let Some(pending) = self.threads_pending.get_mut(&document_id) else {
             return false;
@@ -574,7 +574,7 @@ impl ChannelState {
     pub(super) fn thread_reacted(
         &self,
         root: MessageId,
-        delta: Vec<u8>,
+        delta: DeltaBytes,
     ) -> Result<Sent, MurmureError> {
         let thread = self
             .threads

@@ -17,7 +17,7 @@ use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, verdict,
 };
-use ambre_core::{ChannelId, DocumentId, SpaceId};
+use ambre_core::{ChannelId, DocumentId, LoroPayloadRef, SpaceId};
 use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -521,7 +521,7 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 /// # Errors
 /// Every refusal of [`admit_all`].
 pub(crate) fn admit(
-    payload: &[u8],
+    payload: LoroPayloadRef<'_>,
     kind: DocumentKind,
     channel_id: ChannelId,
     document_id: DocumentId,
@@ -544,7 +544,7 @@ pub(crate) fn admit(
 /// refusals of [`SchemaError`], [`MurmureError::WrongKind`],
 /// [`MurmureError::HeaderMalformed`], and [`MurmureError::ForeignChannel`].
 pub(crate) fn admit_all(
-    payloads: &[&[u8]],
+    payloads: &[LoroPayloadRef<'_>],
     kind: DocumentKind,
     channel_id: ChannelId,
     document_id: DocumentId,
@@ -552,7 +552,7 @@ pub(crate) fn admit_all(
     admit_with(kind, channel_id, document_id, |doc| {
         payloads
             .iter()
-            .try_for_each(|payload| import_bytes(doc, payload, document_id))
+            .try_for_each(|&payload| import_bytes(doc, payload, document_id))
     })
 }
 
@@ -599,12 +599,15 @@ pub(crate) fn admit_with(
 /// # Errors
 /// Every refusal of [`admit_all`], with [`MurmureError::ForeignSpace`] in
 /// place of the foreign channel.
-pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroDoc, MurmureError> {
+pub(crate) fn admit_space(
+    payloads: &[LoroPayloadRef<'_>],
+    space_id: SpaceId,
+) -> Result<LoroDoc, MurmureError> {
     let document_id = space_id.document_id();
     let doc = import_current(|doc| {
         payloads
             .iter()
-            .try_for_each(|payload| import_bytes(doc, payload, document_id))
+            .try_for_each(|&payload| import_bytes(doc, payload, document_id))
     })?;
     let header = header(&doc);
     check_kind(&header, DocumentKind::Space, document_id)?;
@@ -627,7 +630,7 @@ pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroD
 /// [`SchemaError::PayloadRejected`] for bytes the CRDT engine refuses.
 pub(crate) fn import_bytes(
     doc: &LoroDoc,
-    payload: &[u8],
+    payload: LoroPayloadRef<'_>,
     document_id: DocumentId,
 ) -> Result<(), MurmureError> {
     // A snapshot may carry the relay's numbers before its Loro bytes; the

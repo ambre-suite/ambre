@@ -663,7 +663,7 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
     reopened.expect_amendments(closing, amendments);
     let bytes = channel.snapshot(amendments).expect("amendments export");
     reopened
-        .apply_remote(amendments, &bytes)
+        .apply_remote(amendments, (&bytes).into())
         .expect("the bytes wait");
     reopened
         .older_ready(amendments)
@@ -673,7 +673,7 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
     assert!(reopened.threads_to_open().contains(&thread));
     let bytes = channel.snapshot(thread).expect("a thread exports");
     reopened
-        .apply_remote(thread, &bytes)
+        .apply_remote(thread, (&bytes).into())
         .expect("the bytes wait");
     reopened
         .older_ready(thread)
@@ -685,7 +685,7 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
 fn reopened_space(space: &SpaceState) -> SpaceState {
     SpaceState::open(
         space.space_id(),
-        &[&space.snapshot().expect("a space exports")],
+        &[(&space.snapshot().expect("a space exports")).into()],
     )
     .expect("a space this build wrote reopens")
 }

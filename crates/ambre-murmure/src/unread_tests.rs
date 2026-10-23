@@ -1,8 +1,9 @@
 //! The relay's number of each message, and the unread count it gives
 //! (`features/ambre-spec-murmure-unread.md section 3`).
 
+use crate::Receipt;
 use ambre_bus::{MessageDraft, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, SegmentId, Seq, UserId};
+use ambre_core::{ChannelId, SegmentId, Seq, SnapshotBytes, UserId};
 use loro::{Container, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -45,13 +46,19 @@ fn open_from(state: &ChannelState, covered: Option<Seq>) -> ChannelState {
     let active = state.active_id().document_id();
     let mut opening = OpeningChannel::new(state.channel_id(), meta_id);
     let meta = state.snapshot(meta_id.document_id()).expect("meta");
-    assert!(opening.receive(meta_id.document_id(), &meta));
+    assert_eq!(
+        opening.receive(meta_id.document_id(), (&meta).into()),
+        Receipt::Kept
+    );
     assert!(matches!(
         opening.ready(meta_id.document_id()),
         Ok(Opening::OpenSegments(_))
     ));
     let segment = state.snapshot(active).expect("segment");
-    assert!(opening.receive_at(active, covered.map(Order::Snapshot), &segment));
+    assert_eq!(
+        opening.receive_at(active, covered.map(Order::Snapshot), (&segment).into()),
+        Receipt::Kept
+    );
     match opening.ready(active) {
         Ok(Opening::Open(state)) => *state,
         other => panic!("the channel opens: {other:?}"),
@@ -227,8 +234,9 @@ fn a_truncated_table_is_refused_before_any_import() {
     let mut payload = crate::sequence::FRAME_MAGIC.to_vec();
     payload.extend_from_slice(&3u32.to_le_bytes());
     payload.extend_from_slice(&[0; 10]);
+    let payload = SnapshotBytes::new(payload);
     assert!(matches!(
-        bob.apply_remote_at(segment, Some(Order::Snapshot(Seq(2))), &payload),
+        bob.apply_remote_at(segment, Some(Order::Snapshot(Seq(2))), (&payload).into()),
         Err(MurmureError::Crdt(_))
     ));
     assert_eq!(bob.delivered(segment), Seq::ZERO);

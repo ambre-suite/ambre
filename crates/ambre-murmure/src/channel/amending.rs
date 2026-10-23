@@ -9,7 +9,9 @@
 //! (`MURMURE-013`, `MURMURE-253`).
 
 use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, Seq, UserId,
+};
 use loro::{
     Container, LoroDoc, LoroList, LoroMap, LoroText, LoroValue, UpdateOptions, ValueOrContainer,
 };
@@ -32,7 +34,7 @@ pub(super) struct Pending {
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
-    session: Option<(ambre_core::PeerId, Vec<u8>)>,
+    session: Option<(ambre_core::PeerId, PeerEntryBytes)>,
 }
 
 impl Pending {
@@ -83,7 +85,7 @@ pub enum ChangeTarget {
 pub struct Linked {
     /// The `meta` delta that names the document in the segment's entry,
     /// `None` when the entry named it already.
-    pub meta: Option<Vec<u8>>,
+    pub meta: Option<DeltaBytes>,
     /// Whether the document is to open: this client's own, for its session,
     /// or another member's, for its bytes.
     pub open: bool,
@@ -221,7 +223,7 @@ impl ChannelState {
         &mut self,
         segment: SegmentId,
         amendments: DocumentId,
-    ) -> Result<Option<Vec<u8>>, MurmureError> {
+    ) -> Result<Option<DeltaBytes>, MurmureError> {
         let Some(entry) = segment_entry(&self.meta.doc, segment) else {
             return Ok(None);
         };
@@ -260,7 +262,7 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: PeerEntryBytes,
     ) -> bool {
         let Some(pending) = self.amendments_pending.get_mut(&document_id) else {
             return false;
@@ -327,7 +329,7 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: &[u8],
+        payload: &DeltaBytes,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         let sequence = self.sequences.entry(document_id).or_default();

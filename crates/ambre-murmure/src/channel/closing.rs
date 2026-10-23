@@ -6,7 +6,7 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::{ByteSize, Millis, SegmentId};
+use ambre_core::{ByteSize, DeltaBytes, Millis, PeerEntryBytes, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
@@ -55,7 +55,7 @@ pub enum Successor {
 #[derive(Debug)]
 pub struct Closed {
     /// Every operation the close wrote in `meta`, as a Loro update.
-    pub meta: Vec<u8>,
+    pub meta: DeltaBytes,
     /// The successor to open, when this client did not create it. Its bytes
     /// then go to [`ChannelState::apply_remote`], and
     /// [`ChannelState::segment_ready`] admits it once they are all in.
@@ -222,7 +222,7 @@ impl ChannelState {
         &mut self,
         segment: SegmentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: PeerEntryBytes,
     ) -> bool {
         if self.successor != Some(segment) {
             return false;

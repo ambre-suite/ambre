@@ -7,7 +7,7 @@
 //! reads this copy and never writes it (`MURMURE-153`).
 
 use ambre_bus::SnapshotVerdict;
-use ambre_core::{DocumentId, Seq};
+use ambre_core::{DocumentId, LoroPayloadRef, Seq, SnapshotBytes};
 use loro::{LoroDoc, VersionVector};
 
 use super::{ChannelState, folding};
@@ -30,7 +30,7 @@ impl ChannelState {
         &self,
         document_id: DocumentId,
         covered: Seq,
-        snapshot: &[u8],
+        snapshot: &SnapshotBytes,
     ) -> Result<SnapshotVerdict, MurmureError> {
         let own = self
             .doc(document_id)
@@ -39,7 +39,10 @@ impl ChannelState {
             return Ok(SnapshotVerdict::Unchecked);
         }
         let theirs = LoroDoc::new();
-        if theirs.import(sequence::loro_part(snapshot)).is_err() {
+        if theirs
+            .import(sequence::loro_part(LoroPayloadRef::Snapshot(snapshot)))
+            .is_err()
+        {
             return Ok(SnapshotVerdict::Mismatch);
         }
         // A fold holds operations no delta carried: it is checked by folding

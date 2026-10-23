@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use ambre_bus::{
     ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
 };
-use ambre_core::{DocumentId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{
+    DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+};
 use loro::{LoroDoc, LoroMap, VersionVector};
 
 use crate::channel::read_messages;
@@ -45,7 +47,11 @@ fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
         .expect("close");
     let peer = next_peer();
     state
-        .adopt_session(successor.document_id(), peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            successor.document_id(),
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     (state, closing)
 }
@@ -62,14 +68,18 @@ fn locked_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
 
 /// Create the amendments of `segment`, adopt their session and link them.
 /// Returns them, their first update, and the `meta` delta that names them.
-fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, Vec<u8>, Vec<u8>) {
+fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, DeltaBytes, DeltaBytes) {
     let ChangeTarget::Create(amendments) = state.change_target(segment, NOW).expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
     };
     let peer = next_peer();
     let first = state
-        .adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            amendments,
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt")
         .expect("the header travels");
     let linked = state.amendments_linked(segment, amendments).expect("link");
@@ -79,7 +89,7 @@ fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, Vec<u8>
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Vec<u8>> = state
+    let segments: HashMap<SegmentId, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -108,7 +118,7 @@ fn messages_of(event: &MurmureEvent) -> &[MessageView] {
 }
 
 /// Every operation of `doc` past `before`, as a delta travels.
-fn json_since(doc: &LoroDoc, before: &VersionVector) -> Vec<u8> {
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> DeltaBytes {
     doc.commit();
     crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
         .expect("encode")
@@ -119,20 +129,24 @@ fn bob_holding(
     alice: &ChannelState,
     segment: SegmentId,
     amendments: DocumentId,
-    first: &[u8],
-    meta: &[u8],
+    first: &DeltaBytes,
+    meta: &DeltaBytes,
     author: UserId,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
-    bob.apply_remote(bob.meta_id().document_id(), meta)
+    bob.apply_remote(bob.meta_id().document_id(), meta.into())
         .expect("meta");
     assert_eq!(bob.amendments_to_open(), [amendments]);
     bob.apply_signed(amendments, Seq(1), first, signer(alice, amendments, author))
         .expect("the header waits");
     bob.older_ready(amendments).expect("admitted");
     let peer = next_peer();
-    bob.adopt_session(amendments, peer, peer.0.to_le_bytes().to_vec())
-        .expect("adopt");
+    bob.adopt_session(
+        amendments,
+        peer,
+        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+    )
+    .expect("adopt");
     assert_eq!(bob.amendments_id(segment), Some(amendments));
     bob
 }
@@ -277,7 +291,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
         .expect("a change");
 
     let mut bob = peer_of(&alice);
-    bob.apply_remote(bob.meta_id().document_id(), &meta)
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.amendments_to_open(), [amendments]);
     assert_eq!(bob.amendments_to_open(), [], "asked once");
@@ -443,7 +457,11 @@ fn locked_thread(
     };
     let peer = next_peer();
     state
-        .adopt_session(thread, peer, peer.0.to_le_bytes().to_vec())
+        .adopt_session(
+            thread,
+            peer,
+            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        )
         .expect("adopt");
     let linked = state.thread_linked(segment, root, thread).expect("link");
     (thread, linked.root.expect("the amendments record it"))
@@ -635,10 +653,7 @@ fn a_change_refused_by_the_lock_is_replayed() {
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
 
     let relocated = alice
-        .relocate_locked(
-            segment.document_id(),
-            &[edited.delta.into(), deleted.delta.into()],
-        )
+        .relocate_locked(segment.document_id(), &[edited.delta, deleted.delta])
         .expect("relocate");
     assert!(relocated.sent.is_none(), "no new message moves");
     assert_eq!(
