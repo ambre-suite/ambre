@@ -42,7 +42,7 @@ impl SyncState {
                                 // RFC3339 -> epoch ms via the JS Date parser
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
-                                    let ms = js_sys::Date::parse(&e.updated_at);
+                                    let ms = js_sys::Date::parse(e.updated_at.as_str());
                                     ambre_bus::Timestamp(if ms.is_nan() { 0 } else { ms as u64 })
                                 },
                                 member_count: e.member_count.max(1),

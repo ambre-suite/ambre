@@ -337,3 +337,31 @@ mod tests {
         assert_eq!(UnixSeconds(u64::MAX).to_i64_saturating(), i64::MAX);
     }
 }
+
+/// An instant as RFC 3339 text, the form the relay's JSON writes a row's
+/// creation and update time in, such as `2026-01-02T03:04:05+00:00`.
+///
+/// The relay formats it, so the type checks no syntax. A client reads it
+/// through a lenient date parser, and an unreadable value reads as the epoch.
+/// A distinct type keeps it apart from free text and from a name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Rfc3339(String);
+
+impl Rfc3339 {
+    /// The instant a date formatter wrote as RFC 3339 text.
+    pub fn formatted(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The text, for the date parser that reads it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Rfc3339 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}

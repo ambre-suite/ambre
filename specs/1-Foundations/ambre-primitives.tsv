@@ -1653,6 +1653,9 @@ ambre-core | src/span.rs | crate::span | Millis::times(n) | param | u64	math	a m
 ambre-core | src/span.rs | crate::span | Millis::to_timer_i32() | ret | i32	newtype-inner	time newtype accessor for the browser timer
 ambre-core | src/span.rs | crate::span | PageTime.0 | field | f64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | PageTime::after(ms) | param | f64	math	frame-clock span on PageTime
+ambre-core | src/span.rs | crate::span | Rfc3339.0 | field | String	newtype-inner	Rfc3339 newtype
+ambre-core | src/span.rs | crate::span | Rfc3339::as_str() | ret | &str	newtype-inner	Rfc3339 newtype
+ambre-core | src/span.rs | crate::span | Rfc3339::formatted(text) | param | String	newtype-inner	Rfc3339 newtype
 ambre-core | src/span.rs | crate::span | Seconds.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Timestamp.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Timestamp::from_i64(stored) | param | i64	newtype-inner	time newtype accessor
@@ -4289,9 +4292,6 @@ ambre-server | src/routes/channels.rs | crate::routes::channels | MemberChannelJ
 ambre-server | src/routes/channels.rs | crate::routes::channels | ThreadJson.created | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | CreateDocumentRequest.space | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | DocumentSummaryJson.member_count | field | u32	math	count
-ambre-server | src/routes/documents.rs | crate::routes::documents | DocumentSummaryJson.updated_at | field | String	debt	planned: lot C bis 6 Rfc3339
-ambre-server | src/routes/documents.rs | crate::routes::documents | GetDocumentResponse.created_at | field | String	debt	planned: lot C bis 6 Rfc3339
-ambre-server | src/routes/documents.rs | crate::routes::documents | GetDocumentResponse.updated_at | field | String	debt	planned: lot C bis 6 Rfc3339
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | SetupAccountRequest.display_name | field | String	debt	finding: Display names held as String (confirmed)
@@ -4414,7 +4414,6 @@ ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field |
 ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DocumentEntry.member_count | field | u32	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | DocumentEntry.updated_at | field | String	debt	planned: lot C bis 6 (Rfc3339)
 ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text

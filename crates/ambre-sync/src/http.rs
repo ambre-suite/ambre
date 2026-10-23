@@ -1226,7 +1226,7 @@ pub(crate) struct DocumentEntry {
     /// Total member count; `> 1` => shared.
     #[serde(default)]
     pub member_count: u32,
-    pub updated_at: String,
+    pub updated_at: ambre_core::Rfc3339,
 }
 
 #[derive(Serialize)]

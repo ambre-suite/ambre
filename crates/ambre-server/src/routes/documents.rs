@@ -179,7 +179,7 @@ pub struct DocumentSummaryJson {
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// Total member count (routing metadata). `> 1` => shared.
     pub member_count: u32,
-    pub updated_at: String,
+    pub updated_at: ambre_core::Rfc3339,
 }
 /// Response wrapper for the document listing.
 #[derive(serde::Serialize)]
@@ -210,7 +210,7 @@ pub async fn list_documents(
                     .map(ambre_core::ExchangeKeyHex::encode)
                     .unwrap_or_default(),
                 member_count: d.member_count.max(0) as u32,
-                updated_at: d.updated_at.to_rfc3339(),
+                updated_at: ambre_core::Rfc3339::formatted(d.updated_at.to_rfc3339()),
             }
         })
         .collect();
@@ -333,8 +333,8 @@ pub struct GetDocumentResponse {
     /// Serialized as its lowercase word.
     pub role: Option<Role>,
     pub doc_key_enc: Option<ambre_core::WrappedDocKey>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: ambre_core::Rfc3339,
+    pub updated_at: ambre_core::Rfc3339,
 }
 
 pub async fn get_document(
@@ -367,8 +367,8 @@ pub async fn get_document(
         name_enc: doc.name_enc,
         role: mem.as_ref().map(|m| m.role),
         doc_key_enc: mem.map(|m| m.doc_key_enc.clone()),
-        created_at: doc.created_at.to_rfc3339(),
-        updated_at: doc.updated_at.to_rfc3339(),
+        created_at: ambre_core::Rfc3339::formatted(doc.created_at.to_rfc3339()),
+        updated_at: ambre_core::Rfc3339::formatted(doc.updated_at.to_rfc3339()),
     }))
 }
 

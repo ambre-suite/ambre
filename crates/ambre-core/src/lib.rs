@@ -124,7 +124,9 @@ pub use schema::{
     migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
-pub use span::{LamportStamp, Millis, PageTime, Seconds, Timestamp, UnixMillis, UnixSeconds};
+pub use span::{
+    LamportStamp, Millis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis, UnixSeconds,
+};
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
