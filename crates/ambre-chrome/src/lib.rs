@@ -54,7 +54,7 @@ pub use app_shell::{
     AppShell, CanvasCell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
 };
 pub use avatar::{Avatar, avatar_initials};
-pub use color::{ColorPopover, color_hex, parse_hex_color};
+pub use color::{AlphaEdit, ColorPopover, PickedColour};
 pub use command::{CommandStates, keybinding_from_event};
 pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};

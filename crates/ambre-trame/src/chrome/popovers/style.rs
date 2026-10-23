@@ -85,7 +85,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             border: Some(BorderEdit {
                 preset,
                 style: style.border_line.get_untracked(),
-                color: style.border_color.get_untracked().map(Rgb::from_bits),
+                color: style.border_color.get_untracked(),
             }),
             ..Default::default()
         });
@@ -172,7 +172,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                             title="Border colour"
                             icon=icondata::MdiBorderColor
                             current=style.border_color
-                            default=Signal::derive(|| 0x606060)
+                            default=Signal::derive(|| Rgb::from_bits(0x60_6060))
                             reset_label="Automatic"
                             on_pick=Callback::new(move |c| style.border_color.set(c))
                         />

@@ -7,12 +7,11 @@
 // promoted here so Toile's style inspector (`toile-styles`) shares the very same
 // control.
 //
-// The value is a packed `u32`. With `alpha = false` (default) it is a plain
-// `0xRRGGBB` (Trame's cells): the native picker covers the whole colour. With
-// `alpha = true` it is a packed `0xAARRGGBB` (Toile's `ElementStyle` fill /
-// stroke). The native `<input type="color">` still drives the RGB channel, since
-// the widget has no alpha. An extra `<input type="range">` drives the top alpha
-// byte, and the two combine into the ARGB the caller stores.
+// The value is the caller's own packing, behind [`PickedColour`]: an `Rgb`
+// (Trame's cells) or an `Rgba` (Toile's `ElementStyle` fill and stroke). The
+// native `<input type="color">` drives the RGB channels, since the widget has no
+// alpha. A packing that carries an alpha also gets an `<input type="range">`,
+// which drives the alpha channel alone.
 //
 // Both widgets fire on every step of a drag, so each reports through its own
 // `Debouncer`: a drag leaves as one pick, the last (`CHROME-015`). A swatch is
@@ -21,83 +20,121 @@
 
 use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 
+use ambre_core::{Argb, Rgb, Rgba};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
-/// Curated swatch palette for the colour picker popover (packed `0xRRGGBB`).
+/// Curated swatch palette for the colour picker popover.
 /// A small office-style set: greys, then a saturated row and a muted row.
-const PALETTE: &[u32] = &[
-    0x000000, 0x404040, 0x808080, 0xb0b0b0, 0xd9d9d9, 0xffffff, 0xc00000, 0xff0000, 0xffc000,
-    0xffff00, 0x92d050, 0x00b050, 0x00b0f0, 0x0070c0, 0x002060, 0x7030a0,
+const PALETTE: &[Rgb] = &[
+    Rgb::from_bits(0x00_0000),
+    Rgb::from_bits(0x40_4040),
+    Rgb::from_bits(0x80_8080),
+    Rgb::from_bits(0xb0_b0b0),
+    Rgb::from_bits(0xd9_d9d9),
+    Rgb::from_bits(0xff_ffff),
+    Rgb::from_bits(0xc0_0000),
+    Rgb::from_bits(0xff_0000),
+    Rgb::from_bits(0xff_c000),
+    Rgb::from_bits(0xff_ff00),
+    Rgb::from_bits(0x92_d050),
+    Rgb::from_bits(0x00_b050),
+    Rgb::from_bits(0x00_b0f0),
+    Rgb::from_bits(0x00_70c0),
+    Rgb::from_bits(0x00_2060),
+    Rgb::from_bits(0x70_30a0),
 ];
 
-/// Parse an `<input type="color">` value (`"#rrggbb"`) or an `"#aarrggbb"` string
-/// into a packed `u32`. Both 6- and 8-hex-digit forms parse; a shorter/garbled
-/// string yields `None`.
-pub fn parse_hex_color(s: &str) -> Option<u32> {
-    let hex = s.strip_prefix('#')?;
-    u32::from_str_radix(hex, 16).ok()
+/// What an unset colour reads as when a pick keeps its alpha: opaque black.
+const UNSET: Rgba = Rgba::from_bits(0x0000_00ff);
+
+/// Whether the picker edits the alpha channel of a packing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlphaEdit {
+    /// The packing has no alpha, so the popover shows no slider.
+    Absent,
+    /// The popover shows an opacity slider for the alpha channel.
+    Slider,
 }
 
-/// Format the RGB channel of a packed colour into a 6-digit `<input type="color">`
-/// value, using `default` when unset (`<input type=color>` cannot be empty). The
-/// top alpha byte is masked off -- the native widget is RGB-only; alpha is carried
-/// by the separate slider. `default` is the caller's themed on-screen colour, so
-/// an "Automatic" / "Transparent" value shows its real colour, tracking the theme.
-pub fn color_hex(c: Option<u32>, default: u32) -> String {
-    format!("#{:06x}", c.unwrap_or(default) & 0x00ff_ffff)
+/// A colour packing the picker edits. The picker reads and writes the four
+/// channels of an [`Rgba`], and the caller keeps its own packing.
+pub trait PickedColour: Copy + Send + Sync + 'static {
+    /// Whether this packing carries an alpha the picker edits.
+    const ALPHA: AlphaEdit;
+
+    /// The four channels. A packing with no alpha reads as opaque.
+    fn as_rgba(self) -> Rgba;
+
+    /// The packing of four channels. A packing with no alpha drops it.
+    fn from_rgba(rgba: Rgba) -> Self;
 }
 
-/// The alpha byte of a packed ARGB colour, defaulting to fully opaque when unset.
-fn alpha_of(c: Option<u32>) -> u8 {
-    c.map_or(0xff, |v| (v >> 24) as u8)
-}
+impl PickedColour for Rgb {
+    const ALPHA: AlphaEdit = AlphaEdit::Absent;
 
-/// Combine an RGB channel (`0xRRGGBB`) and an alpha byte into the stored value:
-/// packed ARGB when `alpha`, or the bare RGB otherwise.
-fn pack(rgb: u32, a: u8, alpha: bool) -> u32 {
-    if alpha {
-        ((a as u32) << 24) | (rgb & 0x00ff_ffff)
-    } else {
-        rgb & 0x00ff_ffff
+    fn as_rgba(self) -> Rgba {
+        self.to_rgba(u8::MAX)
+    }
+
+    fn from_rgba(rgba: Rgba) -> Self {
+        rgba.rgb()
     }
 }
 
-/// A CSS colour string for the trigger's tint strip: `rgba(...)` when alpha is in
-/// play (so transparency reads through), else a plain `#rrggbb`.
-fn strip_css(c: Option<u32>, default: u32, alpha: bool) -> String {
-    let v = c.unwrap_or(default);
-    if alpha {
-        let a = (v >> 24) & 0xff;
-        format!(
-            "rgba({},{},{},{:.3})",
-            (v >> 16) & 0xff,
-            (v >> 8) & 0xff,
-            v & 0xff,
-            a as f32 / 255.0
-        )
-    } else {
-        format!("#{:06x}", v & 0x00ff_ffff)
+impl PickedColour for Rgba {
+    const ALPHA: AlphaEdit = AlphaEdit::Slider;
+
+    fn as_rgba(self) -> Rgba {
+        self
+    }
+
+    fn from_rgba(rgba: Rgba) -> Self {
+        rgba
     }
 }
 
-/// A composed colour control. `on_pick` receives `Some(packed)` for a chosen
-/// colour or `None` for the reset entry. `alpha = true` switches the stored value
-/// to packed ARGB and reveals an opacity slider (see the module header).
+impl PickedColour for Argb {
+    const ALPHA: AlphaEdit = AlphaEdit::Slider;
+
+    fn as_rgba(self) -> Rgba {
+        self.to_rgba()
+    }
+
+    fn from_rgba(rgba: Rgba) -> Self {
+        rgba.to_argb()
+    }
+}
+
+/// Parse the value of an `<input type="color">`, always `"#rrggbb"`. Any other
+/// spelling yields `None`.
+fn parse_hex_color(s: &str) -> Option<Rgb> {
+    let hex = s
+        .strip_prefix('#')
+        .filter(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))?;
+    u32::from_str_radix(hex, 16).ok().map(Rgb::from_bits)
+}
+
+/// The colour `rgb` in the packing of `current`, with the alpha of `current`.
+/// An unset `current` gives an opaque colour.
+fn repaint<C: PickedColour>(current: Option<C>, rgb: Rgb) -> C {
+    let [.., alpha] = current.map_or(UNSET, PickedColour::as_rgba).channels();
+    C::from_rgba(rgb.to_rgba(alpha))
+}
+
+/// A composed colour control. `on_pick` receives `Some(colour)` for a chosen
+/// colour or `None` for the reset entry. A packing with an alpha also gets an
+/// opacity slider (see the module header).
 #[component]
-pub fn ColorPopover(
+pub fn ColorPopover<C: PickedColour>(
     title: &'static str,
     icon: icondata::Icon,
-    current: RwSignal<Option<u32>>,
-    default: Signal<u32>,
+    current: RwSignal<Option<C>>,
+    default: Signal<C>,
     reset_label: &'static str,
-    on_pick: Callback<Option<u32>>,
-    /// Edit a packed ARGB `u32` with an alpha slider (Toile), instead of a bare
-    /// `0xRRGGBB` (Trame). Defaults to `false`.
-    #[prop(optional)]
-    alpha: bool,
+    on_pick: Callback<Option<C>>,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
     let (rgb_drag, alpha_drag) = (Debouncer::new(), Debouncer::new());
@@ -135,7 +172,9 @@ pub fn ColorPopover(
                 // Thin strip tinted to the current colour (themed default when unset).
                 <span
                     class="swatch-strip"
-                    style:background-color=move || strip_css(current.get(), default.get(), alpha)
+                    style:background-color=move || {
+                        current.get().unwrap_or(default.get()).as_rgba().to_string()
+                    }
                 ></span>
             </button>
             <Show when=move || open.get() fallback=|| ()>
@@ -151,20 +190,19 @@ pub fn ColorPopover(
                     >
                         {reset_label}
                     </button>
-                    // Swatch palette. Each swatch is RGB; in alpha mode it keeps the
-                    // current opacity (fully opaque when the value is unset).
+                    // Swatch palette. Each swatch is RGB, and keeps the current
+                    // alpha (fully opaque when the value is unset).
                     <div class="swatches">
                         {PALETTE
                             .iter()
                             .map(|&rgb| {
                                 view! {
                                     <button
-                                        aria-label=format!("#{:06x}", rgb)
-                                        style:background-color=format!("#{:06x}", rgb)
+                                        aria-label=rgb.to_string()
+                                        style:background-color=rgb.to_string()
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
-                                            let a = alpha_of(current.get_untracked());
-                                            on_pick.run(Some(pack(rgb, a, alpha)));
+                                            on_pick.run(Some(repaint(current.get_untracked(), rgb)));
                                             open.set(false);
                                         }
                                     ></button>
@@ -176,20 +214,21 @@ pub fn ColorPopover(
                     <label class="custom">
                         <input
                             type="color"
-                            prop:value=move || color_hex(current.get(), default.get())
+                            prop:value=move || {
+                                current.get().unwrap_or(default.get()).as_rgba().rgb().to_string()
+                            }
                             on:input=move |ev| {
                                 if let Some(rgb) = parse_hex_color(&event_target_value(&ev)) {
-                                    let a = alpha_of(current.get_untracked());
-                                    let picked = pack(rgb, a, alpha);
+                                    let picked = repaint(current.get_untracked(), rgb);
                                     rgb_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                 }
                             }
                         />
                         "Custom..."
                     </label>
-                    // Opacity slider, ARGB mode only: drives the top alpha byte while
-                    // preserving the current RGB channel.
-                    {alpha
+                    // Opacity slider, for a packing with an alpha: drives the
+                    // alpha channel while preserving the current RGB channels.
+                    {(C::ALPHA == AlphaEdit::Slider)
                         .then(|| {
                             view! {
                                 <label class="opacity">
@@ -197,13 +236,22 @@ pub fn ColorPopover(
                                         type="range"
                                         min="0"
                                         max="255"
-                                        prop:value=move || alpha_of(current.get()).to_string()
+                                        prop:value=move || {
+                                            let [.., alpha] = current
+                                                .get()
+                                                .map_or(UNSET, PickedColour::as_rgba)
+                                                .channels();
+                                            alpha.to_string()
+                                        }
                                         on:input=move |ev| {
-                                            let a = event_target_value(&ev)
+                                            let alpha = event_target_value(&ev)
                                                 .parse::<u8>()
-                                                .unwrap_or(0xff);
-                                            let rgb = current.get_untracked().unwrap_or(default.get_untracked());
-                                            let picked = pack(rgb, a, true);
+                                                .unwrap_or(u8::MAX);
+                                            let base = current
+                                                .get_untracked()
+                                                .unwrap_or(default.get_untracked());
+                                            let [r, g, b, _] = base.as_rgba().channels();
+                                            let picked = C::from_rgba(Rgba::from_channels(r, g, b, alpha));
                                             alpha_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                         }
                                     />
@@ -222,41 +270,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_hex_round_trips_six_digits() {
-        assert_eq!(parse_hex_color("#ff0000"), Some(0xff0000));
-        assert_eq!(parse_hex_color("#000000"), Some(0x000000));
-    }
-
-    #[test]
-    fn parse_hex_round_trips_eight_digits() {
-        assert_eq!(parse_hex_color("#80ff0000"), Some(0x80ff_0000));
-        assert_eq!(parse_hex_color("#ffffffff"), Some(0xffff_ffff));
+    fn parse_hex_reads_the_native_widget_value() {
+        assert_eq!(parse_hex_color("#ff0000"), Some(Rgb::from_bits(0xff_0000)));
+        assert_eq!(parse_hex_color("#000000"), Some(Rgb::from_bits(0x00_0000)));
     }
 
     #[test]
     fn parse_hex_rejects_garbage() {
         assert_eq!(parse_hex_color("ff0000"), None); // no leading '#'
         assert_eq!(parse_hex_color("#zzz"), None);
+        assert_eq!(parse_hex_color("#80ff0000"), None);
+        assert_eq!(parse_hex_color("#+fffff"), None);
     }
 
     #[test]
-    fn color_hex_masks_alpha_and_falls_back_to_default() {
-        // The native input is RGB-only: the alpha byte must be stripped.
-        assert_eq!(color_hex(Some(0x80ab_cdef), 0), "#abcdef");
-        assert_eq!(color_hex(None, 0x123456), "#123456");
+    fn a_repaint_keeps_the_alpha_of_the_current_colour() {
+        let rgb = Rgb::from_bits(0x00_ff00);
+        let translucent = Rgba::from_bits(0xabcd_ef80);
+        assert_eq!(
+            repaint(Some(translucent), rgb),
+            Rgba::from_bits(0x00ff_0080)
+        );
+        assert_eq!(repaint(None::<Rgba>, rgb), Rgba::from_bits(0x00ff_00ff));
+        assert_eq!(repaint(Some(Rgb::from_bits(0x12_3456)), rgb), rgb);
     }
 
     #[test]
-    fn pack_builds_argb_only_in_alpha_mode() {
-        assert_eq!(pack(0x00_ff00, 0x80, true), 0x8000_ff00);
-        assert_eq!(pack(0x00_ff00, 0x80, false), 0x0000_ff00);
-        // A leaking alpha in the rgb argument is masked off.
-        assert_eq!(pack(0xffab_cdef, 0x11, true), 0x11ab_cdef);
-    }
-
-    #[test]
-    fn alpha_of_defaults_opaque_when_unset() {
-        assert_eq!(alpha_of(None), 0xff);
-        assert_eq!(alpha_of(Some(0x80ff_0000)), 0x80);
+    fn an_rgb_reads_as_opaque_and_drops_a_picked_alpha() {
+        let rgb = Rgb::from_bits(0x12_3456);
+        assert_eq!(rgb.as_rgba(), Rgba::from_bits(0x1234_56ff));
+        assert_eq!(Rgb::from_rgba(Rgba::from_bits(0x1234_5680)), rgb);
     }
 }

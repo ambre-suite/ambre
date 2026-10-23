@@ -155,6 +155,21 @@ macro_rules! lower_hex {
 
 lower_hex!(Rgba, Rgb, Argb);
 
+/// The CSS hexadecimal notation `#rrggbbaa`, which a style property reads.
+impl std::fmt::Display for Rgba {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:08x}", self.0)
+    }
+}
+
+/// The CSS hexadecimal notation `#rrggbb`, which a style property and the
+/// value of an `<input type="color">` read.
+impl std::fmt::Display for Rgb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:06x}", self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Argb, Rgb, Rgba};
@@ -201,6 +216,13 @@ mod tests {
     #[test]
     fn rgb_drops_a_top_byte() {
         assert_eq!(Rgb::from_bits(ORANGE_ARGB).bits(), ORANGE_RGB);
+    }
+
+    #[test]
+    fn a_colour_prints_as_its_css_hex() {
+        assert_eq!(Rgba::from_bits(ORANGE_RGBA).to_string(), "#ff802040");
+        assert_eq!(Rgb::from_bits(ORANGE_RGB).to_string(), "#ff8020");
+        assert_eq!(Rgb::from_bits(0x0000_0102).to_string(), "#000102");
     }
 
     #[test]

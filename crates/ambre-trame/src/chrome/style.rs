@@ -66,9 +66,9 @@ pub struct StyleState {
     /// click applies. Seeded (best-effort) from the active cell's first present
     /// edge so reopening the popover shows the cell's current pen.
     pub border_line: RwSignal<BorderStyle>,
-    pub border_color: RwSignal<Option<u32>>,
-    pub fg: RwSignal<Option<u32>>,
-    pub bg: RwSignal<Option<u32>>,
+    pub border_color: RwSignal<Option<Rgb>>,
+    pub fg: RwSignal<Option<Rgb>>,
+    pub bg: RwSignal<Option<Rgb>>,
     pub font: RwSignal<Option<String>>,
     pub size: RwSignal<Option<ambre_core::FontSize>>,
     /// Whether the active cell is part of a merge, driving the toolbar's
@@ -136,8 +136,8 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         // explicit pick every time the selection emits `StyleApplied`, making the
         // line-style picker revert to the cell's current edge
         // (`trame-cell-styles`).
-        s.fg.set(style.fg.map(Rgb::bits));
-        s.bg.set(style.bg.map(Rgb::bits));
+        s.fg.set(style.fg);
+        s.bg.set(style.bg);
         s.font.set(style.font.clone());
         s.size.set(style.size);
     }

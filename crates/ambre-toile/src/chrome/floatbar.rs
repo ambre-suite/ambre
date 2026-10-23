@@ -11,7 +11,7 @@
 // command buttons (duplicate / delete / group / lock) are `ui::menu` `CommandId`s routed
 // through the shared `on_command` path. So the bar is a strict subset of the context
 // menu (`toile-menus`), and the two never diverge. The style controls reuse the shared
-// `ambre_chrome` value controls (`ColorPopover` in ARGB mode, `FontPicker`). They emit a
+// `ambre_chrome` value controls (`ColorPopover` with its opacity slider, `FontPicker`). They emit a
 // single-field `StyleEdit` the view folds into a whole-register `RestyleElements` over
 // the live selection.
 //
@@ -54,8 +54,8 @@ pub fn SelectionToolbar(
     // published bar / model each time the view republishes them, and updated on
     // every pick so the trigger strips track. Reading `bar` / `model` here never
     // re-triggers a picker.
-    let fill = RwSignal::new(None::<u32>);
-    let text_color = RwSignal::new(None::<u32>);
+    let fill = RwSignal::new(None::<Argb>);
+    let text_color = RwSignal::new(None::<Argb>);
     let font_family = RwSignal::new(None::<String>);
     let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
@@ -65,13 +65,13 @@ pub fn SelectionToolbar(
     // The fill swatch seeds from the bar's common fill (already folded there).
     Effect::new(move |_| {
         if let Some(b) = bar.get() {
-            fill.set(b.fill.map(Argb::bits));
+            fill.set(b.fill);
         }
     });
     // The text controls seed from the inspector's common-style model.
     Effect::new(move |_| {
         if let Some(m) = model.get() {
-            text_color.set(m.base.text_color.map(Argb::bits));
+            text_color.set(m.base.text_color);
             font_family.set(m.base.font.family.picker_label().map(str::to_owned));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
@@ -82,13 +82,13 @@ pub fn SelectionToolbar(
     });
 
     // Fill / text-colour picks: track the local swatch and emit the field edit.
-    let on_fill = Callback::new(move |c: Option<u32>| {
+    let on_fill = Callback::new(move |c: Option<Argb>| {
         fill.set(c);
-        on_style.run(StyleEdit::Fill(c.map(Argb::from_bits)));
+        on_style.run(StyleEdit::Fill(c));
     });
-    let on_text_color = Callback::new(move |c: Option<u32>| {
+    let on_text_color = Callback::new(move |c: Option<Argb>| {
         text_color.set(c);
-        on_style.run(StyleEdit::TextColor(c.map(Argb::from_bits)));
+        on_style.run(StyleEdit::TextColor(c));
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());
@@ -205,20 +205,18 @@ pub fn SelectionToolbar(
                                 title="Text colour"
                                 icon=icondata::MdiFormatColorText
                                 current=text_color
-                                default=Signal::derive(|| 0xff1a_1a1au32)
+                                default=Signal::derive(|| Argb::from_bits(0xff1a_1a1a))
                                 reset_label="Default"
                                 on_pick=on_text_color
-                                alpha=true
                             />
                             {mixed_hint(b.mixed.text_color)}
                             <ColorPopover
                                 title="Fill"
                                 icon=icondata::MdiFormatColorFill
                                 current=fill
-                                default=Signal::derive(|| 0xffff_ffffu32)
+                                default=Signal::derive(|| Argb::from_bits(0xffff_ffff))
                                 reset_label="No fill"
                                 on_pick=on_fill
-                                alpha=true
                             />
                             {mixed_hint(b.mixed.fill)}
                             // -- Structural actions (strict subset of the context menu) --

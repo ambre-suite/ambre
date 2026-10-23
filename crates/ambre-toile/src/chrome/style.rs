@@ -19,8 +19,8 @@
 // path verbatim -- identical to the context menu and top menu bar. Values that
 // differ across the selection show a "Mixed" hint (the mask from `ui::style`).
 //
-// Colour editing uses the shared `ambre_chrome::ColorPopover` in ARGB mode
-// (`alpha=true`), the very control Trame's cell fg/bg picker uses (`toile-styles`).
+// Colour editing uses the shared `ambre_chrome::ColorPopover` with its opacity
+// slider, the very control Trame's cell fg/bg picker uses (`toile-styles`).
 // Every control does `on:mousedown prevent_default` to keep DOM focus on the
 // canvas text pipe -- the palette / FormatBar hazard.
 // ============================================================================
@@ -58,12 +58,12 @@ pub fn StyleInspector(
     // style and mutated in place by every control. The four edited fields also get
     // their own signals so `ColorPopover` / the inputs can bind directly.
     let working = RwSignal::new(ElementStyle::default());
-    let fill = RwSignal::new(None::<u32>);
-    let stroke = RwSignal::new(None::<u32>);
+    let fill = RwSignal::new(None::<Argb>);
+    let stroke = RwSignal::new(None::<Argb>);
     let stroke_w = RwSignal::new(1.0_f32);
     let opacity = RwSignal::new(1.0_f32);
     // Text (foreground) colour + font controls.
-    let text_color = RwSignal::new(None::<u32>);
+    let text_color = RwSignal::new(None::<Argb>);
     let font_family = RwSignal::new(None::<String>);
     let font_size = RwSignal::new(FontSize::default());
     let bold = RwSignal::new(false);
@@ -77,11 +77,11 @@ pub fn StyleInspector(
     Effect::new(move |_| {
         if let Some(m) = model.get() {
             working.set(m.base.clone());
-            fill.set(m.base.fill.map(Argb::bits));
-            stroke.set(m.base.stroke.map(Argb::bits));
+            fill.set(m.base.fill);
+            stroke.set(m.base.stroke);
             stroke_w.set(m.base.stroke_w);
             opacity.set(m.base.opacity);
-            text_color.set(m.base.text_color.map(Argb::bits));
+            text_color.set(m.base.text_color);
             font_family.set(m.base.font.family.picker_label().map(str::to_owned));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
@@ -104,17 +104,17 @@ pub fn StyleInspector(
     };
 
     // Colour picks: update the local signal (so the swatch strip tracks) and commit.
-    let on_fill = Callback::new(move |c: Option<u32>| {
+    let on_fill = Callback::new(move |c: Option<Argb>| {
         fill.set(c);
-        commit(StyleEdit::Fill(c.map(Argb::from_bits)));
+        commit(StyleEdit::Fill(c));
     });
-    let on_stroke = Callback::new(move |c: Option<u32>| {
+    let on_stroke = Callback::new(move |c: Option<Argb>| {
         stroke.set(c);
-        commit(StyleEdit::Stroke(c.map(Argb::from_bits)));
+        commit(StyleEdit::Stroke(c));
     });
-    let on_text_color = Callback::new(move |c: Option<u32>| {
+    let on_text_color = Callback::new(move |c: Option<Argb>| {
         text_color.set(c);
-        commit(StyleEdit::TextColor(c.map(Argb::from_bits)));
+        commit(StyleEdit::TextColor(c));
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());
@@ -181,10 +181,9 @@ pub fn StyleInspector(
                             title="Fill"
                             icon=icondata::MdiFormatColorFill
                             current=fill
-                            default=Signal::derive(|| 0xffff_ffffu32)
+                            default=Signal::derive(|| Argb::from_bits(0xffff_ffff))
                             reset_label="No fill"
                             on_pick=on_fill
-                            alpha=true
                         />
                         {move || mixed_hint(mixed().fill)}
                     </div>
@@ -193,10 +192,9 @@ pub fn StyleInspector(
                             title="Stroke"
                             icon=icondata::MdiBorderColor
                             current=stroke
-                            default=Signal::derive(|| 0xff33_3333u32)
+                            default=Signal::derive(|| Argb::from_bits(0xff33_3333))
                             reset_label="No stroke"
                             on_pick=on_stroke
-                            alpha=true
                         />
                         {move || mixed_hint(mixed().stroke)}
                     </div>
@@ -243,10 +241,9 @@ pub fn StyleInspector(
                             title="Text colour"
                             icon=icondata::MdiFormatColorText
                             current=text_color
-                            default=Signal::derive(|| 0xff1a_1a1au32)
+                            default=Signal::derive(|| Argb::from_bits(0xff1a_1a1a))
                             reset_label="Default"
                             on_pick=on_text_color
-                            alpha=true
                         />
                         {move || mixed_hint(mixed().text_color)}
                     </div>

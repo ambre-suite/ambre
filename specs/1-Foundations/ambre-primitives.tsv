@@ -1286,28 +1286,9 @@ ambre-chrome | src/avatar.rs | crate::avatar | Avatar(color) | param | Signal<St
 ambre-chrome | src/avatar.rs | crate::avatar | Avatar(name) | param | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
-ambre-chrome | src/color.rs | crate::color | ColorPopover(alpha) | param | bool	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | ColorPopover(current) | param | RwSignal<Option<u32>>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | ColorPopover(default) | param | Signal<u32>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | ColorPopover(on_pick) | param | Callback<Option<u32>>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | &'static str	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | PALETTE | const | &[u32]	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | alpha_of() | ret | u8	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | alpha_of(c) | param | Option<u32>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | color_hex() | ret | String	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | color_hex(c) | param | Option<u32>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | color_hex(default) | param | u32	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | pack() | ret | u32	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | pack(a) | param | u8	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | pack(alpha) | param | bool	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | pack(rgb) | param | u32	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | parse_hex_color() | ret | Option<u32>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | strip_css() | ret | String	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | strip_css(alpha) | param | bool	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | strip_css(c) | param | Option<u32>	debt	planned: lot D1 color.rs
-ambre-chrome | src/color.rs | crate::color | strip_css(default) | param | u32	debt	planned: lot D1 color.rs
+ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | &'static str	free-text	text, label or user content
+ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	foreign-api	the value an `<input type="color">` reports
 ambre-chrome | src/command.rs | crate::command | CommandStates.enabled | field | Rc<HashMap<ambre_commands::CommandId,RwSignal<bool>>>	math	local value
 ambre-chrome | src/command.rs | crate::command | CommandStates.toggled | field | Rc<HashMap<ambre_commands::CommandId,RwSignal<bool>>>	math	local value
 ambre-chrome | src/command.rs | crate::command | CommandStates::enabled_signal() | ret | Option<RwSignal<bool>>	math	local value
@@ -5613,8 +5594,6 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_font_size() | ret | f32	
 ambre-toile | src/ui/walk.rs | crate::ui::walk | sticky_or_style_font_size() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | text_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/color.rs | crate::chrome::color | theme_bg_default() | ret | u32	debt	planned: lot D 1 (Trame colour seams -> Rgb)
-ambre-trame | src/chrome/color.rs | crate::chrome::color | theme_fg_default() | ret | u32	debt	planned: lot D 1 (Trame colour seams -> Rgb)
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | context_entries_for(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
@@ -5656,10 +5635,7 @@ ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.min | fiel
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.sum | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num(v) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.bg | field | RwSignal<Option<u32>>	debt	planned: lot D 1 (Trame style.rs u32 colours -> Rgb)
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.bold | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.border_color | field | RwSignal<Option<u32>>	debt	planned: lot D 1 (Trame style.rs u32 colours -> Rgb)
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.fg | field | RwSignal<Option<u32>>	debt	planned: lot D 1 (Trame style.rs u32 colours -> Rgb)
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.font | field | RwSignal<Option<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.italic | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.merged | field | RwSignal<bool>	generic	state flag
