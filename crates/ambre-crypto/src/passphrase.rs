@@ -34,6 +34,16 @@ const LANES: u32 = 1;
 /// inputs. A `salt` under 8 bytes is the reachable case.
 pub fn derive_user_key(
     passphrase: &ambre_core::Passphrase,
+    salt: &ambre_core::MasterKeySalt,
+) -> Result<[u8; USER_KEY_LEN], CryptoError> {
+    argon2id(passphrase, salt.as_bytes())
+}
+
+/// Argon2id v1 over raw salt bytes, under the parameters above. The kernel of
+/// [`derive_user_key`] and of [`crate::keys::FileKey::from_passphrase`], each
+/// of which names its own salt type.
+pub(crate) fn argon2id(
+    passphrase: &ambre_core::Passphrase,
     salt: &[u8],
 ) -> Result<[u8; USER_KEY_LEN], CryptoError> {
     let params = Params::new(MEM_KIB, ITERATIONS, LANES, Some(USER_KEY_LEN))

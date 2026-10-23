@@ -56,7 +56,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{DocType, DocumentId, Uuid};
+use crate::{DocType, DocumentId, Nonce, Uuid};
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
 pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
@@ -83,6 +83,24 @@ pub const AMBRE_SEALED_VERSION: ContainerVersion = ContainerVersion(0x80);
 
 /// Argon2id salt width in a sealed header.
 pub const SALT_LEN: usize = 16;
+
+/// The Argon2id salt of one sealed `.ambre`, fresh per file. Public in the
+/// file, so not a secret; distinct from the account's
+/// [`MasterKeySalt`](crate::MasterKeySalt), which no file ever carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileSalt([u8; SALT_LEN]);
+
+impl FileSalt {
+    /// Wraps the salt bytes a header carries or a CSPRNG drew.
+    pub const fn from_array(bytes: [u8; SALT_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    /// The salt bytes, for the KDF and for the header.
+    pub const fn as_array(&self) -> &[u8; SALT_LEN] {
+        &self.0
+    }
+}
 
 /// XChaCha20 nonce width in a sealed header. Mirrors `ambre_crypto::aead::NONCE_LEN`,
 /// which this crate cannot name (`DOCFILE-006`). One crate up, where both sides
@@ -438,9 +456,9 @@ pub struct SealedAmbre {
     /// once the parser has returned.
     pub version: ContainerVersion,
     /// Argon2id salt, fresh per file.
-    pub salt: [u8; SALT_LEN],
+    pub salt: FileSalt,
     /// AEAD nonce, fresh per file.
-    pub nonce: [u8; SEAL_NONCE_LEN],
+    pub nonce: Nonce,
     /// Offset [`SEALED_HEADER_LEN`] onward: the sealed bytes, authentication tag
     /// included. Opens to a whole plaintext container.
     pub ciphertext: Vec<u8>,
@@ -460,11 +478,11 @@ impl SealedAmbre {
 /// Assemble the authenticated prefix of a sealed header. The one place that
 /// writes the sealed layout down, called by [`sealed_aad`] and by
 /// [`SealedAmbre::aad`].
-fn sealed_aad_at(version: ContainerVersion, salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
+fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> [u8; SEALED_AAD_LEN] {
     let mut out = [0u8; SEALED_AAD_LEN];
     out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
     out[VERSION_AT] = version.as_u8();
-    out[SALT_AT..].copy_from_slice(salt);
+    out[SALT_AT..].copy_from_slice(salt.as_array());
     out
 }
 
@@ -474,7 +492,7 @@ fn sealed_aad_at(version: ContainerVersion, salt: &[u8; SALT_LEN]) -> [u8; SEALE
 /// associated data *before* it has a ciphertext to put in a [`SealedAmbre`], so
 /// it asks here. It hands the same salt to [`write_ambre_sealed`] afterwards,
 /// along with the nonce the cipher drew.
-pub fn sealed_aad(salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
+pub fn sealed_aad(salt: &FileSalt) -> [u8; SEALED_AAD_LEN] {
     sealed_aad_at(AMBRE_SEALED_VERSION, salt)
 }
 
@@ -482,14 +500,10 @@ pub fn sealed_aad(salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
 ///
 /// The writer rule of the sealed lineage, and it takes no version either: this
 /// emits [`AMBRE_SEALED_VERSION`] or nothing at all.
-pub fn write_ambre_sealed(
-    salt: &[u8; SALT_LEN],
-    nonce: &[u8; SEAL_NONCE_LEN],
-    ciphertext: &[u8],
-) -> Vec<u8> {
+pub fn write_ambre_sealed(salt: &FileSalt, nonce: &Nonce, ciphertext: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
     out.extend_from_slice(&sealed_aad(salt));
-    out.extend_from_slice(nonce);
+    out.extend_from_slice(&nonce.0);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
     out.extend_from_slice(ciphertext);
     out
@@ -528,10 +542,12 @@ pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
     let salt = head
         .get(SALT_AT..SEAL_NONCE_AT)
         .and_then(|s| <[u8; SALT_LEN]>::try_from(s).ok())
+        .map(FileSalt)
         .ok_or(DocFileError::TruncatedHeader)?;
     let nonce = head
         .get(SEAL_NONCE_AT..)
         .and_then(|s| <[u8; SEAL_NONCE_LEN]>::try_from(s).ok())
+        .map(Nonce)
         .ok_or(DocFileError::TruncatedHeader)?;
     Ok(SealedAmbre {
         version,
@@ -895,8 +911,8 @@ mod tests {
 
     // -- the sealed lineage ----------------------------------------------
 
-    const SALT: [u8; SALT_LEN] = [0xA5; SALT_LEN];
-    const NONCE: [u8; SEAL_NONCE_LEN] = [0x5A; SEAL_NONCE_LEN];
+    const SALT: FileSalt = FileSalt::from_array([0xA5; SALT_LEN]);
+    const NONCE: Nonce = Nonce([0x5A; SEAL_NONCE_LEN]);
 
     fn sealed_sample() -> Vec<u8> {
         write_ambre_sealed(&SALT, &NONCE, b"ciphertext-bytes")
@@ -907,8 +923,8 @@ mod tests {
         let bytes = sealed_sample();
         assert_eq!(&bytes[..4], b"AMBR");
         assert_eq!(bytes[VERSION_AT], AMBRE_SEALED_VERSION.as_u8());
-        assert_eq!(&bytes[SALT_AT..SEAL_NONCE_AT], &SALT);
-        assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], &NONCE);
+        assert_eq!(&bytes[SALT_AT..SEAL_NONCE_AT], SALT.as_array());
+        assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], &NONCE.0);
         assert_eq!(&bytes[SEALED_HEADER_LEN..], b"ciphertext-bytes");
         assert_eq!(SEALED_HEADER_LEN, 45);
         assert_eq!(bytes.len(), SEALED_HEADER_LEN + b"ciphertext-bytes".len());

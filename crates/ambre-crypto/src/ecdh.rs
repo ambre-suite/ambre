@@ -111,10 +111,7 @@ pub fn wrap_anchored(
         plaintext.extend_from_slice(&anchor.0);
     }
     let (nonce, ciphertext) = aead::seal(&plaintext, KEK_DOMAIN, &kek)?;
-    Ok(WrappedKey {
-        nonce: Nonce(nonce),
-        ciphertext: Ciphertext(ciphertext),
-    })
+    Ok(WrappedKey { nonce, ciphertext })
 }
 
 /// Unwraps a [`WrappedKey`] sent by the holder of `peer_public`, using
@@ -151,7 +148,7 @@ pub fn unwrap_anchored(
     let own_pub = PublicKey::from(own_secret).to_bytes();
     let kek = derive_kek(&shared, peer_public.as_array(), &own_pub);
     let bytes = Zeroizing::new(aead::open(
-        &wrapped.nonce.0,
+        &wrapped.nonce,
         &wrapped.ciphertext.0,
         KEK_DOMAIN,
         &kek,

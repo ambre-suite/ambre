@@ -1394,8 +1394,6 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SealedAmbre.ciphertext | field | Vec<u8>	generic	AEAD output bytes of the sealed container, opened only by ambre-crypto
-ambre-core | src/docfile.rs | crate::docfile | SealedAmbre.nonce | field | [u8;SEAL_NONCE_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
-ambre-core | src/docfile.rs | crate::docfile | SealedAmbre.salt | field | [u8;SALT_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | SealedAmbre::aad() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | classify(data) | param | &[u8]	generic	byte codec over a whole file
@@ -1408,15 +1406,14 @@ ambre-core | src/docfile.rs | crate::docfile | parse_sealed_header(data) | param
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext_as(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | sealed_aad() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
-ambre-core | src/docfile.rs | crate::docfile | sealed_aad(salt) | param | &[u8;SALT_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | sealed_aad_at() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
-ambre-core | src/docfile.rs | crate::docfile | sealed_aad_at(salt) | param | &[u8;SALT_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext() | ret | Vec<u8>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext(payload) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed() | ret | Vec<u8>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed(ciphertext) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed(nonce) | param | &[u8;SEAL_NONCE_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed(salt) | param | &[u8;SALT_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
+ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
+ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
+ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/email.rs | crate::email | <Email as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
 ambre-core | src/email.rs | crate::email | <Email as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/email.rs | crate::email | Email.0 | field | String	newtype-inner	Email newtype
@@ -1636,17 +1633,13 @@ ambre-crypto | src/aead.rs | crate::aead | ROW_VERSION | const | u8	generic	gene
 ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | open_document_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_document_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_document_key(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | open_file() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_file(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_file(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_file(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | open_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row(context) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row(row) | param | &[u8]	generic	generic byte/text API or codec
@@ -1654,30 +1647,21 @@ ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,C
 ambre-crypto | src/aead.rs | crate::aead | open_under(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_under(nonce) | param | &[u8;NONCE_LEN]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_document_key() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal_document_key(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_file() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal_file(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_file(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row(context) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_under() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | MEDIA_ADDRESS_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | TAG_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag() | ret | [u8;TAG_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag(aad) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag(ciphertext) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag(nonce) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
+ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag(aad) | param | &[u8]	generic	associated data the caller frames (document, object or catalogue aad); verify_commitment(aad), sign(aad) and every aead aad take the same bytes
 ambre-crypto | src/commitment.rs | crate::commitment | keyed(key) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
@@ -1686,9 +1670,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TA
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(nonce) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(tag) | param | &[u8;TAG_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(recipient_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(sender_pk) | param | &[u8;32]	generic	generic byte/text API or codec
@@ -1705,7 +1686,6 @@ ambre-crypto | src/hash.rs | crate::hash | HASH_LEN | const | usize	generic	gene
 ambre-crypto | src/hash.rs | crate::hash | chain_hash() | ret | [u8;HASH_LEN]	debt	finding: `chain_hash` used as a generic hash and KDF
 ambre-crypto | src/hash.rs | crate::hash | chain_hash(parent_proof) | param | &[u8]	debt	finding: `chain_hash` used as a generic hash and KDF
 ambre-crypto | src/hash.rs | crate::hash | chain_hash(snapshot_bytes) | param | &[u8]	debt	finding: `chain_hash` used as a generic hash and KDF
-ambre-crypto | src/hash.rs | crate::hash | entry_digest() | ret | [u8;HASH_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/hash.rs | crate::hash | entry_digest(encoded_entry) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generic	generic byte/text API or codec
@@ -1718,13 +1698,10 @@ ambre-crypto | src/keys.rs | crate::keys | EXCH_DOMAIN | const | &[u8]	generic	g
 ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | FileKey::for_new_file() | ret | Result<(Self,[u8;SALT_LEN]),CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | FileKey::from_passphrase(salt) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::recovery_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | MasterSeed::wrap_for_storage() | ret | Result<([u8;aead::NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::wrap_for_storage(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | SIGN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | STORE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1738,7 +1715,8 @@ ambre-crypto | src/passphrase.rs | crate::passphrase | LANES | const | u32	math	
 ambre-crypto | src/passphrase.rs | crate::passphrase | MEM_KIB | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-crypto | src/passphrase.rs | crate::passphrase | USER_KEY_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/passphrase.rs | crate::passphrase | derive_user_key() | ret | Result<[u8;USER_KEY_LEN],CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/passphrase.rs | crate::passphrase | derive_user_key(salt) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
+ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<[u8;USER_KEY_LEN],CryptoError>	generic	generic byte/text API or codec
+ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id(salt) | param | &[u8]	generic	private Argon2id kernel over the bytes of either salt type; derive_user_key and FileKey::from_passphrase name the type
 ambre-crypto | src/peer.rs | crate::peer | ENTRY_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/peer.rs | crate::peer | PEER_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/peer.rs | crate::peer | entry_resolves() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1753,20 +1731,10 @@ ambre-crypto | src/signature.rs | crate::signature | message(commitment_tag) | p
 ambre-crypto | src/signature.rs | crate::signature | message(nonce) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign() | ret | [u8;SIGNATURE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/signature.rs | crate::signature | sign(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign(commitment_tag) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/signature.rs | crate::signature | sign(nonce) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/signature.rs | crate::signature | sign_message() | ret | [u8;SIGNATURE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify(commitment_tag) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/signature.rs | crate::signature | verify(nonce) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/signature.rs | crate::signature | verify(signature) | param | &[u8;SIGNATURE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify_message(signature) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | DECAY_MS | const | f32	math	frame-clock span compared with PageTime

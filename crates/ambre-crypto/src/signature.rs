@@ -13,8 +13,8 @@
 //! `ws/handler/message.rs::verify_update_signature` (it must not link
 //! `ambre-crypto`); the two layouts MUST stay byte-identical.
 
-use ambre_core::PublicKey;
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, Signature};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
 
@@ -48,13 +48,13 @@ fn message(nonce: &[u8], ciphertext: &[u8], aad: &[u8], commitment_tag: &[u8]) -
 /// Signs `nonce || ciphertext || aad || commitment_tag` with `signing_key`.
 pub fn sign(
     signing_key: &SigningKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     aad: &[u8],
-    commitment_tag: &[u8],
-) -> [u8; SIGNATURE_LEN] {
-    let msg = message(nonce, ciphertext, aad, commitment_tag);
-    signing_key.sign(&msg).to_bytes()
+    commitment_tag: &CommitmentTag,
+) -> Signature {
+    let msg = message(&nonce.0, &ciphertext.0, aad, &commitment_tag.0);
+    Signature(signing_key.sign(&msg).to_bytes())
 }
 
 /// Verifies `signature` over the envelope against the author's 32-byte public key.
@@ -66,16 +66,16 @@ pub fn sign(
 /// malleable signature, so a re-encoded one fails here too.
 pub fn verify(
     author_pub: &PublicKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     aad: &[u8],
-    commitment_tag: &[u8],
-    signature: &[u8; SIGNATURE_LEN],
+    commitment_tag: &CommitmentTag,
+    signature: &Signature,
 ) -> Result<(), CryptoError> {
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
-    let sig = Signature::from_bytes(signature);
-    let msg = message(nonce, ciphertext, aad, commitment_tag);
+    let sig = ed25519_dalek::Signature::from_bytes(&signature.0);
+    let msg = message(&nonce.0, &ciphertext.0, aad, &commitment_tag.0);
     // Strict verification rejects non-canonical `S` and small-order `A`, so a
     // valid `(R, S)` cannot be transformed into a distinct valid signature over
     // the same message. Ambre treats "signature identifies the author" as
@@ -87,24 +87,25 @@ pub fn verify(
 
 /// Signs `message` whole with `signing_key`. The caller's message opens with
 /// its own domain, so the signature serves no other use.
-pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> [u8; SIGNATURE_LEN] {
-    signing_key.sign(message).to_bytes()
+pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> Signature {
+    Signature(signing_key.sign(message).to_bytes())
 }
 
 /// Verifies a signature [`sign_message`] made, strictly, as [`verify`] does.
 ///
 /// # Errors
 ///
-/// [`CryptoError::InvalidSignature`] for a key that is not a point, a
-/// signature of the wrong length, or one that does not verify.
+/// [`CryptoError::InvalidSignature`] for a key that is not a point, or a
+/// signature that does not verify. A signature of the wrong length is not a
+/// [`Signature`], so it never reaches here.
 pub fn verify_message(
     author_pub: &PublicKey,
     message: &[u8],
-    signature: &[u8],
+    signature: &Signature,
 ) -> Result<(), CryptoError> {
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
-    let sig = Signature::from_slice(signature).map_err(|_| CryptoError::InvalidSignature)?;
+    let sig = ed25519_dalek::Signature::from_bytes(&signature.0);
     verifying_key
         .verify_strict(message, &sig)
         .map_err(|_| CryptoError::InvalidSignature)
@@ -130,27 +131,38 @@ mod tests {
                 .to_bytes(),
         );
         assert!(verify_message(&other, b"entry", &sig).is_err());
-        assert!(verify_message(&pk, b"entry", &sig[..63]).is_err());
     }
 
     fn test_key() -> SigningKey {
         SigningKey::from_bytes(&[7u8; 32])
     }
 
+    fn nonce() -> Nonce {
+        Nonce([1; 24])
+    }
+
+    fn ct(bytes: &[u8]) -> Ciphertext {
+        Ciphertext(bytes.to_vec())
+    }
+
+    fn tag() -> CommitmentTag {
+        CommitmentTag([2; 32])
+    }
+
     #[test]
     fn sign_then_verify_roundtrips() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, b"nonce____", b"cipher", b"aad", b"tag");
-        assert!(verify(&pk, b"nonce____", b"cipher", b"aad", b"tag", &sig).is_ok());
+        let sig = sign(&sk, &nonce(), &ct(b"cipher"), b"aad", &tag());
+        assert!(verify(&pk, &nonce(), &ct(b"cipher"), b"aad", &tag(), &sig).is_ok());
     }
 
     #[test]
     fn tampered_field_rejected() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, b"nonce____", b"cipher", b"aad", b"tag");
-        assert!(verify(&pk, b"nonce____", b"CIPHER", b"aad", b"tag", &sig).is_err());
+        let sig = sign(&sk, &nonce(), &ct(b"cipher"), b"aad", &tag());
+        assert!(verify(&pk, &nonce(), &ct(b"CIPHER"), b"aad", &tag(), &sig).is_err());
     }
 
     /// The order of the Ed25519 group, little-endian.
@@ -161,10 +173,10 @@ mod tests {
 
     /// The same signature with its scalar raised by the group order: a second
     /// encoding that a lax verifier accepts over the same message.
-    fn malleated(sig: &[u8; SIGNATURE_LEN]) -> [u8; SIGNATURE_LEN] {
+    fn malleated(sig: &Signature) -> Signature {
         let mut out = *sig;
         let mut carry = 0u16;
-        for (s, l) in out[32..].iter_mut().zip(GROUP_ORDER) {
+        for (s, l) in out.0[32..].iter_mut().zip(GROUP_ORDER) {
             let sum = u16::from(*s) + u16::from(l) + carry;
             *s = sum as u8;
             carry = sum >> 8;
@@ -179,17 +191,17 @@ mod tests {
     fn only_the_canonical_signature_is_accepted() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, b"n", b"c", b"a", b"t");
-        assert!(verify(&pk, b"n", b"c", b"a", b"t", &sig).is_ok());
-        assert!(verify(&pk, b"n", b"c", b"a", b"t", &malleated(&sig)).is_err());
+        let sig = sign(&sk, &nonce(), &ct(b"c"), b"a", &tag());
+        assert!(verify(&pk, &nonce(), &ct(b"c"), b"a", &tag(), &sig).is_ok());
+        assert!(verify(&pk, &nonce(), &ct(b"c"), b"a", &tag(), &malleated(&sig)).is_err());
 
         // The identity point, and the signature (R = identity, S = 0).
         let mut identity = [0u8; 32];
         identity[0] = 1;
-        let mut forged = [0u8; SIGNATURE_LEN];
-        forged[..32].copy_from_slice(&identity);
+        let mut forged = Signature([0u8; SIGNATURE_LEN]);
+        forged.0[..32].copy_from_slice(&identity);
         let identity_key = PublicKey::from_array(identity);
-        assert!(verify(&identity_key, b"n", b"c", b"a", b"t", &forged).is_err());
+        assert!(verify(&identity_key, &nonce(), &ct(b"c"), b"a", &tag(), &forged).is_err());
     }
 
     /// The length prefixes make the ciphertext|aad boundary unambiguous. Two
@@ -200,10 +212,10 @@ mod tests {
     fn ciphertext_aad_boundary_is_unambiguous() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, b"n", b"ab", b"c", b"t");
+        let sig = sign(&sk, &nonce(), &ct(b"ab"), b"c", &tag());
         // Same concatenation, different split -> must be rejected.
-        assert!(verify(&pk, b"n", b"a", b"bc", b"t", &sig).is_err());
+        assert!(verify(&pk, &nonce(), &ct(b"a"), b"bc", &tag(), &sig).is_err());
         // Exact split -> accepted.
-        assert!(verify(&pk, b"n", b"ab", b"c", b"t", &sig).is_ok());
+        assert!(verify(&pk, &nonce(), &ct(b"ab"), b"c", &tag(), &sig).is_ok());
     }
 }

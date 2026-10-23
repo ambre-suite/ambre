@@ -58,10 +58,10 @@ pub fn seal(
     let commitment_tag = commitment::commitment_tag(doc_key, &nonce, &ciphertext, aad);
     let signature = signature::sign(signing_key, &nonce, &ciphertext, aad, &commitment_tag);
     Ok(Sealed {
-        nonce: Nonce(nonce),
-        ciphertext: Ciphertext(ciphertext),
-        commitment_tag: CommitmentTag(commitment_tag),
-        signature: Signature(signature),
+        nonce,
+        ciphertext,
+        commitment_tag,
+        signature,
     })
 }
 
@@ -85,18 +85,18 @@ pub fn open(
 ) -> Result<Vec<u8>, CryptoError> {
     signature::verify(
         author_pub,
-        &sealed.nonce.0,
-        &sealed.ciphertext.0,
+        &sealed.nonce,
+        &sealed.ciphertext,
         aad,
-        &sealed.commitment_tag.0,
-        &sealed.signature.0,
+        &sealed.commitment_tag,
+        &sealed.signature,
     )?;
     commitment::verify_commitment(
         doc_key,
-        &sealed.nonce.0,
-        &sealed.ciphertext.0,
+        &sealed.nonce,
+        &sealed.ciphertext,
         aad,
-        &sealed.commitment_tag.0,
+        &sealed.commitment_tag,
     )?;
-    aead::open(&sealed.nonce.0, &sealed.ciphertext.0, aad, doc_key)
+    aead::open(&sealed.nonce, &sealed.ciphertext.0, aad, doc_key)
 }

@@ -1313,11 +1313,12 @@ mod tests {
         let nonce_at = tag_at + commitment::TAG_LEN;
         let mut moved = sealed.clone();
         moved[tag_at] ^= 1;
-        let tag: [u8; commitment::TAG_LEN] = moved[tag_at..nonce_at].try_into().unwrap();
-        let nonce = &moved[nonce_at..OBJECT_HEADER_LEN];
+        let tag = ambre_core::CommitmentTag(moved[tag_at..nonce_at].try_into().unwrap());
+        let nonce = ambre_core::Nonce(moved[nonce_at..OBJECT_HEADER_LEN].try_into().unwrap());
+        let body = ambre_core::Ciphertext(moved[OBJECT_HEADER_LEN..].to_vec());
         let bound = object_aad(doc_key.id(), aad);
-        let resigned = signature::sign(&signing, nonce, &moved[OBJECT_HEADER_LEN..], &bound, &tag);
-        moved[signature_at..tag_at].copy_from_slice(&resigned);
+        let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
+        moved[signature_at..tag_at].copy_from_slice(&resigned.0);
         assert!(matches!(
             open_object(&moved, aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::CommitmentMismatch))

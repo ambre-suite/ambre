@@ -61,11 +61,11 @@ const ENTRY_DIGEST_DOMAIN: &[u8] = b"ambre-membership-digest-v1";
 
 /// The digest of one encoded membership entry, which the next entry names
 /// (`SYNC-102`): `BLAKE2b(domain || entry)`, truncated to 32 bytes.
-pub fn entry_digest(encoded_entry: &[u8]) -> [u8; HASH_LEN] {
+pub fn entry_digest(encoded_entry: &[u8]) -> ambre_core::EntryDigest {
     let mut hasher = Blake2b512::new();
     hasher.update(ENTRY_DIGEST_DOMAIN);
     hasher.update(encoded_entry);
-    prefix(&hasher.finalize())
+    ambre_core::EntryDigest(prefix(&hasher.finalize()))
 }
 
 /// Computes the chain hash `BLAKE2b(len(parent_proof) || parent_proof ||

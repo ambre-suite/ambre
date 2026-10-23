@@ -5,7 +5,7 @@
 //! The associated data (`aad`) binds the ciphertext to the message's public
 //! metadata without encrypting it.
 
-use ambre_core::EntryDigest;
+use ambre_core::{Ciphertext, EntryDigest, Nonce};
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
@@ -26,7 +26,7 @@ pub fn seal(
     plaintext: &[u8],
     aad: &[u8],
     key: &DocumentKey,
-) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_under(plaintext, aad, key.as_bytes())
 }
 
@@ -37,7 +37,7 @@ pub fn seal(
 /// [`CryptoError::AeadFailed`] when the tag does not verify: a wrong key,
 /// wrong `aad`, or a modified ciphertext. Poly1305 cannot tell a caller which.
 pub fn open(
-    nonce: &[u8; NONCE_LEN],
+    nonce: &Nonce,
     ciphertext: &[u8],
     aad: &[u8],
     key: &DocumentKey,
@@ -59,7 +59,7 @@ pub fn seal_file(
     plaintext: &[u8],
     aad: &[u8],
     key: &FileKey,
-) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_under(plaintext, aad, key.as_bytes())
 }
 
@@ -73,7 +73,7 @@ pub fn seal_file(
 ///
 /// [`CryptoError::AeadFailed`], for the reason the paragraph above states.
 pub fn open_file(
-    nonce: &[u8; NONCE_LEN],
+    nonce: &Nonce,
     ciphertext: &[u8],
     aad: &[u8],
     key: &FileKey,
@@ -98,8 +98,8 @@ pub fn seal_row(plaintext: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<
     let (nonce, ciphertext) = seal_under(plaintext, context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(ROW_VERSION);
-    row.extend_from_slice(&nonce);
-    row.extend_from_slice(&ciphertext);
+    row.extend_from_slice(&nonce.0);
+    row.extend_from_slice(&ciphertext.0);
     Ok(row)
 }
 
@@ -117,8 +117,8 @@ pub fn open_row(row: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, C
     let (Some(nonce), Some(ciphertext)) = (rest.get(..NONCE_LEN), rest.get(NONCE_LEN..)) else {
         return Err(CryptoError::AeadFailed);
     };
-    let nonce: &[u8; NONCE_LEN] = nonce.try_into().map_err(|_| CryptoError::AeadFailed)?;
-    open_under(nonce, ciphertext, context, key.as_bytes())
+    let nonce = Nonce(nonce.try_into().map_err(|_| CryptoError::AeadFailed)?);
+    open_under(&nonce, ciphertext, context, key.as_bytes())
 }
 
 /// Seals one document key under another, as a catalogue holds the key of a
@@ -134,7 +134,7 @@ pub fn seal_document_key(
     inner: &DocumentKey,
     aad: &[u8],
     outer: &DocumentKey,
-) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_anchored_key(inner, aad, outer, None)
 }
 
@@ -152,7 +152,7 @@ pub fn seal_anchored_key(
     aad: &[u8],
     outer: &DocumentKey,
     anchor: Option<&EntryDigest>,
-) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+) -> Result<(Nonce, Ciphertext), CryptoError> {
     let mut plain = zeroize::Zeroizing::new(inner.as_bytes().to_vec());
     if let Some(anchor) = anchor {
         plain.extend_from_slice(&anchor.0);
@@ -168,7 +168,7 @@ pub fn seal_anchored_key(
 /// ciphertext. [`CryptoError::InvalidKeyLength`] for a plaintext that is
 /// neither a key nor a key and an anchor.
 pub fn open_document_key(
-    nonce: &[u8; NONCE_LEN],
+    nonce: &Nonce,
     ciphertext: &[u8],
     aad: &[u8],
     outer: &DocumentKey,
@@ -183,7 +183,7 @@ pub fn open_document_key(
 ///
 /// Every error of [`open_document_key`].
 pub fn open_anchored_key(
-    nonce: &[u8; NONCE_LEN],
+    nonce: &Nonce,
     ciphertext: &[u8],
     aad: &[u8],
     outer: &DocumentKey,
@@ -210,7 +210,7 @@ fn seal_under(
     plaintext: &[u8],
     aad: &[u8],
     key: &[u8; 32],
-) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+) -> Result<(Nonce, Ciphertext), CryptoError> {
     let nonce = crate::random::bytes::<NONCE_LEN>();
     let cipher = XChaCha20Poly1305::new(key.into());
     // Encryption is infallible for XChaCha20-Poly1305 except when the plaintext
@@ -225,13 +225,13 @@ fn seal_under(
             },
         )
         .map_err(|_| CryptoError::EncryptionFailed)?;
-    Ok((nonce, ciphertext))
+    Ok((Nonce(nonce), Ciphertext(ciphertext)))
 }
 
 /// The inverse, over raw key bytes. Private for the same reason as
 /// [`seal_under`].
 fn open_under(
-    nonce: &[u8; NONCE_LEN],
+    nonce: &Nonce,
     ciphertext: &[u8],
     aad: &[u8],
     key: &[u8; 32],
@@ -239,7 +239,7 @@ fn open_under(
     let cipher = XChaCha20Poly1305::new(key.into());
     cipher
         .decrypt(
-            XNonce::from_slice(nonce),
+            XNonce::from_slice(&nonce.0),
             Payload {
                 msg: ciphertext,
                 aad,

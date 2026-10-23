@@ -45,7 +45,7 @@ impl SyncState {
                             });
                             return;
                         };
-                        let (master_key_enc, salt) = (master_key_enc.as_bytes(), salt.as_bytes());
+                        let master_key_enc = master_key_enc.as_bytes();
                         let Some((nonce, ciphertext)) = master_key_enc.split_first_chunk::<24>()
                         else {
                             tracing::warn!(
@@ -70,7 +70,7 @@ impl SyncState {
                             };
                         let user_doc_key = DocumentKey::from_array(user_key);
                         let seed_bytes = match ambre_crypto::aead::open(
-                            nonce,
+                            &ambre_core::Nonce(*nonce),
                             ciphertext,
                             b"ambre-master-seed",
                             &user_doc_key,
@@ -374,19 +374,22 @@ impl SyncState {
                 let mut salt = [0u8; 32];
                 let wrapped = getrandom::fill(&mut salt)
                     .map_err(|e| format!("no CSPRNG for the account salt: {e}"))
-                    .and_then(|()| {
+                    .map(|()| ambre_core::MasterKeySalt::new(salt.to_vec()))
+                    .and_then(|salt| {
                         ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
+                            .map(|user_key| (salt, user_key))
                             .map_err(|e| format!("user-key derivation failed: {e}"))
                     })
-                    .and_then(|user_key| {
+                    .and_then(|(salt, user_key)| {
                         master_seed
                             .wrap_for_storage(
                                 &DocumentKey::from_array(user_key),
                                 b"ambre-master-seed",
                             )
+                            .map(|wrapped| (salt, wrapped))
                             .map_err(|e| format!("master-seed wrap failed: {e}"))
                     });
-                let (nonce, master_key_enc) = match wrapped {
+                let (master_key_salt, master_key_enc) = match wrapped {
                     Ok(pair) => pair,
                     Err(message) => {
                         tracing::warn!("Sync: {message}");
@@ -394,8 +397,6 @@ impl SyncState {
                         return;
                     }
                 };
-                let mut master_key_with_nonce = nonce.to_vec();
-                master_key_with_nonce.extend_from_slice(&master_key_enc);
 
                 // Zero-Knowledge (N4): only the wrapped master key and its salt go
                 // over the wire; the passphrase stays in this worker and zeroizes
@@ -404,10 +405,8 @@ impl SyncState {
                 let body = http::SetupAccountRequest {
                     email,
                     display_name,
-                    master_key_enc: ambre_core::WrappedMasterKey::new(
-                        master_key_with_nonce.to_vec(),
-                    ),
-                    master_key_salt: ambre_core::MasterKeySalt::new(salt.to_vec()),
+                    master_key_enc,
+                    master_key_salt,
                     signing_pubkey: signing_pub_key,
                     exchange_pubkey: exchange_pub_key,
                 };

@@ -93,9 +93,10 @@ pub use credential::{OidcCode, OidcState, PresignedUrl, ProviderUrl};
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, ContainerVersion,
-    DocFileError, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN, SEALED_AAD_LEN, SEALED_HEADER_LEN,
-    SealedAmbre, classify, migrate_ambre, parse_sealed_header, read_ambre_plaintext,
-    read_ambre_plaintext_as, sealed_aad, write_ambre_plaintext, write_ambre_sealed,
+    DocFileError, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN, SEALED_AAD_LEN,
+    SEALED_HEADER_LEN, SealedAmbre, classify, migrate_ambre, parse_sealed_header,
+    read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad, write_ambre_plaintext,
+    write_ambre_sealed,
 };
 pub use email::Email;
 pub use encoded::{

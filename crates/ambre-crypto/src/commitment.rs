@@ -5,6 +5,7 @@
 //! message to a specific key, defeating inter-document substitution by a
 //! compromised relay. Distinct from the Poly1305 tag carried inside the AEAD.
 
+use ambre_core::{Ciphertext, CommitmentTag, Nonce};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -36,14 +37,16 @@ fn mac(key: &DocumentKey, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HmacSh
 /// Computes the commitment tag over `nonce || ciphertext || aad`.
 pub fn commitment_tag(
     key: &DocumentKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     aad: &[u8],
-) -> [u8; TAG_LEN] {
-    mac(key, nonce, ciphertext, aad)
-        .finalize()
-        .into_bytes()
-        .into()
+) -> CommitmentTag {
+    CommitmentTag(
+        mac(key, &nonce.0, &ciphertext.0, aad)
+            .finalize()
+            .into_bytes()
+            .into(),
+    )
 }
 
 /// Domain-separation tag of the media-address subkey. The subkey keeps the
@@ -84,12 +87,12 @@ fn mac_over(key: &DocumentKey, data: &[u8]) -> [u8; TAG_LEN] {
 /// one: a substituted key, or an input the tag does not cover.
 pub fn verify_commitment(
     key: &DocumentKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     aad: &[u8],
-    tag: &[u8; TAG_LEN],
+    tag: &CommitmentTag,
 ) -> Result<(), CryptoError> {
-    mac(key, nonce, ciphertext, aad)
-        .verify_slice(tag)
+    mac(key, &nonce.0, &ciphertext.0, aad)
+        .verify_slice(&tag.0)
         .map_err(|_| CryptoError::CommitmentMismatch)
 }

@@ -105,7 +105,7 @@ struct Held {
 /// that does not encode, which no decoded entry is.
 pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
     let bytes = entry.encode().ok()?;
-    Some(EntryDigest(ambre_crypto::hash::entry_digest(&bytes)))
+    Some(ambre_crypto::hash::entry_digest(&bytes))
 }
 
 /// The place and the previous digest the next entry of a log takes.
@@ -323,7 +323,7 @@ impl Log {
 /// Whether `key` signed `entry`.
 fn signed_by(entry: &MembershipEntry, key: &PublicKey) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
-        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature.0).is_ok()
+        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature).is_ok()
     })
 }
 
@@ -361,7 +361,7 @@ pub(crate) fn sign(
         signature: Signature([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes().map_err(|e| e.to_string())?;
-    entry.signature = Signature(ambre_crypto::signature::sign_message(signing_key, &bytes));
+    entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes);
     Ok(entry)
 }
 

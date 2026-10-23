@@ -12,7 +12,7 @@
 //!
 //! All three are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
 
-use ambre_core::{KeyId, SALT_LEN};
+use ambre_core::{FileSalt, KeyId, SALT_LEN, WrappedMasterKey};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
@@ -101,8 +101,11 @@ impl MasterSeed {
         &self,
         key: &DocumentKey,
         aad: &[u8],
-    ) -> Result<([u8; aead::NONCE_LEN], Vec<u8>), CryptoError> {
-        aead::seal(&self.0, aad, key)
+    ) -> Result<WrappedMasterKey, CryptoError> {
+        let (nonce, ciphertext) = aead::seal(&self.0, aad, key)?;
+        let mut wrapped = nonce.0.to_vec();
+        wrapped.extend_from_slice(&ciphertext.0);
+        Ok(WrappedMasterKey::new(wrapped))
     }
 }
 
@@ -233,9 +236,9 @@ impl FileKey {
     /// refuses. The BLAKE2b pass is infallible.
     pub fn from_passphrase(
         passphrase: &ambre_core::Passphrase,
-        salt: &[u8],
+        salt: &FileSalt,
     ) -> Result<Self, CryptoError> {
-        let mut intermediate = crate::passphrase::derive_user_key(passphrase, salt)?;
+        let mut intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
         let key = Self(derive32(FILE_DOMAIN, &intermediate));
         intermediate.zeroize();
         Ok(key)
@@ -255,8 +258,8 @@ impl FileKey {
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
     pub fn for_new_file(
         passphrase: &ambre_core::Passphrase,
-    ) -> Result<(Self, [u8; SALT_LEN]), CryptoError> {
-        let salt = random::bytes::<SALT_LEN>();
+    ) -> Result<(Self, FileSalt), CryptoError> {
+        let salt = FileSalt::from_array(random::bytes::<SALT_LEN>());
         let key = Self::from_passphrase(passphrase, &salt)?;
         Ok((key, salt))
     }

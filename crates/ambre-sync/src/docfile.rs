@@ -10,7 +10,7 @@
 //!
 //! Both handlers are synchronous: the Argon2id pass is pure computation, and it
 //! holds this worker's event loop for a few hundred milliseconds.
-use ambre_core::{SALT_LEN, parse_sealed_header, sealed_aad, write_ambre_sealed};
+use ambre_core::{parse_sealed_header, sealed_aad, write_ambre_sealed};
 use ambre_crypto::keys::FileKey;
 
 use super::*;
@@ -41,7 +41,7 @@ impl SyncState {
                 let data = ambre_core::SealedContainer::new(write_ambre_sealed(
                     &salt,
                     &nonce,
-                    &ciphertext,
+                    &ciphertext.0,
                 ));
                 self.reply(id, RestEvent::DocFileSealed { data });
             }
@@ -70,7 +70,6 @@ impl SyncState {
             self.reply(id, RestEvent::DocFileOpenFailed);
             return;
         };
-        debug_assert_eq!(envelope.salt.len(), SALT_LEN);
         let Ok(key) = FileKey::from_passphrase(&passphrase, &envelope.salt) else {
             tracing::warn!("Sync: OpenDocFile: key derivation failed");
             self.reply(id, RestEvent::DocFileOpenFailed);
