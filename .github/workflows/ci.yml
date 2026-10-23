@@ -401,6 +401,7 @@ jobs:
           tool: wasm-pack
       # Clippy on the wasm target: the code host clippy never reads holds the
       # panic lints too (`ARCH-028`). Before the tests, so a lint fails fast.
+      # The recipe also checks the Logic and app wasm test targets.
       - name: Toolchain (clippy)
         run: rustup component add clippy
       - run: just lint-wasm

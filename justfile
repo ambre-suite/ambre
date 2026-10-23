@@ -39,6 +39,10 @@ lint-wasm:
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
     RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    # `test-wasm` builds the Logic and app test targets with these flags, and
+    # no other wasm line compiles them, so a broken wasm test build fails here.
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-logic --tests
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo check --target wasm32-unknown-unknown -p ambre-app --tests
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over
