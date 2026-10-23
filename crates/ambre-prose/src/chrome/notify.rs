@@ -10,7 +10,7 @@ use ambre_bus::{AppEvent, UiEvent};
 use ambre_chrome::Toasts;
 
 use crate::interop::report_message;
-use crate::view::annotate::REPLY_LOST_DELETED;
+use crate::view::annotate::LostReply;
 
 /// Surface what a conversion lost, and a file that produced nothing, as a
 /// toast (`PROSE-IO-053`). A reply refused for its thread is told too
@@ -43,7 +43,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             if matches!(error.reason, ProseRefusal::NoSuchComment(_))
                 && error.refused == "replying to the comment" =>
         {
-            toasts.warning(REPLY_LOST_DELETED);
+            toasts.warning(LostReply::Deleted.notice());
         }
         _ => {}
     }

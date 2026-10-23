@@ -83,13 +83,35 @@ pub enum AnnotationIntent {
     },
 }
 
-/// What the user is told when a peer takes a thread out of the panel while
-/// its reply field holds text (`PROSE-UI-232`).
-pub const REPLY_LOST_DELETED: &str =
-    "A collaborator deleted the thread you were replying to. Your reply was not posted.";
-pub const REPLY_LOST_RESOLVED: &str =
-    "A collaborator resolved the thread you were replying to. Your reply was not posted.";
-pub const REPLY_LOST_ORPHANED: &str = "A collaborator deleted the text of the thread you were replying to. Your reply was not posted.";
+/// How a peer took a thread out of the panel while its reply field held a
+/// draft (`PROSE-UI-232`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LostReply {
+    /// The thread itself was deleted.
+    Deleted,
+    /// The thread was resolved.
+    Resolved,
+    /// The text the thread was anchored to was deleted.
+    Orphaned,
+}
+
+impl LostReply {
+    /// What the user is told when the draft held text.
+    #[must_use]
+    pub const fn notice(self) -> &'static str {
+        match self {
+            Self::Deleted => {
+                "A collaborator deleted the thread you were replying to. Your reply was not posted."
+            }
+            Self::Resolved => {
+                "A collaborator resolved the thread you were replying to. Your reply was not posted."
+            }
+            Self::Orphaned => {
+                "A collaborator deleted the text of the thread you were replying to. Your reply was not posted."
+            }
+        }
+    }
+}
 
 /// Push each height down until it keeps `room` from the one above it. The
 /// heights come in anchor order, so the first thread never moves.
@@ -250,21 +272,21 @@ impl ProseUiState {
             .collect()
     }
 
-    /// The reply drafts whose thread left the panel, each with the notice owed
-    /// when it held text (`PROSE-UI-232`). A draft whose thread is still open
+    /// The reply drafts whose thread left the panel, each with how it left
+    /// when the draft held text, so a notice is owed (`PROSE-UI-232`). A draft whose thread is still open
     /// stays, wherever the thread moved (`PROSE-UI-231`).
     #[must_use]
     pub fn lost_drafts(
         &self,
         drafts: &HashMap<CommentId, String>,
-    ) -> Vec<(CommentId, Option<&'static str>)> {
+    ) -> Vec<(CommentId, Option<LostReply>)> {
         drafts
             .iter()
             .filter_map(|(id, text)| {
                 let why = match self.comments.iter().find(|t| t.comment_id == *id) {
-                    None => REPLY_LOST_DELETED,
-                    Some(thread) if thread.resolved => REPLY_LOST_RESOLVED,
-                    Some(thread) if thread.orphaned => REPLY_LOST_ORPHANED,
+                    None => LostReply::Deleted,
+                    Some(thread) if thread.resolved => LostReply::Resolved,
+                    Some(thread) if thread.orphaned => LostReply::Orphaned,
                     Some(_) => return None,
                 };
                 Some((*id, (!text.trim().is_empty()).then_some(why)))
@@ -576,7 +598,7 @@ mod tests {
 
     #[test]
     fn a_draft_outlives_a_move_and_its_thread_leaving_is_told() {
-        use super::{REPLY_LOST_DELETED, REPLY_LOST_ORPHANED, REPLY_LOST_RESOLVED};
+        use super::LostReply;
         let mut ui = view(3);
         let a = text_block(&ui, 0);
         let thread = || CommentThread {
@@ -624,9 +646,9 @@ mod tests {
         let mut lost = ui.lost_drafts(&drafts);
         lost.sort_by_key(|(id, _)| *id.as_bytes());
         let mut expected = vec![
-            (gone.comment_id, Some(REPLY_LOST_DELETED)),
-            (all[2].comment_id, Some(REPLY_LOST_RESOLVED)),
-            (all[3].comment_id, Some(REPLY_LOST_ORPHANED)),
+            (gone.comment_id, Some(LostReply::Deleted)),
+            (all[2].comment_id, Some(LostReply::Resolved)),
+            (all[3].comment_id, Some(LostReply::Orphaned)),
             (blank.comment_id, None),
         ];
         expected.sort_by_key(|(id, _)| *id.as_bytes());

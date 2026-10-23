@@ -19,7 +19,7 @@ use ambre_core::{CommentId, ReplyId, UserId};
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
 use ambre_prose::events::{CommentReply, CommentThread, ProseEvent};
 use ambre_prose::ui::ProseUiState;
-use ambre_prose::view::annotate::PanelThread;
+use ambre_prose::view::annotate::{LostReply, PanelThread};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -154,9 +154,13 @@ fn a_thread_deleted_under_a_draft_is_told() {
     view.apply_event(&ProseEvent::CommentsUpdated {
         threads: vec![thread(kept, &["a"])],
     });
-    let notices = signals.drop_lost_drafts(&view);
-    assert_eq!(notices.len(), 1);
-    assert!(notices[0].contains("not posted"), "{}", notices[0]);
+    let lost = signals.drop_lost_drafts(&view);
+    assert_eq!(lost, [LostReply::Deleted]);
+    assert!(
+        lost[0].notice().contains("not posted"),
+        "{}",
+        lost[0].notice()
+    );
     signals.drafts.with_untracked(|drafts| {
         assert_eq!(drafts.get(&kept).map(String::as_str), Some("still here"));
         assert!(!drafts.contains_key(&gone), "the lost draft is dropped");

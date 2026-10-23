@@ -251,8 +251,8 @@ impl ProseView {
     /// Drop each reply draft whose thread a peer took out of the panel, and
     /// tell the user of each that held text (`PROSE-UI-232`).
     fn drop_lost_drafts(&self) {
-        for notice in self.annotations.drop_lost_drafts(&self.state) {
-            self.notices.publish(notice);
+        for lost in self.annotations.drop_lost_drafts(&self.state) {
+            self.notices.publish(lost.notice());
         }
     }
 

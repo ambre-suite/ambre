@@ -26,7 +26,7 @@ use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};
 use crate::ui::ProseUiState;
-use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
+use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, LostReply, PanelThread};
 use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
@@ -126,8 +126,9 @@ impl ProseSignals {
     }
 
     /// Drop each reply draft whose thread left the panel, and answer the
-    /// notice owed for each that held text (`PROSE-UI-232`).
-    pub fn drop_lost_drafts(&self, view: &ProseUiState) -> Vec<&'static str> {
+    /// way each that held text was lost, so its notice is owed
+    /// (`PROSE-UI-232`).
+    pub fn drop_lost_drafts(&self, view: &ProseUiState) -> Vec<LostReply> {
         let lost = self
             .drafts
             .with_untracked(|drafts| view.lost_drafts(drafts));
