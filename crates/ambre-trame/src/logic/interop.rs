@@ -7,6 +7,7 @@
 // plaintext file ever transits to the Blind Relay (Zero-Knowledge invariant).
 
 use super::*;
+use crate::CsvDelimiter;
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
@@ -16,14 +17,14 @@ impl TrameState {
     pub(super) fn import_csv(
         &mut self,
         data: Vec<u8>,
-        delimiter: Option<u8>,
+        delimiter: Option<CsvDelimiter>,
         header: HeaderRow,
         target_sheet_id: Option<SheetId>,
         start: CellPos,
     ) -> TrameOutcome {
         let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
         let mut reader = csv::ReaderBuilder::new()
-            .delimiter(delim)
+            .delimiter(delim.byte())
             // We skip the header ourselves so every record is read uniformly.
             .has_headers(false)
             // CSV rows of varying field counts are common in real exports.
@@ -142,7 +143,7 @@ impl TrameState {
     pub(super) fn export_csv(
         &self,
         sheet_id: &SheetId,
-        delimiter: Option<u8>,
+        delimiter: Option<CsvDelimiter>,
         range: Option<CellRect>,
     ) -> TrameOutcome {
         // An export that writes no file says why (`TRAME-IO-041`).
@@ -167,9 +168,9 @@ impl TrameState {
             },
         };
 
-        let delim = delimiter.unwrap_or(b',');
+        let delim = delimiter.unwrap_or(CsvDelimiter::COMMA);
         let mut writer = csv::WriterBuilder::new()
-            .delimiter(delim)
+            .delimiter(delim.byte())
             .from_writer(Vec::new());
         for row in rect.rows() {
             let record: Vec<String> = rect
@@ -266,15 +267,20 @@ impl TrameState {
 /// tab, by frequency in the first kilobyte (`trame-import-export`). A separator
 /// inside a quoted field does not count. A tie goes to the earlier of the
 /// three. Any other separator, the caller names (`TRAME-IO-035`).
-fn detect_csv_delimiter(data: &[u8]) -> u8 {
+fn detect_csv_delimiter(data: &[u8]) -> CsvDelimiter {
     let sample = data.get(..1024).unwrap_or(data);
-    let mut counts = [(b',', 0usize), (b';', 0), (b'\t', 0)];
+    let mut counts = [
+        (CsvDelimiter::COMMA, 0usize),
+        (CsvDelimiter::SEMICOLON, 0),
+        (CsvDelimiter::TAB, 0),
+    ];
     let mut quoted = false;
     for &byte in sample {
         if byte == b'"' {
             // An escaped quote toggles twice, so it leaves the field quoted.
             quoted = !quoted;
-        } else if !quoted && let Some(slot) = counts.iter_mut().find(|(sep, _)| *sep == byte) {
+        } else if !quoted && let Some(slot) = counts.iter_mut().find(|(sep, _)| sep.byte() == byte)
+        {
             slot.1 += 1;
         }
     }

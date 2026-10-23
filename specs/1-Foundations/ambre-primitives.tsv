@@ -489,10 +489,8 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CreateSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ExportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RenameSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
@@ -5078,10 +5076,7 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(oper
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | op_from_str(s) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
-ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter() | ret | u8	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
@@ -5516,3 +5511,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName.
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the name shape
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName.0 | field | String	free-text	the refused text, echoed in the refusal
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidCsvDelimiter.0 | field | u8	newtype-inner	CsvDelimiter field, constructor or accessor: the refused byte, echoed in the refusal

@@ -61,9 +61,9 @@ pub use event::{
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
-    CondFormatId, CondFormatKind, CondStyle, DefinedName, DisplayCell, EditSessionId, FillMode,
-    FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, MergeSpan, Row, RowCount, RowDelta,
-    RowSpan, RowVec, SelectionKind, SheetId, SheetTab, SortKey, SortOrder, StylePatch,
+    CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DefinedName, DisplayCell, EditSessionId,
+    FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, MergeSpan, Row, RowCount,
+    RowDelta, RowSpan, RowVec, SelectionKind, SheetId, SheetTab, SortKey, SortOrder, StylePatch,
     TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};

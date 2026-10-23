@@ -567,7 +567,11 @@ fn csv_import_malformed_never_panics() {
     for (i, data) in cases.iter().enumerate() {
         let mut state = TrameState::new();
         // Each variant: auto-detect and forced delimiters, with/without header.
-        for delimiter in [None, Some(b','), Some(b';')] {
+        for delimiter in [
+            None,
+            Some(crate::CsvDelimiter::COMMA),
+            Some(crate::CsvDelimiter::SEMICOLON),
+        ] {
             for header in [HeaderRow::Absent, HeaderRow::Present] {
                 // Must return without panicking; the result is unspecified but
                 // well-formed (an ImportComplete or an Error event).

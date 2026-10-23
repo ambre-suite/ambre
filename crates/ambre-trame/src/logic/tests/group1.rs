@@ -530,7 +530,10 @@ fn definition_that_is_not_a_reference_is_refused() {
 #[test]
 fn name_a_formula_cannot_read_is_refused() {
     for text in ["1TOTAL", "MY TOTAL", ""] {
-        assert!(crate::DefinedName::new(text).is_err(), "{text:?} is no name");
+        assert!(
+            crate::DefinedName::new(text).is_err(),
+            "{text:?} is no name"
+        );
     }
     let mut state = TrameState::new();
     for name in ["A1", "TRUE"] {

@@ -35,6 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-IO-035` | `PRE` | The caller MUST name the separator for anything but a comma, a semicolon or a tab. | this spec section 3 | `ambre_trame::logic::tests::group12::a_separator_outside_the_three_is_named_by_the_caller` | none | verified |
+| `TRAME-IO-049` | `PRE` | A separator a command names MUST be an ASCII byte other than the double quote, CR and LF. | this spec section 3 | `ambre_bus::app::trame::command::tests::a_separator_is_an_ascii_byte_that_neither_quotes_nor_ends_a_record` -- `CsvDelimiter::new` is the only way to build one | none | verified |
 | `TRAME-IO-006` | `POST` | The separator MUST be auto-detected when the command names none. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_delimiter_autodetect`; `::csv_import_creates_sheet_and_cells` | none | verified |
 | `TRAME-IO-036` | `POST` | A header row MUST be dropped when the command declares one. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_skips_header` | none | verified |
 | `TRAME-IO-037` | `POST` | An import MUST make the sheet it wrote the active one, so the user lands on what arrived. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_creates_sheet_and_cells` -- it asserts the active sheet is the imported one before reading its cells | none | verified |
@@ -97,11 +98,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 27 `verified`, 13 `unimplemented`. What holds is the round trip
-  of the two gestures and their frame conditions. An import is one undo item, an empty file writes
-  nothing, and an export or a save changes nothing. Every refusal answers, and the browser tier
-  reads the one a full queue raises. A gate and `deny.toml`
-  keep every conversion in the Logic thread of `ambre-trame`.
+* **Verification.** 28 `verified`, 13 `unimplemented`. What holds is the round trip of the two
+  gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
+  an export or a save changes nothing. Every refusal answers, and the browser tier reads the one a
+  full queue raises. A gate and `deny.toml` keep every conversion in the Logic thread of
+  `ambre-trame`.
 
 ---
 

@@ -224,7 +224,7 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
     assert_eq!(read_cell(&mut state, 0, 0), "a|b");
     let out = state.handle_command(TrameCommand::ImportCsv {
         data: b"a|b\n".to_vec(),
-        delimiter: Some(b'|'),
+        delimiter: crate::CsvDelimiter::new(b'|').ok(),
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Row::new(0),
@@ -249,7 +249,7 @@ fn a_csv_export_writes_nothing() {
         TrameCommand::ExportActiveSheetCsv,
         TrameCommand::ExportCsv {
             sheet_id: crate::logic::default_sheet(),
-            delimiter: Some(b';'),
+            delimiter: Some(crate::CsvDelimiter::SEMICOLON),
             range: None,
         },
     ] {

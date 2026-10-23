@@ -68,6 +68,43 @@ impl std::borrow::Borrow<str> for DefinedName {
     }
 }
 
+/// A byte refused as a CSV field separator: the double quote, CR, LF, or a
+/// byte outside ASCII.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("byte {0:#04x} cannot separate CSV fields")]
+pub struct InvalidCsvDelimiter(pub u8);
+
+/// The byte that separates the fields of a CSV record (`trame-import-export`).
+/// It is an ASCII byte other than the double quote, which opens a quoted
+/// field, and CR and LF, which end a record. A byte outside ASCII would cut a
+/// UTF-8 character in two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CsvDelimiter(u8);
+
+impl CsvDelimiter {
+    pub const COMMA: Self = Self(b',');
+    pub const SEMICOLON: Self = Self(b';');
+    pub const TAB: Self = Self(b'\t');
+
+    /// The separator `byte` is.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidCsvDelimiter`] for the double quote, CR, LF and any byte
+    /// outside ASCII.
+    pub const fn new(byte: u8) -> Result<Self, InvalidCsvDelimiter> {
+        match byte {
+            b'"' | b'\r' | b'\n' | 0x80.. => Err(InvalidCsvDelimiter(byte)),
+            _ => Ok(Self(byte)),
+        }
+    }
+
+    /// The byte a CSV reader or writer is configured with.
+    pub const fn byte(self) -> u8 {
+        self.0
+    }
+}
+
 /// Shape of a Trame selection band (`trame-selection`), the bus-side mirror of
 /// `ambre_trame`'s `SelKind`. `Cells` is the ordinary rectangle; `Cols`/`Rows`
 /// are whole-axis bands the Logic thread resolves to the used range.
@@ -605,15 +642,15 @@ pub enum TrameCommand {
     /// writes into the named sheet starting at `(start_row, start_col)`, extending the used
     /// range as needed.
     ///
-    /// `delimiter` is auto-detected (comma vs semicolon) when `None`. Each field becomes a
+    /// `delimiter` is auto-detected (comma, semicolon or tab) when `None`. Each field becomes a
     /// literal cell (no formula reindexing -- the source is external). Replies with
     /// [`TrameEvent::ImportComplete`](super::TrameEvent::ImportComplete) plus a
     /// [`DataReset`](super::TrameEvent::DataReset); the whole import is a single undo
     /// group.
     ImportCsv {
         data: Vec<u8>,
-        /// Field separator; `None` auto-detects comma vs semicolon.
-        delimiter: Option<u8>,
+        /// Field separator; `None` auto-detects it.
+        delimiter: Option<CsvDelimiter>,
         /// A first record that is a header row is skipped.
         header: HeaderRow,
         /// Target sheet; `None` creates a new "CSV Import" sheet.
@@ -639,7 +676,7 @@ pub enum TrameCommand {
     /// carrying the file bytes for the UI Thread to download.
     ExportCsv {
         sheet_id: SheetId,
-        delimiter: Option<u8>,
+        delimiter: Option<CsvDelimiter>,
         range: Option<CellRect>,
     },
 
@@ -817,7 +854,7 @@ impl TrameCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::DefinedName;
+    use super::{CsvDelimiter, DefinedName};
 
     #[test]
     fn a_name_is_a_letter_or_underscore_then_word_characters() {
@@ -829,6 +866,18 @@ mod tests {
         }
         for text in ["", "1TOTAL", "MY TOTAL", "TOTAL!", "TÔTAL", "A-B"] {
             assert!(DefinedName::new(text).is_err(), "{text:?} is refused");
+        }
+    }
+
+    /// A separator never opens a quote, ends a record or cuts a character
+    /// (`TRAME-IO-049`).
+    #[test]
+    fn a_separator_is_an_ascii_byte_that_neither_quotes_nor_ends_a_record() {
+        for byte in [b',', b';', b'\t', b'|', b' '] {
+            assert_eq!(CsvDelimiter::new(byte).map(CsvDelimiter::byte), Ok(byte));
+        }
+        for byte in [b'"', b'\r', b'\n', 0x80, 0xff] {
+            assert!(CsvDelimiter::new(byte).is_err(), "{byte:#04x} is refused");
         }
     }
 }
