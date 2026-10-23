@@ -52,13 +52,13 @@ impl FormulaEngine {
     pub fn on_cell_changed(
         &mut self,
         cell: CellId,
-        raw: &StoredFormula,
+        raw: StoredFormula,
         indices: &SheetIndices,
         ctx: &dyn FormulaCtx,
     ) {
         // The same text compiles to the same bytecode and computes the same
         // value: nothing downstream changes either (`TRAME-212`).
-        if self.bytecode.compiled_from(cell, raw) {
+        if self.bytecode.compiled_from(cell, &raw) {
             return;
         }
         self.bytecode.invalidate(cell);
@@ -66,19 +66,21 @@ impl FormulaEngine {
         self.dirty.insert(cell);
         self.dirty.extend(downstream);
 
+        // Plain (non-formula) cells never go through the VM, so their value must
+        // be published here for formula references to resolve. It is read
+        // before the cache takes the text.
+        let plain =
+            (!raw.is_formula()).then(|| (!raw.is_empty()).then(|| literal_value(raw.as_str())));
         let rejected = self
             .bytecode
             .recompile_if_stale(cell, raw, indices, &mut self.deps, ctx);
 
-        // Plain (non-formula) cells never go through the VM, so their value must
-        // be published here for formula references to resolve.
-        if !raw.is_formula() {
+        if let Some(literal) = plain {
             let mut cache = self.formula_cache.borrow_mut();
-            if raw.is_empty() {
-                cache.remove(&cell);
-            } else {
-                cache.insert(cell, literal_value(raw.as_str()));
-            }
+            match literal {
+                Some(value) => cache.insert(cell, value),
+                None => cache.remove(&cell),
+            };
         } else if let Some(err @ CellValue::Error(_)) = rejected {
             // A rejected formula (cycle, parse error) has no bytecode, so the VM
             // pass will not overwrite the cache. Publish the error here, else the
@@ -231,7 +233,7 @@ mod tests {
         let mut engine = FormulaEngine::new();
         let c = cell(0, 0);
 
-        engine.on_cell_changed(c, &stored("=42"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(c, stored("=42"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(c).unwrap(), "42");
@@ -243,11 +245,11 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=10"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=10"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
-        engine.on_cell_changed(cell(0, 1), &stored("=A1*2"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1*2"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "20");
@@ -258,16 +260,16 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=5"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=5"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
-        engine.on_cell_changed(cell(0, 1), &stored("=A1+3"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1+3"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "8");
 
         engine.dirty.clear();
-        engine.on_cell_changed(cell(0, 0), &stored("=10"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=10"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "10");
@@ -280,7 +282,7 @@ mod tests {
         let mut engine = FormulaEngine::new();
         let c = cell(0, 0);
 
-        engine.on_cell_changed(c, &stored("=1/0"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(c, stored("=1/0"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(c).unwrap(), "#DIV/0!");
@@ -294,7 +296,7 @@ mod tests {
         for i in 0..3 {
             engine.on_cell_changed(
                 cell(i, 0),
-                &stored(&format!("={}", i + 1)),
+                stored(&format!("={}", i + 1)),
                 &idx,
                 &SingleSheetCtx,
             );
@@ -302,7 +304,7 @@ mod tests {
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
-        engine.on_cell_changed(cell(0, 2), &stored("=SUM(A1:A3)"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 2), stored("=SUM(A1:A3)"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "6");
@@ -313,12 +315,12 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("1"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 1), &stored("2"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("2"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
-        engine.on_cell_changed(cell(0, 2), &stored("=SUM(A1:B1)"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 2), stored("=SUM(A1:B1)"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "3");
@@ -329,11 +331,11 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=B1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=B1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
-        engine.on_cell_changed(cell(0, 1), &stored("=A1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "#CIRCULAR!");
@@ -344,7 +346,7 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=A1+1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=A1+1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "#CIRCULAR!");
@@ -354,11 +356,11 @@ mod tests {
     fn retyping_the_same_text_does_not_recompile() {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
-        engine.on_cell_changed(cell(0, 0), &stored("=1+1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=1+1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.bytecode.compiles(), 1);
 
-        engine.on_cell_changed(cell(0, 0), &stored("=1+1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=1+1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(
             engine.bytecode.compiles(),
@@ -367,7 +369,7 @@ mod tests {
         );
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
 
-        engine.on_cell_changed(cell(0, 0), &stored("=1+2"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=1+2"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.bytecode.compiles(), 2, "a new text is");
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "3");
@@ -382,13 +384,13 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("1"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 1), &stored("=A1+0"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1+0"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "1");
 
         for (n, expected) in [("2", "2"), ("3", "3"), ("4", "4")] {
-            engine.on_cell_changed(cell(0, 0), &stored(n), &idx, &SingleSheetCtx);
+            engine.on_cell_changed(cell(0, 0), stored(n), &idx, &SingleSheetCtx);
             engine.compute_all_dirty(&idx);
             assert_eq!(
                 engine.evaluated_text(cell(0, 1)).unwrap(),
@@ -405,13 +407,13 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("1"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 1), &stored("=SUM(A1:A3)"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 2), &stored("=SUM(B1:B3)"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=SUM(A1:A3)"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 2), stored("=SUM(B1:B3)"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "1");
 
-        engine.on_cell_changed(cell(0, 0), &stored("10"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("10"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "10", "direct");
         assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "10", "chained");
@@ -425,12 +427,12 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=1"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 1), &stored("=A1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "1");
 
-        engine.on_cell_changed(cell(0, 0), &stored("=B1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=B1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "#CIRCULAR!");
     }
@@ -440,11 +442,11 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), &stored("=1+1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=1+1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
 
-        engine.on_cell_changed(cell(0, 0), &stored("=SUM("), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=SUM("), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert!(
             engine
@@ -462,7 +464,7 @@ mod tests {
 
         engine.on_cell_changed(
             cell(0, 0),
-            &stored("=IF(1>0, \"yes\", \"no\")"),
+            stored("=IF(1>0, \"yes\", \"no\")"),
             &idx,
             &SingleSheetCtx,
         );
@@ -476,9 +478,9 @@ mod tests {
         // A1 = 10 (row uid 0), A2 = 20 (row uid 1), B1 = "=A1" binds to row uid 0.
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
-        engine.on_cell_changed(cell(0, 0), &stored("=10"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(1, 0), &stored("=20"), &idx, &SingleSheetCtx);
-        engine.on_cell_changed(cell(0, 1), &stored("=A1"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 0), stored("=10"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(1, 0), stored("=20"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), stored("=A1"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "10");
 

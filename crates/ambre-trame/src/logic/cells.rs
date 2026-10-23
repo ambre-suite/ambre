@@ -317,7 +317,7 @@ impl TrameState {
                 named: &self.named,
             };
             self.engine
-                .on_cell_changed(cell, &StoredFormula::default(), &indices, &ctx);
+                .on_cell_changed(cell, StoredFormula::default(), &indices, &ctx);
         } else {
             // Persist the canonical form: sheet ids, so cross-sheet references
             // survive rename/reorder (`trame-sheets`), and lines, so references
@@ -353,7 +353,7 @@ impl TrameState {
                 engine_sheet_by_id: &self.engine_sheet_by_id,
                 named: &self.named,
             };
-            self.engine.on_cell_changed(cell, &stored, &indices, &ctx);
+            self.engine.on_cell_changed(cell, stored, &indices, &ctx);
         }
     }
 

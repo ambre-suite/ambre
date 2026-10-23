@@ -74,7 +74,7 @@ impl TrameState {
                     };
                     self.engine.on_cell_changed(
                         CellId::bound(idx, rl, cl),
-                        &StoredFormula::new(text.as_str().to_owned()),
+                        StoredFormula::new(text.as_str().to_owned()),
                         &indices,
                         &ctx,
                     );

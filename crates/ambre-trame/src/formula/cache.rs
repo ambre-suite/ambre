@@ -82,7 +82,7 @@ impl BytecodeCache {
     pub fn recompile_if_stale(
         &mut self,
         cell: CellId,
-        raw: &StoredFormula,
+        raw: StoredFormula,
         indices: &SheetIndices,
         deps: &mut DependencyGraph,
         ctx: &dyn FormulaCtx,
@@ -122,7 +122,7 @@ impl BytecodeCache {
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
                     Ok(()) => {
                         self.entries.insert(cell, bc);
-                        self.sources.insert(cell, raw.clone());
+                        self.sources.insert(cell, raw);
                         None // No error -- caller evaluates normally.
                     }
                     Err(_cycle_err) => {
@@ -185,7 +185,7 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        let err = cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&c).is_some());
         assert!(!cache.stale.contains(&c));
@@ -199,11 +199,11 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(cache.get(&c).is_some());
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, &stored("hello"), &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, stored("hello"), &idx, &mut deps, &SingleSheetCtx);
         assert!(cache.get(&c).is_none());
     }
 
@@ -215,7 +215,7 @@ mod tests {
         let c = cell(0, 0);
 
         cache.invalidate(c);
-        let err = cache.recompile_if_stale(c, &stored("=SUM("), &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, stored("=SUM("), &idx, &mut deps, &SingleSheetCtx);
         assert!(matches!(
             err,
             Some(CellValue::Error(FormulaError::ParseError(_)))
@@ -229,7 +229,7 @@ mod tests {
         let mut deps = DependencyGraph::new();
         let c = cell(0, 0);
 
-        let err = cache.recompile_if_stale(c, &stored("=42"), &idx, &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, stored("=42"), &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&c).is_none());
     }
@@ -243,7 +243,7 @@ mod tests {
         let c = cell(0, 1);
 
         cache.invalidate(c);
-        cache.recompile_if_stale(c, &stored("=A1"), &idx, &mut deps, &SingleSheetCtx);
+        cache.recompile_if_stale(c, stored("=A1"), &idx, &mut deps, &SingleSheetCtx);
         let bc = cache.get(&c).unwrap();
         assert!(matches!(
             bc.cell_deps[0],

@@ -340,14 +340,14 @@ proptest! {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
         for ((r, c), v) in &grid {
-            engine.on_cell_changed(cell(*r, *c), &stored(&v.to_string()), &idx, &SingleSheetCtx);
+            engine.on_cell_changed(cell(*r, *c), stored(&v.to_string()), &idx, &SingleSheetCtx);
         }
         engine.compute_all_dirty(&idx);
         engine.dirty.clear();
 
         // Formula lives outside the summed range (row 6).
         let f = cell(6, 0);
-        engine.on_cell_changed(f, &stored("=SUM(A1:C5)"), &idx, &SingleSheetCtx);
+        engine.on_cell_changed(f, stored("=SUM(A1:C5)"), &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
         prop_assert_eq!(engine.evaluated_text(f).unwrap(), oracle.to_string());
 
