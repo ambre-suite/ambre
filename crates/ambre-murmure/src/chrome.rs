@@ -31,8 +31,8 @@ use ambre_bus::{
     SpaceEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_chrome::{
-    CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, Pressed,
-    ShellAction, ShellRegion, Toasts,
+    CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
+    Pressed, ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
 use ambre_core::{ChannelId, CssPoint, CssPx, Name, SpaceId, StepDirection, UserId};
@@ -205,7 +205,7 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                             let choose = (Some(user) != me)
                                 .then(|| {
                                     Callback::new(move |()| {
-                                        if let Some(command) = relay.choose(*user.as_bytes()) {
+                                        if let Some(command) = relay.choose(PaletteKey::Member(user)) {
                                             send.run(command);
                                         }
                                     })
@@ -1084,7 +1084,7 @@ impl MurmureRelay {
                     .flat_map(|section| {
                         let words = GroupWords::of(section.group);
                         section.entries.into_iter().map(move |entry| PaletteEntry {
-                            key: *entry.channel.as_bytes(),
+                            key: PaletteKey::Channel(entry.channel),
                             label: entry
                                 .name
                                 .map_or_else(|| words.unnamed.to_owned(), Name::into_string),
@@ -1100,7 +1100,7 @@ impl MurmureRelay {
                         .iter()
                         .filter(|member| Some(member.user_id) != me)
                         .map(|member| PaletteEntry {
-                            key: *member.user_id.as_bytes(),
+                            key: PaletteKey::Member(member.user_id),
                             label: member.display_name.as_str().to_owned(),
                             hint: Some("Member"),
                         }),
@@ -1113,17 +1113,23 @@ impl MurmureRelay {
     /// Choose the palette entry of `key`. A channel opens as a click on the
     /// sidebar opens it (`MURMURE-173`). A member's key is fetched for the
     /// check of the pin, which opens the direct message of the two
-    /// (`MURMURE-455`).
-    pub fn choose(&self, key: [u8; 16]) -> Option<LogicCommand> {
-        let user_id = UserId::from_bytes(key);
-        if self.member_name(user_id).is_some() && self.me.get_untracked() != Some(user_id) {
-            self.inviting.set(None);
-            return Some(LogicCommand::Rest {
-                id: RequestId::next(),
-                cmd: RestCommand::FetchMemberKey { user_id },
-            });
+    /// (`MURMURE-455`). A member who left, or the user themself, opens
+    /// nothing.
+    pub fn choose(&self, key: PaletteKey) -> Option<LogicCommand> {
+        match key {
+            PaletteKey::Channel(channel) => self.select(channel),
+            PaletteKey::Member(user_id) => {
+                let other =
+                    self.member_name(user_id).is_some() && self.me.get_untracked() != Some(user_id);
+                other.then(|| {
+                    self.inviting.set(None);
+                    LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::FetchMemberKey { user_id },
+                    }
+                })
+            }
         }
-        self.select(ChannelId::from_bytes(key))
     }
 
     /// The display name of `user` in an open space, if they are a member.
@@ -1333,7 +1339,7 @@ pub struct MurmureHandler {
 impl MurmureHandler {
     /// Open the channel of the palette entry `key`, the palette closing
     /// behind it (`MURMURE-173`).
-    pub fn choose(&self, key: [u8; 16]) {
+    pub fn choose(&self, key: PaletteKey) {
         if let Some(command) = self.relay.choose(key) {
             self.send.run(command);
         }

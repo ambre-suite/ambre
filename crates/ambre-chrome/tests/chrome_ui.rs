@@ -811,10 +811,11 @@ async fn palette_entry_comes_first_and_hands_back_its_key() {
     let owner = Owner::new();
     owner.set();
     let open = RwSignal::new(true);
-    let chosen: RwSignal<Option<[u8; 16]>> = RwSignal::new(None);
+    let chosen: RwSignal<Option<ambre_chrome::PaletteKey>> = RwSignal::new(None);
     let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let key = ambre_chrome::PaletteKey::Channel(ambre_core::ChannelId::from_bytes([7; 16]));
     let entries = Signal::stored(vec![ambre_chrome::PaletteEntry {
-        key: [7; 16],
+        key,
         label: "budget".to_owned(),
         hint: Some("Channel"),
     }]);
@@ -841,7 +842,7 @@ async fn palette_entry_comes_first_and_hands_back_its_key() {
         .unwrap();
     first.click();
 
-    assert_eq!(chosen.get_untracked(), Some([7; 16]));
+    assert_eq!(chosen.get_untracked(), Some(key));
     assert_eq!(invoked.get_untracked(), None);
     assert!(
         !open.get_untracked(),

@@ -1187,11 +1187,8 @@ ambre-chrome | src/menu.rs | crate::menu | initial(label) | param | &str	free-te
 ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | menu_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | menu_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-chrome | src/palette.rs | crate::palette | Chosen::Entry.0 | field | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
-ambre-chrome | src/palette.rs | crate::palette | CommandPalette(on_entry) | param | Option<Callback<[u8;16]>>	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-chrome | src/palette.rs | crate::palette | CommandPalette(open) | param | RwSignal<bool>	math	state flag/predicate
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.hint | field | Option<&'static str>	free-text	text, label or user content
-ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.key | field | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.label | field | String	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | filter(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | matches() | ret | bool	math	state flag/predicate
@@ -2005,11 +2002,9 @@ ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.hint | field | &'stat
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::choose(key) | param | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(Region,usize)>>	debt	finding: the region is typed; the picked entry is still a bare usize index
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::choose(key) | param | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::notice(visible) | param | bool	math	state flag/predicate

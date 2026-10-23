@@ -67,7 +67,7 @@ pub use format::{
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};
 pub use palette::{
-    CommandPalette, PaletteEntry, PaletteRow, filter as filter_commands,
+    CommandPalette, PaletteEntry, PaletteKey, PaletteRow, filter as filter_commands,
     matches as command_matches, rows as palette_rows,
 };
 pub use passphrase::{PassphraseDialog, PassphraseIntent};

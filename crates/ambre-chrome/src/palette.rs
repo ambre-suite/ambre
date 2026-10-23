@@ -48,13 +48,23 @@ pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a
         .collect()
 }
 
+/// What a palette entry names: a channel to open, or a member to write to.
+/// The palette hands it back when the entry is chosen, so a list that changed
+/// meanwhile picks no other, and a member is never read as a channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PaletteKey {
+    /// A channel, or a direct message.
+    Channel(ambre_core::ChannelId),
+    /// A member of a space.
+    Member(ambre_core::UserId),
+}
+
 /// One entry an application supplies to the palette, such as a channel to
 /// open. The entries come before the commands (`CHROME-093`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaletteEntry {
-    /// An opaque key the application chose. The palette hands it back when
-    /// the entry is chosen, so a list that changed meanwhile picks no other.
-    pub key: [u8; 16],
+    /// What the entry names, handed back when it is chosen.
+    pub key: PaletteKey,
     /// What the row reads, and what the query matches.
     pub label: String,
     /// A word beside the label, such as the section of the entry.
@@ -96,7 +106,7 @@ pub fn rows<'a>(
 /// What a drawn row runs once chosen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Chosen {
-    Entry([u8; 16]),
+    Entry(PaletteKey),
     Command(CommandId),
 }
 
@@ -123,7 +133,7 @@ pub fn CommandPalette(
     entries: Option<Signal<Vec<PaletteEntry>>>,
     /// Receives the key of the entry chosen.
     #[prop(optional)]
-    on_entry: Option<Callback<[u8; 16]>>,
+    on_entry: Option<Callback<PaletteKey>>,
 ) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let focused = RwSignal::new(0usize);
@@ -319,7 +329,7 @@ mod tests {
 
     fn entry(key: u8, label: &str) -> PaletteEntry {
         PaletteEntry {
-            key: [key; 16],
+            key: PaletteKey::Channel(ambre_core::ChannelId::from_bytes([key; 16])),
             label: label.into(),
             hint: None,
         }

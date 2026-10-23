@@ -453,7 +453,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             .map(|h| h.relay.palette_entries().get())
             .unwrap_or_default()
     });
-    let on_palette_entry = Callback::new(move |key: [u8; 16]| {
+    let on_palette_entry = Callback::new(move |key: ambre_chrome::PaletteKey| {
         if let Some(h) = murmure {
             h.choose(key);
         }

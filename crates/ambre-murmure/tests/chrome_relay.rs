@@ -19,7 +19,7 @@ use ambre_bus::{
     MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, RequestId,
     RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
-use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
+use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
@@ -393,10 +393,10 @@ fn three_named() -> (Owner, MurmureRelay, [ChannelId; 3]) {
 fn the_palette_lists_the_channels_first_in_sidebar_order() {
     let (_owner, relay, [budget, zeta, direct]) = three_named();
     let entries = relay.palette_entries().get_untracked();
-    let keys: Vec<[u8; 16]> = entries.iter().map(|e| e.key).collect();
+    let keys: Vec<PaletteKey> = entries.iter().map(|e| e.key).collect();
     assert_eq!(
         keys,
-        [budget, zeta, direct].map(|c| *c.as_bytes()),
+        [budget, zeta, direct].map(PaletteKey::Channel),
         "{entries:?}"
     );
     assert_eq!(entries[2].hint, Some("Direct message"));
@@ -421,7 +421,7 @@ fn the_palette_lists_the_channels_first_in_sidebar_order() {
 #[wasm_bindgen_test]
 fn choosing_a_channel_in_the_palette_opens_it() {
     let (_owner, relay, [_, zeta, _]) = three_named();
-    let opened = relay.choose(*zeta.as_bytes());
+    let opened = relay.choose(PaletteKey::Channel(zeta));
     assert!(
         matches!(opened, Some(LogicCommand::OpenChannel { channel_id }) if channel_id == zeta),
         "{opened:?}"
@@ -432,12 +432,21 @@ fn choosing_a_channel_in_the_palette_opens_it() {
 /// A relay showing `general`, a public channel of a space whose members are
 /// this user, Bob and Carol. Returns the space's members in that order.
 fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
+    a_space_with(
+        ChannelId::new(),
+        [UserId::new(), UserId::new(), UserId::new()],
+    )
+}
+
+/// [`a_space_with_members`], with the channel and the members it names.
+fn a_space_with(
+    general: ChannelId,
+    users: [UserId; 3],
+) -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
     let space = SpaceId::new();
-    let general = ChannelId::new();
-    let users = [UserId::new(), UserId::new(), UserId::new()];
     relay.absorb(&UiEvent::Rest {
         id: RequestId::next(),
         evt: RestEvent::SessionReady {
@@ -524,10 +533,14 @@ fn the_refresh_ticks_the_shown_channel_as_well_as_every_space() {
 fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
     let (_owner, relay, general, [_, bob, carol]) = a_space_with_members();
     let entries = relay.palette_entries().get_untracked();
-    let keys: Vec<[u8; 16]> = entries.iter().map(|e| e.key).collect();
+    let keys: Vec<PaletteKey> = entries.iter().map(|e| e.key).collect();
     assert_eq!(
         keys,
-        [*general.as_bytes(), *bob.as_bytes(), *carol.as_bytes()],
+        [
+            PaletteKey::Channel(general),
+            PaletteKey::Member(bob),
+            PaletteKey::Member(carol),
+        ],
         "{entries:?}"
     );
     assert_eq!(entries[1].hint, Some("Member"));
@@ -541,13 +554,33 @@ fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
     assert_eq!(shown, ["Bob"]);
 }
 
+/// A channel entry shows its channel, even beside a member whose id holds
+/// the same sixteen bytes: the entry's key says which of the two it names,
+/// and no key is fetched for the member.
+#[wasm_bindgen_test]
+fn a_channel_entry_shows_its_channel_beside_a_member_of_the_same_bytes() {
+    let general = ChannelId::new();
+    let twin = UserId::from_bytes(*general.as_bytes());
+    let (_owner, relay, _, _) = a_space_with(general, [UserId::new(), twin, UserId::new()]);
+    relay.pane.set(MurmurePane::ChannelList);
+    let entry = relay
+        .palette_entries()
+        .get_untracked()
+        .into_iter()
+        .find(|entry| entry.label == "general")
+        .expect("the channel is listed");
+    let chosen = relay.choose(entry.key);
+    assert!(chosen.is_none(), "the channel is open already: {chosen:?}");
+    assert_eq!(relay.pane.get_untracked().shown_channel(), Some(general));
+}
+
 /// Choosing a member fetches their key and opens nothing yet: the key is
 /// checked against the pin first. The direct message the relay answers
 /// then shows, and opens nothing the Logic thread did not (`MURMURE-455`).
 #[wasm_bindgen_test]
 fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
     let (_owner, relay, general, [_, bob, _]) = a_space_with_members();
-    let fetched = relay.choose(*bob.as_bytes());
+    let fetched = relay.choose(PaletteKey::Member(bob));
     assert!(
         matches!(
             fetched,
@@ -652,7 +685,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
     assert_eq!(relay.take_invite(carol), None, "taken once");
 
     assert!(relay.invite(bob).is_some());
-    assert!(relay.choose(*bob.as_bytes()).is_some());
+    assert!(relay.choose(PaletteKey::Member(bob)).is_some());
     assert_eq!(relay.take_invite(bob), None, "a direct message cancels it");
 }
 
