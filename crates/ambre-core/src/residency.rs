@@ -12,6 +12,19 @@ use std::hash::Hash;
 
 use crate::ByteSize;
 
+/// The order of a view among the views of one tier: a counter, not a clock.
+/// A lower tick was viewed earlier, so it leaves first (`RESID-008`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ViewTick(pub u64);
+
+impl ViewTick {
+    /// The tick after this one, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
 /// What the policy knows of one held document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Held {
@@ -25,13 +38,13 @@ pub struct Held {
     /// (`RESID-009`, `RESID-019`).
     pub unsent: bool,
     /// The tick of its last view. A lower tick leaves first (`RESID-008`).
-    viewed: u64,
+    viewed: ViewTick,
 }
 
 impl Held {
     /// The tick of its last view, kept so a reload restores the order.
     #[must_use]
-    pub fn viewed(&self) -> u64 {
+    pub fn viewed(&self) -> ViewTick {
         self.viewed
     }
 }
@@ -41,14 +54,14 @@ impl Held {
 pub struct Residency<K> {
     held: HashMap<K, Held>,
     /// A counter, not a clock: it orders the views and reads no time.
-    tick: u64,
+    tick: ViewTick,
 }
 
 impl<K> Default for Residency<K> {
     fn default() -> Self {
         Self {
             held: HashMap::new(),
-            tick: 0,
+            tick: ViewTick(0),
         }
     }
 }
@@ -61,8 +74,8 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     }
 
     /// The next tick, so the latest view always sorts last.
-    fn next_tick(&mut self) -> u64 {
-        self.tick = self.tick.saturating_add(1);
+    fn next_tick(&mut self) -> ViewTick {
+        self.tick = self.tick.next();
         self.tick
     }
 
@@ -118,7 +131,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     /// Hold a document as an earlier run of the tier knew it, its view tick
     /// included, so the order survives a reload (`RESID-008`). Later ticks
     /// are drawn past it.
-    pub fn restore(&mut self, key: K, held: Held, viewed: u64) {
+    pub fn restore(&mut self, key: K, held: Held, viewed: ViewTick) {
         self.tick = self.tick.max(viewed);
         self.held.insert(key, Held { viewed, ..held });
     }

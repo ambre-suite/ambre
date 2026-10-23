@@ -130,8 +130,7 @@ pub async fn list_member_channels(
         .zip(counters)
         .map(|(row, counter)| {
             // The live counter runs ahead of the register until a flush.
-            let live = counter.map_or(0, ambre_core::Seq::to_i64_saturating);
-            let last = u64::try_from(row.meta_durable_last.max(live)).unwrap_or(0);
+            let last = row.meta_durable_last.max(counter.unwrap_or_default());
             MemberChannelJson {
                 channel_id: row.id,
                 space_id: row.space_id,
@@ -144,7 +143,7 @@ pub async fn list_member_channels(
                     .map(ambre_core::ExchangeKeyHex::encode)
                     .unwrap_or_default(),
                 peers: row.peers,
-                meta_last: ambre_core::Seq(last),
+                meta_last: last,
             }
         })
         .collect();

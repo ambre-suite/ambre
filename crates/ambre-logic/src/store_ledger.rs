@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use ambre_bus::DocumentId;
 use ambre_core::ByteSize;
-use ambre_core::residency::{Held, Residency};
+use ambre_core::residency::{Held, Residency, ViewTick};
 
 use crate::PersistWrite;
 
@@ -22,14 +22,14 @@ pub const LOCAL_STORE_BUDGET: ByteSize = ByteSize(500 << 20);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 struct Cost {
     /// The bytes of its snapshot.
-    snapshot: u64,
+    snapshot: ByteSize,
     /// The bytes of the deltas logged since that snapshot.
-    deltas: u64,
+    deltas: ByteSize,
 }
 
 impl Cost {
     /// The two together.
-    fn total(self) -> u64 {
+    fn total(self) -> ByteSize {
         self.snapshot.saturating_add(self.deltas)
     }
 }
@@ -65,7 +65,7 @@ pub enum Refusal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Meta {
     cost: Cost,
-    viewed: u64,
+    viewed: ViewTick,
     immutable: bool,
     unsent: bool,
 }
@@ -78,7 +78,7 @@ impl Meta {
     #[must_use]
     pub fn encode(&self) -> [u8; Self::LEN] {
         let mut row = [0u8; Self::LEN];
-        let fields = [self.cost.snapshot, self.cost.deltas, self.viewed];
+        let fields = [self.cost.snapshot.0, self.cost.deltas.0, self.viewed.0];
         for (chunk, field) in row.chunks_exact_mut(8).zip(fields) {
             chunk.copy_from_slice(&field.to_le_bytes());
         }
@@ -92,7 +92,7 @@ impl Meta {
     fn settled(self) -> Self {
         Self {
             cost: Cost {
-                deltas: 0,
+                deltas: ByteSize(0),
                 ..self.cost
             },
             ..self
@@ -111,8 +111,11 @@ impl Meta {
         let (snapshot, deltas, viewed) = (words.next()?, words.next()?, words.next()?);
         let flags = *flags.first()?;
         Some(Self {
-            cost: Cost { snapshot, deltas },
-            viewed,
+            cost: Cost {
+                snapshot: ByteSize(snapshot),
+                deltas: ByteSize(deltas),
+            },
+            viewed: ViewTick(viewed),
             immutable: flags & 1 != 0,
             unsent: flags & 2 != 0,
         })
@@ -164,13 +167,13 @@ impl StoreLedger {
         match write {
             PersistWrite::Snapshot(bytes) => {
                 cost = Cost {
-                    snapshot: len(bytes),
-                    deltas: 0,
+                    snapshot: ByteSize::of_len(bytes.len()),
+                    deltas: ByteSize(0),
                 };
                 self.charge(id, cost, true);
             }
             PersistWrite::Delta(bytes) => {
-                cost.deltas = cost.deltas.saturating_add(len(bytes));
+                cost.deltas = cost.deltas.saturating_add(ByteSize::of_len(bytes.len()));
                 self.charge(id, cost, true);
             }
             PersistWrite::Session { .. } => self.charge(id, cost, true),
@@ -197,7 +200,7 @@ impl StoreLedger {
     /// Record what `id` costs, and mark it unsent when a write changed it.
     fn charge(&mut self, id: DocumentId, cost: Cost, unsent: bool) {
         self.costs.insert(id, cost);
-        self.residency.hold(id, ByteSize(cost.total()));
+        self.residency.hold(id, cost.total());
         if unsent {
             self.residency.set_unsent(id, true);
         }
@@ -271,17 +274,12 @@ impl StoreLedger {
     /// Count a document as an earlier run left it. No view shows it yet.
     pub fn restore(&mut self, id: DocumentId, meta: Meta) {
         let mut held = Held::default();
-        held.bytes = ByteSize(meta.cost.total());
+        held.bytes = meta.cost.total();
         held.immutable = meta.immutable;
         held.unsent = meta.unsent;
         self.costs.insert(id, meta.cost);
         self.residency.restore(id, held, meta.viewed);
     }
-}
-
-/// The length of a byte row, as the ledger counts it.
-fn len(bytes: &[u8]) -> u64 {
-    u64::try_from(bytes.len()).unwrap_or(u64::MAX)
 }
 
 #[cfg(test)]

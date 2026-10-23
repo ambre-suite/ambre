@@ -1576,7 +1576,9 @@ ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text)
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newtype-inner	ByteSize constructor or accessor
+ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ByteSize::of_len(len) | param | usize	newtype-inner	ByteSize constructor or accessor
+ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
@@ -1609,14 +1611,10 @@ ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | par
 ambre-core | src/residency.rs | crate::residency | Held.immutable | field | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | Held.pinned | field | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | Held.unsent | field | bool	generic	residency fact flag or its setter; named field, no mode switch
-ambre-core | src/residency.rs | crate::residency | Held.viewed | field | u64	debt	finding: Residency view tick as u64 (low, confirmed)
-ambre-core | src/residency.rs | crate::residency | Held::viewed() | ret | u64	debt	finding: Residency view tick as u64 (low, confirmed)
-ambre-core | src/residency.rs | crate::residency | Residency.tick | field | u64	debt	finding: Residency view tick as u64 (low, confirmed)
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
-ambre-core | src/residency.rs | crate::residency | Residency<K>::next_tick() | ret | u64	debt	finding: Residency view tick as u64 (low, confirmed)
-ambre-core | src/residency.rs | crate::residency | Residency<K>::restore(viewed) | param | u64	debt	finding: Residency view tick as u64 (low, confirmed)
 ambre-core | src/residency.rs | crate::residency | Residency<K>::set_immutable(immutable) | param | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | Residency<K>::set_unsent(unsent) | param | bool	generic	residency fact flag or its setter; named field, no mode switch
+ambre-core | src/residency.rs | crate::residency | ViewTick.0 | field | u64	newtype-inner	ViewTick newtype
 ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	trait	signature fixed by the trait
 ambre-core | src/role.rs | crate::role | <Role as TryFrom<String>>::try_from(word) | param | String	trait	signature fixed by the trait
 ambre-core | src/role.rs | crate::role | <Role as std::convert::TryFrom<u8>>::try_from(value) | param | u8	trait	signature fixed by the trait
@@ -2149,12 +2147,8 @@ ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | re
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/spaces.rs | crate::spaces | Opening.payloads | field | Vec<Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/store_ledger.rs | crate::store_ledger | Cost.deltas | field | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
-ambre-logic | src/store_ledger.rs | crate::store_ledger | Cost.snapshot | field | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
-ambre-logic | src/store_ledger.rs | crate::store_ledger | Cost::total() | ret | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.immutable | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.unsent | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.viewed | field | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::decode(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret | [u8;Self::LEN]	generic	generic byte/text API or codec
@@ -2162,8 +2156,6 @@ ambre-logic | src/store_ledger.rs | crate::store_ledger | Observed.record | fiel
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::charge(unsent) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::set_immutable(immutable) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::unsent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/store_ledger.rs | crate::store_ledger | len() | ret | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
-ambre-logic | src/store_ledger.rs | crate::store_ledger | len(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/threads.rs | crate::threads | LogicState::count_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::follows_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::thread_link_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -4151,17 +4143,15 @@ ambre-server | src/db/channels.rs | crate::db::channels | ChannelRow.is_public |
 ambre-server | src/db/channels.rs | crate::db::channels | CommitRow.live | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | FoldCommitRow.live | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | MemberChannelRow.is_public | field | bool	math	named state or style flag, local
-ambre-server | src/db/channels.rs | crate::db::channels | MemberChannelRow.meta_durable_last | field | i64	debt	planned: lot B bis 6 Seq
 ambre-server | src/db/channels.rs | crate::db::channels | NewChannel.is_public | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | add_channel_member_if_absent() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret | Result<bool,AppError>	generic	predicate result
+ambre-server | src/db/content.rs | crate::db::content | DeltaCount.0 | field | u64	newtype-inner	DeltaCount newtype
+ambre-server | src/db/content.rs | crate::db::content | DeltaCount::from_i64(stored) | param | i64	newtype-inner	DeltaCount storage conversion
+ambre-server | src/db/content.rs | crate::db::content | DeltaCount::to_i64_saturating() | ret | i64	newtype-inner	DeltaCount storage conversion
 ambre-server | src/db/content.rs | crate::db::content | DroppedSnapshot.refinalize | field | bool	math	named state or style flag, local
-ambre-server | src/db/content.rs | crate::db::content | InlineCap.bytes | field | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
-ambre-server | src/db/content.rs | crate::db::content | InlineCap.deltas | field | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
-ambre-server | src/db/content.rs | crate::db::content | InlineInsert::Stored.bytes | field | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
-ambre-server | src/db/content.rs | crate::db::content | InlineInsert::Stored.deltas | field | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
 ambre-server | src/db/content.rs | crate::db::content | SNAPSHOT_COLUMNS | const | &str	free-text	SQL column list
 ambre-server | src/db/content.rs | crate::db::content | Trim.rows | field | u64	math	row count
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result
@@ -4238,14 +4228,11 @@ ambre-server | src/extract.rs | crate::extract | <ambre_core::ContentHash as Pat
 ambre-server | src/extract.rs | crate::extract | PathPart::part() | ret | Result<Self,&'static str>	generic	generic codec/parser/bytes API
 ambre-server | src/extract.rs | crate::extract | read_path() | ret | Result<Result<T,&'static str>,Response>	generic	generic codec/parser/bytes API
 ambre-server | src/hot_tail.rs | crate::hot_tail | IDLE_PASS_LIMIT | const | i64	math	pass limit count
-ambre-server | src/hot_tail.rs | crate::hot_tail | INLINE_DELTA_MAX_BYTES | const | usize	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
 ambre-server | src/hot_tail.rs | crate::hot_tail | batch_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Result<usize,AppError>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool	generic	predicate result
-ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark(bytes) | param | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
-ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark(deltas) | param | i64	debt	planned: lot B bis 3 ByteSize (hot_tail, state, db/content)
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
 ambre-server | src/jwt.rs | crate::jwt | JwtKeys::from_seed(seed) | param | &[u8;32]	generic	generic codec/parser/bytes API
 ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text

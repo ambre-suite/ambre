@@ -71,11 +71,56 @@ pub struct UpdateRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// A number of delta rows in a document's inline tail.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DeltaCount(pub u64);
+
+impl DeltaCount {
+    /// The count as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+
+    /// A count Postgres returned. A negative value, which no `COUNT` returns,
+    /// reads as zero.
+    pub fn from_i64(stored: i64) -> Self {
+        Self(u64::try_from(stored).unwrap_or(0))
+    }
+
+    /// The count with one more row, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn plus_one(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
 /// The bounds of a document's inline tail (`SRV-150`).
 #[derive(Debug, Clone, Copy)]
 pub struct InlineCap {
-    pub deltas: i64,
-    pub bytes: i64,
+    pub deltas: DeltaCount,
+    pub bytes: ambre_core::ByteSize,
+}
+
+impl InlineCap {
+    /// Three quarters of the cap in both bounds, rounded up: a tail at or
+    /// past it holds at least three quarters of a bound.
+    #[must_use]
+    pub const fn three_quarters(self) -> Self {
+        Self {
+            deltas: DeltaCount(self.deltas.0.saturating_mul(3).div_ceil(4)),
+            bytes: ambre_core::ByteSize(self.bytes.0.saturating_mul(3).div_ceil(4)),
+        }
+    }
+
+    /// A quarter of the cap in both bounds, rounded down: a tail at or under
+    /// it holds at most a quarter of either bound.
+    #[must_use]
+    pub const fn quarter(self) -> Self {
+        Self {
+            deltas: DeltaCount(self.deltas.0 / 4),
+            bytes: ambre_core::ByteSize(self.bytes.0 / 4),
+        }
+    }
 }
 
 /// What an insert into the inline tail did.
@@ -83,7 +128,10 @@ pub struct InlineCap {
 pub enum InlineInsert {
     /// The row holds the frame. The tail now holds `deltas` rows and `bytes`
     /// bytes, counting this one.
-    Stored { deltas: i64, bytes: i64 },
+    Stored {
+        deltas: DeltaCount,
+        bytes: ambre_core::ByteSize,
+    },
     /// The tail is at its cap, and nothing was written.
     Full,
 }
@@ -356,17 +404,17 @@ pub async fn insert_inline_update(
     .bind(clock.to_i64_saturating())
     .bind(seq.to_i64_saturating())
     .bind(wire)
-    .bind(cap.deltas)
-    .bind(cap.bytes)
+    .bind(cap.deltas.to_i64_saturating())
+    .bind(cap.bytes.to_i64_saturating())
     .fetch_one(pool)
     .await?;
     if !room {
         return Ok(InlineInsert::Full);
     }
-    let size = i64::try_from(wire.len()).unwrap_or(i64::MAX);
     Ok(InlineInsert::Stored {
-        deltas: deltas + 1,
-        bytes: bytes.saturating_add(size),
+        deltas: DeltaCount::from_i64(deltas).plus_one(),
+        bytes: ambre_core::ByteSize::from_i64(bytes)
+            .saturating_add(ambre_core::ByteSize::of_len(wire.len())),
     })
 }
 

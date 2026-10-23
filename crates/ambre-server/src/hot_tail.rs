@@ -3,20 +3,22 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::db::InlineCap;
+use ambre_core::ByteSize;
+
+use crate::db::{DeltaCount, InlineCap};
 use crate::error::AppError;
 use crate::payload::Payload;
 use crate::state::AppState;
 
 /// A delta whose sealed envelope is under this size lives in its index row
 /// (`ambre-spec-budgets.md`, the inline delta size row).
-pub const INLINE_DELTA_MAX_BYTES: usize = 64 * 1024;
+pub const INLINE_DELTA_MAX_BYTES: ByteSize = ByteSize(64 * 1024);
 
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
 pub const INLINE_CAP: InlineCap = InlineCap {
-    deltas: 256,
-    bytes: 256 * 1024,
+    deltas: DeltaCount(256),
+    bytes: ByteSize(256 * 1024),
 };
 
 /// How long a document goes without a write before its whole tail moves out
@@ -28,25 +30,26 @@ const IDLE_PASS_LIMIT: i64 = 100;
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
-pub fn past_watermark(deltas: i64, bytes: i64) -> bool {
-    deltas * 4 >= INLINE_CAP.deltas * 3 || bytes * 4 >= INLINE_CAP.bytes * 3
+pub fn past_watermark(deltas: DeltaCount, bytes: ByteSize) -> bool {
+    let mark = INLINE_CAP.three_quarters();
+    deltas >= mark.deltas || bytes >= mark.bytes
 }
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
 fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
-    let mut kept = 0usize;
-    let mut bytes = 0i64;
+    let quarter = INLINE_CAP.quarter();
+    let mut kept = DeltaCount(0);
+    let mut bytes = ByteSize(0);
     for (_, wire) in tail.iter().rev() {
-        let size = i64::try_from(wire.len()).unwrap_or(i64::MAX);
-        let next = i64::try_from(kept + 1).unwrap_or(i64::MAX);
-        if next * 4 > INLINE_CAP.deltas || (bytes + size) * 4 > INLINE_CAP.bytes {
+        let next = bytes.saturating_add(ByteSize::of_len(wire.len()));
+        if kept.plus_one() > quarter.deltas || next > quarter.bytes {
             break;
         }
-        kept += 1;
-        bytes += size;
+        kept = kept.plus_one();
+        bytes = next;
     }
-    kept
+    usize::try_from(kept.0).unwrap_or(usize::MAX)
 }
 
 /// The object a batch of deltas is stored under, named by its first and last
@@ -231,10 +234,10 @@ mod tests {
     /// `SRV-151`: the move starts at three quarters of the count or the bytes.
     #[test]
     fn a_move_starts_at_three_quarters_of_either_bound() {
-        assert!(!past_watermark(191, 0));
-        assert!(past_watermark(192, 0));
-        assert!(!past_watermark(1, 192 * 1024 - 1));
-        assert!(past_watermark(1, 192 * 1024));
+        assert!(!past_watermark(DeltaCount(191), ByteSize(0)));
+        assert!(past_watermark(DeltaCount(192), ByteSize(0)));
+        assert!(!past_watermark(DeltaCount(1), ByteSize(192 * 1024 - 1)));
+        assert!(past_watermark(DeltaCount(1), ByteSize(192 * 1024)));
     }
 
     /// `SRV-151`: a move keeps the newest quarter of either bound inline.
@@ -337,10 +340,12 @@ mod db_tests {
     async fn a_full_tail_takes_no_more_inline(pool: sqlx::PgPool) {
         let stub = S3Stub::spawn([]).await;
         let (state, doc) = setup(pool, &stub).await;
-        let cap = INLINE_CAP.deltas;
+        let cap = INLINE_CAP.deltas.to_i64_saturating();
         for seq in 1..=cap {
             let got = inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
-            assert!(matches!(got, InlineInsert::Stored { deltas, .. } if deltas == seq));
+            assert!(
+                matches!(got, InlineInsert::Stored { deltas, .. } if deltas == DeltaCount::from_i64(seq))
+            );
         }
         let full = inline(&state, &doc, cap + 1, &frame(cap + 1), INLINE_CAP).await;
         assert_eq!(full, InlineInsert::Full);
@@ -352,8 +357,8 @@ mod db_tests {
         let owner = create_test_user(&state.db, "bytes@ambre.app").await;
         let other = create_test_document(&state.db, owner, "prose").await;
         let small = InlineCap {
-            deltas: 100,
-            bytes: 10,
+            deltas: DeltaCount(100),
+            bytes: ByteSize(10),
         };
         assert!(matches!(
             inline(&state, &other, 1, &[0; 6], small).await,

@@ -565,7 +565,7 @@ async fn store_index_row(
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
-    if wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
+    if ambre_core::ByteSize::of_len(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
         let inline = db::insert_inline_update(
             &state.db,
             &doc_id,
@@ -2499,7 +2499,7 @@ mod hot_tail_tests {
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 0, "an inline delta takes no pending entry");
 
-        let large = crate::hot_tail::INLINE_DELTA_MAX_BYTES + 1024;
+        let large = crate::hot_tail::INLINE_DELTA_MAX_BYTES.as_len() + 1024;
         handle_update(
             &state,
             &mut conn,

@@ -168,7 +168,7 @@ pub struct MemberChannelRow {
     pub peers: Vec<ambre_core::DisplayName>,
     /// The highest sequence number the register holds for `meta`. The
     /// ephemeral store may hold a higher one not yet flushed.
-    pub meta_durable_last: i64,
+    pub meta_durable_last: ambre_core::Seq,
 }
 
 /// Every channel whose `meta` holds a row of `user`, by identifier
@@ -219,7 +219,7 @@ pub async fn list_member_channels(
                     r.try_get("wrapper_exchange_pubkey")?,
                 )?,
                 peers: decode_display_names(r.try_get("peers")?)?,
-                meta_durable_last: r.try_get("meta_durable_last")?,
+                meta_durable_last: decode_seq(r.try_get("meta_durable_last")?)?,
             })
         })
         .collect()

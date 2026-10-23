@@ -98,6 +98,17 @@ impl ByteSize {
     pub const fn saturating_sub(self, other: Self) -> Self {
         Self(self.0.saturating_sub(other.0))
     }
+
+    /// The size as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+
+    /// A size a Postgres `BIGINT` stored. A negative value, which no
+    /// `octet_length` returns, reads as zero.
+    pub fn from_i64(stored: i64) -> Self {
+        Self(u64::try_from(stored).unwrap_or(0))
+    }
 }
 
 impl std::iter::Sum for ByteSize {
@@ -113,6 +124,8 @@ mod tests {
     #[test]
     fn a_media_value_serializes_as_its_bare_inner_value() {
         assert_eq!(serde_json::to_string(&ByteSize(7)).unwrap(), "7");
+        assert_eq!(ByteSize::from_i64(-1), ByteSize(0));
+        assert_eq!(ByteSize(u64::MAX).to_i64_saturating(), i64::MAX);
         assert_eq!(
             serde_json::to_string(&ContentHash("ab".to_owned())).unwrap(),
             "\"ab\""
