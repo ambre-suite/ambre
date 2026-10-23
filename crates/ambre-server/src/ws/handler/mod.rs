@@ -21,7 +21,7 @@ use tokio::sync::mpsc;
 use tracing;
 
 use ambre_core::{ChannelId, DocumentId, RefusalCode, UserId};
-use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
+use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
 
@@ -143,26 +143,17 @@ impl WsConnectionState {
     }
 }
 
-/// Close code of an upgrade refused on authentication (expired or rotated
-/// token): the client renews its token and reconnects (`SRV-046`). Mirrors HTTP
-/// 401, in the application range 4000-4999.
-const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
-
-/// Close code of an upgrade refused for a key setup still owed. A renewal
-/// cannot cure it, so the client neither renews nor retries (`SRV-164`).
-/// Mirrors the HTTP 403 of `SETUP_REQUIRED`.
-const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
-
 /// A document whose unsubscribe makes the socket loop panic, so a test can
 /// force the failure `SRV-101` is about.
 #[cfg(test)]
 pub(crate) const PANIC_DOCUMENT: DocumentId = DocumentId::from_bytes([0xff; 16]);
 
-/// The close code and reason a refused upgrade sends for `error`.
-fn refusal_close(error: &AppError) -> (u16, &'static str) {
+/// The close code a refused upgrade sends for `error`. The code carries its
+/// reason text.
+fn refusal_close(error: &AppError) -> CloseCode {
     match error {
-        AppError::SetupRequired => (WS_CLOSE_SETUP_REQUIRED, "setup required"),
-        _ => (WS_CLOSE_UNAUTHORIZED, "unauthorized"),
+        AppError::SetupRequired => CloseCode::SETUP_REQUIRED,
+        _ => CloseCode::UNAUTHORIZED,
     }
 }
 
@@ -180,11 +171,11 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             }
             // Tell the client explicitly why the socket was refused, with an
             // application close code, instead of a generic network drop.
-            let (code, reason) = refusal_close(&e);
+            let code = refusal_close(&e);
             let _ = socket
                 .send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                    code,
-                    reason: reason.into(),
+                    code: code.get(),
+                    reason: code.reason().unwrap_or_default().into(),
                 })))
                 .await;
             return;

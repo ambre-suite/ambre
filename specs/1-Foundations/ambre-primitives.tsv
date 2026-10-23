@@ -3792,6 +3792,10 @@ ambre-protocol | src/ws.rs | crate::ws | decode_client_msg(data) | param | &[u8]
 ambre-protocol | src/ws.rs | crate::ws | decode_server_msg(data) | param | &[u8]	generic	wire codec
 ambre-protocol | src/ws.rs | crate::ws | encode_client_msg() | ret | Vec<u8>	generic	wire codec
 ambre-protocol | src/ws.rs | crate::ws | encode_server_msg() | ret | Vec<u8>	generic	wire codec
+ambre-protocol | src/ws.rs | crate::ws | CloseCode.0 | field | u16	newtype-inner	CloseCode field or accessor
+ambre-protocol | src/ws.rs | crate::ws | CloseCode::get() | ret | u16	newtype-inner	CloseCode field or accessor
+ambre-protocol | src/ws.rs | crate::ws | CloseCode::new(raw) | param | u16	newtype-inner	the raw code a close frame carries, checked by the fallible constructor
+ambre-protocol | src/ws.rs | crate::ws | CloseCode::reason() | ret | Option<&'static str>	free-text	the reason text a close frame carries beside its code
 ambre-server | src/compaction.rs | crate::compaction | CHECK_EVERY | const | u64	math	period in deltas
 ambre-server | src/compaction.rs | crate::compaction | SEGMENT_SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
 ambre-server | src/compaction.rs | crate::compaction | SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
@@ -4058,11 +4062,8 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | members
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse_delta(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_index_row() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WS_CLOSE_SETUP_REQUIRED | const | u16	debt	finding: WebSocket close codes duplicated across crates (confirmed)
-ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WS_CLOSE_UNAUTHORIZED | const | u16	debt	finding: WebSocket close codes duplicated across crates (confirmed)
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState.doc_write_allowed | field | HashMap<DocumentId,bool>	math	named state or style flag, local
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
-ambre-server | src/ws/handler/mod.rs | crate::ws::handler | refusal_close() | ret | (u16,&'static str)	debt	finding: WebSocket close codes duplicated across crates (confirmed)
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | verify_sealed_signature(public_data_bytes) | param | &[u8]	generic	generic codec/parser/bytes API
@@ -4190,7 +4191,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	g
 ambre-sync | src/lib.rs | crate | SyncEvent::ReplayRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncEvent::ResendRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncEvent::SegmentClosed.result | field | Result<(ambre_bus::SegmentId,bool),http::HttpError>	generic	fact flag on an event
-ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.code | field | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.doc_metadata | field | HashMap<DocumentId,(DocType,String)>	free-text	free text: message, label, name or report
@@ -4208,13 +4208,10 @@ ambre-sync | src/lib.rs | crate | SyncState::new(api_base) | param | String	debt
 ambre-sync | src/lib.rs | crate | SyncState::send_wire(wire) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState::set_mock_ws(tx) | param | ambre_bus::conduit::UnboundedSender<Vec<u8>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState::ws_connected() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | WS_CLOSE_SETUP_REQUIRED | const | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
-ambre-sync | src/lib.rs | crate | WS_CLOSE_UNAUTHORIZED | const | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/lib.rs | crate | carries_payload() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | run_wasm(api_base) | param | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle.attempts | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::back_off(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(code) | param | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(wanted) | param | bool	generic	predicate answer: whether any document still needs the socket
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::delay(attempts) | param | u32	math	count, size, limit, index or jitter local to an algorithm
@@ -4375,12 +4372,10 @@ ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | 
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report
-ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(code) | param | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(reason) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::retry_replay(ticket) | param | u64	debt	finding: replay and resend timer tickets are both raw `u64`
-ambre-sync | src/websocket.rs | crate::websocket | SyncState::socket_closed(code) | param | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay_ms(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | socket_address() | ret | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec

@@ -526,3 +526,21 @@ fn the_relay_reads_only_the_listed_fields() {
         (doc, pk, kid, Counter(1))
     );
 }
+
+/// A close code is one a close frame can carry, 1000 to 4999 (RFC 6455
+/// section 7.4). Zero and the codes past the range build none, so no number
+/// stands for a socket that failed without a close.
+#[test]
+fn a_close_code_is_one_a_close_frame_can_carry() {
+    use crate::ws::CloseCode;
+    assert_eq!(CloseCode::new(0), None);
+    assert_eq!(CloseCode::new(999), None);
+    assert_eq!(CloseCode::new(5000), None);
+    assert_eq!(CloseCode::new(4401), Some(CloseCode::UNAUTHORIZED));
+    assert_eq!(CloseCode::new(4403), Some(CloseCode::SETUP_REQUIRED));
+    assert_ne!(CloseCode::UNAUTHORIZED, CloseCode::SETUP_REQUIRED);
+    assert_eq!(CloseCode::new(1006).map(CloseCode::get), Some(1006));
+    assert_eq!(CloseCode::UNAUTHORIZED.reason(), Some("unauthorized"));
+    assert_eq!(CloseCode::SETUP_REQUIRED.reason(), Some("setup required"));
+    assert_eq!(CloseCode::new(1006).and_then(CloseCode::reason), None);
+}

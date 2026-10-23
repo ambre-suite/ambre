@@ -55,7 +55,7 @@ use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 #[cfg(target_arch = "wasm32")]
 use ambre_protocol::ws::decode_server_msg;
-use ambre_protocol::ws::{WsClientMsg, WsServerMsg, encode_client_msg};
+use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
@@ -190,17 +190,6 @@ const QUARANTINE_LIMIT: usize = 1000;
 /// remembers ([`SyncDocumentState::ingested`]).
 const APPLIED_WINDOW: usize = 4096;
 
-/// WebSocket close code the server sends when it refuses the upgrade for auth
-/// reasons (expired/rotated JWT). In the application-reserved 4000-4999 range;
-/// mirrors HTTP 401. The client reacts by refreshing its token and reconnecting.
-const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
-
-/// WebSocket close code the server sends when it refuses the upgrade because
-/// the account still owes its key setup (`ambre-spec-broadcast.md`, `SRV-164`).
-/// A renewal cannot cure it, so the client neither renews nor reconnects until
-/// the keys are stored (`ambre-spec-sync.md`, `SYNC-133`).
-const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
-
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
 /// is bounded by document membership, but a malicious peer can mint arbitrary
@@ -217,8 +206,10 @@ const MAX_EPHEMERAL_REMOTE_AUTHORS: usize = 512;
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 enum SyncEvent {
     WsMessage(WsServerMsg),
+    /// The socket closed with `code`, or failed with no close frame, which
+    /// carries no code (`SYNC-070`).
     WsDisconnected {
-        code: u16,
+        code: Option<CloseCode>,
         reason: String,
     },
     WsError,

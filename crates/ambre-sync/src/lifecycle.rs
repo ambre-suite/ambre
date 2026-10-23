@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use ambre_core::{Millis, UnixMillis};
 
-use crate::{WS_CLOSE_SETUP_REQUIRED, WS_CLOSE_UNAUTHORIZED};
+use ambre_protocol::ws::CloseCode;
 
 /// The first reconnect delay.
 const BASE_DELAY: Millis = Millis(250);
@@ -80,10 +80,16 @@ impl Lifecycle {
     }
 
     /// The socket closed with `code` at `now`, or failed with no close,
-    /// which reads as code 0 (`SYNC-070`). `wanted` is whether any document
+    /// which carries no code (`SYNC-070`). `wanted` is whether any document
     /// still needs it. `jitter` is a fraction in `[0, 1)` added to the delay.
-    pub(crate) fn closed(&mut self, code: u16, wanted: bool, now: UnixMillis, jitter: f64) -> Next {
-        if code == WS_CLOSE_SETUP_REQUIRED {
+    pub(crate) fn closed(
+        &mut self,
+        code: Option<CloseCode>,
+        wanted: bool,
+        now: UnixMillis,
+        jitter: f64,
+    ) -> Next {
+        if code == Some(CloseCode::SETUP_REQUIRED) {
             // A renewed session would have no keys either (`SYNC-133`).
             self.deadline = None;
             return Next::SetupOwed;
@@ -91,7 +97,7 @@ impl Lifecycle {
         if !wanted {
             return Next::Idle;
         }
-        if code == WS_CLOSE_UNAUTHORIZED {
+        if code == Some(CloseCode::UNAUTHORIZED) {
             // A dead token is cured by a renewal, which no backoff can be
             // (`SYNC-063`).
             return Next::Renew;
@@ -163,7 +169,8 @@ mod tests {
         let mut now = UnixMillis(0);
         let mut waits = Vec::new();
         for _ in 0..8 {
-            let Next::Wait { delay } = lifecycle.closed(1006, true, now, 0.0) else {
+            let Next::Wait { delay } = lifecycle.closed(CloseCode::new(1006), true, now, 0.0)
+            else {
                 panic!("a close backs off");
             };
             waits.push(delay.0);
@@ -183,17 +190,17 @@ mod tests {
     #[test]
     fn the_wait_resets_on_a_frame_alone() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
+        lifecycle.closed(CloseCode::new(1006), true, UnixMillis(0), 0.0);
         lifecycle.poll(UnixMillis(250));
         // Opened and closed again with no frame between.
         assert_eq!(
-            lifecycle.closed(1006, true, UnixMillis(250), 0.0),
+            lifecycle.closed(CloseCode::new(1006), true, UnixMillis(250), 0.0),
             Next::Wait { delay: Millis(500) }
         );
         lifecycle.poll(UnixMillis(750));
         lifecycle.frame();
         assert_eq!(
-            lifecycle.closed(1006, true, UnixMillis(800), 0.0),
+            lifecycle.closed(CloseCode::new(1006), true, UnixMillis(800), 0.0),
             Next::Wait { delay: Millis(250) }
         );
     }
@@ -203,9 +210,9 @@ mod tests {
     #[test]
     fn an_authentication_refusal_renews_and_reopens() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
+        lifecycle.closed(CloseCode::new(1006), true, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(WS_CLOSE_UNAUTHORIZED, true, UnixMillis(10), 0.0),
+            lifecycle.closed(Some(CloseCode::UNAUTHORIZED), true, UnixMillis(10), 0.0),
             Next::Renew
         );
         assert_eq!(lifecycle.renewed(), Next::Open);
@@ -215,7 +222,7 @@ mod tests {
             "the old deadline is gone"
         );
         assert_eq!(
-            lifecycle.closed(1006, true, UnixMillis(20), 0.0),
+            lifecycle.closed(CloseCode::new(1006), true, UnixMillis(20), 0.0),
             Next::Wait { delay: Millis(250) }
         );
     }
@@ -227,18 +234,18 @@ mod tests {
         let mut errored = Lifecycle::default();
         let mut closed = Lifecycle::default();
         assert_eq!(
-            errored.closed(0, true, UnixMillis(0), 0.5),
-            closed.closed(1006, true, UnixMillis(0), 0.5)
+            errored.closed(None, true, UnixMillis(0), 0.5),
+            closed.closed(CloseCode::new(1006), true, UnixMillis(0), 0.5)
         );
         assert_eq!(
-            errored.closed(0, true, UnixMillis(0), 0.0),
+            errored.closed(None, true, UnixMillis(0), 0.0),
             Next::Wait { delay: Millis(500) }
         );
 
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(1006, true, UnixMillis(0), 0.0);
+        lifecycle.closed(CloseCode::new(1006), true, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(WS_CLOSE_SETUP_REQUIRED, true, UnixMillis(0), 0.0),
+            lifecycle.closed(Some(CloseCode::SETUP_REQUIRED), true, UnixMillis(0), 0.0),
             Next::SetupOwed
         );
         assert_eq!(
@@ -247,7 +254,7 @@ mod tests {
             "no timer reopens it"
         );
         assert_eq!(
-            lifecycle.closed(1006, false, UnixMillis(0), 0.0),
+            lifecycle.closed(CloseCode::new(1006), false, UnixMillis(0), 0.0),
             Next::Idle
         );
     }
