@@ -90,10 +90,10 @@ impl ProseState {
     }
 
     /// The content hash a live image block addresses.
-    pub(super) fn image_hash(&self, id: &TreeID) -> Option<String> {
+    pub(super) fn image_hash(&self, id: &TreeID) -> Option<ambre_core::ContentHash> {
         let attrs = self.attrs_of(id)?;
         match attrs.value(doc::AttrKey::ContentHash)? {
-            loro::LoroValue::String(s) => Some(s.to_string()),
+            loro::LoroValue::String(s) => Some(ambre_core::ContentHash(s.to_string())),
             _ => None,
         }
     }

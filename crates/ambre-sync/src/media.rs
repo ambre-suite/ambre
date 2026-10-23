@@ -3,14 +3,14 @@ use crate::sharing::GlooHttp;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-type Address = [u8; ambre_crypto::commitment::TAG_LEN];
+use ambre_core::MediaAddress;
 
 /// Seals a blob for one document and the address it is stored under
 /// (`SYNC-051`, `SYNC-074`).
 fn seal_blob(
     data: &[u8],
     document_id: DocumentId,
-    address: &Address,
+    address: &MediaAddress,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<pipeline::SealedBlob, pipeline::PipelineError> {
@@ -32,9 +32,7 @@ fn open_blob(
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, String> {
-    let address: Address = hex::decode(content_hash.as_str())
-        .ok()
-        .and_then(|bytes| bytes.try_into().ok())
+    let address = MediaAddress::parse(content_hash)
         .ok_or_else(|| format!("not an address: {content_hash}"))?;
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)
         .map_err(|e| e.to_string())?;
@@ -110,7 +108,7 @@ impl SyncState {
             return;
         };
         let address = ambre_crypto::commitment::media_address(&doc_key, data.as_bytes());
-        let content_hash = ambre_core::ContentHash(hex::encode(address));
+        let content_hash = address.content_hash();
         let Some(tx) = event_tx else {
             self.reply(
                 id,
@@ -322,7 +320,7 @@ pub(crate) struct Upload {
     id: RequestId,
     document_id: DocumentId,
     data: ambre_core::MediaBytes,
-    address: Address,
+    address: MediaAddress,
     doc_key: DocumentKey,
     signing_key: SigningKey,
 }
@@ -345,7 +343,7 @@ async fn upload_media(
         doc_key,
         signing_key,
     } = upload;
-    let content_hash = ambre_core::ContentHash(hex::encode(address));
+    let content_hash = address.content_hash();
     let outcome = match seal_blob(
         data.as_bytes(),
         document_id,
@@ -517,8 +515,8 @@ mod tests {
                 _ => None,
             });
             let address = answer.expect("the upload answered with an address");
-            let expected = hex::encode(ambre_crypto::commitment::media_address(&key, &picture));
-            assert_eq!(address, ambre_core::ContentHash(expected));
+            let expected = ambre_crypto::commitment::media_address(&key, &picture);
+            assert_eq!(address, expected.content_hash());
             addresses.push(address);
         }
         assert_ne!(addresses[0], addresses[1]);
@@ -740,7 +738,7 @@ mod tests {
         assert!(matches!(
             &sent[..],
             [SyncEvent::MediaUploaded { id: answered, content_hash, .. }]
-                if *answered == id && *content_hash == ambre_core::ContentHash(hex::encode(address))
+                if *answered == id && *content_hash == address.content_hash()
         ));
     }
 
@@ -798,10 +796,7 @@ mod tests {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let address = ambre_crypto::commitment::media_address(key, data);
         let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
-        (
-            blob.as_bytes().to_vec(),
-            ambre_core::ContentHash(hex::encode(address)),
-        )
+        (blob.as_bytes().to_vec(), address.content_hash())
     }
 
     /// A picture sealed before two rotations opens with the current key and

@@ -1525,6 +1525,10 @@ ambre-core | src/media.rs | crate::media | ByteSize::of_len(len) | param | usize
 ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
+ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
+ambre-core | src/media.rs | crate::media | MediaAddress.0 | field | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
+ambre-core | src/media.rs | crate::media | MediaAddress::as_bytes() | ret | &[u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
+ambre-core | src/media.rs | crate::media | MediaAddress::from_array(bytes) | param | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq() | ret | bool	trait	signature fixed by the trait
@@ -1705,7 +1709,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | mac(ciphertext) | param |
 ambre-crypto | src/commitment.rs | crate::commitment | mac(nonce) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TAG_LEN]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | media_address() | ret | [u8;TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
@@ -3317,7 +3320,6 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | HEADING_LEVELS | cons
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::heading_level_of() | ret | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::image_hash() | ret | Option<String>	debt	finding: content hash as String (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::insert_block(style_id) | param | Option<&str>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_lang(lang) | param | &str	free-text	text content / label / parser input
@@ -4371,7 +4373,6 @@ ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/local_store.rs | crate::local_store | place_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | Address | alias | [u8;ambre_crypto::commitment::TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
 ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | download_leg() | ret | Result<Vec<u8>,http::Failed>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | open_blob() | ret | Result<Vec<u8>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
@@ -4435,7 +4436,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded(body) |
 ambre-sync | src/pipeline.rs | crate::pipeline | ephemeral_frame(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | link_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | media_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | media_aad(address) | param | &[u8;ambre_crypto::commitment::TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
 ambre-sync | src/pipeline.rs | crate::pipeline | name_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_aad(aad) | param | &[u8]	generic	generic byte/text API or codec

@@ -60,12 +60,15 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 /// # Panics
 ///
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
-pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> [u8; TAG_LEN] {
+pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> ambre_core::MediaAddress {
     let subkey: [u8; TAG_LEN] = mac_over(key, MEDIA_ADDRESS_DOMAIN);
     let mut m = keyed(&subkey);
     m.update(plaintext);
-    m.finalize().into_bytes().into()
+    ambre_core::MediaAddress::from_array(m.finalize().into_bytes().into())
 }
+
+// A media address is one HMAC output wide.
+const _: () = assert!(ambre_core::MEDIA_ADDRESS_LEN == TAG_LEN);
 
 fn mac_over(key: &DocumentKey, data: &[u8]) -> [u8; TAG_LEN] {
     let mut m = keyed(key.as_bytes());

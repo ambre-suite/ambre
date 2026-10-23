@@ -1,7 +1,8 @@
 //! The values that name and measure a media blob.
 //!
-//! Each is `#[serde(transparent)]`: it reads and writes the bare string or
-//! integer the relay exchanges, so the type changes no byte on the wire.
+//! Each that travels is `#[serde(transparent)]`: it reads and writes the bare
+//! string or integer the relay exchanges, so the type changes no byte on the
+//! wire. [`MediaAddress`] never travels; its hex spelling does.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +17,44 @@ impl ContentHash {
     /// The address, as the relay names it.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// The width of a [`MediaAddress`], in bytes.
+pub const MEDIA_ADDRESS_LEN: usize = 32;
+
+/// The content address of a media blob as bytes: the keyed hash of its
+/// plaintext under the document key. [`ContentHash`] is its hex spelling, the
+/// name the relay stores the blob under. A distinct type, so a commitment tag
+/// or a digest of the same width never takes its place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MediaAddress([u8; MEDIA_ADDRESS_LEN]);
+
+impl MediaAddress {
+    /// Wraps the bytes a keyed hash produced.
+    #[must_use]
+    pub const fn from_array(bytes: [u8; MEDIA_ADDRESS_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes, for the additional data a blob is sealed under.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; MEDIA_ADDRESS_LEN] {
+        &self.0
+    }
+
+    /// The hex spelling the relay names the blob by.
+    #[must_use]
+    pub fn content_hash(&self) -> ContentHash {
+        ContentHash(hex::encode(self.0))
+    }
+
+    /// Reads an address back from its hex spelling, or `None` when `hash` is
+    /// no address of this width.
+    #[must_use]
+    pub fn parse(hash: &ContentHash) -> Option<Self> {
+        let bytes: [u8; MEDIA_ADDRESS_LEN] = hex::decode(hash.as_str()).ok()?.try_into().ok()?;
+        Some(Self(bytes))
     }
 }
 
@@ -119,7 +158,7 @@ impl std::iter::Sum for ByteSize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteSize, ContentHash};
+    use super::{ByteSize, ContentHash, MediaAddress};
 
     #[test]
     fn a_media_value_serializes_as_its_bare_inner_value() {
@@ -130,5 +169,15 @@ mod tests {
             serde_json::to_string(&ContentHash("ab".to_owned())).unwrap(),
             "\"ab\""
         );
+    }
+
+    #[test]
+    fn an_address_reads_back_from_its_hex_spelling_and_nothing_else_does() {
+        let address = MediaAddress::from_array([0xab; 32]);
+        let hash = address.content_hash();
+        assert_eq!(hash.as_str(), "ab".repeat(32));
+        assert_eq!(MediaAddress::parse(&hash), Some(address));
+        assert_eq!(MediaAddress::parse(&ContentHash("ab".to_owned())), None);
+        assert_eq!(MediaAddress::parse(&ContentHash("zz".repeat(32))), None);
     }
 }

@@ -606,11 +606,11 @@ const MEDIA_DOMAIN: &[u8] = b"ambre-media-v2";
 /// address the document stores.
 pub fn media_aad(
     document_id: ambre_core::DocumentId,
-    address: &[u8; ambre_crypto::commitment::TAG_LEN],
+    address: &ambre_core::MediaAddress,
 ) -> Vec<u8> {
     let mut aad = MEDIA_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
-    aad.extend_from_slice(address);
+    aad.extend_from_slice(address.as_bytes());
     aad
 }
 

@@ -497,7 +497,7 @@ fn a_media_address_needs_the_document_key() {
         commitment::media_address(&fixed_doc_key(), b"another picture")
     );
     let plain = Blake2b512::digest(picture);
-    assert_ne!(address[..], plain[..32]);
+    assert_ne!(address.as_bytes()[..], plain[..32]);
 }
 
 // -- Property tests ----------------------------------------------------------

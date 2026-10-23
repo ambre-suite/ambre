@@ -115,7 +115,7 @@ pub use id::{
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use link::LinkUrl;
-pub use media::{ByteSize, ContentHash, MediaType};
+pub use media::{ByteSize, ContentHash, MEDIA_ADDRESS_LEN, MediaAddress, MediaType};
 pub use mode::{HistoryStep, StepDirection, Visibility};
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,

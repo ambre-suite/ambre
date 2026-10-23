@@ -1072,7 +1072,7 @@ impl ProseState {
             .nodes()
             .into_iter()
             .filter(|id| doc::block_type_of(&tree, id) == Some(crate::events::BlockType::Image))
-            .filter(|id| self.image_hash(id).as_deref() == Some(content_hash.as_str()))
+            .filter(|id| self.image_hash(id).as_ref() == Some(content_hash))
             .collect();
         ids.sort();
         ids.into_iter().map(block_id).collect()
