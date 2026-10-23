@@ -37,7 +37,7 @@ pub use ambre_bus::rest::RequestId;
 pub enum ToileRequest {
     UploadMedia {
         id: RequestId,
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     },
     DownloadMedia {
         id: RequestId,

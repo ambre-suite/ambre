@@ -159,7 +159,7 @@ pub struct ProseState {
     /// discovers none on its own, so these are the whole of what pagination
     /// shapes on. They arrive from the Main thread, which is the only one that
     /// can fetch (`LogicCommand::LoadFonts`).
-    faces: Vec<Vec<u8>>,
+    faces: Vec<ambre_core::FontBytes>,
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
@@ -341,7 +341,7 @@ impl ProseState {
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
             for bytes in faces {
-                paginator.register_faces(bytes.clone());
+                paginator.register_faces(bytes.as_bytes().to_vec());
             }
             paginator
         });
@@ -448,10 +448,10 @@ impl ProseState {
     /// it shapes every run into tofu. A face that arrives after a layout was
     /// measured invalidates it, and the next call recomputes in full
     /// (`PROSE-111`).
-    pub fn load_faces(&mut self, faces: &[Vec<u8>]) {
+    pub fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
         for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
-                paginator.register_faces(bytes.clone());
+                paginator.register_faces(bytes.as_bytes().to_vec());
             }
             self.faces.push(bytes.clone());
         }

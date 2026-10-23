@@ -624,7 +624,7 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         content_hash: ambre_core::ContentHash,
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     },
 }
 
@@ -665,7 +665,7 @@ struct SyncDocumentState {
     /// Uploads asked for while the document is local-only. The relay signs no
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
-    pending_uploads: Vec<(RequestId, Vec<u8>)>,
+    pending_uploads: Vec<(RequestId, ambre_core::MediaBytes)>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: SnapshotId,

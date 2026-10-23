@@ -66,7 +66,7 @@ pub fn coverage_grew(font_cx: &mut FontContext, missing: ScriptSet) -> bool {
 /// has no way of its own to read a file.
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn shipped_faces() -> Vec<Vec<u8>> {
+pub(crate) fn shipped_faces() -> Vec<ambre_core::FontBytes> {
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
     const FILES: [&str; 6] = [
         "NotoSans-Regular.ttf",
@@ -79,6 +79,7 @@ pub(crate) fn shipped_faces() -> Vec<Vec<u8>> {
     FILES
         .iter()
         .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+        .map(ambre_core::FontBytes::new)
         .collect()
 }
 

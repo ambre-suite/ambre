@@ -79,7 +79,7 @@ impl SyncState {
         &mut self,
         id: RequestId,
         document_id: DocumentId,
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     ) {
         if let Some(doc_state) = self
             .documents
@@ -109,7 +109,7 @@ impl SyncState {
             });
             return;
         };
-        let address = ambre_crypto::commitment::media_address(&doc_key, &data);
+        let address = ambre_crypto::commitment::media_address(&doc_key, data.as_bytes());
         let content_hash = ambre_core::ContentHash(hex::encode(address));
         let Some(tx) = event_tx else {
             self.reply(
@@ -200,7 +200,7 @@ impl SyncState {
                 RestEvent::MediaDownloaded {
                     document_id,
                     content_hash,
-                    data: Vec::new(),
+                    data: ambre_core::MediaBytes::default(),
                 },
             );
             return;
@@ -317,7 +317,7 @@ fn report(logic_tx: &LogicSink, id: RequestId, request: ApiRequest, error: impl 
 pub(crate) struct Upload {
     id: RequestId,
     document_id: DocumentId,
-    data: Vec<u8>,
+    data: ambre_core::MediaBytes,
     address: Address,
     doc_key: DocumentKey,
     signing_key: SigningKey,
@@ -342,7 +342,13 @@ async fn upload_media(
         signing_key,
     } = upload;
     let content_hash = ambre_core::ContentHash(hex::encode(address));
-    let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
+    let outcome = match seal_blob(
+        data.as_bytes(),
+        document_id,
+        &address,
+        &doc_key,
+        &signing_key,
+    ) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
         Err(e) => Err(http::Failed::local(format!("seal: {e}"))),
     };
@@ -376,7 +382,7 @@ async fn download_media(
                 id,
                 document_id: keyring.document_id,
                 content_hash,
-                data,
+                data: ambre_core::MediaBytes::new(data),
             });
         }
         Err(message) => report(logic_tx, id, ApiRequest::DownloadMedia, message),
@@ -499,7 +505,7 @@ mod tests {
             let key = DocumentKey::from_array([byte; 32]);
             let doc_state = SyncDocumentState::new(document_id, key.clone(), DocType::Toile, true);
             state.documents.insert(document_id, doc_state);
-            state.handle_upload_media(RequestId::next(), document_id, picture.clone());
+            state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
             let answer = rx.try_iter().find_map(|event| match event {
                 LogicEvent::Rest {
                     evt: RestEvent::MediaUploaded { content_hash, .. },
@@ -543,7 +549,7 @@ mod tests {
             let key = DocumentKey::from_array([0x41; 32]);
             let doc_state = SyncDocumentState::new(document_id, key, DocType::Toile, false);
             state.documents.insert(document_id, doc_state);
-            state.handle_upload_media(RequestId::next(), document_id, picture.clone());
+            state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
             assert!(
                 answered(&rx).is_empty(),
                 "the upload went ahead of its document"
@@ -698,7 +704,7 @@ mod tests {
         let upload = |id| Upload {
             id,
             document_id,
-            data: b"a picture".to_vec(),
+            data: b"a picture".to_vec().into(),
             address,
             doc_key: key.clone(),
             signing_key: SigningKey::from_bytes(&[0x07; 32]),

@@ -208,7 +208,7 @@ pub enum LogicCommand {
     /// (`toile-pdf-export`). Sent at boot with the base faces, and again for
     /// each script face fetched on demand. Local-only -- it never reaches Sync
     /// or the server. Each entry is one font file's bytes.
-    LoadFonts { faces: Vec<Vec<u8>> },
+    LoadFonts { faces: Vec<ambre_core::FontBytes> },
 }
 
 // -----------------------------------------------------------------------------

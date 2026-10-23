@@ -425,7 +425,7 @@ impl MurmureView {
                 evt: RestEvent::MediaDownloaded { data, .. },
             } if self.fetching.borrow().contains_key(&id) => {
                 if let Some(file) = self.fetching.borrow_mut().remove(&id) {
-                    (self.reads.save_file)(&file, data);
+                    (self.reads.save_file)(&file, data.into_bytes());
                 }
             }
             UiEvent::ApiError { id: Some(id), .. } => {
@@ -3528,7 +3528,7 @@ mod tests {
         let evt = RestEvent::MediaDownloaded {
             document_id: DocumentId::new(),
             content_hash: ambre_core::ContentHash(HASH.to_owned()),
-            data: vec![1, 2, 3],
+            data: vec![1, 2, 3].into(),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })

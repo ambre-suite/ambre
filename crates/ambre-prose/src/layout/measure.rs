@@ -235,7 +235,7 @@ impl TextMetrics {
 pub(crate) fn shipped_measurer() -> Measurer {
     let mut measurer = Measurer::new();
     for bytes in fonts::shipped_faces() {
-        measurer.register_faces(bytes);
+        measurer.register_faces(bytes.into_bytes());
     }
     measurer
 }

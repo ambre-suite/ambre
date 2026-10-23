@@ -50,6 +50,7 @@ pub(crate) fn send_faces(
     to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
     faces: Vec<Vec<u8>>,
 ) -> bool {
+    let faces = faces.into_iter().map(ambre_core::FontBytes::new).collect();
     to_logic.try_send(LogicCommand::LoadFonts { faces }).is_ok()
 }
 

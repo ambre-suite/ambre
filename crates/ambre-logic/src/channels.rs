@@ -1326,7 +1326,10 @@ impl LogicState {
                 let document_id = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::Rest {
                     id,
-                    cmd: RestCommand::UploadMedia { document_id, data },
+                    cmd: RestCommand::UploadMedia {
+                        document_id,
+                        data: ambre_core::MediaBytes::new(data),
+                    },
                 });
             }
             MurmureCommand::FetchFile { id, media_ref } => {
@@ -3936,7 +3939,7 @@ mod tests {
             evt: RestEvent::MediaDownloaded {
                 document_id: meta,
                 content_hash: ambre_core::ContentHash(file.as_str().to_owned()),
-                data: png,
+                data: png.into(),
             },
         });
         let got = drain(&ui);

@@ -150,7 +150,7 @@ impl ToileState {
             outstanding.insert(id, slot);
             requests.push(ToileRequest::UploadMedia {
                 id,
-                data: blob.plaintext.clone(),
+                data: ambre_core::MediaBytes::new(blob.plaintext.clone()),
             });
         }
         self.pending_imports

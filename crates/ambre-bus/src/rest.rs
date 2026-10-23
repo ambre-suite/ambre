@@ -369,7 +369,7 @@ pub enum RestCommand {
     UploadMedia {
         document_id: DocumentId,
         /// Raw (unencrypted) media bytes.
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     },
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
@@ -551,7 +551,7 @@ pub enum RestEvent {
         document_id: DocumentId,
         content_hash: ambre_core::ContentHash,
         /// Decrypted raw media bytes, ready for display.
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     },
     MediaErased {
         document_id: DocumentId,

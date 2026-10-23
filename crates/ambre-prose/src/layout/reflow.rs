@@ -498,7 +498,7 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> u32 {
 pub(crate) fn shipped_paginator() -> Paginator {
     let mut paginator = Paginator::new();
     for bytes in crate::layout::fonts::shipped_faces() {
-        paginator.register_faces(bytes);
+        paginator.register_faces(bytes.into_bytes());
     }
     paginator
 }

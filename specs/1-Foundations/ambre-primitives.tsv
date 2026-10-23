@@ -734,7 +734,6 @@ ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML com
 ambre-bus | src/lib.rs | crate | ViewportVersion.0 | field | u64	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/logic.rs | crate::logic | LogicCommand::CreateSpace.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
-ambre-bus | src/logic.rs | crate::logic | LogicCommand::LoadFonts.faces | field | Vec<Vec<u8>>	debt	planned: lot B bis 12: UploadMedia.data / LoadFonts.faces
 ambre-bus | src/logic.rs | crate::logic | LogicCommand::LocalStoreFull.full | field | bool	generic	fact flag on an event
 ambre-bus | src/logic.rs | crate::logic | LogicCommand::SearchMessages.query | field | String	free-text	search query
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
@@ -756,10 +755,8 @@ ambre-bus | src/rest.rs | crate::rest | RestCommand::CreateMeeting.name | field 
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
 ambre-bus | src/rest.rs | crate::rest | RestCommand::OpenDocFile.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
-ambre-bus | src/rest.rs | crate::rest | RestCommand::UploadMedia.data | field | Vec<u8>	debt	planned: lot B bis 12: UploadMedia.data / LoadFonts.faces
 ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestEvent::LocalRowSealed.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
-ambre-bus | src/rest.rs | crate::rest | RestEvent::MediaDownloaded.data | field | Vec<u8>	generic	downloaded media bytes, already decrypted payload
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderAddress.url | field | String	debt	planned: lot C bis 5: ProviderAddress url
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
 ambre-bus | src/rest.rs | crate::rest | RowPlace::Draft.0 | field | String	debt	planned: lot C bis 7: DraftKey
@@ -2021,14 +2018,12 @@ ambre-logic | src/lib.rs | crate | DocState::apply_remote_batch(payloads) | para
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(filename) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/lib.rs | crate | DocState::load_faces(faces) | param | &[Vec<u8>]	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-logic | src/lib.rs | crate | DocState::schema_version() | ret | u32	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.logged | field | Option<usize>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc::relay_saw(payload) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/lib.rs | crate | LogicState.base_faces | field | Vec<Vec<u8>>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-logic | src/lib.rs | crate | LogicState.pending_seals | field | HashMap<RequestId,(DocumentId,String)>	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | LogicState.unsent | field | HashMap<DocumentId,Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3630,7 +3625,6 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(key) | param
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/mod.rs | crate::logic | LOAD_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.entry_end | field | Option<i32>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.faces | field | Vec<Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,(u32,u32))>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed_version | field | u64	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.last_frame | field | Option<Vec<u8>>	debt	finding: ephemeral payloads as Vec<u8> (confirmed)
@@ -3646,7 +3640,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::flush_delta() | ret | Option<Vec<u8>>	debt	planned: lot B1 DeltaBytes
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::load_faces(faces) | param | &[Vec<u8>]	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::schema_version() | ret | u32	debt	finding: schema version as a bare integer (confirmed)
@@ -4508,7 +4501,6 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState.directory_held | field | u64
 ambre-sync | src/lib.rs | crate | SyncDocumentState.ephemeral_remote_counters | field | HashMap<ambre_core::PublicKey,u64>	debt	finding: ephemeral counter and mock sequence unwrapped
 ambre-sync | src/lib.rs | crate | SyncDocumentState.gap_requested | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.pending_updates | field | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/lib.rs | crate | SyncDocumentState.pending_uploads | field | Vec<(RequestId,Vec<u8>)>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-sync | src/lib.rs | crate | SyncDocumentState.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter(counter) | param | u64	debt	finding: ephemeral counter and mock sequence unwrapped
@@ -4521,7 +4513,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | Str
 ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.asked | field | u64	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::HttpError.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::MediaDownloaded.data | field | Vec<u8>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-sync | src/lib.rs | crate | SyncEvent::MemberChannelsListed.asked | field | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentFailed.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4570,8 +4561,6 @@ ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes(
 ambre-sync | src/media.rs | crate::media | Address | alias | [u8;ambre_crypto::commitment::TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
 ambre-sync | src/media.rs | crate::media | MediaHttp::delete() | ret | Result<u16,http::HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | SyncState::handle_upload_media(data) | param | Vec<u8>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
-ambre-sync | src/media.rs | crate::media | Upload.data | field | Vec<u8>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-sync | src/media.rs | crate::media | download_leg() | ret | Result<Vec<u8>,http::Failed>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | open_blob() | ret | Result<Vec<u8>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/media.rs | crate::media | open_blob(blob) | param | &[u8]	generic	generic byte/text API or codec
@@ -4807,7 +4796,6 @@ ambre-toile | src/logic/command.rs | crate::logic::command | ToileOutcome.epheme
 ambre-toile | src/logic/command.rs | crate::logic::command | ToileOutcome.update | field | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/command.rs | crate::logic::command | ToileOutcome::display_and_ephemeral(ephemeral) | param | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/command.rs | crate::logic::command | ToileOutcome::ephemeral_only(ephemeral) | param | Vec<u8>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
-ambre-toile | src/logic/command.rs | crate::logic::command | ToileRequest::UploadMedia.data | field | Vec<u8>	debt	planned: lot B item 12 UploadMedia{data}
 ambre-toile | src/logic/connector.rs | crate::logic::connector | anchor_is_horizontal() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result

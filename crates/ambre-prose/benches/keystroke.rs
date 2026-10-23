@@ -20,7 +20,7 @@ const PARAGRAPH: &str =
     "The quick brown fox jumps over the lazy dog while the text keeps flowing. ";
 
 /// The faces the application ships, read from the workspace tree.
-fn faces() -> Vec<Vec<u8>> {
+fn faces() -> Vec<ambre_core::FontBytes> {
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
     [
         "NotoSans-Regular.ttf",
@@ -32,6 +32,7 @@ fn faces() -> Vec<Vec<u8>> {
     ]
     .iter()
     .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+    .map(ambre_core::FontBytes::new)
     .collect()
 }
 

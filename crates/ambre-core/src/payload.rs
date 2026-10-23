@@ -1,10 +1,12 @@
-//! Plaintext CRDT bytes, one type per role.
+//! Plaintext bytes, one type per role.
 //!
-//! A delta, a snapshot and an ephemeral sample all cross the threads as
-//! bytes. A bare `Vec<u8>` lets a snapshot pass where a delta is expected. One type per role keeps them apart up to the seal, where Sync
-//! encrypts them. They hold document plaintext, so `Debug` prints the length
-//! alone, as the encoded roles do. Serde sees the bare bytes: the envelope
-//! that carries one is the same as the envelope that carried a `Vec<u8>`.
+//! A delta, a snapshot, an ephemeral sample, a media file and a font file all
+//! cross the threads as bytes. A bare `Vec<u8>` lets a snapshot pass where a
+//! delta is expected. One type per role keeps them apart up to the seal, where
+//! Sync encrypts the ones it sends. They may hold document plaintext, so
+//! `Debug` prints the length alone, as the encoded roles do. Serde sees the
+//! bare bytes: the envelope that carries one is the same as the envelope that
+//! carried a `Vec<u8>`.
 
 use serde::{Deserialize, Serialize};
 
@@ -107,6 +109,18 @@ define_payload! {
     /// One peer's presence as the engine encodes it, kept by nothing after
     /// delivery.
     EphemeralBytes
+}
+
+define_payload! {
+    /// A media file as the user placed it, before Sync seals it or after Sync
+    /// opens it.
+    MediaBytes
+}
+
+define_payload! {
+    /// One font file, as the Main thread fetched it for the Logic thread to
+    /// shape on.
+    FontBytes
 }
 
 #[cfg(test)]

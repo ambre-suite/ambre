@@ -64,7 +64,7 @@ impl LogicState {
             return false;
         };
         let picture = match evt {
-            RestEvent::MediaDownloaded { data, .. } => decode(data),
+            RestEvent::MediaDownloaded { data, .. } => decode(data.as_bytes()),
             _ => None,
         };
         self.send_picture(channel_id, media_ref, picture);

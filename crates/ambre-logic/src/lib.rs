@@ -377,7 +377,7 @@ impl DocState {
     /// Only Prose measures text on the Logic thread: pagination shapes on a
     /// sealed context, which holds nothing until these arrive (`PROSE-114`).
     /// Trame and Toile measure on the UI thread, which owns its own context.
-    fn load_faces(&mut self, faces: &[Vec<u8>]) {
+    fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
         match self {
             DocState::Prose(state) => state.load_faces(faces),
             DocState::Trame(_) | DocState::Toile(_) => {}
@@ -845,7 +845,7 @@ struct LogicState {
     /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
     /// fetch, so this is the whole of what it can measure on.
-    base_faces: Vec<Vec<u8>>,
+    base_faces: Vec<ambre_core::FontBytes>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no

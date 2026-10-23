@@ -244,7 +244,7 @@ impl LogicState {
                 for bytes in &faces {
                     export_cx
                         .collection
-                        .register_fonts(bytes.clone().into(), None);
+                        .register_fonts(bytes.as_bytes().to_vec().into(), None);
                 }
                 // Kept for the documents opened after this point.
                 self.base_faces.extend(faces);
@@ -2015,7 +2015,7 @@ mod tests {
             },
             RestCommand::UploadMedia {
                 document_id: doc,
-                data: vec![1],
+                data: vec![1].into(),
             },
             RestCommand::DownloadMedia {
                 document_id: doc,
@@ -2151,11 +2151,12 @@ mod tests {
 
     /// The faces the workspace ships, read off the tree. A running peer gets
     /// the same bytes over the bus; here the test plays the Main thread.
-    fn shipped_faces() -> Vec<Vec<u8>> {
+    fn shipped_faces() -> Vec<ambre_core::FontBytes> {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
             .iter()
             .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+            .map(ambre_core::FontBytes::new)
             .collect()
     }
 
