@@ -246,7 +246,9 @@ fn set_web_link(
 ) {
     match normalize_web_address(&typed.get_untracked()) {
         Ok(url) => {
-            edit.set(Some(LinkEdit(Some(LinkTarget::Url(url)))));
+            edit.set(Some(LinkEdit(Some(LinkTarget::Url(
+                ambre_core::LinkUrl::new(url.into_string()),
+            )))));
             open.set(false);
         }
         Err(e) => error.set(Some(e.message())),

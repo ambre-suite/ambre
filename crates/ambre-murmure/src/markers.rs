@@ -290,10 +290,11 @@ fn link(line: &str) -> Option<Closed> {
     let open = open_end[..middle].rfind('[')?;
     let inner = open + 1..middle;
     let text = &line[inner.clone()];
-    (holds(text) && !text.contains(']') && linkable(address)).then(|| Closed {
+    let address = ambre_core::LinkUrl::from(address);
+    (holds(text) && !text.contains(']') && linkable(&address)).then(|| Closed {
         span: ByteSpan::from_usize_range(open..line.len()),
         inner: ByteSpan::from_usize_range(inner),
-        style: TextStyle::Link(address.to_owned()),
+        style: TextStyle::Link(address),
     })
 }
 
@@ -420,7 +421,7 @@ mod tests {
     /// draft (`MURMURE-197`).
     #[test]
     fn each_marker_becomes_its_mark_as_it_closes() {
-        let site = TextStyle::Link("https://ambre.dev".to_owned());
+        let site = TextStyle::Link("https://ambre.dev".into());
         let cases = [
             ("say **done**", "say done", 4..8, TextStyle::Bold),
             ("an _aside_", "an aside", 3..8, TextStyle::Italic),

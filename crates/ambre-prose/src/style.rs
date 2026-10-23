@@ -47,7 +47,7 @@ pub struct ResolvedStyle {
     /// In points.
     pub font_size: f32,
     pub font_family: Option<String>,
-    pub link: Option<String>,
+    pub link: Option<ambre_core::LinkUrl>,
 }
 
 /// How much larger than the body a heading of each level is drawn.
@@ -129,7 +129,11 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
     if let Some(family) = marks.get("ff").filter(|family| !family.is_empty()) {
         resolved.font_family = Some(family.clone());
     }
-    resolved.link = marks.get("a").filter(|url| !url.is_empty()).cloned();
+    resolved.link = marks
+        .get("a")
+        .filter(|url| !url.is_empty())
+        .cloned()
+        .map(ambre_core::LinkUrl::new);
     resolved
 }
 

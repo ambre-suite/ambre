@@ -34,7 +34,7 @@ pub enum LinkAction {
     GoToFrame(ElementId),
     /// Hand the address to the shell, which opens it in a sandboxed tab. The
     /// board never fetches it (`TOILE-065`, `TOILE-110`).
-    OpenUrl(String),
+    OpenUrl(ambre_core::LinkUrl),
     /// Ask the shell to open another document (`TOILE-114`).
     OpenDocument {
         document_id: DocumentId,
@@ -63,7 +63,7 @@ impl LinkAction {
 /// another document. The board never fetches either (`TOILE-110`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShellNav {
-    Url(String),
+    Url(ambre_core::LinkUrl),
     Document {
         document_id: DocumentId,
         doc_type: DocType,

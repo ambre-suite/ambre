@@ -197,7 +197,9 @@ fn a_seed_of_another_kind_is_refused() {
         ),
         (
             ElementKind::Sticky,
-            InitContent::Embed("https://x.test".to_owned()),
+            InitContent::Embed(ambre_bus::app::toile::WebAddress::new(
+                "https://x.test".to_owned(),
+            )),
         ),
     ] {
         let out = st.handle_command(ToileCommand::CreateElement {

@@ -357,7 +357,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
         TextStyle::Bold,
         TextStyle::Italic,
         TextStyle::Code,
-        TextStyle::Link("https://ambre.dev".to_owned()),
+        TextStyle::Link("https://ambre.dev".into()),
         TextStyle::CodeBlock,
         TextStyle::Quote,
         TextStyle::List,

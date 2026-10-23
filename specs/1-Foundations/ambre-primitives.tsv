@@ -77,7 +77,6 @@ ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[
 ambre-app | src/host/mod.rs | crate::host | desktop() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | desktop_in() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | is_other_editable() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | open_address(url) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
 ambre-app | src/host/mod.rs | crate::host | publish_item() | ret | Option<(T,bool)>	math	named pair: item, carries-web flag
 ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(&str,Option<&str>)])->Option<T>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | publish_item(html) | param | Option<&str>	debt	finding: Clipboard payload strings (confirmed)
@@ -129,7 +128,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | to_css(y) | param | f32	mat
 ambre-app | src/host/run.rs | crate::host::run | run_with(canvas_id) | param | &str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
-ambre-app | src/host/web_embed.rs | crate::host::web_embed | WebFrames.urls | field | HashMap<ElementId,String>	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | layer_click_through(takes_input) | param | bool	math	value flag to the DOM
 ambre-app | src/landing.rs | crate::landing | DocItem.member_count | field | u32	math	count
 ambre-app | src/landing.rs | crate::landing | DocItem.name | field | Option<String>	free-text	document name for display
@@ -201,19 +199,14 @@ ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param 
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | param | RwSignal<String>	free-text	presenter notes text
 ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
-ambre-app | src/signin.rs | crate::signin | accept_return(pending) | param | Option<String>	debt	planned: lot C bis 5 OidcState
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | follow_address(navigate) | param | impl FnOnce(&str)	trait	navigate closure signature
-ambre-app | src/signin.rs | crate::signin | follow_address(state) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
-ambre-app | src/signin.rs | crate::signin | follow_address(url) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
-ambre-app | src/signin.rs | crate::signin | is_followable(url) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	trait	reload closure signature
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
-ambre-app | src/signin.rs | crate::signin | take_pending_state() | ret | Option<String>	debt	planned: lot C bis 5 OidcState
 ambre-app | src/tofu.rs | crate::tofu | TofuPrompt.changed | field | bool	math	named flag
 ambre-app | src/tofu.rs | crate::tofu | TofuPrompt::email() | ret | Option<&str>	free-text	email shown in the prompt (ambre_core::Email exists, display only)
 ambre-app | src/vault.rs | crate::vault | Sealed | alias | Box<dyn FnOnce(Option<Vec<u8>>)>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
@@ -269,7 +262,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceCommand::AddCategory
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::Catalogue.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | TextStyle::Link.0 | field | String	debt	finding: Addresses not listed in lot C bis 5 (low, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ThreadHead.replies | field | u32	math	count
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic.0 | field | String	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::as_str() | ret | &str	newtype-inner	newtype
@@ -277,7 +269,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::new(text) | param 
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount.0 | field | u32	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount::is_zero() | ret | bool	newtype-inner	newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | ActiveMarks.link | field | Option<String>	debt	planned: lot C bis 5: LinkUrl (bus carrier of prose link.rs)
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BandSet.different_first_page | field | bool	generic	named setting or fact flag, selects no mode
@@ -315,7 +306,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::TooLarge.0 | fi
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight.value | field | f32	debt	finding: Prose LineHeight.value: one f32, two units (low-medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | LinkSpan.url | field | String	debt	planned: lot C bis 5: LinkUrl (bus carrier of prose link.rs)
 ambre-bus | src/app/prose.rs | crate::app::prose | ListStyle::Todo.0 | field | bool	generic	todo checkbox ticked, a fact inside the enum variant
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -443,7 +433,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | DeckFrame.name | field | Stri
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayConnector.label | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayElement.locked | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::DocEmbed.focused | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Embed.0 | field | String	debt	planned: lot C bis 5: WebAddress (EmbedTarget::Web)
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Frame.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
@@ -472,9 +461,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.italic | field | boo
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.strikethrough | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.underline | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.weight | field | u16	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Embed.0 | field | String	debt	planned: lot C bis 5: WebAddress (EmbedTarget::Web)
 ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Text.0 | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::Url.0 | field | String	debt	finding: Addresses not listed in lot C bis 5 (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | NodeId::decode(s) | param | &str	newtype-inner	NodeId storage codec
@@ -549,6 +536,10 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.widt
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_redo | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_undo | field | bool	generic	named flag, setter of a flag, or predicate
+ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress.0 | field | String	newtype-inner	WebAddress newtype
+ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
+ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::into_string() | ret | String	newtype-inner	WebAddress newtype
+ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::new(text) | param | String	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | ZTarget::Index.0 | field | usize	math	z-order index
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
@@ -760,7 +751,6 @@ ambre-bus | src/rest.rs | crate::rest | RestCommand::OpenDocFile.sealed | field 
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestEvent::LocalRowSealed.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
-ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderAddress.url | field | String	debt	planned: lot C bis 5: ProviderAddress url
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
 ambre-bus | src/rest.rs | crate::rest | SealedRow.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | SecretBytes.0 | field | Zeroizing<Vec<u8>>	newtype-inner	secret newtype
@@ -1551,6 +1541,11 @@ ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_
 ambre-core | src/key_id.rs | crate::key_id | KeyId::from_array(bytes) | param | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::parse_hex(text) | param | &str	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::to_hex() | ret | String	newtype-inner	KeyId newtype
+ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
+ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | String	newtype-inner	LinkUrl newtype
+ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-inner	LinkUrl newtype
+ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
 ambre-core | src/media.rs | crate::media | <ContentHash as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
 ambre-core | src/media.rs | crate::media | <ContentHash as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
@@ -2381,7 +2376,6 @@ ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since() | ret
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since(seen) | param | usize	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::version() | ret | u64	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
-ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.link | field | Option<String>	debt	finding: Link addresses as `String`
 ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.style | field | String	debt	finding: `RowStyle.style` stores a `TextStyle` name as a String
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/drafts.rs | crate::drafts | Shelf.version | field | u64	math	local count/index/counter
@@ -2517,7 +2511,6 @@ ambre-murmure | src/paint.rs | crate::paint | Painted.focus | field | Option<(f3
 ambre-murmure | src/paint.rs | crate::paint | Painted.laid_out | field | usize	math	local count/index/counter
 ambre-murmure | src/paint.rs | crate::paint | Painted.latest_shown | field | bool	math	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | Painted.line_shown | field | bool	math	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | Painted.link | field | Option<String>	debt	finding: Link addresses as `String`
 ambre-murmure | src/paint.rs | crate::paint | Painted.oldest_shown | field | bool	math	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | Painted.rest | field | Option<(usize,f32)>	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Painted.rows | field | Vec<(usize,f32,f32)>	math	layout geometry in logical px
@@ -2570,7 +2563,6 @@ ambre-murmure | src/paint.rs | crate::paint | header_height(width) | param | f32
 ambre-murmure | src/paint.rs | crate::paint | line_height() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | line_height(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at((x,y)) | param | (f32,f32)	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | link_at() | ret | Option<String>	debt	finding: Link addresses as `String`
 ambre-murmure | src/paint.rs | crate::paint | link_at(rows) | param | &[(usize,f32,f32)]	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
@@ -2711,8 +2703,7 @@ ambre-murmure | src/space.rs | crate::space | SpaceState::unlist_channel() | ret
 ambre-murmure | src/space.rs | crate::space | position_of() | ret | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	debt	finding: Link addresses as `String`
-ambre-murmure | src/style.rs | crate::style | linkable(address) | param | &str	debt	finding: Link addresses as `String`
+ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result
 ambre-murmure | src/uploads.rs | crate::uploads | OPENS | const | [&str;5]	debt	finding: Media types as `&str`
 ambre-murmure | src/uploads.rs | crate::uploads | Pending.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.data | field | Vec<u8>	generic	opaque file content bytes
@@ -2787,7 +2778,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move(y) | param |
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_up() | ret | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | PRIMARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | PageReads.open_link | field | Rc<dyn Fn(&str)>	debt	finding: Link addresses as `String`
 ambre-murmure | src/view.rs | crate::view | PageReads.still | field | Rc<dyn Fn()->bool>	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | PageReads.take_pick | field | Rc<dyn Fn(Region)->Option<usize>>	debt	finding: the region is typed; the picked entry is still a bare usize index
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
@@ -2890,7 +2880,6 @@ ambre-prose | src/chrome/mod.rs | crate::chrome | MENU_DROP_PX | const | f32	mat
 ambre-prose | src/chrome/mod.rs | crate::chrome | PANEL_WIDTH_PX | const | u32	math	count, size or local index
 ambre-prose | src/chrome/mod.rs | crate::chrome | POPOVER_LIFT_PX | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<CommentId,String>>	free-text	text content / label / parser input
-ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.followed | field | RwSignal<Option<String>>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.over_link | field | RwSignal<bool>	generic	independent flag or predicate
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.slash_pick | field | RwSignal<Option<usize>>	math	count, size or local index
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals::drop_lost_drafts() | ret | Vec<&'static str>	debt	finding: lost-reply notice as &'static str (suspected)
@@ -3040,14 +3029,12 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | MAX
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.image | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.italic | field | u32	math	count, size or local index
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.links | field | Vec<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.strike | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::dropping() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | heading_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::Link.0 | field | String	debt	planned: lot C5 LinkUrl
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ListRun.ordinal | field | u32	math	count, size or local index
@@ -3095,7 +3082,6 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrRun.comment | field | bool
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.cross_ref | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.footnote_ref | field | Option<u32>	math	count, size or local index
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.italic | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.link | field | Option<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.strikethrough | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.styled | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.subscript | field | bool	generic	independent flag or predicate
@@ -3395,8 +3381,7 @@ ambre-prose | src/layout/run.rs | crate::layout::run | order_of() | ret | HashMa
 ambre-prose | src/layout/run.rs | crate::layout::run | shifted(shift) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/link.rs | crate::link | LINK_KEY | const | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/link.rs | crate::link | OPENABLE | const | [&str;3]	debt	finding: openable URL schemes as a &str list (confirmed)
-ambre-prose | src/link.rs | crate::link | openable() | ret | bool	debt	planned: lot C5 LinkUrl
-ambre-prose | src/link.rs | crate::link | openable(url) | param | &str	debt	planned: lot C5 LinkUrl
+ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predicate result
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
@@ -3460,8 +3445,8 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | on(key) | param | &'static str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link() | ret | bool	debt	planned: lot C5 LinkUrl
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link(href) | param | &str	debt	planned: lot C5 LinkUrl
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link() | ret | bool	generic	predicate result
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link(href) | param | &str	free-text	href attribute text of pasted HTML, checked before it becomes a link
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | style_marks(style) | param | &str	generic	CSS style parser over &str
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
@@ -3583,7 +3568,6 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | type_name() | ret |
 ambre-prose | src/logic/lists.rs | crate::logic::lists | ProseState::write_list_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/marks.rs | crate::logic::marks | BAR_KEYS | const | [&str;5]	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
-ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.link | field | Option<Option<String>>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(key) | param | &str	debt	planned: lot C8 MarkKey
@@ -3754,7 +3738,6 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.code_inline | field | 
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.font_family | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.font_size | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.italic | field | bool	generic	independent flag or predicate
-ambre-prose | src/style.rs | crate::style | ResolvedStyle.link | field | Option<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.strikethrough | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.subscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.superscript | field | bool	generic	independent flag or predicate
@@ -3790,7 +3773,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Optio
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.drag_pointer | field | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.find_current | field | Option<u32>	math	count, size or local index
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.followed | field | Option<String>	debt	planned: lot C5 LinkUrl
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.layout_version | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.marks_asked | field | Option<((crate::view::caret::Spot,crate::view::caret::Spot),u64)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
@@ -4423,7 +4405,6 @@ ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(Content
 ambre-sync | src/http.rs | crate::http | Outgoing.url | field | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | Outgoing::json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | Outgoing::new(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | ProviderLoginResponse.url | field | String	debt	planned: lot C bis 5 (ProviderAddress, sync side of it)
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayHost::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | RelayHost::new(host) | param | String	newtype-inner	newtype field, constructor or accessor
@@ -5071,12 +5052,9 @@ ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bo
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::on_release() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedSessions::is_open() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedTarget::Web.0 | field | String	debt	planned: lot C item 5 WebAddress
 ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleEmbed.focused | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleWebEmbed.focused | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleWebEmbed.url | field | String	debt	planned: lot C item 5 WebAddress
-ambre-toile | src/ui/embed.rs | crate::ui::embed | normalize_web_address() | ret | Result<String,AddressError>	debt	planned: lot C item 5 WebAddress
-ambre-toile | src/ui/embed.rs | crate::ui::embed | normalize_web_address(typed) | param | &str	debt	planned: lot C item 5 WebAddress
+ambre-toile | src/ui/embed.rs | crate::ui::embed | normalize_web_address(typed) | param | &str	free-text	address text the user typed, checked into a WebAddress
 ambre-toile | src/ui/embed.rs | crate::ui::embed | references() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | routes_to_child() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
@@ -5142,8 +5120,6 @@ ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_W | const | f64	math	ge
 ambre-toile | src/ui/label.rs | crate::ui::label | connector_at(pick) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | BADGE_GAP | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | BADGE_PX | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/link.rs | crate::ui::link | LinkAction::OpenUrl.0 | field | String	debt	finding: Link URLs are strings; lot C item 5 should cover them too (confirmed): link URL as String; extends lot C item 5 (WebAddress) to LinkTarget::Url
-ambre-toile | src/ui/link.rs | crate::ui::link | ShellNav::Url.0 | field | String	debt	finding: Link URLs are strings; lot C item 5 should cover them too (confirmed): link URL as String; extends lot C item 5 (WebAddress) to LinkTarget::Url
 ambre-toile | src/ui/link.rs | crate::ui::link | link_at(pick) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_locked | field | bool	math	local state flag or value, not a mode selector

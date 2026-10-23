@@ -1,7 +1,7 @@
 //! Texts that grant access to whoever holds them.
 //!
-//! A presigned URL lets its holder read or write one object, and the code and
-//! state of an OIDC sign-in let their holder finish it. Each is a bearer
+//! A presigned URL lets its holder read or write one object. The address,
+//! code and state of an OIDC sign-in let their holder finish it. Each is a bearer
 //! credential, so a log must never carry one. Each type's `Debug` prints no
 //! byte of it. Each is `#[serde(transparent)]`, so the JSON keeps its text.
 
@@ -38,6 +38,13 @@ define_credential! {
     /// A presigned object-store URL: it reads or writes one object until it
     /// expires.
     PresignedUrl
+}
+
+define_credential! {
+    /// The identity provider's authorization address the relay answers for a
+    /// sign-in. Its query carries the sign-in's state, so it is a credential
+    /// too. It is the relay's data, and a page checks it before following it.
+    ProviderUrl
 }
 
 define_credential! {

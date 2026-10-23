@@ -86,7 +86,7 @@ pub struct Painted {
     /// (`MURMURE-425`).
     pub selection: Option<TextSelection>,
     /// The address of the link a click landed on (`MURMURE-567`).
-    pub link: Option<String>,
+    pub link: Option<ambre_core::LinkUrl>,
     /// The reaction chip a click landed on: the index of its row, and its
     /// emoji.
     pub chip: Option<(usize, Emoji)>,
@@ -476,7 +476,7 @@ fn link_at(
     words: &HashMap<usize, (RowWords, bool)>,
     (x, y): (f32, f32),
     width: f32,
-) -> Option<String> {
+) -> Option<ambre_core::LinkUrl> {
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
@@ -1391,7 +1391,7 @@ pub(crate) mod tests {
         let mark = |style, range| StyleMark { style, range };
         sent.styles = vec![
             mark(
-                TextStyle::Link("https://ambre.dev".to_owned()),
+                TextStyle::Link("https://ambre.dev".into()),
                 CharSpan::from_usize_range(14..15),
             ),
             mark(TextStyle::Bold, CharSpan::from_usize_range(7..11)),

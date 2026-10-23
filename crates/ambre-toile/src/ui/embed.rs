@@ -25,7 +25,7 @@ use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, InitContent,
-    ToileCommand,
+    ToileCommand, WebAddress,
 };
 use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_draw::{Affine, Point, Rect, Size};
@@ -190,7 +190,7 @@ pub const DEFAULT_EMBED_SIZE: Size = Size::new(640.0, 400.0);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EmbedTarget {
     /// A web page, by an address already through [`normalize_web_address`].
-    Web(String),
+    Web(WebAddress),
     /// Another Ambre document, by reference (`TOILE-021`): the board stores the
     /// id and never the content.
     Document {
@@ -292,7 +292,7 @@ impl AddressError {
 /// * [`AddressError::NotHttps`] on any scheme other than `https`.
 /// * [`AddressError::NoHost`] on a missing host, or a host holding a character
 ///   no host may carry.
-pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
+pub fn normalize_web_address(typed: &str) -> Result<WebAddress, AddressError> {
     // A control character or a space inside an address is never legitimate. It
     // is a paste accident, or an attempt to hide a scheme from a naive prefix
     // test (`java\nscript:`). Strip the ends, and refuse the middle.
@@ -325,7 +325,7 @@ pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
         return Err(AddressError::NoHost);
     }
 
-    Ok(format!("https://{rest}"))
+    Ok(WebAddress::new(format!("https://{rest}")))
 }
 
 /// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
@@ -390,8 +390,9 @@ where
 pub struct VisibleWebEmbed {
     /// The board element carrying the address: the shell's key for its frame.
     pub element: ElementId,
-    /// The address, as stored: the placement normalized it already.
-    pub url: String,
+    /// The address, as stored. A peer may have written it, so nothing
+    /// here checked it.
+    pub url: WebAddress,
     /// Where the frame goes, in screen pixels: the AABB of the
     /// element's quad, like a nested document's. What the board clips to.
     pub screen_rect: Rect,
@@ -1305,18 +1306,20 @@ mod tests {
 
 #[cfg(test)]
 mod address_tests {
-    use super::{AddressError, normalize_web_address};
+    use super::{AddressError, WebAddress, normalize_web_address};
 
     /// A host typed on its own is the common case, and it is https.
     #[test]
     fn a_bare_host_becomes_an_https_address() {
         assert_eq!(
             normalize_web_address("example.com"),
-            Ok("https://example.com".to_owned())
+            Ok(WebAddress::new("https://example.com".to_owned()))
         );
         assert_eq!(
             normalize_web_address("  example.com/a/b?q=1#top  "),
-            Ok("https://example.com/a/b?q=1#top".to_owned())
+            Ok(WebAddress::new(
+                "https://example.com/a/b?q=1#top".to_owned()
+            ))
         );
     }
 
@@ -1325,7 +1328,7 @@ mod address_tests {
     fn a_host_with_a_port_keeps_its_port() {
         assert_eq!(
             normalize_web_address("example.com:8443/x"),
-            Ok("https://example.com:8443/x".to_owned())
+            Ok(WebAddress::new("https://example.com:8443/x".to_owned()))
         );
     }
 
@@ -1333,12 +1336,12 @@ mod address_tests {
     fn an_https_address_survives_verbatim() {
         assert_eq!(
             normalize_web_address("https://example.com/a"),
-            Ok("https://example.com/a".to_owned())
+            Ok(WebAddress::new("https://example.com/a".to_owned()))
         );
         // The parser compares the scheme without case, then normalizes it.
         assert_eq!(
             normalize_web_address("HTTPS://Example.COM/A"),
-            Ok("https://Example.COM/A".to_owned())
+            Ok(WebAddress::new("https://Example.COM/A".to_owned()))
         );
     }
 
@@ -1441,7 +1444,7 @@ mod web_embed_tests {
     /// one helper covers both kinds.
     fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
         let mut e = doc_embed(id, DocumentId::new(), bounds, 0.0);
-        e.geom = DisplayGeom::Embed(url.to_owned());
+        e.geom = DisplayGeom::Embed(super::WebAddress::new(url.to_owned()));
         e
     }
 
@@ -1465,7 +1468,7 @@ mod web_embed_tests {
 
         let got = visible_web_embeds(&dv, &cam(), None);
         assert_eq!(got.len(), 1, "one frame, for the one web embed");
-        assert_eq!(got[0].url, "https://example.com");
+        assert_eq!(got[0].url.as_str(), "https://example.com");
         assert_eq!(got[0].element.0, "w");
     }
 
@@ -1671,7 +1674,7 @@ mod placement_tests {
     #[test]
     fn a_web_address_lands_centred_under_its_drop_point() {
         let cam = ViewportTransform::new(800.0, 600.0);
-        let url = "https://example.com".to_owned();
+        let url = super::WebAddress::new("https://example.com".to_owned());
         let placed = PlacedEmbed {
             target: EmbedTarget::Web(url.clone()),
             at: Some(Point::new(100.0, 50.0)),

@@ -214,9 +214,9 @@ impl ToileState {
             ElementKind::Image => DisplayGeom::Image(ambre_core::ContentHash(
                 str_of(em, ElementKey::Hash).unwrap_or_default(),
             )),
-            ElementKind::Embed => {
-                DisplayGeom::Embed(str_of(em, ElementKey::Url).unwrap_or_default())
-            }
+            ElementKind::Embed => DisplayGeom::Embed(ambre_bus::app::toile::WebAddress::new(
+                str_of(em, ElementKey::Url).unwrap_or_default(),
+            )),
             ElementKind::DocEmbed => {
                 // Parse back the reference; on any parse failure fall to Frame so
                 // the node still paints a placeholder rather than vanishing.

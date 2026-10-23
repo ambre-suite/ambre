@@ -1091,7 +1091,7 @@ mod tests {
         js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
         let navigated = std::cell::Cell::new(false);
         follow_shell_nav(
-            toile_chrome::ShellNav::Url("https://example.com/a".to_owned()),
+            toile_chrome::ShellNav::Url("https://example.com/a".into()),
             &|_: &str, _| navigated.set(true),
             DocType::Toile,
         );

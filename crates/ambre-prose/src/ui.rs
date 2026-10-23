@@ -389,7 +389,7 @@ pub struct ProseUiState {
     pub(crate) highlights_walked: u64,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
-    pub followed: Option<String>,
+    pub followed: Option<ambre_core::LinkUrl>,
     /// The payload of the last copy, until the host mirrors it to the system
     /// clipboard (`PROSE-UI-041`).
     pub(crate) pending_clip: Option<ambre_bus::ClipboardBlob>,

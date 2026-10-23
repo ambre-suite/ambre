@@ -54,21 +54,25 @@ pub(crate) fn parse_return(path: &str, query: &str) -> Option<ProviderReturn> {
 /// party, and would sign the person in as someone else.
 pub(crate) fn accept_return(
     ret: ProviderReturn,
-    pending: Option<String>,
+    pending: Option<ambre_core::OidcState>,
 ) -> Option<ProviderReturn> {
-    (pending.as_deref() == Some(ret.state.expose())).then_some(ret)
+    (pending.as_ref() == Some(&ret.state)).then_some(ret)
 }
 
 /// Whether `url` may be followed: an `https` address. The address is data from
 /// the relay, and a `javascript:` one would run in this page's origin.
-pub(crate) fn is_followable(url: &str) -> bool {
-    web_sys::Url::new(url).is_ok_and(|u| u.protocol() == "https:")
+pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
+    web_sys::Url::new(url.expose()).is_ok_and(|u| u.protocol() == "https:")
 }
 
 /// Follow the provider's address: remember its `state` for the return, then
 /// `navigate` there (`CHROME-095`). Refused, and nothing remembered, unless the
 /// address is followable.
-pub(crate) fn follow_address(url: &str, state: &str, navigate: impl FnOnce(&str)) -> bool {
+pub(crate) fn follow_address(
+    url: &ambre_core::ProviderUrl,
+    state: &ambre_core::OidcState,
+    navigate: impl FnOnce(&str),
+) -> bool {
     if !is_followable(url) {
         tracing::warn!("Sign-in: the relay answered an address that is not https");
         return false;
@@ -76,10 +80,10 @@ pub(crate) fn follow_address(url: &str, state: &str, navigate: impl FnOnce(&str)
     let Some(storage) = session_storage() else {
         return false;
     };
-    if storage.set_item(PENDING_STATE_KEY, state).is_err() {
+    if storage.set_item(PENDING_STATE_KEY, state.expose()).is_err() {
         return false;
     }
-    navigate(url);
+    navigate(url.expose());
     true
 }
 
@@ -122,11 +126,11 @@ fn session_storage() -> Option<web_sys::Storage> {
 }
 
 /// Read and clear the remembered state: one return per sign-in.
-fn take_pending_state() -> Option<String> {
+fn take_pending_state() -> Option<ambre_core::OidcState> {
     let storage = session_storage()?;
     let state = storage.get_item(PENDING_STATE_KEY).ok().flatten();
     let _ = storage.remove_item(PENDING_STATE_KEY);
-    state
+    state.map(ambre_core::OidcState::new)
 }
 
 // -- Tests (wasm tier) -------------------------------------------------------
@@ -138,6 +142,10 @@ mod tests {
     use wasm_bindgen_test::*;
 
     wasm_bindgen_test_configure!(run_in_browser);
+
+    fn state(text: &str) -> ambre_core::OidcState {
+        ambre_core::OidcState::new(text.to_owned())
+    }
 
     fn google(state: &str) -> ProviderReturn {
         ProviderReturn {
@@ -176,10 +184,10 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_return_this_tab_did_not_start_is_refused() {
         assert_eq!(
-            accept_return(google("st1"), Some("st1".into())),
+            accept_return(google("st1"), Some(state("st1"))),
             Some(google("st1"))
         );
-        assert_eq!(accept_return(google("st1"), Some("st2".into())), None);
+        assert_eq!(accept_return(google("st1"), Some(state("st2"))), None);
         assert_eq!(accept_return(google("st1"), None), None);
     }
 
@@ -189,10 +197,11 @@ mod tests {
     fn the_provider_address_is_followed_and_its_state_kept() {
         let _ = take_pending_state();
         let mut went = None;
-        let url = "https://accounts.example.org/o/oauth2/auth?state=st9";
-        assert!(follow_address(url, "st9", |u| went = Some(u.to_owned())));
-        assert_eq!(went.as_deref(), Some(url));
-        assert_eq!(take_pending_state().as_deref(), Some("st9"));
+        let text = "https://accounts.example.org/o/oauth2/auth?state=st9";
+        let url = ambre_core::ProviderUrl::new(text.to_owned());
+        assert!(follow_address(&url, &state("st9"), |u| went = Some(u.to_owned())));
+        assert_eq!(went.as_deref(), Some(text));
+        assert_eq!(take_pending_state(), Some(state("st9")));
         assert_eq!(take_pending_state(), None, "a state serves one return");
 
         for bad in [
@@ -202,7 +211,11 @@ mod tests {
         ] {
             let mut went = false;
             assert!(
-                !follow_address(bad, "st9", |_| went = true),
+                !follow_address(
+                    &ambre_core::ProviderUrl::new(bad.to_owned()),
+                    &state("st9"),
+                    |_| went = true
+                ),
                 "{bad} was followed"
             );
             assert!(!went);

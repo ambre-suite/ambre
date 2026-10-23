@@ -2010,7 +2010,12 @@ mod tests {
             doc_type: ambre_bus::DocType::Trame,
             focused: false,
         };
-        for geom in [DisplayGeom::Embed("https://example.org".into()), doc] {
+        for geom in [
+            DisplayGeom::Embed(ambre_bus::app::toile::WebAddress::new(
+                "https://example.org".to_owned(),
+            )),
+            doc,
+        ] {
             let ops = inner(geom.clone());
             assert!(
                 matches!(ops[..], [DrawOp::FillPath { .. }, ..]),

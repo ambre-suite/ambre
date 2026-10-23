@@ -986,7 +986,7 @@ pub(crate) struct DevLoginResponse {
 /// The relay's answer to `GET /api/auth/{provider}/login`.
 #[derive(Deserialize)]
 pub(crate) struct ProviderLoginResponse {
-    pub url: String,
+    pub url: ambre_core::ProviderUrl,
     pub state: ambre_core::OidcState,
 }
 

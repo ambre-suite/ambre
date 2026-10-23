@@ -50,7 +50,8 @@ pub(crate) fn configure(doc: &LoroDoc) {
 
 /// Whether `address` is one a link may hold: `http` or `https`, with no
 /// blank or control char in it (`MURMURE-561`).
-pub fn linkable(address: &str) -> bool {
+pub fn linkable(address: &ambre_core::LinkUrl) -> bool {
+    let address = address.as_str();
     let lower = address.to_ascii_lowercase();
     let rest = lower
         .strip_prefix("https://")
@@ -172,8 +173,9 @@ fn style_of(key: Mark, value: &LoroValue) -> Option<TextStyle> {
         (Mark::CodeBlock, LoroValue::Bool(true)) => Some(TextStyle::CodeBlock),
         (Mark::Quote, LoroValue::Bool(true)) => Some(TextStyle::Quote),
         (Mark::List, LoroValue::Bool(true)) => Some(TextStyle::List),
-        (Mark::Link, LoroValue::String(address)) if linkable(address) => {
-            Some(TextStyle::Link(address.to_string()))
+        (Mark::Link, LoroValue::String(address)) => {
+            let address = ambre_core::LinkUrl::new(address.to_string());
+            linkable(&address).then_some(TextStyle::Link(address))
         }
         _ => None,
     }

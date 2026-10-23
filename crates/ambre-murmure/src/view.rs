@@ -107,7 +107,7 @@ pub struct PageReads {
     pub take_returned: Rc<dyn Fn(Region) -> Option<AskedAll>>,
     /// Open the address of a link a click landed on, in a fresh tab with no
     /// opener (`MURMURE-567`).
-    pub open_link: Rc<dyn Fn(&str)>,
+    pub open_link: Rc<dyn Fn(&ambre_core::LinkUrl)>,
     /// The drafts the device keeps, which every region reads before a paint
     /// and writes after it (`MURMURE-210`).
     pub drafts: DraftShelf,
@@ -1785,7 +1785,7 @@ mod tests {
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
-        opened: Rc<RefCell<Vec<String>>>,
+        opened: Rc<RefCell<Vec<ambre_core::LinkUrl>>>,
         /// Each format bar the view handed the page, oldest first.
         bars: Rc<RefCell<Vec<Barred>>>,
         /// The style a press on the bar asked for, for the region it names.
@@ -1910,7 +1910,9 @@ mod tests {
                     None
                 }
             }),
-            open_link: Rc::new(move |address: &str| opens.borrow_mut().push(address.to_owned())),
+            open_link: Rc::new(move |address: &ambre_core::LinkUrl| {
+                opens.borrow_mut().push(address.clone())
+            }),
             drafts: DraftShelf::default(),
             ask_emoji: Rc::new(move |in_thread| asks.borrow_mut().push(in_thread)),
             take_emoji: Rc::new(move |in_thread| {
@@ -2211,7 +2213,7 @@ mod tests {
         let link = |text: &str, address: &str, range| {
             let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), text);
             sent.styles = vec![StyleMark {
-                style: TextStyle::Link(address.to_owned()),
+                style: TextStyle::Link(address.into()),
                 range,
             }];
             sent
@@ -2263,7 +2265,13 @@ mod tests {
         assert!(page.view.touch_up(ambre_bus::PageTime(50.0)).is_some());
         frame_with_fonts(&mut page.view);
         let opened = page.opened.borrow().clone();
-        assert_eq!(opened, ["https://ambre.dev", "https://ambre.dev"]);
+        assert_eq!(
+            opened,
+            [
+                ambre_core::LinkUrl::from("https://ambre.dev"),
+                ambre_core::LinkUrl::from("https://ambre.dev")
+            ]
+        );
         assert!(page.commands.try_recv().is_err(), "the opens sent nothing");
     }
 

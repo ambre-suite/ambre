@@ -1144,7 +1144,7 @@ fn a_press_with_the_modifier_hands_the_target_over_and_moves_nothing() {
     let sent = rig.sent.len();
     let at = rig.point_of(block, 8);
     assert!(press_follow(&mut rig, at, true));
-    assert_eq!(rig.ui.followed.as_deref(), Some(TARGET));
+    assert_eq!(rig.ui.followed, Some(TARGET.into()));
     assert_eq!(rig.ui.cursor, before);
     assert_eq!(rig.sent.len(), sent, "nothing is written");
     // Off a link, the modifier is an ordinary press.

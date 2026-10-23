@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::ElementId;
+use ambre_bus::app::toile::{ElementId, WebAddress};
 use ambre_toile::ui::embed::VisibleWebEmbed;
 use wasm_bindgen::JsCast;
 
@@ -51,7 +51,7 @@ pub struct WebFrames {
     /// The address each frame was last pointed at, so a board redraw does not
     /// reload a page that has not changed. Reloading on every frame would make
     /// an embedded page unusable.
-    urls: HashMap<ElementId, String>,
+    urls: HashMap<ElementId, WebAddress>,
 }
 
 impl WebFrames {
@@ -83,8 +83,8 @@ impl WebFrames {
             // Point it somewhere only when the address actually changed: `src`
             // is a navigation, and a per-frame navigation is a page that never
             // finishes loading.
-            if self.urls.get(&e.element).map(String::as_str) != Some(e.url.as_str()) {
-                frame.set_src(&e.url);
+            if self.urls.get(&e.element) != Some(&e.url) {
+                frame.set_src(e.url.as_str());
                 self.urls.insert(e.element.clone(), e.url.clone());
             }
             // Until the embed is entered the frame lets the pointer through, so
@@ -146,7 +146,7 @@ fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
 #[cfg(test)]
 mod tests {
     use super::WebFrames;
-    use ambre_bus::app::toile::ElementId;
+    use ambre_bus::app::toile::{ElementId, WebAddress};
     use ambre_draw::{Affine, Rect, Size};
     use ambre_toile::ui::embed::VisibleWebEmbed;
     use wasm_bindgen::JsCast;
@@ -167,7 +167,7 @@ mod tests {
             .expect("an element");
         let embed = VisibleWebEmbed {
             element: ElementId("page".to_owned()),
-            url: "about:blank".to_owned(),
+            url: WebAddress::new("about:blank".to_owned()),
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
             layout_size: Size::new(200.0, 100.0),
             to_screen: Affine::IDENTITY,

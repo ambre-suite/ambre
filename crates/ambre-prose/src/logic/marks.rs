@@ -290,7 +290,7 @@ struct MarkFold {
     counts: [(u32, u32); 5],
     /// The link every run carries so far: `None` before the first run, and
     /// `Some(None)` once two runs disagree or one carries none.
-    link: Option<Option<String>>,
+    link: Option<Option<ambre_core::LinkUrl>>,
 }
 
 impl MarkFold {
@@ -302,7 +302,7 @@ impl MarkFold {
                 *off += 1;
             }
         }
-        let this = marks.get("a").cloned();
+        let this = marks.get("a").cloned().map(ambre_core::LinkUrl::new);
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),

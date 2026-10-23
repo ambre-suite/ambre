@@ -639,7 +639,7 @@ pub enum RestEvent {
     // -- Provider sign-in ----------------------------------------------------------
     /// The provider's authorization address, and the `state` the relay bound to it.
     ProviderAddress {
-        url: String,
+        url: ambre_core::ProviderUrl,
         state: ambre_core::OidcState,
     },
     /// The provider return was exchanged. The tokens stayed on the Sync worker;

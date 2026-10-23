@@ -33,7 +33,9 @@ pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
                 .as_ref()
                 .and_then(|attributes| attributes.get(LINK_KEY))
                 .and_then(|value| match value {
-                    LoroValue::String(url) if !url.is_empty() => Some(url.to_string()),
+                    LoroValue::String(url) if !url.is_empty() => {
+                        Some(ambre_core::LinkUrl::new(url.to_string()))
+                    }
                     _ => None,
                 });
             if let Some(url) = url {
@@ -67,8 +69,9 @@ const OPENABLE: [&str; 3] = ["http", "https", "mailto"];
 /// The scheme is read the way a browser reads it: leading spaces and control
 /// characters skipped, tabs and newlines inside dropped, case folded.
 #[must_use]
-pub fn openable(url: &str) -> bool {
+pub fn openable(url: &ambre_core::LinkUrl) -> bool {
     let cleaned: String = url
+        .as_str()
         .trim_start_matches(|c: char| c <= ' ')
         .chars()
         .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
@@ -114,7 +117,7 @@ mod tests {
             block_id: block,
             start: DocOffset::new(4),
             end: DocOffset::new(12),
-            url: "https://example.org/".to_owned(),
+            url: "https://example.org/".into(),
         }];
         assert!(events.contains(&ProseEvent::LinksUpdated {
             links: expected.clone()
@@ -137,7 +140,7 @@ mod tests {
             "HTTPS://example.org/",
             "mailto:someone@example.org",
         ] {
-            assert!(super::openable(url), "{url}");
+            assert!(super::openable(&url.into()), "{url}");
         }
         for url in [
             "javascript:alert(1)",
@@ -153,7 +156,7 @@ mod tests {
             "example.org",
             "",
         ] {
-            assert!(!super::openable(url), "{url}");
+            assert!(!super::openable(&url.into()), "{url}");
         }
     }
 }

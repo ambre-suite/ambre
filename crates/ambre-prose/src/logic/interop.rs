@@ -316,7 +316,7 @@ fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, u32>) -> IrRun {
             "c" => out.code = true,
             "a" => {
                 if let LoroValue::String(url) = value {
-                    out.link = Some(url.to_string());
+                    out.link = Some(ambre_core::LinkUrl::new(url.to_string()));
                 }
             }
             "fg" | "bg" | "fs" | "ff" => out.styled = true,

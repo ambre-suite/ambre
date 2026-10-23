@@ -85,9 +85,13 @@ pub use run::run_with;
 /// Open a web address in a fresh tab with `noopener,noreferrer`. The page can
 /// neither reach back into this window nor learn where it came from. A
 /// followed Toile link and a clicked Murmure link both open through it.
-pub(crate) fn open_address(url: &str) {
+pub(crate) fn open_address(url: &ambre_core::LinkUrl) {
     if let Some(window) = web_sys::window() {
-        let _ = window.open_with_url_and_target_and_features(url, "_blank", "noopener,noreferrer");
+        let _ = window.open_with_url_and_target_and_features(
+            url.as_str(),
+            "_blank",
+            "noopener,noreferrer",
+        );
     }
 }
 

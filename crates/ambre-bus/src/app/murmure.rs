@@ -191,7 +191,7 @@ pub enum TextStyle {
     /// Inline code: a marker typed in it stays text (`MURMURE-198`).
     Code,
     /// A link to an `http` or `https` address (`MURMURE-561`).
-    Link(String),
+    Link(ambre_core::LinkUrl),
     /// A block of code: its lines, the fences gone. A marker typed in it
     /// stays text (`MURMURE-198`).
     CodeBlock,

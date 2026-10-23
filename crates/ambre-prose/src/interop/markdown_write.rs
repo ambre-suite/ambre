@@ -366,7 +366,7 @@ impl Writer {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Delimiter {
-    Link(String),
+    Link(ambre_core::LinkUrl),
     Bold,
     Italic,
     Strike,
@@ -384,7 +384,7 @@ impl Delimiter {
 
     fn close(&self) -> String {
         match self {
-            Self::Link(url) => format!("]({})", link_target(url)),
+            Self::Link(url) => format!("]({})", link_target(url.as_str())),
             Self::Bold => "**".to_owned(),
             Self::Italic => "*".to_owned(),
             Self::Strike => "~~".to_owned(),
@@ -531,7 +531,7 @@ mod tests {
             ..IrRun::plain("both")
         };
         let link = IrRun {
-            link: Some("https://example.org".to_owned()),
+            link: Some("https://example.org".into()),
             ..IrRun::plain("here")
         };
         let doc = ir(vec![

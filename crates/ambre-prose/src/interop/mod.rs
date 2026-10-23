@@ -119,7 +119,7 @@ pub struct IrRun {
     pub superscript: bool,
     pub subscript: bool,
     pub code: bool,
-    pub link: Option<String>,
+    pub link: Option<ambre_core::LinkUrl>,
     /// A colour, a background, a size or a family.
     pub styled: bool,
     pub comment: bool,

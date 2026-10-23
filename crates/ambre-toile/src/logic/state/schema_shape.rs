@@ -282,7 +282,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         (format!("elements/{ANY}/style"), hex(&style.to_bytes())),
         (
             format!("elements/{ANY}/link#url"),
-            hex(&LinkTarget::Url("u".to_owned()).to_bytes()),
+            hex(&LinkTarget::Url("u".into()).to_bytes()),
         ),
         (
             format!("elements/{ANY}/link#frame"),
@@ -496,7 +496,9 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Embed,
         Point::new(40.0, 200.0),
-        InitContent::Embed("https://example.invalid".to_owned()),
+        InitContent::Embed(ambre_bus::app::toile::WebAddress::new(
+            "https://example.invalid".to_owned(),
+        )),
         4,
     );
     let _doc_embed = create(
@@ -531,7 +533,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::SetLink {
         id: rect.clone(),
-        link: Some(LinkTarget::Url("https://example.invalid".to_owned())),
+        link: Some(LinkTarget::Url("https://example.invalid".into())),
     });
     st.handle_command(ToileCommand::LockElements {
         ids: vec![rect.clone()],

@@ -48,7 +48,7 @@ pub struct ProseSignals {
     /// (`PROSE-UI-153`).
     pub over_link: RwSignal<bool>,
     /// A link target to open, until the shell takes it (`PROSE-UI-071`).
-    pub followed: RwSignal<Option<String>>,
+    pub followed: RwSignal<Option<ambre_core::LinkUrl>>,
     /// The format bar, its anchor in CSS pixels (`PROSE-UI-053`).
     pub toolbar: RwSignal<ToolbarState>,
     /// A formatting command a control or a chord invoked, until the view

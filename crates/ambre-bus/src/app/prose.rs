@@ -539,7 +539,7 @@ pub struct ActiveMarks {
     pub code: TriState,
     /// The address, when the whole selection carries one link and the same
     /// one.
-    pub link: Option<String>,
+    pub link: Option<ambre_core::LinkUrl>,
 }
 
 /// A value a band resolves when its page is drawn, and never stores
@@ -669,7 +669,7 @@ pub struct LinkSpan {
     pub block_id: BlockId,
     pub start: DocOffset,
     pub end: DocOffset,
-    pub url: String,
+    pub url: ambre_core::LinkUrl,
 }
 
 /// One pending suggestion as the view lists it, derived from its marks and its

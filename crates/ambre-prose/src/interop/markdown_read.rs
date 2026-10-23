@@ -93,7 +93,7 @@ struct Reader {
     bold: u32,
     italic: u32,
     strike: u32,
-    links: Vec<String>,
+    links: Vec<ambre_core::LinkUrl>,
     /// Inside an image: its alt text is dropped with it.
     image: u32,
     warnings: Warnings,
@@ -241,7 +241,9 @@ impl Reader {
             Tag::Emphasis => self.italic += 1,
             Tag::Strong => self.bold += 1,
             Tag::Strikethrough => self.strike += 1,
-            Tag::Link { dest_url, .. } => self.links.push(dest_url.to_string()),
+            Tag::Link { dest_url, .. } => self
+                .links
+                .push(ambre_core::LinkUrl::new(dest_url.to_string())),
             Tag::Image { .. } => {
                 self.warnings.dropped("image");
                 self.image += 1;
@@ -488,7 +490,7 @@ mod tests {
                     },
                     IrRun::plain(" and "),
                     IrRun {
-                        link: Some("https://x.org".to_owned()),
+                        link: Some("https://x.org".into()),
                         ..IrRun::plain("a link")
                     },
                     IrRun::plain("."),

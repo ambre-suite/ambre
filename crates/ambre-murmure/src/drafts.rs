@@ -249,7 +249,7 @@ struct RowMention {
 #[derive(Serialize, Deserialize)]
 struct RowStyle {
     style: String,
-    link: Option<String>,
+    link: Option<ambre_core::LinkUrl>,
     start: CharOffset,
     end: CharOffset,
 }
@@ -383,7 +383,7 @@ mod tests {
                 TextStyle::Bold,
                 TextStyle::Italic,
                 TextStyle::Code,
-                TextStyle::Link("https://a.example".to_owned()),
+                TextStyle::Link("https://a.example".into()),
                 TextStyle::CodeBlock,
                 TextStyle::Quote,
                 TextStyle::List,

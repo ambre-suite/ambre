@@ -46,7 +46,7 @@ fn mark(style: TextStyle, range: std::ops::Range<usize>) -> StyleMark {
 }
 
 fn link(address: &str) -> TextStyle {
-    TextStyle::Link(address.to_owned())
+    TextStyle::Link(address.into())
 }
 
 fn draft(text: &str, styles: Vec<StyleMark>) -> MessageDraft {

@@ -50,6 +50,8 @@ pub mod id;
 pub mod index;
 pub mod key_hex;
 pub mod key_id;
+/// The target of a link: [`LinkUrl`].
+pub mod link;
 pub mod media;
 /// Two-way choices shared across crates: [`StepDirection`], [`HistoryStep`].
 pub mod mode;
@@ -81,7 +83,7 @@ pub mod zoom;
 pub use authorship::{PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Rgb, Rgba};
-pub use credential::{OidcCode, OidcState, PresignedUrl};
+pub use credential::{OidcCode, OidcState, PresignedUrl, ProviderUrl};
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,
@@ -109,6 +111,7 @@ pub use id::{
 };
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
+pub use link::LinkUrl;
 pub use media::{ByteSize, ContentHash, MediaType};
 pub use mode::{HistoryStep, StepDirection, Visibility};
 pub use name::{

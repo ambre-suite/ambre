@@ -367,7 +367,7 @@ mod tests {
         );
         js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
         let reads = page_reads(MurmureRelay::new(), TextInput::detached(), Rc::new(|_| {}));
-        (reads.open_link)("https://ambre.dev/a");
+        (reads.open_link)(&"https://ambre.dev/a".into());
         js_sys::Reflect::set(&window, &key, &original).expect("open restored");
         let opened = js_sys::Reflect::get(&window, &"__murmureOpened".into()).expect("a record");
         let opened: Vec<String> = js_sys::Array::from(&opened)

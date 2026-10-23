@@ -487,7 +487,7 @@ impl ElementStyle {
 pub enum LinkTarget {
     /// A web address, opened by the shell in a sandboxed tab. The board never
     /// fetches it (`TOILE-110`).
-    Url(String),
+    Url(ambre_core::LinkUrl),
     /// A frame on this board: the camera fits to it (`TOILE-113`).
     Frame(ElementId),
     /// Another Ambre document, opened by the shell (`TOILE-114`).
@@ -507,6 +507,46 @@ impl LinkTarget {
     /// than as a link nobody can follow.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         postcard::from_bytes(bytes).ok()
+    }
+}
+
+/// The address of a web page that an embed frames (`toile-embeds`).
+///
+/// The placement dialog makes one only through the toile address check, so a
+/// local write is an `https` address. The board also reads one back from the
+/// document, and a peer may write any text there. Nothing checks it again on
+/// that path, so a stored address is untrusted. `Debug` prints the bare text,
+/// as the `String` it replaced did.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct WebAddress(String);
+
+impl WebAddress {
+    /// The address spelled as `text`, with no check.
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The address's text, for the frame that loads it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The address's text, for the document that stores it.
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for WebAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::Display for WebAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -672,7 +712,7 @@ pub enum InitContent {
     None,
     Path(BezPath),
     Image(ambre_core::ContentHash), // blake2b plaintext hash, key into `media`
-    Embed(String),                  // web url (sandboxed iframe)
+    Embed(WebAddress),              // web url (sandboxed iframe)
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
@@ -2000,7 +2040,7 @@ pub enum DisplayGeom {
     /// (`toile-embeds`).
     Group,
     /// Web url (sandboxed iframe).
-    Embed(String),
+    Embed(WebAddress),
     /// Nested Ambre document (`toile-embeds`).
     DocEmbed {
         document_id: DocumentId,

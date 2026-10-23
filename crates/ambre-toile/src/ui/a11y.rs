@@ -73,7 +73,7 @@ fn kind_name(element: &DisplayElement) -> &'static str {
 fn element_text(geom: &DisplayGeom) -> Option<&str> {
     match geom {
         DisplayGeom::Sticky(s) | DisplayGeom::Text(s) | DisplayGeom::Frame(s) => Some(s),
-        DisplayGeom::Embed(url) => Some(url),
+        DisplayGeom::Embed(url) => Some(url.as_str()),
         _ => None,
     }
 }
