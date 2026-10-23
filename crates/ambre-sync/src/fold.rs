@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(json(2)["covered_seq"], 41, "the fold covers the horizon");
         let commit = sent.len() - 1;
         assert_eq!(
-            sent[commit].url,
+            sent[commit].url.expose(),
             format!("{BASE}/api/channels/{channel}/segments/{segment}/fold")
         );
         assert_eq!(

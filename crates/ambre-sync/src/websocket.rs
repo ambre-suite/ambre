@@ -30,21 +30,6 @@ pub(crate) struct ReplayStops {
     ticket: crate::generation::ReplayTicket,
 }
 
-/// The socket address. It carries no credential: the token travels in the
-/// socket's first frame, so no log line, proxy record or URL holds it
-/// (`SYNC-061`, `ambre-spec-session.md`, `SRV-031`).
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub(crate) fn socket_address(
-    scheme: crate::http::UrlScheme,
-    api_base: &crate::http::RelayHost,
-) -> String {
-    let socket = match scheme {
-        crate::http::UrlScheme::Http => "ws",
-        crate::http::UrlScheme::Https => "wss",
-    };
-    format!("{socket}://{api_base}/api/ws")
-}
-
 impl SyncState {
     /// Sends the access token as the socket's first frame. The relay reads
     /// nothing else until this frame opens the session (`SRV-031`).
@@ -78,8 +63,8 @@ impl SyncState {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
         }
-        let url = socket_address(self.url_scheme, &self.api_base);
-        match WebSocket::new(&url) {
+        let url = crate::http::SocketUrl::of(self.url_scheme, &self.api_base);
+        match WebSocket::new(url.as_str()) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
                 self.wire_ws_callbacks(&ws);
@@ -1641,7 +1626,7 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay_ms, socket_address};
+    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay_ms};
     use crate::http::{SecretToken, TokenPair};
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
@@ -1653,7 +1638,7 @@ mod tests {
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let id = DocumentId::new();
         state.documents.insert(
             id,
@@ -1832,7 +1817,7 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
         let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
@@ -1884,7 +1869,7 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
             let id = DocumentId::new();
@@ -1938,10 +1923,11 @@ mod tests {
     #[test]
     fn the_socket_address_carries_no_token() {
         assert_eq!(
-            socket_address(
+            crate::http::SocketUrl::of(
                 crate::http::UrlScheme::Https,
                 &crate::http::RelayHost::new("relay.example".to_owned())
-            ),
+            )
+            .as_str(),
             "wss://relay.example/api/ws"
         );
     }

@@ -1412,7 +1412,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_creation_and_a_join_fail_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new());
+        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let (channel_id, space_id) = (ChannelId::new(), SpaceId::new());
         for visibility in [
             ambre_core::Visibility::Public,
@@ -1440,7 +1440,7 @@ pub(crate) mod tests {
     #[test]
     fn a_delete_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let channel_id = ChannelId::new();
         let meta = DocumentId::new();
         state.documents.insert(
@@ -1480,7 +1480,7 @@ pub(crate) mod tests {
     #[test]
     fn a_leave_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let channel_id = ChannelId::new();
         let meta = DocumentId::new();
         state.documents.insert(
@@ -1521,7 +1521,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_refused_for_want_of_membership_reads_as_refused() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let channel_id = ChannelId::new();
         let url = "https://relay.example/api/channels/c/documents";
         for (status, code) in [
@@ -1531,7 +1531,7 @@ pub(crate) mod tests {
         ] {
             let error = crate::http::HttpError::refused(
                 crate::http::Method::Get,
-                url,
+                &crate::http::Target::relay(url),
                 ambre_core::HttpStatus(status),
                 code,
             );
@@ -1556,7 +1556,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new());
+        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let space_id = SpaceId::new();
         let channel_id = ChannelId::new();
         let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
@@ -1580,7 +1580,7 @@ pub(crate) mod tests {
     #[test]
     fn the_share_of_a_murmure_document_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         for doc_type in [DocType::Prose, DocType::Murmure] {
             state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentShared {
                 document_id: DocumentId::new(),
@@ -1605,7 +1605,7 @@ pub(crate) mod tests {
     #[test]
     fn the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.user_id = Some(UserId::new());
         let (prose, murmure, unheld) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
         for (id, doc_type) in [(prose, DocType::Prose), (murmure, DocType::Murmure)] {
@@ -1635,7 +1635,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listing_of_the_users_channels_forwards_their_places() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.handle_list_member_channels();
         state.handle_list_member_channels();
         let (space, bare) = (SpaceId::new(), SpaceId::new());
@@ -1739,7 +1739,8 @@ pub(crate) mod tests {
     /// none, and so does an empty one. A meta never named shows none.
     #[tokio::test]
     async fn a_listed_name_opens_under_the_users_key_of_its_meta() {
-        let mut state = SyncState::new(LogicSink::channel().0, String::new());
+        let mut state =
+            SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
         state.signing_key =
             Some(ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key());
         let own = exchange_key(1);
@@ -1817,7 +1818,8 @@ pub(crate) mod tests {
     /// its meta, under the channel key, and only meta opens it.
     #[test]
     fn a_channel_name_is_sealed_under_the_channel_key_for_its_meta() {
-        let mut state = SyncState::new(LogicSink::channel().0, String::new());
+        let mut state =
+            SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
         let (meta, key) = (MetaId::new(), DocumentKey::generate());
         let design = ambre_core::Name::new("Design").unwrap();
         assert!(
@@ -1846,7 +1848,7 @@ pub(crate) mod tests {
     #[test]
     fn a_new_space_is_created_as_a_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let (space, gone) = (SpaceId::new(), SpaceId::new());
         let other = DocumentId::new();
         state.handle_command(SyncCommand::CreateSpace { space_id: space });
@@ -1890,7 +1892,7 @@ pub(crate) mod tests {
     #[test]
     fn a_listed_meta_walks_under_the_word_of_its_open_space() {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let (space_id, meta) = (SpaceId::new(), DocumentId::new());
         let document_id = space_id.document_id();
         let mut space =
@@ -1906,7 +1908,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new());
+        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let channel_id = ChannelId::new();
         state.handle_open_channel(channel_id, None);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
@@ -2025,7 +2027,7 @@ pub(crate) mod tests {
     #[test]
     fn with_no_relay_a_direct_message_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
-        let state = SyncState::new(sink, String::new());
+        let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let channel_id = ChannelId::new();
         let members = vec![member_of(&exchange_key(2))];
         state.handle_create_direct_message(channel_id, (MetaId::new(), SegmentId::new()), members);

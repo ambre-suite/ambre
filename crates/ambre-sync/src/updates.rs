@@ -1841,7 +1841,7 @@ mod tests {
         SnapshotId,
     ) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();

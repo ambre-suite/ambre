@@ -197,7 +197,7 @@ impl SyncState {
                     signing_pub_key,
                     exchange_pub_key,
                 };
-                match http::post_json::<_, http::DevLoginResponse>(url.as_str(), &body).await {
+                match http::post_json::<_, http::DevLoginResponse>(&url, &body).await {
                     Ok(resp) => {
                         let user_id = resp.user_id;
                         let _ = tx.send(SyncEvent::SessionReady {
@@ -258,7 +258,7 @@ impl SyncState {
         let url = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
             .route(format!("/auth/{provider}/login"));
         wasm_bindgen_futures::spawn_local(async move {
-            let evt = match http::get_json::<http::ProviderLoginResponse>(url.as_str()).await {
+            let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
                 Ok(resp) => LogicEvent::Rest {
                     id,
                     evt: RestEvent::ProviderAddress {
@@ -298,16 +298,14 @@ impl SyncState {
             let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                 .route(format!("/auth/{provider}/callback"));
             let body = http::ProviderCallbackRequest { code, state };
-            let resp =
-                match http::post_json::<_, http::ProviderCallbackResponse>(url.as_str(), &body)
-                    .await
-                {
-                    Ok(resp) => resp,
-                    Err(message) => {
-                        let _ = logic_tx.send(auth_failed(message));
-                        return;
-                    }
-                };
+            let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
+            {
+                Ok(resp) => resp,
+                Err(message) => {
+                    let _ = logic_tx.send(auth_failed(message));
+                    return;
+                }
+            };
             // A context of its own: the worker's store takes the tokens only
             // once the whole sign-in has succeeded.
             let auth = http::AuthContext {
@@ -410,7 +408,7 @@ impl SyncState {
                     signing_pubkey: signing_pub_key,
                     exchange_pubkey: exchange_pub_key,
                 };
-                match http::post_json::<_, http::SetupAccountResponse>(url.as_str(), &body).await {
+                match http::post_json::<_, http::SetupAccountResponse>(&url, &body).await {
                     Ok(resp) => {
                         let _ = tx.send(SyncEvent::AccountCreated {
                             id,
@@ -531,7 +529,10 @@ mod provider_tests {
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        (SyncState::new(sink, String::new()), rx)
+        (
+            SyncState::new(sink, crate::RelayHost::new(String::new())),
+            rx,
+        )
     }
 
     fn signed_in(keys_stored: bool) -> SyncEvent {

@@ -3626,22 +3626,15 @@ ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-te
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Local.0 | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::NoAnswer.reason | field | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | HttpError::NoAnswer.url | field | String	debt	a URL as a bare String: RelayUrl exists
-ambre-sync | src/http.rs | crate::http | HttpError::Refused.url | field | String	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.url | field | String	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | HttpError::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
-ambre-sync | src/http.rs | crate::http | HttpError::refused(url) | param | &str	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(ContentType,Vec<u8>)>	generic	HTTP body bytes, content type typed
-ambre-sync | src/http.rs | crate::http | Outgoing.url | field | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | Outgoing::json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | Outgoing::new(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayHost::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | RelayHost::new(host) | param | String	newtype-inner	newtype field, constructor or accessor
@@ -3656,10 +3649,10 @@ ambre-sync | src/http.rs | crate::http | UNKNOWN_WORD | const | &str	debt	findin
 ambre-sync | src/http.rs | crate::http | bearer() | ret | Zeroizing<String>	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | encode_link() | ret | Result<ambre_core::EncodedKeyLink,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/http.rs | crate::http | get_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | is_personal() | ret | bool	generic	predicate result: the serde skip test of CreateDocumentRequest.space
-ambre-sync | src/http.rs | crate::http | post_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | post_json_via(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
+ambre-sync | src/http.rs | crate::http | SocketUrl.0 | field | String	newtype-inner	newtype field, constructor or accessor
+ambre-sync | src/http.rs | crate::http | SocketUrl::as_str() | ret | &str	newtype-inner	newtype field, constructor or accessor
+ambre-sync | src/http.rs | crate::http | Target::expose() | ret | &str	foreign-api	the full address the browser's fetch takes
 ambre-sync | src/lib.rs | crate | APPLIED_WINDOW | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | MAX_EPHEMERAL_REMOTE_AUTHORS | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | QUARANTINE_ALERT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -3692,12 +3685,10 @@ ambre-sync | src/lib.rs | crate | SyncState.setup_owed | field | bool	generic	ye
 ambre-sync | src/lib.rs | crate | SyncState.socket_opens | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState.update_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState::documents_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | SyncState::new(api_base) | param | String	debt	the relay base as a bare String: RelayUrl exists
 ambre-sync | src/lib.rs | crate | SyncState::send_wire(wire) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState::set_mock_ws(tx) | param | ambre_bus::conduit::UnboundedSender<Vec<u8>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState::ws_connected() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | carries_payload() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | run_wasm(api_base) | param | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle.attempts | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::back_off(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
@@ -3853,7 +3844,6 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconne
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay_ms(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | socket_address() | ret | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/worker.rs | crate::worker | post_bytes(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text

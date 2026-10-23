@@ -2260,7 +2260,7 @@ mod tests {
             ] })),
             Err(http::HttpError::refused(
                 http::Method::Post,
-                "https://api.test/revoke",
+                &crate::http::Target::relay("https://api.test/revoke"),
                 ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )),
@@ -2312,7 +2312,7 @@ mod tests {
             script.push(Ok(members.clone()));
             script.push(Err(http::HttpError::refused(
                 http::Method::Post,
-                "https://api.test/revoke",
+                &crate::http::Target::relay("https://api.test/revoke"),
                 ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )));
@@ -2349,7 +2349,7 @@ mod tests {
             ),
             Err(http::HttpError::refused(
                 http::Method::Post,
-                "https://api.test/rotate-key",
+                &crate::http::Target::relay("https://api.test/rotate-key"),
                 ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )),
@@ -2401,7 +2401,7 @@ mod tests {
             Ok(serde_json::json!({ "members": [] })),
             Err(http::HttpError::refused(
                 http::Method::Post,
-                "https://api.test/share",
+                &crate::http::Target::relay("https://api.test/share"),
                 ambre_core::HttpStatus(409),
                 Some(RefusalCode::KeyChanged),
             )),
@@ -2844,7 +2844,7 @@ mod tests {
         ] });
         let changed = http::HttpError::refused(
             http::Method::Post,
-            "x",
+            &crate::http::Target::relay("x"),
             ambre_core::HttpStatus(409),
             Some(RefusalCode::MembersChanged),
         );
@@ -3377,7 +3377,7 @@ mod tests {
             Ok(first),
             Err(http::HttpError::refused(
                 http::Method::Post,
-                "https://api.test/share",
+                &crate::http::Target::relay("https://api.test/share"),
                 ambre_core::HttpStatus(409),
                 Some(RefusalCode::LogMoved),
             )),

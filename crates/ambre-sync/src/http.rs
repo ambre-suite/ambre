@@ -46,11 +46,11 @@ pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
 /// `relay.example` or `localhost:3000`. Every URL of the relay is built from
 /// it, through [`ApiRoot`] or the socket address.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RelayHost(String);
+pub struct RelayHost(String);
 
 impl RelayHost {
     /// The host the page configured.
-    pub(crate) fn new(host: String) -> Self {
+    pub fn new(host: String) -> Self {
         Self(host)
     }
 
@@ -119,6 +119,38 @@ impl std::fmt::Display for ApiRoot {
     }
 }
 
+/// The address of the relay's socket, `{ws|wss}://{host}/api/ws`. It carries
+/// no credential: the token travels in the socket's first frame, so no log
+/// line, proxy record or URL holds it (`SYNC-061`, `ambre-spec-session.md`,
+/// `SRV-031`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SocketUrl(String);
+
+impl SocketUrl {
+    /// The socket of `host`, under the TLS choice `scheme` makes for its
+    /// routes.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn of(scheme: UrlScheme, host: &RelayHost) -> Self {
+        let socket = match scheme {
+            UrlScheme::Http => "ws",
+            UrlScheme::Https => "wss",
+        };
+        Self(format!("{socket}://{host}/api/ws"))
+    }
+
+    /// The address, as the browser's socket constructor takes it.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SocketUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// The URL of one of the relay's REST routes. Only [`ApiRoot::route`] builds
 /// one, and every helper that attaches the access token takes one. A
 /// presigned object-storage link is not one, so the token never reaches the
@@ -141,6 +173,60 @@ impl RelayUrl {
 impl std::fmt::Display for RelayUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+/// Where a request goes: one of the relay's routes, or an object a presigned
+/// link names. Only a relay route ever carries the access token. A presigned
+/// link is a credential of its own, so its text never reaches a log: the
+/// target reads as the link without its query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Target {
+    /// A route of the relay.
+    Relay(RelayUrl),
+    /// An object in storage, through its presigned link.
+    Object(ambre_core::PresignedUrl),
+}
+
+impl Target {
+    /// The full address, for the one call that sends the request.
+    pub(crate) fn expose(&self) -> &str {
+        match self {
+            Self::Relay(url) => url.as_str(),
+            Self::Object(link) => link.expose(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Target {
+    /// A relay route spelled out, for a test that builds an error by hand.
+    pub(crate) fn relay(text: &str) -> Self {
+        Self::Relay(RelayUrl(text.to_owned()))
+    }
+}
+
+impl From<&RelayUrl> for Target {
+    fn from(url: &RelayUrl) -> Self {
+        Self::Relay(url.clone())
+    }
+}
+
+impl From<&ambre_core::PresignedUrl> for Target {
+    fn from(link: &ambre_core::PresignedUrl) -> Self {
+        Self::Object(link.clone())
+    }
+}
+
+impl std::fmt::Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Relay(url) => url.fmt(f),
+            Self::Object(link) => {
+                let text = link.expose();
+                f.write_str(text.split_once('?').map_or(text, |(address, _)| address))
+            }
+        }
     }
 }
 
@@ -192,7 +278,7 @@ impl AuthContext {
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,
         };
-        let next = post_json_via::<_, TokenPair>(transport, url.as_str(), &body).await?;
+        let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
         *self.tokens.borrow_mut() = Some(next);
         Ok(())
     }
@@ -215,7 +301,7 @@ impl AuthContext {
             let body = RefreshRequest {
                 refresh_token: self.refresh_token()?,
             };
-            let mut request = Outgoing::json(Method::Post, url.as_str(), &body)?;
+            let mut request = Outgoing::json(Method::Post, (&url).into(), &body)?;
             request.bearer = Some(self.access_token()?);
             let resp = exchange(transport, &request).await?;
             Ok::<_, HttpError>((request, resp))
@@ -284,7 +370,7 @@ pub(crate) struct Outgoing {
     /// The method.
     pub method: Method,
     /// Where it goes.
-    pub url: String,
+    pub url: Target,
     /// The access token the `Authorization` header presents, on a request to
     /// the relay that needs one. The transport spells the header at send time.
     pub bearer: Option<SecretToken>,
@@ -297,10 +383,10 @@ pub(crate) struct Outgoing {
 impl Outgoing {
     /// A request with no body and no credential, under the per-request
     /// timeout.
-    fn new(method: Method, url: &str) -> Self {
+    fn new(method: Method, url: Target) -> Self {
         Self {
             method,
-            url: url.to_owned(),
+            url,
             bearer: None,
             body: None,
             timeout_ms: REQUEST_TIMEOUT_MS,
@@ -308,7 +394,7 @@ impl Outgoing {
     }
 
     /// A request carrying `body` as JSON.
-    fn json<T: Serialize>(method: Method, url: &str, body: &T) -> Result<Self, HttpError> {
+    fn json<T: Serialize>(method: Method, url: Target, body: &T) -> Result<Self, HttpError> {
         let bytes = serde_json::to_vec(body).map_err(|e| {
             HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
         })?;
@@ -363,7 +449,7 @@ impl Transport for Fetch {
         let signal = web_sys::AbortSignal::timeout_with_u32(
             u32::try_from(request.timeout_ms.0).unwrap_or(u32::MAX),
         );
-        let mut builder = gloo_net::http::RequestBuilder::new(&request.url)
+        let mut builder = gloo_net::http::RequestBuilder::new(request.url.expose())
             .method(request.method.gloo())
             .abort_signal(Some(&signal));
         if let Some(token) = &request.bearer {
@@ -435,7 +521,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: String,
+        url: Target,
         /// What the transport said.
         reason: String,
     },
@@ -448,7 +534,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: String,
+        url: Target,
         /// The status the relay answered.
         status: HttpStatus,
         /// The code its body named, on a status that may carry one.
@@ -460,7 +546,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: String,
+        url: Target,
         /// What the parser said.
         reason: String,
         /// Whether the body was malformed, or named a word this build does
@@ -478,7 +564,7 @@ impl HttpError {
     /// kept only with the status that may carry it.
     pub(crate) fn refused(
         method: Method,
-        url: &str,
+        url: &Target,
         status: HttpStatus,
         code: Option<RefusalCode>,
     ) -> Self {
@@ -490,7 +576,7 @@ impl HttpError {
         };
         Self::Refused {
             method,
-            url: url.to_owned(),
+            url: url.clone(),
             status,
             code,
         }
@@ -740,7 +826,7 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
     url: &RelayUrl,
     auth: &AuthContext,
 ) -> Result<Option<T>, HttpError> {
-    let mut request = Outgoing::new(Method::Get, url.as_str());
+    let mut request = Outgoing::new(Method::Get, url.into());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     if resp.status == HttpStatus(404) {
         return Ok(None);
@@ -754,7 +840,7 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
     url: &RelayUrl,
     auth: &AuthContext,
 ) -> Result<T, HttpError> {
-    let mut request = Outgoing::new(Method::Get, url.as_str());
+    let mut request = Outgoing::new(Method::Get, url.into());
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
 }
@@ -762,10 +848,10 @@ pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
 /// A POST of JSON that carries no credential, answered with JSON.
 pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
     transport: &impl Transport,
-    url: &str,
+    url: &RelayUrl,
     body: &T,
 ) -> Result<R, HttpError> {
-    let request = Outgoing::json(Method::Post, url, body)?;
+    let request = Outgoing::json(Method::Post, url.into(), body)?;
     let resp = exchange(transport, &request).await?;
     read_json(&request, &resp)
 }
@@ -777,7 +863,7 @@ pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOw
     body: &T,
     auth: &AuthContext,
 ) -> Result<R, HttpError> {
-    let mut request = Outgoing::json(Method::Post, url.as_str(), body)?;
+    let mut request = Outgoing::json(Method::Post, url.into(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     read_json(&request, &resp)
 }
@@ -791,7 +877,7 @@ pub(crate) async fn send_json_auth_via<T: Serialize>(
     body: &T,
     auth: &AuthContext,
 ) -> Result<(), HttpError> {
-    let mut request = Outgoing::json(method, url.as_str(), body)?;
+    let mut request = Outgoing::json(method, url.into(), body)?;
     let resp = exchange_auth(transport, auth, &mut request).await?;
     expect_ok(&request, &resp)
 }
@@ -806,8 +892,10 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
 
 /// HTTP GET to JSON deserialized response.
 #[allow(dead_code)]
-pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, HttpError> {
-    let request = Outgoing::new(Method::Get, url);
+pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
+    url: &RelayUrl,
+) -> Result<T, HttpError> {
+    let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
     read_json(&request, &resp)
 }
@@ -820,7 +908,7 @@ pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
 }
 
 pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
-    url: &str,
+    url: &RelayUrl,
     body: &T,
 ) -> Result<R, HttpError> {
     post_json_via(&Fetch, url, body).await
@@ -856,7 +944,7 @@ pub(crate) async fn download_snapshot(
 }
 
 pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {
-    let mut request = Outgoing::new(Method::Delete, url.as_str());
+    let mut request = Outgoing::new(Method::Delete, url.into());
     let resp = exchange_auth(&Fetch, &auth, &mut request).await?;
     expect_ok(&request, &resp)
 }
@@ -867,7 +955,7 @@ pub(crate) async fn delete_status_auth(
     url: &RelayUrl,
     auth: AuthContext,
 ) -> Result<HttpStatus, HttpError> {
-    let mut request = Outgoing::new(Method::Delete, url.as_str());
+    let mut request = Outgoing::new(Method::Delete, url.into());
     exchange_auth(&Fetch, &auth, &mut request)
         .await
         .map(|resp| resp.status)
@@ -893,7 +981,7 @@ pub(crate) async fn put_sealed_via(
 ) -> Result<(), HttpError> {
     let request = Outgoing {
         body: Some((ContentType::Octets, blob.as_bytes().to_vec())),
-        ..Outgoing::new(Method::Put, url.expose())
+        ..Outgoing::new(Method::Put, url.into())
     };
     let resp = exchange(transport, &request).await?;
     expect_ok(&request, &resp)
@@ -936,7 +1024,7 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
 }
 
 pub(crate) async fn fetch_bytes(url: &ambre_core::PresignedUrl) -> Result<Vec<u8>, HttpError> {
-    let request = Outgoing::new(Method::Get, url.expose());
+    let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body)
@@ -1889,7 +1977,7 @@ pub(crate) mod scripted {
             self.sent
                 .borrow()
                 .iter()
-                .map(|r| (r.method, r.url.clone()))
+                .map(|r| (r.method, r.url.expose().to_owned()))
                 .collect()
         }
     }
@@ -1951,7 +2039,7 @@ mod tests {
         } else {
             Method::Post
         };
-        HttpError::refused(method, url, HttpStatus(status), code)
+        HttpError::refused(method, &Target::relay(url), HttpStatus(status), code)
     }
 
     fn is_setup_refusal(error: &HttpError) -> bool {
@@ -2003,7 +2091,7 @@ mod tests {
         let url = "https://relay.example/api/documents/d/share";
         let changed = HttpError::refused(
             Method::Post,
-            url,
+            &Target::relay(url),
             HttpStatus(409),
             Some(RefusalCode::KeyChanged),
         );
@@ -2017,7 +2105,7 @@ mod tests {
         assert_eq!(changed.to_string(), format!("POST {url}: KEY_CHANGED"));
         let plain = HttpError::refused(
             Method::Post,
-            url,
+            &Target::relay(url),
             HttpStatus(500),
             Some(RefusalCode::KeyChanged),
         );
@@ -2041,7 +2129,7 @@ mod tests {
         let _: serde_json::Value = get_json_auth_via(&transport, &url, &auth).await.unwrap();
         let sent = transport.sent.borrow();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].url, url.as_str());
+        assert_eq!(sent[0].url.expose(), url.as_str());
         assert_eq!(bearer_of(&sent[0]).as_deref(), Some("Bearer access-1"));
     }
 
@@ -2070,7 +2158,7 @@ mod tests {
             panic!("expected three requests, got {}", sent.len());
         };
         assert_eq!(bearer_of(first).as_deref(), Some("Bearer access-1"));
-        assert_eq!(renewal.url, "https://relay.test/api/auth/refresh");
+        assert_eq!(renewal.url.expose(), "https://relay.test/api/auth/refresh");
         assert_eq!(
             bearer_of(renewal),
             None,
@@ -2106,7 +2194,7 @@ mod tests {
         let [only] = sent.as_slice() else {
             panic!("expected one request, got {}", sent.len());
         };
-        assert_eq!((only.method, only.url.as_str()), (Method::Post, logout));
+        assert_eq!((only.method, only.url.expose()), (Method::Post, logout));
         assert_eq!(bearer_of(only).as_deref(), Some("Bearer access-1"));
         assert_eq!(
             body_of(only),
@@ -2126,7 +2214,7 @@ mod tests {
         let [_, _, replay] = sent.as_slice() else {
             panic!("expected three requests, got {}", sent.len());
         };
-        assert_eq!(replay.url, logout);
+        assert_eq!(replay.url.expose(), logout);
         assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
         assert_eq!(
             body_of(replay),
@@ -2175,6 +2263,34 @@ mod tests {
             2,
             "no replay without a token"
         );
+    }
+
+    /// A presigned link is its own credential. A failed upload or download
+    /// reads with no byte of its query, because the text reaches a log and a
+    /// toast.
+    #[tokio::test]
+    async fn a_failed_presigned_request_reads_without_its_signature() {
+        let link = ambre_core::PresignedUrl::new(
+            "https://store.test/bucket/object?X-Amz-Signature=secret-sig".to_owned(),
+        );
+        let blob = crate::pipeline::object_blob(
+            b"media",
+            b"aad",
+            &ambre_crypto::DocumentKey::generate(),
+            &ed25519_dalek::SigningKey::from_bytes(&[7; 32]),
+        )
+        .expect("seal");
+        let refused = Scripted::new([Ok((403, serde_json::json!({})))]);
+        let error = put_sealed_via(&refused, &link, &blob).await.unwrap_err();
+        let unanswered = Scripted::new([Err("network down".to_owned())]);
+        let silent = put_sealed_via(&unanswered, &link, &blob).await.unwrap_err();
+        for text in [error.to_string(), silent.to_string()] {
+            assert!(!text.contains("secret-sig"), "{text}");
+            assert!(
+                text.starts_with("PUT https://store.test/bucket/object"),
+                "{text}"
+            );
+        }
     }
 
     /// `SYNC-071`: a request the relay never answers ends with an error once

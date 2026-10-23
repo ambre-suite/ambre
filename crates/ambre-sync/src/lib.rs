@@ -173,6 +173,8 @@ mod websocket;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
+pub use http::RelayHost;
+
 // -----------------------------------------------------------------------------
 // Quarantine bounds (`ambre-spec-delta-order.md`)
 // -----------------------------------------------------------------------------
@@ -1152,8 +1154,7 @@ pub struct SyncState {
 impl SyncState {
     /// A signed-out worker state: the session's tokens arrive with a sign-in.
     #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    pub fn new(logic_tx: LogicSink, api_base: String) -> Self {
-        let api_base = crate::http::RelayHost::new(api_base);
+    pub fn new(logic_tx: LogicSink, api_base: RelayHost) -> Self {
         let url_scheme = crate::http::UrlScheme::of(&api_base);
         Self {
             logic_tx,
@@ -1700,7 +1701,7 @@ impl SyncState {
 pub async fn run_wasm(
     cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
-    api_base: String,
+    api_base: RelayHost,
 ) {
     tracing::info!("Ambre Sync worker starting (wasm async)");
     run(cmd_rx, SyncState::new(logic_sink, api_base)).await;
@@ -1747,8 +1748,10 @@ mod run_tests {
             .run_until(async {
                 let (sink, _logic_rx) = LogicSink::channel();
                 let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
-                let looped =
-                    tokio::task::spawn_local(run(cmd_rx, SyncState::new(sink, String::new())));
+                let looped = tokio::task::spawn_local(run(
+                    cmd_rx,
+                    SyncState::new(sink, crate::RelayHost::new(String::new())),
+                ));
                 tokio::task::yield_now().await;
 
                 let ran = Rc::new(Cell::new(false));
@@ -1780,7 +1783,7 @@ mod setup_tests {
         let url = "https://relay.example/api/documents";
         let refused = http::HttpError::refused(
             http::Method::Get,
-            url,
+            &crate::http::Target::relay(url),
             ambre_core::HttpStatus(403),
             Some(ambre_core::RefusalCode::SetupRequired),
         );
@@ -1797,8 +1800,12 @@ mod setup_tests {
             failure: ApiFailure::NoAnswer,
             message: format!("{refused}"),
         });
-        let bare =
-            http::HttpError::refused(http::Method::Get, url, ambre_core::HttpStatus(403), None);
+        let bare = http::HttpError::refused(
+            http::Method::Get,
+            &crate::http::Target::relay(url),
+            ambre_core::HttpStatus(403),
+            None,
+        );
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
             request: ApiRequest::ListDocuments,
@@ -1836,7 +1843,7 @@ mod setup_tests {
         use ambre_core::UnreadableCause;
         let unreadable = |cause| http::HttpError::Unreadable {
             method: http::Method::Get,
-            url: "https://relay.example/api/documents/d/members".into(),
+            url: crate::http::Target::relay("https://relay.example/api/documents/d/members"),
             reason: "unknown variant `auditor`".into(),
             cause,
         };
@@ -1967,7 +1974,7 @@ mod seal_tests {
     /// handed.
     fn with_socket() -> (SyncState, DocumentId, ambre_bus::conduit::Receiver<Vec<u8>>) {
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, String::new());
+        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
         let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
