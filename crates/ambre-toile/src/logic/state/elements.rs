@@ -19,7 +19,7 @@ use crate::logic::text_merge::merge_edits;
 
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
+    bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, stored_rect, stroke_aabb,
 };
 use super::names::{ElementKey, Fields, Root};
 use super::{ToileState, write_edits};
@@ -110,7 +110,10 @@ impl ToileState {
             .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Element(id.clone()).encode().as_str());
 
-        let rect = expanded_aabb(at.x, at.y, size.width, size.height, 0.0);
+        let rect = expanded_aabb(
+            Rect::new(at.x, at.y, at.x + size.width, at.y + size.height),
+            0.0,
+        );
         self.bounds.insert(id.clone(), rect);
         self.index
             .insert(ElementBounds::from_rect(id.clone(), rect));
@@ -254,10 +257,9 @@ impl ToileState {
             if bool_of(&em, ElementKey::Locked) {
                 continue; // locked blocks edit locally (advisory)
             }
-            let x = f64_of(&em, ElementKey::X) + delta.x;
-            let y = f64_of(&em, ElementKey::Y) + delta.y;
-            let _ = em.insert(ElementKey::X, x);
-            let _ = em.insert(ElementKey::Y, y);
+            let at = stored_rect(&em).origin() + delta;
+            let _ = em.insert(ElementKey::X, at.x);
+            let _ = em.insert(ElementKey::Y, at.y);
             self.update_bounds(id, &em);
             touched = true;
         }
@@ -316,8 +318,9 @@ impl ToileState {
                 if bool_of(&em, ElementKey::Locked) {
                     continue; // a locked leaf inside a moving group stays put
                 }
-                let _ = em.insert(ElementKey::X, f64_of(&em, ElementKey::X) + delta.x);
-                let _ = em.insert(ElementKey::Y, f64_of(&em, ElementKey::Y) + delta.y);
+                let at = stored_rect(&em).origin() + delta;
+                let _ = em.insert(ElementKey::X, at.x);
+                let _ = em.insert(ElementKey::Y, at.y);
                 self.update_bounds(leaf, &em);
                 touched = true;
             }
@@ -402,7 +405,7 @@ impl ToileState {
             if bool_of(&em, ElementKey::Locked) {
                 continue;
             }
-            let existing = self.style_read(&bin_of(&em, ElementKey::Style));
+            let existing = self.style_read(bin_of(&em, ElementKey::Style).as_deref());
             let merged = existing.merged_over(style);
             let _ = em.insert(
                 ElementKey::Style,

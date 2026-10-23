@@ -6,7 +6,7 @@
 //! super::codec::*`.
 
 use ambre_core::crdt::FieldKey;
-use kurbo::{Affine, Point, Rect, Vec2};
+use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use loro::{Container, LoroMap, LoroText, LoroValue, ValueOrContainer};
 
 use crate::logic::command::{ClipValue, InitContent};
@@ -18,10 +18,9 @@ use crate::logic::model::{
 
 use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
 
-/// Rotation-expanded axis-aligned bounds of a rect rotated by `rot` about its
+/// Rotation-expanded axis-aligned bounds of `r` rotated by `rot` about its
 /// center. For `rot == 0` this is the rect itself.
-pub(super) fn expanded_aabb(x: f64, y: f64, w: f64, h: f64, rot: f64) -> Rect {
-    let r = Rect::new(x, y, x + w, y + h);
+pub(super) fn expanded_aabb(r: Rect, rot: f64) -> Rect {
     if rot == 0.0 {
         return r;
     }
@@ -165,26 +164,54 @@ pub(super) fn content_matches(kind: ElementKind, content: &InitContent) -> bool 
 /// The kind an element map's type tag names. An unknown tag reads as a
 /// rectangle, and so does a shape with no readable shape tag.
 pub(super) fn kind_of(em: &Fields<ElementKey>) -> ElementKind {
-    match str_of(em, ElementKey::Type).as_str() {
-        "shape" => ElementKind::Shape(
-            ShapeKind::from_tag(&str_of(em, ElementKey::Shape)).unwrap_or(ShapeKind::Rect),
-        ),
-        "sticky" => ElementKind::Sticky,
-        "text" => ElementKind::Text,
-        "image" => ElementKind::Image,
-        "frame" => ElementKind::Frame,
-        "group" => ElementKind::Group,
-        "drawing" => ElementKind::Drawing,
-        "embed" => ElementKind::Embed,
-        "doc_embed" => ElementKind::DocEmbed,
+    match str_of(em, ElementKey::Type).as_deref() {
+        Some("shape") => ElementKind::Shape(shape_of(em)),
+        Some("sticky") => ElementKind::Sticky,
+        Some("text") => ElementKind::Text,
+        Some("image") => ElementKind::Image,
+        Some("frame") => ElementKind::Frame,
+        Some("group") => ElementKind::Group,
+        Some("drawing") => ElementKind::Drawing,
+        Some("embed") => ElementKind::Embed,
+        Some("doc_embed") => ElementKind::DocEmbed,
         _ => ElementKind::Shape(ShapeKind::Rect),
     }
+}
+
+/// The shape a shape element's tag names: a rectangle when it carries no
+/// tag this build reads.
+pub(super) fn shape_of(em: &Fields<ElementKey>) -> ShapeKind {
+    str_of(em, ElementKey::Shape)
+        .as_deref()
+        .and_then(ShapeKind::from_tag)
+        .unwrap_or(ShapeKind::Rect)
+}
+
+/// The outline a path element stores, `None` when it holds none this build
+/// reads.
+pub(super) fn path_of(em: &Fields<ElementKey>) -> Option<BezPath> {
+    BezPath::from_svg(&str_of(em, ElementKey::Path)?).ok()
+}
+
+/// The unrotated box an element map stores, its corner at `x, y`. A
+/// coordinate or a size the map lacks reads as zero, so an element written
+/// in part still draws at the origin.
+pub(super) fn stored_rect(em: &Fields<ElementKey>) -> Rect {
+    let read = |key| f64_of(em, key).unwrap_or(0.0);
+    let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
+    Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H))
+}
+
+/// The rotation an element map stores, in radians. A map that holds none is
+/// not rotated.
+pub(super) fn rotation_of(em: &Fields<ElementKey>) -> f64 {
+    f64_of(em, ElementKey::Rot).unwrap_or(0.0)
 }
 
 /// Whether an element map's type tag is the tag of `kind`. Every shape kind
 /// carries one tag.
 pub(super) fn has_type(em: &Fields<ElementKey>, kind: ElementKind) -> bool {
-    str_of(em, ElementKey::Type) == kind.type_tag()
+    str_of(em, ElementKey::Type).as_deref() == Some(kind.type_tag())
 }
 
 /// Whether an element read whole carries the type tag of `kind`.
@@ -262,14 +289,18 @@ pub(super) fn connector_label_or_seed(cm: &Fields<ConnectorKey>) -> Option<LoroT
         .ok()
 }
 
+/// One connector, read from its map. An endpoint the map lacks names no
+/// element, so the arrow reads as dangling (`TOILE-165`). A missing anchor or
+/// path type reads as the default one.
 pub(super) fn read_connector(id: ConnectorId, cm: &Fields<ConnectorKey>) -> Option<Connector> {
+    let text = |key| str_of(cm, key).unwrap_or_default();
     Some(Connector {
         id,
-        from: ElementId(str_of(cm, ConnectorKey::From)),
-        from_anch: decode_anchor(&str_of(cm, ConnectorKey::FromAnch)),
-        to: ElementId(str_of(cm, ConnectorKey::To)),
-        to_anch: decode_anchor(&str_of(cm, ConnectorKey::ToAnch)),
-        path_type: decode_path_type(&str_of(cm, ConnectorKey::PathType)),
+        from: ElementId(text(ConnectorKey::From)),
+        from_anch: decode_anchor(&text(ConnectorKey::FromAnch)),
+        to: ElementId(text(ConnectorKey::To)),
+        to_anch: decode_anchor(&text(ConnectorKey::ToAnch)),
+        path_type: decode_path_type(&text(ConnectorKey::PathType)),
         arrows: EndCaps {
             start: bool_of(cm, ConnectorKey::ArrowStart),
             end: bool_of(cm, ConnectorKey::ArrowEnd),
@@ -327,10 +358,11 @@ pub(super) fn decode_path_type(s: &str) -> PathType {
 
 // -- LoroMap handle field readers ---------------------------------------------
 
-pub(super) fn f64_of<K: FieldKey>(m: &Fields<K>, k: K) -> f64 {
+/// A number field, `None` when the map lacks it or holds another kind there.
+pub(super) fn f64_of<K: FieldKey>(m: &Fields<K>, k: K) -> Option<f64> {
     match m.value(k) {
-        Some(LoroValue::Double(d)) => d,
-        _ => 0.0,
+        Some(LoroValue::Double(d)) => Some(d),
+        _ => None,
     }
 }
 
@@ -359,17 +391,19 @@ pub(super) fn body_text_or_seed(m: &Fields<ElementKey>) -> Option<LoroText> {
     m.insert_container(ElementKey::Body, LoroText::new()).ok()
 }
 
-pub(super) fn str_of<K: FieldKey>(m: &Fields<K>, k: K) -> String {
+/// A string field, `None` when the map lacks it or holds another kind there.
+pub(super) fn str_of<K: FieldKey>(m: &Fields<K>, k: K) -> Option<String> {
     match m.value(k) {
-        Some(LoroValue::String(s)) => s.to_string(),
-        _ => String::new(),
+        Some(LoroValue::String(s)) => Some(s.to_string()),
+        _ => None,
     }
 }
 
-pub(super) fn bin_of<K: FieldKey>(m: &Fields<K>, k: K) -> Vec<u8> {
+/// A binary field, `None` when the map lacks it or holds another kind there.
+pub(super) fn bin_of<K: FieldKey>(m: &Fields<K>, k: K) -> Option<Vec<u8>> {
     match m.value(k) {
-        Some(LoroValue::Binary(b)) => b.to_vec(),
-        _ => Vec::new(),
+        Some(LoroValue::Binary(b)) => Some(b.to_vec()),
+        _ => None,
     }
 }
 
@@ -378,16 +412,26 @@ pub(super) fn bin_of<K: FieldKey>(m: &Fields<K>, k: K) -> Vec<u8> {
 // Used on the from-scratch rebuild path (`rebuild_caches`), which reads whole
 // container deep-values rather than per-field handles.
 
-pub(super) fn map_f64<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> f64 {
+/// A number field of a map read whole, `None` when it lacks one there.
+pub(super) fn map_f64<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> Option<f64> {
     match m.get(k) {
-        Some(LoroValue::Double(d)) => *d,
-        _ => 0.0,
+        Some(LoroValue::Double(d)) => Some(*d),
+        _ => None,
     }
 }
 
-pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> String {
+/// A string field of a map read whole, `None` when it lacks one there.
+pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> Option<String> {
     match m.get(k) {
-        Some(LoroValue::String(s)) => s.to_string(),
-        _ => String::new(),
+        Some(LoroValue::String(s)) => Some(s.to_string()),
+        _ => None,
     }
+}
+
+/// [`stored_rect`] and [`rotation_of`], for an element map read whole.
+pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, f64) {
+    let read = |key| map_f64(fields, key).unwrap_or(0.0);
+    let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
+    let rect = Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H));
+    (rect, read(ElementKey::Rot))
 }

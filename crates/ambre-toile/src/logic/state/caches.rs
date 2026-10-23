@@ -15,7 +15,7 @@ use crate::logic::index::{ElementBounds, SpatialIndex};
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
 use super::ToileState;
-use super::codec::{expanded_aabb, f64_of, map_f64};
+use super::codec::{expanded_aabb, map_placement, rotation_of, stored_rect};
 use super::codec::{has_type, value_has_type};
 use super::names::{ElementKey, FieldValues, Fields, Root, entry, root_map};
 use crate::logic::model::ElementKind;
@@ -24,13 +24,7 @@ impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and
     /// the R-tree.
     pub(super) fn update_bounds(&mut self, id: &ElementId, em: &Fields<ElementKey>) {
-        let rect = expanded_aabb(
-            f64_of(em, ElementKey::X),
-            f64_of(em, ElementKey::Y),
-            f64_of(em, ElementKey::W),
-            f64_of(em, ElementKey::H),
-            f64_of(em, ElementKey::Rot),
-        );
+        let rect = expanded_aabb(stored_rect(em), rotation_of(em));
         self.bounds.insert(id.clone(), rect);
         self.index
             .update(ElementBounds::from_rect(id.clone(), rect));
@@ -62,13 +56,9 @@ impl ToileState {
                     if value_has_type(fields, ElementKind::Group) {
                         continue;
                     }
-                    let x = map_f64(fields, ElementKey::X);
-                    let y = map_f64(fields, ElementKey::Y);
-                    let w = map_f64(fields, ElementKey::W);
-                    let h = map_f64(fields, ElementKey::H);
-                    let rot = map_f64(fields, ElementKey::Rot);
+                    let (stored, rot) = map_placement(fields);
                     let id = ElementId(key.clone());
-                    let rect = expanded_aabb(x, y, w, h, rot);
+                    let rect = expanded_aabb(stored, rot);
                     self.bounds.insert(id.clone(), rect);
                     leaves.push(ElementBounds::from_rect(id, rect));
                 }

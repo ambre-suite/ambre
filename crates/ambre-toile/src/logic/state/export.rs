@@ -9,14 +9,12 @@
 //! Read-only by construction (`TOILE-IO-024`): every access here is a `get`, and
 //! the outcome carries no CRDT update.
 
-use kurbo::{BezPath, Rect};
-
 use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::interop::{ExportElement, export_svg};
 use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 
 use super::ToileState;
-use super::codec::{bin_of, body_of, f64_of, kind_of, str_of};
+use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, str_of};
 use super::names::{ElementKey, FieldValues, MediaKey, Root};
 
 /// The name an SVG export carries. The board's own title is a launcher concern:
@@ -120,23 +118,15 @@ impl ToileState {
         let rect = if kind == ElementKind::Group {
             self.bounds.get(id).copied()?
         } else {
-            let (x, y) = (f64_of(&em, ElementKey::X), f64_of(&em, ElementKey::Y));
-            Rect::new(
-                x,
-                y,
-                x + f64_of(&em, ElementKey::W),
-                y + f64_of(&em, ElementKey::H),
-            )
+            stored_rect(&em)
         };
         Some(ExportElement {
             kind,
             rect,
-            rotation: f64_of(&em, ElementKey::Rot),
-            style: self.style_read(&bin_of(&em, ElementKey::Style)),
+            rotation: rotation_of(&em),
+            style: self.style_read(bin_of(&em, ElementKey::Style).as_deref()),
             path: match kind {
-                ElementKind::Shape(ShapeKind::Path) => {
-                    BezPath::from_svg(&str_of(&em, ElementKey::Path)).ok()
-                }
+                ElementKind::Shape(ShapeKind::Path) => path_of(&em),
                 _ => None,
             },
             text: match kind {
@@ -144,13 +134,15 @@ impl ToileState {
                 _ => None,
             },
             media_hash: match kind {
-                ElementKind::Image => Some(ambre_core::ContentHash(str_of(&em, ElementKey::Hash))),
+                ElementKind::Image => str_of(&em, ElementKey::Hash).map(ambre_core::ContentHash),
                 _ => None,
             },
             // The plaintext thumbnail, re-encoded as the PNG the export writes
             // inline (`TOILE-IO-087`).
             image_png: match kind {
-                ElementKind::Image => self.thumbnail_png(&str_of(&em, ElementKey::Hash)),
+                ElementKind::Image => {
+                    str_of(&em, ElementKey::Hash).and_then(|hash| self.thumbnail_png(&hash))
+                }
                 _ => None,
             },
         })

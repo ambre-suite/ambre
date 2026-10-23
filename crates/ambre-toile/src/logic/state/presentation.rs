@@ -121,7 +121,7 @@ impl ToileState {
     fn deck_frame(&self, id: &ElementId) -> DeckFrame {
         let name = self
             .element_map(id)
-            .map(|em| str_of(&em, ElementKey::Name))
+            .and_then(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default();
         DeckFrame {
             id: id.clone(),

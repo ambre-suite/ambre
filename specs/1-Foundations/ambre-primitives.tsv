@@ -5015,7 +5015,7 @@ ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTou
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | WiresTouched.unplaced | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Vec<u8>	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | body_of() | ret | String	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | bool	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | capture_scalars() | ret | Vec<(String,ClipValue)>	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
@@ -5026,16 +5026,14 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_pat
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | doc_type_from_tag(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | encode_anchor() | ret | String	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | encode_path_type() | ret | &'static str	generic	enum<->stored string codec at the CRDT boundary
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(h) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(rot) | param | f64	debt	finding: Rotation is a raw f64 in radians across storage, the bus and export (suspected, low): rotation radians as f64 across storage/bus/export, degrees used beside it
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(w) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(x) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | expanded_aabb(y) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of() | ret | f64	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | f64_of() | ret | Option<f64>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() | ret | f64	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | String	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | String	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() | ret | Option<f64>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_placement() | ret | (Rect,f64)	math	board geometry, style metric, opacity or pressure
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | rotation_of() | ret | f64	math	board geometry, style metric, opacity or pressure
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | write_clip_fields(fields) | param | &[(String,ClipValue)]	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | PREVIEW_CHARS | const | usize	math	geometry, layout, count or size local to the algorithm
@@ -5050,8 +5048,8 @@ ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | push
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | ToileState::set_connector_label(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | ToileState::set_connector_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | Wire.reach | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::link_read(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::style_read(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
+ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::link_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
+ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::style_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::import_ambre_plaintext(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::create_element(correlate) | param | u64	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel

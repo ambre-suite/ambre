@@ -1219,7 +1219,7 @@ impl ToileState {
     /// Test helper.
     pub fn style_of(&self, id: &ElementId) -> ElementStyle {
         self.element_map(id)
-            .map(|em| self.style_read(&codec::bin_of(&em, ElementKey::Style)))
+            .map(|em| self.style_read(codec::bin_of(&em, ElementKey::Style).as_deref()))
             .unwrap_or_default()
     }
 

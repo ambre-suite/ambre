@@ -76,7 +76,7 @@ impl ToileState {
             body_of(&em)
         } else if has_type(&em, ElementKind::Frame) {
             // A frame title lives in its `name` field (empty until named).
-            str_of(&em, ElementKey::Name)
+            str_of(&em, ElementKey::Name).unwrap_or_default()
         } else {
             return false;
         };

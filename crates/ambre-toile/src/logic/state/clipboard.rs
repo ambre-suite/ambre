@@ -114,10 +114,9 @@ impl ToileState {
             for (_key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
                     let f = FieldValues::<ConnectorKey>::of(f);
-                    let from = ElementId(map_str(f, ConnectorKey::From));
-                    let to = ElementId(map_str(f, ConnectorKey::To));
+                    let slot = |key| map_str(f, key).and_then(|id| slot_of.get(&ElementId(id)));
                     if let (Some(&from_slot), Some(&to_slot)) =
-                        (slot_of.get(&from), slot_of.get(&to))
+                        (slot(ConnectorKey::From), slot(ConnectorKey::To))
                     {
                         connectors.push(ClipConnector {
                             from_slot,

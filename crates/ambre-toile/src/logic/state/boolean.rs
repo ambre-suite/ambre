@@ -9,7 +9,7 @@
 //! item. A boolean is an ordinary geometry edit: the result is a plain element, no
 //! special CRDT state (`toile-elements`).
 
-use kurbo::{Affine, BezPath, Ellipse, Rect, Shape};
+use kurbo::{Affine, BezPath, Ellipse, Shape};
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::boolean::{FLATTEN_TOL, boolean_op};
@@ -18,7 +18,7 @@ use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKin
 
 use super::ToileState;
 use super::codec::has_type;
-use super::codec::{bin_of, bool_of, f64_of, str_of};
+use super::codec::{bin_of, bool_of, path_of, rotation_of, shape_of, stored_rect};
 use super::names::{ElementKey, Fields, Root};
 
 impl ToileState {
@@ -49,7 +49,7 @@ impl ToileState {
                 continue; // not a shape / path element
             };
             if style_bytes.is_none() {
-                style_bytes = Some(bin_of(&em, ElementKey::Style));
+                style_bytes = bin_of(&em, ElementKey::Style);
             }
             paths.push(path);
             sources.push(id.clone());
@@ -118,14 +118,8 @@ fn element_world_path(em: &Fields<ElementKey>) -> Option<BezPath> {
     if !has_type(em, ElementKind::Shape(ShapeKind::Rect)) {
         return None;
     }
-    let (x, y, w, h) = (
-        f64_of(em, ElementKey::X),
-        f64_of(em, ElementKey::Y),
-        f64_of(em, ElementKey::W),
-        f64_of(em, ElementKey::H),
-    );
-    let bounds = Rect::new(x, y, x + w, y + h);
-    let kind = ShapeKind::from_tag(&str_of(em, ElementKey::Shape)).unwrap_or(ShapeKind::Rect);
+    let bounds = stored_rect(em);
+    let kind = shape_of(em);
     let local = match kind {
         ShapeKind::Rect => bounds.to_path(FLATTEN_TOL),
         ShapeKind::Ellipse => Ellipse::from_rect(bounds).to_path(FLATTEN_TOL),
@@ -136,10 +130,10 @@ fn element_world_path(em: &Fields<ElementKey>) -> Option<BezPath> {
             p.line_to((bounds.x1, bounds.y1));
             p
         }
-        ShapeKind::Path => BezPath::from_svg(&str_of(em, ElementKey::Path)).unwrap_or_default(),
+        ShapeKind::Path => path_of(em).unwrap_or_default(),
     };
     // World transform: rotation about the AABB center (derive.rs:122-124).
-    let rot = f64_of(em, ElementKey::Rot);
+    let rot = rotation_of(em);
     let center = bounds.center();
     let transform = Affine::translate(center.to_vec2())
         * Affine::rotate(rot)

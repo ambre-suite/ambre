@@ -22,8 +22,8 @@ use crate::logic::stroke::smooth_stroke;
 use super::ToileState;
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_of, read_connector,
-    str_of,
+    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_of, path_of,
+    read_connector, rotation_of, stored_rect, str_of,
 };
 use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 
@@ -102,7 +102,8 @@ impl ToileState {
             viewport: vp,
             // One map lookup per frame: the register is board scaffolding,
             // and a peer can rewrite it at any time (`TOILE-UI-279`).
-            grid_unit: f64_of(&board(&self.doc), BoardKey::GridSize),
+            // A board that holds none sends zero, which the view replaces.
+            grid_unit: f64_of(&board(&self.doc), BoardKey::GridSize).unwrap_or(0.0),
             reactions: self.reaction_tallies(&visible),
             pins: self.comment_pins(&visible, &vp),
             nodes,
@@ -124,24 +125,18 @@ impl ToileState {
             .into_iter()
             .filter_map(|id| {
                 let em = self.element_map(&id)?;
-                let style = self.style_read(&bin_of(&em, ElementKey::Style));
+                let style = self.style_read(bin_of(&em, ElementKey::Style).as_deref());
                 // A group carries no stored geometry: its rect is the derived
                 // member-union AABB, read from the bounds cache.
                 let bounds = if has_type(&em, ElementKind::Group) {
                     self.bounds.get(&id).copied().unwrap_or_default()
                 } else {
-                    let (x, y, w, h) = (
-                        f64_of(&em, ElementKey::X),
-                        f64_of(&em, ElementKey::Y),
-                        f64_of(&em, ElementKey::W),
-                        f64_of(&em, ElementKey::H),
-                    );
-                    Rect::new(x, y, x + w, y + h)
+                    stored_rect(&em)
                 };
                 Some(SnapElement {
                     id,
                     bounds,
-                    rotation: f64_of(&em, ElementKey::Rot),
+                    rotation: rotation_of(&em),
                     opacity: style.opacity,
                     fill: style.fill,
                 })
@@ -159,13 +154,7 @@ impl ToileState {
         if has_type(&em, ElementKind::Group) {
             Some(self.bounds.get(id).copied().unwrap_or_default())
         } else {
-            let (x, y, w, h) = (
-                f64_of(&em, ElementKey::X),
-                f64_of(&em, ElementKey::Y),
-                f64_of(&em, ElementKey::W),
-                f64_of(&em, ElementKey::H),
-            );
-            Some(Rect::new(x, y, x + w, y + h))
+            Some(stored_rect(&em))
         }
     }
 
@@ -174,22 +163,16 @@ impl ToileState {
         // A group has no stored geometry: its bounds are the derived member union
         // Read them from the derived cache.
         let is_group = has_type(&em, ElementKind::Group);
-        let (x, y, w, h) = if is_group {
+        let bounds = if is_group {
             let r = self.bounds.get(id).copied().unwrap_or_default();
-            (r.x0, r.y0, r.width(), r.height())
+            Rect::new(r.x0, r.y0, r.x0 + r.width(), r.y0 + r.height())
         } else {
-            (
-                f64_of(&em, ElementKey::X),
-                f64_of(&em, ElementKey::Y),
-                f64_of(&em, ElementKey::W),
-                f64_of(&em, ElementKey::H),
-            )
+            stored_rect(&em)
         };
-        let rot = f64_of(&em, ElementKey::Rot);
+        let rot = rotation_of(&em);
         let locked = bool_of(&em, ElementKey::Locked);
-        let style = self.style_read(&bin_of(&em, ElementKey::Style));
+        let style = self.style_read(bin_of(&em, ElementKey::Style).as_deref());
         let kind = kind_of(&em);
-        let bounds = Rect::new(x, y, x + w, y + h);
         // World transform: rotation about the AABB center.
         let center = bounds.center();
         let transform = Affine::translate(center.to_vec2())
@@ -206,7 +189,7 @@ impl ToileState {
             geom,
             // The link register, absent on an element that carries none
             // (`toile-links`).
-            link: self.link_read(&bin_of(&em, ElementKey::Link)),
+            link: self.link_read(bin_of(&em, ElementKey::Link).as_deref()),
             // The immediate enclosing group (if any): the UI resolves group-scope
             // selection by walking this edge upward.
             group: self.enclosing_group(id),
@@ -224,19 +207,25 @@ impl ToileState {
                 p.line_to((bounds.x1, bounds.y1));
                 DisplayGeom::Path(p)
             }
-            ElementKind::Shape(ShapeKind::Path) => DisplayGeom::Path(
-                BezPath::from_svg(&str_of(em, ElementKey::Path)).unwrap_or_default(),
-            ),
-            ElementKind::Image => DisplayGeom::Image(str_of(em, ElementKey::Hash)),
-            ElementKind::Embed => DisplayGeom::Embed(str_of(em, ElementKey::Url)),
+            ElementKind::Shape(ShapeKind::Path) => {
+                DisplayGeom::Path(path_of(em).unwrap_or_default())
+            }
+            // An image or an embed that names no source paints its placeholder.
+            ElementKind::Image => {
+                DisplayGeom::Image(str_of(em, ElementKey::Hash).unwrap_or_default())
+            }
+            ElementKind::Embed => {
+                DisplayGeom::Embed(str_of(em, ElementKey::Url).unwrap_or_default())
+            }
             ElementKind::DocEmbed => {
                 // Parse back the reference; on any parse failure fall to Frame so
                 // the node still paints a placeholder rather than vanishing.
                 match (
-                    ambre_core::DocumentId::parse_str(&str_of(em, ElementKey::DocId)),
-                    doc_type_from_tag(&str_of(em, ElementKey::DocType)),
+                    str_of(em, ElementKey::DocId)
+                        .and_then(|id| ambre_core::DocumentId::parse_str(&id).ok()),
+                    str_of(em, ElementKey::DocType).and_then(|tag| doc_type_from_tag(&tag)),
                 ) {
-                    (Ok(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
+                    (Some(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
                         document_id,
                         doc_type,
                         focused: false,
@@ -244,12 +233,16 @@ impl ToileState {
                     _ => DisplayGeom::Frame(String::new()),
                 }
             }
-            ElementKind::Frame => DisplayGeom::Frame(str_of(em, ElementKey::Name)),
+            // A frame is untitled until someone names it.
+            ElementKind::Frame => {
+                DisplayGeom::Frame(str_of(em, ElementKey::Name).unwrap_or_default())
+            }
             ElementKind::Group => DisplayGeom::Group,
             ElementKind::Sticky => DisplayGeom::Sticky(body_of(em)),
             ElementKind::Text => DisplayGeom::Text(body_of(em)),
             ElementKind::Drawing => {
-                let raw = bin_of(em, ElementKey::Points);
+                // No samples read as an empty stroke, which is not a decode failure.
+                let raw = bin_of(em, ElementKey::Points).unwrap_or_default();
                 let pts: Vec<StrokePoint> = postcard::from_bytes(&raw).unwrap_or_else(|_| {
                     // A stroke this build cannot decode draws as no stroke at
                     // all, which is an absence the user is owed a word about
@@ -269,19 +262,22 @@ impl ToileState {
     ///
     /// The fallback itself is unavoidable, since an unreadable register cannot be
     /// drawn as anything else. The rule is about the notice, not the pixels.
-    pub(super) fn style_read(&self, bytes: &[u8]) -> ElementStyle {
+    ///
+    /// A map that holds no register reads as the default look, with no notice.
+    pub(super) fn style_read(&self, bytes: Option<&[u8]>) -> ElementStyle {
+        let Some(bytes) = bytes else {
+            return ElementStyle::default();
+        };
         ElementStyle::try_from_bytes(bytes).unwrap_or_else(|| {
             self.note_undecodable(bytes);
             ElementStyle::default()
         })
     }
 
-    /// Decode a `"link"` register the same way. An empty register is an element
-    /// carrying no link, which is not a decode failure.
-    fn link_read(&self, bytes: &[u8]) -> Option<LinkTarget> {
-        if bytes.is_empty() {
-            return None;
-        }
+    /// Decode a `"link"` register the same way. A missing or empty register is
+    /// an element carrying no link, which is not a decode failure.
+    fn link_read(&self, bytes: Option<&[u8]>) -> Option<LinkTarget> {
+        let bytes = bytes.filter(|b| !b.is_empty())?;
         let link = LinkTarget::from_bytes(bytes);
         if link.is_none() {
             self.note_undecodable(bytes);
@@ -300,9 +296,9 @@ impl ToileState {
         Some(DisplayConnector {
             id: id.clone(),
             path,
-            // A connector minted before the field existed reads back an empty
-            // binary, which decodes to the default: the same look it had.
-            style: self.style_read(&bin_of(&cm, ConnectorKey::Style)),
+            // A connector minted before the field existed holds no register,
+            // which reads as the default: the same look it had.
+            style: self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref()),
             arrows: conn.arrows,
             label: connector_label(&cm),
         })

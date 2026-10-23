@@ -256,7 +256,7 @@ impl ToileState {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
         let stroke = f64::from(
-            self.style_read(&bin_of(&cm, ConnectorKey::Style))
+            self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref())
                 .stroke_w
                 .max(1.0),
         );
@@ -273,9 +273,12 @@ impl ToileState {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
                     let f = FieldValues::<ConnectorKey>::of(f);
-                    let from = map_str(f, ConnectorKey::From);
-                    let to = map_str(f, ConnectorKey::To);
-                    if del.contains(&ElementId(from)) || del.contains(&ElementId(to)) {
+                    let touches = |key| {
+                        map_str(f, key)
+                            .map(ElementId)
+                            .is_some_and(|id| del.contains(&id))
+                    };
+                    if touches(ConnectorKey::From) || touches(ConnectorKey::To) {
                         out.insert(ConnectorId(key.clone()));
                     }
                 }

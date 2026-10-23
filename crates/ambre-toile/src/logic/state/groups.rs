@@ -358,7 +358,7 @@ impl ToileState {
     /// accessor; every surface reads it off the display payload instead.
     pub fn frame_name(&self, frame: &ElementId) -> String {
         self.element_map(frame)
-            .map(|em| str_of(&em, ElementKey::Name))
+            .and_then(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default()
     }
 
@@ -381,7 +381,7 @@ impl ToileState {
             )]);
         }
         let name: String = name.trim().chars().take(FRAME_NAME_MAX).collect();
-        if str_of(&fm, ElementKey::Name) == name {
+        if str_of(&fm, ElementKey::Name).unwrap_or_default() == name {
             return ToileOutcome::display_only(Vec::new());
         }
         let _ = fm.insert(ElementKey::Name, name.as_str());
