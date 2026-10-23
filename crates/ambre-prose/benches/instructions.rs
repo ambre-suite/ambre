@@ -20,7 +20,7 @@ use ambre_draw::ParleyBrush;
 use ambre_prose::doc::DocDefaults;
 use ambre_prose::layout::fonts::register_faces;
 use ambre_prose::layout::measure::{EffectiveStyle, Measurer, reshape_paragraph};
-use ambre_prose::layout::run::{ParleyRunData, ShapedRun};
+use ambre_prose::layout::run::{ParleyRunData, RunLineCount, ShapedRun};
 use parley::{FontContext, LayoutContext};
 
 /// The longest paragraph the "Text layout" row holds to its budget at its
@@ -130,7 +130,7 @@ fn paragraph_shape() {
         black_box(&typed),
         &style,
     );
-    if run.data().line_count() < 2 {
+    if run.data().line_count() < RunLineCount::new(2) {
         panic!("a long paragraph breaks into lines");
     }
 }
