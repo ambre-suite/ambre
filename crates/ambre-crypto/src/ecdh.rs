@@ -10,7 +10,7 @@ use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, Nonce};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::aead;
 use crate::error::CryptoError;
@@ -30,6 +30,26 @@ pub struct WrappedKey {
     pub ciphertext: Ciphertext,
 }
 
+/// The raw X25519 output between two parties, the input of the KEK.
+///
+/// Wiped on drop and never cloned, like the keys of `keys.rs`. Its `Debug`
+/// form prints the length and none of the bytes.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct SharedSecret([u8; 32]);
+
+impl SharedSecret {
+    /// Returns the raw secret bytes, for the KEK derivation and the tests.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl core::fmt::Debug for SharedSecret {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "SharedSecret({} bytes)", self.0.len())
+    }
+}
+
 /// Computes the raw X25519 shared secret between `own_secret` and `peer_public`.
 ///
 /// Rejects a non-contributory exchange: a low-order `peer_public` drives the
@@ -43,13 +63,15 @@ pub struct WrappedKey {
 pub fn shared_secret(
     own_secret: &StaticSecret,
     peer_public: &ExchangePublicKey,
-) -> Result<[u8; 32], CryptoError> {
+) -> Result<SharedSecret, CryptoError> {
     let peer = PublicKey::from(*peer_public.as_array());
+    // `x25519_dalek::SharedSecret` wipes itself on drop; the copy moves
+    // straight into the wiping wrapper.
     let shared = own_secret.diffie_hellman(&peer);
     if !shared.was_contributory() {
         return Err(CryptoError::WeakPublicKey);
     }
-    Ok(shared.to_bytes())
+    Ok(SharedSecret(shared.to_bytes()))
 }
 
 /// Derives the key-encryption key via HKDF-BLAKE2b, binding the transcript to
@@ -60,10 +82,10 @@ pub fn shared_secret(
     clippy::expect_used,
     reason = "HKDF expands up to 255 digests, and 32 bytes is far below that"
 )]
-fn derive_kek(shared: &[u8; 32], sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) -> DocumentKey {
+fn derive_kek(shared: &SharedSecret, sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) -> DocumentKey {
     // `SimpleHkdf` (SimpleHmac-based) is required: BLAKE2b's variable-output core
     // is not the "eager" hash the default `Hkdf<H>` (raw `Hmac`) demands.
-    let hk = SimpleHkdf::<Blake2b512>::new(None, shared);
+    let hk = SimpleHkdf::<Blake2b512>::new(None, shared.as_bytes());
     let mut info = Vec::with_capacity(KEK_DOMAIN.len() + 64);
     info.extend_from_slice(KEK_DOMAIN);
     info.extend_from_slice(sender_pk);
@@ -71,7 +93,9 @@ fn derive_kek(shared: &[u8; 32], sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) 
     let mut kek = [0u8; 32];
     hk.expand(&info, &mut kek)
         .expect("HKDF-BLAKE2b expand of 32 bytes is within the output limit");
-    DocumentKey::from_array(kek)
+    let key = DocumentKey::from_array(kek);
+    kek.zeroize();
+    key
 }
 
 /// Wraps `doc_key` for the holder of `peer_public`, using `own_secret`. Here the

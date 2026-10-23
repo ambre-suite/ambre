@@ -280,9 +280,21 @@ fn ecdh_symmetric() {
         ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
 
     assert_eq!(
-        ecdh::shared_secret(&alice, &bob_pub).unwrap(),
-        ecdh::shared_secret(&bob, &alice_pub).unwrap()
+        ecdh::shared_secret(&alice, &bob_pub).unwrap().as_bytes(),
+        ecdh::shared_secret(&bob, &alice_pub).unwrap().as_bytes()
     );
+}
+
+#[test]
+fn a_shared_secret_is_wiped_and_never_printed() {
+    fn wiped_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
+    let bob_pub =
+        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let shared = ecdh::shared_secret(&alice, &bob_pub).unwrap();
+    wiped_on_drop(&shared);
+    assert_eq!(format!("{shared:?}"), "SharedSecret(32 bytes)");
 }
 
 #[test]
@@ -368,8 +380,8 @@ fn weak_peer_public_key_rejected() {
     let weak_pub = ambre_core::ExchangePublicKey::from_array([0u8; 32]);
 
     assert_eq!(
-        ecdh::shared_secret(&alice, &weak_pub),
-        Err(CryptoError::WeakPublicKey)
+        ecdh::shared_secret(&alice, &weak_pub).err(),
+        Some(CryptoError::WeakPublicKey)
     );
 
     let doc_key = DocumentKey::from_array([0x55; 32]);

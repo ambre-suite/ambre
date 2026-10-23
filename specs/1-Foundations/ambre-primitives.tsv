@@ -1599,8 +1599,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(aad) | 
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(recipient_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(sender_pk) | param | &[u8;32]	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(shared) | param | &[u8;32]	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | shared_secret() | ret | Result<[u8;32],CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | open(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(aad) | param | &[u8]	generic	generic byte/text API or codec
@@ -5164,3 +5162,5 @@ ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	ge
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(head) | param | &[u8]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(tail) | param | &[u8]	generic	private hashing construction; each caller wraps the result
+ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | [u8;32]	newtype-inner	SharedSecret newtype
+ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
