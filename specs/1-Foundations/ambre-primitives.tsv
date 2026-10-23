@@ -4245,7 +4245,7 @@ ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registe
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers(rewrite) | param | &impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles(rewrite) | param | impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
-ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
+ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/schema.rs | crate::logic::schema | style_version_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	math	local state flag or value, not a mode selector
@@ -5317,7 +5317,7 @@ ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(x) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(y) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
-ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
+ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_at(y) | param | f64	math	local geometry / pixel arithmetic
