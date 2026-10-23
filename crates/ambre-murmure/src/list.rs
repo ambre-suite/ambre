@@ -15,7 +15,7 @@ use ambre_bus::{
 
 /// Consecutive messages of one author inside this span share one header:
 /// the grouping row of `ambre-spec-budgets.md section 8`.
-pub const GROUP_SPAN_MS: u64 = 5 * 60 * 1000;
+pub const GROUP_SPAN_MS: ambre_core::Millis = ambre_core::Millis(5 * 60 * 1000);
 
 /// What a deleted message shows in place of its body (`MURMURE-185`).
 pub const DELETED: &str = "This message was deleted.";
@@ -236,7 +236,7 @@ impl MessageList {
 fn grouped(previous: &MessageView, next: &MessageView) -> bool {
     previous.author == next.author
         && previous.notice.is_none()
-        && next.ts.0.saturating_sub(previous.ts.0) <= GROUP_SPAN_MS
+        && next.ts.since(previous.ts) <= GROUP_SPAN_MS
 }
 
 /// One row of the list.
@@ -951,11 +951,11 @@ pub(crate) mod tests {
             SegmentId::new(),
             vec![
                 message(ada, ambre_bus::Timestamp(0), "a"),
-                message(ada, ambre_bus::Timestamp(GROUP_SPAN_MS), "b"),
-                message(ada, ambre_bus::Timestamp(2 * GROUP_SPAN_MS + 1), "c"),
-                message(bob, ambre_bus::Timestamp(2 * GROUP_SPAN_MS + 2), "d"),
+                message(ada, ambre_bus::Timestamp(GROUP_SPAN_MS.0), "b"),
+                message(ada, ambre_bus::Timestamp(2 * GROUP_SPAN_MS.0 + 1), "c"),
+                message(bob, ambre_bus::Timestamp(2 * GROUP_SPAN_MS.0 + 2), "d"),
                 notice,
-                message(bob, ambre_bus::Timestamp(2 * GROUP_SPAN_MS + 3), "e"),
+                message(bob, ambre_bus::Timestamp(2 * GROUP_SPAN_MS.0 + 3), "e"),
             ],
         );
         assert_eq!(headers(&list), [true, false, true, true, false, true]);

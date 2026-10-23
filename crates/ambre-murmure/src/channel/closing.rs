@@ -6,7 +6,7 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::SegmentId;
+use ambre_core::{Millis, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
@@ -25,7 +25,7 @@ pub const SEGMENT_BYTES: usize = 2 * 1024 * 1024;
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const SUCCESSOR_RETRY_MS: u64 = 1_000;
+pub const SUCCESSOR_RETRY_MS: Millis = Millis(1_000);
 
 /// The failures past which a successor is no longer fetched again.
 const SUCCESSOR_FAILURES: u32 = 5;
@@ -278,8 +278,8 @@ impl ChannelState {
             return None;
         }
         let Some(at) = retry.at else {
-            let delay = SUCCESSOR_RETRY_MS << (retry.failures - 1);
-            retry.at = Some(Timestamp(now.0.saturating_add(delay)));
+            let delay = SUCCESSOR_RETRY_MS.doubled(retry.failures - 1);
+            retry.at = Some(now.plus(delay));
             return None;
         };
         if now < at {

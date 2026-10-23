@@ -2321,11 +2321,11 @@ mod tests {
                 },
             });
         };
-        tick(&mut state, PRESENCE_EXPIRY_MS);
+        tick(&mut state, PRESENCE_EXPIRY_MS.0);
         assert!(last_members(&drain(&ui)).is_none(), "Bob is still online");
         assert_eq!(samples(&drain(&sync)).len(), 1);
 
-        tick(&mut state, PRESENCE_EXPIRY_MS + 1);
+        tick(&mut state, PRESENCE_EXPIRY_MS.0 + 1);
         let members = last_members(&drain(&ui)).expect("a member list");
         assert_eq!(members[0].presence, Presence::Offline);
         assert_eq!(samples(&drain(&sync)).len(), 1);

@@ -4062,7 +4062,7 @@ mod tests {
         );
         assert!(ephemerals(&sync).is_empty(), "within the refresh period");
         let refreshed = MurmureCommand::Tick {
-            now: at(ambre_murmure::REFRESH_PERIOD_MS),
+            now: at(ambre_murmure::REFRESH_PERIOD_MS.0),
         };
         command(&mut state, channel_id, refreshed);
         assert_eq!(ephemerals(&sync), [(meta, Sample::Watching.bytes())]);
@@ -4088,7 +4088,7 @@ mod tests {
         let before = versions(&state);
         drain(&sync);
 
-        for offset in [0, 500, ambre_murmure::TYPING_REFRESH_MS] {
+        for offset in [0, 500, ambre_murmure::TYPING_REFRESH_MS.0] {
             command(
                 &mut state,
                 channel_id,
@@ -4171,7 +4171,7 @@ mod tests {
         );
 
         let expired = MurmureCommand::Tick {
-            now: at(ambre_murmure::TYPING_EXPIRY_MS + 1),
+            now: at(ambre_murmure::TYPING_EXPIRY_MS.0 + 1),
         };
         command(&mut state, channel_id, expired);
         assert_eq!(watchers(&ui), [(channel_id, vec![bob], Vec::new())]);
@@ -5462,7 +5462,7 @@ mod tests {
             &mut state,
             channel_id,
             MurmureCommand::Tick {
-                now: at(1 + ambre_murmure::FINALIZE_RETRY_MS),
+                now: at(1 + ambre_murmure::FINALIZE_RETRY_MS.0),
             },
         );
         assert_eq!(finalizes(&sync), [(closing, None)], "asked again");

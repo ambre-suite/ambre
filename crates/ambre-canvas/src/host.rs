@@ -122,11 +122,11 @@ pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, _settled: GpuSettled
     std::mem::forget(cb);
 }
 
-/// Run `relay` every `period_ms` while the page is hidden
+/// Run `relay` every `period` while the page is hidden
 /// ([`crate::frame::drive_hidden`]). The browser may space a hidden page's
 /// timers further apart; the relay then runs that often. The interval lives
 /// as long as the page.
-pub fn start_hidden_relay(mut relay: impl FnMut() + 'static, period_ms: i32) {
+pub fn start_hidden_relay(mut relay: impl FnMut() + 'static, period: ambre_bus::Millis) {
     let Some(window) = web_sys::window() else {
         return;
     };
@@ -137,7 +137,7 @@ pub fn start_hidden_relay(mut relay: impl FnMut() + 'static, period_ms: i32) {
     });
     if let Err(e) = window.set_interval_with_callback_and_timeout_and_arguments_0(
         tick.as_ref().unchecked_ref(),
-        period_ms,
+        period.to_timer_i32(),
     ) {
         tracing::error!("hidden relay not started: {e:?}");
     }

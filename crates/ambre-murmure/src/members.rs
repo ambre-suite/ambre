@@ -10,17 +10,17 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MemberView, Presence, Timestamp};
-use ambre_core::UserId;
+use ambre_core::{Millis, UserId};
 
 /// How often a client that holds a space open sends its presence sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const REFRESH_PERIOD_MS: u64 = 60_000;
+pub const REFRESH_PERIOD_MS: Millis = Millis(60_000);
 
 /// How long a presence sample keeps its member online, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Three refresh periods: one for the
 /// tick that dates a sample, one for a sample lost on the way, and one for
 /// two drifting timers.
-pub const PRESENCE_EXPIRY_MS: u64 = 3 * REFRESH_PERIOD_MS;
+pub const PRESENCE_EXPIRY_MS: Millis = REFRESH_PERIOD_MS.times(3);
 
 /// The first byte of a presence sample. Another ephemeral of the space
 /// document takes another tag, so neither reads as the other.
@@ -118,7 +118,7 @@ impl Roster {
         let before = self.heard.len();
         self.heard.retain(|_, stamp| {
             let at = *stamp.get_or_insert(now);
-            now.0.saturating_sub(at.0) <= PRESENCE_EXPIRY_MS
+            now.since(at) <= PRESENCE_EXPIRY_MS
         });
         self.heard.len() != before
     }
@@ -204,11 +204,11 @@ mod tests {
         assert!(roster.heard(bob), "Bob was offline");
         assert_eq!(roster.presence(bob), Presence::Online);
         assert!(
-            !roster.tick(at(PRESENCE_EXPIRY_MS)),
+            !roster.tick(at(PRESENCE_EXPIRY_MS.0)),
             "still within the expiry"
         );
         assert_eq!(roster.presence(bob), Presence::Online);
-        assert!(roster.tick(at(PRESENCE_EXPIRY_MS + 1)));
+        assert!(roster.tick(at(PRESENCE_EXPIRY_MS.0 + 1)));
         assert_eq!(roster.presence(bob), Presence::Offline);
     }
 
@@ -220,7 +220,7 @@ mod tests {
         let mut roster = roster(&[(bob, "Bob")]);
         for period in 1..10 {
             roster.heard(bob);
-            roster.tick(at(period * REFRESH_PERIOD_MS));
+            roster.tick(at(period * REFRESH_PERIOD_MS.0));
             assert_eq!(roster.presence(bob), Presence::Online, "period {period}");
         }
     }

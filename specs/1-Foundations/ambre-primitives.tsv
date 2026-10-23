@@ -65,7 +65,6 @@ ambre-app | src/host/mod.rs | crate::host | AppView::touch() | ret | bool	generi
 ambre-app | src/host/mod.rs | crate::host | AppView::touch(x) | param | f32	math	css position
 ambre-app | src/host/mod.rs | crate::host | AppView::touch(y) | param | f32	math	css position
 ambre-app | src/host/mod.rs | crate::host | ClipboardPaste.token | field | Option<String>	debt	finding: Clipboard payload strings (confirmed)
-ambre-app | src/host/mod.rs | crate::host | HIDDEN_RELAY_PERIOD_MS | const | i32	debt	planned: lot B bis 4 Millis (start_hidden_relay period)
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(html) | param | Option<String>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(payload_b64) | param | Option<String>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	math	flag cell
@@ -955,7 +954,6 @@ ambre-canvas | src/frame.rs | crate::frame | text_height(width) | param | f32	ma
 ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	debt	finding: rAF frame timestamp as a bare f64 (confirmed)
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
-ambre-canvas | src/host.rs | crate::host | start_hidden_relay(period_ms) | param | i32	debt	planned: lot B bis 4 Millis (start_hidden_relay period)
 ambre-canvas | src/host.rs | crate::host | start_raf_loop(frame) | param | impl FnMut(f64)+'static	debt	finding: rAF frame timestamp as a bare f64 (confirmed)
 ambre-canvas | src/host.rs | crate::host | surface_config(height) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/host.rs | crate::host | surface_config(width) | param | u32	math	geometry, layout, GPU or count arithmetic
@@ -1671,6 +1669,10 @@ ambre-core | src/span.rs | crate::span | LamportStamp.0 | field | u64	newtype-in
 ambre-core | src/span.rs | crate::span | LamportStamp::from_i64(stored) | param | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | LamportStamp::to_i64_saturating() | ret | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | Millis.0 | field | u64	newtype-inner	time newtype accessor
+ambre-core | src/span.rs | crate::span | Millis::as_page_ms() | ret | f64	newtype-inner	time newtype accessor
+ambre-core | src/span.rs | crate::span | Millis::doubled(doublings) | param | u32	math	a count of doublings, not a span
+ambre-core | src/span.rs | crate::span | Millis::times(n) | param | u64	math	a multiplier, not a span
+ambre-core | src/span.rs | crate::span | Millis::to_timer_i32() | ret | i32	newtype-inner	time newtype accessor for the browser timer
 ambre-core | src/span.rs | crate::span | PageTime.0 | field | f64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | PageTime::after(ms) | param | f64	math	frame-clock span on PageTime
 ambre-core | src/span.rs | crate::span | Seconds.0 | field | u64	newtype-inner	time newtype accessor
@@ -2092,17 +2094,13 @@ ambre-logic | src/persistence.rs | crate::persistence | id_to_hex(id) | param | 
 ambre-logic | src/persistence.rs | crate::persistence | rows_of(hex) | param | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | unique_suffix() | ret | String	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/pictures.rs | crate::pictures | FAST_DELAY_MS | const | u32	debt	planned: lot B bis 4 (Millis)
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | MAX_ALLOC | const | u64	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/pictures.rs | crate::pictures | MAX_EDGE | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/pictures.rs | crate::pictures | PICTURE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/pictures.rs | crate::pictures | PREVIEW_EDGE | const | (u32,u32)	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/pictures.rs | crate::pictures | SLOW_DELAY_MS | const | u32	debt	planned: lot B bis 4 (Millis)
 ambre-logic | src/pictures.rs | crate::pictures | decode(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-logic | src/pictures.rs | crate::pictures | delay() | ret | u32	debt	planned: lot B bis 4 (Millis)
-ambre-logic | src/pictures.rs | crate::pictures | delay(ms) | param | u32	debt	planned: lot B bis 4 (Millis)
 ambre-logic | src/pictures.rs | crate::pictures | fit((width,height)) | param | (u32,u32)	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/pictures.rs | crate::pictures | fit() | ret | (u32,u32)	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/pictures.rs | crate::pictures | scale() | ret | Vec<u8>	generic	generic byte/text API or codec
@@ -2231,21 +2229,16 @@ ambre-murmure | src/channel/closing.rs | crate::channel::closing | Retry.failure
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SEGMENT_BYTES | const | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SEGMENT_MESSAGES | const | usize	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SUCCESSOR_FAILURES | const | u32	math	local count/index/counter
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | SUCCESSOR_RETRY_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/channel/confirming.rs | crate::channel::confirming | ChannelState::check_snapshot(snapshot) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::mark_final() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::refinalize() | ret | bool	math	state flag/predicate
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | FINALIZE_RETRY_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | FinalSnapshot.payload | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | Finalizing.failures | field | u32	math	local count/index/counter
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | RETRY_DOUBLINGS | const | u32	math	local count/index/counter
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | Step::Due.after | field | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/channel/folding.rs | crate::channel::folding | ChannelState::amendments_gone() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/folding.rs | crate::channel::folding | ChannelState::mark_folded() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | FOLD_DELAY_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/channel/folding.rs | crate::channel::folding | FoldSnapshot.payload | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/folding.rs | crate::channel::folding | Folding.failures | field | u32	math	local count/index/counter
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | Step::Due.after | field | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::ask_thread() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_probe() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	math	state flag/predicate
@@ -2463,7 +2456,6 @@ ambre-murmure | src/list.rs | crate::list | DELETED | const | &str	free-text	UI 
 ambre-murmure | src/list.rs | crate::list | EDITED | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | FLUSH_PX | const | f32	math	layout geometry in logical px
 ambre-murmure | src/list.rs | crate::list | FROM_THREAD | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | GROUP_SPAN_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/list.rs | crate::list | JUMP_HINT | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	math	state flag/predicate
@@ -2538,8 +2530,6 @@ ambre-murmure | src/markers.rs | crate::markers | line_marker(text) | param | &s
 ambre-murmure | src/markers.rs | crate::markers | link(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | outside(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/members.rs | crate::members | ONLINE | const | u8	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/members.rs | crate::members | PRESENCE_EXPIRY_MS | const | u64	debt	planned: lot B4 Millis
-ambre-murmure | src/members.rs | crate::members | REFRESH_PERIOD_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/members.rs | crate::members | Roster::heard() | ret | bool	math	state flag/predicate
 ambre-murmure | src/members.rs | crate::members | Roster::left() | ret | bool	math	state flag/predicate
 ambre-murmure | src/members.rs | crate::members | Roster::tick() | ret | bool	math	state flag/predicate
@@ -2865,10 +2855,7 @@ ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inne
 ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | Sample::bytes() | ret | Vec<u8>	debt	finding: Ephemeral samples as `Vec<u8>`
 ambre-murmure | src/watchers.rs | crate::watchers | Sample::read(payload) | param | &[u8]	debt	finding: Ephemeral samples as `Vec<u8>`
-ambre-murmure | src/watchers.rs | crate::watchers | TICK_MS | const | u64	debt	planned: lot B4 Millis
-ambre-murmure | src/watchers.rs | crate::watchers | TYPING_EXPIRY_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/watchers.rs | crate::watchers | TYPING_IN_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | TYPING_REFRESH_MS | const | u64	debt	planned: lot B4 Millis
 ambre-murmure | src/watchers.rs | crate::watchers | TYPING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | WATCHING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::heard() | ret | bool	math	state flag/predicate
@@ -2878,7 +2865,6 @@ ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_typing() | re
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_watching() | ret | bool	math	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::tick() | ret | bool	math	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	math	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | owed(period) | param | u64	debt	planned: lot B4 Millis
 ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(width) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(x0) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(x1) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)

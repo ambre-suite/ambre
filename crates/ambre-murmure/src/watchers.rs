@@ -9,22 +9,22 @@
 use std::collections::HashMap;
 
 use ambre_bus::Timestamp;
-use ambre_core::{MessageId, UserId};
+use ambre_core::{MessageId, Millis, UserId};
 
 use crate::{PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS};
 
 /// How often the view ticks an open channel, in milliseconds
 /// (`ambre-spec-budgets.md section 8`).
-pub const TICK_MS: u64 = 1_000;
+pub const TICK_MS: Millis = Millis(1_000);
 
 /// How often a member who keeps typing sends a typing sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const TYPING_REFRESH_MS: u64 = 3_000;
+pub const TYPING_REFRESH_MS: Millis = Millis(3_000);
 
 /// How long a typing sample keeps its member typing, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Two refresh periods: one for the
 /// tick that dates a sample, one for a sample lost on the way.
-pub const TYPING_EXPIRY_MS: u64 = 2 * TYPING_REFRESH_MS;
+pub const TYPING_EXPIRY_MS: Millis = TYPING_REFRESH_MS.times(2);
 
 /// The first byte of a channel sample. A space sample takes another tag, so
 /// neither reads as the other.
@@ -142,9 +142,9 @@ impl Watchers {
     /// changed.
     pub fn tick(&mut self, now: Timestamp) -> bool {
         self.now = Some(now);
-        let fresh = |stamp: &mut Option<Timestamp>, expiry: u64| {
+        let fresh = |stamp: &mut Option<Timestamp>, expiry: Millis| {
             let at = *stamp.get_or_insert(now);
-            now.0.saturating_sub(at.0) <= expiry
+            now.since(at) <= expiry
         };
         let (watching, typing) = (self.watching.len(), self.typing.len());
         self.typing
@@ -210,8 +210,8 @@ impl Watchers {
 }
 
 /// Whether a sample last sent at `sent` is owed again at `now`, recording it.
-fn owed(sent: &mut Option<Timestamp>, now: Timestamp, period: u64) -> bool {
-    let due = sent.is_none_or(|at| now.0.saturating_sub(at.0) >= period);
+fn owed(sent: &mut Option<Timestamp>, now: Timestamp, period: Millis) -> bool {
+    let due = sent.is_none_or(|at| now.since(at) >= period);
     if due {
         *sent = Some(now);
     }
@@ -242,14 +242,14 @@ mod tests {
     fn typing_refreshes_while_it_lasts_and_expires_once_it_stops() {
         let mut watchers = ticked();
         assert!(watchers.owes_typing(T0, None), "the first keystroke sends");
-        assert!(!watchers.owes_typing(at(TYPING_REFRESH_MS - 1), None));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS), None));
+        assert!(!watchers.owes_typing(at(TYPING_REFRESH_MS.0 - 1), None));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS.0), None));
 
         let bob = UserId::new();
         assert!(watchers.heard(bob, Sample::Typing));
         assert_eq!(watchers.view(), (vec![bob], vec![bob]));
-        assert!(!watchers.tick(at(TYPING_EXPIRY_MS)), "within the expiry");
-        assert!(watchers.tick(at(TYPING_EXPIRY_MS + 1)));
+        assert!(!watchers.tick(at(TYPING_EXPIRY_MS.0)), "within the expiry");
+        assert!(watchers.tick(at(TYPING_EXPIRY_MS.0 + 1)));
         assert_eq!(
             watchers.view(),
             (vec![bob], Vec::new()),
@@ -274,13 +274,13 @@ mod tests {
 
         assert!(watchers.left(carol));
         assert!(!watchers.left(carol));
-        assert!(!watchers.tick(at(PRESENCE_EXPIRY_MS)));
-        assert!(watchers.tick(at(PRESENCE_EXPIRY_MS + 1)));
+        assert!(!watchers.tick(at(PRESENCE_EXPIRY_MS.0)));
+        assert!(watchers.tick(at(PRESENCE_EXPIRY_MS.0 + 1)));
         assert_eq!(watchers.view(), (Vec::new(), Vec::new()));
 
         assert!(watchers.owes_watching(T0));
-        assert!(!watchers.owes_watching(at(REFRESH_PERIOD_MS - 1)));
-        assert!(watchers.owes_watching(at(REFRESH_PERIOD_MS)));
+        assert!(!watchers.owes_watching(at(REFRESH_PERIOD_MS.0 - 1)));
+        assert!(watchers.owes_watching(at(REFRESH_PERIOD_MS.0)));
     }
 
     // --- MURMURE-127 ---
@@ -332,7 +332,7 @@ mod tests {
         assert!(watchers.owes_typing(T0, None));
         assert!(watchers.owes_typing(at(1), Some(root)), "a new place");
         assert!(!watchers.owes_typing(at(2), Some(root)));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS + 1), Some(root)));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS.0 + 1), Some(root)));
         assert_eq!(Sample::typing(Some(root)), Sample::TypingIn(root));
         assert_eq!(Sample::typing(None), Sample::Typing);
     }

@@ -105,7 +105,7 @@ pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 
 /// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
 /// browser spaces a hidden page's timers to a second at least.
-const HIDDEN_RELAY_PERIOD_MS: i32 = 1000;
+const HIDDEN_RELAY_PERIOD_MS: ambre_bus::Millis = ambre_bus::Millis(1000);
 
 /// The ownership token under the `web ` prefix the asynchronous Clipboard API
 /// demands. The async publish writes it beside the payload so the whole-clipboard

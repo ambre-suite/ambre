@@ -27,6 +27,34 @@ impl Millis {
     pub const fn to_duration(self) -> Duration {
         Duration::from_millis(self.0)
     }
+
+    /// The span `n` times over, saturating at `u64::MAX` milliseconds.
+    #[must_use]
+    pub const fn times(self, n: u64) -> Self {
+        Self(self.0.saturating_mul(n))
+    }
+
+    /// The span doubled `doublings` times, saturating at `u64::MAX`
+    /// milliseconds: the delay of a retry that backs off.
+    #[must_use]
+    pub const fn doubled(self, doublings: u32) -> Self {
+        match 1_u64.checked_shl(doublings) {
+            Some(factor) => self.times(factor),
+            None => Self(u64::MAX),
+        }
+    }
+
+    /// The span as the `i32` a browser timer takes, saturating at
+    /// `i32::MAX` milliseconds.
+    pub fn to_timer_i32(self) -> i32 {
+        i32::try_from(self.0).unwrap_or(i32::MAX)
+    }
+
+    /// The span as a distance between two [`PageTime`] instants.
+    #[allow(clippy::cast_precision_loss)]
+    pub const fn as_page_ms(self) -> f64 {
+        self.0 as f64
+    }
 }
 
 /// A span of time in whole seconds.
@@ -62,6 +90,17 @@ impl std::fmt::Display for Timestamp {
 }
 
 impl Timestamp {
+    /// The instant `span` after this one, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn plus(self, span: Millis) -> Self {
+        Self(self.0.saturating_add(span.0))
+    }
+
+    /// The span from `earlier` to this instant, zero when `earlier` is later.
+    pub const fn since(self, earlier: Self) -> Millis {
+        Millis(self.0.saturating_sub(earlier.0))
+    }
+
     /// The instant as a CRDT stores it, a signed 64-bit integer, saturating
     /// at `i64::MAX`.
     pub fn to_i64_saturating(self) -> i64 {
@@ -232,6 +271,19 @@ mod tests {
     fn a_span_serializes_as_the_bare_integer_of_its_unit() {
         assert_eq!(serde_json::to_string(&Millis(1500)).unwrap(), "1500");
         assert_eq!(serde_json::to_string(&Seconds(900)).unwrap(), "900");
+    }
+
+    #[test]
+    fn a_millisecond_span_scales_and_backs_off_without_overflow() {
+        assert_eq!(Millis(2_000).times(3), Millis(6_000));
+        assert_eq!(Millis(2_000).doubled(2), Millis(8_000));
+        assert_eq!(Millis(2).doubled(64), Millis(u64::MAX));
+        assert_eq!(Millis(u64::MAX).times(2), Millis(u64::MAX));
+        assert_eq!(Millis(1_000).to_timer_i32(), 1_000);
+        assert_eq!(Millis(u64::MAX).to_timer_i32(), i32::MAX);
+        assert_eq!(Timestamp(10).plus(Millis(5)), Timestamp(15));
+        assert_eq!(Timestamp(10).since(Timestamp(4)), Millis(6));
+        assert_eq!(Timestamp(4).since(Timestamp(10)), Millis(0));
     }
 
     #[test]

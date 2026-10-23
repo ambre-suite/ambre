@@ -117,15 +117,15 @@ fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
     state.finalize_failed(closing);
     assert_eq!(state.lease_to_ask(at(5_000)), None, "the tick dates it");
     assert_eq!(
-        state.lease_to_ask(at(5_000 + FINALIZE_RETRY_MS)),
+        state.lease_to_ask(at(5_000 + FINALIZE_RETRY_MS.0)),
         Some(closing)
     );
     state.finalize_failed(closing);
-    let base = 5_000 + FINALIZE_RETRY_MS;
+    let base = 5_000 + FINALIZE_RETRY_MS.0;
     assert_eq!(state.lease_to_ask(at(base)), None);
-    assert_eq!(state.lease_to_ask(at(base + FINALIZE_RETRY_MS)), None);
+    assert_eq!(state.lease_to_ask(at(base + FINALIZE_RETRY_MS.0)), None);
     assert_eq!(
-        state.lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS)),
+        state.lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS.0)),
         Some(closing)
     );
 }

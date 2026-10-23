@@ -1371,7 +1371,7 @@ impl MurmureView {
         let now = (self.reads.now_ms)();
         let due = self
             .ticked
-            .is_none_or(|(ticked, at)| ticked != channel_id || now - at >= TICK_MS as f64);
+            .is_none_or(|(ticked, at)| ticked != channel_id || now - at >= TICK_MS.as_page_ms());
         if due {
             self.ticked = Some((channel_id, now));
             let now = self.now();
@@ -4311,10 +4311,11 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
-        page.clock.set(ambre_bus::PageTime(TICK_MS as f64 - 1.0));
+        page.clock
+            .set(ambre_bus::PageTime(TICK_MS.as_page_ms() - 1.0));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 0, "inside the period");
-        page.clock.set(ambre_bus::PageTime(TICK_MS as f64));
+        page.clock.set(ambre_bus::PageTime(TICK_MS.as_page_ms()));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "one period later");
 
@@ -4326,7 +4327,8 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
         let mut thread_view = page.view.region(300.0, 400.0);
-        page.clock.set(ambre_bus::PageTime(10.0 * TICK_MS as f64));
+        page.clock
+            .set(ambre_bus::PageTime(10.0 * TICK_MS.as_page_ms()));
         frame(&mut thread_view);
         assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
         page.pane.set(MurmurePane::ChannelList);

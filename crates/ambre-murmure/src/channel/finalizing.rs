@@ -8,7 +8,7 @@
 //! each delay is stamped by the next tick.
 
 use ambre_bus::Timestamp;
-use ambre_core::{LeaseId, SegmentId, Seq};
+use ambre_core::{LeaseId, Millis, SegmentId, Seq};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -17,7 +17,7 @@ use crate::schema::{self, Root, SegmentKey, SegmentState};
 
 /// The delay before a failed lease request or commit is asked again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const FINALIZE_RETRY_MS: u64 = 2_000;
+pub const FINALIZE_RETRY_MS: Millis = Millis(2_000);
 
 /// The doublings past which the delay stops growing: about half an hour.
 pub(super) const RETRY_DOUBLINGS: u32 = 10;
@@ -35,7 +35,10 @@ pub(super) struct Finalizing {
 #[derive(Debug, Clone, Copy)]
 enum Step {
     /// Ask for the lease `after` milliseconds past the tick that stamps `at`.
-    Due { after: u64, at: Option<Timestamp> },
+    Due {
+        after: Millis,
+        at: Option<Timestamp>,
+    },
     /// A lease request or a commit is on its way.
     Asked,
     /// This client holds the lease until `until`, stamped by the next tick.
@@ -91,7 +94,10 @@ impl ChannelState {
         if self.finalizing.as_ref().map(|f| f.segment) != Some(segment) {
             self.finalizing = Some(Finalizing {
                 segment,
-                step: Step::Due { after: 0, at: None },
+                step: Step::Due {
+                    after: Millis(0),
+                    at: None,
+                },
                 failures: 0,
             });
         }
@@ -106,7 +112,7 @@ impl ChannelState {
         let finalizing = self.finalize_step(segment)?;
         match &mut finalizing.step {
             Step::Due { after, at } => {
-                let at = *at.get_or_insert(Timestamp(now.0.saturating_add(*after)));
+                let at = *at.get_or_insert(now.plus(*after));
                 if now < at {
                     return None;
                 }
@@ -125,7 +131,7 @@ impl ChannelState {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = 0;
             finalizing.step = Step::Due {
-                after: retry_in.0,
+                after: retry_in,
                 at: None,
             };
         }
@@ -162,7 +168,7 @@ impl ChannelState {
             let doublings = finalizing.failures.min(RETRY_DOUBLINGS);
             finalizing.failures = finalizing.failures.saturating_add(1);
             finalizing.step = Step::Due {
-                after: FINALIZE_RETRY_MS << doublings,
+                after: FINALIZE_RETRY_MS.doubled(doublings),
                 at: None,
             };
         }

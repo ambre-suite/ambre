@@ -9,7 +9,9 @@
 use std::io::Cursor;
 
 use super::*;
-use ambre_bus::{ChannelId, MediaRef, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent};
+use ambre_bus::{
+    ChannelId, MediaRef, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
+};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
@@ -27,8 +29,8 @@ const MAX_ALLOC: u64 = 128 * 1024 * 1024;
 pub(crate) const PICTURE_BYTES: usize = 8 * 1024 * 1024;
 /// A frame delay at or under this plays at [`SLOW_DELAY_MS`], as browsers do:
 /// a file that asks for none would otherwise spin.
-const FAST_DELAY_MS: u32 = 10;
-const SLOW_DELAY_MS: u32 = 100;
+const FAST_DELAY_MS: Millis = Millis(10);
+const SLOW_DELAY_MS: Millis = Millis(100);
 
 impl LogicState {
     /// Fetch the image `media_ref`, stored under `document_id`, for the view
@@ -113,9 +115,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                 held += pixels.len();
                 frames.push(PictureFrame {
                     pixels,
-                    delay_ms: ambre_core::Millis(u64::from(delay(
-                        numer.checked_div(denom).unwrap_or(0),
-                    ))),
+                    delay_ms: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
                 });
             }
             (!frames.is_empty()).then_some(Picture {
@@ -162,7 +162,7 @@ fn scale(image: RgbaImage, size: (u32, u32)) -> Vec<u8> {
     image::imageops::resize(&image, size.0, size.1, FilterType::Triangle).into_raw()
 }
 
-fn delay(ms: u32) -> u32 {
+fn delay(ms: Millis) -> Millis {
     if ms <= FAST_DELAY_MS {
         SLOW_DELAY_MS
     } else {
@@ -223,12 +223,7 @@ mod tests {
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&gif(2, (8, 8), 0)).expect("a GIF");
-        assert!(
-            spinning
-                .frames
-                .iter()
-                .all(|f| f.delay_ms == ambre_core::Millis(u64::from(SLOW_DELAY_MS)))
-        );
+        assert!(spinning.frames.iter().all(|f| f.delay_ms == SLOW_DELAY_MS));
     }
 
     /// A still image is one frame, and a small one keeps its size. A file

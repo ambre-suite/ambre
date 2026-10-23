@@ -11,7 +11,7 @@
 //! The engine reads no clock: each delay is stamped by the next tick.
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, DocumentId, LeaseId, SegmentId, Seq};
+use ambre_core::{ChannelId, DocumentId, LeaseId, Millis, SegmentId, Seq};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -26,7 +26,7 @@ use crate::{mention, style};
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay
 /// holds. The relay answers sooner when a fold is owed earlier.
-pub const FOLD_DELAY_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+pub const FOLD_DELAY_MS: Millis = Millis(7 * 24 * 60 * 60 * 1000);
 
 /// The fold of one final segment, as this client drives it.
 #[derive(Debug)]
@@ -41,7 +41,10 @@ pub(super) struct Folding {
 #[derive(Debug, Clone, Copy)]
 enum Step {
     /// Ask for the lease `after` milliseconds past the tick that stamps `at`.
-    Due { after: u64, at: Option<Timestamp> },
+    Due {
+        after: Millis,
+        at: Option<Timestamp>,
+    },
     /// A lease request or a commit is on its way.
     Asked,
     /// This client holds the lease until `until`, stamped by the next tick.
@@ -112,7 +115,10 @@ impl ChannelState {
         if self.folding.as_ref().map(|f| f.segment) != Some(segment) {
             self.folding = Some(Folding {
                 segment,
-                step: Step::Due { after: 0, at: None },
+                step: Step::Due {
+                    after: Millis(0),
+                    at: None,
+                },
                 failures: 0,
             });
         }
@@ -132,7 +138,7 @@ impl ChannelState {
         let folding = self.fold_step()?;
         match &mut folding.step {
             Step::Due { after, at } => {
-                let at = *at.get_or_insert(Timestamp(now.0.saturating_add(*after)));
+                let at = *at.get_or_insert(now.plus(*after));
                 if now < at {
                     return None;
                 }
@@ -169,7 +175,7 @@ impl ChannelState {
                 until: None,
             },
             FoldAnswer::Deferred { retry_in } => Step::Due {
-                after: retry_in.0,
+                after: retry_in,
                 at: None,
             },
         };
@@ -195,7 +201,7 @@ impl ChannelState {
             let doublings = folding.failures.min(RETRY_DOUBLINGS);
             folding.failures = folding.failures.saturating_add(1);
             folding.step = Step::Due {
-                after: FINALIZE_RETRY_MS << doublings,
+                after: FINALIZE_RETRY_MS.doubled(doublings),
                 at: None,
             };
         }
