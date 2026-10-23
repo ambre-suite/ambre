@@ -8,7 +8,7 @@
 //! because it never states one.
 
 use ambre_bus::app::prose::MarkKey;
-use ambre_core::{Rgb, Rgba};
+use ambre_core::{FontSize, Rgb, Rgba};
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 use crate::doc;
@@ -205,8 +205,10 @@ const FLAG_KEYS: [MarkRoot; 7] = [
 /// The keys whose value is a colour.
 const COLOR_KEYS: [MarkRoot; 2] = [MarkRoot::Ink, MarkRoot::Highlight];
 
-/// The largest font size the office formats round-trip, in points.
-const FONT_SIZE_MAX: f32 = 1638.0;
+/// The smallest font size a mark may carry.
+const FONT_SIZE_MIN: FontSize = FontSize::from_whole_points(1);
+/// The largest font size the office formats round-trip.
+const FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(1638);
 
 /// Why a mark value was refused before the document was touched
 /// (`PROSE-FEAT-022`).
@@ -267,13 +269,12 @@ pub fn canonical_color(rgba: Rgba) -> String {
 /// # Errors
 /// [`MarkValueError::BadFontSize`] for a value that does not read as a number,
 /// is not finite, or falls outside one to 1638 points.
-pub fn parse_font_size(raw: &str) -> Result<f32, MarkValueError> {
+pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
     let bad = || MarkValueError::BadFontSize(raw.to_owned());
     let points = raw.parse::<f32>().map_err(|_| bad())?;
-    if !points.is_finite() || !(1.0..=FONT_SIZE_MAX).contains(&points) {
-        return Err(bad());
-    }
-    Ok(points)
+    FontSize::new(points)
+        .filter(|size| (FONT_SIZE_MIN..=FONT_SIZE_MAX).contains(size))
+        .ok_or_else(bad)
 }
 
 /// The value a command may write under `key`, in its canonical spelling, or the
@@ -303,8 +304,9 @@ pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<String, MarkVa
         return Ok(canonical_color(parse_color(raw)?));
     }
     if NUMERIC_KEYS.contains(&root) {
-        let points = parse_font_size(raw)?;
-        return canonical_number(points).ok_or_else(|| MarkValueError::BadFontSize(raw.to_owned()));
+        let size = parse_font_size(raw)?;
+        return canonical_number(size.points())
+            .ok_or_else(|| MarkValueError::BadFontSize(raw.to_owned()));
     }
     Ok(raw.to_owned())
 }

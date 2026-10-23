@@ -10,7 +10,7 @@
 //! Nothing here writes. The resolution runs once per run per layout, which is
 //! the row the budget pays for (`ambre-spec-budgets.md section 1`).
 
-use ambre_core::Rgba;
+use ambre_core::{FontSize, Rgba};
 use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
@@ -46,8 +46,7 @@ pub struct ResolvedStyle {
     pub code_inline: bool,
     pub color: Option<Rgba>,
     pub background: Option<Rgba>,
-    /// In points.
-    pub font_size: f32,
+    pub font_size: FontSize,
     pub font_family: Option<String>,
     pub link: Option<ambre_core::LinkUrl>,
 }
@@ -74,7 +73,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
         code_inline: false,
         color: None,
         background: None,
-        font_size: defaults.font_size_pt,
+        font_size: defaults.font_size,
         font_family: Some(defaults.font_family.clone()),
         link: None,
     };
@@ -83,7 +82,8 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
             resolved.bold = true;
             let level = usize::from(context.heading_level.unwrap_or(1).clamp(1, 6));
             if let Some(scale) = HEADING_SCALE.get(level - 1) {
-                resolved.font_size = defaults.font_size_pt * scale;
+                resolved.font_size = FontSize::new(defaults.font_size.points() * scale)
+                    .unwrap_or(defaults.font_size);
             }
         }
         BlockType::CodeBlock => {
@@ -168,17 +168,17 @@ mod tests {
         let defaults = DocDefaults::default();
         // The defaults alone.
         let plain = resolve(&MarkSet::new(), body(), &defaults);
-        assert_eq!(plain.font_size, defaults.font_size_pt);
+        assert_eq!(plain.font_size, defaults.font_size);
         assert!(!plain.bold);
 
         // The block type, above the defaults.
         let titled = resolve(&MarkSet::new(), heading(1), &defaults);
         assert!(titled.bold, "a heading is drawn bold by its type");
-        assert!(titled.font_size > defaults.font_size_pt);
+        assert!(titled.font_size > defaults.font_size);
 
         // The mark, above both.
         let marked = resolve(&marks(&[("fs", "30")]), heading(1), &defaults);
-        assert_eq!(marked.font_size, 30.0);
+        assert_eq!(marked.font_size, FontSize::from_whole_points(30));
     }
 
     /// A property no level carries resolves to a decided absence, and the
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(resolved.background, None);
         assert_eq!(resolved.link, None);
         // The size and the family are always decided: the defaults carry both.
-        assert!(resolved.font_size > 0.0);
+        assert!(resolved.font_size > FontSize::default());
         assert!(resolved.font_family.is_some());
     }
 

@@ -29,8 +29,8 @@ use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
 
 use crate::doc;
 use crate::events::{
-    Align, BlockInit, CellBorder, LineHeight, LineHeightMode, ListStyle, OrderedStyle,
-    ParagraphStyle, ProseCommand, VAlign, tree_id,
+    Align, BlockInit, CellBorder, LineHeight, ListStyle, OrderedStyle, ParagraphStyle,
+    ProseCommand, VAlign, tree_id,
 };
 use crate::logic::ProseState;
 use crate::schema::{MIGRATIONS, SCHEMA_VERSION};
@@ -354,10 +354,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             indent_right: Some(3.0),
             space_before: Some(4.0),
             space_after: Some(5.0),
-            line_height: Some(LineHeight {
-                mode: LineHeightMode::Multiple,
-                value: 1.5,
-            }),
+            line_height: Some(LineHeight::Multiple(1.5)),
             keep_together: Some(true),
             keep_with_next: Some(true),
         },
@@ -538,7 +535,7 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
             width_pt: 0.5,
             color: ambre_core::Rgb::from_bits(0x0000_0000),
         }),
-        padding_pt: Some(4.0),
+        padding_pt: Some(ambre_core::Pt::new(4.0)),
     });
 }
 

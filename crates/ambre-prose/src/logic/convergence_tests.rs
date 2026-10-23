@@ -516,7 +516,7 @@ fn two_peers_setting_two_sizes_resolve_the_same_one() {
 
     let size = alice.resolved_runs(&block).remove(0).1.font_size;
     assert_eq!(size, bob.resolved_runs(&block).remove(0).1.font_size);
-    assert!(size == 12.0 || size == 14.0, "{size}");
+    assert!(size.points() == 12.0 || size.points() == 14.0, "{size}");
 }
 
 /// Two authors setting two properties of one paragraph both keep theirs

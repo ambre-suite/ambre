@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use ambre_core::{CommentId, FootnoteId, ReplyId, Rgb, SuggestionId, UserId};
+use ambre_core::{CommentId, FootnoteId, Pt, ReplyId, Rgb, SuggestionId, UserId};
 
 ambre_core::define_index! {
     /// A code-point offset into the body of one block, as the CRDT counts it
@@ -365,11 +365,47 @@ impl LineHeightMode {
     }
 }
 
-/// One line-height setting: the mode and the number it reads.
+/// One line-height setting. The mode decides the unit of its number, so each
+/// mode carries its own.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LineHeight {
-    pub mode: LineHeightMode,
-    pub value: f32,
+pub enum LineHeight {
+    /// A multiple of the font size, a bare ratio.
+    Multiple(f32),
+    /// An exact height.
+    Exact(Pt),
+    /// A floor on the height.
+    AtLeast(Pt),
+}
+
+impl LineHeight {
+    /// The setting a stored mode and number read as.
+    #[must_use]
+    pub fn from_stored(mode: LineHeightMode, value: f32) -> Self {
+        match mode {
+            LineHeightMode::Multiple => Self::Multiple(value),
+            LineHeightMode::Exact => Self::Exact(Pt::new(value)),
+            LineHeightMode::AtLeast => Self::AtLeast(Pt::new(value)),
+        }
+    }
+
+    /// The mode the store writes.
+    #[must_use]
+    pub fn mode(self) -> LineHeightMode {
+        match self {
+            Self::Multiple(_) => LineHeightMode::Multiple,
+            Self::Exact(_) => LineHeightMode::Exact,
+            Self::AtLeast(_) => LineHeightMode::AtLeast,
+        }
+    }
+
+    /// The number the store writes beside the mode.
+    #[must_use]
+    pub fn stored_value(self) -> f32 {
+        match self {
+            Self::Multiple(factor) => factor,
+            Self::Exact(height) | Self::AtLeast(height) => height.get(),
+        }
+    }
 }
 
 /// The nine paragraph properties, each one optional.
@@ -942,7 +978,7 @@ pub enum ProseCommand {
     InsertTableCol {
         table_id: BlockId,
         at_col: u32,
-        width_pt: Option<f32>,
+        width_pt: Option<Pt>,
     },
     DeleteTableCol {
         table_id: BlockId,
@@ -951,7 +987,7 @@ pub enum ProseCommand {
     ResizeTableCol {
         table_id: BlockId,
         col_index: u32,
-        width_pt: f32,
+        width_pt: Pt,
     },
     /// Two grid positions, `(row, column)`, in either order. The handler
     /// resolves them to two block ids before it writes (`PROSE-FEAT-241`).
@@ -969,7 +1005,7 @@ pub enum ProseCommand {
         bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
-        padding_pt: Option<f32>,
+        padding_pt: Option<Pt>,
     },
     /// Tab and Shift-Tab: the next or the previous stop in reading order.
     /// Past the last cell, a row is appended (`PROSE-FEAT-251`).

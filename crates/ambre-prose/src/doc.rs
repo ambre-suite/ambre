@@ -13,7 +13,7 @@
 //! separator (`PROSE-088`).
 
 use ambre_core::crdt::FieldKey;
-use ambre_core::{LangTag, Mm};
+use ambre_core::{FontSize, LangTag, Mm, Pt};
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
@@ -313,8 +313,8 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 }
 
 /// The width a column takes when the command that makes it names none
-/// (`PROSE-FEAT-232`): one inch, in points.
-pub const DEFAULT_COLUMN_WIDTH_PT: f32 = 72.0;
+/// (`PROSE-FEAT-232`): one inch.
+pub const DEFAULT_COLUMN_WIDTH: Pt = Pt::new(72.0);
 
 /// The nine built-in style names. A document written by an older client renders
 /// them from the client rather than from stale copies of its own
@@ -537,16 +537,16 @@ pub(crate) fn col_widths_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMov
 
 /// A table's column widths, in points, in column order.
 #[must_use]
-pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<f32> {
+pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<Pt> {
     let Some(list) = col_widths_read(tree, table) else {
         return Vec::new();
     };
     (0..list.len())
         .map(
             |index| match list.get(index).and_then(|v| v.into_value().ok()) {
-                Some(LoroValue::Double(n)) => n as f32,
-                Some(LoroValue::I64(n)) => n as f32,
-                _ => DEFAULT_COLUMN_WIDTH_PT,
+                Some(LoroValue::Double(n)) => Pt::new(n as f32),
+                Some(LoroValue::I64(n)) => Pt::new(n as f32),
+                _ => DEFAULT_COLUMN_WIDTH,
             },
         )
         .collect()
@@ -802,8 +802,8 @@ pub(crate) fn write_paragraph_style(
                 "the line-height register refused a container".into(),
             ));
         };
-        map.insert(LineHeightKey::Mode, i64::from(line_height.mode.code()))?;
-        map.insert(LineHeightKey::Value, f64::from(line_height.value))?;
+        map.insert(LineHeightKey::Mode, i64::from(line_height.mode().code()))?;
+        map.insert(LineHeightKey::Value, f64::from(line_height.stored_value()))?;
     }
     Ok(())
 }
@@ -865,10 +865,7 @@ fn read_line_height(node: &Fields<NodeKey>) -> Option<LineHeight> {
         .ok()
         .and_then(LineHeightMode::from_code)?;
     let value = read_f64(&map, LineHeightKey::Value)?;
-    Some(LineHeight {
-        mode,
-        value: value as f32,
-    })
+    Some(LineHeight::from_stored(mode, value as f32))
 }
 
 // -----------------------------------------------------------------------------
@@ -914,7 +911,7 @@ const DEFAULT_MARGIN: Mm = Mm::new(20.0);
 /// The family is a value, not a key. It lives in `DocDefaults::default` alone,
 /// because a string constant in this module is read as a schema key
 /// (`SCHEMA-018`).
-const DEFAULT_FONT_SIZE_PT: f32 = 11.0;
+const DEFAULT_FONT_SIZE: FontSize = FontSize::from_whole_points(11);
 const DEFAULT_LINE_HEIGHT: f32 = 1.5;
 
 /// The page format a document declares, in millimetres.
@@ -954,7 +951,7 @@ impl Default for PageFormat {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocDefaults {
     pub font_family: String,
-    pub font_size_pt: f32,
+    pub font_size: FontSize,
     /// A multiple of the font size, never an absolute length.
     pub line_height: f32,
 }
@@ -964,7 +961,7 @@ impl Default for DocDefaults {
     fn default() -> Self {
         Self {
             font_family: "Inter".to_string(),
-            font_size_pt: DEFAULT_FONT_SIZE_PT,
+            font_size: DEFAULT_FONT_SIZE,
             line_height: DEFAULT_LINE_HEIGHT,
         }
     }
@@ -993,7 +990,10 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
         font_family: read_string(&defaults, DefaultsKey::FontFamily)
             .filter(|name| !name.is_empty())
             .unwrap_or(fallback.font_family),
-        font_size_pt: read(DefaultsKey::FontSizePt, fallback.font_size_pt),
+        font_size: read_f32(&defaults, DefaultsKey::FontSizePt)
+            .filter(|number| *number > 0.0)
+            .and_then(FontSize::new)
+            .unwrap_or(fallback.font_size),
         line_height: read(DefaultsKey::LineHeight, fallback.line_height),
     }
 }
@@ -1108,7 +1108,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
         .insert(DefaultsKey::FontFamily, text.font_family.as_str())
         .ok()?;
     defaults
-        .insert(DefaultsKey::FontSizePt, f64::from(text.font_size_pt))
+        .insert(DefaultsKey::FontSizePt, f64::from(text.font_size.points()))
         .ok()?;
     defaults
         .insert(DefaultsKey::LineHeight, f64::from(text.line_height))

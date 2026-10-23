@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{BlockType, DocOffset, ParagraphStyle};
-use ambre_core::FootnoteId;
+use ambre_core::{FootnoteId, Pt};
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
@@ -791,13 +791,13 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-pub(crate) fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Vec<f32> {
-    let usable = stored_pt.len() == cols
-        && stored_pt
+pub(crate) fn column_widths_px(stored: &[Pt], cols: usize, content_width_px: f32) -> Vec<f32> {
+    let usable = stored.len() == cols
+        && stored
             .iter()
-            .all(|width| width.is_finite() && *width > 0.0);
+            .all(|width| width.is_finite() && *width > Pt::ZERO);
     if usable {
-        stored_pt.iter().map(|width| width * PX_PER_PT).collect()
+        stored.iter().map(|width| width.to_doc_px().get()).collect()
     } else {
         let share = if cols == 0 {
             content_width_px

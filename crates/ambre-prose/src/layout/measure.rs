@@ -10,8 +10,8 @@ use parley::{
     LayoutContext, LineHeight, StyleProperty,
 };
 
-use ambre_bus::app::prose::{Align, DocOffset, LineHeightMode, ParagraphStyle};
-use ambre_core::{ByteDelta, ByteOffset, ByteSpan, char_to_byte};
+use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
+use ambre_core::{ByteDelta, ByteOffset, ByteSpan, Pt, char_to_byte};
 use ambre_draw::{ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -77,12 +77,6 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
     (out, spans)
 }
 
-/// The height one point converts to.
-#[must_use]
-pub fn px(points: f32) -> f32 {
-    points * PX_PER_PT
-}
-
 /// The style one block is measured in.
 ///
 /// It resolves the document defaults against the block's own paragraph
@@ -142,9 +136,7 @@ impl EffectiveStyle {
     ) -> Self {
         // A stored size outside the range of a font size lays out at zero
         // rather than at a negative height.
-        let font_size_px = ambre_core::FontSize::new(defaults.font_size_pt)
-            .unwrap_or_default()
-            .to_px();
+        let font_size_px = defaults.font_size.to_px();
         Self {
             font_family: defaults.font_family.clone(),
             font_size_px,
@@ -153,11 +145,21 @@ impl EffectiveStyle {
             bold: weight == Weight::Bold,
             italic: false,
             align: paragraph.align.unwrap_or(Align::Left),
-            indent_first_px: px(paragraph.indent_first.unwrap_or(0.0)),
-            indent_left_px: px(paragraph.indent_left.unwrap_or(0.0)),
-            indent_right_px: px(paragraph.indent_right.unwrap_or(0.0)),
-            space_before_px: px(paragraph.space_before.unwrap_or(0.0)),
-            space_after_px: px(paragraph.space_after.unwrap_or(0.0)),
+            indent_first_px: Pt::new(paragraph.indent_first.unwrap_or(0.0))
+                .to_doc_px()
+                .get(),
+            indent_left_px: Pt::new(paragraph.indent_left.unwrap_or(0.0))
+                .to_doc_px()
+                .get(),
+            indent_right_px: Pt::new(paragraph.indent_right.unwrap_or(0.0))
+                .to_doc_px()
+                .get(),
+            space_before_px: Pt::new(paragraph.space_before.unwrap_or(0.0))
+                .to_doc_px()
+                .get(),
+            space_after_px: Pt::new(paragraph.space_after.unwrap_or(0.0))
+                .to_doc_px()
+                .get(),
             keep_together: paragraph.keep_together.unwrap_or(false),
             keep_with_next: paragraph.keep_with_next.unwrap_or(false),
         }
@@ -180,10 +182,10 @@ impl EffectiveStyle {
 fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> LineHeight {
     match paragraph.line_height {
         None => LineHeight::FontSizeRelative(defaults.line_height),
-        Some(height) => match height.mode {
-            LineHeightMode::Multiple => LineHeight::FontSizeRelative(height.value),
-            LineHeightMode::Exact => LineHeight::Absolute(px(height.value)),
-            LineHeightMode::AtLeast => LineHeight::MetricsRelative(1.0),
+        Some(height) => match height {
+            StoredLineHeight::Multiple(factor) => LineHeight::FontSizeRelative(factor),
+            StoredLineHeight::Exact(points) => LineHeight::Absolute(points.to_doc_px().get()),
+            StoredLineHeight::AtLeast(_) => LineHeight::MetricsRelative(1.0),
         },
     }
 }
@@ -751,10 +753,9 @@ fn build(
 
 /// The floor an `AtLeast` line height sets, in pixels.
 fn at_least_floor_of(paragraph: &ParagraphStyle) -> Option<f32> {
-    let height = paragraph.line_height?;
-    match height.mode {
-        LineHeightMode::AtLeast => Some(px(height.value)),
-        LineHeightMode::Multiple | LineHeightMode::Exact => None,
+    match paragraph.line_height? {
+        StoredLineHeight::AtLeast(floor) => Some(floor.to_doc_px().get()),
+        StoredLineHeight::Multiple(_) | StoredLineHeight::Exact(_) => None,
     }
 }
 
@@ -1077,8 +1078,8 @@ mod tests {
     fn a_font_size_in_points_is_measured_in_pixels() {
         // 96 DPI: twelve points is sixteen pixels, and nothing rounds on the
         // way (`features/ambre-spec-prose-pagination.md section 2`).
-        assert!((px(12.0) - 16.0).abs() < 0.001);
-        assert!((px(72.0) - 96.0).abs() < 0.001);
+        assert!((Pt::new(12.0).to_doc_px().get() - 16.0).abs() < 0.001);
+        assert!((Pt::new(72.0).to_doc_px().get() - 96.0).abs() < 0.001);
     }
 
     #[test]
@@ -1086,7 +1087,7 @@ mod tests {
         // Trame and Toile read `FontSize::to_px` too, so twelve points draw at
         // one height in all three applications.
         let defaults = doc::DocDefaults {
-            font_size_pt: 12.0,
+            font_size: ambre_core::FontSize::from_whole_points(12),
             ..doc::DocDefaults::default()
         };
         let style =

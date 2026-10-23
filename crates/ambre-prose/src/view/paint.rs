@@ -1204,7 +1204,7 @@ mod tests {
 
         style(&mut state, first, |command| {
             if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
-                *padding_pt = Some(12.0);
+                *padding_pt = Some(ambre_core::Pt::new(12.0));
             }
         });
         let mut ui = view_of(&mut state);
@@ -1223,7 +1223,7 @@ mod tests {
         // The neighbour pads more, so the first cell has room below its text.
         style(&mut state, second, |command| {
             if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
-                *padding_pt = Some(48.0);
+                *padding_pt = Some(ambre_core::Pt::new(48.0));
             }
         });
         style(&mut state, first, |command| {

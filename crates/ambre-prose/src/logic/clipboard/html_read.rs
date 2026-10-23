@@ -675,7 +675,9 @@ fn style_marks(style: &str) -> Vec<Change> {
                 }
             }
             "font-size" => {
-                if let Some(points) = font_size(&lower) {
+                if let Some(points) =
+                    font_size(&lower).and_then(|size| mark::canonical_number(size.points()))
+                {
                     changes.push((MarkRoot::FontSize, Some(points)));
                 }
             }
@@ -700,13 +702,15 @@ fn ink(color: Rgba) -> bool {
 
 /// A size in points, from points or pixels. A relative size depends on a
 /// page the paste does not carry.
-fn font_size(value: &str) -> Option<String> {
+fn font_size(value: &str) -> Option<ambre_core::FontSize> {
     let points = if let Some(pt) = value.strip_suffix("pt") {
         pt.trim().parse::<f32>().ok()?
     } else {
-        value.strip_suffix("px")?.trim().parse::<f32>().ok()? * 0.75
+        ambre_core::DocPx::new(value.strip_suffix("px")?.trim().parse::<f32>().ok()?)
+            .to_pt()
+            .get()
     };
-    mark::canonical_number((points * 2.0).round() / 2.0)
+    ambre_core::FontSize::new((points * 2.0).round() / 2.0)
 }
 
 /// The first family a font stack names, when it names one rather than a
