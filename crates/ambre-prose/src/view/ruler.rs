@@ -8,8 +8,9 @@
 //! [`RulerRelease`] and leaves as one command (`PROSE-UI-063`,
 //! `PROSE-UI-076`).
 
+use ambre_core::{DocPx, Pt, ViewPx};
+
 use crate::events::{ParagraphStyle, ProseCommand, tree_id};
-use crate::layout::measure::PX_PER_PT;
 use crate::ui::ProseUiState;
 
 /// One handle of the ruler.
@@ -25,39 +26,47 @@ pub enum RulerHandle {
 
 /// What the ruler shows, rebuilt on every frame from the caret and the column.
 ///
-/// The view publishes canvas pixels. The host converts them to CSS pixels
-/// before the element sees them.
+/// The positions are in pixels of the view, from the canvas's corner. The
+/// ruler sits on the canvas's top edge. The chrome moves it onto the page by
+/// the canvas origin, and moves a pointer back by the same origin.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RulerState {
     /// `false` hides the handles: no caret, or a caret in a block the page
     /// column does not measure.
     pub visible: bool,
-    /// The top of the canvas, where the ruler sits.
-    pub top_px: f32,
-    /// Where the page's content column starts on screen.
-    pub page_left_px: f32,
-    /// How wide the content column is on screen.
-    pub content_width_px: f32,
-    /// How many screen pixels one point takes, at the zoom in force.
-    pub px_per_pt: f32,
-    /// The caret block's indents as the page lays it out, in points
-    /// (`PROSE-UI-075`).
-    pub indent_first: f32,
-    pub indent_left: f32,
-    pub indent_right: f32,
+    /// Where the page's content column starts on the canvas.
+    pub page_left: ViewPx,
+    /// How wide the content column is on the canvas.
+    pub content_width: ViewPx,
+    /// How wide one point is on the canvas, at the zoom the column is drawn at.
+    pub point_width: ViewPx,
+    /// The caret block's indents as the page lays it out (`PROSE-UI-075`).
+    pub indent_first: Pt,
+    pub indent_left: Pt,
+    pub indent_right: Pt,
 }
 
 impl RulerState {
-    /// Where a handle sits on screen.
+    /// A length in points, on the canvas.
+    fn on_canvas(&self, length: Pt) -> ViewPx {
+        self.point_width * length.get()
+    }
+
+    /// A length on the canvas, in points.
+    fn in_points(&self, length: ViewPx) -> Pt {
+        Pt::new(length / self.point_width)
+    }
+
+    /// Where a handle sits on the canvas.
     #[must_use]
-    pub fn handle_x(&self, handle: RulerHandle) -> f32 {
+    pub fn handle_x(&self, handle: RulerHandle) -> ViewPx {
         match handle {
             RulerHandle::IndentFirst => {
-                self.page_left_px + (self.indent_left + self.indent_first) * self.px_per_pt
+                self.page_left + self.on_canvas(self.indent_left + self.indent_first)
             }
-            RulerHandle::IndentLeft => self.page_left_px + self.indent_left * self.px_per_pt,
+            RulerHandle::IndentLeft => self.page_left + self.on_canvas(self.indent_left),
             RulerHandle::IndentRight => {
-                self.page_left_px + self.content_width_px - self.indent_right * self.px_per_pt
+                self.page_left + self.content_width - self.on_canvas(self.indent_right)
             }
         }
     }
@@ -67,57 +76,58 @@ impl RulerState {
     /// no drag leaves a paragraph without room for its text (`PROSE-UI-228`,
     /// `PROSE-UI-229`).
     #[must_use]
-    pub fn points_at(&self, handle: RulerHandle, x: f32) -> f32 {
-        if self.px_per_pt <= 0.0 || !x.is_finite() {
-            return match handle {
-                RulerHandle::IndentFirst => self.indent_first,
-                RulerHandle::IndentLeft => self.indent_left,
-                RulerHandle::IndentRight => self.indent_right,
-            };
-        }
-        let column_pt = self.content_width_px / self.px_per_pt;
+    pub fn points_at(&self, handle: RulerHandle, x: ViewPx) -> Pt {
+        let held = match handle {
+            RulerHandle::IndentFirst => self.indent_first,
+            RulerHandle::IndentLeft => self.indent_left,
+            RulerHandle::IndentRight => self.indent_right,
+        };
+        let column = self.in_points(self.content_width);
         let (raw, other) = match handle {
             // The first line counts from the left indent, and both side
             // indents narrow the room it has.
             RulerHandle::IndentFirst => (
-                (x - self.page_left_px) / self.px_per_pt - self.indent_left,
+                self.in_points(x - self.page_left) - self.indent_left,
                 self.indent_left + self.indent_right,
             ),
-            RulerHandle::IndentLeft => {
-                ((x - self.page_left_px) / self.px_per_pt, self.indent_right)
-            }
+            RulerHandle::IndentLeft => (self.in_points(x - self.page_left), self.indent_right),
             RulerHandle::IndentRight => (
-                (self.page_left_px + self.content_width_px - x) / self.px_per_pt,
+                self.in_points(self.page_left + self.content_width - x),
                 self.indent_left,
             ),
         };
-        let room = (column_pt - other - MIN_TEXT_PT).max(0.0);
-        raw.round().clamp(0.0, room.floor())
+        // A pointer that is not a number, or a point of no width, leaves the
+        // indent where it is.
+        if !raw.is_finite() || !column.is_finite() {
+            return held;
+        }
+        let room = (column - other - MIN_TEXT).max(Pt::ZERO);
+        raw.round().clamp(Pt::ZERO, room.floor())
     }
 }
 
-/// The narrowest text a drag may leave between the two handles, in points.
-const MIN_TEXT_PT: f32 = 36.0;
+/// The narrowest text a drag may leave between the two handles.
+const MIN_TEXT: Pt = Pt::new(36.0);
 
 /// A handle in motion, held by the element. It paints the handle at the
 /// pointer and writes nothing until [`RulerDrag::release`] (`PROSE-UI-076`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RulerDrag {
     pub handle: RulerHandle,
-    /// Where the handle is painted, on screen.
-    pub at_px: f32,
+    /// Where the handle is painted, on the canvas.
+    pub at: ViewPx,
 }
 
 impl RulerDrag {
     /// A press on a handle.
     #[must_use]
-    pub fn press(handle: RulerHandle, x: f32) -> Self {
-        Self { handle, at_px: x }
+    pub fn press(handle: RulerHandle, x: ViewPx) -> Self {
+        Self { handle, at: x }
     }
 
     /// The pointer moved: the handle follows it, and nothing else happens.
-    pub fn move_to(&mut self, x: f32) {
-        self.at_px = x;
+    pub fn move_to(&mut self, x: ViewPx) {
+        self.at = x;
     }
 
     /// The release: the one value the whole gesture stands for.
@@ -125,16 +135,16 @@ impl RulerDrag {
     pub fn release(self, ruler: &RulerState) -> RulerRelease {
         RulerRelease {
             handle: self.handle,
-            points: ruler.points_at(self.handle, self.at_px),
+            points: ruler.points_at(self.handle, self.at),
         }
     }
 }
 
-/// A released handle, and the indent it set, in points.
+/// A released handle, and the indent it set.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RulerRelease {
     pub handle: RulerHandle,
-    pub points: f32,
+    pub points: Pt,
 }
 
 impl ProseUiState {
@@ -145,16 +155,16 @@ impl ProseUiState {
     #[must_use]
     pub fn ruler(&self) -> RulerState {
         let layout = &self.shaped.layout;
-        let scale = self.viewport.scale();
+        let zoom = self.viewport.zoom;
         let mut ruler = RulerState {
             visible: false,
-            top_px: 0.0,
-            page_left_px: self.column.left_px(&self.viewport) + layout.margin_left_px * scale,
-            content_width_px: layout.content_width_px * scale,
-            px_per_pt: PX_PER_PT * scale,
-            indent_first: 0.0,
-            indent_left: 0.0,
-            indent_right: 0.0,
+            page_left: ViewPx::new(self.column.left_px(&self.viewport))
+                + DocPx::new(layout.margin_left_px).zoomed(zoom),
+            content_width: DocPx::new(layout.content_width_px).zoomed(zoom),
+            point_width: Pt::new(1.0).to_doc_px().zoomed(zoom),
+            indent_first: Pt::ZERO,
+            indent_left: Pt::ZERO,
+            indent_right: Pt::ZERO,
         };
         let style = self
             .cursor
@@ -166,9 +176,9 @@ impl ProseUiState {
         if let Some(style) = style {
             ruler.visible = true;
             // A hanging indent is laid out as none (`PROSE-FEAT-310`).
-            ruler.indent_first = style.indent_first_px.max(0.0) / PX_PER_PT;
-            ruler.indent_left = style.indent_left_px / PX_PER_PT;
-            ruler.indent_right = style.indent_right_px / PX_PER_PT;
+            ruler.indent_first = DocPx::new(style.indent_first_px.max(0.0)).to_pt();
+            ruler.indent_left = DocPx::new(style.indent_left_px).to_pt();
+            ruler.indent_right = DocPx::new(style.indent_right_px).to_pt();
         }
         ruler
     }
@@ -185,15 +195,16 @@ impl ProseUiState {
         }
         let block_id = self.cursor.as_ref()?.block_id;
         let mut style = ParagraphStyle::default();
+        let points = Some(release.points.get());
         match release.handle {
             RulerHandle::IndentFirst if release.points != ruler.indent_first => {
-                style.indent_first = Some(release.points);
+                style.indent_first = points;
             }
             RulerHandle::IndentLeft if release.points != ruler.indent_left => {
-                style.indent_left = Some(release.points);
+                style.indent_left = points;
             }
             RulerHandle::IndentRight if release.points != ruler.indent_right => {
-                style.indent_right = Some(release.points);
+                style.indent_right = points;
             }
             _ => return None,
         }
@@ -203,12 +214,18 @@ impl ProseUiState {
 
 #[cfg(test)]
 mod tests {
-    use super::{RulerDrag, RulerHandle, RulerRelease};
+    use super::{RulerDrag, RulerHandle, RulerRelease, RulerState};
     use crate::events::{BlockInit, CursorPosition, ParagraphStyle, ProseCommand};
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
     use ambre_bus::app::prose::DocOffset;
+    use ambre_core::{Pt, ViewPx};
+
+    /// A length in points, on the canvas.
+    fn on_canvas(ruler: &RulerState, points: f32) -> ViewPx {
+        ruler.point_width * points
+    }
 
     /// A document of two paragraphs, the second indented, and a view on it.
     fn indented() -> (ProseState, ProseUiState, [crate::events::BlockId; 2]) {
@@ -247,16 +264,16 @@ mod tests {
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
         assert!(ruler.visible);
-        assert!((ruler.indent_first - 24.0).abs() < 1e-3);
-        assert!((ruler.indent_left - 36.0).abs() < 1e-3);
-        assert!((ruler.indent_right - 18.0).abs() < 1e-3);
+        assert!((ruler.indent_first.get() - 24.0).abs() < 1e-3);
+        assert!((ruler.indent_left.get() - 36.0).abs() < 1e-3);
+        assert!((ruler.indent_right.get() - 18.0).abs() < 1e-3);
         // A block with no stored indent shows the zero it is laid out with.
         caret_in(&mut ui, plain);
         let ruler = ui.ruler();
         assert!(ruler.visible);
         assert_eq!(
             (ruler.indent_first, ruler.indent_left, ruler.indent_right),
-            (0.0, 0.0, 0.0)
+            (Pt::ZERO, Pt::ZERO, Pt::ZERO)
         );
     }
 
@@ -271,8 +288,8 @@ mod tests {
             let ruler = ui.ruler();
             let layout = &ui.shaped.layout;
             let left = ui.column.left_px(&ui.viewport) + layout.margin_left_px * zoom;
-            assert!((ruler.page_left_px - left).abs() < 1e-3);
-            assert!((ruler.content_width_px - layout.content_width_px * zoom).abs() < 1e-3);
+            assert!((ruler.page_left.get() - left).abs() < 1e-3);
+            assert!((ruler.content_width.get() - layout.content_width_px * zoom).abs() < 1e-3);
             // A handle placed at its value reads back the same value.
             for handle in [
                 RulerHandle::IndentFirst,
@@ -285,7 +302,10 @@ mod tests {
                     RulerHandle::IndentLeft => ruler.indent_left,
                     RulerHandle::IndentRight => ruler.indent_right,
                 };
-                assert!((back - value).abs() < 1e-3, "{handle:?} at zoom {zoom}");
+                assert!(
+                    (back - value).abs().get() < 1e-3,
+                    "{handle:?} at zoom {zoom}"
+                );
             }
         }
     }
@@ -303,13 +323,13 @@ mod tests {
             ruler.handle_x(RulerHandle::IndentLeft),
         );
         for step in 0..500 {
-            drag.move_to(ruler.page_left_px + step as f32);
+            drag.move_to(ruler.page_left + ViewPx::new(step as f32));
         }
-        drag.move_to(ruler.page_left_px + 72.0 * ruler.px_per_pt);
+        drag.move_to(ruler.page_left + on_canvas(&ruler, 72.0));
         // The motion touched nothing.
         assert_eq!(state.export_snapshot(), before);
         let release = drag.release(&ruler);
-        assert_eq!(release.points, 72.0);
+        assert_eq!(release.points, Pt::new(72.0));
         let command = ui.ruler_release(release).expect("one command");
         assert_eq!(
             command,
@@ -323,7 +343,7 @@ mod tests {
         );
         state.handle_command(command);
         ui.apply_layout(state.shaped_layout());
-        assert!((ui.ruler().indent_left - 72.0).abs() < 1e-3);
+        assert!((ui.ruler().indent_left.get() - 72.0).abs() < 1e-3);
         // A release where the handle started writes nothing.
         let ruler = ui.ruler();
         let still = RulerDrag::press(
@@ -340,24 +360,31 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
-        let column_pt = ruler.content_width_px / ruler.px_per_pt;
-        let far_right = ruler.page_left_px + ruler.content_width_px * 3.0;
-        let far_left = ruler.page_left_px - ruler.content_width_px;
-        assert_eq!(ruler.points_at(RulerHandle::IndentLeft, far_left), 0.0);
-        assert_eq!(ruler.points_at(RulerHandle::IndentRight, far_right), 0.0);
+        let column_pt = Pt::new(ruler.content_width / ruler.point_width);
+        let short = Pt::new(36.0 - 1e-3);
+        let far_right = ruler.page_left + ruler.content_width * 3.0;
+        let far_left = ruler.page_left - ruler.content_width;
+        assert_eq!(ruler.points_at(RulerHandle::IndentLeft, far_left), Pt::ZERO);
+        assert_eq!(
+            ruler.points_at(RulerHandle::IndentRight, far_right),
+            Pt::ZERO
+        );
         let left = ruler.points_at(RulerHandle::IndentLeft, far_right);
-        assert!(left + ruler.indent_right <= column_pt - 36.0 + 1e-3);
+        assert!(left + ruler.indent_right <= column_pt - short);
         let right = ruler.points_at(RulerHandle::IndentRight, far_left);
-        assert!(right + ruler.indent_left <= column_pt - 36.0 + 1e-3);
+        assert!(right + ruler.indent_left <= column_pt - short);
         // The first line counts from the left indent, and stops as short.
-        assert_eq!(ruler.points_at(RulerHandle::IndentFirst, far_left), 0.0);
+        assert_eq!(
+            ruler.points_at(RulerHandle::IndentFirst, far_left),
+            Pt::ZERO
+        );
         let first = ruler.points_at(RulerHandle::IndentFirst, far_right);
-        assert!(first + ruler.indent_left + ruler.indent_right <= column_pt - 36.0 + 1e-3);
+        assert!(first + ruler.indent_left + ruler.indent_right <= column_pt - short);
         // No caret, no command.
         ui.cursor = None;
         let release = RulerRelease {
             handle: RulerHandle::IndentLeft,
-            points: 10.0,
+            points: Pt::new(10.0),
         };
         assert_eq!(ui.ruler_release(release), None);
     }
@@ -369,10 +396,15 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
-        let expected = ruler.page_left_px + (36.0 + 24.0) * ruler.px_per_pt;
-        assert!((ruler.handle_x(RulerHandle::IndentFirst) - expected).abs() < 1e-3);
+        let expected = ruler.page_left + on_canvas(&ruler, 36.0 + 24.0);
+        assert!(
+            (ruler.handle_x(RulerHandle::IndentFirst) - expected)
+                .abs()
+                .get()
+                < 1e-3
+        );
         let mut drag = RulerDrag::press(RulerHandle::IndentFirst, expected);
-        drag.move_to(ruler.page_left_px + (36.0 + 48.0) * ruler.px_per_pt);
+        drag.move_to(ruler.page_left + on_canvas(&ruler, 36.0 + 48.0));
         let command = ui.ruler_release(drag.release(&ruler));
         assert_eq!(
             command,

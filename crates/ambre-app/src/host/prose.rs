@@ -31,6 +31,7 @@ use ambre_canvas::{
     OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
+use ambre_core::{CssPoint, CssPx};
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
@@ -39,7 +40,6 @@ use ambre_prose::probe::{Answer, CONFIRM_FRAMES, Dispatch, KeyProbe, Measure, SH
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
-use ambre_prose::view::ruler::RulerState;
 
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
 ///
@@ -60,35 +60,23 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
     }
 }
 
-/// From canvas pixels to CSS pixels of the window. A canvas pixel is a CSS
-/// pixel (`CANVAS-032`), so only the canvas offset applies.
-fn to_css(x: f32, y: f32) -> (f32, f32) {
-    let (left, top) = web_sys::window()
+/// Where the canvas's top-left corner sits on the page. The chrome moves the
+/// view's positions onto the page by it. A canvas pixel is a CSS pixel
+/// (`CANVAS-032`), so the offset is the whole conversion.
+fn canvas_origin() -> CssPoint {
+    web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
-        .map_or((0.0, 0.0), |el| {
+        .map_or_else(CssPoint::default, |el| {
             let r = el.get_bounding_client_rect();
-            (r.left() as f32, r.top() as f32)
-        });
-    (left + x, top + y)
+            CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
+        })
 }
 
-/// The ruler the view published, moved into CSS pixels by `to_css`. The scale
-/// keeps its ratio to the column, so each handle lands where the view put it
-/// (`PROSE-UI-065`).
-fn ruler_in_css(mut ruler: RulerState, to_css: impl Fn(f32, f32) -> (f32, f32)) -> RulerState {
-    let (left, top) = to_css(ruler.page_left_px, 0.0);
-    let (right, _) = to_css(ruler.page_left_px + ruler.content_width_px, 0.0);
-    let factor = if ruler.content_width_px > 0.0 {
-        (right - left) / ruler.content_width_px
-    } else {
-        1.0
-    };
-    ruler.page_left_px = left;
-    ruler.top_px = top;
-    ruler.content_width_px = right - left;
-    ruler.px_per_pt *= factor;
-    ruler
+/// From canvas pixels to CSS pixels of the window.
+fn to_css(x: f32, y: f32) -> (f32, f32) {
+    let origin = canvas_origin();
+    (origin.x.get() + x, origin.y.get() + y)
 }
 
 fn rect_to_css(rect: ScreenRect) -> ScreenRect {
@@ -308,16 +296,29 @@ impl ProseView {
         self.busy_pub.publish(self.outbox.is_busy());
     }
 
-    /// Publish the ruler in CSS pixels. The release comes back in points, so
-    /// the pixels it was measured in never reach the view.
+    /// Publish the ruler in pixels of the view. The release comes back in
+    /// points, so the pixels it was measured in never reach the view.
     fn publish_ruler(&self) {
-        let ruler = ruler_in_css(self.state.ruler(), to_css);
+        let ruler = self.state.ruler();
         if self
             .annotations
             .ruler
             .with_untracked(|shown| *shown != ruler)
         {
             self.annotations.ruler.set(ruler);
+        }
+    }
+
+    /// Publish where the canvas sits on the page, before any position the
+    /// chrome moves onto the page by it.
+    fn publish_origin(&self) {
+        let origin = canvas_origin();
+        if self
+            .annotations
+            .canvas_origin
+            .with_untracked(|shown| *shown != origin)
+        {
+            self.annotations.canvas_origin.set(origin);
         }
     }
 
@@ -355,6 +356,7 @@ impl ProseView {
     /// Publish the format bar, and ask for the marks it still lacks
     /// (`PROSE-UI-057`). A read the channel drops is asked again next frame.
     fn publish_toolbar(&mut self) {
+        self.publish_origin();
         if !self.fatal
             && let Some(query) = self.state.marks_query()
             && send_command(&self.to_logic, self.document_id, query).accepted()
@@ -789,7 +791,6 @@ fn download(filename: &str, media_type: &ambre_bus::MediaType, data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_prose::view::ruler::RulerHandle;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// `CHROME-102`: a press in the page gives the keyboard focus to the pipe,
@@ -887,40 +888,6 @@ mod tests {
         assert!(matches!(view.outbox.flush(), SendOutcome::Sent));
         assert!(view.handle_input(&wheel));
         assert!(view.dirty, "the drained page takes input again");
-    }
-
-    /// The ruler moves with the canvas and keeps its scale, at any zoom and any
-    /// column offset (`PROSE-UI-065`). Each handle lands at the canvas
-    /// position plus the canvas's own offset on the page.
-    #[wasm_bindgen_test]
-    fn the_ruler_in_css_pixels_follows_the_canvas_offset() {
-        let origin = |x: f32, y: f32| (x + 40.0, y + 64.0);
-        for (zoom, column_left) in [(1.0, 80.0), (2.0, 15.0), (0.5, 300.0)] {
-            let canvas = RulerState {
-                visible: true,
-                top_px: 0.0,
-                page_left_px: column_left,
-                content_width_px: 451.0 * zoom,
-                px_per_pt: 4.0 / 3.0 * zoom,
-                indent_first: 18.0,
-                indent_left: 36.0,
-                indent_right: 12.0,
-            };
-            let css = ruler_in_css(canvas, origin);
-            assert_eq!(css.top_px, 64.0);
-            assert_eq!(css.content_width_px, canvas.content_width_px);
-            for handle in [
-                RulerHandle::IndentFirst,
-                RulerHandle::IndentLeft,
-                RulerHandle::IndentRight,
-            ] {
-                let moved = css.handle_x(handle) - canvas.handle_x(handle);
-                assert!(
-                    (moved - 40.0).abs() < 1e-3,
-                    "zoom {zoom}: {handle:?} moved {moved}"
-                );
-            }
-        }
     }
 
     /// `PROSE-FEAT-040`: the page's count reaches the status bar slot every

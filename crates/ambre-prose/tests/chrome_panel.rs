@@ -191,24 +191,27 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     root.remove();
 }
 
-/// The ruler element sits where the host placed the column, and each handle
-/// is centred on the position the state gives it (`PROSE-UI-065`). The
-/// element adds no offset of its own, at any zoom.
+/// The ruler element sits on the column the view gave it, moved onto the page
+/// by the canvas origin. Each handle is centred on the position the state
+/// gives it (`PROSE-UI-065`). The element adds no offset of its own, at any
+/// zoom.
 #[wasm_bindgen_test]
 async fn the_ruler_element_sits_on_the_column_it_was_given() {
+    use ambre_core::{CssPoint, CssPx, Pt, ViewPx};
     use ambre_prose::view::ruler::{RulerHandle, RulerState};
+    let origin = CssPoint::new(CssPx::new(40.0), CssPx::new(30.0));
     for zoom in [0.5_f32, 1.0, 2.0] {
         let signals = ProseSignals::new();
         let ruler = RulerState {
             visible: true,
-            top_px: 30.0,
-            page_left_px: 120.0,
-            content_width_px: 451.0 * zoom,
-            px_per_pt: 4.0 / 3.0 * zoom,
-            indent_first: 18.0,
-            indent_left: 36.0,
-            indent_right: 12.0,
+            page_left: ViewPx::new(80.0),
+            content_width: ViewPx::new(451.0 * zoom),
+            point_width: ViewPx::new(4.0 / 3.0 * zoom),
+            indent_first: Pt::new(18.0),
+            indent_left: Pt::new(36.0),
+            indent_right: Pt::new(12.0),
         };
+        signals.canvas_origin.set(origin);
         signals.ruler.set(ruler);
         let container =
             mount_in_container(move || view! { <chrome::ProseRuler signals=signals /> });
@@ -222,7 +225,7 @@ async fn the_ruler_element_sits_on_the_column_it_was_given() {
         assert_eq!(rect.left() as f32, 120.0, "zoom {zoom}");
         assert_eq!(rect.top() as f32, 30.0, "zoom {zoom}");
         assert!(
-            (rect.width() as f32 - ruler.content_width_px).abs() < 0.5,
+            (rect.width() as f32 - ruler.content_width.get()).abs() < 0.5,
             "zoom {zoom}"
         );
         let handles = container
@@ -238,8 +241,9 @@ async fn the_ruler_element_sits_on_the_column_it_was_given() {
             let el: web_sys::Element = handles.item(i as u32).unwrap().dyn_into().unwrap();
             let r = el.get_bounding_client_rect();
             let centre = (r.left() + r.width() / 2.0) as f32;
+            let expected = ruler.handle_x(handle).on_page(origin.x).get();
             assert!(
-                (centre - ruler.handle_x(handle)).abs() < 0.5,
+                (centre - expected).abs() < 0.5,
                 "zoom {zoom}: {handle:?} at {centre}"
             );
         }

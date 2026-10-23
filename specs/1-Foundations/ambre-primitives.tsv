@@ -114,7 +114,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(x) | param
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(y) | param | f32	math	css position
 ambre-app | src/host/prose.rs | crate::host::prose | download(data) | param | &[u8]	generic	bytes
 ambre-app | src/host/prose.rs | crate::host::prose | download(filename) | param | &str	free-text	file name
-ambre-app | src/host/prose.rs | crate::host::prose | ruler_in_css(to_css) | param | impl Fn(f32,f32)->(f32,f32)	math	layout px closure
 ambre-app | src/host/prose.rs | crate::host::prose | to_css() | ret | (f32,f32)	math	layout px
 ambre-app | src/host/prose.rs | crate::host::prose | to_css(x) | param | f32	math	layout px
 ambre-app | src/host/prose.rs | crate::host::prose | to_css(y) | param | f32	math	layout px
@@ -3800,22 +3799,7 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_drawn() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_fresh() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_table() | ret | (TableShape,f32)	math	layout geometry local to algorithm
-ambre-prose | src/view/ruler.rs | crate::view::ruler | MIN_TEXT_PT | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerDrag.at_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerDrag::move_to(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerDrag::press(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerRelease.points | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.content_width_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.indent_first | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.indent_left | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.indent_right | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.page_left_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.px_per_pt | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.top_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.visible | field | bool	generic	independent flag or predicate
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::handle_x() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::points_at() | ret | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState::points_at(x) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::under() | ret | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashCommand::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)

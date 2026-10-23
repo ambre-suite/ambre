@@ -7757,7 +7757,6 @@
   {"edge": "verified-by", "from": "PROSE-UI-075", "to": "ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents"},
   {"edge": "cites-section", "from": "PROSE-UI-065", "section": "3", "to": "4-Prose/features/ambre-spec-prose-ruler.md"},
   {"edge": "verified-by", "from": "PROSE-UI-065", "to": "ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom"},
-  {"edge": "verified-by", "from": "PROSE-UI-065", "to": "ambre_app::host::prose::tests::the_ruler_in_css_pixels_follows_the_canvas_offset"},
   {"edge": "verified-by", "from": "PROSE-UI-065", "to": "ambre_prose::chrome_panel::the_ruler_element_sits_on_the_column_it_was_given"},
   {"edge": "cites-section", "from": "PROSE-UI-230", "section": "3", "to": "4-Prose/features/ambre-spec-prose-ruler.md"},
   {"edge": "verified-by", "from": "PROSE-UI-230", "to": "ambre_prose::view::ruler::tests::the_first_line_handle_writes_the_first_line_indent_alone"},

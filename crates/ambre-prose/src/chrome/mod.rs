@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::CommentId;
+use ambre_core::{CommentId, CssPoint, CssPx, ViewPx};
 use leptos::prelude::*;
 
 mod handler;
@@ -31,10 +31,15 @@ use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
 
-/// The signals the chrome and the shell share with the view. Every position
-/// is in CSS pixels of the window.
+/// The signals the chrome and the shell share with the view.
+///
+/// The view publishes its positions in pixels of the view, from the canvas's
+/// corner. The host publishes where that corner sits on the page, and the
+/// chrome moves each position onto the page by it.
 #[derive(Clone, Copy)]
 pub struct ProseSignals {
+    /// The canvas's top-left corner on the page.
+    pub canvas_origin: RwSignal<CssPoint>,
     /// The threads the panel lists, each at its anchor's height.
     pub threads: RwSignal<Vec<PanelThread>>,
     /// The reply being typed in each thread's field, by thread. It outlives
@@ -58,7 +63,7 @@ pub struct ProseSignals {
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
     pub slash_pick: RwSignal<Option<usize>>,
-    /// The ruler, in CSS pixels (`PROSE-UI-064`).
+    /// The ruler (`PROSE-UI-064`).
     pub ruler: RwSignal<RulerState>,
     /// A released ruler handle, until the view drains it (`PROSE-UI-063`).
     pub ruler_release: RwSignal<Option<RulerRelease>>,
@@ -86,6 +91,7 @@ impl ProseSignals {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            canvas_origin: RwSignal::new(CssPoint::default()),
             threads: RwSignal::new(Vec::new()),
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
@@ -381,6 +387,11 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
 /// The height of the ruler, in CSS pixels.
 const RULER_HEIGHT_PX: f32 = 22.0;
 
+/// Where a pointer event falls on the canvas whose corner sits at `origin`.
+fn pointer_x(ev: &web_sys::PointerEvent, origin: CssPoint) -> ViewPx {
+    CssPx::new(ev.client_x() as f32).in_canvas(origin.x)
+}
+
 /// The ruler above the page (`features/ambre-spec-prose-ruler.md section 4`).
 ///
 /// It renders what the view published. A handle in motion is painted at the
@@ -393,20 +404,23 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
         let Some(mut held) = drag.get_untracked() else {
             return;
         };
-        held.move_to(ev.client_x() as f32);
+        held.move_to(pointer_x(&ev, signals.canvas_origin.get_untracked()));
         drag.set(None);
         let ruler = signals.ruler.get_untracked();
         signals.ruler_release.set(Some(held.release(&ruler)));
     };
     move || {
         let ruler = signals.ruler.get();
-        if ruler.content_width_px <= 0.0 {
+        if ruler.content_width <= ViewPx::ZERO {
             return None;
         }
+        let origin = signals.canvas_origin.get();
         let style = format!(
             "position: fixed; left: {}px; top: {}px; width: {}px; height: {RULER_HEIGHT_PX}px; \
              z-index: 59;",
-            ruler.page_left_px, ruler.top_px, ruler.content_width_px
+            ruler.page_left.on_page(origin.x).get(),
+            origin.y.get(),
+            ruler.content_width.get()
         );
         let handles = ruler.visible.then(|| {
             [
@@ -418,8 +432,8 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                 let x = move || {
                     drag.get()
                         .filter(|d| d.handle == handle)
-                        .map_or_else(|| ruler.handle_x(handle), |d| d.at_px)
-                        - ruler.page_left_px
+                        .map_or_else(|| ruler.handle_x(handle), |d| d.at)
+                        - ruler.page_left
                 };
                 view! {
                     <div
@@ -429,19 +443,19 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                         style=move || format!(
                             "position: absolute; left: {}px; top: 0; transform: translateX(-50%); \
                              touch-action: none; cursor: ew-resize;",
-                            x()
+                            x().get()
                         )
                         on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
                         on:pointerdown=move |ev: web_sys::PointerEvent| {
                             ev.prevent_default();
                             let target = event_target::<web_sys::Element>(&ev);
                             let _ = target.set_pointer_capture(ev.pointer_id());
-                            drag.set(Some(RulerDrag::press(handle, ev.client_x() as f32)));
+                            drag.set(Some(RulerDrag::press(handle, pointer_x(&ev, origin))));
                         }
                         on:pointermove=move |ev: web_sys::PointerEvent| {
                             drag.update(|d| {
                                 if let Some(d) = d.as_mut().filter(|d| d.handle == handle) {
-                                    d.move_to(ev.client_x() as f32);
+                                    d.move_to(pointer_x(&ev, origin));
                                 }
                             });
                         }

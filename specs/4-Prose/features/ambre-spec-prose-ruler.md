@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
 | `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
-| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates; `ambre_app::host::prose::tests::the_ruler_in_css_pixels_follows_the_canvas_offset` -- the conversion to CSS pixels; `ambre_prose::chrome_panel::the_ruler_element_sits_on_the_column_it_was_given` -- the element and its handles placed in a headless document | none | verified |
+| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates; `ambre_prose::chrome_panel::the_ruler_element_sits_on_the_column_it_was_given` -- the element and its handles moved onto the page by the canvas origin, in a headless document | none | verified |
 
 ### 1.2 Drag a handle
 
@@ -75,25 +75,25 @@ is. It publishes that (`ambre-spec-ui.md section 2`).
 // ambre-prose/src/view/ruler.rs -- published to the chrome component, never drawn on the canvas
 
 pub struct RulerState {
-    pub visible:          bool,
-    /// Where the ruler sits, where the content column starts and how wide it is, on screen.
-    pub top_px:           f32,
-    pub page_left_px:     f32,
-    pub content_width_px: f32,
-    /// How many screen pixels one point takes, at the zoom in force.
-    pub px_per_pt:        f32,
-    /// The indents of the block the caret is in, as laid out, in points.
-    pub indent_first:     f32,
-    pub indent_left:      f32,
-    pub indent_right:     f32,
+    pub visible:       bool,
+    /// Where the content column starts and how wide it is, from the canvas's corner.
+    pub page_left:     ViewPx,
+    pub content_width: ViewPx,
+    /// How wide one point is on the canvas, at the zoom the column is drawn at.
+    pub point_width:   ViewPx,
+    /// The indents of the block the caret is in, as laid out.
+    pub indent_first:  Pt,
+    pub indent_left:   Pt,
+    pub indent_right:  Pt,
 }
 
 pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }
 ```
 
-The view publishes canvas pixels and the host converts them to CSS pixels. The element holds the
-drag, a `RulerDrag`, and hands back a `RulerRelease`: the handle and the indent in points, so no
-pixel crosses back.
+The view publishes pixels of the view, from the canvas's corner, and the host publishes where that
+corner sits on the page. The element moves the ruler onto the page by that origin, and moves each
+pointer back by it. It holds the drag, a `RulerDrag`, and hands back a `RulerRelease`: the handle
+and the indent in points, so no pixel crosses back.
 
 **Steps, for one drag:**
 

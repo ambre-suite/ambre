@@ -236,6 +236,15 @@ impl ViewPx {
     }
 }
 
+impl CssPx {
+    /// The coordinate on a canvas whose corner sits at `canvas_origin`: the
+    /// inverse of [`ViewPx::on_page`].
+    #[must_use]
+    pub fn in_canvas(self, canvas_origin: CssPx) -> ViewPx {
+        ViewPx(self.0 - canvas_origin.0)
+    }
+}
+
 impl Radians {
     /// The angle in degrees, for a writer whose format takes degrees.
     #[must_use]
@@ -293,6 +302,17 @@ impl ViewPoint {
     }
 }
 
+impl CssPoint {
+    /// The point on a canvas whose corner sits at `canvas_origin`.
+    #[must_use]
+    pub fn in_canvas(self, canvas_origin: CssPoint) -> ViewPoint {
+        Point::new(
+            self.x.in_canvas(canvas_origin.x),
+            self.y.in_canvas(canvas_origin.y),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CssPoint, CssPx, DocPx, Mm, Pt, ViewPoint, ViewPx};
@@ -327,6 +347,10 @@ mod tests {
         let origin = CssPoint::new(CssPx::new(10.0), CssPx::new(20.0));
         let on_page = ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0)).on_page(origin);
         assert_eq!(on_page, CssPoint::new(CssPx::new(11.0), CssPx::new(22.0)));
+        assert_eq!(
+            on_page.in_canvas(origin),
+            ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0))
+        );
     }
 
     #[test]
