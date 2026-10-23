@@ -793,13 +793,48 @@ impl From<Topic> for String {
     }
 }
 
+/// The rank of a category or of a channel in the catalogue of a space:
+/// lower first, ties by identifier. Any `u32` is a rank, so it is built
+/// infallibly; the type keeps it apart from counts and indexes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CatalogPosition(u32);
+
+impl CatalogPosition {
+    /// The first rank.
+    pub const FIRST: Self = Self(0);
+
+    /// The rank `rank`.
+    #[must_use]
+    pub const fn new(rank: u32) -> Self {
+        Self(rank)
+    }
+
+    /// The rank a document stored as `stored`, saturating at the last rank.
+    #[must_use]
+    pub fn from_stored(stored: u64) -> Self {
+        Self(u32::try_from(stored).unwrap_or(u32::MAX))
+    }
+
+    /// The rank as a document stores it.
+    #[must_use]
+    pub fn to_stored(self) -> i64 {
+        i64::from(self.0)
+    }
+}
+
+impl std::fmt::Display for CatalogPosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// A category of a space, as the view draws it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryView {
     pub id: CategoryId,
     pub name: ambre_core::Name,
     /// The rank among the categories: lower first, ties by identifier.
-    pub position: u32,
+    pub position: CatalogPosition,
 }
 
 /// One public channel of the catalogue, as the view draws it.
@@ -814,7 +849,7 @@ pub struct CatalogueEntry {
     /// Absent for a channel outside every category.
     pub category: Option<CategoryId>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: u32,
+    pub position: CatalogPosition,
 }
 
 /// A public channel the view asks a space to create and list.
@@ -827,7 +862,7 @@ pub struct PublicChannelDraft {
     /// Absent for a channel outside every category.
     pub category: Option<CategoryId>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: u32,
+    pub position: CatalogPosition,
 }
 
 /// Whether a member of a space is online, as the member list marks it.
@@ -904,7 +939,7 @@ pub enum SpaceCommand {
         category_id: CategoryId,
         name: ambre_core::Name,
         /// The rank among the categories: lower first, ties by identifier.
-        position: u32,
+        position: CatalogPosition,
     },
     /// Create a public channel, then list it in the catalogue with its key
     /// sealed under the space key (`MURMURE-037`).

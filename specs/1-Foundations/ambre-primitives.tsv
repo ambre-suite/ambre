@@ -182,8 +182,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::fr
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogueEntry.position | field | u32	math	catalogue rank, lower first
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CategoryView.position | field | u32	math	catalogue rank, lower first
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelActivity.active | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelMatches.listed | field | usize	math	count
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
@@ -211,11 +209,9 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture.height | field | 
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture.width | field | u32	math	picture size
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture::bytes() | ret | usize	math	picture size
 ambre-bus | src/app/murmure.rs | crate::app::murmure | PictureFrame.pixels | field | Vec<u8>	generic	decoded RGBA8 pixels
-ambre-bus | src/app/murmure.rs | crate::app::murmure | PublicChannelDraft.position | field | u32	math	catalogue rank, lower first
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceCommand::AddCategory.position | field | u32	math	catalogue rank, lower first
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ThreadHead.replies | field | u32	math	count
@@ -224,6 +220,10 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::as_str() | ret | &
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::new(text) | param | impl Into<String>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount.0 | field | u32	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount::is_zero() | ret | bool	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field | u32	newtype-inner	the inside of the CatalogPosition newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	foreign-api	the unsigned integer the Loro map stores, read back into the rank
+ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	foreign-api	the integer the Loro map stores for the rank
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
@@ -2443,8 +2443,6 @@ ambre-murmure | src/session.rs | crate::session | Session::export_json() | ret |
 ambre-murmure | src/session.rs | crate::session | Session::rewind(counter) | param | i32	trait	Loro Counter is i32
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	math	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	math	state flag/predicate
-ambre-murmure | src/sidebar.rs | crate::sidebar | rank() | ret | (u32,[u8;16])	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
-ambre-murmure | src/space.rs | crate::space | Listing.position | field | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::apply_remote(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2454,11 +2452,9 @@ ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | b
 ambre-murmure | src/space.rs | crate::space | SpaceState::list_channel() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::open(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::put_category() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::put_category(position) | param | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | SpaceState::reseal_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::unlist_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | position_of() | ret | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result

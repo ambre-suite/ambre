@@ -966,7 +966,7 @@ mod tests {
             name: named(name),
             topic: Topic::new("the weekly figures"),
             category: None,
-            position: 1,
+            position: ambre_bus::CatalogPosition::new(1),
         }
     }
 
@@ -1255,7 +1255,7 @@ mod tests {
             command: SpaceCommand::AddCategory {
                 category_id: CategoryId::new(),
                 name: Name::new("Teams").unwrap(),
-                position: 0,
+                position: ambre_bus::CatalogPosition::FIRST,
             },
         });
         assert!(drain(&sync).is_empty());
@@ -1397,7 +1397,7 @@ mod tests {
                 &Listing {
                     topic: None,
                     category: None,
-                    position: 0,
+                    position: ambre_bus::CatalogPosition::FIRST,
                     key: sealed(9),
                 },
             )
@@ -1473,7 +1473,7 @@ mod tests {
         let listing = Listing {
             topic: None,
             category: None,
-            position: 0,
+            position: ambre_bus::CatalogPosition::FIRST,
             key: sealed(9),
         };
         alice.list_channel(&listed, &listing).expect("list");
@@ -1997,7 +1997,7 @@ mod tests {
                 &Listing {
                     topic: None,
                     category: None,
-                    position: 0,
+                    position: ambre_bus::CatalogPosition::FIRST,
                     key: sealed(2),
                 },
             )

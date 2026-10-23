@@ -7,7 +7,9 @@
 //! bytes and never opens them: no key material reaches this thread
 //! (`MURMURE-157`).
 
-use ambre_bus::{CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic};
+use ambre_bus::{
+    CatalogPosition, CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic,
+};
 use ambre_core::{CategoryId, ChannelId, DocumentId, Name, SpaceId};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
@@ -24,7 +26,7 @@ pub struct Listing<'a> {
     /// Absent for a channel outside every category.
     pub category: Option<CategoryId>,
     /// The rank in the catalogue: lower first, ties by identifier.
-    pub position: u32,
+    pub position: CatalogPosition,
     /// The channel key, sealed under the space key by the Sync worker.
     pub key: SealedChannelKey,
 }
@@ -185,7 +187,7 @@ impl SpaceState {
         &mut self,
         category_id: CategoryId,
         name: &Name,
-        position: u32,
+        position: CatalogPosition,
     ) -> Result<Vec<u8>, MurmureError> {
         self.writable()?;
         let entry = Fields::<CategoryKey>::of(
@@ -193,7 +195,7 @@ impl SpaceState {
                 .ensure_mergeable_map(&category_id.to_string())?,
         );
         entry.insert(CategoryKey::Name, name.as_str())?;
-        entry.insert(CategoryKey::Position, i64::from(position))?;
+        entry.insert(CategoryKey::Position, position.to_stored())?;
         self.export()
     }
 
@@ -233,7 +235,7 @@ impl SpaceState {
             Some(category) => entry.insert(EntryKey::Category, category.to_string())?,
             None => clear(&entry, EntryKey::Category)?,
         }
-        entry.insert(EntryKey::Position, i64::from(listing.position))?;
+        entry.insert(EntryKey::Position, listing.position.to_stored())?;
         entry.insert(EntryKey::Key, listing.key.as_bytes().to_vec())?;
         self.export()
     }
@@ -407,9 +409,8 @@ fn clear(map: &Fields<EntryKey>, key: EntryKey) -> Result<(), MurmureError> {
     Ok(())
 }
 
-/// A stored position, saturating into `u32`. A value no build wrote reads as 0.
-fn position_of<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> u32 {
-    schema::unsigned(map, key)
-        .map(|n| u32::try_from(n).unwrap_or(u32::MAX))
-        .unwrap_or(0)
+/// A stored position, saturating at the last rank. A value no build wrote
+/// reads as the first.
+fn position_of<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> CatalogPosition {
+    schema::unsigned(map, key).map_or(CatalogPosition::FIRST, CatalogPosition::from_stored)
 }

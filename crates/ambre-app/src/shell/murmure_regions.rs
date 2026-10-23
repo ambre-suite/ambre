@@ -198,12 +198,12 @@ impl Acme {
 
     fn catalogue(&self) -> UiEvent {
         let team = CategoryId::new();
-        let entry = |channel_id, name: &str, category, position| CatalogueEntry {
+        let entry = |channel_id, name: &str, category, position: u32| CatalogueEntry {
             channel_id,
             name: ambre_core::Name::new(name).unwrap(),
             topic: None,
             category,
-            position,
+            position: ambre_bus::CatalogPosition::new(position),
         };
         UiEvent::Space {
             space_id: self.space,
@@ -212,7 +212,7 @@ impl Acme {
                 categories: vec![CategoryView {
                     id: team,
                     name: ambre_core::Name::new("Team").unwrap(),
-                    position: 0,
+                    position: ambre_bus::CatalogPosition::FIRST,
                 }],
                 channels: vec![
                     entry(self.random, "random", None, 1),

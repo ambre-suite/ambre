@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
-    MemberChannel, MentionCount, UnreadCount,
+    CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace,
+    DirectPeers, MemberChannel, MentionCount, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, SpaceId, StepDirection};
 
@@ -424,10 +424,40 @@ impl Sidebar {
     }
 }
 
-/// The order of a public channel: its rank in the catalogue, ties by
-/// identifier. A channel the catalogue does not list yet comes last.
-fn rank(entry: Option<&CatalogueEntry>, id: ChannelId) -> (u32, [u8; 16]) {
-    (entry.map_or(u32::MAX, |e| e.position), *id.as_bytes())
+/// Where a public channel stands in the catalogue: at its rank, or after
+/// every listed channel while the catalogue does not list it yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Placed {
+    At(CatalogPosition),
+    Unlisted,
+}
+
+/// The order of a public channel: where it stands in the catalogue, ties
+/// by the bytes of its identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rank {
+    placed: Placed,
+    channel: ChannelId,
+}
+
+impl Ord for Rank {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.placed
+            .cmp(&other.placed)
+            .then_with(|| self.channel.as_bytes().cmp(other.channel.as_bytes()))
+    }
+}
+
+impl PartialOrd for Rank {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// The rank of the public channel `channel`, listed by `entry` or not yet.
+fn rank(entry: Option<&CatalogueEntry>, channel: ChannelId) -> Rank {
+    let placed = entry.map_or(Placed::Unlisted, |e| Placed::At(e.position));
+    Rank { placed, channel }
 }
 
 fn push(
@@ -466,7 +496,7 @@ mod tests {
             name: ambre_core::Name::new(name).unwrap(),
             topic: None,
             category,
-            position,
+            position: CatalogPosition::new(position),
         }
     }
 
@@ -553,7 +583,7 @@ mod tests {
             vec![CategoryView {
                 id: team,
                 name: ambre_core::Name::new("Team").unwrap(),
-                position: 0,
+                position: ambre_bus::CatalogPosition::new(0),
             }],
             vec![
                 listed(leads, "leads", Some(team), 2),
@@ -601,6 +631,42 @@ mod tests {
                 .set_member_channels(sidebar.members.clone(), &[space])
                 .is_empty()
         );
+    }
+
+    /// A channel the catalogue does not list yet comes after every listed
+    /// one, even one at the last rank a position holds.
+    #[test]
+    fn an_unlisted_channel_comes_after_one_listed_at_the_last_rank() {
+        let space = SpaceId::new();
+        let last = ChannelId::from_bytes([0xff; 16]);
+        let unlisted = ChannelId::from_bytes([0; 16]);
+        let place = ChannelPlace::Public(space);
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(
+            vec![
+                MemberChannel {
+                    channel_id: unlisted,
+                    place,
+                },
+                MemberChannel {
+                    channel_id: last,
+                    place,
+                },
+            ],
+            &[space],
+        );
+        sidebar.set_catalogue(
+            space,
+            None,
+            Vec::new(),
+            vec![listed(last, "last", None, u32::MAX)],
+        );
+        let order: Vec<ChannelId> = sidebar.sections()[0]
+            .entries
+            .iter()
+            .map(|e| e.channel)
+            .collect();
+        assert_eq!(order, [last, unlisted]);
     }
 
     /// A public channel the user has not joined sits apart, after every

@@ -474,7 +474,7 @@ fn a_space_with(
                 name: ambre_core::Name::new("general").unwrap(),
                 topic: None,
                 category: None,
-                position: 0,
+                position: ambre_bus::CatalogPosition::FIRST,
             }],
         },
     });
