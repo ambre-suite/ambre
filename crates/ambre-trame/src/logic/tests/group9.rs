@@ -170,7 +170,7 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
         col: Col::new(1),
     });
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(two.clone()),
+        sheet_id: two.clone(),
     });
 
     let out = commit(&mut a, 6, "kept");
@@ -182,7 +182,7 @@ fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
     );
     assert!(cells(&mut a).is_empty(), "the tab being read took nothing");
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
     });
     assert!(
         cells(&mut a).contains(&(0, 1, "kept".into())),
@@ -216,7 +216,7 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
     );
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(two.clone()),
+        sheet_id: two.clone(),
     });
     a.handle_command(TrameCommand::BeginCellEdit {
         session: 5,
@@ -228,7 +228,7 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
         &mut b,
         &mut a,
         TrameCommand::DeleteSheet {
-            sheet_id: SheetId(two.clone()),
+            sheet_id: two.clone(),
         },
     );
     let active = events
@@ -239,7 +239,8 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
         })
         .expect("the merge reports the sheet list");
     assert_eq!(
-        active.0, TEST_SHEET,
+        active,
+        default_sheet(),
         "the reader lands on the tab before it"
     );
     assert!(

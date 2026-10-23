@@ -208,7 +208,7 @@ impl TrameState {
     /// ([`Self::masked_cells_for`]) -- therefore read one answer instead of
     /// each deriving its own. A second copy of this precedence would let a
     /// masked cell differ from the block the grid draws.
-    pub(super) fn resolved_merges(&self, sheet_id: &str, index: &SheetIndex) -> Vec<CellRect> {
+    pub(super) fn resolved_merges(&self, sheet_id: &SheetId, index: &SheetIndex) -> Vec<CellRect> {
         let LoroValue::Map(entries) = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Merges, sheet_id).as_str())
@@ -255,7 +255,11 @@ impl TrameState {
     /// masked conflicted cell therefore reads the same value regardless of the
     /// active tab (`trame-cell-merges`, `TRAME-020`). For the active sheet (fed
     /// with [`Self::index`]) it returns exactly [`Self::masked_cells`].
-    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<CellKey> {
+    pub(super) fn masked_cells_for(
+        &self,
+        sheet_id: &SheetId,
+        index: &SheetIndex,
+    ) -> HashSet<CellKey> {
         let cells = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str());

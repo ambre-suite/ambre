@@ -22,13 +22,13 @@ impl TrameState {
     /// sheet or a virtual (never-materialized) column.
     pub(super) fn apply_filter(
         &mut self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         col: Col,
         kind: FilterKind,
     ) -> TrameOutcome {
         // A filter that cannot apply says so (`TRAME-FEAT-037`): the popover
         // would otherwise close on a column that was never filtered.
-        if sheet_id != self.active_sheet {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: "the filter applies to the sheet on screen only".to_owned(),
             }]);
@@ -159,8 +159,8 @@ impl TrameState {
     /// and the stored `filters_{sheet}` definition, then broadcast
     /// (`trame-shared-filter`). A no-op
     /// (no delta) when nothing is filtered.
-    pub(super) fn clear_filter(&mut self, sheet_id: &str) -> TrameOutcome {
-        if sheet_id != self.active_sheet {
+    pub(super) fn clear_filter(&mut self, sheet_id: &SheetId) -> TrameOutcome {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let hidden = self

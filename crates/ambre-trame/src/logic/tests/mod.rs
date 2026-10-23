@@ -1,15 +1,13 @@
 // ambre-trame/src/logic/tests.rs
 // Unit tests for `TrameState` (moved verbatim out of logic.rs).
 
-use super::{TrameOutcome, TrameState, col_to_alpha};
+use super::{TrameOutcome, TrameState, col_to_alpha, default_sheet};
 use crate::model::Uid;
 use crate::{CellPos, Col, ColCount, Row, RowCount};
 use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
 use ambre_bus::{FilterKind, FilterOp, SheetId};
 
 use crate::test_support::{at, span};
-
-const TEST_SHEET: &str = "s0";
 
 /// `rect` as `(r1, c1, r2, c2)`.
 fn rect_tuple(rect: crate::CellRect) -> (u32, u32, u32, u32) {
@@ -88,11 +86,11 @@ fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCel
 }
 
 /// The id of the first non-default sheet in the current tab order.
-fn second_sheet_id(state: &TrameState) -> String {
+fn second_sheet_id(state: &TrameState) -> SheetId {
     state
         .sheet_order_ids()
         .into_iter()
-        .find(|id| id != super::DEFAULT_SHEET)
+        .find(|id| *id != super::default_sheet())
         .expect("a second sheet")
 }
 
@@ -186,7 +184,7 @@ fn replaced_count(out: &TrameOutcome) -> u32 {
 }
 
 /// Pull the `ImportComplete` event out of an outcome.
-fn import_result(out: &TrameOutcome) -> (String, u32, u32) {
+fn import_result(out: &TrameOutcome) -> (SheetId, u32, u32) {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -194,7 +192,7 @@ fn import_result(out: &TrameOutcome) -> (String, u32, u32) {
                 sheet_id,
                 rows,
                 cols,
-            } => Some((sheet_id.0.clone(), rows.get(), cols.get())),
+            } => Some((sheet_id.clone(), rows.get(), cols.get())),
             _ => None,
         })
         .expect("expected ImportComplete")

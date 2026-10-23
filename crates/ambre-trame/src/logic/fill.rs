@@ -49,13 +49,13 @@ impl TrameState {
     /// a `DataReset` so the UI re-fetches the filled region, plus the CRDT delta.
     pub(super) fn fill_range(
         &mut self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         src: CellRect,
         dest: CellRect,
         mode: FillMode,
     ) -> TrameOutcome {
         // Range ops only ever target the active sheet (the UI activates it first).
-        if sheet_id != self.active_sheet {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         // `dest` must contain `src`; otherwise the drag is malformed -> no-op.

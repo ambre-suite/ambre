@@ -273,7 +273,7 @@ fn resize_col_round_trips_through_viewport() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(1),
         width_px: 150.0,
     });
@@ -297,7 +297,7 @@ fn resize_row_round_trips_and_clamps_to_minimum() {
     // A sub-minimum request is pinned to MIN_ROW_HEIGHT (12.0).
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         row: Row::new(2),
         height_px: 1.0,
     });
@@ -310,7 +310,7 @@ fn resize_survives_snapshot_roundtrip() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         width_px: 200.0,
     });
@@ -331,13 +331,13 @@ fn concurrent_resize_of_same_col_converges_lww() {
     let mut b = TrameState::new();
     a.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         width_px: 120.0,
     });
     b.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         width_px: 300.0,
     });

@@ -317,7 +317,7 @@ pub enum TrameEvent {
 /// Stable identity of a sheet, peer-scoped where it is minted
 /// (`{peer:016x}_{counter:08x}`). A rename leaves it unchanged
 /// (`trame-sheets`).
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct SheetId(pub String);
 
 impl SheetId {

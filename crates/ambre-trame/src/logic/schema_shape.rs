@@ -42,8 +42,8 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    DEFAULT_SHEET, Fields, FilterKey, FilterRecord, LegacyFilterKey, MIGRATIONS, Root,
-    SCHEMA_VERSION, SheetContainer, SheetRoot,
+    Fields, FilterKey, FilterRecord, LegacyFilterKey, MIGRATIONS, Root, SCHEMA_VERSION,
+    SheetContainer, SheetRoot, default_sheet,
 };
 use crate::logic::styles::StyleRecord;
 use crate::model::{CellKey, Uid};
@@ -361,13 +361,13 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(0),
-        sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         width_px: 120.0,
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(0),
-        sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         row: Row::new(0),
         height_px: 33.0,
     });
@@ -382,7 +382,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         reference: "A1".to_owned(),
     });
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: ambre_bus::SheetId(DEFAULT_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Eq,
@@ -436,7 +436,7 @@ fn workbook_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
     doc.set_peer_id(1)
         .expect("a fresh document takes a peer id");
     doc.get_map(Root::Sheets.as_str())
-        .insert(DEFAULT_SHEET, "Sheet1")
+        .insert(default_sheet().as_str(), "Sheet1")
         .expect("the sheet");
     write(&doc);
     if let Some(version) = version {
@@ -460,7 +460,7 @@ fn canonical(from: u32) -> LoroDoc {
         // The flat filter keys the `1 -> 2` step folds.
         1 => workbook_at(Some(1), |doc| {
             let filters = Fields::<LegacyFilterKey>::of(
-                doc.get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str()),
+                doc.get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str()),
             );
             for (key, value) in [
                 (LegacyFilterKey::Col, "0000000000000001_00000000"),
@@ -477,17 +477,17 @@ fn canonical(from: u32) -> LoroDoc {
                 peer: ambre_core::PeerId(1),
                 counter,
             };
-            let rows =
-                doc.get_movable_list(SheetContainer::of(SheetRoot::Rows, DEFAULT_SHEET).as_str());
+            let rows = doc
+                .get_movable_list(SheetContainer::of(SheetRoot::Rows, &default_sheet()).as_str());
             for counter in 0..3 {
                 rows.push(uid(counter).to_key_part()).expect("a row");
             }
-            let cols =
-                doc.get_movable_list(SheetContainer::of(SheetRoot::Cols, DEFAULT_SHEET).as_str());
+            let cols = doc
+                .get_movable_list(SheetContainer::of(SheetRoot::Cols, &default_sheet()).as_str());
             for counter in 3..5 {
                 cols.push(uid(counter).to_key_part()).expect("a column");
             }
-            doc.get_map(SheetContainer::of(SheetRoot::Cells, DEFAULT_SHEET).as_str())
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str())
                 .insert(CellKey::of(uid(0), uid(4)).as_str(), "=SUM(A2:A3)+A2")
                 .expect("the formula");
         }),

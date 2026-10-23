@@ -5732,7 +5732,7 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | range(input) 
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | resolve_refs() | ret | Result<Expr,String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number() | ret | nom::IResult<&str,Row>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,String>	debt	planned: lot A 1 ripple (parsed sheet id token)
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,SheetId>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -5754,7 +5754,7 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | within_bounds
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | within_bounds(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | ws() | ret | impl Parser<&'a str,Output=O,Error=nom::error::Error<&'a str>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | binop_symbol() | ret | &'static str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | canonicalize(name_to_id) | param | &impl Fn(&str)->Option<String>	debt	planned: lot A 1 knock-on (render.rs:57,87)
+ambre-trame | src/formula/render.rs | crate::formula::render | canonicalize(name_to_id) | param | &impl Fn(&str)->Option<SheetId>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/render.rs | crate::formula::render | emit() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | emit(min_prec) | param | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | first_name_qualifier() | ret | Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
@@ -5770,12 +5770,11 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_range() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&str)->Option<String>	debt	planned: lot A 1 knock-on (render.rs:57,87)
+ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&SheetId)->Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/shift.rs | crate::formula::shift | shift_formula(raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_name(_name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet(_name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet_id(_id) | param | &str	debt	planned: lot A 1 (FormulaCtx::resolve_sheet_id)
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -5789,7 +5788,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Expr::FnCall.name |
 ambre-trame | src/formula/types.rs | crate::formula::types | Expr::Name.0 | field | String	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_sheet_id(id) | param | &str	debt	planned: lot A 1 (FormulaCtx::resolve_sheet_id)
 ambre-trame | src/formula/types.rs | crate::formula::types | FormulaError::ParseError.0 | field | String	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.name | field | String	debt	finding: (FINDING, confirmed): builtin function name as String
@@ -5806,7 +5804,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(col
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(row) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(cols) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Id.0 | field | String	debt	planned: lot A 1 (SheetQualifier::Id)
 ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Name.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
@@ -5821,18 +5818,14 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(cols) | param
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/cells.rs | crate::logic::cells | SheetLines<'_>::of(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input() | ret | Result<String,String>	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input(text) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_raw() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_display(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source() | ret | String	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
@@ -5841,7 +5834,6 @@ ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.session | field | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
-ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | EditAnchor.sheet | field | String	debt	planned: lot A 1 ripple (edit_anchor)
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::begin_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(session) | param | u64	debt	finding: (FINDING, confirmed): edit session id is a bare u64 that crosses the bus
 ambre-trame | src/logic/edit_anchor.rs | crate::logic::edit_anchor | TrameState::commit_cell_edit(text) | param | &str	free-text	free text: user content, label, message or display string
@@ -5852,15 +5844,12 @@ ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_t
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(src_raw) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_range(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number(v) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params() | ret | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | series_params(sources) | param | &[String]	debt	finding: (FINDING, confirmed): three formula text forms in one String type
-ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::apply_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/filters.rs | crate::logic::filters | TrameState::clear_filter(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::find_next(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
@@ -5876,7 +5865,6 @@ ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_ot
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(needle) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(query) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(replacement) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
-ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(query) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_one(replacement) | param | String	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
@@ -5905,7 +5893,6 @@ ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as 
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as FixtureGen>::seed() | ret | u64	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::canonical_dump() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::fixture_peer_count() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::fixture_sheet_ids() | ret | Vec<String>	debt	planned: lot A 1 ripple (Vec<SheetId>)
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::CASCADE | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::ROWS | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_dag::DEPTH | const | u32	math	a value local to one algorithm
@@ -5920,46 +5907,33 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(oper
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | op_from_str(s) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_csv(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(delimiter) | param | Option<u8>	generic	file bytes or CSV delimiter
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(target_sheet_id) | param | Option<String>	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::used_extent(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter() | ret | u8	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::masked_cells_for(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::resolved_merges(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::col_width() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(width_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(height_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::row_height() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet_id(id) | param | &str	debt	planned: lot A 1 (FormulaCtx::resolve_sheet_id)
 ambre-trame | src/logic/mod.rs | crate::logic | DEFAULT_SHEET_NAME | const | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_id | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_name | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.named | field | &'a HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameOutcome.ephemeral | field | Option<Vec<u8>>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameOutcome.update | field | Option<Vec<u8>>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.active_sheet | field | String	debt	planned: lot A 1 (TrameState.active_sheet)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_id | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.named | field | HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<String,String>	debt	planned: lot A 1 (SheetId key; the name value is G8)
+ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheets_by_idx | field | Vec<String>	debt	bug: (BUG, suspected): create_sheet re-sorts the engine sheet indices without a reseed
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.uid_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
 ambre-trame | src/logic/mod.rs | crate::logic | WriteRefusal::UnknownSheet.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
@@ -6000,7 +5974,6 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(decim
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_SHEET | const | &str	debt	planned: lot A 1 (DEFAULT_SHEET comparisons)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	debt	finding: (FINDING, confirmed): FilterRecord.col holds a Uid key part as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_ORIGIN | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
@@ -6009,42 +5982,26 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_ROW_HEIGHT | cons
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SCHEMA_VERSION | const | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::of(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys(sheet) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::activate_sheet(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::all_sheet_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::build_sheet_index(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference() | ret | Option<String>	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::create_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::delete_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::delete_sheet(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::drop_sheet_containers(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::fallback_sheet() | ret | String	debt	planned: lot A 1 ripple (sheet order is Vec<SheetId>)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::fallback_sheet(order) | param | &[String]	debt	planned: lot A 1 ripple (sheet order is Vec<SheetId>)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name() | ret | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name(wanted) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::leave_a_deleted_sheet(order) | param | &[String]	debt	planned: lot A 1 ripple (sheet order is Vec<SheetId>)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::move_sheet(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::move_sheet(to_index) | param | u32	math	tab order position, a count
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::rename_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::rename_sheet(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_names() | ret | HashMap<String,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_order_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::stored_sheet_ids() | ret | Vec<String>	debt	planned: lot A 1 (Vec<SheetId>)
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_names() | ret | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
-ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::sort_range_multi(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::reanchor_formulas() | ret | bool	generic	predicate or did-it-change return
@@ -6055,7 +6012,6 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::cell_is_n
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::stored_style(sheet_id) | param | &str	debt	planned: lot A 1 (&SheetId param)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_ephemeral(_payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
@@ -6068,10 +6024,8 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(order) | param | &[String]	debt	planned: lot A 1 ripple (sheet order ids)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::schema_version() | ret | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id() | ret | Option<String>	debt	planned: lot A 1 (returns a SheetId)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)

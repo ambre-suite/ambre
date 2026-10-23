@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::logic::schema::{
-    DEFAULT_SHEET, MATERIALIZE_CAP, MIN_COL_WIDTH, SheetContainer, SheetRoot,
+    MATERIALIZE_CAP, MIN_COL_WIDTH, SheetContainer, SheetRoot, default_sheet,
 };
 use crate::model::CellKey;
 use crate::{FillMode, SelectionKind};
@@ -48,7 +48,7 @@ fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> crate::CellRect {
 }
 
 fn fill(state: &mut TrameState, src: crate::CellRect, dest: crate::CellRect) {
-    let sheet_id = SheetId(state.active_sheet.clone());
+    let sheet_id = state.active_sheet.clone();
     state.handle_command(TrameCommand::FillRange {
         sheet_id,
         src,
@@ -139,7 +139,7 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
         .resolve(CellPos::new(Row::new(0), Col::new(0)))
         .expect("A1 is materialized");
     b.doc
-        .get_map(SheetContainer::of(SheetRoot::Merges, TEST_SHEET).as_str())
+        .get_map(SheetContainer::of(SheetRoot::Merges, &default_sheet()).as_str())
         .insert(CellKey::of(rl, cl).as_str(), CellKey::of(rl, cl).as_str())
         .expect("the entry");
     b.doc.commit();
@@ -161,7 +161,7 @@ fn a_merge_past_the_cap_writes_no_entry() {
     assert!(out.update.is_none(), "the refused merge sent a delta");
     assert_eq!(own_ops(&state), before);
     assert!(
-        matches!(container(&state, SheetContainer::of(SheetRoot::Merges, TEST_SHEET)), LoroValue::Map(m) if m.is_empty())
+        matches!(container(&state, SheetContainer::of(SheetRoot::Merges, &default_sheet())), LoroValue::Map(m) if m.is_empty())
     );
     assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
 }
@@ -353,7 +353,7 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
     for (r, v) in ["a", "b", "c", "d"].iter().enumerate() {
         set(&mut state, r as u32, 0, v);
     }
-    let sheet_id = SheetId(state.active_sheet.clone());
+    let sheet_id = state.active_sheet.clone();
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
@@ -407,7 +407,7 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
 #[test]
 fn a_column_is_never_narrower_than_its_minimum() {
     let mut state = TrameState::new();
-    let sheet_id = SheetId(state.active_sheet.clone());
+    let sheet_id = state.active_sheet.clone();
     for (col, width) in [(0, 3.0), (1, 0.0), (2, -40.0)] {
         state.handle_command(TrameCommand::ResizeCol {
             version: ambre_bus::ViewportVersion(1),
@@ -447,7 +447,7 @@ fn a_write_past_the_line_cap_is_refused() {
 
 /// Two sheets beside the default one, each holding a value, a formula and
 /// a bold cell. Returns their ids, the default first.
-fn three_sheets(state: &mut TrameState) -> Vec<String> {
+fn three_sheets(state: &mut TrameState) -> Vec<SheetId> {
     for name in ["Two", "Three"] {
         state.handle_command(TrameCommand::CreateSheet {
             name: name.to_owned(),
@@ -456,7 +456,7 @@ fn three_sheets(state: &mut TrameState) -> Vec<String> {
     let ids = state.sheet_order_ids();
     for id in &ids {
         state.handle_command(TrameCommand::ActivateSheet {
-            sheet_id: SheetId(id.clone()),
+            sheet_id: id.clone(),
         });
         set(state, 0, 0, "4");
         set(state, 0, 1, "=A1*2");
@@ -466,13 +466,13 @@ fn three_sheets(state: &mut TrameState) -> Vec<String> {
         });
     }
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(ids[0].clone()),
+        sheet_id: ids[0].clone(),
     });
     ids
 }
 
 /// The cells and the styles of every sheet in `ids`.
-fn contents(state: &TrameState, ids: &[String]) -> Vec<(LoroValue, LoroValue)> {
+fn contents(state: &TrameState, ids: &[SheetId]) -> Vec<(LoroValue, LoroValue)> {
     ids.iter()
         .map(|id| {
             (
@@ -490,7 +490,7 @@ fn a_rename_keeps_the_tab_order() {
     let ids = three_sheets(&mut state);
     for (id, name) in [(&ids[0], "Zulu"), (&ids[2], "Alpha")] {
         state.handle_command(TrameCommand::RenameSheet {
-            sheet_id: SheetId(id.clone()),
+            sheet_id: id.clone(),
             name: name.to_owned(),
         });
     }
@@ -504,7 +504,7 @@ fn a_tab_reorder_changes_no_content() {
     let ids = three_sheets(&mut state);
     let before = contents(&state, &ids);
     state.handle_command(TrameCommand::MoveSheet {
-        sheet_id: SheetId(ids[2].clone()),
+        sheet_id: ids[2].clone(),
         to_index: 0,
     });
     assert_eq!(state.sheet_order_ids()[0], ids[2]);
@@ -520,7 +520,7 @@ fn a_sheet_delete_leaves_the_other_sheets() {
     let kept = [ids[0].clone(), ids[2].clone()];
     let before = contents(&state, &kept);
     state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: SheetId(ids[1].clone()),
+        sheet_id: ids[1].clone(),
     });
     assert_eq!(state.sheet_order_ids(), kept);
     assert_eq!(contents(&state, &kept), before);
@@ -535,7 +535,7 @@ fn a_tab_switch_writes_nothing() {
     let before = own_ops(&state);
     for id in ids.iter().rev() {
         let out = state.handle_command(TrameCommand::ActivateSheet {
-            sheet_id: SheetId(id.clone()),
+            sheet_id: id.clone(),
         });
         assert!(out.update.is_none(), "the switch to {id} sent a delta");
     }
@@ -571,12 +571,11 @@ fn two_peers_adding_a_sheet_keep_both() {
 }
 
 /// The tab strip one peer reads: each sheet's id and name, and the active id.
-fn strip(state: &TrameState) -> (Vec<(String, String)>, String) {
+fn strip(state: &TrameState) -> (Vec<(SheetId, String)>, SheetId) {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, active } => (
-            sheets.into_iter().map(|t| (t.id.0, t.name)).collect(),
-            active.0,
-        ),
+        TrameEvent::SheetList { sheets, active } => {
+            (sheets.into_iter().map(|t| (t.id, t.name)).collect(), active)
+        }
         other => panic!("not a sheet list: {other:?}"),
     }
 }
@@ -598,13 +597,13 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
     b.flush_delta();
     let from_a = a
         .handle_command(TrameCommand::DeleteSheet {
-            sheet_id: SheetId(ids[1].clone()),
+            sheet_id: ids[1].clone(),
         })
         .update
         .expect("the delete");
     let from_b = b
         .handle_command(TrameCommand::DeleteSheet {
-            sheet_id: SheetId(ids[0].clone()),
+            sheet_id: ids[0].clone(),
         })
         .update
         .expect("the delete");
@@ -612,8 +611,8 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
     a.apply_remote(&from_b);
     b.apply_remote(&from_a);
     let one = (
-        vec![(DEFAULT_SHEET.to_owned(), "Sheet1".to_owned())],
-        DEFAULT_SHEET.to_owned(),
+        vec![(default_sheet(), "Sheet1".to_owned())],
+        default_sheet(),
     );
     assert_eq!(strip(&a), one);
     assert_eq!(strip(&b), one);
@@ -623,7 +622,7 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
 
     // The last sheet stays: its delete is refused and writes nothing.
     let out = a.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: SheetId(DEFAULT_SHEET.to_owned()),
+        sheet_id: default_sheet(),
     });
     assert!(out.update.is_none());
     assert!(
@@ -651,6 +650,6 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
     b.apply_remote(&from_a);
     assert_eq!(a.sheet_order_ids(), b.sheet_order_ids());
     assert_eq!(a.sheet_order_ids().len(), 2);
-    assert_eq!(a.sheet_order_ids()[0], DEFAULT_SHEET);
+    assert_eq!(a.sheet_order_ids()[0], default_sheet());
     assert_eq!(read_cell(&mut b, 0, 0), "kept");
 }

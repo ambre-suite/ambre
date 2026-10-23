@@ -18,7 +18,7 @@ impl TrameState {
         data: Vec<u8>,
         delimiter: Option<u8>,
         header: HeaderRow,
-        target_sheet_id: Option<String>,
+        target_sheet_id: Option<SheetId>,
         start: CellPos,
     ) -> TrameOutcome {
         let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
@@ -64,7 +64,11 @@ impl TrameState {
             Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => (id, false),
             _ => {
                 self.hold_default_sheet();
-                let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
+                let id = SheetId(format!(
+                    "{:016x}_{:08x}",
+                    self.doc.peer_id(),
+                    self.sheet_counter
+                ));
                 self.sheet_counter += 1;
                 (id, true)
             }
@@ -101,7 +105,7 @@ impl TrameState {
             let _ = self
                 .doc
                 .get_map(Root::Sheets.as_str())
-                .insert(&sheet_id, name.as_str());
+                .insert(sheet_id.as_str(), name.as_str());
             let _ = self
                 .doc
                 .get_movable_list(Root::SheetOrder.as_str())
@@ -123,7 +127,7 @@ impl TrameState {
         outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
         outcome.display.push(TrameEvent::ImportComplete {
-            sheet_id: SheetId(sheet_id),
+            sheet_id,
             rows,
             cols,
         });
@@ -137,7 +141,7 @@ impl TrameState {
     /// included). Returns an [`TrameEvent::ExportComplete`] carrying the bytes.
     pub(super) fn export_csv(
         &self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         delimiter: Option<u8>,
         range: Option<CellRect>,
     ) -> TrameOutcome {
@@ -180,11 +184,11 @@ impl TrameState {
         let name = match self
             .doc
             .get_map(Root::Sheets.as_str())
-            .get(sheet_id)
+            .get(sheet_id.as_str())
             .map(|v| v.get_deep_value())
         {
             Some(LoroValue::String(s)) => s.to_string(),
-            _ => sheet_id.to_owned(),
+            _ => sheet_id.to_string(),
         };
         TrameOutcome::display_only(vec![TrameEvent::ExportComplete {
             filename: format!("{name}.csv"),
@@ -198,7 +202,7 @@ impl TrameState {
     /// materialized at their high-water mark after a scroll or a since-cleared
     /// edit. Using their length would therefore export a rectangle padded with
     /// empty trailing rows/columns.
-    fn used_extent(&self, sheet_id: &str, index: &SheetIndex) -> Option<CellPos> {
+    fn used_extent(&self, sheet_id: &SheetId, index: &SheetIndex) -> Option<CellPos> {
         let LoroValue::Map(cells) = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())
@@ -230,7 +234,7 @@ impl TrameState {
     /// The cell's number format then applies (`TRAME-108`).
     fn export_cell_text(
         &self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         idx: EngineSheet,
         index: &SheetIndex,
         at: CellPos,

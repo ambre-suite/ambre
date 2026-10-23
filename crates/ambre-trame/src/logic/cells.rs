@@ -82,7 +82,7 @@ impl TrameState {
     pub(super) fn canonicalize_input(
         &self,
         text: &str,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         lines: &SheetLines<'_>,
     ) -> Result<String, String> {
         let Some(body) = text.strip_prefix('=') else {
@@ -112,7 +112,7 @@ impl TrameState {
     pub(super) fn formula_source(
         &self,
         stored: &str,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         lines: &SheetLines<'_>,
     ) -> String {
         let Some(body) = stored.strip_prefix('=') else {
@@ -142,7 +142,7 @@ impl TrameState {
     pub(super) fn formula_display(
         &self,
         stored: &str,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         lines: &SheetLines<'_>,
     ) -> String {
         let source = self.formula_source(stored, sheet_id, lines);
@@ -153,7 +153,7 @@ impl TrameState {
         if !body.contains('#') {
             return source;
         }
-        let id_to_name = |id: &str| self.sheet_id_to_name.get(id).cloned();
+        let id_to_name = |id: &SheetId| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
             Ok(ast) => format!(
                 "={}",
@@ -423,7 +423,7 @@ pub(super) struct SheetLines<'a> {
 impl SheetLines<'_> {
     /// The index a reference of a formula on `sheet_id` reads: its qualifier's
     /// sheet, else the formula's own. `None` for a sheet that does not exist.
-    pub(super) fn of(&self, sheet_id: &str, q: Option<&SheetQualifier>) -> Option<&SheetIndex> {
+    pub(super) fn of(&self, sheet_id: &SheetId, q: Option<&SheetQualifier>) -> Option<&SheetIndex> {
         let state = self.state;
         let idx = match q {
             None => state.engine_sheet_by_id.get(sheet_id),

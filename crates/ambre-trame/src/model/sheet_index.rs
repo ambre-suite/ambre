@@ -285,12 +285,12 @@ fn collect_ids(list: &LoroMovableList) -> Vec<Uid> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::{DEFAULT_SHEET, SheetContainer, SheetRoot};
+    use crate::logic::{SheetContainer, SheetRoot, default_sheet};
     use loro::LoroDoc;
 
     /// The order list of one axis of the default sheet, as a workbook names it.
     fn axis(root: SheetRoot) -> SheetContainer {
-        SheetContainer::of(root, DEFAULT_SHEET)
+        SheetContainer::of(root, &default_sheet())
     }
 
     /// Build a `SheetIndex` for a fresh doc with `n_rows` rows and `n_cols`

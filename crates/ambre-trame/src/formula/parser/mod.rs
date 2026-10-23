@@ -16,7 +16,7 @@ use super::types::{
     NameTarget, RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
-use ambre_bus::Row;
+use ambre_bus::{Row, SheetId};
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -223,10 +223,10 @@ fn sheet_name(input: &str) -> nom::IResult<&str, String> {
 /// A stable sheet id token in canonical form: `#` followed by id characters
 /// (hex digits and `_`, for example `#s0` or `#00..0_0000002a`). The id may start with
 /// a digit, so a plain `identifier` parser does not fit.
-fn sheet_id_token(input: &str) -> nom::IResult<&str, String> {
+fn sheet_id_token(input: &str) -> nom::IResult<&str, SheetId> {
     let (input, _) = char('#').parse(input)?;
     let (input, id) = recognize(many1(alt((alphanumeric1, tag("_"))))).parse(input)?;
-    Ok((input, id.to_string()))
+    Ok((input, SheetId(id.to_owned())))
 }
 
 /// The qualifier preceding a `!`: a stable id (`#s0`) or a display name

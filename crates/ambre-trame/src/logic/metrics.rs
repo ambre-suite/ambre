@@ -23,8 +23,13 @@ impl TrameState {
     /// viewport with the new metrics. A no-op when `sheet_id` is not the active
     /// sheet (the index/caches only track the active sheet -- the MVP UI never
     /// resizes a background sheet).
-    pub(super) fn resize_col(&mut self, sheet_id: &str, col: Col, width_px: f32) -> TrameOutcome {
-        if sheet_id != self.active_sheet {
+    pub(super) fn resize_col(
+        &mut self,
+        sheet_id: &SheetId,
+        col: Col,
+        width_px: f32,
+    ) -> TrameOutcome {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let width = width_px.max(MIN_COL_WIDTH);
@@ -50,8 +55,13 @@ impl TrameState {
     /// Set row `row`'s height (logical px) on the active sheet, clamped to
     /// [`MIN_ROW_HEIGHT`]. Row analogue of [`resize_col`](Self::resize_col):
     /// writes `row_heights_{sheet}`.
-    pub(super) fn resize_row(&mut self, sheet_id: &str, row: Row, height_px: f32) -> TrameOutcome {
-        if sheet_id != self.active_sheet {
+    pub(super) fn resize_row(
+        &mut self,
+        sheet_id: &SheetId,
+        row: Row,
+        height_px: f32,
+    ) -> TrameOutcome {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let height = height_px.max(MIN_ROW_HEIGHT);

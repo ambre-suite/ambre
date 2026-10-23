@@ -430,10 +430,8 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
     });
     let other = second_sheet_id(&state);
     // Sheet1!A1:A2 holds 1 and 2; Other!A1:A2 holds 10 and 20.
-    for (sheet, base) in [("s0".to_owned(), 1), (other.clone(), 10)] {
-        state.handle_command(TrameCommand::ActivateSheet {
-            sheet_id: SheetId(sheet),
-        });
+    for (sheet, base) in [(default_sheet(), 1), (other.clone(), 10)] {
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: sheet });
         for row in 0..2 {
             state.handle_command(TrameCommand::SetCellText {
                 row: Row::new(row),
@@ -457,7 +455,7 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
     assert_eq!(read_cell_v(&mut state, 0, 1, 1), "3");
     // A formula on the other sheet reads the same name, and the same cells.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(other.clone()),
+        sheet_id: other.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -477,7 +475,7 @@ fn name_on_another_sheet_survives_its_rename() {
     });
     let data = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(data.clone()),
+        sheet_id: data.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -498,7 +496,7 @@ fn name_on_another_sheet_survives_its_rename() {
     });
     assert_eq!(read_a1(&mut state, 1), "14");
     state.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId(data),
+        sheet_id: data,
         name: "Inputs".to_owned(),
     });
     assert_eq!(
@@ -649,7 +647,7 @@ fn sum_over_plain_literals_survives_reseed() {
 #[test]
 fn multi_sheet_isolation_and_name_lookup() {
     let mut state = TrameState::new();
-    assert_eq!(state.sheet_name_to_id("Sheet1").as_deref(), Some("s0"));
+    assert_eq!(state.sheet_name_to_id("Sheet1"), Some(default_sheet()));
     assert_eq!(state.sheet_name_to_id("Nope"), None);
 
     // Write to the default sheet, then to a second sheet's containers
@@ -665,7 +663,7 @@ fn multi_sheet_isolation_and_name_lookup() {
         .insert("s1", "Sheet2");
     let other = state
         .doc
-        .get_movable_list(SheetContainer::of(SheetRoot::Rows, "s1").as_str());
+        .get_movable_list(SheetContainer::of(SheetRoot::Rows, &SheetId("s1".to_owned())).as_str());
     other
         .push(
             Uid {
@@ -680,14 +678,17 @@ fn multi_sheet_isolation_and_name_lookup() {
 
     // `cells_s1` is empty; `cells_s0` holds the value -- containers are isolated.
     assert!(matches!(
-        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, "s0").as_str()).get_value(),
+        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str()).get_value(),
         loro::LoroValue::Map(ref m) if m.len() == 1
     ));
     assert!(matches!(
-        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, "s1").as_str()).get_value(),
+        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, &SheetId("s1".to_owned())).as_str()).get_value(),
         loro::LoroValue::Map(ref m) if m.is_empty()
     ));
-    assert_eq!(state.sheet_name_to_id("Sheet2").as_deref(), Some("s1"));
+    assert_eq!(
+        state.sheet_name_to_id("Sheet2"),
+        Some(SheetId("s1".to_owned()))
+    );
 }
 
 /// A cross-sheet formula is stored bound to the stable `sheet_id` (`#id`
@@ -704,7 +705,7 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 
     // Sheet2!A1 = 5.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(s2.clone()),
+        sheet_id: s2.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -737,7 +738,7 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 
     // Rename the target: the reference keeps computing and the bar follows.
     state.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId(s2.clone()),
+        sheet_id: s2.clone(),
         name: "Data".to_owned(),
     });
     assert_eq!(
@@ -753,15 +754,13 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 
     // Reorder: pure presentation, value unchanged.
     state.handle_command(TrameCommand::MoveSheet {
-        sheet_id: SheetId(s2.clone()),
+        sheet_id: s2.clone(),
         to_index: 0,
     });
     assert_eq!(read_cell(&mut state, 0, 1), "10", "reorder is inert");
 
     // Delete the target sheet: the cross-sheet reference becomes #REF!.
-    state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: SheetId(s2),
-    });
+    state.handle_command(TrameCommand::DeleteSheet { sheet_id: s2 });
     assert_eq!(
         read_cell(&mut state, 0, 1),
         "#REF!",

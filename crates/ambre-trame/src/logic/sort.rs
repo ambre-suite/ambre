@@ -33,14 +33,14 @@ impl TrameState {
     /// or an empty/virtual range, is a no-op.
     pub(super) fn sort_range(
         &mut self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         rect: CellRect,
         sort_col: ColCount,
         order: SortOrder,
         header: HeaderRow,
     ) -> TrameOutcome {
         // Only the active sheet has its values positioned in the engine cache.
-        if sheet_id != self.active_sheet {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         let sort_col_abs = rect.top_left.col + sort_col;
@@ -103,13 +103,13 @@ impl TrameState {
     /// data (`trame-formula-engine`); LWW resolves concurrent sorts.
     pub(super) fn sort_range_multi(
         &mut self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         rect: CellRect,
         sort_keys: &[SortKey],
         header: HeaderRow,
     ) -> TrameOutcome {
         // Only the active sheet has its values positioned in the engine cache.
-        if sheet_id != self.active_sheet {
+        if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
         // Resolve the keys to absolute columns inside the range; drop out-of-range

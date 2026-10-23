@@ -40,7 +40,7 @@ fn style(state: &mut TrameState, patch: StylePatch) -> TrameOutcome {
 fn deep(state: &TrameState, root: SheetRoot) -> LoroValue {
     state
         .doc
-        .get_map(SheetContainer::of(root, DEFAULT).as_str())
+        .get_map(SheetContainer::of(root, &default_sheet()).as_str())
         .get_deep_value()
 }
 
@@ -55,11 +55,9 @@ fn style_entries(state: &TrameState) -> usize {
     }
 }
 
-const DEFAULT: &str = crate::logic::DEFAULT_SHEET;
-
 fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> TrameOutcome {
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId(DEFAULT.to_owned()),
+        sheet_id: default_sheet(),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(rows.0), Col::new(0)),
             crate::CellPos::new(Row::new(rows.1), Col::new(1)),
@@ -76,7 +74,7 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
 
 fn filter(state: &mut TrameState, col: u32, kind: FilterKind) -> TrameOutcome {
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId(DEFAULT.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(col),
         kind,
     })
@@ -383,7 +381,7 @@ fn a_filter_and_its_clear_keep_every_cell() {
     assert_eq!(cells(&state), before, "the apply");
     assert_eq!(read_cell(&mut state, 1, 2), total);
     state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: SheetId(DEFAULT.to_owned()),
+        sheet_id: default_sheet(),
     });
     assert!(!is_filtered(&mut state, 0, 0));
     assert_eq!(cells(&state), before, "the clear");
@@ -478,7 +476,7 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
     let before = state.doc.len_ops();
     for (row_end, header) in [(0, HeaderRow::Absent), (1, HeaderRow::Present)] {
         let out = state.handle_command(TrameCommand::SortRange {
-            sheet_id: SheetId(DEFAULT.to_owned()),
+            sheet_id: default_sheet(),
             rect: crate::CellRect::spanning(
                 crate::CellPos::new(Row::new(0), Col::new(0)),
                 crate::CellPos::new(Row::new(row_end), Col::new(0)),

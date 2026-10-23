@@ -732,25 +732,25 @@ fn deleted_line_leaves_no_formatting() {
     }
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(1),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         row: Row::new(1),
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(2),
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         width_px: 150.0,
     });
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["0".to_owned(), "2".to_owned()]),
     });
     let len = |state: &TrameState, root: SheetRoot| {
         state
             .doc
-            .get_map(SheetContainer::of(root, TEST_SHEET).as_str())
+            .get_map(SheetContainer::of(root, &default_sheet()).as_str())
             .len()
     };
     assert_eq!(len(&state, SheetRoot::RowHeights), 1);
@@ -759,7 +759,7 @@ fn deleted_line_leaves_no_formatting() {
     assert_eq!(len(&state, SheetRoot::RowHeights), 0);
     assert_eq!(len(&state, SheetRoot::FilterHidden), 0);
     state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
     });
     state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
     assert_eq!(len(&state, SheetRoot::ColWidths), 0);

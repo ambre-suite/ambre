@@ -295,7 +295,7 @@ impl TrameState {
     /// The style `cellstyle_{sheet}` stores for a cell of any sheet, or `None`
     /// for the default. An undecodable record reads as the default here: the
     /// reseed of that sheet is what reports it (`SCHEMA-003`).
-    pub(super) fn stored_style(&self, sheet_id: &str, rl: Uid, cl: Uid) -> Option<CellStyle> {
+    pub(super) fn stored_style(&self, sheet_id: &SheetId, rl: Uid, cl: Uid) -> Option<CellStyle> {
         match self
             .doc
             .get_map(SheetContainer::of(SheetRoot::CellStyle, sheet_id).as_str())

@@ -44,7 +44,7 @@ pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 /// same call.
 struct TrameCtx<'a> {
     engine_sheet_by_name: &'a HashMap<String, EngineSheet>,
-    engine_sheet_by_id: &'a HashMap<String, EngineSheet>,
+    engine_sheet_by_id: &'a HashMap<SheetId, EngineSheet>,
     named: &'a HashMap<String, NameTarget>,
 }
 
@@ -52,7 +52,7 @@ impl FormulaCtx for TrameCtx<'_> {
     fn resolve_sheet(&self, name: &str) -> Option<EngineSheet> {
         self.engine_sheet_by_name.get(name).copied()
     }
-    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet> {
+    fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet> {
         self.engine_sheet_by_id.get(id).copied()
     }
     fn resolve_name(&self, name: &str) -> Option<NameTarget> {
@@ -132,8 +132,8 @@ pub struct TrameState {
     /// state, `trame-selection`). Defaults to the single active cell.
     selection: TrackedSelection,
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
-    /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
-    active_sheet: String,
+    /// implicit [`default_sheet`]; multi-sheet switching arrives with the tabs.
+    active_sheet: SheetId,
     /// Cells carrying a bold run on the active sheet. Keyed by grid position;
     /// absence means regular weight. Mirrors the persisted `format_{sheet}` map
     /// (the CRDT source of truth) for fast lookup; reseeded on import.
@@ -192,7 +192,7 @@ pub struct TrameState {
     /// The **active sheet is always index 0**, so single-sheet code paths keep
     /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
     /// order. Rebuilt by [`Self::rebuild_sheet_maps`].
-    sheets_by_idx: Vec<String>,
+    sheets_by_idx: Vec<SheetId>,
     /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
     /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
     engine_sheet_by_name: HashMap<String, EngineSheet>,
@@ -200,10 +200,10 @@ pub struct TrameState {
     /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable,
     /// `trame-sheets`).
     /// Derived alongside [`Self::sheets_by_idx`].
-    engine_sheet_by_id: HashMap<String, EngineSheet>,
+    engine_sheet_by_id: HashMap<SheetId, EngineSheet>,
     /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
     /// text from the canonical id form. Derived alongside [`Self::sheets_by_idx`].
-    sheet_id_to_name: HashMap<String, String>,
+    sheet_id_to_name: HashMap<SheetId, String>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<String, NameTarget>,
@@ -270,7 +270,7 @@ fn write_scaffold(doc: &LoroDoc) {
     // a peer that also "creates" s0 converges to the same entry).
     let _ = doc
         .get_map(crate::logic::Root::Sheets.as_str())
-        .insert(DEFAULT_SHEET, DEFAULT_SHEET_NAME);
+        .insert(default_sheet().as_str(), DEFAULT_SHEET_NAME);
     // The schema version is workbook scaffolding too, and it is written in
     // the same commit so a workbook is never persisted without it
     // (`SCHEMA-004`).
@@ -382,7 +382,7 @@ impl TrameState {
                 extra: Vec::new(),
                 kind: SelectionKind::Cells,
             },
-            active_sheet: DEFAULT_SHEET.to_owned(),
+            active_sheet: default_sheet(),
             bold: HashSet::new(),
             italic: HashSet::new(),
             styles: HashMap::new(),

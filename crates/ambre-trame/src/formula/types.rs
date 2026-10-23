@@ -1,6 +1,6 @@
 use std::fmt;
 
-use ambre_bus::{CellPos, Col, Row};
+use ambre_bus::{CellPos, Col, Row, SheetId};
 
 use crate::model::{Line, SheetIndex, Uid};
 
@@ -694,7 +694,7 @@ pub enum SheetQualifier {
     /// A display name (`Sheet2`, `'My Sheet'`).
     Name(String),
     /// A stable CRDT `sheet_id` (`s0`, `00..0_0000002a`), prefixed `#` in text.
-    Id(String),
+    Id(SheetId),
 }
 
 /// Resolution services the formula crate needs from the host (`TrameState`).
@@ -707,7 +707,7 @@ pub trait FormulaCtx {
     fn resolve_sheet(&self, name: &str) -> Option<EngineSheet>;
     /// Resolve a stable sheet id (`#s0_a1b2` canonical form) to its local index,
     /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
-    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet>;
+    fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet>;
     /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
     fn resolve_name(&self, name: &str) -> Option<NameTarget>;
 }
@@ -720,7 +720,7 @@ impl FormulaCtx for SingleSheetCtx {
     fn resolve_sheet(&self, _name: &str) -> Option<EngineSheet> {
         None
     }
-    fn resolve_sheet_id(&self, _id: &str) -> Option<EngineSheet> {
+    fn resolve_sheet_id(&self, _id: &SheetId) -> Option<EngineSheet> {
         None
     }
     fn resolve_name(&self, _name: &str) -> Option<NameTarget> {

@@ -151,7 +151,7 @@ impl TrameState {
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
     /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
     /// over the `sheets` map -- there are only a handful of sheets.
-    pub fn sheet_name_to_id(&self, name: &str) -> Option<String> {
+    pub fn sheet_name_to_id(&self, name: &str) -> Option<SheetId> {
         self.sheet_names()
             .into_iter()
             .find_map(|(id, n)| (n == name).then_some(id))
@@ -209,7 +209,11 @@ impl TrameState {
     /// Shared tail of the single-delta [`import_and_reseed`] and the batched
     /// [`apply_remote_batch`] / quarantine-release paths. `order` is the tab
     /// order before the merge, which a deleted active sheet falls back from.
-    pub(super) fn reseed_after_merge(&mut self, origin: &str, order: &[String]) -> Vec<TrameEvent> {
+    pub(super) fn reseed_after_merge(
+        &mut self,
+        origin: &str,
+        order: &[SheetId],
+    ) -> Vec<TrameEvent> {
         // A peer may have deleted the sheet this reader is on (`TRAME-075`).
         // Leave it before any cache is rebuilt from it.
         self.leave_a_deleted_sheet(order);

@@ -218,8 +218,8 @@ impl FormulaCtx for TestCtx {
             _ => None,
         }
     }
-    fn resolve_sheet_id(&self, id: &str) -> Option<EngineSheet> {
-        match id {
+    fn resolve_sheet_id(&self, id: &ambre_bus::SheetId) -> Option<EngineSheet> {
+        match id.as_str() {
             "s2" => Some(S2),
             _ => None,
         }
@@ -306,7 +306,7 @@ fn id_qualified_with_underscore_and_leading_digit() {
     // A peer-scoped id can start with a hex digit and contain '_'.
     assert!(matches!(
         parse("#00a_2f!A1"),
-        Expr::SheetRef { sheet: SheetQualifier::Id(id), .. } if id == "00a_2f"
+        Expr::SheetRef { sheet: SheetQualifier::Id(id), .. } if id.as_str() == "00a_2f"
     ));
 }
 

@@ -91,7 +91,7 @@ impl TrameState {
                 .sheet_id_to_name
                 .get(&sheet)
                 .cloned()
-                .unwrap_or_else(|| sheet.clone());
+                .unwrap_or_else(|| sheet.to_string());
             out.push_str(&format!("sheet {sheet} {name}\n"));
             // One index per sheet: `self.index` tracks only the active sheet, and
             // a dump quantifies over all of them.
@@ -163,8 +163,8 @@ impl TrameState {
     /// Not `sheet_order_ids()`: that one is a *view* concern and pins the active
     /// sheet first. The same workbook would then dump differently depending on
     /// which tab happened to be open.
-    fn fixture_sheet_ids(&self) -> Vec<String> {
-        let mut listed: Vec<String> = match self
+    fn fixture_sheet_ids(&self) -> Vec<SheetId> {
+        let mut listed: Vec<SheetId> = match self
             .doc
             .get_movable_list(Root::SheetOrder.as_str())
             .get_value()
@@ -172,17 +172,18 @@ impl TrameState {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
-                    LoroValue::String(s) => Some(s.to_string()),
+                    LoroValue::String(s) => Some(SheetId(s.to_string())),
                     _ => None,
                 })
                 .collect(),
             _ => Vec::new(),
         };
-        let mut rest: Vec<String> = match self.doc.get_map(Root::Sheets.as_str()).get_value() {
+        let mut rest: Vec<SheetId> = match self.doc.get_map(Root::Sheets.as_str()).get_value() {
             LoroValue::Map(sheets) => sheets
                 .keys()
-                .filter(|id| !listed.contains(id))
+                .filter(|id| !listed.iter().any(|l| l.as_str() == id.as_str()))
                 .cloned()
+                .map(SheetId)
                 .collect(),
             _ => Vec::new(),
         };
@@ -191,7 +192,7 @@ impl TrameState {
         // A workbook always has at least the implicit default sheet, even before
         // anything registers it in the `sheets` map.
         if listed.is_empty() {
-            listed.push(DEFAULT_SHEET.to_owned());
+            listed.push(default_sheet());
         }
         listed
     }

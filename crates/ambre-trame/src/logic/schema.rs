@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount};
+use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount, SheetId};
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, verdict,
@@ -37,7 +37,10 @@ use crate::model::{Line, SheetIndex, Uid};
 /// and merge cleanly. Explicit additional sheets (a later step) get unique ids
 /// and populate `sheet_order`. With one sheet, `sheet_order` stays empty to
 /// avoid a duplicate `push` on merge (see `trame-schema`).
-pub(crate) const DEFAULT_SHEET: &str = "s0";
+#[must_use]
+pub(crate) fn default_sheet() -> SheetId {
+    SheetId("s0".to_owned())
+}
 
 ambre_core::loro_fields!(pub(crate));
 
@@ -52,7 +55,7 @@ ambre_core::crdt_names! {
         Sheets = "sheets",
         /// The tab-strip order as a `LoroMovableList` of `sheet_id`s
         /// (`trame-schema`, `trame-sheets`). This list *never* carries the
-        /// implicit [`DEFAULT_SHEET`] eagerly, because two fresh peers would
+        /// implicit [`default_sheet`] eagerly, because two fresh peers would
         /// each push it and converge to a duplicate.
         /// [`TrameState::sheet_order_ids`] treats it as the implicit first tab
         /// instead. [`TrameCommand::CreateSheet`] appends an explicit sheet.
@@ -126,7 +129,7 @@ pub(crate) struct SheetContainer(String);
 impl SheetContainer {
     /// The container of the family `root` that belongs to `sheet`.
     #[must_use]
-    pub(crate) fn of(root: SheetRoot, sheet: &str) -> Self {
+    pub(crate) fn of(root: SheetRoot, sheet: &SheetId) -> Self {
         Self(format!("{}_{sheet}", root.as_str()))
     }
 
@@ -372,9 +375,9 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
     if let LoroValue::Map(sheets) = doc.get_map(Root::Sheets.as_str()).get_value() {
         // Sorted: two peers migrating one history write the same operations
         // only if they write them in the same order (`SCHEMA-020`).
-        let mut sheets: Vec<&String> = sheets.keys().collect();
+        let mut sheets: Vec<SheetId> = sheets.keys().cloned().map(SheetId).collect();
         sheets.sort();
-        for sheet in sheets {
+        for sheet in &sheets {
             fold_filter_keys(doc, sheet)?;
         }
     }
@@ -395,12 +398,12 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
 /// used range stays a position, and a formula that does not parse is left as
 /// typed.
 fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
-    let mut sheets: Vec<String> = match doc.get_map(Root::Sheets.as_str()).get_value() {
-        LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
+    let mut sheets: Vec<SheetId> = match doc.get_map(Root::Sheets.as_str()).get_value() {
+        LoroValue::Map(sheets) => sheets.keys().cloned().map(SheetId).collect(),
         _ => Vec::new(),
     };
-    if !sheets.iter().any(|s| s == DEFAULT_SHEET) {
-        sheets.push(DEFAULT_SHEET.to_owned());
+    if !sheets.contains(&default_sheet()) {
+        sheets.push(default_sheet());
     }
     // Sheets and cells are walked sorted, so every peer writes in one order
     // (`SCHEMA-020`).
@@ -450,7 +453,7 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
 
 /// Convert one sheet's flat filter shape into the single register. A sheet with
 /// no filter (an empty or absent map) is left untouched.
-fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
+fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), String> {
     let map = doc.get_map(SheetContainer::of(SheetRoot::Filters, sheet).as_str());
     // `get_deep_value` resolves the `values` child list, which the shallow read
     // in `load_active_filter` could not (`TRAME-FEAT-004`).
@@ -584,7 +587,7 @@ mod tests {
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.get_map(Root::Sheets.as_str())
-            .insert(DEFAULT_SHEET, "Sheet1")
+            .insert(default_sheet().as_str(), "Sheet1")
             .expect("seed");
         if let Some(v) = version {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
@@ -628,7 +631,7 @@ mod tests {
         assert!(
             migrated
                 .get_map(Root::Sheets.as_str())
-                .get(DEFAULT_SHEET)
+                .get(default_sheet().as_str())
                 .is_some(),
             "the migration must not drop what it migrates"
         );
@@ -706,7 +709,7 @@ mod tests {
         // produce: a record written by a client this build does not know.
         let styles = source
             .doc
-            .get_map(SheetContainer::of(SheetRoot::CellStyle, DEFAULT_SHEET).as_str());
+            .get_map(SheetContainer::of(SheetRoot::CellStyle, &default_sheet()).as_str());
         let LoroValue::Map(entries) = styles.get_value() else {
             panic!("the styled cell wrote a register");
         };
@@ -801,9 +804,10 @@ mod tests {
             )
             .expect("stamp");
         doc.get_map(Root::Sheets.as_str())
-            .insert(DEFAULT_SHEET, "Sheet1")
+            .insert(default_sheet().as_str(), "Sheet1")
             .expect("sheet");
-        let filters = doc.get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str());
+        let filters =
+            doc.get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str());
         let filters = Fields::<LegacyFilterKey>::of(filters);
         filters
             .insert(LegacyFilterKey::Col, "0000000000000001_00000000")
@@ -820,7 +824,7 @@ mod tests {
         assert_eq!(read_version(&migrated).expect("reads"), SCHEMA_VERSION);
 
         let LoroValue::Map(deep) = migrated
-            .get_map(SheetContainer::of(SheetRoot::Filters, DEFAULT_SHEET).as_str())
+            .get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str())
             .get_deep_value()
         else {
             panic!("the filters map survives");

@@ -60,7 +60,7 @@ pub(super) struct EditAnchor {
     /// The UI's token for the session, echoed in every event about it.
     session: u64,
     /// The sheet the session opened on.
-    sheet: String,
+    sheet: SheetId,
     row: Pin<Row>,
     col: Pin<Col>,
     /// The position the UI last heard of, so a move is reported once.

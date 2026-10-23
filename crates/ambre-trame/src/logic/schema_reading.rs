@@ -27,7 +27,7 @@
 use ambre_core::Rgb;
 use std::collections::BTreeSet;
 
-use ambre_bus::{CellBorder, CellStyle, TrameCommand};
+use ambre_bus::{CellBorder, CellStyle, SheetId, TrameCommand};
 use ambre_core::schema::verdict;
 use loro::{ExportMode, LoroValue};
 
@@ -228,8 +228,11 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
             ))
         }
         Root::Sheets => {
-            let tab = reader.sheet_order_ids().iter().position(|id| id == key)?;
-            let name = reader.sheet_names().remove(key)?;
+            let tab = reader
+                .sheet_order_ids()
+                .iter()
+                .position(|id| id.as_str() == key)?;
+            let name = reader.sheet_names().remove(&SheetId(key.to_owned()))?;
             Some(format!("tab {} named {name:?}", tab + 1))
         }
         Root::SheetOrder => {
@@ -239,7 +242,7 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
             let tab = reader
                 .sheet_order_ids()
                 .iter()
-                .position(|at| at == id.as_str())?;
+                .position(|at| at.as_str() == id.as_str())?;
             Some(format!("tab {}", tab + 1))
         }
         Root::NamedRanges => Some(format!(
@@ -261,7 +264,7 @@ fn sheet_reading(
     // The derived caches follow the active sheet only, and the scenario writes
     // nothing per sheet elsewhere. A value on another sheet has no reading,
     // and the coverage test names it.
-    if sheet != reader.active_sheet {
+    if sheet != reader.active_sheet.as_str() {
         return None;
     }
     let index = &reader.index;
@@ -447,7 +450,7 @@ fn a_stored_value_moving_moves_the_reading() {
     // value column can show it.
     moved.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(0),
-        sheet_id: ambre_bus::SheetId(super::schema::DEFAULT_SHEET.to_owned()),
+        sheet_id: super::schema::default_sheet(),
         col: Col::new(0),
         width_px: 90.0,
     });

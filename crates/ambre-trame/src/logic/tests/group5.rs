@@ -346,7 +346,7 @@ fn filtered_sheet(values: &[&str], keep: &str) -> TrameState {
         });
     }
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         col: Col::new(0),
         kind: FilterKind::Values(vec![keep.to_owned()]),
     });
@@ -369,7 +369,7 @@ fn filter_goes_with_its_column() {
     assert!(state.hidden_rows.is_empty());
     let def = state
         .doc
-        .get_map(SheetContainer::of(SheetRoot::Filters, TEST_SHEET).as_str());
+        .get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str());
     assert_eq!(def.len(), 0, "no definition left in the document");
 }
 
@@ -591,7 +591,7 @@ fn fill_auto_extrapolates_numeric_series() {
     });
 
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: SheetId(state.active_sheet.clone()),
+        sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(1), Col::new(0)),
@@ -649,7 +649,7 @@ fn fill_auto_copies_text_and_reindexes_formula() {
 
     // Fill B1 down to B2: the single source is not a series -> Copy + reindex.
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: SheetId(state.active_sheet.clone()),
+        sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(1)),
             crate::CellPos::new(Row::new(0), Col::new(1)),
@@ -692,7 +692,7 @@ fn fill_series_single_cell_increments_by_one() {
     });
 
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: SheetId(state.active_sheet.clone()),
+        sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(0), Col::new(0)),
@@ -744,7 +744,7 @@ fn fill_copy_multi_cell_tiles_verbatim() {
     });
 
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: SheetId(state.active_sheet.clone()),
+        sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(1), Col::new(0)),

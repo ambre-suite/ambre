@@ -19,12 +19,12 @@ fn with_one_edit() -> TrameState {
     state
 }
 
-fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<String>) -> TrameOutcome {
+fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<SheetId>) -> TrameOutcome {
     state.handle_command(TrameCommand::ImportCsv {
         data: data.to_vec(),
         delimiter: None,
         header: HeaderRow::Absent,
-        target_sheet_id: target_sheet_id.map(SheetId),
+        target_sheet_id,
         start_row: Row::new(0),
         start_col: Col::new(0),
     })
@@ -118,7 +118,7 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         text: "=SUM(TOTAL)*A1".to_owned(),
     });
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
+        sheet_id: crate::logic::default_sheet(),
         src: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(2)),
             crate::CellPos::new(Row::new(0), Col::new(2)),
@@ -162,7 +162,7 @@ fn an_import_is_one_undo_item() {
     );
     assert_eq!(
         state.active_sheet,
-        crate::logic::DEFAULT_SHEET,
+        crate::logic::default_sheet(),
         "the reader left it too"
     );
     assert_eq!(read_cell(&mut state, 0, 0), "kept", "the edit before stays");
@@ -248,7 +248,7 @@ fn a_csv_export_writes_nothing() {
     for cmd in [
         TrameCommand::ExportActiveSheetCsv,
         TrameCommand::ExportCsv {
-            sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
+            sheet_id: crate::logic::default_sheet(),
             delimiter: Some(b';'),
             range: None,
         },
@@ -294,7 +294,7 @@ fn a_computed_value_stays_out_of_the_document() {
     assert_eq!(read_cell(&mut state, 0, 1), "4242x");
     let LoroValue::Map(cells) = state
         .doc
-        .get_map(SheetContainer::of(SheetRoot::Cells, crate::logic::DEFAULT_SHEET).as_str())
+        .get_map(SheetContainer::of(SheetRoot::Cells, &crate::logic::default_sheet()).as_str())
         .get_deep_value()
     else {
         panic!("the cells map");

@@ -19,6 +19,7 @@ use super::types::{
 };
 use crate::columns::row_label;
 use crate::model::Uid;
+use ambre_bus::SheetId;
 
 // -----------------------------------------------------------------------------
 // Qualifier rewriting
@@ -52,7 +53,7 @@ fn map_qualifiers(expr: Expr, f: &impl Fn(SheetQualifier) -> SheetQualifier) -> 
 /// Rewrite display-name qualifiers (`Sheet2!`) into stable-id form (`#s0!`).
 /// A name that `name_to_id` cannot resolve is left as-is (it will surface as a
 /// parse error, never silently dropping user input).
-pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&str) -> Option<String>) -> Expr {
+pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&str) -> Option<SheetId>) -> Expr {
     map_qualifiers(expr, &|q| match q {
         SheetQualifier::Name(n) => match name_to_id(&n) {
             Some(id) => SheetQualifier::Id(id),
@@ -83,7 +84,7 @@ pub fn first_name_qualifier(expr: &Expr) -> Option<String> {
 /// Rewrite stable-id qualifiers (`#s0!`) back into the sheet's current display
 /// name (`Data!`). An id that `id_to_name` cannot resolve (deleted sheet) is
 /// left in `#id` form, which signals the dangling reference in the formula bar.
-pub fn to_display_form(expr: Expr, id_to_name: &impl Fn(&str) -> Option<String>) -> Expr {
+pub fn to_display_form(expr: Expr, id_to_name: &impl Fn(&SheetId) -> Option<String>) -> Expr {
     map_qualifiers(expr, &|q| match q {
         SheetQualifier::Id(id) => match id_to_name(&id) {
             Some(name) => SheetQualifier::Name(name),
@@ -353,7 +354,7 @@ mod tests {
     #[test]
     fn canonicalize_name_to_id() {
         let ast = parse_formula("Sheet2!A1+1").unwrap();
-        let name_to_id = |n: &str| (n == "Sheet2").then(|| "s0_a1b2".to_string());
+        let name_to_id = |n: &str| (n == "Sheet2").then(|| SheetId("s0_a1b2".to_owned()));
         let canon = canonicalize(ast, &name_to_id);
         assert_eq!(render(&canon), "#s0_a1b2!A1+1");
     }
@@ -361,7 +362,7 @@ mod tests {
     #[test]
     fn display_id_to_name() {
         let ast = parse_formula("#s0_a1b2!A1+1").unwrap();
-        let id_to_name = |id: &str| (id == "s0_a1b2").then(|| "Data".to_string());
+        let id_to_name = |id: &SheetId| (id.as_str() == "s0_a1b2").then(|| "Data".to_string());
         let disp = to_display_form(ast, &id_to_name);
         assert_eq!(render(&disp), "Data!A1+1");
     }
@@ -369,7 +370,7 @@ mod tests {
     #[test]
     fn display_quotes_name_with_space() {
         let ast = parse_formula("#s0!A1").unwrap();
-        let id_to_name = |id: &str| (id == "s0").then(|| "My Sheet".to_string());
+        let id_to_name = |id: &SheetId| (id.as_str() == "s0").then(|| "My Sheet".to_string());
         let disp = to_display_form(ast, &id_to_name);
         assert_eq!(render(&disp), "'My Sheet'!A1");
     }

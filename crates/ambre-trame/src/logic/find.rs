@@ -85,7 +85,7 @@ impl TrameState {
         // active sheet's engine state.
         let mut touched_other = false;
         if options.sheets == SheetScope::All {
-            let others: Vec<String> = self
+            let others: Vec<SheetId> = self
                 .all_sheet_ids()
                 .into_iter()
                 .filter(|id| *id != self.active_sheet)
@@ -219,7 +219,7 @@ impl TrameState {
     /// evaluation for that sheet, consistent with the active path.
     fn replace_in_other(
         &mut self,
-        sheet_id: &str,
+        sheet_id: &SheetId,
         needle: &str,
         query: &str,
         replacement: &str,

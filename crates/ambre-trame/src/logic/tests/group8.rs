@@ -87,7 +87,7 @@ fn a_sort_keeps_the_range_and_moves_the_cell() {
     set(&mut state, 4, 2, "=A1");
     assert_eq!(read_cell(&mut state, 4, 1), "4");
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId(TEST_SHEET.to_owned()),
+        sheet_id: default_sheet(),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(0)),
@@ -186,7 +186,7 @@ fn a_positional_workbook_migrates_onto_its_cells() {
         .resolve(CellPos::new(Row::new(0), Col::new(1)))
         .expect("B1 is materialized");
     old.doc
-        .get_map(SheetContainer::of(SheetRoot::Cells, TEST_SHEET).as_str())
+        .get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str())
         .insert(CellKey::of(rl, cl).as_str(), "=SUM(A2:A3)+A2")
         .expect("the positional text");
     old.doc
