@@ -41,6 +41,12 @@ impl Uuid {
         ExternalUuid::from_bytes(self.0).to_string()
     }
 
+    /// Converts the UUID to its 32 lowercase hexadecimal digits, without
+    /// hyphens.
+    pub fn to_simple(&self) -> String {
+        ExternalUuid::from_bytes(self.0).simple().to_string()
+    }
+
     /// Creates a UUID from a slice of bytes.
     ///
     /// Returns an error if the slice length is not 16.
@@ -88,6 +94,13 @@ impl fmt::Display for Uuid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_simple_form_is_the_hyphenated_one_without_hyphens() {
+        let uuid = Uuid::from_bytes([0xab; 16]);
+        assert_eq!(uuid.to_simple(), uuid.to_hyphenated().replace('-', ""));
+        assert_eq!(Uuid::parse_str(&uuid.to_simple()).unwrap(), uuid);
+    }
 
     #[test]
     fn test_new() {

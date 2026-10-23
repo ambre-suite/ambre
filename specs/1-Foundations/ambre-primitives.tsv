@@ -1550,6 +1550,7 @@ ambre-core | src/uuid.rs | crate::uuid | Uuid::from_bytes(bytes) | param | [u8;1
 ambre-core | src/uuid.rs | crate::uuid | Uuid::from_slice(slice) | param | &[u8]	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::parse_str(s) | param | &str	newtype-inner	Uuid newtype
 ambre-core | src/uuid.rs | crate::uuid | Uuid::to_hyphenated() | ret | String	newtype-inner	Uuid newtype
+ambre-core | src/uuid.rs | crate::uuid | Uuid::to_simple() | ret | String	newtype-inner	Uuid newtype
 ambre-core | src/version.rs | crate::version | Version.0 | field | u8	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/version.rs | crate::version | Version::as_u8() | ret | u8	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/version.rs | crate::version | Version::compatible_with() | ret | bool	generic	predicate
@@ -1854,27 +1855,16 @@ ambre-logic | src/lib.rs | crate | pass_clock() | ret | Option<f64>	math	count, 
 ambre-logic | src/lib.rs | crate | pass_clock()#2 | ret | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | stamp_pass(_start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/persistence.rs | crate::persistence | DB_NAME | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | DB_VERSION | const | u32	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named(db_name) | param | &str	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed() | ret | oneshot::Receiver<bool>	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::sessions_store(hex) | param | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_DELTAS | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_DRAFTS | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_META | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_SESSIONS | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_SNAPSHOTS | const | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | STORE_TRUSTED_KEYS | const | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | bytes_to_js(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-logic | src/persistence.rs | crate::persistence | hex_to_id() | ret | Option<[u8;16]>	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | hex_to_id(hex) | param | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | id_to_hex() | ret | String	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | id_to_hex(id) | param | &[u8;16]	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | rows_of(hex) | param | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
-ambre-logic | src/persistence.rs | crate::persistence | unique_suffix() | ret | String	debt	finding: IndexedDB keys and store names as strings
+ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
+ambre-logic | src/persistence.rs | crate::persistence | DbVersion.0 | field | u32	newtype-inner	DbVersion newtype
+ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | String	newtype-inner	IdbKey newtype
+ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its DocumentId
+ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret | &'static str	newtype-inner	the enum's own store name, unwrapped at the IndexedDB call
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | MAX_ALLOC | const | u64	math	count, size, limit, index or jitter local to an algorithm

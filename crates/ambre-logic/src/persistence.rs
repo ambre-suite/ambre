@@ -56,7 +56,19 @@ fn answer<T>() -> (Answer<T>, oneshot::Receiver<T>) {
     (Answer(Rc::new(RefCell::new(Some(tx)))), rx)
 }
 
-const DB_NAME: &str = "ambre-persistence";
+/// The name of a database the store opens: the production one, or the one a
+/// test opens apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DbName<'a>(&'a str);
+
+/// The database every session opens.
+const DB_NAME: DbName<'static> = DbName("ambre-persistence");
+
+/// The version of the database's shape. The browser runs the upgrade when it
+/// rises, and the upgrade adds every store the version holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct DbVersion(u32);
+
 // v2 adds the `trusted_keys` store (`ambre-spec-key-verification.md`).
 // The upgrade handler creates each store only if absent, so bumping the version
 // on an existing v1 database adds `trusted_keys` without touching `snapshots`.
@@ -64,28 +76,115 @@ const DB_NAME: &str = "ambre-persistence";
 // v4 adds the `sessions` store, created the same guarded way.
 // v5 adds the `meta` store, created the same guarded way.
 // v6 adds the `drafts` store, created the same guarded way.
-const DB_VERSION: u32 = 6;
-const STORE_SNAPSHOTS: &str = "snapshots";
-/// The deltas written since each document's snapshot, keyed
-/// `"{document hex}:{unique suffix}"`. A Loro import does not depend on the
-/// order it is fed, so the suffix only has to be unique.
-const STORE_DELTAS: &str = "deltas";
-/// This user's earlier sessions on each document, keyed
-/// `"{document hex}:{peer}"`. The value is the PeerID's eight little-endian
-/// bytes and then the nonce, so what a session left unsent travels at the
-/// next open (`AUTHOR-028`).
-const STORE_SESSIONS: &str = "sessions";
-/// TOFU pinned exchange keys: `UserId` (hex) -> the 32 raw bytes of the X25519
-/// key confirmed on first invitation (`ambre-spec-key-verification.md`).
-const STORE_TRUSTED_KEYS: &str = "trusted_keys";
-/// What the store's ledger knows of each document it holds, keyed by the
-/// document hex: one [`Meta`] row, read back at boot (`RESID-008`).
-const STORE_META: &str = "meta";
-/// The drafts the user has not sent, one text row per channel or thread. The
-/// composer builds the key from the user (the Murmure composer spec, section
-/// 3). No document row names them, so no eviction reaches them
-/// (`ambre-spec-murmure-composer.md`).
-const STORE_DRAFTS: &str = "drafts";
+const DB_VERSION: DbVersion = DbVersion(6);
+
+/// The object stores of the database, one variant each.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum IdbStore {
+    /// Each document's latest snapshot, keyed by [`IdbKey::document`].
+    Snapshots,
+    /// The deltas written since each document's snapshot, keyed by
+    /// [`IdbKey::fresh_delta`]. A Loro import does not depend on the order it
+    /// is fed, so the suffix only has to be unique.
+    Deltas,
+    /// This user's earlier sessions on each document, keyed by
+    /// [`IdbKey::session`]. The value is the PeerID's eight little-endian
+    /// bytes and then the nonce, so what a session left unsent travels at the
+    /// next open (`AUTHOR-028`).
+    Sessions,
+    /// TOFU pinned exchange keys, keyed by [`IdbKey::user`]: the 32 raw bytes
+    /// of the X25519 key confirmed on first invitation
+    /// (`ambre-spec-key-verification.md`).
+    TrustedKeys,
+    /// What the store's ledger knows of each document it holds, keyed by
+    /// [`IdbKey::document`]: one [`Meta`] row, read back at boot
+    /// (`RESID-008`).
+    Meta,
+    /// The drafts the user has not sent, one text row per channel or thread.
+    /// The composer builds the key from the user (the Murmure composer spec,
+    /// section 3). No document row names them, so no eviction reaches them
+    /// (`ambre-spec-murmure-composer.md`).
+    Drafts,
+}
+
+impl IdbStore {
+    /// Every store, in the order the upgrade creates them.
+    const ALL: [Self; 6] = [
+        Self::Snapshots,
+        Self::TrustedKeys,
+        Self::Deltas,
+        Self::Sessions,
+        Self::Meta,
+        Self::Drafts,
+    ];
+
+    /// The store's name, for the call into IndexedDB.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Snapshots => "snapshots",
+            Self::Deltas => "deltas",
+            Self::Sessions => "sessions",
+            Self::TrustedKeys => "trusted_keys",
+            Self::Meta => "meta",
+            Self::Drafts => "drafts",
+        }
+    }
+}
+
+/// The key of one row, as IndexedDB holds it: text. Each constructor names
+/// what the row belongs to, so a user's key never stands for a document's.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct IdbKey(String);
+
+impl IdbKey {
+    /// A document's row: its id as 32 lowercase hex digits.
+    fn document(id: DocumentId) -> Self {
+        Self(id.as_uuid().to_simple())
+    }
+
+    /// A user's row: its id as 32 lowercase hex digits.
+    fn user(id: UserId) -> Self {
+        Self(id.as_uuid().to_simple())
+    }
+
+    /// A key no other delta of `document` holds: the document's key, then the
+    /// time, a counter for this page, and a random draw for another tab
+    /// writing in the same millisecond.
+    fn fresh_delta(document: DocumentId) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let count = NEXT.fetch_add(1, Ordering::Relaxed);
+        let now = js_sys::Date::now() as u64;
+        let draw = (js_sys::Math::random() * f64::from(u32::MAX)) as u32;
+        let document = Self::document(document);
+        Self(format!("{document}:{now:015}:{count:010}:{draw:08x}"))
+    }
+
+    /// The row of one session of `peer` on `document`.
+    fn session(document: DocumentId, peer: ambre_core::PeerId) -> Self {
+        Self(format!("{}:{peer}", Self::document(document)))
+    }
+
+    /// The document whose row IndexedDB keyed `text`, as
+    /// [`IdbKey::document`] wrote it. `None` for any other text.
+    fn document_of(text: &str) -> Option<DocumentId> {
+        if text.len() != 32 {
+            return None;
+        }
+        DocumentId::parse_str(text).ok()
+    }
+
+    /// The key, for the call into IndexedDB.
+    fn to_js(&self) -> JsValue {
+        JsValue::from_str(&self.0)
+    }
+}
+
+impl std::fmt::Display for IdbKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// How one write ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +218,7 @@ impl PersistenceStore {
     /// Open a named database at [`DB_VERSION`], running the shared upgrade path.
     /// [`open`](Self::open) uses the production [`DB_NAME`]; tests pass a unique
     /// name so each runs against an isolated database.
-    fn open_named(db_name: &str) -> oneshot::Receiver<Result<Self, String>> {
+    fn open_named(db_name: DbName<'_>) -> oneshot::Receiver<Result<Self, String>> {
         let (tx, rx) = answer();
 
         let factory = match web_sys::window().and_then(|w| w.indexed_db().ok().flatten()) {
@@ -130,7 +229,7 @@ impl PersistenceStore {
             }
         };
 
-        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name, DB_VERSION) {
+        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name.0, DB_VERSION.0) {
             Ok(req) => req,
             Err(e) => {
                 tx.send(Err(format!("open request failed: {e:?}")));
@@ -146,23 +245,10 @@ impl PersistenceStore {
         let on_upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
                 let existing = db.object_store_names();
-                if !existing.contains(STORE_SNAPSHOTS) {
-                    let _ = db.create_object_store(STORE_SNAPSHOTS);
-                }
-                if !existing.contains(STORE_TRUSTED_KEYS) {
-                    let _ = db.create_object_store(STORE_TRUSTED_KEYS);
-                }
-                if !existing.contains(STORE_DELTAS) {
-                    let _ = db.create_object_store(STORE_DELTAS);
-                }
-                if !existing.contains(STORE_SESSIONS) {
-                    let _ = db.create_object_store(STORE_SESSIONS);
-                }
-                if !existing.contains(STORE_META) {
-                    let _ = db.create_object_store(STORE_META);
-                }
-                if !existing.contains(STORE_DRAFTS) {
-                    let _ = db.create_object_store(STORE_DRAFTS);
+                for store in IdbStore::ALL {
+                    if !existing.contains(store.name()) {
+                        let _ = db.create_object_store(store.name());
+                    }
                 }
             }
         });
@@ -218,26 +304,22 @@ impl PersistenceStore {
         document_id: DocumentId,
         delta: &SealedRowBytes,
     ) -> oneshot::Receiver<Stored> {
-        let hex = id_to_hex(document_id.as_bytes());
-        let key = format!("{hex}:{}", unique_suffix());
+        let key = IdbKey::fresh_delta(document_id);
         let txn = match self
             .db
-            .transaction_with_str_and_mode(STORE_DELTAS, IdbTransactionMode::Readwrite)
+            .transaction_with_str_and_mode(IdbStore::Deltas.name(), IdbTransactionMode::Readwrite)
         {
             Ok(t) => t,
             Err(e) => {
-                tracing::warn!("Persistence: delta txn failed for {hex}: {e:?}");
+                tracing::warn!("Persistence: delta txn failed for {key}: {e:?}");
                 return outcome(None);
             }
         };
-        let Ok(store) = txn.object_store(STORE_DELTAS) else {
+        let Ok(store) = txn.object_store(IdbStore::Deltas.name()) else {
             return outcome(None);
         };
-        if let Err(e) = store.put_with_key(
-            bytes_to_js(delta.as_bytes()).as_ref(),
-            &JsValue::from_str(&key),
-        ) {
-            tracing::warn!("Persistence: delta put failed for {hex}: {e:?}");
+        if let Err(e) = store.put_with_key(bytes_to_js(delta.as_bytes()).as_ref(), &key.to_js()) {
+            tracing::warn!("Persistence: delta put failed for {key}: {e:?}");
             return outcome(None);
         }
         outcome(Some(txn))
@@ -246,19 +328,16 @@ impl PersistenceStore {
     /// Write the ledger's row for a document (fire-and-forget). A row lost
     /// here only counts the document less precisely after a reload.
     pub fn save_meta(&self, document_id: DocumentId, meta: &Meta) {
-        let hex = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
         if let Err(e) = self
             .db
-            .transaction_with_str_and_mode(STORE_META, IdbTransactionMode::Readwrite)
-            .and_then(|txn| txn.object_store(STORE_META))
+            .transaction_with_str_and_mode(IdbStore::Meta.name(), IdbTransactionMode::Readwrite)
+            .and_then(|txn| txn.object_store(IdbStore::Meta.name()))
             .and_then(|store| {
-                store.put_with_key(
-                    bytes_to_js(&meta.encode()).as_ref(),
-                    &JsValue::from_str(&hex),
-                )
+                store.put_with_key(bytes_to_js(&meta.encode()).as_ref(), &key.to_js())
             })
         {
-            tracing::warn!("Persistence: meta put failed for {hex}: {e:?}");
+            tracing::warn!("Persistence: meta put failed for {key}: {e:?}");
         }
     }
 
@@ -266,12 +345,12 @@ impl PersistenceStore {
     /// list when the read failed; a row that does not decode is skipped.
     pub fn load_meta(&self) -> oneshot::Receiver<Vec<(DocumentId, Meta)>> {
         let (tx, rx) = answer();
-        let Ok(txn) = self.db.transaction_with_str(STORE_META) else {
+        let Ok(txn) = self.db.transaction_with_str(IdbStore::Meta.name()) else {
             tx.send(Vec::new());
             return rx;
         };
         let requests = txn
-            .object_store(STORE_META)
+            .object_store(IdbStore::Meta.name())
             .and_then(|store| Ok((store.get_all_keys()?, store.get_all()?)));
         let Ok((keys, rows)) = requests else {
             tx.send(Vec::new());
@@ -295,7 +374,7 @@ impl PersistenceStore {
                     .iter()
                     .zip(rows.iter())
                     .filter_map(|(key, row)| {
-                        let id = DocumentId::from_bytes(hex_to_id(&key.as_string()?)?);
+                        let id = IdbKey::document_of(&key.as_string()?)?;
                         let row = row.dyn_into::<Uint8Array>().ok()?.to_vec();
                         Some((id, Meta::decode(&row)?))
                     })
@@ -339,10 +418,10 @@ impl PersistenceStore {
         document_id: DocumentId,
         snapshot: &SealedRowBytes,
     ) -> Option<web_sys::IdbTransaction> {
-        let key = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
         let stores = js_sys::Array::of2(
-            &JsValue::from_str(STORE_SNAPSHOTS),
-            &JsValue::from_str(STORE_DELTAS),
+            &JsValue::from_str(IdbStore::Snapshots.name()),
+            &JsValue::from_str(IdbStore::Deltas.name()),
         );
         let txn = match self
             .db
@@ -355,20 +434,19 @@ impl PersistenceStore {
             }
         };
         let (Ok(snapshots), Ok(deltas)) = (
-            txn.object_store(STORE_SNAPSHOTS),
-            txn.object_store(STORE_DELTAS),
+            txn.object_store(IdbStore::Snapshots.name()),
+            txn.object_store(IdbStore::Deltas.name()),
         ) else {
             tracing::warn!("Persistence: save object_store failed for {key}");
             return None;
         };
-        if let Err(e) = snapshots.put_with_key(
-            bytes_to_js(snapshot.as_bytes()).as_ref(),
-            &JsValue::from_str(&key),
-        ) {
+        if let Err(e) =
+            snapshots.put_with_key(bytes_to_js(snapshot.as_bytes()).as_ref(), &key.to_js())
+        {
             tracing::warn!("Persistence: save put failed for {key}: {e:?}");
             return None;
         }
-        match rows_of(&key) {
+        match rows_of(document_id) {
             Some(range) => {
                 if let Err(e) = deltas.delete(&range) {
                     tracing::warn!("Persistence: delta sweep failed for {key}: {e:?}");
@@ -436,23 +514,23 @@ impl PersistenceStore {
         document_id: DocumentId,
     ) -> oneshot::Receiver<Option<SealedRowBytes>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
 
-        let txn = match self.db.transaction_with_str(STORE_SNAPSHOTS) {
+        let txn = match self.db.transaction_with_str(IdbStore::Snapshots.name()) {
             Ok(t) => t,
             Err(_) => {
                 tx.send(None);
                 return rx;
             }
         };
-        let store = match txn.object_store(STORE_SNAPSHOTS) {
+        let store = match txn.object_store(IdbStore::Snapshots.name()) {
             Ok(s) => s,
             Err(_) => {
                 tx.send(None);
                 return rx;
             }
         };
-        let request = match store.get(&JsValue::from_str(&key)) {
+        let request = match store.get(&key.to_js()) {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!("Persistence: load get failed for {key}: {e:?}");
@@ -490,13 +568,13 @@ impl PersistenceStore {
     /// Resolves to an empty list when there is none or the read failed.
     pub fn load_deltas(&self, document_id: DocumentId) -> oneshot::Receiver<Vec<SealedRowBytes>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
         let request = self
             .db
-            .transaction_with_str(STORE_DELTAS)
-            .and_then(|txn| txn.object_store(STORE_DELTAS))
+            .transaction_with_str(IdbStore::Deltas.name())
+            .and_then(|txn| txn.object_store(IdbStore::Deltas.name()))
             .ok()
-            .zip(rows_of(&key))
+            .zip(rows_of(document_id))
             .and_then(|(store, range)| store.get_all_with_key(&range).ok());
         let Some(request) = request else {
             tx.send(Vec::new());
@@ -542,41 +620,41 @@ impl PersistenceStore {
         peer: ambre_core::PeerId,
         nonce: SessionNonce,
     ) {
-        let hex = id_to_hex(document_id.as_bytes());
-        let Some(store) = self.sessions_store(&hex) else {
+        let key = IdbKey::session(document_id, peer);
+        let Some(store) = self.sessions_store(&key) else {
             return;
         };
         let mut value = [0u8; 24];
         let (head, tail) = value.split_at_mut(8);
         head.copy_from_slice(&peer.0.to_le_bytes());
         tail.copy_from_slice(&nonce.0);
-        let key = JsValue::from_str(&format!("{hex}:{peer}"));
-        if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key) {
-            tracing::warn!("Persistence: session put failed for {hex}: {e:?}");
+        if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key.to_js()) {
+            tracing::warn!("Persistence: session put failed for {key}: {e:?}");
         }
     }
 
     /// Drop one session the relay already holds whole (fire-and-forget).
     pub fn forget_session(&self, document_id: DocumentId, peer: ambre_core::PeerId) {
-        let hex = id_to_hex(document_id.as_bytes());
-        let Some(store) = self.sessions_store(&hex) else {
+        let key = IdbKey::session(document_id, peer);
+        let Some(store) = self.sessions_store(&key) else {
             return;
         };
-        if let Err(e) = store.delete(&JsValue::from_str(&format!("{hex}:{peer}"))) {
-            tracing::warn!("Persistence: session delete failed for {hex}: {e:?}");
+        if let Err(e) = store.delete(&key.to_js()) {
+            tracing::warn!("Persistence: session delete failed for {key}: {e:?}");
         }
     }
 
-    /// The `sessions` store in a fresh read-write transaction.
-    fn sessions_store(&self, hex: &str) -> Option<web_sys::IdbObjectStore> {
+    /// The `sessions` store in a fresh read-write transaction, to write the
+    /// row `key`.
+    fn sessions_store(&self, key: &IdbKey) -> Option<web_sys::IdbObjectStore> {
         match self
             .db
-            .transaction_with_str_and_mode(STORE_SESSIONS, IdbTransactionMode::Readwrite)
-            .and_then(|txn| txn.object_store(STORE_SESSIONS))
+            .transaction_with_str_and_mode(IdbStore::Sessions.name(), IdbTransactionMode::Readwrite)
+            .and_then(|txn| txn.object_store(IdbStore::Sessions.name()))
         {
             Ok(store) => Some(store),
             Err(e) => {
-                tracing::warn!("Persistence: session txn failed for {hex}: {e:?}");
+                tracing::warn!("Persistence: session txn failed for {key}: {e:?}");
                 None
             }
         }
@@ -591,13 +669,13 @@ impl PersistenceStore {
         document_id: DocumentId,
     ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, SessionNonce)>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
         let request = self
             .db
-            .transaction_with_str(STORE_SESSIONS)
-            .and_then(|txn| txn.object_store(STORE_SESSIONS))
+            .transaction_with_str(IdbStore::Sessions.name())
+            .and_then(|txn| txn.object_store(IdbStore::Sessions.name()))
             .ok()
-            .zip(rows_of(&key))
+            .zip(rows_of(document_id))
             .and_then(|(store, range)| store.get_all_with_key(&range).ok());
         let Some(request) = request else {
             tx.send(Vec::new());
@@ -644,23 +722,23 @@ impl PersistenceStore {
         user_id: UserId,
     ) -> oneshot::Receiver<Option<ambre_core::ExchangePublicKey>> {
         let (tx, rx) = answer();
-        let key = id_to_hex(user_id.as_bytes());
+        let key = IdbKey::user(user_id);
 
-        let txn = match self.db.transaction_with_str(STORE_TRUSTED_KEYS) {
+        let txn = match self.db.transaction_with_str(IdbStore::TrustedKeys.name()) {
             Ok(t) => t,
             Err(_) => {
                 tx.send(None);
                 return rx;
             }
         };
-        let store = match txn.object_store(STORE_TRUSTED_KEYS) {
+        let store = match txn.object_store(IdbStore::TrustedKeys.name()) {
             Ok(s) => s,
             Err(_) => {
                 tx.send(None);
                 return rx;
             }
         };
-        let request = match store.get(&JsValue::from_str(&key)) {
+        let request = match store.get(&key.to_js()) {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!("Persistence: trusted_key get failed for {key}: {e:?}");
@@ -703,41 +781,41 @@ impl PersistenceStore {
     /// deliberately re-pin after a "key changed" alert. The transaction
     /// auto-commits when the Main thread returns to its event loop.
     pub fn save_trusted_key(&self, user_id: UserId, key: &ambre_core::ExchangePublicKey) {
-        let hex = id_to_hex(user_id.as_bytes());
-        let txn = match self
-            .db
-            .transaction_with_str_and_mode(STORE_TRUSTED_KEYS, IdbTransactionMode::Readwrite)
-        {
+        let row = IdbKey::user(user_id);
+        let txn = match self.db.transaction_with_str_and_mode(
+            IdbStore::TrustedKeys.name(),
+            IdbTransactionMode::Readwrite,
+        ) {
             Ok(t) => t,
             Err(e) => {
-                tracing::warn!("Persistence: trusted_key save txn failed for {hex}: {e:?}");
+                tracing::warn!("Persistence: trusted_key save txn failed for {row}: {e:?}");
                 return;
             }
         };
-        let store = match txn.object_store(STORE_TRUSTED_KEYS) {
+        let store = match txn.object_store(IdbStore::TrustedKeys.name()) {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!("Persistence: trusted_key object_store failed for {hex}: {e:?}");
+                tracing::warn!("Persistence: trusted_key object_store failed for {row}: {e:?}");
                 return;
             }
         };
 
         let array = Uint8Array::new_with_length(key.as_slice().len() as u32);
         array.copy_from(key.as_slice());
-        if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&hex)) {
-            tracing::warn!("Persistence: trusted_key put failed for {hex}: {e:?}");
+        if let Err(e) = store.put_with_key(array.as_ref(), &row.to_js()) {
+            tracing::warn!("Persistence: trusted_key put failed for {row}: {e:?}");
         }
     }
 
     /// Remove a document's snapshot, its deltas, its sessions and its ledger
     /// row: the copy leaves the store, and a reopen fetches it (`RESID-012`).
     pub fn delete_snapshot(&self, document_id: DocumentId) {
-        let key = id_to_hex(document_id.as_bytes());
+        let key = IdbKey::document(document_id);
         let stores = js_sys::Array::of4(
-            &JsValue::from_str(STORE_SNAPSHOTS),
-            &JsValue::from_str(STORE_DELTAS),
-            &JsValue::from_str(STORE_SESSIONS),
-            &JsValue::from_str(STORE_META),
+            &JsValue::from_str(IdbStore::Snapshots.name()),
+            &JsValue::from_str(IdbStore::Deltas.name()),
+            &JsValue::from_str(IdbStore::Sessions.name()),
+            &JsValue::from_str(IdbStore::Meta.name()),
         );
         let Ok(txn) = self
             .db
@@ -745,15 +823,15 @@ impl PersistenceStore {
         else {
             return;
         };
-        for name in [STORE_SNAPSHOTS, STORE_META] {
+        for name in [IdbStore::Snapshots, IdbStore::Meta].map(IdbStore::name) {
             if let Ok(store) = txn.object_store(name)
-                && let Err(e) = store.delete(&JsValue::from_str(&key))
+                && let Err(e) = store.delete(&key.to_js())
             {
                 tracing::warn!("Persistence: {name} delete failed for {key}: {e:?}");
             }
         }
-        for name in [STORE_DELTAS, STORE_SESSIONS] {
-            if let (Ok(store), Some(range)) = (txn.object_store(name), rows_of(&key))
+        for name in [IdbStore::Deltas, IdbStore::Sessions].map(IdbStore::name) {
+            if let (Ok(store), Some(range)) = (txn.object_store(name), rows_of(document_id))
                 && let Err(e) = store.delete(&range)
             {
                 tracing::warn!("Persistence: {name} delete failed for {key}: {e:?}");
@@ -811,8 +889,8 @@ impl PersistenceStore {
     fn drafts_store(&self) -> Option<web_sys::IdbObjectStore> {
         match self
             .db
-            .transaction_with_str_and_mode(STORE_DRAFTS, IdbTransactionMode::Readwrite)
-            .and_then(|txn| txn.object_store(STORE_DRAFTS))
+            .transaction_with_str_and_mode(IdbStore::Drafts.name(), IdbTransactionMode::Readwrite)
+            .and_then(|txn| txn.object_store(IdbStore::Drafts.name()))
         {
             Ok(store) => Some(store),
             Err(e) => {
@@ -836,11 +914,11 @@ impl PersistenceStore {
             &JsValue::from_str(lower.as_str()),
             &JsValue::from_str(upper.as_str()),
         );
-        let Ok(txn) = self.db.transaction_with_str(STORE_DRAFTS) else {
+        let Ok(txn) = self.db.transaction_with_str(IdbStore::Drafts.name()) else {
             tx.send(Vec::new());
             return rx;
         };
-        let requests = txn.object_store(STORE_DRAFTS).and_then(|store| {
+        let requests = txn.object_store(IdbStore::Drafts.name()).and_then(|store| {
             let range = range?;
             Ok((
                 store.get_all_keys_with_key(&range)?,
@@ -920,18 +998,6 @@ fn outcome(txn: Option<web_sys::IdbTransaction>) -> oneshot::Receiver<Stored> {
     rx
 }
 
-/// Parse a 32-char hex key back into its 16 bytes.
-fn hex_to_id(hex: &str) -> Option<[u8; 16]> {
-    let mut id = [0u8; 16];
-    if hex.len() != 32 {
-        return None;
-    }
-    for (byte, pair) in id.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
-        *byte = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
-    }
-    Some(id)
-}
-
 /// Parse one `sessions` row: the PeerID's eight little-endian bytes, then
 /// the sixteen bytes of the nonce. `None` for any other length.
 fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, SessionNonce)> {
@@ -943,26 +1009,16 @@ fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, SessionNonce)> {
     ))
 }
 
-/// The key range holding every row of the document keyed `hex`, in a store
-/// keyed `"{hex}:..."`. It runs from `"{hex}:"` up to `"{hex};"`, the
-/// character after the colon.
-fn rows_of(hex: &str) -> Option<web_sys::IdbKeyRange> {
+/// The key range holding every row of `document`, in a store whose keys open
+/// with [`IdbKey::document`] and a colon. It runs from `"{key}:"` up to
+/// `"{key};"`, the character after the colon.
+fn rows_of(document: DocumentId) -> Option<web_sys::IdbKeyRange> {
+    let key = IdbKey::document(document);
     web_sys::IdbKeyRange::bound(
-        &JsValue::from_str(&format!("{hex}:")),
-        &JsValue::from_str(&format!("{hex};")),
+        &JsValue::from_str(&format!("{key}:")),
+        &JsValue::from_str(&format!("{key};")),
     )
     .ok()
-}
-
-/// A key suffix no other delta holds. It is the time, a counter for this
-/// page, and a random draw for another tab writing in the same millisecond.
-fn unique_suffix() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let count = NEXT.fetch_add(1, Ordering::Relaxed);
-    let now = js_sys::Date::now() as u64;
-    let draw = (js_sys::Math::random() * f64::from(u32::MAX)) as u32;
-    format!("{now:015}:{count:010}:{draw:08x}")
 }
 
 /// Copy `bytes` into a fresh JS array.
@@ -979,15 +1035,6 @@ fn request_database(event: &web_sys::Event) -> Option<IdbDatabase> {
         .and_then(|t| t.dyn_into::<IdbOpenDbRequest>().ok())
         .and_then(|req| req.result().ok())
         .and_then(|r| r.dyn_into::<IdbDatabase>().ok())
-}
-
-/// Render a `DocumentId`'s 16 bytes as a 32-char lowercase hex key.
-fn id_to_hex(id: &[u8; 16]) -> String {
-    let mut s = String::with_capacity(32);
-    for byte in id {
-        s.push_str(&format!("{byte:02x}"));
-    }
-    s
 }
 
 // ============================================================================
@@ -1042,24 +1089,25 @@ mod wasm_tests {
         // v1 upgrade: the old code created `snapshots` unconditionally.
         let upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
-                let _ = db.create_object_store(STORE_SNAPSHOTS);
+                let _ = db.create_object_store(IdbStore::Snapshots.name());
             }
         });
         req.set_onupgradeneeded(Some(upgrade.as_ref().unchecked_ref()));
         upgrade.forget();
 
-        let key = id_to_hex(doc_id.as_bytes());
+        let key = IdbKey::document(doc_id);
         let payload = bytes.to_vec();
         let tx2 = tx.clone();
         let success = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
-                if let Ok(txn) =
-                    db.transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
-                {
-                    if let Ok(store) = txn.object_store(STORE_SNAPSHOTS) {
+                if let Ok(txn) = db.transaction_with_str_and_mode(
+                    IdbStore::Snapshots.name(),
+                    IdbTransactionMode::Readwrite,
+                ) {
+                    if let Ok(store) = txn.object_store(IdbStore::Snapshots.name()) {
                         let arr = Uint8Array::new_with_length(payload.len() as u32);
                         arr.copy_from(&payload);
-                        let _ = store.put_with_key(arr.as_ref(), &JsValue::from_str(&key));
+                        let _ = store.put_with_key(arr.as_ref(), &key.to_js());
                     }
                 }
                 db.close();
@@ -1072,11 +1120,22 @@ mod wasm_tests {
         let _ = rx.await;
     }
 
+    /// A document's key is its 32 hex digits, and reads back as that
+    /// document. The hyphenated form is no key.
+    #[wasm_bindgen_test]
+    fn a_document_key_reads_back_as_its_document() {
+        let doc = DocumentId::from_bytes([0xab; 16]);
+        let key = IdbKey::document(doc);
+        assert_eq!(key.to_string(), "ab".repeat(16));
+        assert_eq!(IdbKey::document_of(&key.to_string()), Some(doc));
+        assert_eq!(IdbKey::document_of(&doc.to_string()), None);
+    }
+
     #[wasm_bindgen_test]
     async fn trusted_key_roundtrips_and_absent_is_none() {
         let name = "ambre-test-trusted-roundtrip";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
@@ -1106,7 +1165,7 @@ mod wasm_tests {
     async fn a_repin_leaves_every_other_pin_as_it_was() {
         let name = "ambre-test-trusted-repin";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
@@ -1137,7 +1196,7 @@ mod wasm_tests {
 
         // Open with the current (v2) code: the guarded onupgradeneeded must add
         // `trusted_keys` without throwing ConstraintError on `snapshots`.
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("v1 database upgrades to v2 cleanly");
@@ -1159,7 +1218,7 @@ mod wasm_tests {
     async fn deltas_log_until_a_snapshot_folds_them() {
         let name = "ambre-test-deltas";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
@@ -1201,12 +1260,12 @@ mod wasm_tests {
     async fn drafts_outlive_an_eviction() {
         let name = "ambre-test-drafts";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
         let doc = DocumentId::from_bytes([8; 16]);
-        let hex = id_to_hex(doc.as_bytes());
+        let hex = IdbKey::document(doc);
         let (mine, theirs) = (
             DraftKey::new(format!("{hex}:a")),
             DraftKey::new("z/b".to_owned()),
@@ -1246,7 +1305,7 @@ mod wasm_tests {
         use crate::store_ledger::{Meta, StoreLedger};
         let name = "ambre-test-meta";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
@@ -1276,7 +1335,7 @@ mod wasm_tests {
     async fn sessions_are_kept_until_forgotten() {
         let name = "ambre-test-sessions";
         delete_db(name).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("store opens");
@@ -1311,7 +1370,7 @@ mod wasm_tests {
         delete_db(name).await;
         let doc = DocumentId::from_bytes([8; 16]);
         seed_v1_with_snapshot(name, doc, &[1, 2]).await;
-        let store = PersistenceStore::open_named(name)
+        let store = PersistenceStore::open_named(DbName(name))
             .await
             .expect("channel")
             .expect("the database upgrades cleanly");
