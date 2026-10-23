@@ -38,11 +38,7 @@ impl SyncState {
         };
         match ambre_crypto::aead::seal_file(&plaintext, &sealed_aad(&salt), &key) {
             Ok((nonce, ciphertext)) => {
-                let data = ambre_core::SealedContainer::new(write_ambre_sealed(
-                    &salt,
-                    &nonce,
-                    &ciphertext.0,
-                ));
+                let data = write_ambre_sealed(&salt, &nonce, &ciphertext);
                 self.reply(id, RestEvent::DocFileSealed { data });
             }
             Err(_) => {
@@ -77,7 +73,7 @@ impl SyncState {
         };
         match ambre_crypto::aead::open_file(
             &envelope.nonce,
-            &envelope.ciphertext,
+            &envelope.ciphertext.0,
             &envelope.aad(),
             &key,
         ) {

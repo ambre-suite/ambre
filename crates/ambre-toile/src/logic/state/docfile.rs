@@ -19,7 +19,10 @@ impl ToileState {
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     /// `None` when the board could not be read: no file is better than a file
     /// that opens empty (`TOILE-IO-069`).
-    pub fn export_ambre_plaintext(&self, doc_id: DocumentId) -> Option<Vec<u8>> {
+    pub fn export_ambre_plaintext(
+        &self,
+        doc_id: DocumentId,
+    ) -> Option<ambre_core::PlaintextContainer> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -38,7 +41,7 @@ impl ToileState {
     /// engine refuses the payload. The board is unchanged in either case.
     pub fn import_ambre_plaintext(
         &mut self,
-        data: &[u8],
+        data: &ambre_core::PlaintextContainer,
     ) -> Result<(DocumentId, Vec<ToileEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         // The container has said its piece; the schema register inside the
@@ -109,7 +112,7 @@ mod tests {
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Toile);
         assert_eq!(header.document_id, doc_id());
-        assert_eq!(header.payload, bytes[HEADER_LEN..]);
+        assert_eq!(header.payload, bytes.as_bytes()[HEADER_LEN..]);
         assert!(!header.payload.is_empty());
     }
 
@@ -170,7 +173,7 @@ mod tests {
             })
         );
         // The same bytes are accepted, unchanged, by the importer they name.
-        assert!(read_ambre_plaintext_as(DocType::Trame, &trame).is_ok());
+        assert!(read_ambre_plaintext_as(DocType::Trame, trame.as_bytes()).is_ok());
     }
 
     #[test]
@@ -196,23 +199,24 @@ mod tests {
         let before_layers = state.layer_order().to_vec();
 
         let cases: Vec<Vec<u8>> = vec![
-            good[..8].to_vec(),
+            good.as_bytes()[..8].to_vec(),
             {
-                let mut b = good.clone();
+                let mut b = good.clone().into_bytes();
                 b[0] = b'X';
                 b
             },
             {
-                let mut b = good.clone();
+                let mut b = good.clone().into_bytes();
                 b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
-            write_ambre_plaintext(DocType::Trame, doc_id(), b"whatever"),
-            write_ambre_plaintext(DocType::Toile, doc_id(), b"not a loro snapshot"),
+            write_ambre_plaintext(DocType::Trame, doc_id(), b"whatever").into_bytes(),
+            write_ambre_plaintext(DocType::Toile, doc_id(), b"not a loro snapshot").into_bytes(),
         ];
         for bytes in cases {
             let before_bytes = bytes.clone();
-            assert!(state.import_ambre_plaintext(&bytes).is_err());
+            let container = ambre_core::PlaintextContainer::new(bytes.clone());
+            assert!(state.import_ambre_plaintext(&container).is_err());
             assert_eq!(bytes, before_bytes, "a failed import rewrote its input");
             assert_eq!(
                 state.export_snapshot(),

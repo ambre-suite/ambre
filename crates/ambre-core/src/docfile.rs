@@ -56,7 +56,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{DocType, DocumentId, Nonce, Uuid};
+use crate::{Ciphertext, DocType, DocumentId, Nonce, PlaintextContainer, SealedContainer, Uuid};
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
 pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
@@ -323,7 +323,7 @@ pub fn write_ambre_plaintext(
     doc_type: DocType,
     document_id: DocumentId,
     payload: &[u8],
-) -> Vec<u8> {
+) -> PlaintextContainer {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
     out.push(AMBRE_VERSION.as_u8());
@@ -331,7 +331,7 @@ pub fn write_ambre_plaintext(
     out.extend_from_slice(document_id.as_bytes());
     debug_assert_eq!(out.len(), HEADER_LEN);
     out.extend_from_slice(payload);
-    out
+    PlaintextContainer::new(out)
 }
 
 // -----------------------------------------------------------------------------
@@ -461,7 +461,7 @@ pub struct SealedAmbre {
     pub nonce: Nonce,
     /// Offset [`SEALED_HEADER_LEN`] onward: the sealed bytes, authentication tag
     /// included. Opens to a whole plaintext container.
-    pub ciphertext: Vec<u8>,
+    pub ciphertext: Ciphertext,
 }
 
 impl SealedAmbre {
@@ -500,13 +500,17 @@ pub fn sealed_aad(salt: &FileSalt) -> crate::Aad {
 ///
 /// The writer rule of the sealed lineage, and it takes no version either: this
 /// emits [`AMBRE_SEALED_VERSION`] or nothing at all.
-pub fn write_ambre_sealed(salt: &FileSalt, nonce: &Nonce, ciphertext: &[u8]) -> Vec<u8> {
+pub fn write_ambre_sealed(
+    salt: &FileSalt,
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
+) -> SealedContainer {
     let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
     out.extend_from_slice(sealed_aad(salt).as_bytes());
     out.extend_from_slice(&nonce.0);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
-    out.extend_from_slice(ciphertext);
-    out
+    out.extend_from_slice(&ciphertext.0);
+    SealedContainer::new(out)
 }
 
 /// Parse a sealed `.ambre` header, at the current sealed layout exactly.
@@ -553,7 +557,7 @@ pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
         version,
         salt,
         nonce,
-        ciphertext: ciphertext.to_vec(),
+        ciphertext: Ciphertext(ciphertext.to_vec()),
     })
 }
 
@@ -646,7 +650,7 @@ mod tests {
     }
 
     fn sample(doc_type: DocType) -> Vec<u8> {
-        write_ambre_plaintext(doc_type, doc_id(), b"snapshot-bytes")
+        write_ambre_plaintext(doc_type, doc_id(), b"snapshot-bytes").into_bytes()
     }
 
     #[test]
@@ -685,7 +689,7 @@ mod tests {
         // A header failure and an empty document are different conditions: the
         // container reports the second faithfully and lets the engine judge it.
         let bytes = write_ambre_plaintext(DocType::Trame, doc_id(), &[]);
-        let header = read_ambre_plaintext(&bytes).expect("valid container");
+        let header = read_ambre_plaintext(bytes.as_bytes()).expect("valid container");
         assert!(header.payload.is_empty());
     }
 
@@ -915,7 +919,7 @@ mod tests {
     const NONCE: Nonce = Nonce([0x5A; SEAL_NONCE_LEN]);
 
     fn sealed_sample() -> Vec<u8> {
-        write_ambre_sealed(&SALT, &NONCE, b"ciphertext-bytes")
+        write_ambre_sealed(&SALT, &NONCE, &Ciphertext(b"ciphertext-bytes".to_vec())).into_bytes()
     }
 
     #[test]
@@ -950,7 +954,7 @@ mod tests {
         assert_eq!(envelope.version, AMBRE_SEALED_VERSION);
         assert_eq!(envelope.salt, SALT);
         assert_eq!(envelope.nonce, NONCE);
-        assert_eq!(envelope.ciphertext, b"ciphertext-bytes");
+        assert_eq!(envelope.ciphertext.0, b"ciphertext-bytes");
         assert_eq!(
             write_ambre_sealed(&envelope.salt, &envelope.nonce, &envelope.ciphertext),
             sealed_sample()
@@ -1052,8 +1056,10 @@ mod tests {
         // This module owns no tag width (`DOCFILE-006`), so it cannot tell a
         // ciphertext too short to be one from a valid short document. It reports
         // the envelope faithfully; the open fails one layer up.
-        let envelope = parse_sealed_header(&write_ambre_sealed(&SALT, &NONCE, &[]))
-            .expect("a header with no ciphertext is still a header");
+        let envelope = parse_sealed_header(
+            write_ambre_sealed(&SALT, &NONCE, &Ciphertext(Vec::new())).as_bytes(),
+        )
+        .expect("a header with no ciphertext is still a header");
         assert!(envelope.ciphertext.is_empty());
     }
 }

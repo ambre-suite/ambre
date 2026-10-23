@@ -74,6 +74,7 @@ impl FixtureGen for Gen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
+            .into_bytes()
     }
 }
 

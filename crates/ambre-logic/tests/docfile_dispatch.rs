@@ -35,7 +35,7 @@ fn doc_id(tag: u8) -> DocumentId {
     DocumentId::from_bytes(bytes)
 }
 
-fn trame_file() -> Vec<u8> {
+fn trame_file() -> ambre_core::PlaintextContainer {
     let mut state = TrameState::new();
     state.handle_command(ambre_trame::TrameCommand::SetCellText {
         row: Row::new(0),
@@ -47,7 +47,7 @@ fn trame_file() -> Vec<u8> {
         .expect("the document reads")
 }
 
-fn toile_file() -> Vec<u8> {
+fn toile_file() -> ambre_core::PlaintextContainer {
     let mut state = ToileState::new();
     state.handle_command(ambre_toile::ToileCommand::CreateElement {
         kind: ambre_toile::ElementKind::Sticky,
@@ -111,10 +111,10 @@ fn routing_reads_the_type_off_the_header_without_asking_an_app_first() {
         (trame_file(), DocType::Trame),
         (toile_file(), DocType::Toile),
     ] {
-        let header = read_ambre_plaintext(&bytes).expect("a valid container");
+        let header = read_ambre_plaintext(bytes.as_bytes()).expect("a valid container");
         assert_eq!(header.doc_type, expected);
         // The container is app-agnostic: the two files differ in one header byte
         // and their payloads, in nothing else.
-        assert_eq!(&bytes[..5], b"AMBR\x01");
+        assert_eq!(&bytes.as_bytes()[..5], b"AMBR\x01");
     }
 }

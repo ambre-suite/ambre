@@ -500,10 +500,11 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     // `read_ambre_plaintext_as`, which is also where the dispatch rule fires.
     // That re-reads (and re-copies) the payload, which is the price of keeping
     // one import path instead of two; nothing here is on a hot path.
+    let container = ambre_core::PlaintextContainer::new(bytes.to_vec());
     let document_id = match &mut state {
-        DocState::Trame(trame) => trame.import_ambre_plaintext(bytes).map(|(id, _events)| id),
-        DocState::Toile(toile) => toile.import_ambre_plaintext(bytes).map(|(id, _events)| id),
-        DocState::Prose(prose) => prose.import_ambre_plaintext(bytes).map(|(id, _events)| id),
+        DocState::Trame(trame) => trame.import_ambre_plaintext(&container).map(|(id, _)| id),
+        DocState::Toile(toile) => toile.import_ambre_plaintext(&container).map(|(id, _)| id),
+        DocState::Prose(prose) => prose.import_ambre_plaintext(&container).map(|(id, _)| id),
     }?;
     Ok((document_id, state))
 }

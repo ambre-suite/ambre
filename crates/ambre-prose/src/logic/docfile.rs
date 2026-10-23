@@ -23,7 +23,10 @@ use super::ProseState;
 /// (`PROSE-IO-059`). `None` when the document cannot be read: a header over
 /// nothing would open as a document the user emptied.
 #[must_use]
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(
+    doc: &LoroDoc,
+    doc_id: DocumentId,
+) -> Option<ambre_core::PlaintextContainer> {
     let payload = doc
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("Prose: .ambre export failed, writing no file: {e:?}"))
@@ -41,8 +44,10 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u
 ///
 /// # Errors
 /// Every error of [`read_ambre_plaintext_as`].
-pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Prose, data)
+pub fn import_ambre_plaintext(
+    data: &ambre_core::PlaintextContainer,
+) -> Result<AmbreHeader, DocFileError> {
+    read_ambre_plaintext_as(DocType::Prose, data.as_bytes())
 }
 
 impl ProseState {
@@ -52,7 +57,10 @@ impl ProseState {
     /// identity, not the engine. It reads through `&self`, so an export
     /// changes nothing and emits no delta (`PROSE-IO-017`).
     #[must_use]
-    pub fn export_ambre_plaintext(&self, doc_id: DocumentId) -> Option<Vec<u8>> {
+    pub fn export_ambre_plaintext(
+        &self,
+        doc_id: DocumentId,
+    ) -> Option<ambre_core::PlaintextContainer> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -68,7 +76,7 @@ impl ProseState {
     /// payload and [`DocFileError::PayloadSchema`] when the schema gate does.
     pub fn import_ambre_plaintext(
         &mut self,
-        data: &[u8],
+        data: &ambre_core::PlaintextContainer,
     ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         let events = self.import_snapshot(&header.payload).map_err(|e| match e {
@@ -128,7 +136,7 @@ mod tests {
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Prose);
         assert_eq!(header.document_id, doc_id());
-        assert_eq!(header.payload, bytes[HEADER_LEN..]);
+        assert_eq!(header.payload, bytes.as_bytes()[HEADER_LEN..]);
         assert_eq!(header.payload, state.export_snapshot());
     }
 

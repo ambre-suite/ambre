@@ -111,7 +111,7 @@ impl LogicState {
         self.send_to_sync(SyncCommand::Rest {
             id,
             cmd: RestCommand::SealDocFile {
-                plaintext: plaintext.into(),
+                plaintext: plaintext.into_bytes().into(),
                 passphrase,
             },
         });

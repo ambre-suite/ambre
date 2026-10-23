@@ -152,7 +152,7 @@ impl ToileState {
             outstanding.insert(id, ImportSlot::from_usize(slot));
             requests.push(ToileRequest::UploadMedia {
                 id,
-                data: ambre_core::MediaBytes::new(blob.plaintext.clone()),
+                data: blob.plaintext.clone(),
             });
         }
         self.pending_imports
@@ -641,7 +641,7 @@ mod tests {
     fn blob(hash: &str, w: u32, h: u32, mime: &str) -> MediaBlob {
         MediaBlob {
             media: MediaRef::Stored(ContentHash(hash.to_owned())),
-            plaintext: vec![0u8; 4],
+            plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
             width: w,
             height: h,

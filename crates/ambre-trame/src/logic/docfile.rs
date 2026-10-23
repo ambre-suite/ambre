@@ -23,7 +23,10 @@ use super::*;
 ///
 /// Pure and crypto-free (`FIXTURE-007`). Protection, when it applies, is a
 /// separate stage owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(
+    doc: &LoroDoc,
+    doc_id: DocumentId,
+) -> Option<ambre_core::PlaintextContainer> {
     // `None` rather than a header over nothing, as the board half answers
     // (`TOILE-IO-069`). A valid file that opens empty reads as a document the
     // user emptied.
@@ -47,8 +50,10 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u
 ///
 /// Every error of [`read_ambre_plaintext_as`], including
 /// [`DocFileError::WrongDocType`] for a valid file of another app.
-pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Trame, data)
+pub fn import_ambre_plaintext(
+    data: &ambre_core::PlaintextContainer,
+) -> Result<AmbreHeader, DocFileError> {
+    read_ambre_plaintext_as(DocType::Trame, data.as_bytes())
 }
 
 impl TrameState {
@@ -58,7 +63,10 @@ impl TrameState {
     /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     /// `None` when the document could not be read, so no file is written.
-    pub fn export_ambre_plaintext(&self, doc_id: DocumentId) -> Option<Vec<u8>> {
+    pub fn export_ambre_plaintext(
+        &self,
+        doc_id: DocumentId,
+    ) -> Option<ambre_core::PlaintextContainer> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -77,7 +85,7 @@ impl TrameState {
     /// engine refuses the payload. The state is unchanged in either case.
     pub fn import_ambre_plaintext(
         &mut self,
-        data: &[u8],
+        data: &ambre_core::PlaintextContainer,
     ) -> Result<(DocumentId, Vec<TrameEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         // The container has said its piece; the schema register inside the
@@ -159,7 +167,7 @@ mod tests {
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Trame);
         assert_eq!(header.document_id, doc_id());
-        assert_eq!(header.payload, bytes[HEADER_LEN..]);
+        assert_eq!(header.payload, bytes.as_bytes()[HEADER_LEN..]);
         assert!(!header.payload.is_empty());
     }
 
@@ -240,23 +248,24 @@ mod tests {
         let before_state = state.export_snapshot();
 
         let cases: Vec<Vec<u8>> = vec![
-            good[..8].to_vec(),
+            good.as_bytes()[..8].to_vec(),
             {
-                let mut b = good.clone();
+                let mut b = good.clone().into_bytes();
                 b[0] = b'X';
                 b
             },
             {
-                let mut b = good.clone();
+                let mut b = good.clone().into_bytes();
                 b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
-            write_ambre_plaintext(DocType::Toile, doc_id(), b"whatever"),
-            write_ambre_plaintext(DocType::Trame, doc_id(), b"not a loro snapshot"),
+            write_ambre_plaintext(DocType::Toile, doc_id(), b"whatever").into_bytes(),
+            write_ambre_plaintext(DocType::Trame, doc_id(), b"not a loro snapshot").into_bytes(),
         ];
         for bytes in cases {
             let before_bytes = bytes.clone();
-            assert!(state.import_ambre_plaintext(&bytes).is_err());
+            let container = ambre_core::PlaintextContainer::new(bytes.clone());
+            assert!(state.import_ambre_plaintext(&container).is_err());
             assert_eq!(bytes, before_bytes, "a failed import rewrote its input");
             assert_eq!(
                 state.export_snapshot(),

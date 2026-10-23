@@ -258,7 +258,7 @@ impl DocState {
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
-            Some((filename, data)) => self.export_complete_event(filename, data),
+            Some((filename, data)) => self.export_complete_event(filename, data.into_bytes()),
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
             None => self.export_failed_event("the document could not be read".to_owned()),
@@ -273,7 +273,10 @@ impl DocState {
     /// come back changed, while the name waits here (`DOCFILE-014`).
     /// `None` when the engine could not read the document: no file is written
     /// at all (`TOILE-IO-069`).
-    fn ambre_file_bytes(&self, document_id: DocumentId) -> Option<(String, Vec<u8>)> {
+    fn ambre_file_bytes(
+        &self,
+        document_id: DocumentId,
+    ) -> Option<(String, ambre_core::PlaintextContainer)> {
         match self {
             DocState::Trame(state) => Some((
                 "workbook.ambre".to_owned(),

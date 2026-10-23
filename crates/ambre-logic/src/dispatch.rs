@@ -841,7 +841,7 @@ mod tests {
         let mut reopened =
             ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId(9)).expect("a document");
         let (id, _) = reopened
-            .import_ambre_plaintext(&bytes)
+            .import_ambre_plaintext(&ambre_core::PlaintextContainer::new(bytes))
             .expect("the file opens");
         assert_eq!(id, document_id);
     }

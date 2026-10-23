@@ -21,7 +21,10 @@ use ambre_core::{
 ///
 /// Pure and crypto-free (I4). Protection, when it applies, is a separate stage
 /// owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u8>> {
+pub fn export_ambre_plaintext(
+    doc: &LoroDoc,
+    doc_id: DocumentId,
+) -> Option<ambre_core::PlaintextContainer> {
     // `None` rather than a header over nothing (`TOILE-IO-069`). A well-formed
     // file carrying the right document id and an empty board is what the user
     // cannot tell from a board they emptied themselves.
@@ -45,6 +48,8 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<Vec<u
 ///
 /// Every error of [`read_ambre_plaintext_as`], including
 /// [`DocFileError::WrongDocType`] for a valid file of another app.
-pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Toile, data)
+pub fn import_ambre_plaintext(
+    data: &ambre_core::PlaintextContainer,
+) -> Result<AmbreHeader, DocFileError> {
+    read_ambre_plaintext_as(DocType::Toile, data.as_bytes())
 }

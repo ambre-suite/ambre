@@ -311,6 +311,7 @@ impl FixtureGen for ProseFixture {
             .inspect_err(|e| tracing::error!("Prose fixture: {e}"))
             .ok()
             .and_then(|state| state.export_ambre_plaintext(seeded_document_id(seed)))
+            .map(ambre_core::PlaintextContainer::into_bytes)
             .unwrap_or_default()
     }
 }

@@ -82,14 +82,18 @@ pub fn shared_secret(
     clippy::expect_used,
     reason = "HKDF expands up to 255 digests, and 32 bytes is far below that"
 )]
-fn derive_kek(shared: &SharedSecret, sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) -> DocumentKey {
+fn derive_kek(
+    shared: &SharedSecret,
+    sender_pk: &ExchangePublicKey,
+    recipient_pk: &ExchangePublicKey,
+) -> DocumentKey {
     // `SimpleHkdf` (SimpleHmac-based) is required: BLAKE2b's variable-output core
     // is not the "eager" hash the default `Hkdf<H>` (raw `Hmac`) demands.
     let hk = SimpleHkdf::<Blake2b512>::new(None, shared.as_bytes());
     let mut info = Vec::with_capacity(KEK_DOMAIN.len() + 64);
     info.extend_from_slice(KEK_DOMAIN);
-    info.extend_from_slice(sender_pk);
-    info.extend_from_slice(recipient_pk);
+    info.extend_from_slice(sender_pk.as_slice());
+    info.extend_from_slice(recipient_pk.as_slice());
     let mut kek = [0u8; 32];
     hk.expand(&info, &mut kek)
         .expect("HKDF-BLAKE2b expand of 32 bytes is within the output limit");
@@ -128,8 +132,8 @@ pub fn wrap_anchored(
     anchor: Option<&EntryDigest>,
 ) -> Result<WrappedKey, CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
-    let own_pub = PublicKey::from(own_secret).to_bytes();
-    let kek = derive_kek(&shared, &own_pub, peer_public.as_array());
+    let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
+    let kek = derive_kek(&shared, &own_pub, peer_public);
     let mut plaintext = Zeroizing::new(doc_key.as_bytes().to_vec());
     if let Some(anchor) = anchor {
         plaintext.extend_from_slice(&anchor.0);
@@ -169,8 +173,8 @@ pub fn unwrap_anchored(
     wrapped: &WrappedKey,
 ) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
-    let own_pub = PublicKey::from(own_secret).to_bytes();
-    let kek = derive_kek(&shared, peer_public.as_array(), &own_pub);
+    let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
+    let kek = derive_kek(&shared, peer_public, &own_pub);
     let bytes = Zeroizing::new(aead::open(
         &wrapped.nonce,
         &wrapped.ciphertext.0,

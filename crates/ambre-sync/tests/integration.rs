@@ -517,7 +517,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         &mut state,
         seal_id,
         RestCommand::SealDocFile {
-            plaintext: plaintext.clone().into(),
+            plaintext: plaintext.as_bytes().to_vec().into(),
             passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
         },
     );
@@ -549,7 +549,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         // What comes back is the whole plaintext container, byte for byte, so
         // the caller reads it exactly as it reads a file off the disk.
         RestEvent::DocFileOpened { plaintext: opened } => {
-            assert_eq!(&*opened, &plaintext[..]);
+            assert_eq!(&*opened, plaintext.as_bytes());
             let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
             assert_eq!(header.doc_type, DocType::Prose);
             assert_eq!(header.document_id, doc_id);
@@ -569,7 +569,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         &mut state,
         seal_id,
         RestCommand::SealDocFile {
-            plaintext: plaintext.into(),
+            plaintext: plaintext.into_bytes().into(),
             passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
         },
     );
@@ -629,7 +629,7 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
         &mut state,
         id,
         RestCommand::OpenDocFile {
-            sealed: ambre_core::SealedContainer::new(plaintext),
+            sealed: ambre_core::SealedContainer::new(plaintext.into_bytes()),
             passphrase: ambre_core::Passphrase::new("anything".to_owned()),
         },
     );

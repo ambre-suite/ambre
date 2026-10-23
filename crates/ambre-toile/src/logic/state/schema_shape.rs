@@ -655,7 +655,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
         media: crate::logic::command::MediaRef::Stored(ContentHash("h".to_owned())),
-        plaintext: vec![1],
+        plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
         width: 1,
         height: 2,

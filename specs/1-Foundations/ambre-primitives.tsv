@@ -1312,7 +1312,6 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_BIT | const | u8	generic	c
 ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | SealedAmbre.ciphertext | field | Vec<u8>	generic	AEAD output bytes of the sealed container, opened only by ambre-crypto
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | classify(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_ambre() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
@@ -1323,10 +1322,7 @@ ambre-core | src/docfile.rs | crate::docfile | parse_header(data) | param | &[u8
 ambre-core | src/docfile.rs | crate::docfile | parse_sealed_header(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext_as(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext() | ret | Vec<u8>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext(payload) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed() | ret | Vec<u8>	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed(ciphertext) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
@@ -1579,8 +1575,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TA
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(recipient_pk) | param | &[u8;32]	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(sender_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1800,7 +1794,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | manifest_path(name) | param | 
 ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DELTAS_PER_SNAPSHOT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(String,Vec<u8>)>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(filename) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
@@ -2998,10 +2991,6 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
-ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
-ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::import_ambre_plaintext(data) | param | &[u8]	math	count, size or local index
-ambre-prose | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
-ambre-prose | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | FindSession.current | field | Option<u32>	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::refresh_matches(keep) | param | Option<u32>	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(replacement) | param | &str	free-text	text content / label / parser input
@@ -3045,14 +3034,11 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_ru
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.media_cache | field | HashMap<ambre_core::ContentHash,Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	an owned anchor value the engine mints, a footnote Uuid or a cross reference record in hex; validate_value never sees an owned anchor, is_owned_anchor refuses it on the style path
@@ -3800,8 +3786,6 @@ ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.max | fie
 ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.min | field | [f64;2]	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::len() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/docfile.rs | crate::logic::interop::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/docfile.rs | crate::logic::interop::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.coord_clamp | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.max_depth | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.max_elements | field | usize	math	geometry, layout, count or size local to the algorithm
@@ -3837,7 +3821,6 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport.im
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport.skipped | field | Vec<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | MediaBlob.height | field | u32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | MediaBlob.plaintext | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | MediaBlob.thumb | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | MediaBlob.width | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | PageSize.height | field | f64	math	geometry, layout, count or size local to the algorithm
@@ -3912,8 +3895,6 @@ ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | 
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | Wire.reach | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::link_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::style_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::import_ambre_plaintext(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::delete_from_doc() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::holds_a_lock() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::lock_elements(locked) | param | bool	math	local state flag or value, not a mode selector
@@ -4608,10 +4589,6 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(rows) | param
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/docfile.rs | crate::logic::docfile | import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_merged_tile(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::fill_one(series) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
@@ -5129,3 +5106,4 @@ ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
+ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(String,ambre_core::PlaintextContainer)>	generic	generic byte/text API or codec

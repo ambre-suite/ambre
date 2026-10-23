@@ -279,6 +279,7 @@ impl FixtureGen for ToileFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
+            .into_bytes()
     }
 }
 
@@ -506,6 +507,7 @@ impl FixtureGen for ToileBenchFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
+            .into_bytes()
     }
 }
 

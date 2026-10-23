@@ -106,7 +106,7 @@ pub struct ProseState {
     undo: UndoManager,
     /// Decrypted picture bytes, by content hash. Session state: it never enters
     /// the document (`PROSE-044`) and it dies with the tab.
-    media_cache: HashMap<ambre_core::ContentHash, Vec<u8>>,
+    media_cache: HashMap<ambre_core::ContentHash, ambre_core::MediaBytes>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -1021,7 +1021,7 @@ impl ProseState {
     pub fn on_media_downloaded(
         &mut self,
         content_hash: ambre_core::ContentHash,
-        data: Vec<u8>,
+        data: ambre_core::MediaBytes,
     ) -> Vec<ProseEvent> {
         let blocks = self.blocks_showing(&content_hash);
         self.media_cache.insert(content_hash.clone(), data);
@@ -1033,8 +1033,11 @@ impl ProseState {
 
     /// The decrypted bytes of a cached picture, for the view that paints it.
     #[must_use]
-    pub fn cached_media(&self, content_hash: &ambre_core::ContentHash) -> Option<&[u8]> {
-        self.media_cache.get(content_hash).map(Vec::as_slice)
+    pub fn cached_media(
+        &self,
+        content_hash: &ambre_core::ContentHash,
+    ) -> Option<&ambre_core::MediaBytes> {
+        self.media_cache.get(content_hash)
     }
 
     /// Mint an image block addressing `content_hash`, for a test that binds the
@@ -1679,9 +1682,16 @@ mod tests {
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let events =
-            state.on_media_downloaded(ambre_core::ContentHash("abc".to_owned()), vec![1, 2, 3]);
-        assert_eq!(state.cached_media(&"abc".into()), Some(&[1u8, 2, 3][..]));
+        let events = state.on_media_downloaded(
+            ambre_core::ContentHash("abc".to_owned()),
+            ambre_core::MediaBytes::new(vec![1, 2, 3]),
+        );
+        assert_eq!(
+            state
+                .cached_media(&"abc".into())
+                .map(ambre_core::MediaBytes::as_bytes),
+            Some(&[1u8, 2, 3][..])
+        );
         assert_eq!(events.len(), 1);
         assert_eq!(state.export_snapshot().len(), before.len());
     }
@@ -1703,7 +1713,7 @@ mod tests {
 
         let events = state.on_media_downloaded(
             ambre_core::ContentHash("a-content-hash".to_owned()),
-            vec![9],
+            ambre_core::MediaBytes::new(vec![9]),
         );
         let named = events
             .iter()
@@ -1738,7 +1748,7 @@ mod tests {
         let before = state.export_snapshot();
         state.on_media_downloaded(
             ambre_core::ContentHash("a-hash".to_owned()),
-            vec![1, 2, 3, 4],
+            ambre_core::MediaBytes::new(vec![1, 2, 3, 4]),
         );
         assert!(state.cached_media(&"a-hash".into()).is_some());
         // The cache is session state: the bytes the document exports are the

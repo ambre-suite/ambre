@@ -82,6 +82,7 @@ fn build_trame(seed: u64, doc_id: DocumentId) -> Vec<u8> {
     state
         .export_ambre_plaintext(doc_id)
         .expect("the document reads")
+        .into_bytes()
 }
 
 /// A board with several shapes and a frame, so the dump and the shape summary
@@ -109,6 +110,7 @@ fn build_toile(seed: u64, doc_id: DocumentId) -> Vec<u8> {
     state
         .export_ambre_plaintext(doc_id)
         .expect("the document reads")
+        .into_bytes()
 }
 
 // -----------------------------------------------------------------------------

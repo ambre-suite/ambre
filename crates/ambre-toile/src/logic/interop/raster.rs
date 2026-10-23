@@ -98,7 +98,7 @@ pub(super) fn decode_media(
 
     Ok(MediaBlob {
         media,
-        plaintext: bytes.to_vec(),
+        plaintext: ambre_core::MediaBytes::new(bytes.to_vec()),
         mime: mime_of(format),
         width,
         height,
@@ -149,7 +149,11 @@ mod tests {
             !blob.thumb.is_empty(),
             "a placeholder thumbnail is produced"
         );
-        assert_eq!(blob.plaintext, png, "full-res plaintext is preserved");
+        assert_eq!(
+            blob.plaintext.as_bytes(),
+            png,
+            "full-res plaintext is preserved"
+        );
 
         match &batch.commands[0] {
             ToileCommand::CreateElement {

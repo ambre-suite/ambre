@@ -77,6 +77,7 @@ impl FixtureGen for TrameGen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
+            .into_bytes()
     }
 }
 
@@ -122,6 +123,7 @@ impl FixtureGen for ToileGen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
+            .into_bytes()
     }
 }
 
@@ -467,7 +469,7 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
         ),
         (
             "valid Trame header, payload the engine refuses",
-            write_ambre_plaintext(DocType::Trame, doc_id, b"not a loro snapshot"),
+            write_ambre_plaintext(DocType::Trame, doc_id, b"not a loro snapshot").into_bytes(),
             DocFileError::PayloadRejected,
         ),
         (
@@ -476,7 +478,7 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             // inferred rejection from an empty event vector would accept this one
             // and hand back an empty board.
             "valid Toile header, payload the engine refuses",
-            write_ambre_plaintext(DocType::Toile, doc_id, b"not a loro snapshot"),
+            write_ambre_plaintext(DocType::Toile, doc_id, b"not a loro snapshot").into_bytes(),
             DocFileError::PayloadRejected,
         ),
     ];
@@ -509,7 +511,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
         DocumentId::from_bytes([0x44; 16]),
         b"payload",
     );
-    match fixtures::import_fixture(&murmure) {
+    match fixtures::import_fixture(murmure.as_bytes()) {
         Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Murmure),
         other => panic!("expected NoEngine, got {other:?}"),
     }
@@ -520,7 +522,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
         DocumentId::from_bytes([0x44; 16]),
         b"payload",
     );
-    match fixtures::import_fixture(&prose) {
+    match fixtures::import_fixture(prose.as_bytes()) {
         Err(FixtureError::Container(DocFileError::PayloadRejected)) => {}
         other => panic!("expected PayloadRejected, got {other:?}"),
     }

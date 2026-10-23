@@ -154,7 +154,7 @@ impl ImportReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBlob {
     pub media: MediaRef,
-    pub plaintext: Vec<u8>,
+    pub plaintext: ambre_core::MediaBytes,
     pub mime: ambre_core::MediaType,
     pub width: u32,
     pub height: u32,
