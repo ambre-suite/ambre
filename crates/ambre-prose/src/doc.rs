@@ -1343,14 +1343,36 @@ impl Bands {
     }
 }
 
-/// The spelling of a band alignment in the document.
-#[must_use]
-pub(crate) fn band_align_name(align: Align) -> Option<&'static str> {
-    match align {
-        Align::Left => Some("left"),
-        Align::Center => Some("center"),
-        Align::Right => Some("right"),
-        Align::Justify => None,
+ambre_core::crdt_names! {
+    /// The alignments a band takes, by the name its register stores. A band
+    /// is never justified (`PROSE-FEAT-171`).
+    pub(crate) enum BandAlign {
+        Left = "left",
+        Center = "center",
+        Right = "right",
+    }
+}
+
+impl BandAlign {
+    /// The band alignment `align` asks for, or `None` for justify.
+    #[must_use]
+    pub(crate) const fn of(align: Align) -> Option<Self> {
+        match align {
+            Align::Left => Some(Self::Left),
+            Align::Center => Some(Self::Center),
+            Align::Right => Some(Self::Right),
+            Align::Justify => None,
+        }
+    }
+
+    /// The paragraph alignment the band draws with.
+    #[must_use]
+    pub(crate) const fn align(self) -> Align {
+        match self {
+            Self::Left => Align::Left,
+            Self::Center => Align::Center,
+            Self::Right => Align::Right,
+        }
     }
 }
 
@@ -1359,11 +1381,10 @@ fn read_band(meta: &Fields<MetaKey>, key: MetaKey) -> Band {
         return Band::default();
     };
     let block = read_string(&map, BandKey::Block).and_then(|s| TreeID::try_from(s.as_str()).ok());
-    let align = match read_string(&map, BandKey::Align).as_deref() {
-        Some("center") => Align::Center,
-        Some("right") => Align::Right,
-        _ => Align::Left,
-    };
+    // A name this build does not know draws on the left, as before.
+    let align = read_string(&map, BandKey::Align)
+        .and_then(|name| BandAlign::parse(&name))
+        .map_or(Align::Left, BandAlign::align);
     Band { block, align }
 }
 

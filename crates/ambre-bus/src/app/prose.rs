@@ -1830,7 +1830,7 @@ pub enum ProseEvent {
 /// could only print it. Both halves here are readable by code. The view picks
 /// where to put the message from `refused`, and the message itself from
 /// `reason` (`PROSE-105`, `PROSE-106`).
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[error("{refused} refused: {reason}")]
 pub struct ProseError {
     /// What the engine turned down: a command, under the name
@@ -1848,12 +1848,36 @@ impl ProseError {
     }
 }
 
+/// A table value the format cannot hold, as a table command asked for it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TableValue {
+    /// A table of no row or no column (`PROSE-FEAT-228`).
+    Size { rows: RowCount, cols: ColCount },
+    /// A column width.
+    Width(Pt),
+    /// A cell border's width.
+    Border(Pt),
+    /// A cell's padding.
+    Padding(Pt),
+}
+
+impl fmt::Display for TableValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Size { rows, cols } => write!(f, "{} by {}", rows.get(), cols.get()),
+            Self::Width(width) => write!(f, "a width of {} pt", width.get()),
+            Self::Border(width) => write!(f, "a border of {} pt", width.get()),
+            Self::Padding(padding) => write!(f, "a padding of {} pt", padding.get()),
+        }
+    }
+}
+
 /// Why the engine refused.
 ///
 /// One variant per reason the engine can state, never one per call site. Two
 /// handlers refusing a range out of bounds carry the same variant. They differ
 /// by the command they name.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum ProseRefusal {
     /// A block id that resolves to no live block.
     #[error("block {0} is not in the document")]
@@ -1893,7 +1917,11 @@ pub enum ProseRefusal {
     MergeOverText,
     /// A table dimension or a width the format cannot hold.
     #[error("{0} is not a value a table takes")]
-    BadTableValue(String),
+    BadTableValue(TableValue),
+    /// A justified header or footer: a band is aligned left, centred or
+    /// right, and nothing else (`PROSE-FEAT-171`).
+    #[error("a header or a footer cannot be justified")]
+    BandJustified,
     /// A field aimed at the first page's own block while the setting is off
     /// (`PROSE-FEAT-067`).
     #[error("the first page has no band of its own while the setting is off")]

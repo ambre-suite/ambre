@@ -123,18 +123,15 @@ impl ProseState {
     /// Align the band whose block is `id` (`PROSE-FEAT-171`). The text and
     /// the other bands are left alone (`PROSE-FEAT-172`).
     pub(super) fn set_band_align(&mut self, id: &TreeID, align: Align) -> ProseOutcome {
-        let Some(name) = doc::band_align_name(align) else {
-            return ProseOutcome::refused(ProseRefusal::BadMarkValue {
-                key: doc::BandKey::Align.as_str().into(),
-                value: "justify".to_owned(),
-            });
+        let Some(band_align) = doc::BandAlign::of(align) else {
+            return ProseOutcome::refused(ProseRefusal::BandJustified);
         };
         let Some(register) = doc::read_bands(&self.doc).register_of(id) else {
             return Self::err_no_block(id);
         };
         let written = self
             .register(register)
-            .and_then(|map| map.insert(doc::BandKey::Align, name).ok());
+            .and_then(|map| map.insert(doc::BandKey::Align, band_align.as_str()).ok());
         if written.is_none() {
             return Self::err_write("the band register refused the alignment");
         }
@@ -514,7 +511,7 @@ pub(crate) mod tests {
             block_id: header,
             align: Align::Justify,
         });
-        assert!(refusal(&justified).is_some());
+        assert_eq!(refusal(&justified), Some(ProseRefusal::BandJustified));
     }
 
     #[test]

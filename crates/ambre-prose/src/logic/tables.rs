@@ -18,7 +18,7 @@ use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 use crate::doc::{self, Region};
 use crate::events::grid::{CellPos, CellRect, Col, ColCount, Row, RowCount};
 use crate::events::{
-    BlockType, CellBorder, ProseEvent, ProseOutcome, ProseRefusal, VAlign, block_id,
+    BlockType, CellBorder, ProseEvent, ProseOutcome, ProseRefusal, TableValue, VAlign, block_id,
 };
 
 use super::ProseState;
@@ -292,7 +292,7 @@ impl ProseState {
         if rows.is_zero() || cols.is_zero() {
             // A table of no column paints nothing and accepts no text
             // (`PROSE-FEAT-228`).
-            return Self::err_table(format!("{} by {}", rows.get(), cols.get()));
+            return Self::err_table(TableValue::Size { rows, cols });
         }
         match self.mint_table(parent_id, after_id, rows, cols) {
             Ok(_) => self.commit_with(Vec::new()),
@@ -410,7 +410,7 @@ impl ProseState {
         };
         let width = width_pt.unwrap_or(doc::DEFAULT_COLUMN_WIDTH);
         if !usable(width, Floor::AboveZero) {
-            return Self::err_table(format!("a width of {} pt", width.get()));
+            return Self::err_table(TableValue::Width(width));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
             return Self::err_write("the table carries no width list");
@@ -483,7 +483,7 @@ impl ProseState {
             return Self::err_no_block(table);
         }
         if !usable(width_pt, Floor::AboveZero) {
-            return Self::err_table(format!("a width of {} pt", width_pt.get()));
+            return Self::err_table(TableValue::Width(width_pt));
         }
         let Some(widths) = doc::col_widths_read(&tree, table) else {
             return Self::err_write("the table carries no width list");
@@ -625,8 +625,9 @@ impl ProseState {
             writes.push((doc::AttrKey::VAlign, i64::from(valign.code()).into()));
         }
         if let Some(border) = border {
-            if !usable(Pt::new(border.width_pt), Floor::ZeroAllowed) {
-                return Self::err_table(format!("a border of {} pt", border.width_pt));
+            let width = Pt::new(border.width_pt);
+            if !usable(width, Floor::ZeroAllowed) {
+                return Self::err_table(TableValue::Border(width));
             }
             for key in [
                 doc::AttrKey::EdgeTop,
@@ -640,7 +641,7 @@ impl ProseState {
         }
         if let Some(padding) = padding_pt {
             if !usable(padding, Floor::ZeroAllowed) {
-                return Self::err_table(format!("a padding of {} pt", padding.get()));
+                return Self::err_table(TableValue::Padding(padding));
             }
             writes.push((doc::AttrKey::Padding, f64::from(padding.get()).into()));
         }
@@ -763,7 +764,7 @@ impl ProseState {
     }
 
     /// The refusal of a dimension, a width or a colour the format cannot hold.
-    fn err_table(what: String) -> ProseOutcome {
+    fn err_table(what: TableValue) -> ProseOutcome {
         ProseOutcome::refused(ProseRefusal::BadTableValue(what))
     }
 }
@@ -928,10 +929,13 @@ pub(crate) mod tests {
                 rows: RowCount::new(rows),
                 cols: ColCount::new(cols),
             });
-            assert!(matches!(
+            assert_eq!(
                 refusal(&outcome),
-                Some(ProseRefusal::BadTableValue(_))
-            ));
+                Some(ProseRefusal::BadTableValue(TableValue::Size {
+                    rows: RowCount::new(rows),
+                    cols: ColCount::new(cols),
+                }))
+            );
             assert!(outcome.update.is_none());
         }
     }
