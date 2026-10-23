@@ -3949,13 +3949,9 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | clear_pending_dirty_if_empt
 ambre-server | src/redis_ops.rs | crate::redis_ops | clock_refusal(error) | param | &str	generic	parses a store error text
 ambre-server | src/redis_ops.rs | crate::redis_ops | clock_state_is_cold() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | dirty_pending_keys() | ret | Result<Vec<String>,AppError>	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | doc_presence_remove(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | doc_presence_update(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_presence_update::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_close() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_close(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_close::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_open(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_open::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_sessions_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | document_gone_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
@@ -3979,14 +3975,12 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | release_flush_lock::LUA | c
 ambre-server | src/redis_ops.rs | crate::redis_ops | rotation_owed_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | seal_folded() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | seal_folded::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | seed_clock_state(author_clocks) | param | &[(String,Clock)]	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | segment_locked_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(error) | param | &str	generic	parses a store error text
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(what) | param | &str	free-text	context label
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock(lock_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | verify_clock_and_assign_seq(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/routes/auth.rs | crate::routes::auth | AuthConfigResponse.dev_mode | field | bool	math	named state or style flag, local
 ambre-server | src/routes/auth.rs | crate::routes::auth | DevLoginRequest.username | field | String	debt	bug: The display-name rule is enforced on one write path only (BUG, confirmed)
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once

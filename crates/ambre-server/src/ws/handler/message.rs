@@ -202,10 +202,13 @@ pub(crate) async fn handle_subscribe(
     match redis_ops::clock_state_is_cold(&state.redis, &document_id).await {
         Ok(true) => match db::get_clock_state(&state.db, &document_id).await {
             Ok(clock_state) => {
-                let author_clocks: Vec<(String, ambre_protocol::messages::Clock)> = clock_state
+                let author_clocks: Vec<(
+                    ambre_core::SigningKeyHex,
+                    ambre_protocol::messages::Clock,
+                )> = clock_state
                     .author_clocks
                     .iter()
-                    .map(|(pk, clock)| (pk.to_hex(), *clock))
+                    .map(|(pk, clock)| (ambre_core::SigningKeyHex::encode(pk), *clock))
                     .collect();
                 if let Err(e) = redis_ops::seed_clock_state(
                     &state.redis,
@@ -249,7 +252,7 @@ pub(crate) async fn handle_subscribe(
     // is announced only when no other session of the same key still watches
     // (`PRESENCE-015`). A failed count is logged; the departure then fails open.
     if conn.doc_subscriptions.insert(document_id) {
-        let pub_key_hex = conn.signing_pubkey.to_hex();
+        let pub_key_hex = ambre_core::SigningKeyHex::encode(&conn.signing_pubkey);
         if let Err(e) = redis_ops::doc_session_open(&state.redis, &document_id, &pub_key_hex).await
         {
             tracing::error!(error = %e, "subscribe: session count failed");
@@ -302,7 +305,7 @@ pub(crate) async fn announce_departure(
     document_id: &DocumentId,
     signing_pubkey: &ambre_core::PublicKey,
 ) {
-    let pub_key_hex = signing_pubkey.to_hex();
+    let pub_key_hex = ambre_core::SigningKeyHex::encode(signing_pubkey);
     // A count the store cannot answer fails open: the departure is announced,
     // and the session that remains re-enters the set with its next sample.
     let last = redis_ops::doc_session_close(&state.redis, document_id, &pub_key_hex)
@@ -405,7 +408,7 @@ pub(crate) async fn handle_update(
         return;
     }
 
-    let pub_key_hex = author_pubkey.to_hex();
+    let pub_key_hex = ambre_core::SigningKeyHex::encode(&author_pubkey);
     let clock = update.public_data.clock;
 
     // A delta sent behind a refused one waits for the author's answer: it
@@ -422,7 +425,8 @@ pub(crate) async fn handle_update(
         {
             Ok(s) => {
                 tracing::debug!(
-                    "[Server] seq assigned doc={doc_id} author={pub_key_hex} clock={clock} seq={s}"
+                    "[Server] seq assigned doc={doc_id} author={} clock={clock} seq={s}",
+                    pub_key_hex.as_str()
                 );
                 s
             }
@@ -644,7 +648,7 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
-    let pub_key_hex = eph.public_data.pub_key.to_hex();
+    let pub_key_hex = ambre_core::SigningKeyHex::encode(&eph.public_data.pub_key);
     // A refused write is not broadcast either: a document that owes a rotation
     // carries no presence sealed under a key a departed member holds (`SRV-123`).
     if redis_ops::doc_presence_update(
@@ -871,7 +875,7 @@ async fn membership_still_valid(
             // The session no longer watches, so it leaves the count; a member
             // added back later then starts from the right number (`PRESENCE-015`).
             if conn.doc_subscriptions.remove(&doc_id) {
-                let pub_key_hex = conn.signing_pubkey.to_hex();
+                let pub_key_hex = ambre_core::SigningKeyHex::encode(&conn.signing_pubkey);
                 let _ = redis_ops::doc_session_close(&state.redis, &doc_id, &pub_key_hex).await;
             }
             conn.doc_access_verified_at.remove(&doc_id);
@@ -1364,7 +1368,7 @@ mod ephemeral_binding_tests {
         };
         let doc_id = DocumentId::new();
         let key = PublicKey::from_array([31u8; 32]);
-        let key_hex = key.to_hex();
+        let key_hex = ambre_core::SigningKeyHex::encode(&key);
         let presence_key = format!("doc:{doc_id}:presence");
         let (tx, mut rx) = mpsc::channel(8);
         state
@@ -1393,11 +1397,19 @@ mod ephemeral_binding_tests {
         .unwrap();
 
         announce_departure(&state, &doc_id, &key).await;
-        let kept: bool = state.redis.hexists(&presence_key, &key_hex).await.unwrap();
+        let kept: bool = state
+            .redis
+            .hexists(&presence_key, key_hex.as_str())
+            .await
+            .unwrap();
         assert!(kept, "a session of the same key still watches");
 
         announce_departure(&state, &doc_id, &key).await;
-        let kept: bool = state.redis.hexists(&presence_key, &key_hex).await.unwrap();
+        let kept: bool = state
+            .redis
+            .hexists(&presence_key, key_hex.as_str())
+            .await
+            .unwrap();
         assert!(!kept, "the last session took the entry with it");
 
         // Exactly one departure reaches the watcher: the second.

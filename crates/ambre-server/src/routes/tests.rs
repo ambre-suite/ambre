@@ -555,8 +555,9 @@ mod handler_tests {
         let [other_seq, ..] = crate::redis_ops::document_state_keys(&other);
         state.redis.set(&seq, 7).await.unwrap();
         state.redis.hset(&clocks, [("aa", "3")]).await.unwrap();
+        let aa = ambre_core::SigningKeyHex("aa".into());
         state.redis.set(&other_seq, 4).await.unwrap();
-        crate::redis_ops::doc_session_open(&state.redis, &doc, "aa")
+        crate::redis_ops::doc_session_open(&state.redis, &doc, &aa)
             .await
             .unwrap();
 
@@ -590,7 +591,7 @@ mod handler_tests {
             crate::redis_ops::verify_clock_and_assign_seq(
                 redis,
                 &doc,
-                "aa",
+                &aa,
                 ambre_protocol::messages::Clock(4)
             )
             .await
@@ -621,7 +622,7 @@ mod handler_tests {
             crate::redis_ops::doc_presence_update(
                 redis,
                 &doc,
-                "aa",
+                &aa,
                 &sample,
                 ambre_core::Seconds(15)
             )
@@ -631,11 +632,11 @@ mod handler_tests {
             redis,
             &doc,
             ambre_core::Seq(9),
-            &[("aa".into(), ambre_protocol::messages::Clock(9))],
+            &[(aa.clone(), ambre_protocol::messages::Clock(9))],
         )
         .await
         .unwrap();
-        crate::redis_ops::doc_session_open(redis, &doc, "aa")
+        crate::redis_ops::doc_session_open(redis, &doc, &aa)
             .await
             .unwrap();
         let prefix = format!("doc:{doc}");

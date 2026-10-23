@@ -74,7 +74,7 @@ return redis.call('INCR', KEYS[2])
 pub async fn verify_clock_and_assign_seq(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    pub_key_hex: &str,
+    pub_key_hex: &ambre_core::SigningKeyHex,
     clock: Clock,
 ) -> Result<ambre_core::Seq, AppError> {
     let clocks_key = format!("doc:{document_id}:clocks");
@@ -93,7 +93,7 @@ pub async fn verify_clock_and_assign_seq(
                 owed_key.as_str(),
                 locked_key.as_str(),
             ],
-            [pub_key_hex, &clock.to_string()],
+            [pub_key_hex.as_str(), &clock.to_string()],
         )
         .await
         .map_err(|e| clock_refusal(&e.to_string(), clock))?;
@@ -204,7 +204,7 @@ pub async fn seed_clock_state(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     max_seq: ambre_core::Seq,
-    author_clocks: &[(String, Clock)],
+    author_clocks: &[(ambre_core::SigningKeyHex, Clock)],
 ) -> Result<(), AppError> {
     if author_clocks.is_empty() {
         return Ok(());
@@ -214,7 +214,7 @@ pub async fn seed_clock_state(
     let gone_key = document_gone_key(document_id);
     let mut argv = vec![max_seq.0.to_string()];
     for (hex, clock) in author_clocks {
-        argv.push(hex.clone());
+        argv.push(hex.as_str().to_owned());
         argv.push(clock.to_string());
     }
     redis
@@ -721,7 +721,7 @@ pub async fn thread_activity(
 pub async fn doc_presence_update(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    pub_key_hex: &str,
+    pub_key_hex: &ambre_core::SigningKeyHex,
     presence: &ambre_protocol::messages::Ciphertext,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
@@ -751,7 +751,7 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
         .eval::<Vec<i64>>(
             LUA,
             [key.as_str(), gone_key.as_str(), owed_key.as_str()],
-            [ttl.as_str(), pub_key_hex, presence_b64.as_str()],
+            [ttl.as_str(), pub_key_hex.as_str(), presence_b64.as_str()],
         )
         .await
         .map_err(|e| {
@@ -775,11 +775,11 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
 pub async fn doc_presence_remove(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    pub_key_hex: &str,
+    pub_key_hex: &ambre_core::SigningKeyHex,
 ) -> Result<(), AppError> {
     let key = format!("doc:{document_id}:presence");
     redis
-        .hdel(&key, pub_key_hex)
+        .hdel(&key, pub_key_hex.as_str())
         .await
         .map_err(|e| AppError::Redis(format!("presence remove: {e}")))?;
     Ok(())
@@ -802,7 +802,7 @@ fn doc_sessions_key(document_id: &ambre_core::DocumentId) -> String {
 pub async fn doc_session_open(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    pub_key_hex: &str,
+    pub_key_hex: &ambre_core::SigningKeyHex,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 if redis.call('EXISTS', KEYS[2]) == 1 then
@@ -819,7 +819,7 @@ return 1
         .eval(
             LUA,
             [key.as_str(), gone_key.as_str()],
-            [ttl.as_str(), pub_key_hex],
+            [ttl.as_str(), pub_key_hex.as_str()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("session open: {e}")))?;
@@ -834,7 +834,7 @@ return 1
 pub async fn doc_session_close(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    pub_key_hex: &str,
+    pub_key_hex: &ambre_core::SigningKeyHex,
 ) -> Result<bool, AppError> {
     const LUA: &str = r#"
 local left = redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
@@ -846,7 +846,7 @@ return 0
 "#;
     let key = doc_sessions_key(document_id);
     let last: i64 = redis
-        .eval(LUA, [key.as_str()], [pub_key_hex])
+        .eval(LUA, [key.as_str()], [pub_key_hex.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("session close: {e}")))?;
     Ok(last == 1)
@@ -1208,7 +1208,9 @@ mod lua_tests {
     async fn a_frame_owed_a_rotation_takes_no_seq_and_no_clock() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_hex = "0aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa1";
+        let pk_hex = &ambre_core::SigningKeyHex(
+            "0aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa1".into(),
+        );
 
         mirror_rotation_owed(&redis, &doc_id, true).await.unwrap();
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1)).await;
@@ -1248,7 +1250,9 @@ mod lua_tests {
     async fn a_locked_segment_refuses_every_later_delta() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_hex = "0bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb1";
+        let pk_hex = &ambre_core::SigningKeyHex(
+            "0bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb10bb1".into(),
+        );
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
@@ -1274,7 +1278,7 @@ mod lua_tests {
         let seq: Option<u64> = redis.get(format!("doc:{doc_id}:seq")).await.unwrap();
         assert_eq!(seq, Some(2), "a refused delta takes no sequence number");
         let clock: Option<u64> = redis
-            .hget(format_doc_clocks_key(&doc_id), pk_hex)
+            .hget(format_doc_clocks_key(&doc_id), pk_hex.as_str())
             .await
             .unwrap();
         assert_eq!(clock, Some(2), "a refused delta consumes no clock");
@@ -1289,7 +1293,9 @@ mod lua_tests {
     async fn a_rotation_locks_a_segment_with_a_delta_still_pending() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_hex = "0dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd1";
+        let pk_hex = &ambre_core::SigningKeyHex(
+            "0dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd10dd1".into(),
+        );
         assert_eq!(
             lock_segment_now(&redis, &doc_id).await.unwrap(),
             ambre_core::Seq(0)
@@ -1326,7 +1332,9 @@ mod lua_tests {
     async fn a_fold_seals_only_the_amendments_it_holds() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_hex = "0cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc1";
+        let pk_hex = &ambre_core::SigningKeyHex(
+            "0cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc10cc1".into(),
+        );
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
@@ -1370,7 +1378,9 @@ mod lua_tests {
     async fn first_update_succeeds() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_hex = "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1";
+        let pk_hex = &ambre_core::SigningKeyHex(
+            "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1".into(),
+        );
 
         let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
             .await
@@ -1388,7 +1398,9 @@ mod lua_tests {
     async fn sequential_clock_succeeds() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk = "def456def456def456def456def456def456def456def456def456def456def4";
+        let pk = &ambre_core::SigningKeyHex(
+            "def456def456def456def456def456def456def456def456def456def456def4".into(),
+        );
 
         let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
             .await
@@ -1414,7 +1426,9 @@ mod lua_tests {
     async fn clock_mismatch_rejected() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk = "1111111111111111111111111111111111111111111111111111111111111111";
+        let pk = &ambre_core::SigningKeyHex(
+            "1111111111111111111111111111111111111111111111111111111111111111".into(),
+        );
 
         verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
             .await
@@ -1444,7 +1458,9 @@ mod lua_tests {
     async fn duplicate_clock_rejected() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk = "2222222222222222222222222222222222222222222222222222222222222222";
+        let pk = &ambre_core::SigningKeyHex(
+            "2222222222222222222222222222222222222222222222222222222222222222".into(),
+        );
 
         verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
             .await
@@ -1474,8 +1490,12 @@ mod lua_tests {
     async fn independent_clients_have_independent_clocks() {
         let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
-        let pk_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let pk_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let pk_a = &ambre_core::SigningKeyHex(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        );
+        let pk_b = &ambre_core::SigningKeyHex(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        );
 
         let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Clock(1))
             .await
@@ -1593,13 +1613,14 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn one_clock_sent_at_once_is_numbered_once() {
         let doc = ambre_core::DocumentId::new();
+        let ab = ambre_core::SigningKeyHex("ab".into());
         let mut clients = Vec::new();
         for _ in 0..16 {
             clients.push(connect_redis().await);
         }
         let calls = clients
             .iter()
-            .map(|redis| verify_clock_and_assign_seq(redis, &doc, "ab", Clock(1)));
+            .map(|redis| verify_clock_and_assign_seq(redis, &doc, &ab, Clock(1)));
         let results = futures_util::future::join_all(calls).await;
 
         let numbered: Vec<ambre_core::Seq> = results
@@ -1625,7 +1646,7 @@ mod redis_integration_tests {
         let seq: u64 = redis.get(format!("doc:{doc}:seq")).await.unwrap();
         assert_eq!(seq, 1);
         assert_eq!(
-            verify_clock_and_assign_seq(&redis, &doc, "ab", Clock(2))
+            verify_clock_and_assign_seq(&redis, &doc, &ab, Clock(2))
                 .await
                 .unwrap(),
             ambre_core::Seq(2)
@@ -1735,7 +1756,9 @@ mod redis_integration_tests {
         let redis = connect_redis().await;
         let doc = ambre_core::DocumentId::new();
         let key = format!("doc:{doc}:presence");
-        let pk = "0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de";
+        let pk = &ambre_core::SigningKeyHex(
+            "0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de".into(),
+        );
         let _ = redis.del([key.as_str()]).await;
 
         doc_presence_update(
@@ -1747,18 +1770,22 @@ mod redis_integration_tests {
         )
         .await
         .unwrap();
-        let present: bool = redis.hexists(&key, pk).await.unwrap();
+        let present: bool = redis.hexists(&key, pk.as_str()).await.unwrap();
         assert!(present, "the sample is in the hash");
 
         doc_presence_remove(&redis, &doc, pk).await.unwrap();
-        let present: bool = redis.hexists(&key, pk).await.unwrap();
+        let present: bool = redis.hexists(&key, pk.as_str()).await.unwrap();
         assert!(!present, "the departure removed the field");
 
         // Removing a field nobody wrote is not an error: a connection that never
         // sent presence still announces its departure.
-        doc_presence_remove(&redis, &doc, "never-wrote")
-            .await
-            .unwrap();
+        doc_presence_remove(
+            &redis,
+            &doc,
+            &ambre_core::SigningKeyHex("never-wrote".into()),
+        )
+        .await
+        .unwrap();
 
         let _ = redis.del([key.as_str()]).await;
     }
@@ -1788,7 +1815,9 @@ mod redis_integration_tests {
         let redis = connect_redis().await;
         let doc = ambre_core::DocumentId::new();
         let key = format!("doc:{doc}:presence");
-        let pk = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
+        let pk = &ambre_core::SigningKeyHex(
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0".into(),
+        );
         let _ = redis.del([key.as_str()]).await;
 
         doc_presence_update(
@@ -1831,7 +1860,9 @@ mod redis_integration_tests {
         let doc = ambre_core::DocumentId::new();
         let clocks_key = format!("doc:{doc}:clocks");
         let seq_key = format!("doc:{doc}:seq");
-        let author = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
+        let author = &ambre_core::SigningKeyHex(
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0".into(),
+        );
         // Cold Redis (as after a restart): neither key exists.
         let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;
         assert!(clock_state_is_cold(&redis, &doc).await.unwrap());
@@ -1841,7 +1872,7 @@ mod redis_integration_tests {
             &redis,
             &doc,
             ambre_core::Seq(5),
-            &[(author.to_string(), Clock(5))],
+            &[(author.clone(), Clock(5))],
         )
         .await
         .expect("seed");
