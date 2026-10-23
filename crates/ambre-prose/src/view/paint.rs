@@ -686,6 +686,7 @@ fn paint_sheet<S: DrawSurface>(
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use crate::events::HeadingLevel;
     use crate::layout::run::RunOffset;
     use ambre_bus::app::prose::DocSpan;
     use ambre_bus::app::prose::{DocCount, DocOffset};
@@ -1434,7 +1435,13 @@ mod tests {
     #[test]
     fn a_draft_in_a_heading_is_drawn_as_the_heading() {
         let (mut state, _) = laid_out(1, 3);
-        let heading = append(&mut state, BlockInit::Heading { level: 1 }, "Title");
+        let heading = append(
+            &mut state,
+            BlockInit::Heading {
+                level: HeadingLevel::H1,
+            },
+            "Title",
+        );
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(state.shaped_layout());

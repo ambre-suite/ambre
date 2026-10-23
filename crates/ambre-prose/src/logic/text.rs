@@ -374,6 +374,7 @@ fn normalize(range: DocSpan) -> DocSpan {
 
 #[cfg(test)]
 mod tests {
+    use crate::events::HeadingLevel;
     use crate::events::{BlockInit, ProseCommand};
     use crate::logic::ProseState;
     use ambre_bus::app::prose::DocOffset;
@@ -524,7 +525,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(first),
-            init: BlockInit::Heading { level: 3 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H3,
+            },
             style_id: None,
         });
         let heading = state.root_blocks()[1];
@@ -560,7 +563,10 @@ mod tests {
             state.paragraph_style_of(&new_block).align,
             Some(crate::events::Align::Center)
         );
-        assert_eq!(state.heading_level_of(&new_block), Some(3));
+        assert_eq!(
+            state.heading_level_of(&new_block),
+            Some(crate::doc::StoredLevel::of(HeadingLevel::H3))
+        );
     }
 
     #[test]

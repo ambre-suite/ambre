@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::{DocOffset, HeadingLevel};
 use ambre_core::FootnoteId;
 use loro::{LoroValue, TreeID};
 
@@ -28,7 +28,7 @@ use ambre_bus::app::prose::{
 use super::ProseState;
 use super::tables::Grid;
 use super::text::{MarkedRun, body_span, marked_runs, write_runs};
-use crate::doc;
+use crate::doc::{self, StoredLevel};
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 use crate::interop::{
     IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun, IrTableCell, IrTableRow,
@@ -132,7 +132,8 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
             push(ops, parent, BlockInit::Paragraph, runs);
         }
         IrBlock::Heading { level, runs } => {
-            push(ops, parent, BlockInit::Heading { level: *level }, runs);
+            let level = level.clamped();
+            push(ops, parent, BlockInit::Heading { level }, runs);
         }
         IrBlock::CodeBlock { lang, text } => {
             let init = BlockInit::CodeBlock {
@@ -406,7 +407,8 @@ impl ProseState {
             },
             // The stored level, unclamped (`PROSE-FEAT-091`).
             BlockType::Heading => IrBlock::Heading {
-                level: doc::heading_level_of(tree, &id).unwrap_or(1),
+                level: doc::heading_level_of(tree, &id)
+                    .unwrap_or(StoredLevel::of(HeadingLevel::H1)),
                 runs: runs(),
             },
             BlockType::ListItem => IrBlock::ListItem {
@@ -845,7 +847,13 @@ mod tests {
     #[test]
     fn the_walk_keeps_a_stored_level_outside_the_range() {
         let mut state = document();
-        let heading: BlockId = append(&mut state, BlockInit::Heading { level: 2 }, "deep");
+        let heading: BlockId = append(
+            &mut state,
+            BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
+            "deep",
+        );
         let tree = doc::blocks(&state.doc);
         let attrs =
             doc::attrs_at(&doc::node_of(&tree, &tree_id(heading)).expect("node")).expect("attrs");
@@ -853,7 +861,7 @@ mod tests {
         state.doc.commit();
         let ir = state.walk();
         assert!(ir.blocks.contains(&IrBlock::Heading {
-            level: 9,
+            level: StoredLevel::from_stored(9),
             runs: vec![IrRun::plain("deep")],
         }));
     }

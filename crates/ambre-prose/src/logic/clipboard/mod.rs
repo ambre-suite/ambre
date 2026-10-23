@@ -15,11 +15,13 @@ mod sink;
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::app::prose::{BlockInit, DocCount, DocOffset, DocSpan, ListStyle, OrderedStyle};
+use ambre_bus::app::prose::{
+    BlockInit, DocCount, DocOffset, DocSpan, HeadingLevel, ListStyle, OrderedStyle,
+};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
-use crate::doc;
+use crate::doc::{self, StoredLevel};
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
 use crate::mark::{FORMATTING_KEYS, MarkRoot};
 use ambre_bus::app::prose::{BlockType, MarkKey};
@@ -47,7 +49,7 @@ struct ClipBlock {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum ClipKind {
     Paragraph,
-    Heading(u8),
+    Heading(HeadingLevel),
     Bullet,
     Ordered(u8),
     Todo(bool),
@@ -157,9 +159,9 @@ impl ProseState {
     fn clip_kind(&self, id: &TreeID) -> ClipKind {
         let tree = doc::blocks(&self.doc);
         match doc::block_type_of(&tree, id) {
-            Some(BlockType::Heading) => {
-                ClipKind::Heading(doc::heading_level_of(&tree, id).unwrap_or(1))
-            }
+            Some(BlockType::Heading) => ClipKind::Heading(
+                doc::heading_level_of(&tree, id).map_or(HeadingLevel::H1, StoredLevel::clamped),
+            ),
             Some(BlockType::ListItem) => match doc::list_style_of(&tree, id) {
                 Some(ListStyle::Ordered(style)) => ClipKind::Ordered(style.code()),
                 Some(ListStyle::Todo(done)) => ClipKind::Todo(done),
@@ -428,7 +430,13 @@ mod tests {
     #[test]
     fn a_rich_paste_keeps_types_and_marks() {
         let (mut state, _) = document();
-        let heading = append(&mut state, BlockInit::Heading { level: 2 }, "Title");
+        let heading = append(
+            &mut state,
+            BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
+            "Title",
+        );
         let bold = append(&mut state, BlockInit::Paragraph, "bold text");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: bold,
@@ -536,7 +544,13 @@ mod tests {
     #[test]
     fn the_html_half_alone_pastes_what_the_rich_half_does() {
         let (mut state, _) = document();
-        let heading = append(&mut state, BlockInit::Heading { level: 2 }, "Title");
+        let heading = append(
+            &mut state,
+            BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
+            "Title",
+        );
         let body = append(&mut state, BlockInit::Paragraph, "bold and red and linked");
         for (range, key, value) in [
             ((0, 4), "b", None),

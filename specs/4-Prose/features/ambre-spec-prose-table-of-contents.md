@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for. | this spec section 3 | `ambre_prose::logic::derived::tests::a_settings_change_lands_on_the_block` | none | verified |
 | `PROSE-FEAT-291` | `POST` | The next layout MUST list the block's entries by the depth and the numbering it carries. | this spec section 3 | `ambre_prose::logic::derived::tests::the_next_layout_lists_by_the_settings_just_written` | none | verified |
-| `PROSE-FEAT-292` | `POST` | A depth outside one to six MUST be brought to the nearer of the two before it is written. | this spec section 3 | `ambre_prose::logic::derived::tests::a_depth_outside_one_to_six_is_brought_inside` | none | verified |
+| `PROSE-FEAT-292` | `POST` | A depth MUST be one to six when it is written, and a stored depth outside that range MUST be read as the nearer of the two. | this spec section 3 | `ambre_prose::logic::derived::tests::a_stored_depth_outside_one_to_six_reads_as_the_nearer_end` -- it stores a zero and a two hundred and reads the settings back; type-level -- `InsertToc` and `UpdateTocConfig` carry a `HeadingLevel`, so no command writes another depth | none | verified |
 | `PROSE-FEAT-118` | `FRAME` | Changing one block's settings MUST NOT touch a heading, nor the settings of another table of contents. | this spec section 5 | `ambre_prose::logic::derived::tests::changing_one_block_leaves_another_and_the_headings_alone` | none | verified |
 
 ### 1.4 Click an entry
@@ -88,7 +88,7 @@ so no container holds them.
 /// One line of the table of contents. Nothing here is persisted.
 pub struct TocEntry {
     pub block_id:       BlockId,
-    pub level:          u8,
+    pub level:          HeadingLevel,
     pub text:           String,
     /// Present only when the block is configured as numbered (`PROSE-FEAT-062`).
     pub section_number: Option<Vec<u32>>,
@@ -99,7 +99,7 @@ pub struct TocEntry {
 
 pub struct TableOfContents {
     pub entries:   Vec<TocEntry>,
-    pub max_level: u8,
+    pub max_level: HeadingLevel,
     pub numbered:  bool,
 }
 ```
@@ -119,7 +119,8 @@ The build runs on each layout, and nothing it produces is written back (`PROSE-F
 engine answers `TocUpdated` for each block, and the view shows the last one it received.
 
 **The depth is one to six.** A heading level is one to six (`features/ambre-spec-prose-headings.md`),
-so a command carrying zero or two hundred writes the nearer bound (`PROSE-FEAT-292`).
+so a command carries a `HeadingLevel`. A stored depth of zero or two hundred reads as the nearer
+bound (`PROSE-FEAT-292`).
 
 **Why the build repeats.** The table of contents is itself a block on a page. Its own height
 changes where the following blocks fall, which changes the page numbers it shows. Pagination runs

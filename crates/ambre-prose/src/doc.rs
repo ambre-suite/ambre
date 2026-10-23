@@ -19,8 +19,8 @@ use loro::{
 };
 
 use ambre_bus::app::prose::{
-    Align, BlockType, DocCount, DocOffset, DocSpan, LineHeight, LineHeightMode, ListStyle,
-    OrderedStyle, ParagraphStyle,
+    Align, BlockType, DocCount, DocOffset, DocSpan, HeadingLevel, LineHeight, LineHeightMode,
+    ListStyle, OrderedStyle, ParagraphStyle,
 };
 
 // -----------------------------------------------------------------------------
@@ -450,20 +450,59 @@ pub fn block_type_of(tree: &LoroTree, id: &TreeID) -> Option<BlockType> {
     BlockType::from_code(code)
 }
 
-/// The level a live heading carries, exactly as the document holds it.
+/// A heading level exactly as the document holds it.
 ///
 /// Raw on purpose. An import is the only way a level outside one to six reaches
-/// a document, and it stays as it came (`PROSE-FEAT-091`). The clamp belongs to
-/// the numbering, which is the one reader that cannot work outside the range
-/// (`PROSE-FEAT-029`). `None` for a block that is not a live heading, or whose
-/// level is missing or unreadable.
+/// a document, and it stays as it came (`PROSE-FEAT-091`). A reader that works
+/// only inside the range, the numbering first (`PROSE-FEAT-029`), takes
+/// [`StoredLevel::clamped`]; an export and a diagnostic read the number itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StoredLevel(u8);
+
+impl StoredLevel {
+    /// The level a document holds, read from its attribute.
+    #[must_use]
+    pub(crate) const fn from_stored(level: u8) -> Self {
+        Self(level)
+    }
+
+    /// The level a document holds for `level`, which is always one to six.
+    #[must_use]
+    pub const fn of(level: HeadingLevel) -> Self {
+        Self(level.get())
+    }
+
+    /// The level as the document holds it, inside one to six or not.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// The level brought inside one to six, to the nearer end.
+    #[must_use]
+    pub const fn clamped(self) -> HeadingLevel {
+        HeadingLevel::clamp(self.0)
+    }
+}
+
+impl std::fmt::Display for StoredLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The level a live heading carries, exactly as the document holds it
+/// ([`StoredLevel`]). `None` for a block that is not a live heading, or whose
+/// level is missing or does not fit a byte.
 #[must_use]
-pub(crate) fn heading_level_of(tree: &LoroTree, id: &TreeID) -> Option<u8> {
+pub(crate) fn heading_level_of(tree: &LoroTree, id: &TreeID) -> Option<StoredLevel> {
     if block_type_of(tree, id) != Some(BlockType::Heading) {
         return None;
     }
     let attrs = attrs_read(tree, id)?;
-    u8::try_from(read_i64(&attrs, AttrKey::Level)?).ok()
+    u8::try_from(read_i64(&attrs, AttrKey::Level)?)
+        .ok()
+        .map(StoredLevel::from_stored)
 }
 
 /// The marker a live list item carries.
@@ -503,27 +542,40 @@ pub(crate) fn attrs_at(node: &Fields<NodeKey>) -> Option<Fields<AttrKey>> {
     map_at(node, NodeKey::Attrs).map(Fields::of)
 }
 
-/// The two settings a live table of contents carries: the deepest level it
-/// lists and whether it numbers its entries.
+/// The two settings a live table of contents carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TocSettings {
+    /// The deepest level it lists.
+    pub max_level: HeadingLevel,
+    /// Whether it numbers its entries.
+    pub numbered: bool,
+}
+
+/// The settings of a live table of contents.
 ///
 /// A missing or unreadable depth reads as six and a missing switch as off, so
-/// a block an older client wrote still lists something.
+/// a block an older client wrote still lists something. A stored depth
+/// outside one to six reads as the nearer end: it would list nothing or
+/// everything (`PROSE-FEAT-292`).
 #[must_use]
-pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<(u8, bool)> {
+pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<TocSettings> {
     if block_type_of(tree, id) != Some(BlockType::Toc) {
         return None;
     }
     let attrs = attrs_read(tree, id);
-    let level = attrs
+    let max_level = attrs
         .as_ref()
         .and_then(|a| read_i64(a, AttrKey::MaxLevel))
         .and_then(|n| u8::try_from(n).ok())
-        .unwrap_or(6);
+        .map_or(HeadingLevel::MAX, HeadingLevel::clamp);
     let numbered = attrs
         .as_ref()
         .and_then(|a| read_bool(a, AttrKey::Numbered))
         .unwrap_or(false);
-    Some((level, numbered))
+    Some(TocSettings {
+        max_level,
+        numbered,
+    })
 }
 
 /// A table's column widths list, or `None` when the table carries none.

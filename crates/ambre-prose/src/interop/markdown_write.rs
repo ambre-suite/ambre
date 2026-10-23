@@ -13,9 +13,6 @@ use ambre_bus::app::prose::{ConversionFormat, ConversionReport, MarkdownFlavor};
 
 use super::{IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, ProseIr, Warnings};
 
-/// The deepest heading Markdown spells.
-const MAX_HEADING: u8 = 6;
-
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.
 #[must_use]
 pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport) {
@@ -100,12 +97,12 @@ impl Writer {
             IrBlock::Heading { level, runs } => {
                 // The form carries the stored level (`PROSE-FEAT-091`); the
                 // syntax spells one to six.
-                let spelled = (*level).clamp(1, MAX_HEADING);
-                if spelled != *level {
+                let spelled = level.clamped();
+                if spelled.get() != level.get() {
                     self.warnings.unsupported("heading level outside 1 to 6");
                 }
                 let text = self.inline(runs);
-                let hashes = "#".repeat(usize::from(spelled));
+                let hashes = "#".repeat(usize::from(spelled.get()));
                 self.line(indent, &format!("{hashes} {text}"));
             }
             IrBlock::CodeBlock { lang, text } => {
@@ -536,7 +533,7 @@ mod tests {
         };
         let doc = ir(vec![
             IrBlock::Heading {
-                level: 2,
+                level: crate::doc::StoredLevel::of(ambre_bus::app::prose::HeadingLevel::H2),
                 runs: vec![IrRun::plain("Title")],
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
@@ -582,7 +579,7 @@ mod tests {
     #[test]
     fn a_level_beyond_six_is_spelled_six_and_reported() {
         let doc = ir(vec![IrBlock::Heading {
-            level: 9,
+            level: crate::doc::StoredLevel::from_stored(9),
             runs: vec![IrRun::plain("deep")],
         }]);
         let (text, report) = write(&doc, MarkdownFlavor::Gfm);

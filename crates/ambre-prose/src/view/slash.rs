@@ -6,7 +6,9 @@
 //! path (`PROSE-UI-059`). The menu remembers where the slash sits and what
 //! was typed after it, and writes none of that (`PROSE-UI-087`).
 
-use crate::events::{BlockInit, BlockType, ListStyle, OrderedStyle, ProseCommand, tree_id};
+use crate::events::{
+    BlockInit, BlockType, HeadingLevel, ListStyle, OrderedStyle, ProseCommand, tree_id,
+};
 use crate::layout::run::Affinity;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
@@ -17,14 +19,14 @@ use ambre_core::{DocPoint, DocPx, ViewPoint};
 const TABLE_SIZE: u32 = 3;
 
 /// The deepest heading a table of contents from the menu lists.
-const TOC_LEVEL: u8 = 3;
+const TOC_LEVEL: HeadingLevel = HeadingLevel::H3;
 
 /// What an item asks for. Each resolves to a command the plane declares
 /// (`PROSE-UI-062`); the menu has none of its own (`PROSE-UI-088`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SlashCommand {
     Paragraph,
-    Heading(u8),
+    Heading(HeadingLevel),
     List(ListStyle),
     Table,
     Code,
@@ -48,15 +50,15 @@ pub const ITEMS: [SlashItem; 12] = [
     },
     SlashItem {
         label: "Heading 1",
-        command: SlashCommand::Heading(1),
+        command: SlashCommand::Heading(HeadingLevel::H1),
     },
     SlashItem {
         label: "Heading 2",
-        command: SlashCommand::Heading(2),
+        command: SlashCommand::Heading(HeadingLevel::H2),
     },
     SlashItem {
         label: "Heading 3",
-        command: SlashCommand::Heading(3),
+        command: SlashCommand::Heading(HeadingLevel::H3),
     },
     SlashItem {
         label: "Bullet list",

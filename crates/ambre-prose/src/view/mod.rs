@@ -637,7 +637,7 @@ pub(crate) mod tests {
         assert!(far.page_start > PageIndex::ZERO);
         let entry = TocEntry {
             block_id: block_id(far.block_id),
-            level: 1,
+            level: crate::events::HeadingLevel::H1,
             text: String::new(),
             section_number: None,
             page: Some(far.page_start.number()),

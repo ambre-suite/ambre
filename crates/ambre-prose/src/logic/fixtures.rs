@@ -364,7 +364,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         &mut state,
         ProseCommand::SetHeadingLevel {
             block_id: block_id(title),
-            level: Some(1),
+            level: Some(crate::events::HeadingLevel::H1),
         },
     )?;
 

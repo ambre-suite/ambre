@@ -18,18 +18,6 @@ use crate::events::{PageNumber, TableOfContents, TocEntry, block_id};
 use crate::layout::place::BlockLayout;
 use crate::numbering;
 
-/// The deepest level a table of contents may list, and the shallowest.
-///
-/// A heading level is one to six, so a depth outside it lists nothing or
-/// everything, and a command brings it inside (`PROSE-FEAT-292`).
-pub const MAX_LEVELS: std::ops::RangeInclusive<u8> = 1..=6;
-
-/// A configured depth, brought inside [`MAX_LEVELS`] (`PROSE-FEAT-292`).
-#[must_use]
-pub fn clamp_level(level: u8) -> u8 {
-    level.clamp(*MAX_LEVELS.start(), *MAX_LEVELS.end())
-}
-
 /// The entries one table of contents lists (`PROSE-FEAT-003`).
 ///
 /// Every heading no deeper than the block's depth, in document order, reading
@@ -44,12 +32,14 @@ pub fn build(
     toc: &TreeID,
     pages: &HashMap<TreeID, PageNumber>,
 ) -> Option<TableOfContents> {
-    let (stored, numbered) = doc::toc_settings(tree, toc)?;
-    let max_level = clamp_level(stored);
+    let doc::TocSettings {
+        max_level,
+        numbered,
+    } = doc::toc_settings(tree, toc)?;
     let entries = numbering::section_numbers(tree)
         .into_iter()
         .filter_map(|(heading, number)| {
-            let level = clamp_level(doc::heading_level_of(tree, &heading)?);
+            let level = doc::heading_level_of(tree, &heading)?.clamped();
             (level <= max_level).then(|| TocEntry {
                 block_id: block_id(heading),
                 level,

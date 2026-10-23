@@ -14,7 +14,7 @@ use ambre_core::{FontSize, Rgba};
 use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
-use crate::events::BlockType;
+use crate::events::{BlockType, HeadingLevel};
 use ambre_bus::app::prose::MarkKey;
 
 use crate::mark::{self, MarkRoot};
@@ -28,7 +28,7 @@ pub type MarkSet = BTreeMap<MarkKey, String>;
 pub struct BlockContext {
     pub block_type: BlockType,
     /// The heading's level, when the block is one.
-    pub heading_level: Option<u8>,
+    pub heading_level: Option<HeadingLevel>,
 }
 
 /// The result of the cascade for one run of text.
@@ -80,8 +80,8 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
     match context.block_type {
         BlockType::Heading => {
             resolved.bold = true;
-            let level = usize::from(context.heading_level.unwrap_or(1).clamp(1, 6));
-            if let Some(scale) = HEADING_SCALE.get(level - 1) {
+            let level = context.heading_level.unwrap_or(HeadingLevel::H1);
+            if let Some(scale) = HEADING_SCALE.get(level.depth()) {
                 resolved.font_size = FontSize::new(defaults.font_size.points() * scale)
                     .unwrap_or(defaults.font_size);
             }
@@ -157,7 +157,7 @@ mod tests {
     fn heading(level: u8) -> BlockContext {
         BlockContext {
             block_type: BlockType::Heading,
-            heading_level: Some(level),
+            heading_level: HeadingLevel::new(level),
         }
     }
 

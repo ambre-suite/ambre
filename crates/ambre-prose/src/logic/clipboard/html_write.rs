@@ -58,11 +58,7 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
         match &block.kind {
             ClipKind::Paragraph => element(&mut html, "p", &block.runs),
             ClipKind::Heading(level) => {
-                element(
-                    &mut html,
-                    &format!("h{}", (*level).clamp(1, 6)),
-                    &block.runs,
-                );
+                element(&mut html, &format!("h{level}"), &block.runs);
             }
             ClipKind::Bullet | ClipKind::Ordered(_) => element(&mut html, "li", &block.runs),
             ClipKind::Todo(done) => {

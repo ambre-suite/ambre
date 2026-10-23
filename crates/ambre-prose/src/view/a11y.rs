@@ -57,6 +57,7 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use crate::events::HeadingLevel;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::{BlockInit, CursorPosition};
 
@@ -71,7 +72,13 @@ mod tests {
     fn a_page_announces_the_block_at_the_caret() {
         let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         logic.load_faces(&crate::layout::fonts::shipped_faces());
-        let title = append(&mut logic, BlockInit::Heading { level: 1 }, "Introduction");
+        let title = append(
+            &mut logic,
+            BlockInit::Heading {
+                level: HeadingLevel::H1,
+            },
+            "Introduction",
+        );
         let body = append(&mut logic, BlockInit::Paragraph, "");
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);

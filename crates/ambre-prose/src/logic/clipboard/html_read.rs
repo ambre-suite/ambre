@@ -17,7 +17,7 @@ use html5ever::tokenizer::{
 };
 use html5ever::{Attribute, LocalName, ParseOpts, ns, parse_document};
 
-use ambre_bus::app::prose::OrderedStyle;
+use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
 
 use super::sink::{Arena, Data, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
@@ -306,7 +306,7 @@ impl Reader {
         let heading = tag
             .strip_prefix('h')
             .and_then(|level| level.parse::<u8>().ok())
-            .filter(|level| (1..=6).contains(level));
+            .and_then(HeadingLevel::new);
         if let Some(level) = heading {
             return ClipKind::Heading(level);
         }
@@ -837,7 +837,7 @@ mod tests {
         );
         let blocks = read(html);
         assert_eq!(texts(&blocks), ["Title", "Bold plain", "item"]);
-        assert_eq!(blocks[0].kind, ClipKind::Heading(1));
+        assert_eq!(blocks[0].kind, ClipKind::Heading(HeadingLevel::H1));
         assert_eq!(keys(&blocks[0].runs[0]), ["fs"]);
         assert_eq!(keys(&blocks[1].runs[0]), ["b"], "black ink is no colour");
         assert_eq!(keys(&blocks[1].runs[1]), ["i"]);
@@ -982,7 +982,7 @@ mod tests {
         assert_eq!(
             kinds(&blocks),
             [
-                ClipKind::Heading(1),
+                ClipKind::Heading(HeadingLevel::H1),
                 ClipKind::Paragraph,
                 ClipKind::Bullet,
                 ClipKind::Bullet,
@@ -1022,7 +1022,7 @@ mod tests {
                 "x = 1",
             ]
         );
-        assert_eq!(blocks[0].kind, ClipKind::Heading(2));
+        assert_eq!(blocks[0].kind, ClipKind::Heading(HeadingLevel::H2));
         assert_eq!(blocks[2].kind, blocks[3].kind);
         assert!(matches!(blocks[2].kind, ClipKind::Ordered(_)));
         let body = marked(&blocks[1]);
@@ -1049,7 +1049,7 @@ mod tests {
                 "cargo, le gestionnaire de paquets\u{a0};",
             ]
         );
-        assert_eq!(blocks[0].kind, ClipKind::Heading(2));
+        assert_eq!(blocks[0].kind, ClipKind::Heading(HeadingLevel::H2));
         assert_eq!(keys(&blocks[0].runs[0]), ["ff"]);
         let body = marked(&blocks[1]);
         assert_eq!(body[0], ("Le langage ", vec![]));

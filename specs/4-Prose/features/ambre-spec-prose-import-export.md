@@ -208,7 +208,7 @@ pub enum IrField { PageNumber, PageCount, Date, Title }
 
 pub enum IrBlock {
     Paragraph { style_id: Option<String>, para_style: IrParaStyle, runs: Vec<IrRun> },
-    Heading   { level: u8, numbered: bool, runs: Vec<IrRun> },
+    Heading   { level: StoredLevel, numbered: bool, runs: Vec<IrRun> },
     /// Depth is derived from the nesting, never stored: the document derives it too.
     ListItem  { style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
     Table     { col_widths_pt: Vec<f32>, style: IrTableStyle, rows: Vec<IrTableRow> },

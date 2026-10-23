@@ -349,7 +349,7 @@ pub enum ProseCommand {
     MoveBlock     { block_id: TreeID, new_parent: Option<TreeID>, after_id: Option<TreeID> },
     SetBlockStyle { block_id: TreeID, style_id: String },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
-    SetHeadingLevel { block_id: TreeID, level: Option<u8> },
+    SetHeadingLevel { block_id: TreeID, level: Option<HeadingLevel> },
     SetCodeLang     { block_id: TreeID, lang: String },
     /// The command is coarse and the storage is per property: the handler writes only what
     /// changed (`PROSE-FEAT-025`, `features/ambre-spec-prose-inline-styles.md`).
@@ -380,8 +380,8 @@ pub enum ProseCommand {
 
     // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --
     InsertToc       { parent_id: Option<TreeID>, after_id: Option<TreeID>,
-                      max_level: u8, numbered: bool },
-    UpdateTocConfig { block_id: TreeID, max_level: u8, numbered: bool },
+                      max_level: HeadingLevel, numbered: bool },
+    UpdateTocConfig { block_id: TreeID, max_level: HeadingLevel, numbered: bool },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
     /// The view sends it once a run of changes stops; it writes nothing.
@@ -485,7 +485,7 @@ pub enum ProseCommand {
 pub enum BlockInit {
     Paragraph,
     /// The level is mandatory at creation, 1..=6.
-    Heading   { level: u8 },
+    Heading   { level: HeadingLevel },
     /// An empty language reads as plain.
     CodeBlock { lang: String },
     /// The marker is mandatory at creation (`features/ambre-spec-prose-lists.md`).

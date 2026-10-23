@@ -28,6 +28,7 @@ use ambre_core::schema::{migration_peer, step_fingerprint};
 use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
 
 use crate::doc;
+use crate::events::HeadingLevel;
 use crate::events::{
     Align, BlockInit, CellBorder, LineHeight, ListStyle, OrderedStyle, ParagraphStyle,
     ProseCommand, VAlign, tree_id,
@@ -360,7 +361,9 @@ pub(super) fn document_of_every_key() -> ProseState {
         },
     });
     for init in [
-        BlockInit::Heading { level: 2 },
+        BlockInit::Heading {
+            level: HeadingLevel::H2,
+        },
         BlockInit::ListItem {
             style: ListStyle::Bullet,
         },
@@ -387,7 +390,7 @@ pub(super) fn document_of_every_key() -> ProseState {
     state.handle_command(ProseCommand::InsertToc {
         parent_id: None,
         after_id: Some(root),
-        max_level: 3,
+        max_level: HeadingLevel::H3,
         numbered: true,
     });
     write_the_bands(&mut state);

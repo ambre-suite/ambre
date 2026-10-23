@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | `ambre_prose::logic::blocks::tests::a_heading_level_is_clamped_to_the_six_the_format_declares` -- it drives a nine and a zero through both writing paths | none | verified |
+| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | type-level -- `BlockInit::Heading` and `ProseCommand::SetHeadingLevel` carry a `HeadingLevel`, an enum of the six levels, so no command can name another | none | verified |
 | `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | `ambre_prose::logic::blocks::tests::a_level_makes_a_heading_and_taking_it_away_makes_a_paragraph` -- it drives the gesture both ways and reads the type back | none | verified |
 | `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | `ambre_prose::logic::blocks::tests::setting_a_level_leaves_every_other_block_as_it_was` -- it reads the neighbour text, type and document order back | none | verified |
 
@@ -36,8 +36,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: a heading is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
 * **Verification.** 8 `verified`. The numbering is a pure read over the block tree, so a test
-  builds a document and reads the numbers back. `PROSE-FEAT-031` is compiler-held: an untyped
-  attribute write is a variant that is not there. The Markdown export reads the stored level.
+  builds a document and reads the numbers back. `PROSE-FEAT-031` and `PROSE-FEAT-094` are
+  compiler-held: an untyped attribute write is a variant that is not there, and a command names
+  one of six levels. The Markdown export reads the stored level.
 
 ---
 
@@ -69,9 +70,9 @@ that precede the block in document order (`PROSE-FEAT-030`) and stored nowhere
 /// The section number of a heading, as one counter per level.
 pub fn compute_section_number(tree: &LoroMovableTree, heading_id: &TreeID) -> Vec<u32>;
 
-/// The stored level of a block, when it is a heading. Raw: the clamp is applied by the
-/// numbering, not here (`PROSE-FEAT-029`).
-fn heading_level_of(tree: &LoroMovableTree, id: &TreeID) -> Option<u8>;
+/// The stored level of a block, when it is a heading. Raw: the numbering reads
+/// `StoredLevel::clamped`, not this (`PROSE-FEAT-029`).
+fn heading_level_of(tree: &LoroMovableTree, id: &TreeID) -> Option<StoredLevel>;
 ```
 
 **A level out of range.** The format documents one to six, and an import is the only way in for a

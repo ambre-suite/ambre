@@ -7,12 +7,13 @@
 //! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
-use ambre_bus::app::prose::{ConversionFormat, ConversionReport, InteropError};
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use ambre_bus::app::prose::{ConversionFormat, ConversionReport, HeadingLevel, InteropError};
+use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use super::{
     IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, ProseIr, Warnings,
 };
+use crate::doc::StoredLevel;
 
 /// The largest file a Markdown import reads.
 pub const MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -80,7 +81,7 @@ enum Frame {
 /// The block whose text the inline events fill.
 enum Leaf {
     Paragraph,
-    Heading(u8),
+    Heading(HeadingLevel),
     Cell,
     Code { lang: Option<String>, text: String },
 }
@@ -270,7 +271,10 @@ impl Reader {
             TagEnd::Heading(_) => {
                 let runs = std::mem::take(&mut self.runs);
                 if let Some(Leaf::Heading(level)) = self.leaf.take() {
-                    self.place(IrBlock::Heading { level, runs });
+                    self.place(IrBlock::Heading {
+                        level: StoredLevel::of(level),
+                        runs,
+                    });
                 }
             }
             TagEnd::CodeBlock => {
@@ -442,14 +446,14 @@ fn same_marks(a: &IrRun, b: &IrRun) -> bool {
         && a.link == b.link
 }
 
-fn heading_level(level: HeadingLevel) -> u8 {
+fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
     match level {
-        HeadingLevel::H1 => 1,
-        HeadingLevel::H2 => 2,
-        HeadingLevel::H3 => 3,
-        HeadingLevel::H4 => 4,
-        HeadingLevel::H5 => 5,
-        HeadingLevel::H6 => 6,
+        pulldown_cmark::HeadingLevel::H1 => HeadingLevel::H1,
+        pulldown_cmark::HeadingLevel::H2 => HeadingLevel::H2,
+        pulldown_cmark::HeadingLevel::H3 => HeadingLevel::H3,
+        pulldown_cmark::HeadingLevel::H4 => HeadingLevel::H4,
+        pulldown_cmark::HeadingLevel::H5 => HeadingLevel::H5,
+        pulldown_cmark::HeadingLevel::H6 => HeadingLevel::H6,
     }
 }
 
@@ -479,7 +483,7 @@ mod tests {
             read,
             vec![
                 IrBlock::Heading {
-                    level: 1,
+                    level: StoredLevel::of(HeadingLevel::H1),
                     runs: vec![IrRun::plain("Title")]
                 },
                 para(vec![

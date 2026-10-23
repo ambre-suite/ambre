@@ -359,6 +359,96 @@ impl OrderedStyle {
     }
 }
 
+/// One of the six heading levels the format declares
+/// (`features/ambre-spec-prose-headings.md`).
+///
+/// A command carries one of these, so a level outside one to six cannot reach
+/// a block through a command. A level read back from a document may still lie
+/// outside, and [`HeadingLevel::clamp`] brings it to the nearer end. The type
+/// serializes as the bare number, and a decoded number outside one to six is
+/// refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub enum HeadingLevel {
+    H1 = 1,
+    H2 = 2,
+    H3 = 3,
+    H4 = 4,
+    H5 = 5,
+    H6 = 6,
+}
+
+impl HeadingLevel {
+    /// The six levels, shallowest first.
+    pub const ALL: [Self; 6] = [Self::H1, Self::H2, Self::H3, Self::H4, Self::H5, Self::H6];
+
+    /// The deepest level.
+    pub const MAX: Self = Self::H6;
+
+    /// The level `level` names, or `None` outside one to six.
+    #[must_use]
+    pub const fn new(level: u8) -> Option<Self> {
+        Some(match level {
+            1 => Self::H1,
+            2 => Self::H2,
+            3 => Self::H3,
+            4 => Self::H4,
+            5 => Self::H5,
+            6 => Self::H6,
+            _ => return None,
+        })
+    }
+
+    /// `level` brought inside one to six: zero reads as a level one, and
+    /// anything past six as a level six.
+    #[must_use]
+    pub const fn clamp(level: u8) -> Self {
+        match Self::new(level) {
+            Some(level) => level,
+            None if level == 0 => Self::H1,
+            None => Self::H6,
+        }
+    }
+
+    /// The level as a number, one to six.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self as u8
+    }
+
+    /// How many levels sit above this one: zero for a level one. A table
+    /// indexed by level reads its row here.
+    #[must_use]
+    pub const fn depth(self) -> usize {
+        self as usize - 1
+    }
+}
+
+/// The error of a decoded heading level outside one to six.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a heading level is one to six, not {0}")]
+pub struct InvalidHeadingLevel(pub u8);
+
+impl TryFrom<u8> for HeadingLevel {
+    type Error = InvalidHeadingLevel;
+
+    fn try_from(level: u8) -> Result<Self, Self::Error> {
+        Self::new(level).ok_or(InvalidHeadingLevel(level))
+    }
+}
+
+impl From<HeadingLevel> for u8 {
+    fn from(level: HeadingLevel) -> Self {
+        level.get()
+    }
+}
+
+impl std::fmt::Display for HeadingLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get())
+    }
+}
+
 /// The typed initializer of `InsertBlock`.
 ///
 /// Each variant carries exactly the creation attributes of its block type. The
@@ -368,9 +458,9 @@ impl OrderedStyle {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlockInit {
     Paragraph,
-    /// The level is mandatory at creation, and the handler clamps it to 1..=6.
+    /// The level is mandatory at creation.
     Heading {
-        level: u8,
+        level: HeadingLevel,
     },
     /// The style is mandatory at creation, the way a heading's level is: an
     /// item minted without one would need a default and a follow-up command.
@@ -896,7 +986,7 @@ pub struct ResolvedCrossRef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TocEntry {
     pub block_id: BlockId,
-    pub level: u8,
+    pub level: HeadingLevel,
     pub text: String,
     /// Present only while the block is configured as numbered
     /// (`PROSE-FEAT-062`).
@@ -908,10 +998,10 @@ pub struct TocEntry {
 
 /// The entries one table-of-contents block lists, built from the headings and
 /// a layout.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TableOfContents {
     pub entries: Vec<TocEntry>,
-    pub max_level: u8,
+    pub max_level: HeadingLevel,
     pub numbered: bool,
 }
 
@@ -1007,13 +1097,12 @@ pub enum ProseCommand {
         block_id: BlockId,
         style_id: StyleId,
     },
-    /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
-    /// `None` takes the level away, and the block becomes a paragraph
-    /// (`PROSE-FEAT-092`). One command for the two directions of one control:
+    /// `features/ambre-spec-prose-headings.md`. `None` takes the level away,
+    /// and the block becomes a paragraph (`PROSE-FEAT-092`). One command for the two directions of one control:
     /// the style picker offers the six levels and the paragraph beside them.
     SetHeadingLevel {
         block_id: BlockId,
-        level: Option<u8>,
+        level: Option<HeadingLevel>,
     },
     SetCodeLang {
         block_id: BlockId,
@@ -1106,16 +1195,16 @@ pub enum ProseCommand {
     },
 
     // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --
-    /// `max_level` is clamped to one to six (`PROSE-FEAT-292`).
+    /// `max_level` is one of the six levels (`PROSE-FEAT-292`).
     InsertToc {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
-        max_level: u8,
+        max_level: HeadingLevel,
         numbered: bool,
     },
     UpdateTocConfig {
         block_id: BlockId,
-        max_level: u8,
+        max_level: HeadingLevel,
         numbered: bool,
     },
 

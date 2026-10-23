@@ -16,6 +16,8 @@ pub mod markdown_write;
 
 use ambre_bus::app::prose::{ConversionFormat, ConversionReport, ConversionWarning};
 
+use crate::doc::StoredLevel;
+
 /// A document in flight between a format and the block tree. Held for the
 /// length of one conversion and never serialized.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -48,7 +50,7 @@ pub enum IrBlock {
     },
     /// The level is the stored one, unclamped (`PROSE-FEAT-091`).
     Heading {
-        level: u8,
+        level: StoredLevel,
         runs: Vec<IrRun>,
     },
     ListItem {

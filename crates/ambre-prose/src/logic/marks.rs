@@ -132,7 +132,8 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         let context = BlockContext {
             block_type: doc::block_type_of(&tree, &tree_id(*id)).unwrap_or(BlockType::Paragraph),
-            heading_level: doc::heading_level_of(&tree, &tree_id(*id)),
+            heading_level: doc::heading_level_of(&tree, &tree_id(*id))
+                .map(doc::StoredLevel::clamped),
         };
         let defaults = doc::read_defaults(&self.doc);
         let Some(LoroValue::List(runs)) = self.marks_of(id) else {

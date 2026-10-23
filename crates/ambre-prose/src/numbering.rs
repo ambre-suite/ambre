@@ -18,10 +18,10 @@
 use loro::{LoroTree, TreeID};
 
 use crate::doc;
-use crate::events::{ListStyle, OrderedStyle};
+use crate::events::{HeadingLevel, ListStyle, OrderedStyle};
 
-/// The levels the format declares, and the width of the counter vector.
-const LEVELS: usize = 6;
+/// The width of the counter vector: one counter per level the format declares.
+const LEVELS: usize = HeadingLevel::ALL.len();
 
 /// The counters of a numbering walk, one per level.
 ///
@@ -35,27 +35,18 @@ impl Counters {
     }
 
     /// Count one heading of `level`, and answer the number it is drawn with.
-    ///
-    /// `level` is one-based and already inside the range.
-    fn bump(&mut self, level: usize) -> Vec<u32> {
-        if let Some(counter) = self.0.get_mut(level - 1) {
+    /// A stored level outside one to six is brought inside before it gets
+    /// here (`PROSE-FEAT-029`): it would index the counters outside them.
+    fn bump(&mut self, level: HeadingLevel) -> Vec<u32> {
+        let depth = level.depth();
+        if let Some(counter) = self.0.get_mut(depth) {
             *counter = counter.saturating_add(1);
         }
-        if let Some(below) = self.0.get_mut(level..) {
+        if let Some(below) = self.0.get_mut(depth + 1..) {
             below.fill(0);
         }
-        self.0.iter().copied().take(level).collect()
+        self.0.iter().copied().take(depth + 1).collect()
     }
-}
-
-/// One heading level, brought inside the six the format declares
-/// (`PROSE-FEAT-029`).
-///
-/// Read-side only: the stored level is never rewritten (`PROSE-FEAT-091`). A
-/// level of zero would index the counter vector below its first component, and
-/// a level above six outside its last.
-fn numbering_level(stored: u8) -> usize {
-    usize::from(stored.clamp(1, 6))
 }
 
 /// Every live heading of the document, in document order, with the number it is
@@ -70,7 +61,7 @@ pub fn section_numbers(tree: &LoroTree) -> Vec<(TreeID, Vec<u32>)> {
     let mut out = Vec::new();
     walk(tree, &mut |tree, id| {
         if let Some(stored) = doc::heading_level_of(tree, id) {
-            out.push((*id, counters.bump(numbering_level(stored))));
+            out.push((*id, counters.bump(stored.clamped())));
         }
         false
     });
@@ -91,7 +82,7 @@ pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Vec<u32> 
         let Some(stored) = doc::heading_level_of(tree, id) else {
             return false;
         };
-        let number = counters.bump(numbering_level(stored));
+        let number = counters.bump(stored.clamped());
         if id == heading_id {
             found = number;
             return true;
@@ -199,7 +190,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(last),
-            init: BlockInit::Heading { level },
+            init: BlockInit::Heading {
+                level: HeadingLevel::new(level).expect("a level of one to six"),
+            },
             style_id: None,
         });
         *state.root_blocks().last().expect("the heading landed")
@@ -268,7 +261,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(first),
-            init: BlockInit::Heading { level: 1 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H1,
+            },
             style_id: None,
         });
         assert_eq!(numbers(&state), vec![vec![1], vec![2], vec![3]]);
@@ -292,8 +287,14 @@ mod tests {
 
         // Zero numbers as a level one, and nine as a level six under it.
         assert_eq!(numbers(&state), vec![vec![1], vec![1, 0, 0, 0, 0, 1]]);
-        assert_eq!(state.heading_level_of(&low), Some(0));
-        assert_eq!(state.heading_level_of(&high), Some(9));
+        assert_eq!(
+            state.heading_level_of(&low).map(doc::StoredLevel::get),
+            Some(0)
+        );
+        assert_eq!(
+            state.heading_level_of(&high).map(doc::StoredLevel::get),
+            Some(9)
+        );
     }
 
     /// Numbering writes nothing: the document after a numbering pass is the

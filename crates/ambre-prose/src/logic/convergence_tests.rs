@@ -6,6 +6,7 @@
 //! browser and no channel: a handler answers with a value, which is what makes
 //! this shape reachable at all (`PROSE-024`).
 
+use crate::events::HeadingLevel;
 use crate::events::{
     Align, BlockInit, ListStyle, OrderedStyle, ParagraphStyle, ProseCommand, ProseEvent,
 };
@@ -215,7 +216,9 @@ fn a_converged_document_holds_only_the_parentages_the_format_declares() {
         .handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(first),
-            init: BlockInit::Heading { level: 2 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
             style_id: None,
         })
         .update

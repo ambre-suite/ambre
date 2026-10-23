@@ -8,15 +8,10 @@
 use loro::{TreeID, TreeParentId};
 
 use crate::doc;
-use crate::events::{BlockId, BlockInit, BlockType, ParagraphStyle, ProseOutcome, tree_id};
-
-/// The levels a heading may carry.
-const HEADING_LEVELS: std::ops::RangeInclusive<u8> = 1..=6;
-
-/// One heading level, brought inside the six the format declares.
-fn clamp_level(level: u8) -> u8 {
-    level.clamp(*HEADING_LEVELS.start(), *HEADING_LEVELS.end())
-}
+use crate::doc::StoredLevel;
+use crate::events::{
+    BlockId, BlockInit, BlockType, HeadingLevel, ParagraphStyle, ProseOutcome, tree_id,
+};
 
 use super::ProseState;
 
@@ -69,12 +64,12 @@ impl ProseState {
         doc::read_paragraph_style(&doc::blocks(&self.doc), &tree_id(*id))
     }
 
-    /// The level a live heading carries.
+    /// The level a live heading carries, as the document holds it.
     #[must_use]
-    pub fn heading_level_of(&self, id: &BlockId) -> Option<u8> {
+    pub fn heading_level_of(&self, id: &BlockId) -> Option<StoredLevel> {
         let attrs = self.attrs_of(&tree_id(*id))?;
         match attrs.get(doc::AttrKey::Level)?.into_value() {
-            Ok(loro::LoroValue::I64(n)) => u8::try_from(n).ok(),
+            Ok(loro::LoroValue::I64(n)) => u8::try_from(n).ok().map(StoredLevel::from_stored),
             _ => None,
         }
     }
@@ -191,7 +186,7 @@ impl ProseState {
         };
         match init {
             BlockInit::Heading { level } => {
-                attrs(doc::AttrKey::Level, i64::from(clamp_level(*level)).into())
+                attrs(doc::AttrKey::Level, i64::from(level.get()).into())
             }
             BlockInit::CodeBlock { lang } => attrs(doc::AttrKey::Lang, lang.as_str().into()),
             BlockInit::ListItem { style } => {
@@ -325,12 +320,16 @@ impl ProseState {
     /// Set a heading's level, or take it away and leave a paragraph
     /// (`PROSE-FEAT-092`).
     ///
-    /// The level is clamped to the six the format declares, so no command
-    /// writes one outside them (`PROSE-FEAT-094`). An import is the other way
+    /// The level is one of the six the format declares, so no command writes
+    /// one outside them (`PROSE-FEAT-094`). An import is the other way
     /// in, and what it carries is left as it came (`PROSE-FEAT-091`). A
     /// paragraph and a heading are the two sides of this gesture. Any other
     /// block type is refused, as a code language on a paragraph is.
-    pub(super) fn set_heading_level(&mut self, id: &TreeID, level: Option<u8>) -> ProseOutcome {
+    pub(super) fn set_heading_level(
+        &mut self,
+        id: &TreeID,
+        level: Option<HeadingLevel>,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let was = doc::block_type_of(&tree, id);
         if !matches!(was, Some(BlockType::Heading | BlockType::Paragraph)) {
@@ -355,11 +354,7 @@ impl ProseState {
                 return Self::err_write(&format!("{e:?}"));
             }
         }
-        self.write_attr(
-            id,
-            doc::AttrKey::Level,
-            i64::from(clamp_level(level)).into(),
-        )
+        self.write_attr(id, doc::AttrKey::Level, i64::from(level.get()).into())
     }
 
     /// Turn a heading back into a paragraph, keeping its text and its place.
@@ -464,7 +459,7 @@ impl ProseState {
                 .ok_or_else(|| "the attribute map refused a container".to_owned())?;
             if let Some(level) = level {
                 attrs
-                    .insert(doc::AttrKey::Level, i64::from(level))
+                    .insert(doc::AttrKey::Level, i64::from(level.get()))
                     .map_err(|e| format!("{e:?}"))?;
             }
             if let Some(lang) = lang {
@@ -519,7 +514,8 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    use crate::events::{BlockInit, BlockType, ProseCommand};
+    use crate::doc::StoredLevel;
+    use crate::events::{BlockInit, BlockType, HeadingLevel, ProseCommand};
     use crate::logic::ProseState;
     use ambre_bus::app::prose::DocOffset;
 
@@ -633,25 +629,6 @@ mod tests {
         assert!(state.parentages_are_declared());
     }
 
-    #[test]
-    fn a_heading_level_is_clamped_to_the_six_the_format_declares() {
-        let mut state = ProseState::new().expect("a document is built");
-        let first = state.root_blocks()[0];
-        state.handle_command(ProseCommand::InsertBlock {
-            parent_id: None,
-            after_id: Some(first),
-            init: BlockInit::Heading { level: 9 },
-            style_id: None,
-        });
-        let heading = state.root_blocks()[1];
-        assert_eq!(state.heading_level_of(&heading), Some(6));
-        state.handle_command(ProseCommand::SetHeadingLevel {
-            block_id: heading,
-            level: Some(0),
-        });
-        assert_eq!(state.heading_level_of(&heading), Some(1));
-    }
-
     /// The gesture goes both ways (`PROSE-FEAT-092`). A paragraph becomes a
     /// heading of the level asked for, and a heading whose level is taken away
     /// becomes a paragraph again.
@@ -671,10 +648,13 @@ mod tests {
 
         state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: block,
-            level: Some(3),
+            level: Some(HeadingLevel::H3),
         });
         assert_eq!(state.block_type_of(&block), Some(BlockType::Heading));
-        assert_eq!(state.heading_level_of(&block), Some(3));
+        assert_eq!(
+            state.heading_level_of(&block),
+            Some(StoredLevel::of(HeadingLevel::H3))
+        );
 
         state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: block,
@@ -694,7 +674,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(first),
-            init: BlockInit::Heading { level: 2 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
             style_id: None,
         });
         let neighbour = state.root_blocks()[1];
@@ -707,10 +689,13 @@ mod tests {
         let order_before = state.root_blocks();
         state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: neighbour,
-            level: Some(5),
+            level: Some(HeadingLevel::H5),
         });
 
-        assert_eq!(state.heading_level_of(&neighbour), Some(5));
+        assert_eq!(
+            state.heading_level_of(&neighbour),
+            Some(StoredLevel::of(HeadingLevel::H5))
+        );
         assert_eq!(state.text_of(&first).as_deref(), Some("kept"));
         assert_eq!(state.block_type_of(&first), Some(BlockType::Paragraph));
         assert_eq!(state.root_blocks(), order_before);
@@ -726,7 +711,7 @@ mod tests {
             .expect("a table");
         let outcome = state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: table,
-            level: Some(1),
+            level: Some(HeadingLevel::H1),
         });
         assert!(
             matches!(
@@ -874,7 +859,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(first),
-            init: BlockInit::Heading { level: 2 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
             style_id: None,
         });
         let second = state.root_blocks()[1];

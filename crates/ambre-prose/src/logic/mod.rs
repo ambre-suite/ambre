@@ -1363,6 +1363,7 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, CursorPosition};
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::DocSpan;
@@ -1625,7 +1626,9 @@ mod tests {
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
             after_id: Some(block),
-            init: BlockInit::Heading { level: 2 },
+            init: BlockInit::Heading {
+                level: HeadingLevel::H2,
+            },
             style_id: None,
         });
         let snapshot = state.export_snapshot();

@@ -81,6 +81,7 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, ProseCommand, ResolvedCrossRef, tree_id};
     use ambre_bus::app::prose::DocSpan;
 
@@ -89,7 +90,12 @@ mod tests {
         let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let mut ids = state.root_blocks();
-        for init in [BlockInit::Paragraph, BlockInit::Heading { level: 1 }] {
+        for init in [
+            BlockInit::Paragraph,
+            BlockInit::Heading {
+                level: HeadingLevel::H1,
+            },
+        ] {
             state.handle_command(ProseCommand::InsertBlock {
                 parent_id: None,
                 after_id: ids.last().copied(),
@@ -100,7 +106,7 @@ mod tests {
         }
         state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: ids[0],
-            level: Some(1),
+            level: Some(HeadingLevel::H1),
         });
         for (id, text) in ids.iter().zip(["Intro", "See ", "Details"]) {
             state.handle_command(ProseCommand::InsertText {

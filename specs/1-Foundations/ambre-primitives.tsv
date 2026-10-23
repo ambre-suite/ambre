@@ -257,7 +257,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | BandSet.header_enabled | fiel
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockId.counter | field | i32	newtype-inner	Loro TreeID counter, half of the BlockId composite id
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockId::new(counter) | param | i32	newtype-inner	Loro TreeID counter, half of the BlockId composite id
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockInit::CodeBlock.lang | field | String	free-text	code language tag, empty reads as plain
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockInit::Heading.level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepted_at_root() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -314,7 +313,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTable.col
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTable.rows | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTableCol.at_col | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertText.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertToc.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertToc.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::MergeTableCells.end | field | (u32,u32)	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::MergeTableCells.start | field | (u32,u32)	debt	finding: Prose table row/col as u32 (medium, confirmed)
@@ -329,8 +327,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetCodeLang.lan
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetDifferentFirstPage.enabled | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetFooterEnabled.enabled | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeaderEnabled.enabled | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::SetHeadingLevel.level | field | Option<u8>	debt	finding: Heading level as u8 (low, confirmed)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::UpdateTocConfig.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::name() | ret | &'static str	generic	command name, the static label ProseCommand::name gives
@@ -354,12 +350,10 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::FindRefused.0 |
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | String	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | TableOfContents.max_level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TableOfContents.numbered | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::plus(n) | param | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextChangeSeq.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.level | field | u8	debt	finding: Heading level as u8 (low, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | field | Option<Vec<u32>>	math	section number components
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -2777,7 +2771,6 @@ ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static s
 ambre-prose | src/doc.rs | crate::doc | anchors(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | band_align_name() | ret | Option<&'static str>	debt	finding: band alignment as a name string (confirmed)
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | heading_level_of() | ret | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/doc.rs | crate::doc | hide_block() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/doc.rs | crate::doc | is_ancestor_of() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_aside() | ret | bool	generic	independent flag or predicate
@@ -2794,7 +2787,6 @@ ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	coun
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
-ambre-prose | src/doc.rs | crate::doc | toc_settings() | ret | Option<(u8,bool)>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	text content / label / parser input
 ambre-prose | src/events.rs | crate::events | UNNAMED | const | &str	free-text	text content / label / parser input
@@ -2837,7 +2829,6 @@ ambre-prose | src/input.rs | crate::input | Sent::Text.1 | field | Option<String
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Frame::List.ordered | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | MAX_BYTES | const | usize	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | MAX_LIST_DEPTH | const | usize	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	math	count, size or local index
@@ -2846,13 +2837,11 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.strike | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::dropping() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | heading_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ListRun.ordinal | field | u32	math	count, size or local index
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | MAX_HEADING | const | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.gfm | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.out | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::block(indent) | param | &str	free-text	text content / label / parser input
@@ -2881,7 +2870,6 @@ ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | o
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | write() | ret | (String,ConversionReport)	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Heading.level | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Paragraph.styled | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Table.merged | field | bool	generic	independent flag or predicate
@@ -3168,18 +3156,13 @@ ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | ch
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | field_mark() | ret | (&'static str,&'static str)	debt	finding: header-field codec duplicated as string literals (confirmed)
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | HEADING_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::heading_level_of() | ret | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::insert_block(style_id) | param | Option<&str>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_lang(lang) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_heading_level(level) | param | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::write_init() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
@@ -3241,7 +3224,6 @@ ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Code.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Ordered.0 | field | u8	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Todo.0 | field | bool	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.text | field | String	free-text	text content / label / parser input
@@ -3279,11 +3261,8 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_thread() | ret | Result<doc::Fields<doc::AnnotKey>,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
-ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(max_level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::export_ambre_plaintext() | ret | Option<Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/docfile.rs | crate::logic::docfile | ProseState::import_ambre_plaintext(data) | param | &[u8]	math	count, size or local index
@@ -3426,13 +3405,10 @@ ambre-prose | src/note.rs | crate::note | KIND_FOOTNOTE | const | &str	debt	find
 ambre-prose | src/note.rs | crate::note | ordinals() | ret | Vec<(FootnoteId,u32)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | Counters::bump(level) | param | usize	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | compute_ordinal() | ret | u32	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | compute_section_number() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | list_depth() | ret | u32	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | numbering_level() | ret | usize	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/numbering.rs | crate::numbering | numbering_level(stored) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/numbering.rs | crate::numbering | section_numbers() | ret | Vec<(TreeID,Vec<u32>)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
@@ -3457,7 +3433,6 @@ ambre-prose | src/schema.rs | crate::schema | gate() | ret | Result<Cow<'_,[u8]>
 ambre-prose | src/schema.rs | crate::schema | gate(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/style.rs | crate::style | BlockContext.heading_level | field | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MONOSPACE | const | &str	free-text	text content / label / parser input
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
@@ -3472,9 +3447,6 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.underline | field | bo
 ambre-prose | src/suggest.rs | crate::suggest | KIND_SUGGESTION | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/toc.rs | crate::toc | MAX_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/toc.rs | crate::toc | clamp_level() | ret | u8	debt	finding: heading level as u8/u32/usize (confirmed)
-ambre-prose | src/toc.rs | crate::toc | clamp_level(level) | param | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer.generation | field | u64	math	count, size or local index
@@ -3620,7 +3592,6 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_table() | ret | (TableShape,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.visible | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/slash.rs | crate::view::slash | SlashCommand::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.selected | field | usize	math	count, size or local index
@@ -3629,7 +3600,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | fi
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.selected | field | usize	math	count, size or local index
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | TABLE_SIZE | const | u32	math	count, size or local index
-ambre-prose | src/view/slash.rs | crate::view::slash | TOC_LEVEL | const | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/walk.rs | crate::view::walk | BAND | const | f64	math	layout geometry local to algorithm
@@ -5707,3 +5677,13 @@ ambre-bus | src/app/prose.rs | crate::app::prose | PageNumber::get() | ret | u32
 ambre-prose | src/layout/run.rs | crate::layout::run | page_offset() | ret | Option<usize>	math	slot of a page in the window vector of the pages it carries
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,PageSpan)>	math	the usize is the number of faces the layout was shaped on, compared for equality
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_page() | ret | Option<(PageIndex,f32)>	math	layout geometry local to algorithm, the y within the page as DocPos::OnPage.y_in_page
+ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::depth() | ret | usize	newtype-inner	HeadingLevel field, constructor or accessor: the row of a table indexed by level
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel.0 | field | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose | src/doc.rs | crate::doc | StoredLevel.0 | field | u8	newtype-inner	StoredLevel field, constructor or accessor
+ambre-prose | src/doc.rs | crate::doc | StoredLevel::from_stored(level) | param | u8	newtype-inner	StoredLevel field, constructor or accessor
+ambre-prose | src/doc.rs | crate::doc | StoredLevel::get() | ret | u8	newtype-inner	StoredLevel field, constructor or accessor
+ambre-prose | src/doc.rs | crate::doc | TocSettings.numbered | field | bool	generic	named setting or fact flag, selects no mode

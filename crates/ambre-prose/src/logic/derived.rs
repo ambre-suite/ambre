@@ -12,7 +12,7 @@ use loro::{LoroValue, TreeID};
 
 use crate::count;
 use crate::doc;
-use crate::events::{BlockType, ProseEvent, ProseOutcome, TableOfContents, block_id};
+use crate::events::{BlockType, HeadingLevel, ProseEvent, ProseOutcome, TableOfContents, block_id};
 use crate::toc;
 
 use super::ProseState;
@@ -22,13 +22,13 @@ impl ProseState {
     /// `max_level`, numbered or not (`PROSE-FEAT-115`).
     ///
     /// The block carries the two settings and nothing else: no entry is
-    /// written, and no heading is touched (`PROSE-FEAT-116`). The depth is
-    /// brought inside one to six (`PROSE-FEAT-292`).
+    /// written, and no heading is touched (`PROSE-FEAT-116`). The depth is one
+    /// of the six levels (`PROSE-FEAT-292`).
     pub(super) fn insert_toc(
         &mut self,
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
-        max_level: u8,
+        max_level: HeadingLevel,
         numbered: bool,
     ) -> ProseOutcome {
         let id = match self.mint_placed(parent_id, after_id, BlockType::Toc) {
@@ -45,7 +45,7 @@ impl ProseState {
     pub(super) fn update_toc_config(
         &mut self,
         id: &TreeID,
-        max_level: u8,
+        max_level: HeadingLevel,
         numbered: bool,
     ) -> ProseOutcome {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::Toc) {
@@ -56,13 +56,18 @@ impl ProseState {
 
     /// The shared write of the two commands, then the entries as the settled
     /// layout lists them (`PROSE-FEAT-291`).
-    fn write_toc_settings(&mut self, id: &TreeID, max_level: u8, numbered: bool) -> ProseOutcome {
+    fn write_toc_settings(
+        &mut self,
+        id: &TreeID,
+        max_level: HeadingLevel,
+        numbered: bool,
+    ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let attrs = doc::node_of(&tree, id).and_then(|node| doc::attrs_at(&node));
         let Some(attrs) = attrs else {
             return Self::err_write("the block refused its attribute map");
         };
-        let level = i64::from(toc::clamp_level(max_level));
+        let level = i64::from(max_level.get());
         let written = attrs
             .insert(doc::AttrKey::MaxLevel, LoroValue::I64(level))
             .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered)));
@@ -165,6 +170,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
+    use crate::events::HeadingLevel;
     use ambre_bus::app::prose::DocOffset;
     use loro::LoroValue;
 
@@ -204,6 +210,7 @@ mod tests {
     }
 
     fn heading(state: &mut ProseState, level: u8, text: &str) -> BlockId {
+        let level = HeadingLevel::new(level).expect("a level of one to six");
         append(state, BlockInit::Heading { level }, text)
     }
 
@@ -214,7 +221,7 @@ mod tests {
         state.handle_command(ProseCommand::InsertToc {
             parent_id: None,
             after_id: Some(first),
-            max_level,
+            max_level: HeadingLevel::new(max_level).expect("a depth of one to six"),
             numbered,
         });
         state
@@ -264,8 +271,8 @@ mod tests {
         heading(&mut state, 2, "Beta");
         let built = settled(&mut state, toc);
         assert_eq!(texts(&built), ["Alpha", "Beta"]);
-        let levels: Vec<u8> = built.entries.iter().map(|entry| entry.level).collect();
-        assert_eq!(levels, [1, 2]);
+        let levels: Vec<HeadingLevel> = built.entries.iter().map(|entry| entry.level).collect();
+        assert_eq!(levels, [HeadingLevel::H1, HeadingLevel::H2]);
     }
 
     #[test]
@@ -348,7 +355,7 @@ mod tests {
         );
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
-            max_level: 6,
+            max_level: HeadingLevel::H6,
             numbered: true,
         });
         let numbered = settled(&mut state, toc);
@@ -374,7 +381,7 @@ mod tests {
         let from_bob = bob
             .handle_command(ProseCommand::UpdateTocConfig {
                 block_id: toc,
-                max_level: 2,
+                max_level: HeadingLevel::H2,
                 numbered: true,
             })
             .update
@@ -393,7 +400,10 @@ mod tests {
         assert_eq!(state.root_blocks().get(1), Some(&toc));
         assert_eq!(state.root_blocks().first(), Some(&first));
         let tree = doc::blocks(state.document());
-        assert_eq!(doc::toc_settings(&tree, &tree_id(toc)), Some((3, true)));
+        assert_eq!(
+            doc::toc_settings(&tree, &tree_id(toc)),
+            Some(settings(HeadingLevel::H3, true))
+        );
     }
 
     #[test]
@@ -413,11 +423,14 @@ mod tests {
         let toc = insert_toc(&mut state, 6, false);
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
-            max_level: 4,
+            max_level: HeadingLevel::H4,
             numbered: true,
         });
         let tree = doc::blocks(state.document());
-        assert_eq!(doc::toc_settings(&tree, &tree_id(toc)), Some((4, true)));
+        assert_eq!(
+            doc::toc_settings(&tree, &tree_id(toc)),
+            Some(settings(HeadingLevel::H4, true))
+        );
     }
 
     #[test]
@@ -428,7 +441,7 @@ mod tests {
         heading(&mut state, 2, "Two");
         let outcome = state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
-            max_level: 1,
+            max_level: HeadingLevel::H1,
             numbered: true,
         });
         let listed = outcome.display.into_iter().find_map(|event| match event {
@@ -437,7 +450,10 @@ mod tests {
         });
         let listed = listed.expect("the command answers the entries");
         assert_eq!(texts(&listed), ["One"]);
-        assert_eq!((listed.max_level, listed.numbered), (1, true));
+        assert_eq!(
+            (listed.max_level, listed.numbered),
+            (HeadingLevel::H1, true)
+        );
     }
 
     #[test]
@@ -449,33 +465,48 @@ mod tests {
         state.handle_command(ProseCommand::InsertToc {
             parent_id: None,
             after_id: Some(second),
-            max_level: 2,
+            max_level: HeadingLevel::H2,
             numbered: true,
         });
         let other = *state.root_blocks().get(4).expect("the second block");
         let (heading_before, other_before) = (meta_of(&state, kept), meta_of(&state, other));
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: first,
-            max_level: 3,
+            max_level: HeadingLevel::H3,
             numbered: true,
         });
         assert_eq!(meta_of(&state, kept), heading_before);
         assert_eq!(meta_of(&state, other), other_before);
     }
 
+    fn settings(max_level: HeadingLevel, numbered: bool) -> doc::TocSettings {
+        doc::TocSettings {
+            max_level,
+            numbered,
+        }
+    }
+
+    /// A command carries one of the six levels, so a depth outside them
+    /// reaches a block only from a client that wrote one. It reads as the
+    /// nearer end (`PROSE-FEAT-292`).
     #[test]
-    fn a_depth_outside_one_to_six_is_brought_inside() {
+    fn a_stored_depth_outside_one_to_six_reads_as_the_nearer_end() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 0, false);
-        let tree = doc::blocks(state.document());
-        assert_eq!(doc::toc_settings(&tree, &tree_id(toc)), Some((1, false)));
-        state.handle_command(ProseCommand::UpdateTocConfig {
-            block_id: toc,
-            max_level: 200,
-            numbered: false,
-        });
-        let tree = doc::blocks(state.document());
-        assert_eq!(doc::toc_settings(&tree, &tree_id(toc)), Some((6, false)));
+        let toc = insert_toc(&mut state, 3, false);
+        for (stored, read) in [(0, HeadingLevel::H1), (200, HeadingLevel::H6)] {
+            let tree = doc::blocks(state.document());
+            let node = doc::node_of(&tree, &tree_id(toc)).expect("a live block");
+            doc::attrs_at(&node)
+                .expect("the attribute map")
+                .insert(doc::AttrKey::MaxLevel, LoroValue::I64(stored))
+                .expect("the depth is stored");
+            state.document().commit();
+            let tree = doc::blocks(state.document());
+            assert_eq!(
+                doc::toc_settings(&tree, &tree_id(toc)),
+                Some(settings(read, false))
+            );
+        }
     }
 
     // -- the word count ----------------------------------------------------
