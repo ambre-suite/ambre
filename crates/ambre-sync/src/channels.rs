@@ -6,6 +6,8 @@ use ambre_bus::{
 use ambre_core::DocType;
 use ambre_crypto::aead::NONCE_LEN;
 
+use crate::error::{Part, SyncError};
+
 /// What an activity fetch does before it asks the relay.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActivityFetch {
@@ -137,15 +139,15 @@ impl SyncState {
     pub(crate) fn space_keys(
         &self,
         space_id: SpaceId,
-    ) -> Result<(crate::chain::Keyring, StaticSecret), String> {
+    ) -> Result<(crate::chain::Keyring, StaticSecret), SyncError> {
         let space = self
             .documents
             .get(&space_id.document_id())
-            .ok_or("the space is not open")?;
+            .ok_or(SyncError::NotOpen)?;
         if !space.server_created {
-            return Err("the space is not on the relay yet".into());
+            return Err(SyncError::NotOnRelay);
         }
-        let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
+        let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
         Ok((space.keyring(), exchange_key))
     }
 
@@ -164,54 +166,62 @@ impl SyncState {
         visibility: ambre_core::Visibility,
         name: Option<ambre_core::Name>,
     ) {
-        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            // A private channel is listed nowhere, so it needs no space key.
-            let space_key = if visibility == ambre_core::Visibility::Public {
-                Some(self.space_keys(space_id)?.0.current)
-            } else {
-                None
-            };
-            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
-            let author = self.author().ok_or("session locked")?;
-            // Both documents open a log under the one channel key, and the
-            // channel's members live in meta's. Each creator copy seals its
-            // own document's anchor, and the catalogue seals meta's, so a
-            // self-joiner replays from it (`SYNC-104`).
-            let channel_key = DocumentKey::generate();
-            // The name rides beside meta alone, so it shows before the
-            // channel opens (`SYNC-171`).
-            let name_enc = name
-                .as_ref()
-                .map(|name| self.seal_channel_name(meta, &channel_key, name))
-                .transpose()?;
-            let documents = [
-                (meta.document_id(), name_enc),
-                (segment.document_id(), None),
-            ]
-            .into_iter()
-            .map(|(document_id, name_enc)| {
-                let (doc_key_enc, entry) =
-                    crate::sharing::creation(document_id, &channel_key, &exchange_key, &author)?;
-                Ok((document_id, doc_key_enc, entry, name_enc))
-            })
-            .collect::<Result<Vec<_>, String>>()?;
-            let sealed = match space_key {
-                Some(space_key) => {
-                    let meta_anchor = documents
-                        .first()
-                        .and_then(|(_, _, entry, _)| digest_of(entry))
-                        .ok_or("meta's first entry does not decode")?;
-                    Some(seal_channel_key(
-                        channel_id,
+        let prepared = self
+            .event_tx
+            .clone()
+            .ok_or(SyncError::NoRelay)
+            .and_then(|tx| {
+                // A private channel is listed nowhere, so it needs no space key.
+                let space_key = if visibility == ambre_core::Visibility::Public {
+                    Some(self.space_keys(space_id)?.0.current)
+                } else {
+                    None
+                };
+                let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
+                let author = self.author().ok_or(SyncError::SessionLocked)?;
+                // Both documents open a log under the one channel key, and the
+                // channel's members live in meta's. Each creator copy seals its
+                // own document's anchor, and the catalogue seals meta's, so a
+                // self-joiner replays from it (`SYNC-104`).
+                let channel_key = DocumentKey::generate();
+                // The name rides beside meta alone, so it shows before the
+                // channel opens (`SYNC-171`).
+                let name_enc = name
+                    .as_ref()
+                    .map(|name| self.seal_channel_name(meta, &channel_key, name))
+                    .transpose()?;
+                let documents = [
+                    (meta.document_id(), name_enc),
+                    (segment.document_id(), None),
+                ]
+                .into_iter()
+                .map(|(document_id, name_enc)| {
+                    let (doc_key_enc, entry) = crate::sharing::creation(
+                        document_id,
                         &channel_key,
-                        &space_key,
-                        meta_anchor,
-                    )?)
-                }
-                None => None,
-            };
-            Ok((tx, sealed, documents))
-        });
+                        &exchange_key,
+                        &author,
+                    )?;
+                    Ok((document_id, doc_key_enc, entry, name_enc))
+                })
+                .collect::<Result<Vec<_>, SyncError>>()?;
+                let sealed = match space_key {
+                    Some(space_key) => {
+                        let meta_anchor = documents
+                            .first()
+                            .and_then(|(_, _, entry, _)| digest_of(entry))
+                            .ok_or(SyncError::NoDigest)?;
+                        Some(seal_channel_key(
+                            channel_id,
+                            &channel_key,
+                            &space_key,
+                            meta_anchor,
+                        )?)
+                    }
+                    None => None,
+                };
+                Ok((tx, sealed, documents))
+            });
         let (tx, sealed, documents) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
@@ -258,11 +268,9 @@ impl SyncState {
     /// failure is logged: the hint stays stale until the next name.
     pub(crate) fn handle_name_channel(&self, meta: MetaId, name: Option<ambre_core::Name>) {
         let held = self.documents.get(&meta.document_id());
-        let sealed = held
-            .ok_or_else(|| "meta is not held".to_owned())
-            .and_then(|held| {
-                self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
-            });
+        let sealed = held.ok_or(SyncError::NotOpen).and_then(|held| {
+            self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
+        });
         let name_enc = match sealed {
             Ok(name_enc) => name_enc,
             Err(message) => {
@@ -291,10 +299,14 @@ impl SyncState {
         meta: MetaId,
         key: &DocumentKey,
         name: &ambre_core::Name,
-    ) -> Result<ambre_core::SealedName, String> {
-        let signing_key = self.signing_key.as_ref().ok_or("session locked")?;
-        Self::seal_document_name(meta.document_id(), key, signing_key, name)
-            .map_err(|e| format!("name seal failed: {e}"))
+    ) -> Result<ambre_core::SealedName, SyncError> {
+        let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
+        Ok(Self::seal_document_name(
+            meta.document_id(),
+            key,
+            signing_key,
+            name,
+        )?)
     }
 
     /// Join a public channel alone. Unseal the catalogue's key with the space
@@ -308,12 +320,17 @@ impl SyncState {
         space_id: SpaceId,
         sealed: &SealedChannelKey,
     ) {
-        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            let (space_keys, exchange_key) = self.space_keys(space_id)?;
-            let author = self.author().ok_or("session locked")?;
-            let (doc_key_enc, key_id) = join_key(channel_id, sealed, &space_keys, &exchange_key)?;
-            Ok((tx, doc_key_enc, key_id, author))
-        });
+        let prepared = self
+            .event_tx
+            .clone()
+            .ok_or(SyncError::NoRelay)
+            .and_then(|tx| {
+                let (space_keys, exchange_key) = self.space_keys(space_id)?;
+                let author = self.author().ok_or(SyncError::SessionLocked)?;
+                let (doc_key_enc, key_id) =
+                    join_key(channel_id, sealed, &space_keys, &exchange_key)?;
+                Ok((tx, doc_key_enc, key_id, author))
+            });
         let (tx, doc_key_enc, key_id, author) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
@@ -353,7 +370,7 @@ impl SyncState {
                 return self.send_to_logic(LogicEvent::SegmentCloseFailed {
                     channel_id,
                     closing,
-                    message,
+                    message: message.to_string(),
                 });
             }
         };
@@ -393,16 +410,16 @@ impl SyncState {
             StaticSecret,
             crate::sharing::Author,
         ),
-        String,
+        SyncError,
     > {
-        let tx = self.event_tx.clone().ok_or_else(no_relay)?;
+        let tx = self.event_tx.clone().ok_or(SyncError::NoRelay)?;
         let meta_key = self
             .documents
             .get(&meta.document_id())
             .map(|doc| doc.doc_key.clone())
-            .ok_or("the channel's meta has no open session")?;
-        let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
-        let author = self.author().ok_or("session locked")?;
+            .ok_or(SyncError::NotOpen)?;
+        let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
+        let author = self.author().ok_or(SyncError::SessionLocked)?;
         Ok((tx, meta_key, exchange_key, author))
     }
 
@@ -423,7 +440,7 @@ impl SyncState {
                     channel_id,
                     segment,
                     amendments,
-                    message,
+                    message: message.to_string(),
                 });
             }
         };
@@ -469,7 +486,7 @@ impl SyncState {
                     segment,
                     root,
                     thread,
-                    message,
+                    message: message.to_string(),
                 });
             }
         };
@@ -503,7 +520,7 @@ impl SyncState {
     /// the answer and closes them, so a refusal leaves the channel whole.
     pub(crate) fn handle_delete_channel(&self, channel_id: ChannelId) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.channel_answered(channel_id, Err(no_relay().into()));
+            return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -521,7 +538,7 @@ impl SyncState {
     /// refusal leaves the channel whole, as with a delete.
     pub(crate) fn handle_leave_channel(&self, channel_id: ChannelId) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.channel_answered(channel_id, Err(no_relay().into()));
+            return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
         let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone()) else {
             return self.channel_answered(channel_id, Err("not signed in".into()));
@@ -556,11 +573,15 @@ impl SyncState {
         ids: (MetaId, SegmentId),
         members: Vec<DirectMember>,
     ) {
-        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
-            let author = self.author().ok_or("session locked")?;
-            Ok((tx, exchange_key, author))
-        });
+        let prepared = self
+            .event_tx
+            .clone()
+            .ok_or(SyncError::NoRelay)
+            .and_then(|tx| {
+                let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
+                let author = self.author().ok_or(SyncError::SessionLocked)?;
+                Ok((tx, exchange_key, author))
+            });
         let (tx, exchange_key, author) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
@@ -919,10 +940,6 @@ async fn open_channel_names(
     names
 }
 
-fn no_relay() -> String {
-    "no relay on this transport".into()
-}
-
 /// Move each cursor to its number, one request per document. A refused move
 /// leaves that cursor where it was and says so in the log.
 async fn put_cursors(
@@ -965,14 +982,13 @@ pub(crate) fn seal_channel_key(
     channel_key: &DocumentKey,
     space_key: &DocumentKey,
     meta_anchor: ambre_protocol::EntryDigest,
-) -> Result<SealedChannelKey, String> {
+) -> Result<SealedChannelKey, SyncError> {
     let (nonce, ciphertext) = ambre_crypto::aead::seal_anchored_key(
         channel_key,
         &channel_key_aad(channel_id),
         space_key,
         Some(&meta_anchor),
-    )
-    .map_err(|e| format!("seal the channel key: {e}"))?;
+    )?;
     let mut sealed = space_key.id().as_array().to_vec();
     sealed.extend_from_slice(&nonce.0);
     sealed.extend_from_slice(&ciphertext.0);
@@ -995,24 +1011,25 @@ pub(crate) fn unseal_channel_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
     keys: &crate::chain::Keyring,
-) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), String> {
-    let short = "the sealed channel key is too short";
+) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), SyncError> {
+    let short = SyncError::Malformed(Part::SealedChannelKey);
     let (key_id, rest) = sealed
         .as_bytes()
         .split_first_chunk::<{ ambre_core::KEY_ID_LEN }>()
         .ok_or(short)?;
     let space_key = keys
         .find(KeyId::from_array(*key_id))
-        .ok_or("no space key this client holds sealed the channel key")?;
+        .ok_or(SyncError::KeyOutOfReach)?;
     let space_key = &space_key;
-    let (nonce, ciphertext) = rest.split_first_chunk::<NONCE_LEN>().ok_or(short)?;
+    let (nonce, ciphertext) = rest
+        .split_first_chunk::<NONCE_LEN>()
+        .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         &ambre_core::Nonce(*nonce),
         ciphertext,
         &channel_key_aad(channel_id),
         space_key,
-    )
-    .map_err(|e| format!("unseal the channel key: {e}"))?;
+    )?;
     Ok((key, anchor))
 }
 
@@ -1025,11 +1042,10 @@ pub(crate) fn join_key(
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
-) -> Result<(ambre_core::WrappedDocKey, KeyId), String> {
+) -> Result<(ambre_core::WrappedDocKey, KeyId), SyncError> {
     let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
-    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)
-        .map_err(|e| format!("wrap the channel key: {e}"))?;
+    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)?;
     Ok((wrapped, key.id()))
 }
 
@@ -1040,7 +1056,7 @@ pub(crate) fn self_join_entry(
     author: &crate::sharing::Author,
     head: &http::JoinHeadResponse,
     key: KeyId,
-) -> Result<Option<ambre_core::EncodedLogEntry>, String> {
+) -> Result<Option<ambre_core::EncodedLogEntry>, SyncError> {
     if head.length.is_first() {
         return Ok(None);
     }
@@ -1049,7 +1065,7 @@ pub(crate) fn self_join_entry(
         .last
         .as_ref()
         .and_then(digest_of)
-        .ok_or("the join head names no last entry")?;
+        .ok_or(SyncError::Malformed(Part::JoinHead))?;
     let draft = membership_log::Draft {
         document: meta,
         member: author.user_id,
@@ -1067,7 +1083,7 @@ pub(crate) fn self_join_entry(
         author.user_id,
         &author.signing_key,
     )?;
-    membership_log::encode(&entry).map(Some)
+    Ok(Some(membership_log::encode(&entry)?))
 }
 
 /// The request that creates a direct message of the signer and `members`
@@ -1084,7 +1100,7 @@ pub(crate) fn direct_message_request(
     channel_id: ChannelId,
     (meta, segment): (MetaId, SegmentId),
     members: &[(&DirectMember, ambre_core::PublicKey)],
-) -> Result<http::CreateDirectMessageRequest, String> {
+) -> Result<http::CreateDirectMessageRequest, SyncError> {
     let key = DocumentKey::generate();
     let document = meta.document_id();
     let own_key = author.public();
@@ -1104,22 +1120,21 @@ pub(crate) fn direct_message_request(
             member_key: signing_keys
                 .get(&member)
                 .cloned()
-                .ok_or("a member has no signing key")?,
+                .ok_or(SyncError::MemberUnsigned)?,
             act,
             role,
             key: (act != ambre_protocol::MembershipAct::ChangeRole).then(|| key.id()),
         };
         let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
-        let digest = membership_log::digest(&entry).ok_or("an entry does not encode")?;
+        let digest = membership_log::digest(&entry).ok_or(SyncError::NoDigest)?;
         root.get_or_insert(digest);
         next = next.after(digest);
         entries.push(membership_log::encode(&entry)?);
     }
     // The creation goes first, so the first digest is the log's root.
-    let root = root.ok_or("the log holds no creation")?;
+    let root = root.ok_or(SyncError::NoDigest)?;
     let wrap = |peer: &ambre_core::ExchangePublicKey| {
         crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
-            .map_err(|e| format!("wrap the channel key: {e}"))
     };
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
     let members = members
@@ -1147,15 +1162,12 @@ pub(crate) fn direct_message_request(
 pub(crate) fn check_pinned(
     member: &DirectMember,
     served_hex: &ambre_core::ExchangeKeyHex,
-) -> Result<(), String> {
+) -> Result<(), SyncError> {
     let served = crate::sharing::decode_exchange_pubkey(served_hex)?;
     if served == member.exchange_pub_key {
         Ok(())
     } else {
-        Err(format!(
-            "the exchange key of {} is not the one pinned",
-            member.user_id
-        ))
+        Err(SyncError::PinMismatch(member.user_id))
     }
 }
 

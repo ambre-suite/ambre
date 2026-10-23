@@ -28,13 +28,16 @@ use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
 use crate::{LogicSink, SyncEvent};
 use ambre_core::RefusalCode;
 
+use crate::error::{Part, SyncError};
+
 /// Decodes a hex-encoded X25519 public key.
 pub(crate) fn decode_exchange_pubkey(
     hex_str: &ambre_core::ExchangeKeyHex,
-) -> Result<ambre_core::ExchangePublicKey, String> {
-    let bytes = hex::decode(hex_str.as_str()).map_err(|e| format!("hex decode pubkey: {e}"))?;
+) -> Result<ambre_core::ExchangePublicKey, SyncError> {
+    let malformed = SyncError::Malformed(Part::ExchangeKey);
+    let bytes = hex::decode(hex_str.as_str()).map_err(|_| malformed)?;
     ambre_core::ExchangePublicKey::from_slice(&bytes)
-        .map_err(|_| "exchange pubkey is not 32 bytes".to_string())
+        .map_err(|_| SyncError::Malformed(Part::ExchangeKey))
 }
 
 /// Wraps `doc_key` for the holder of `peer_pub` via X25519 ECDH and returns the
@@ -71,13 +74,13 @@ pub(crate) fn unwrap_own<'a>(
             &'a ambre_core::ExchangeKeyHex,
         ),
     >,
-) -> Result<(DocumentKey, Option<EntryDigest>), String> {
+) -> Result<(DocumentKey, Option<EntryDigest>), SyncError> {
     let ours =
         ambre_core::ExchangeKeyHex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes());
     let (own, enc, wrapper) = rows
         .into_iter()
         .find(|(own, _, _)| **own == ours)
-        .ok_or("own member entry not found")?;
+        .ok_or(SyncError::OwnRowMissing)?;
     let encrypted = enc.as_bytes();
     let (nonce, ciphertext) = encrypted
         .split_first_chunk::<24>()
@@ -87,12 +90,15 @@ pub(crate) fn unwrap_own<'a>(
                 ambre_core::Ciphertext(ciphertext.to_vec()),
             )
         })
-        .ok_or("wrapped key too short")?;
+        .ok_or(SyncError::Malformed(Part::WrappedKey))?;
     let wrapper = if wrapper.is_empty() { own } else { wrapper };
     let peer = decode_exchange_pubkey(wrapper)?;
     let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
-    ambre_crypto::ecdh::unwrap_anchored(exchange_key, &peer, &wrapped)
-        .map_err(|e| format!("ECDH unwrap: {e}"))
+    Ok(ambre_crypto::ecdh::unwrap_anchored(
+        exchange_key,
+        &peer,
+        &wrapped,
+    )?)
 }
 
 /// The X25519 public key of `secret`: this user's own exchange key.
@@ -103,10 +109,10 @@ pub(crate) fn own_exchange_key(secret: &StaticSecret) -> ambre_core::ExchangePub
 /// Decodes a hex-encoded Ed25519 verifying key.
 pub(crate) fn decode_signing_pubkey(
     hex_str: &ambre_core::SigningKeyHex,
-) -> Result<ambre_core::PublicKey, String> {
+) -> Result<ambre_core::PublicKey, SyncError> {
     let bytes =
-        hex::decode(hex_str.as_str()).map_err(|e| format!("hex decode signing key: {e}"))?;
-    ambre_core::PublicKey::from_slice(&bytes).map_err(|_| "signing key is not 32 bytes".to_string())
+        hex::decode(hex_str.as_str()).map_err(|_| SyncError::Malformed(Part::SigningKey))?;
+    ambre_core::PublicKey::from_slice(&bytes).map_err(|_| SyncError::Malformed(Part::SigningKey))
 }
 
 /// The user who signs the entries a change appends (`SYNC-132`).
@@ -176,13 +182,13 @@ fn entry_after(
     log: &Log,
     draft: Draft,
     author: &Author,
-) -> Result<Option<ambre_core::EncodedLogEntry>, String> {
+) -> Result<Option<ambre_core::EncodedLogEntry>, SyncError> {
     let next = log.next();
     if next.is_empty() {
         return Ok(None);
     }
     let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
-    membership_log::encode(&entry).map(Some)
+    Ok(Some(membership_log::encode(&entry)?))
 }
 
 /// The creator's copy of a new document's key, and the first entry of its
@@ -193,7 +199,7 @@ pub(crate) fn creation(
     doc_key: &DocumentKey,
     exchange_key: &StaticSecret,
     author: &Author,
-) -> Result<(ambre_core::WrappedDocKey, ambre_core::EncodedLogEntry), String> {
+) -> Result<(ambre_core::WrappedDocKey, ambre_core::EncodedLogEntry), SyncError> {
     let draft = Draft {
         document: document_id,
         member: author.user_id,
@@ -205,10 +211,9 @@ pub(crate) fn creation(
         key: Some(doc_key.id()),
     };
     let entry = membership_log::sign(draft, LogHead::EMPTY, author.user_id, &author.signing_key)?;
-    let anchor = membership_log::digest(&entry).ok_or("the first entry does not encode")?;
+    let anchor = membership_log::digest(&entry).ok_or(SyncError::NoDigest)?;
     let own_pub = own_exchange_key(exchange_key);
-    let doc_key_enc = wrap_anchored_b64(exchange_key, &own_pub, doc_key, Some(anchor))
-        .map_err(|e| format!("key wrap failed: {e}"))?;
+    let doc_key_enc = wrap_anchored_b64(exchange_key, &own_pub, doc_key, Some(anchor))?;
     Ok((doc_key_enc, membership_log::encode(&entry)?))
 }
 
@@ -224,7 +229,7 @@ pub(crate) fn build_invite_request(
     role: Role,
     anchor: Option<EntryDigest>,
     entry: Option<ambre_core::EncodedLogEntry>,
-) -> Result<http::InviteRequest, String> {
+) -> Result<http::InviteRequest, SyncError> {
     let peer = decode_exchange_pubkey(invitee_pub_hex)?;
     let (invitee_email, invitee_id) = match invitee {
         InviteeName::Email(email) => (Some(email), None),
@@ -234,7 +239,7 @@ pub(crate) fn build_invite_request(
         invitee_email,
         invitee_id,
         role,
-        doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor).map_err(|e| e.to_string())?,
+        doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor)?,
         // The relay refuses the copy if a rotation replaced this key
         // between the read and the post (`SYNC-143`).
         key_id: doc_key.id(),
@@ -928,7 +933,7 @@ async fn leave_document<H: ShareHttp>(
     url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
     exchange_key: &StaticSecret,
-) -> Result<(), String> {
+) -> Result<(), SyncError> {
     let me = author.user_id;
     let members_url = crate::http::ApiRoot::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/members"));
@@ -939,8 +944,7 @@ async fn leave_document<H: ShareHttp>(
         tries += 1;
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
-            .await
-            .map_err(|e| format!("Get members failed: {e}"))?;
+            .await?;
         let (log, _) = served_log(document_id, exchange_key, &resp);
         let role = resp
             .members
@@ -962,7 +966,7 @@ async fn leave_document<H: ShareHttp>(
         match http.delete(&url, &body).await {
             Ok(()) => return Ok(()),
             Err(e) if e.is(RefusalCode::LogMoved) && tries < ROTATION_TRIES => {}
-            Err(e) => return Err(format!("Leave failed: {e}")),
+            Err(e) => return Err(e.into()),
         }
     }
 }
@@ -1278,9 +1282,8 @@ fn link_to(
     previous: &DocumentKey,
     next: &DocumentKey,
     signing_key: &SigningKey,
-) -> Result<(ambre_protocol::KeyLink, ambre_core::EncodedKeyLink), String> {
-    let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)
-        .map_err(|e| format!("Seal key link failed: {e}"))?;
+) -> Result<(ambre_protocol::KeyLink, ambre_core::EncodedKeyLink), SyncError> {
+    let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)?;
     let text = http::encode_link(&link)?;
     Ok((link, text))
 }
@@ -1309,7 +1312,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
     let new_doc_key = DocumentKey::generate();
     let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
         Ok(link) => link,
-        Err(e) => return unsettled(e),
+        Err(e) => return unsettled(e.to_string()),
     };
     let mut tries = 0;
     loop {
@@ -1537,7 +1540,7 @@ mod tests {
         recipient: &StaticSecret,
         wrapper_pub: &ambre_core::ExchangePublicKey,
         doc_key_enc: &ambre_core::WrappedDocKey,
-    ) -> Result<DocumentKey, String> {
+    ) -> Result<DocumentKey, SyncError> {
         unwrap_anchor_b64(recipient, wrapper_pub, doc_key_enc).map(|(key, _)| key)
     }
 
@@ -1546,7 +1549,7 @@ mod tests {
         recipient: &StaticSecret,
         wrapper_pub: &ambre_core::ExchangePublicKey,
         doc_key_enc: &ambre_core::WrappedDocKey,
-    ) -> Result<(DocumentKey, Option<EntryDigest>), String> {
+    ) -> Result<(DocumentKey, Option<EntryDigest>), SyncError> {
         let own = ambre_core::ExchangeKeyHex::encode(PublicKey::from(recipient).to_bytes());
         let wrapper = ambre_core::ExchangeKeyHex::encode(wrapper_pub);
         unwrap_own(recipient, [(&own, doc_key_enc, &wrapper)])
@@ -2774,6 +2777,57 @@ mod tests {
         );
         assert!(matches!(&calls[0], Call::Get(_)));
         assert!(matches!(&calls[1], Call::Delete(u, _) if u.ends_with(&format!("/share/{me}"))));
+    }
+
+    /// A leave the relay refuses reaches the Logic thread as the relay's
+    /// refusal, its code kept. A setup still owed then reads as the setup,
+    /// never as a failure on this device.
+    #[tokio::test]
+    async fn a_refused_leave_keeps_the_relay_refusal() {
+        let refusal = || {
+            http::HttpError::refused(
+                http::Method::Delete,
+                &crate::http::Target::relay("https://api.test/share"),
+                ambre_core::HttpStatus(403),
+                Some(RefusalCode::SetupRequired),
+            )
+        };
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "members": [] })),
+            Err(refusal()),
+        ]);
+        let (etx, _erx, sink, lrx) = channels();
+        let params = LeaveParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            author: author(),
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            exchange_key: keypair(1).0,
+        };
+        leave_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            lrx.try_recv().expect("the refusal"),
+            LogicEvent::SetupRequired
+        ));
+
+        let listing = serde_json::json!({ "documents": [
+            { "document_id": DocumentId::new().to_string(), "kind": "meta" },
+        ]});
+        let http = FakeHttp::new(vec![
+            Ok(listing),
+            Ok(serde_json::json!({ "members": [] })),
+            Err(refusal()),
+        ]);
+        let params = ChannelLeaveParams {
+            channel_id: ChannelId::new(),
+            author: author(),
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::RelayHost::new("api.test".to_owned()),
+            exchange_key: keypair(1).0,
+        };
+        let left = leave_channel_task(&http, params).await;
+        assert!(left.is_err_and(|e| e.is(RefusalCode::SetupRequired)));
     }
 
     fn settle_params(my_xk: &StaticSecret) -> SettleParams {

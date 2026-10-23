@@ -419,10 +419,35 @@ pub(crate) struct Incoming {
 #[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
 pub(crate) trait Transport {
     /// Sends `request`. An error is a request that got no answer at all.
-    async fn send(&self, request: &Outgoing) -> Result<Incoming, String>;
+    async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError>;
 
     /// Resolves once `ms` milliseconds have passed.
     async fn elapse(&self, span: ambre_core::Millis);
+}
+
+/// Why a request got no answer. The browser's own words ride in the variants
+/// that carry them, as free text this build never reads back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TransportError {
+    /// The body did not go into the request.
+    Body(String),
+    /// `fetch` failed: the network, the abort signal or a refused origin.
+    Fetch(String),
+    /// The answer came, and its body did not read whole.
+    Truncated(String),
+    /// No answer arrived within the request's deadline (`SYNC-071`).
+    Deadline(ambre_core::Millis),
+}
+
+impl std::fmt::Display for TransportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Body(reason) => write!(f, "body error: {reason}"),
+            Self::Fetch(reason) => f.write_str(reason),
+            Self::Truncated(reason) => write!(f, "binary error: {reason}"),
+            Self::Deadline(span) => write!(f, "no answer within {} ms", span.0),
+        }
+    }
 }
 
 /// The browser's `fetch`, the transport of the running worker.
@@ -442,7 +467,7 @@ impl Method {
 }
 
 impl Transport for Fetch {
-    async fn send(&self, request: &Outgoing) -> Result<Incoming, String> {
+    async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError> {
         // A new signal per request, because a timeout signal starts counting
         // down the moment it is created. gloo-net copies it into the request,
         // so it may be dropped here while `fetch` still holds it.
@@ -464,17 +489,17 @@ impl Transport for Fetch {
                 builder
                     .header("Content-Type", content_type)
                     .body(bytes.clone())
-                    .map_err(|e| format!("body error: {e}"))?
+                    .map_err(|e| TransportError::Body(e.to_string()))?
                     .send()
                     .await
             }
             None => builder.send().await,
         };
-        let resp = sent.map_err(|e| e.to_string())?;
+        let resp = sent.map_err(|e| TransportError::Fetch(e.to_string()))?;
         let body = resp
             .binary()
             .await
-            .map_err(|e| format!("binary error: {e}"))?;
+            .map_err(|e| TransportError::Truncated(e.to_string()))?;
         Ok(Incoming {
             status: HttpStatus(resp.status()),
             body,
@@ -523,7 +548,7 @@ pub(crate) enum HttpError {
         /// Where it went.
         url: Target,
         /// What the transport said.
-        reason: String,
+        reason: TransportError,
     },
     /// The relay refused the request with `status`. `code` is the relay's
     /// error code, kept only with the status that may carry it. A 403
@@ -554,10 +579,6 @@ pub(crate) enum HttpError {
         cause: UnreadableCause,
     },
 }
-
-/// Closes the text of an answer that names a word of a closed set this
-/// build does not know.
-const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
 
 impl HttpError {
     /// The refusal of `method` to `url` with `status`. The relay's `code` is
@@ -650,10 +671,12 @@ impl std::fmt::Display for HttpError {
                 cause,
             } => {
                 write!(f, "{} {url}: parse error: {reason}", method.as_str())?;
-                if *cause == UnreadableCause::UnknownWord {
-                    write!(f, ": {UNKNOWN_WORD}")?;
+                // The text closes on the cause when the body names a word of
+                // a closed set this build does not know.
+                match cause {
+                    UnreadableCause::Malformed => Ok(()),
+                    UnreadableCause::UnknownWord => f.write_str(": UNKNOWN_WORD"),
                 }
-                Ok(())
             }
         }
     }
@@ -793,7 +816,7 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
     let deadline = std::pin::pin!(transport.elapse(request.timeout_ms));
     let answer = match select(send, deadline).await {
         Either::Left((answer, _)) => answer,
-        Either::Right(((), _)) => Err(format!("no answer within {} ms", request.timeout_ms.0)),
+        Either::Right(((), _)) => Err(TransportError::Deadline(request.timeout_ms)),
     };
     answer.map_err(|reason| HttpError::NoAnswer {
         method: request.method,
@@ -1797,8 +1820,8 @@ pub(crate) struct KeyLinksResponse {
 /// The form a link takes in a request: its postcard bytes, in base64.
 pub(crate) fn encode_link(
     link: &ambre_protocol::KeyLink,
-) -> Result<ambre_core::EncodedKeyLink, String> {
-    let bytes = link.encode().map_err(|e| e.to_string())?;
+) -> Result<ambre_core::EncodedKeyLink, ambre_protocol::error::SerializationError> {
+    let bytes = link.encode()?;
     Ok(ambre_core::EncodedKeyLink::new(bytes.to_vec()))
 }
 
@@ -1983,13 +2006,13 @@ pub(crate) mod scripted {
     }
 
     impl Transport for Scripted {
-        async fn send(&self, request: &Outgoing) -> Result<Incoming, String> {
+        async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError> {
             self.sent.borrow_mut().push(request.clone());
             let answer = self.answers.borrow_mut().pop_front();
             match answer {
-                Some(answer) => answer,
+                Some(answer) => answer.map_err(TransportError::Fetch),
                 None if self.silent.get() => std::future::pending().await,
-                None => Err("no answer scripted".to_owned()),
+                None => Err(TransportError::Fetch("no answer scripted".to_owned())),
             }
         }
 

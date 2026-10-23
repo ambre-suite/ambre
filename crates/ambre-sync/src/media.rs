@@ -1,4 +1,5 @@
 use super::*;
+use crate::error::{Part, SyncError};
 use crate::sharing::GlooHttp;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -31,15 +32,14 @@ fn open_blob(
     document_id: DocumentId,
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
-) -> Result<Vec<u8>, String> {
-    let address = MediaAddress::parse(content_hash)
-        .ok_or_else(|| format!("not an address: {content_hash}"))?;
-    let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)
-        .map_err(|e| e.to_string())?;
+) -> Result<ambre_core::MediaBytes, SyncError> {
+    let address =
+        MediaAddress::parse(content_hash).ok_or(SyncError::Malformed(Part::MediaAddress))?;
+    let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
-        return Err(format!("the blob is not the one {content_hash} names"));
+        return Err(SyncError::BlobMismatch);
     }
-    Ok(data)
+    Ok(ambre_core::MediaBytes::new(data))
 }
 
 /// Opens a downloaded blob with the one key it names: the current key, a
@@ -48,11 +48,9 @@ fn open_blob_named(
     blob: &[u8],
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
-) -> Result<Vec<u8>, String> {
-    let wanted = pipeline::object_key(blob).map_err(|e| e.to_string())?;
-    let key = keyring
-        .find(wanted)
-        .ok_or_else(|| "the blob names a key out of reach".to_owned())?;
+) -> Result<ambre_core::MediaBytes, SyncError> {
+    let wanted = pipeline::object_key(blob)?;
+    let key = keyring.find(wanted).ok_or(SyncError::KeyOutOfReach)?;
     open_blob(blob, keyring.document_id, content_hash, &key)
 }
 
@@ -384,7 +382,7 @@ async fn download_media(
                 id,
                 document_id: keyring.document_id,
                 content_hash,
-                data: ambre_core::MediaBytes::new(data),
+                data,
             });
         }
         Err(message) => report(logic_tx, id, ApiRequest::DownloadMedia, message),
@@ -471,7 +469,7 @@ async fn download_leg(
     base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
-) -> Result<Vec<u8>, http::Failed> {
+) -> Result<ambre_core::MediaBytes, http::Failed> {
     let link: http::DownloadUrlResponse = http
         .post_json(
             &base.join("/media/download-url"),

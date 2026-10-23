@@ -148,6 +148,7 @@ mod chain;
 mod channels;
 mod docfile;
 mod documents;
+mod error;
 mod finalize;
 mod fold;
 #[cfg(feature = "fuzz")]

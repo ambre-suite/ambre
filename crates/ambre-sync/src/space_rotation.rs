@@ -125,7 +125,7 @@ impl SyncState {
         let keys = space.keyring();
         let prepared =
             unseal_channel_key(channel_id, sealed, &keys).and_then(|(previous, anchor)| {
-                let anchor = anchor.ok_or("the catalogue entry carries no anchor")?;
+                let anchor = anchor.ok_or(crate::error::SyncError::Unanchored)?;
                 match (
                     self.event_tx.clone(),
                     self.exchange_key.clone(),
@@ -134,7 +134,7 @@ impl SyncState {
                     (Some(tx), Some(exchange_key), Some(signing_key)) => {
                         Ok((tx, exchange_key, signing_key, previous, anchor))
                     }
-                    _ => Err("session locked".to_owned()),
+                    _ => Err(crate::error::SyncError::SessionLocked),
                 }
             });
         let (tx, exchange_key, signing_key, previous, anchor) = match prepared {

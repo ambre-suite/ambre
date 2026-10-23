@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
+use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
 use ed25519_dalek::SigningKey;
@@ -347,7 +348,7 @@ pub(crate) fn sign(
     next: LogHead,
     author: UserId,
     signing_key: &SigningKey,
-) -> Result<MembershipEntry, String> {
+) -> Result<MembershipEntry, SerializationError> {
     let mut entry = MembershipEntry {
         document: draft.document,
         position: next.position,
@@ -360,7 +361,7 @@ pub(crate) fn sign(
         author,
         signature: Signature([0; ENTRY_SIGNATURE_LEN]),
     };
-    let bytes = entry.signed_bytes().map_err(|e| e.to_string())?;
+    let bytes = entry.signed_bytes()?;
     entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes);
     Ok(entry)
 }
@@ -370,8 +371,10 @@ pub(crate) fn sign(
 /// # Errors
 ///
 /// The encoder's error.
-pub(crate) fn encode(entry: &MembershipEntry) -> Result<ambre_core::EncodedLogEntry, String> {
-    let bytes = entry.encode().map_err(|e| e.to_string())?;
+pub(crate) fn encode(
+    entry: &MembershipEntry,
+) -> Result<ambre_core::EncodedLogEntry, SerializationError> {
+    let bytes = entry.encode()?;
     Ok(ambre_core::EncodedLogEntry::new(bytes.to_vec()))
 }
 

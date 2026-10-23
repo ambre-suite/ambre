@@ -100,7 +100,7 @@ impl SyncState {
         let document_id = segment.document_id();
         let upload = match self.snapshot_upload(document_id, payload, horizon) {
             Ok(upload) => upload,
-            Err(message) => return self.fold_failed(channel_id, segment, &message),
+            Err(message) => return self.fold_failed(channel_id, segment, &message.to_string()),
         };
         let Some(tx) = self.event_tx.clone() else {
             return self.fold_failed(channel_id, segment, "no relay on this transport");

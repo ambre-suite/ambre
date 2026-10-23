@@ -99,13 +99,14 @@ impl SyncState {
     /// it. The name is sealed under that id, and no other id opens it
     /// (`SYNC-136`). A malformed id never reaches here: the answer is refused
     /// when it is read.
-    fn created_document(minted: DocumentId, answered: DocumentId) -> Result<DocumentId, String> {
+    fn created_document(
+        minted: DocumentId,
+        answered: DocumentId,
+    ) -> Result<DocumentId, crate::error::SyncError> {
         if answered == minted {
             Ok(minted)
         } else {
-            Err(format!(
-                "CreateDocument: the relay answered {answered}, not the minted {minted}"
-            ))
+            Err(crate::error::SyncError::WrongDocument { minted, answered })
         }
     }
 
@@ -522,8 +523,11 @@ mod tests {
     fn a_create_fails_on_a_foreign_answer() {
         let minted = DocumentId::new();
         let answer = SyncState::created_document(minted, minted);
-        assert_eq!(answer, Ok(minted));
-        assert!(SyncState::created_document(minted, DocumentId::new()).is_err());
+        assert_eq!(answer.ok(), Some(minted));
+        assert!(matches!(
+            SyncState::created_document(minted, DocumentId::new()),
+            Err(crate::error::SyncError::WrongDocument { .. })
+        ));
         let read = |id: String| {
             let body = serde_json::json!({ "document_id": id, "doc_type": "prose" });
             serde_json::from_value::<crate::http::CreateDocumentResponse>(body)

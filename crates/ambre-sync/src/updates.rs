@@ -744,7 +744,7 @@ impl SyncState {
     pub(crate) fn unwrap_document_key(
         exchange_key: &x25519_dalek::StaticSecret,
         members: &[http::MemberEntry],
-    ) -> Result<DocumentKey, String> {
+    ) -> Result<DocumentKey, crate::error::SyncError> {
         Self::unwrap_anchored(exchange_key, members).map(|(key, _)| key)
     }
 
@@ -753,7 +753,7 @@ impl SyncState {
     pub(crate) fn unwrap_anchored(
         exchange_key: &x25519_dalek::StaticSecret,
         members: &[http::MemberEntry],
-    ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), String> {
+    ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), crate::error::SyncError> {
         crate::sharing::unwrap_own(
             exchange_key,
             members.iter().map(|m| {
@@ -790,7 +790,7 @@ impl SyncState {
         rule: &membership_log::LogRule,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
-            .map_err(|message| (OpenFailure::KeyNotReceived, message))?;
+            .map_err(|error| (OpenFailure::KeyNotReceived, error.to_string()))?;
         let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
@@ -1394,7 +1394,7 @@ impl SyncState {
                     Err(message) => {
                         let _ = tx.send(SyncEvent::DocumentCreateFailed {
                             document_id,
-                            failure: http::Failed::local(message),
+                            failure: http::Failed::local(message.to_string()),
                         });
                         return;
                     }
@@ -1479,14 +1479,12 @@ impl SyncState {
         document_id: DocumentId,
         payload: &ambre_core::SnapshotBytes,
         covered_seq: Seq,
-    ) -> Result<SnapshotUpload, String> {
-        let signing_key = self.signing_key.as_ref().ok_or("session keys not ready")?;
-        let pub_key = self.author_pub_key().ok_or("session keys not ready")?;
+    ) -> Result<SnapshotUpload, crate::error::SyncError> {
+        use crate::error::SyncError;
+        let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
+        let pub_key = self.author_pub_key().ok_or(SyncError::SessionLocked)?;
         let author_pubkey = ambre_core::SigningKeyHex::encode(pub_key.as_array());
-        let doc_state = self
-            .documents
-            .get(&document_id)
-            .ok_or("the document is not open")?;
+        let doc_state = self.documents.get(&document_id).ok_or(SyncError::NotOpen)?;
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
@@ -1500,8 +1498,7 @@ impl SyncState {
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
         // `decode_snapshot_blob` + `open_snapshot`).
-        let blob = pipeline::snapshot_blob(payload, public_data, &doc_state.doc_key, signing_key)
-            .map_err(|e| format!("seal failed: {e}"))?;
+        let blob = pipeline::snapshot_blob(payload, public_data, &doc_state.doc_key, signing_key)?;
         // The Logic thread names the last delta it holds with no gap below it,
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
@@ -1562,7 +1559,7 @@ pub(crate) async fn send_vouch(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
     vouch: &Vouch,
-) -> Result<Option<DocumentId>, String> {
+) -> Result<Option<DocumentId>, http::HttpError> {
     let url = base.route(format!("/documents/{document_id}/snapshots/{snapshot_id}"));
     let post = http::Method::Post;
     match vouch {
@@ -3782,14 +3779,16 @@ mod tests {
             if let Some(named) = named {
                 row.wrapper_exchange_pub_key = ambre_core::ExchangeKeyHex(named);
             }
-            SyncState::unwrap_document_key(&my_xk, &[row]).map(|key| key.id())
+            SyncState::unwrap_document_key(&my_xk, &[row])
+                .map(|key| key.id())
+                .ok()
         };
         let mine = hex::encode(x25519_dalek::PublicKey::from(&my_xk).to_bytes());
 
-        assert_eq!(unwrapped(&peer_xk, None), Ok(doc_key.id()));
-        assert!(unwrapped(&peer_xk, Some(mine)).is_err());
-        assert!(unwrapped(&peer_xk, Some(String::new())).is_err());
-        assert_eq!(unwrapped(&my_xk, Some(String::new())), Ok(doc_key.id()));
+        assert_eq!(unwrapped(&peer_xk, None), Some(doc_key.id()));
+        assert!(unwrapped(&peer_xk, Some(mine)).is_none());
+        assert!(unwrapped(&peer_xk, Some(String::new())).is_none());
+        assert_eq!(unwrapped(&my_xk, Some(String::new())), Some(doc_key.id()));
     }
 
     /// Every refusal of a live frame reaches the Logic thread as one warning
