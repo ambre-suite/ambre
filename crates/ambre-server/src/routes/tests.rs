@@ -1536,7 +1536,9 @@ mod handler_tests {
             s3,
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(Config::default()),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients,
         })
     }
@@ -1560,7 +1562,9 @@ mod handler_tests {
             s3,
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(config),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients: empty_oidc_clients(),
         })
     }

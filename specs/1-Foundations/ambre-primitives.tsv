@@ -3448,7 +3448,6 @@ ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Resul
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool	generic	predicate result
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
-ambre-server | src/jwt.rs | crate::jwt | JwtKeys::from_seed(seed) | param | &[u8;32]	generic	generic codec/parser/bytes API
 ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text
 ambre-server | src/main.rs | crate | compact_once::KEEP_PER_DOCUMENT | const | i64	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	free-text	config list text
@@ -5164,3 +5163,7 @@ ambre-crypto | src/hash.rs | crate::hash | length_prefixed(head) | param | &[u8]
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(tail) | param | &[u8]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | [u8;32]	newtype-inner	SharedSecret newtype
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
+ambre-server | src/jwt.rs | crate::jwt | JwtSeed.0 | field | [u8;32]	newtype-inner	JwtSeed newtype
+ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &str	foreign-api	the JWT_SIGNING_SEED environment value, parsed here once
+ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
+ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::NotHex.0 | field | String	free-text	the hex decoder message a refusal reports

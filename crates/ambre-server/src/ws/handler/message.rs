@@ -1140,7 +1140,9 @@ mod ephemeral_binding_tests {
             s3,
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients: Arc::new(std::collections::HashMap::new()),
         }))
     }
@@ -1457,7 +1459,9 @@ mod delta_size_cap_tests {
             s3,
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(config),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients: Arc::new(std::collections::HashMap::new()),
         }))
     }
@@ -1647,7 +1651,9 @@ mod delta_size_cap_tests {
             s3,
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients: Arc::new(std::collections::HashMap::new()),
         });
         let doc_id = DocumentId::new();
@@ -1705,7 +1711,9 @@ mod access_tests {
             s3: aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build()),
             s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
             config: Arc::new(crate::state::Config::default()),
-            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(
+                &crate::jwt::JwtSeed::from_array([7u8; 32]),
+            )),
             oidc_clients: Arc::new(HashMap::new()),
         })
     }

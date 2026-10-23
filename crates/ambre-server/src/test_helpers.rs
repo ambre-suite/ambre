@@ -32,7 +32,9 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         s3,
         s3_bucket: crate::s3::BucketName::new("test-bucket".to_owned()),
         config: Arc::new(Config::default()),
-        jwt: Arc::new(JwtKeys::from_seed(&TEST_JWT_SEED)),
+        jwt: Arc::new(JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+            TEST_JWT_SEED,
+        ))),
         oidc_clients: empty_oidc_clients(),
     })
 }
@@ -57,7 +59,9 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
         s3: base.s3.clone(),
         s3_bucket: base.s3_bucket.clone(),
         config: Arc::clone(&base.config),
-        jwt: Arc::new(JwtKeys::from_seed(&TEST_JWT_SEED)),
+        jwt: Arc::new(JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
+            TEST_JWT_SEED,
+        ))),
         oidc_clients: Arc::clone(&base.oidc_clients),
     })
 }

@@ -129,22 +129,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // shared, so any instance can verify a token minted by another. Absent
     // (dev), generate an ephemeral one so a restart simply forces clients to
     // refresh.
-    let jwt_seed: [u8; 32] = match std::env::var("JWT_SIGNING_SEED") {
-        Ok(hex_seed) => {
-            let bytes = hex::decode(hex_seed.trim())
-                .map_err(|e| format!("JWT_SIGNING_SEED is not valid hex: {e}"))?;
-            bytes
-                .try_into()
-                .map_err(|_| "JWT_SIGNING_SEED must be 32 bytes (64 hex chars)")?
-        }
+    let jwt_seed = match std::env::var("JWT_SIGNING_SEED") {
+        // The hex text is the seed too, so it is wiped like the bytes.
+        Ok(hex_seed) => jwt::JwtSeed::from_hex(&zeroize::Zeroizing::new(hex_seed))?,
         Err(_) if dev_mode => {
             tracing::warn!(
                 "JWT_SIGNING_SEED not set: generating an ephemeral signing key (tokens \
                  do not survive a restart, and multi-instance verification will fail)"
             );
-            let mut seed = [0u8; 32];
-            getrandom::fill(&mut seed).map_err(|e| format!("no CSPRNG for the JWT seed: {e}"))?;
-            seed
+            jwt::JwtSeed::generate().map_err(|e| format!("no CSPRNG for the JWT seed: {e}"))?
         }
         Err(_) => {
             // Outside DEV_MODE an ephemeral key is a misconfiguration: it breaks
@@ -154,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
+    drop(jwt_seed);
 
     let env_ttl = |name: &str, default: u64| {
         std::env::var(name)

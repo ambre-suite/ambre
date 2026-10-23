@@ -20,6 +20,7 @@ use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// Access-token claims. `sub` is the user id, as its hyphenated text.
 /// `spk` is the hex Ed25519 signing public key (used server-side to verify WS
@@ -35,6 +36,67 @@ pub struct Claims {
     pub spk: Option<ambre_core::SigningKeyHex>,
     pub iat: ambre_core::UnixSeconds,
     pub exp: ambre_core::UnixSeconds,
+}
+
+/// The 32-byte Ed25519 seed the access tokens are signed under, read from
+/// `JWT_SIGNING_SEED` or drawn at a dev startup.
+///
+/// Wiped on drop and never cloned (`SRV-235`). Its `Debug` form prints the
+/// length and none of the bytes (`SRV-236`).
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct JwtSeed([u8; 32]);
+
+/// Why a `JWT_SIGNING_SEED` value is refused.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum JwtSeedRefusal {
+    #[error("JWT_SIGNING_SEED is not valid hex: {0}")]
+    NotHex(String),
+    #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {0}")]
+    Length(usize),
+}
+
+impl JwtSeed {
+    /// The seed `bytes` name, for a fixed seed in a test.
+    #[cfg(test)]
+    pub const fn from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// Reads the seed from its hex text. The decoded bytes are wiped too,
+    /// whether the seed is accepted or refused.
+    ///
+    /// # Errors
+    ///
+    /// [`JwtSeedRefusal::NotHex`] when the text is not hex, and
+    /// [`JwtSeedRefusal::Length`] when it decodes to other than 32 bytes.
+    pub fn from_hex(text: &str) -> Result<Self, JwtSeedRefusal> {
+        let bytes = Zeroizing::new(
+            hex::decode(text.trim()).map_err(|e| JwtSeedRefusal::NotHex(e.to_string()))?,
+        );
+        let mut seed = Self([0u8; 32]);
+        if bytes.len() != seed.0.len() {
+            return Err(JwtSeedRefusal::Length(bytes.len()));
+        }
+        seed.0.copy_from_slice(&bytes);
+        Ok(seed)
+    }
+
+    /// Draws a fresh seed from the platform CSPRNG.
+    ///
+    /// # Errors
+    ///
+    /// The error of `getrandom` when the platform has no CSPRNG.
+    pub fn generate() -> Result<Self, getrandom::Error> {
+        let mut seed = Self([0u8; 32]);
+        getrandom::fill(&mut seed.0)?;
+        Ok(seed)
+    }
+}
+
+impl std::fmt::Debug for JwtSeed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JwtSeed({} bytes)", self.0.len())
+    }
 }
 
 /// Server signing/verifying material, derived once from the seed at startup.
@@ -57,8 +119,8 @@ impl JwtKeys {
         clippy::expect_used,
         reason = "an Ed25519 key always encodes to PKCS#8, so the conversion cannot fail"
     )]
-    pub fn from_seed(seed: &[u8; 32]) -> Self {
-        let signing = SigningKey::from_bytes(seed);
+    pub fn from_seed(seed: &JwtSeed) -> Self {
+        let signing = SigningKey::from_bytes(&seed.0);
         let pkcs8 = signing
             .to_pkcs8_der()
             .expect("ed25519 signing key to PKCS#8 DER");
@@ -106,7 +168,7 @@ mod tests {
 
     #[test]
     fn mint_then_verify_roundtrips() {
-        let keys = JwtKeys::from_seed(&[7u8; 32]);
+        let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([7u8; 32]));
         let iat = now();
         let claims = Claims {
             sub: ambre_core::UserId::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
@@ -121,8 +183,24 @@ mod tests {
     }
 
     #[test]
+    fn a_jwt_seed_is_wiped_and_never_printed() {
+        fn wiped_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
+        let seed = JwtSeed::from_hex(&"ab".repeat(32)).expect("64 hex chars");
+        wiped_on_drop(&seed);
+        assert_eq!(format!("{seed:?}"), "JwtSeed(32 bytes)");
+        assert_eq!(
+            JwtSeed::from_hex(&"ab".repeat(31)).err(),
+            Some(JwtSeedRefusal::Length(31))
+        );
+        assert!(matches!(
+            JwtSeed::from_hex("zz"),
+            Err(JwtSeedRefusal::NotHex(_))
+        ));
+    }
+
+    #[test]
     fn expired_token_is_rejected() {
-        let keys = JwtKeys::from_seed(&[9u8; 32]);
+        let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([9u8; 32]));
         let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
             sub: ambre_core::UserId::new(),
@@ -136,8 +214,8 @@ mod tests {
 
     #[test]
     fn wrong_key_is_rejected() {
-        let a = JwtKeys::from_seed(&[1u8; 32]);
-        let b = JwtKeys::from_seed(&[2u8; 32]);
+        let a = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([1u8; 32]));
+        let b = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([2u8; 32]));
         let iat = now();
         let token = a
             .mint(&Claims {

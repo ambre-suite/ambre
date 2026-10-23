@@ -32,7 +32,7 @@
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 27 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 70 |  |
-| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 20 |  |
+| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 22 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1087 contract rows, 3 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1089 contract rows, 3 loose.**

@@ -358,7 +358,7 @@ mod tests {
     /// whatever address it comes. A token that does not verify is no caller.
     #[test]
     fn an_authenticated_request_is_bucketed_by_its_caller() {
-        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
         let (user, bearer) = bearer_for(&jwt);
         for peer in [[10, 0, 0, 1], [10, 0, 0, 2]] {
             let req = request_from(peer, &[("authorization", &bearer)]);
@@ -367,7 +367,7 @@ mod tests {
                 RateBucket::User(user)
             );
         }
-        let forged = crate::jwt::JwtKeys::from_seed(&[6u8; 32]);
+        let forged = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([6u8; 32]));
         let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
         assert_eq!(
             request_bucket(&forged, ProxyTrust::Direct, &req),
@@ -379,7 +379,7 @@ mod tests {
     /// forwarded address counts only where the deployment declares a proxy.
     #[test]
     fn an_anonymous_request_is_bucketed_by_its_peer() {
-        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
         let req = request_from([10, 0, 0, 1], &[("x-forwarded-for", "203.0.113.9")]);
         assert_eq!(
             request_bucket(&jwt, ProxyTrust::Direct, &req),
@@ -408,7 +408,7 @@ mod tests {
     /// when no proxy is declared.
     #[test]
     fn two_callers_never_share_a_bucket() {
-        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
         let (_, alice) = bearer_for(&jwt);
         let (_, bob) = bearer_for(&jwt);
         let signed = [
