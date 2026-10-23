@@ -224,7 +224,7 @@ fn undo_local_only_not_remote() {
     // B receives A's edit (the remote op enters B's doc but not its undo stack).
     // A full snapshot carries A's history from the shared base, so importing it
     // yields the union without dangling deps.
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     assert_eq!(read_cell(&mut b, 0, 0), "alice", "B sees A's remote value");
     assert_eq!(read_cell(&mut b, 0, 1), "bob", "B sees its own value");
 

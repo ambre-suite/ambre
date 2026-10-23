@@ -161,7 +161,7 @@ mod tests {
             text: "a".to_owned(),
         });
         let peer = loro::LoroDoc::new();
-        peer.import(&state.export_snapshot())
+        peer.import(state.export_snapshot().as_bytes())
             .expect("the peer opens the document");
         let undone = state.handle_command(ProseCommand::Undo);
         assert!(placed(&undone.display).is_some());

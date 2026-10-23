@@ -659,7 +659,7 @@ mod tests {
         let before = st.export_snapshot();
 
         let err = st
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)))
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)).into())
             .expect_err("refused");
 
         assert_eq!(

@@ -763,7 +763,7 @@ struct PendingCheck {
     author: ambre_core::PublicKey,
     covered_seq: Seq,
     /// The opened snapshot, kept on open only: a match adopts it.
-    payload: Option<Vec<u8>>,
+    payload: Option<ambre_core::SnapshotBytes>,
 }
 
 /// A snapshot only its author confirmed, still sealed (`SRV-128`).
@@ -942,7 +942,10 @@ impl SyncDocumentState {
 
     /// Opens a snapshot blob with the one key it names: a snapshot sealed
     /// before a rotation opens with a key the chain recovers (`SYNC-119`).
-    fn open_snapshot_blob(&self, blob: &[u8]) -> Result<Vec<u8>, pipeline::PipelineError> {
+    fn open_snapshot_blob(
+        &self,
+        blob: &[u8],
+    ) -> Result<ambre_core::SnapshotBytes, pipeline::PipelineError> {
         self.open_signed_snapshot(blob).map(|(payload, _)| payload)
     }
 
@@ -951,7 +954,7 @@ impl SyncDocumentState {
     fn open_signed_snapshot(
         &self,
         blob: &[u8],
-    ) -> Result<(Vec<u8>, ambre_core::PublicKey), pipeline::PipelineError> {
+    ) -> Result<(ambre_core::SnapshotBytes, ambre_core::PublicKey), pipeline::PipelineError> {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self
             .key_named(snapshot.public_data.key_id)
@@ -1402,7 +1405,7 @@ impl SyncState {
                 payload,
                 covered_seq,
             } => {
-                self.handle_send_snapshot(document_id, payload.into_bytes(), covered_seq);
+                self.handle_send_snapshot(document_id, payload, covered_seq);
             }
             SyncCommand::SnapshotVerdict {
                 document_id,
@@ -1482,13 +1485,7 @@ impl SyncState {
                 lease,
                 horizon,
                 payload,
-            } => self.handle_finalize_segment(
-                channel_id,
-                segment,
-                lease,
-                horizon,
-                payload.as_bytes(),
-            ),
+            } => self.handle_finalize_segment(channel_id, segment, lease, horizon, &payload),
             SyncCommand::TakeFoldLease {
                 channel_id,
                 segment,
@@ -1505,7 +1502,7 @@ impl SyncState {
                     lease,
                     amendments_seq,
                 };
-                self.handle_fold_segment(channel_id, segment, reach, horizon, payload.as_bytes());
+                self.handle_fold_segment(channel_id, segment, reach, horizon, &payload);
             }
             SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
             SyncCommand::WatchThread {

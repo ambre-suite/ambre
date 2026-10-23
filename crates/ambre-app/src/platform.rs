@@ -718,7 +718,7 @@ pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: cr
     // The payload lands as every copy does, sealed under the session's key.
     vault.seal(
         ambre_bus::RowPlace::Document(document_id),
-        payload,
+        payload.into_bytes(),
         move |sealed| match sealed {
             Some(sealed) => {
                 wasm_bindgen_futures::spawn_local(store_container(
@@ -738,7 +738,7 @@ pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: cr
 fn read_container(
     bytes: &[u8],
     toasts: Toasts,
-) -> Option<(DocumentId, ambre_bus::DocType, Vec<u8>)> {
+) -> Option<(DocumentId, ambre_bus::DocType, ambre_core::SnapshotBytes)> {
     let header = match ambre_core::docfile::read_ambre_plaintext(bytes) {
         Ok(header) => header,
         Err(e) => {
@@ -756,11 +756,7 @@ fn read_container(
         ));
         return None;
     }
-    Some((
-        header.document_id,
-        header.doc_type,
-        header.payload.into_bytes(),
-    ))
+    Some((header.document_id, header.doc_type, header.payload))
 }
 
 /// Store a container's sealed payload as the document's copy, and navigate

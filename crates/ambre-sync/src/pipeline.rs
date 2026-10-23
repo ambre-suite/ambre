@@ -13,7 +13,7 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
-use ambre_core::{KEY_ID_LEN, KeyId, PublicKey};
+use ambre_core::{KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -336,14 +336,14 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, Pi
 
 /// Compresses, encrypts and signs `payload` into a [`Snapshot`].
 pub fn seal_snapshot(
-    payload: &[u8],
+    payload: &SnapshotBytes,
     public_data: SnapshotPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Snapshot, PipelineError> {
     check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
+    let sealed = seal_payload(payload.as_bytes(), &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     let snapshot = Snapshot {
         ciphertext,
@@ -378,7 +378,10 @@ pub fn decode_snapshot_blob(
 }
 
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
-pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
+pub fn open_snapshot(
+    snapshot: &Snapshot,
+    doc_key: &DocumentKey,
+) -> Result<SnapshotBytes, PipelineError> {
     check_key(snapshot.public_data.key_id, doc_key)?;
     let aad = aad_of(&snapshot.public_data)?;
     let sealed = sealed_from(
@@ -387,7 +390,7 @@ pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u
         &snapshot.commitment_tag,
         &snapshot.signature,
     );
-    open_payload(&sealed, &aad, doc_key, &snapshot.public_data.pub_key)
+    open_payload(&sealed, &aad, doc_key, &snapshot.public_data.pub_key).map(SnapshotBytes::new)
 }
 
 // -- Ephemeral -----------------------------------------------------------------
@@ -511,7 +514,7 @@ pub fn ephemeral_frame(
 /// Every error [`seal_snapshot`] raises, and [`PipelineError::Postcard`] when
 /// the snapshot does not serialize.
 pub fn snapshot_blob(
-    payload: &[u8],
+    payload: &SnapshotBytes,
     public_data: SnapshotPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -843,7 +846,13 @@ mod tests {
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot = seal_snapshot(&payload, pd, &doc_key, &signing).unwrap();
+        let snapshot = seal_snapshot(
+            &ambre_core::SnapshotBytes::new(payload.to_vec()),
+            pd,
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         // Compressed ciphertext is far smaller than the 4 KiB plaintext.
         assert!(snapshot.ciphertext.0.len() < payload.len());
         assert_eq!(open_snapshot(&snapshot, &doc_key).unwrap(), payload);
@@ -866,7 +875,12 @@ mod tests {
             parent_snapshot_update_clocks: vec![(author.clone(), Clock(1)), (author, Clock(2))],
         };
         assert!(matches!(
-            seal_snapshot(b"board", pd, &doc_key, &signing),
+            seal_snapshot(
+                &ambre_core::SnapshotBytes::new(b"board".to_vec()),
+                pd,
+                &doc_key,
+                &signing
+            ),
             Err(PipelineError::Validation(
                 ValidationError::DuplicatePublicKey
             ))
@@ -1031,7 +1045,13 @@ mod tests {
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot = snapshot_blob(plaintext, pd, &doc_key, &signing).unwrap();
+        let snapshot = snapshot_blob(
+            &SnapshotBytes::new(plaintext.to_vec()),
+            pd,
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert!(!contains(snapshot.as_bytes()));
         let decoded = decode_snapshot_blob(snapshot.as_bytes(), document_id).unwrap();
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);

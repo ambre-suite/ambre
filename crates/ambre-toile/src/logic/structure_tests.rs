@@ -357,7 +357,7 @@ fn an_element_sits_in_one_container_at_most() {
     assert_eq!(st.membership_of(&f), std::slice::from_ref(&g3));
     assert_eq!(st.membership_of(&g3), [d, e]);
     let mut rebuilt = ToileState::new();
-    rebuilt.apply_remote(&st.export_snapshot());
+    rebuilt.apply_remote(st.export_snapshot().as_bytes());
     assert_eq!(st.debug_caches(), rebuilt.debug_caches());
 }
 
@@ -378,7 +378,7 @@ fn a_group_left_with_no_member_is_removed() {
     assert!(st.bounds_of(&g).is_none(), "the empty group is still there");
     assert!(!order(&st).contains(&NodeId::Element(g)));
     let mut rebuilt = ToileState::new();
-    rebuilt.apply_remote(&st.export_snapshot());
+    rebuilt.apply_remote(st.export_snapshot().as_bytes());
     assert_eq!(st.debug_caches(), rebuilt.debug_caches());
 }
 
@@ -395,7 +395,7 @@ fn a_binding_keeps_what_it_can_hold_and_moves_nobody() {
     let inner = group(&mut a, &[&x, &y]);
     // A peer deletes `gone` while this user still has it selected.
     let mut b = ToileState::with_peer(ambre_core::PeerId(2));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let deleted = b.handle_command(ToileCommand::DeleteElements {
         ids: vec![gone.clone()],
     });

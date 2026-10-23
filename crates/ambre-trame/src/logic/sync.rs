@@ -112,11 +112,11 @@ impl TrameState {
         &self.doc
     }
 
-    pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
+    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
+        ambre_core::SnapshotBytes::new(self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
             tracing::error!("[Logic] export_snapshot failed, returning empty snapshot: {e:?}");
             Vec::new()
-        })
+        }))
     }
 
     /// Import a full CRDT snapshot (local restore from IndexedDB at startup).
@@ -138,10 +138,13 @@ impl TrameState {
     /// The remote-delta path ([`apply_remote`](Self::apply_remote)) carries no
     /// version and applies blind: a delta is not a full-state read, and there is
     /// nothing in it to compare.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<TrameEvent>, SchemaError> {
+    pub fn import_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Result<Vec<TrameEvent>, SchemaError> {
         // Before a single container is used (`SCHEMA-006`). What comes back is
         // the payload itself at the current version, or a migrated snapshot.
-        let payload = schema::gate(payload)?;
+        let payload = schema::gate(payload.as_bytes())?;
         Ok(self.import_and_reseed(&payload, "import_snapshot"))
     }
 

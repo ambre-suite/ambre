@@ -71,14 +71,12 @@ impl ProseState {
         data: &[u8],
     ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
-        let events = self
-            .import_snapshot(header.payload.as_bytes())
-            .map_err(|e| match e {
-                // Bytes the engine will not read already have a name in the
-                // container taxonomy.
-                SchemaError::PayloadRejected => DocFileError::PayloadRejected,
-                other => DocFileError::PayloadSchema(other),
-            })?;
+        let events = self.import_snapshot(&header.payload).map_err(|e| match e {
+            // Bytes the engine will not read already have a name in the
+            // container taxonomy.
+            SchemaError::PayloadRejected => DocFileError::PayloadRejected,
+            other => DocFileError::PayloadSchema(other),
+        })?;
         Ok((header.document_id, events))
     }
 }

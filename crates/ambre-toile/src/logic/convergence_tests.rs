@@ -38,7 +38,7 @@ fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
     let mut author = ToileState::new();
     let id = create_rect(&mut author, Point::new(0.0, 0.0), Size::new(10.0, 10.0));
     let mut reader = ToileState::new();
-    reader.apply_remote(&author.export_snapshot());
+    reader.apply_remote(author.export_snapshot().as_bytes());
     assert_eq!(
         reader.history(),
         author.history(),
@@ -110,7 +110,7 @@ fn a_remote_move_walks_no_board() {
         })
         .collect();
     let mut b = ToileState::new();
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let walks = b.board_walks();
     let out = a.handle_command(ToileCommand::MoveElements {
         ids: vec![ids[7].clone()],
@@ -274,7 +274,7 @@ fn two_authors_typing_in_one_note_both_keep_their_words() {
             fill: None,
             correlate: 0,
         }));
-        b.apply_remote(&a.export_snapshot());
+        b.apply_remote(a.export_snapshot().as_bytes());
 
         race_two_bodies(&mut a, &mut b, &id, "buy milk and eggs", "please buy milk");
 
@@ -300,7 +300,7 @@ fn an_open_editor_keeps_a_peers_edit() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     let id = create_sticky(&mut a, Point::ZERO, "buy milk");
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let opened = body_of(&b, &id).expect("a body");
     let da = set_body(&mut a, &id, "buy milk", "please buy milk")
@@ -343,7 +343,7 @@ fn a_close_echo_paints_what_the_document_keeps() {
         base: String::new(),
         text: "cost".into(),
     });
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = set_body(&mut a, &id, "buy milk", "please buy milk")
         .update
@@ -413,7 +413,7 @@ fn a_pasted_note_and_arrow_keep_their_text() {
     );
 
     let mut peer = ToileState::new();
-    peer.apply_remote(&st.export_snapshot());
+    peer.apply_remote(st.export_snapshot().as_bytes());
     race_two_bodies(&mut st, &mut peer, &pasted, "draft one", "a draft");
     assert_eq!(body_of(&st, &pasted).as_deref(), Some("a draft one"));
     assert_eq!(body_of(&st, &pasted), body_of(&peer, &pasted));
@@ -609,7 +609,7 @@ fn concurrent_captions_converge() {
     let mut b = ToileState::new();
     let c = create_connector(&mut a);
     // B takes the board, and with it the caption container seeded at birth.
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     // Both start from "cost" and edit a different end of it, unaware of each
     // other: A prepends, B appends.
@@ -618,7 +618,7 @@ fn concurrent_captions_converge() {
         base: String::new(),
         text: "cost".into(),
     });
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::SetConnectorLabel {
@@ -661,7 +661,7 @@ fn an_open_caption_editor_keeps_a_peers_edit() {
         base: String::new(),
         text: "cost".into(),
     });
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     // B opens its editor on "cost". A's edit lands on B while it is open.
     let da = a
@@ -919,7 +919,7 @@ fn selection_data_names_the_ids_a_peer_deleted() {
     let mut b = ToileState::new();
     let kept = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let gone = create_rect(&mut a, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let delta = a
         .handle_command(ToileCommand::DeleteElements {
             ids: vec![gone.clone()],
@@ -1178,7 +1178,7 @@ fn concurrent_names_converge_on_one_whole_name() {
     let mut a = ToileState::new();
     let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     let mut b = ToileState::new();
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::RenameFrame {
@@ -1686,7 +1686,7 @@ fn an_import_is_not_broadcast_back() {
     let snapshot = author.export_snapshot();
 
     let mut reader = ToileState::new();
-    reader.apply_remote(&snapshot);
+    reader.apply_remote(snapshot.as_bytes());
     let out = reader.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at: Point::new(50.0, 0.0),
@@ -1710,7 +1710,7 @@ fn an_import_is_not_broadcast_back() {
 
     // The author, who holds everything the delta depends on, gets the new one.
     let mut third = ToileState::new();
-    third.apply_remote(&snapshot);
+    third.apply_remote(snapshot.as_bytes());
     third.apply_remote(&delta);
     assert_eq!(third.element_count(), 2);
 }
@@ -1728,7 +1728,7 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
 
     // A brand-new board: it commits its own scaffolding and never sends it.
     let mut reader = ToileState::new();
-    reader.apply_remote(&snapshot);
+    reader.apply_remote(snapshot.as_bytes());
     let out = reader.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at: Point::new(50.0, 0.0),
@@ -1826,7 +1826,7 @@ fn a_group_takes_no_box_from_a_resize_or_a_rotation() {
     b.set_user_id(UserId::new());
     let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let y = create_rect(&mut a, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     // A binds both while B deletes one: the merged group names a dead member.
     let out = a.handle_command(ToileCommand::GroupElements {
         ids: vec![x.clone(), y],
@@ -1847,7 +1847,7 @@ fn a_group_takes_no_box_from_a_resize_or_a_rotation() {
     });
     b.apply_remote(&rotated.update.expect("the rotation is a change"));
     let mut rebuilt = ToileState::new();
-    rebuilt.apply_remote(&a.export_snapshot());
+    rebuilt.apply_remote(a.export_snapshot().as_bytes());
     assert_eq!(a.bounds_of(&g), None, "a group took a leaf box");
     assert_eq!(a.debug_caches(), b.debug_caches());
     assert_eq!(a.debug_caches(), rebuilt.debug_caches());
@@ -1894,8 +1894,8 @@ fn an_element_bound_into_two_groups_names_one_on_both_peers() {
         ids: vec![x.clone(), z],
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
-    a.apply_remote(&sb);
-    b.apply_remote(&sa);
+    a.apply_remote(sb.as_bytes());
+    b.apply_remote(sa.as_bytes());
 
     let group_of = |st: &ToileState| {
         st.debug_viewport().nodes.iter().find_map(|n| match n {
@@ -2317,7 +2317,7 @@ fn selection_data_names_a_member_outside_its_frame() {
     );
 
     let mut peer = ToileState::new();
-    let remote = peer.apply_remote(&st.export_snapshot());
+    let remote = peer.apply_remote(st.export_snapshot().as_bytes());
     assert!(
         remote.iter().any(|e| matches!(e, ToileEvent::BoardChanged)),
         "a peer's delta announces no change"
@@ -2663,7 +2663,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     // A peer's first edit of the copy's notes converges rather than minting a
     // rival container, which is what a scalar field would have produced.
     let mut peer = ToileState::new();
-    peer.apply_remote(&st.export_snapshot());
+    peer.apply_remote(st.export_snapshot().as_bytes());
     let da = st
         .handle_command(ToileCommand::EditNotes {
             frame: pasted[0].clone(),
@@ -2721,7 +2721,7 @@ fn an_arrow_stranded_by_a_peer_is_announced() {
     let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let y = create_rect(&mut a, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
     let mut b = ToileState::new();
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     // Concurrent: B joins the two, A deletes one of them.
     let db = b
@@ -3019,7 +3019,7 @@ fn a_history_step_reaches_the_other_peer_as_a_delta() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     let id = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     assert_eq!(b.element_count(), 1);
 
     let undo = a.handle_command(ToileCommand::Undo);
@@ -3063,7 +3063,7 @@ fn an_undo_leaves_a_remote_move_alone() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     let shared = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let own = create_rect(&mut b, Point::new(50.0, 0.0), Size::new(10.0, 10.0));
     let moved = a.handle_command(ToileCommand::MoveElements {
         ids: vec![shared.clone()],
@@ -3636,7 +3636,7 @@ fn every_path_that_moves_the_deck_says_so() {
     let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     let mut peer = ToileState::new();
-    peer.apply_remote(&st.export_snapshot());
+    peer.apply_remote(st.export_snapshot().as_bytes());
 
     let write = st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone()],
@@ -3667,7 +3667,7 @@ fn playback_is_not_synced() {
         order: vec![f0, f1],
     });
     // Bring B fully up to date (frames + sequence) so it shares the deck.
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     assert_eq!(a.slide_order(), b.slide_order(), "the sequence is shared");
 
     // A enters present mode and steps forward; neither produces a delta to relay.
@@ -3716,7 +3716,7 @@ fn concurrent_first_decks_converge_on_one_list() {
     let f1 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     let f2 = create_frame(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     // B takes the board, frames and all, before either peer has a deck.
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     assert!(a.slide_order().is_empty() && b.slide_order().is_empty());
 
     // Each peer builds a deck, neither having seen the other's.
@@ -3816,7 +3816,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
         order: vec![frame.clone()],
     });
     let mut b = ToileState::new();
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     b.handle_command(ToileCommand::EnterPresent { focus: true });
 
     let delta = a
@@ -3848,7 +3848,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
     let _ = other;
     let delta = a.export_snapshot();
     assert!(
-        !b.apply_remote(&delta)
+        !b.apply_remote(delta.as_bytes())
             .iter()
             .any(|e| matches!(e, ToileEvent::NotesChanged { .. }))
     );
@@ -3897,7 +3897,7 @@ fn follower_adopts_presenter_slide() {
         .expect("broadcast frame");
 
     let mut rx = ToileState::new();
-    rx.apply_remote(&presenter.export_snapshot());
+    rx.apply_remote(presenter.export_snapshot().as_bytes());
     let alice = UserId::new();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
 
@@ -3929,7 +3929,7 @@ fn non_follower_ignores_broadcast() {
         .expect("broadcast frame");
 
     let mut rx = ToileState::new();
-    rx.apply_remote(&presenter.export_snapshot());
+    rx.apply_remote(presenter.export_snapshot().as_bytes());
     let events = rx.apply_ephemeral(UserId::new(), &frame);
     assert_eq!(rx.playback().1, 0, "a non-follower does not move");
     assert!(
@@ -3953,7 +3953,7 @@ fn following_other_peer_ignores_broadcast() {
         .expect("broadcast frame");
 
     let mut rx = ToileState::new();
-    rx.apply_remote(&presenter.export_snapshot());
+    rx.apply_remote(presenter.export_snapshot().as_bytes());
     let bob = UserId::new();
     rx.handle_command(ToileCommand::FollowPresenter(Some(bob)));
     let alice = UserId::new();
@@ -4057,7 +4057,7 @@ fn follow_state_is_not_synced() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     deck_of_three(&mut a);
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let alice = UserId::new();
     assert!(
@@ -4138,7 +4138,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
         delta: insert_notes(0, "Hello world"),
     });
     let mut b = ToileState::new();
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let peer = b
         .handle_command(ToileCommand::EditNotes {
             frame: f.clone(),
@@ -4265,7 +4265,7 @@ fn concurrent_notes_edits_converge() {
     let mut b = ToileState::new();
     let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     // Bring B up to date so both share the same frame + notes container.
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     assert_eq!(a.notes(&f), "");
     assert_eq!(b.notes(&f), "");
 
@@ -4402,7 +4402,7 @@ fn concurrent_auto_layout_edits_converge() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::SetAutoLayout {
@@ -4756,7 +4756,7 @@ fn concurrent_reactions_distinct_users_converge() {
 
     let mut b = ToileState::new();
     b.set_user_id(bob);
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::React {
@@ -4797,7 +4797,7 @@ fn same_user_two_devices_is_one_entry() {
 
     let mut b = ToileState::new();
     b.set_user_id(me);
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::React {
@@ -4836,7 +4836,7 @@ fn reacted_by(reactions: &[Reaction]) -> (ToileState, ElementId) {
     for reaction in reactions {
         let mut peer = ToileState::new();
         peer.set_user_id(UserId::new());
-        peer.apply_remote(&board.export_snapshot());
+        peer.apply_remote(board.export_snapshot().as_bytes());
         let delta = peer
             .handle_command(ToileCommand::React {
                 target: t.clone(),
@@ -5064,7 +5064,7 @@ fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let out_a = a.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e.clone()),
@@ -5107,7 +5107,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::ReplyComment {
@@ -5151,7 +5151,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
 
     let mut b = ToileState::new();
     b.set_user_id(me);
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::EditComment {
@@ -5198,7 +5198,7 @@ fn editing_another_authors_message_is_refused() {
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let out = b.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
@@ -5227,7 +5227,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
 
     let mut b = ToileState::new();
     b.set_user_id(UserId::new());
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let da = a
         .handle_command(ToileCommand::ResolveThread {
@@ -5521,7 +5521,7 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
         "seed",
         ambre_bus::Timestamp(0),
     );
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
 
     let ra = a.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
@@ -6041,8 +6041,8 @@ proptest! {
         for _ in 0..2 {
             let da = a.export_snapshot();
             let db = b.export_snapshot();
-            b.apply_remote(&da);
-            a.apply_remote(&db);
+            b.apply_remote(da.as_bytes());
+            a.apply_remote(db.as_bytes());
         }
 
         // Identical derived caches.
@@ -6119,7 +6119,7 @@ proptest! {
         let mut a = ToileState::new();
         a.set_user_id(UserId::new());
         let mut b = ToileState::new();
-        b.apply_remote(&a.export_snapshot());
+        b.apply_remote(a.export_snapshot().as_bytes());
         for op in &ops {
             if let Some(d) = apply_local(&mut a, op) {
                 b.apply_remote(&d);
@@ -6145,7 +6145,7 @@ proptest! {
             let _ = apply_local(&mut a, op);
         }
         let mut b = ToileState::new();
-        b.apply_remote(&a.export_snapshot());
+        b.apply_remote(a.export_snapshot().as_bytes());
 
         a.handle_command(ToileCommand::SetViewport(wide_viewport()));
         b.handle_command(ToileCommand::SetViewport(wide_viewport()));
@@ -6250,8 +6250,8 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
     // Full bidirectional exchange.
     let sa = a.export_snapshot();
     let sb = b.export_snapshot();
-    a.apply_remote(&sb);
-    b.apply_remote(&sa);
+    a.apply_remote(sb.as_bytes());
+    b.apply_remote(sa.as_bytes());
 
     let conv_a = a.style_of(&id);
     let conv_b = b.style_of(&id);
@@ -6376,14 +6376,14 @@ fn an_arrow_whose_end_a_peer_deleted_keeps_its_record() {
     let from = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let to = create_rect(&mut a, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
     let mut b = ToileState::with_peer(ambre_core::PeerId(2));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     let conn = connect(&mut a, from.clone(), to.clone());
     let joined = a.connector_of(&conn).expect("the arrow is stored");
     let gone = b.handle_command(ToileCommand::DeleteElements {
         ids: vec![to.clone()],
     });
     a.apply_remote(&gone.update.expect("a delete writes"));
-    b.apply_remote(&a.export_snapshot());
+    b.apply_remote(a.export_snapshot().as_bytes());
     for peer in [&a, &b] {
         assert_eq!(peer.connector_ids(), vec![conn.clone()], "not destroyed");
         assert_eq!(peer.connector_of(&conn).as_ref(), Some(&joined));

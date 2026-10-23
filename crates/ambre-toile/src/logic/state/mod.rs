@@ -760,8 +760,8 @@ impl ToileState {
     }
 
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.
-    pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export(ExportMode::Snapshot).unwrap_or_default()
+    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
+        ambre_core::SnapshotBytes::new(self.doc.export(ExportMode::Snapshot).unwrap_or_default())
     }
 
     /// Import a full CRDT snapshot (local restore, or a fixture loaded through
@@ -798,11 +798,14 @@ impl ToileState {
     /// On any of them the board keeps what it held (`SCHEMA-012`). The gate
     /// reads the payload in a scratch document precisely so a refusal costs the
     /// caller nothing.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<ToileEvent>, SchemaError> {
+    pub fn import_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Result<Vec<ToileEvent>, SchemaError> {
         // Before the caller touches a single container (`SCHEMA-006`). What
         // comes back is the payload itself at the current version, or a migrated
         // snapshot.
-        let payload = schema::gate(payload)?;
+        let payload = schema::gate(payload.as_bytes())?;
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
@@ -1368,7 +1371,9 @@ mod schema_tests {
 
         let mut st = board_with_one_rect();
         let before = st.export_snapshot();
-        let err = st.import_snapshot(&newer).expect_err("refused");
+        let err = st
+            .import_snapshot(&ambre_core::SnapshotBytes::new(newer.to_vec()))
+            .expect_err("refused");
 
         assert_eq!(
             err,

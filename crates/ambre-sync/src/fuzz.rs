@@ -39,7 +39,7 @@ pub fn open_relayed_update(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
 pub fn open_stored_snapshot(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let named: Snapshot = postcard::from_bytes(bytes).map_err(|_| PipelineError::Postcard)?;
     let snapshot = decode_snapshot_blob(bytes, named.public_data.document_id)?;
-    open_snapshot(&snapshot, &doc_key())
+    open_snapshot(&snapshot, &doc_key()).map(ambre_core::SnapshotBytes::into_bytes)
 }
 
 /// Opens an update whose sealed plaintext is `plaintext`, as a peer holding

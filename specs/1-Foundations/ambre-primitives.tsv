@@ -179,7 +179,6 @@ ambre-app | src/platform.rs | crate::platform | read_ambre_file(on_sealed) | par
 ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Option<(ambre_bus::ClipboardBlob,Option<String>)>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item(mime) | param | &str	debt	planned: lot B bis 10 MediaType
-ambre-app | src/platform.rs | crate::platform | read_container() | ret | Option<(DocumentId,ambre_bus::DocType,Vec<u8>)>	debt	planned: lot B bis 2: payload is AmbreHeader.payload, becomes SnapshotBytes
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | remember_dev_user(username) | param | &str	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | store_container(sealed) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
@@ -1992,8 +1991,6 @@ ambre-logic | src/channels.rs | crate::channels | LogicState::channel_open_faile
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_snapshot() | ret | Option<(Vec<u8>,Seq)>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
-ambre-logic | src/channels.rs | crate::channels | LogicState::check_channel_snapshot(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/channels.rs | crate::channels | LogicState::count_closed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::end_opening(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::holds_murmure() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2008,10 +2005,8 @@ ambre-logic | src/channels.rs | crate::channels | ReadCursor.active | field | bo
 ambre-logic | src/data.rs | crate::data | LogicState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/data.rs | crate::data | LogicState::apply_ephemeral(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::apply_remote(payload) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/data.rs | crate::data | LogicState::check_pending_snapshot(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(ephemeral) | param | Option<Vec<u8>>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(update) | param | Option<Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/data.rs | crate::data | LogicState::export_covered_snapshot() | ret | Option<(Vec<u8>,Seq)>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::merge_batch(payloads) | param | &[Vec<u8>]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2087,8 +2082,6 @@ ambre-logic | src/lib.rs | crate | DocState::apply_remote_batch(payloads) | para
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(filename) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/lib.rs | crate | DocState::export_snapshot() | ret | Vec<u8>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
-ambre-logic | src/lib.rs | crate | DocState::import_snapshot(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/lib.rs | crate | DocState::load_faces(faces) | param | &[Vec<u8>]	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-logic | src/lib.rs | crate | DocState::schema_version() | ret | u32	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -2184,7 +2177,6 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.container | 
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.deps | field | Vec<String>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | field | u32	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | SeqLedger::record(payload) | param | Option<&[u8]>	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/snapshot_check.rs | crate::snapshot_check | check_snapshot(snapshot) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::adopt_space_session() | ret | Option<Result<Option<Vec<u8>>,ambre_murmure::MurmureError>>	debt	planned: lot B bis 1 (DeltaBytes)
@@ -2205,7 +2197,6 @@ ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_open_failed(mess
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_snapshot() | ret | Option<(Vec<u8>,Seq)>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-logic | src/spaces.rs | crate::spaces | Opening.payloads | field | Vec<Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Cost.deltas | field | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Cost.snapshot | field | u64	debt	finding: the local store ledger's sizes and LRU tick are bare `u64` (extends lot B bis 3)
@@ -3756,10 +3747,8 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote(payload
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	planned: lot B1 DeltaBytes
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::export_snapshot() | ret | Vec<u8>	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::flush_delta() | ret | Option<Vec<u8>>	debt	planned: lot B1 DeltaBytes
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::import_snapshot(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::load_faces(faces) | param | &[Vec<u8>]	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
@@ -4570,10 +4559,8 @@ ambre-sync | src/documents.rs | crate::documents | open_name() | ret | Option<St
 ambre-sync | src/documents.rs | crate::documents | open_name(bytes) | param | &[u8]	debt	finding: sealed document name bytes
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
-ambre-sync | src/finalize.rs | crate::finalize | SyncState::handle_finalize_segment(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/finalize.rs | crate::finalize | commit_final() | ret | Result<(),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-sync | src/fold.rs | crate::fold | SyncState::handle_fold_segment(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/fold.rs | crate::fold | commit_fold() | ret | Result<(),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/fold.rs | crate::fold | take_fold_lease() | ret | Result<FoldAnswer,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
@@ -4648,7 +4635,6 @@ ambre-sync | src/http.rs | crate::http | put_sealed_via(url) | param | &str	debt
 ambre-sync | src/lib.rs | crate | APPLIED_WINDOW | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | HeldSnapshot.blob | field | Vec<u8>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | MAX_EPHEMERAL_REMOTE_AUTHORS | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | PendingCheck.payload | field | Option<Vec<u8>>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/lib.rs | crate | QUARANTINE_ALERT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | QUARANTINE_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncDocumentState.awaiting_initial_hydration | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4665,9 +4651,7 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter(co
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	generic	initial value of the server_created fact field
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_ephemeral_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_signed_snapshot() | ret | Result<(Vec<u8>,ambre_core::PublicKey),pipeline::PipelineError>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_signed_snapshot(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_snapshot_blob() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_snapshot_blob(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_update_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -4822,7 +4806,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | open_object(aad) | param | &[u8
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_snapshot() | ret | Result<Vec<u8>,PipelineError>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | open_update() | ret | Result<Vec<u8>,PipelineError>	generic	bytes of a codec or a transport
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_ephemeral(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
@@ -4830,9 +4813,7 @@ ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(aad) | param | &[u8
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_snapshot(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_update(payload) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/pipeline.rs | crate::pipeline | snapshot_blob(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/pipeline.rs | crate::pipeline | split_update_body(body) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/pipeline.rs | crate::pipeline | update_body() | ret | Result<Vec<u8>,PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/pipeline.rs | crate::pipeline | update_body(delta) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
@@ -4901,7 +4882,6 @@ ambre-sync | src/updates.rs | crate::updates | OpenedMembers.rotation_owed | fie
 ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/updates.rs | crate::updates | SyncState::adopt_fetched_snapshot(blob) | param | Option<Vec<u8>>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/updates.rs | crate::updates | SyncState::handle_send_snapshot(payload) | param | Vec<u8>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/updates.rs | crate::updates | SyncState::hold_refused(cause) | param | &str	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
@@ -4912,7 +4892,6 @@ ambre-sync | src/updates.rs | crate::updates | SyncState::seal_and_send(body) | 
 ambre-sync | src/updates.rs | crate::updates | SyncState::send_body(body) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/updates.rs | crate::updates | SyncState::send_update_body(delta) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-sync | src/updates.rs | crate::updates | SyncState::snapshot_upload() | ret | Result<SnapshotUpload,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/updates.rs | crate::updates | SyncState::snapshot_upload(payload) | param | &[u8]	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/updates.rs | crate::updates | SyncState::unwrap_anchored() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | SyncState::unwrap_document_key() | ret | Result<DocumentKey,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | Vouch::Report.0 | field | String	free-text	free text: message, label, name or report
@@ -5211,9 +5190,7 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_w
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_push_layer_raw(s) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_raw_layers() | ret | Vec<String>	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::element_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::export_snapshot() | ret | Vec<u8>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::flush_delta() | ret | Option<Vec<u8>>	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_snapshot(payload) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::schema_version() | ret | u32	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
@@ -6210,11 +6187,9 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_ephemeral(_payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_remote(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::export_snapshot() | ret | Vec<u8>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::flush_delta() | ret | Option<Vec<u8>>	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::import_and_reseed(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::import_and_reseed(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::import_snapshot(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)

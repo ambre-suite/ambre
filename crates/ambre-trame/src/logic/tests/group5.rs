@@ -146,7 +146,7 @@ fn shared_filter_applies_on_remote_import() {
     let snapshot = author.export_snapshot();
 
     let mut peer = TrameState::new();
-    peer.apply_remote(&snapshot);
+    peer.apply_remote(snapshot.as_bytes());
     assert!(is_filtered(&mut peer, 0, 0), "10 hidden on the peer");
     assert!(!is_filtered(&mut peer, 1, 0));
     // The stored condition survived: an edit on the peer recomputes it.
@@ -197,8 +197,8 @@ fn concurrent_filters_converge_lww() {
     // Exchange deltas (full snapshots merge fine).
     let a_snap = a.export_snapshot();
     let b_snap = b.export_snapshot();
-    a.apply_remote(&b_snap);
-    b.apply_remote(&a_snap);
+    a.apply_remote(b_snap.as_bytes());
+    b.apply_remote(a_snap.as_bytes());
 
     assert_eq!(
         a.hidden_rows, b.hidden_rows,
@@ -241,8 +241,8 @@ fn concurrent_filters_elect_a_whole_definition() {
 
     let a_snap = a.export_snapshot();
     let b_snap = b.export_snapshot();
-    a.apply_remote(&b_snap);
-    b.apply_remote(&a_snap);
+    a.apply_remote(b_snap.as_bytes());
+    b.apply_remote(a_snap.as_bytes());
 
     let (_, a_kind) = a.load_active_filter().expect("a keeps a filter");
     let (_, b_kind) = b.load_active_filter().expect("b keeps a filter");

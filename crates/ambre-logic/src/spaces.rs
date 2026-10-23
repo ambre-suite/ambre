@@ -232,7 +232,10 @@ impl LogicState {
 
     /// The snapshot of a space document, for the relay's compaction, with the
     /// relay's number of the last delta it folds in (`SRV-083`).
-    pub(crate) fn space_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, Seq)> {
+    pub(crate) fn space_snapshot(
+        &self,
+        document_id: DocumentId,
+    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
         let space = self.spaces.get(&SpaceId::from_document(document_id))?;
         let payload = space
             .state
@@ -243,7 +246,7 @@ impl LogicState {
             .channel_ledgers
             .get(&document_id)
             .map_or(Seq::ZERO, crate::snapshot_check::SeqLedger::contiguous_end);
-        Some((payload, covered))
+        Some((ambre_core::SnapshotBytes::new(payload), covered))
     }
 
     /// Hand the view the name, the categories and the catalogue of a space.

@@ -1408,7 +1408,7 @@ impl SyncState {
     pub(crate) fn handle_send_snapshot(
         &mut self,
         document_id: DocumentId,
-        payload: Vec<u8>,
+        payload: ambre_core::SnapshotBytes,
         covered_seq: Seq,
     ) {
         let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
@@ -1451,7 +1451,7 @@ impl SyncState {
     pub(crate) fn snapshot_upload(
         &self,
         document_id: DocumentId,
-        payload: &[u8],
+        payload: &ambre_core::SnapshotBytes,
         covered_seq: Seq,
     ) -> Result<SnapshotUpload, String> {
         let signing_key = self.signing_key.as_ref().ok_or("session keys not ready")?;
@@ -1949,8 +1949,13 @@ mod tests {
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot =
-            pipeline::seal_snapshot(payload, public_data, doc_key, signing_key).expect("seal");
+        let snapshot = pipeline::seal_snapshot(
+            &ambre_core::SnapshotBytes::new(payload.to_vec()),
+            public_data,
+            doc_key,
+            signing_key,
+        )
+        .expect("seal");
         postcard::to_allocvec(&snapshot).expect("encode")
     }
 
@@ -2856,7 +2861,7 @@ mod tests {
         // Session keys are required to reach the seal step.
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
 
-        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec(), Seq(0));
+        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec().into(), Seq(0));
 
         // No event_tx in this setup: the upload path is skipped, the current
         // snapshot id is unchanged (no SnapshotUploaded round-trip).
@@ -3056,7 +3061,13 @@ mod tests {
                 document_id: doc,
                 author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
                 covered_seq: ambre_bus::Seq(3),
-                blob: pipeline::snapshot_blob(b"base", public_data, &key, &sk).unwrap(),
+                blob: pipeline::snapshot_blob(
+                    &ambre_core::SnapshotBytes::new(b"base".to_vec()),
+                    public_data,
+                    &key,
+                    &sk,
+                )
+                .unwrap(),
             }
         };
         let link = serde_json::json!({ "upload_url": "https://store.test/o?sig=x", "s3_key": "k" });
@@ -3348,7 +3359,7 @@ mod tests {
                 segment,
                 ambre_bus::LeaseId::new(),
                 ambre_bus::Seq(3),
-                b"s",
+                &ambre_core::SnapshotBytes::new(b"s".to_vec()),
             );
         };
         let withdrawn = |events: &[LogicEvent]| -> Vec<bool> {

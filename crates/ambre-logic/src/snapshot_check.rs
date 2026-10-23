@@ -116,7 +116,7 @@ impl SeqLedger {
 pub(crate) fn check_snapshot(
     own: &LoroDoc,
     ledger: &SeqLedger,
-    snapshot: &[u8],
+    snapshot: &ambre_core::SnapshotBytes,
     covered: Seq,
     purpose: Purpose,
 ) -> Outcome {
@@ -127,7 +127,7 @@ pub(crate) fn check_snapshot(
         return Outcome::Unchecked;
     }
     let theirs = LoroDoc::new();
-    if theirs.import(snapshot).is_err() {
+    if theirs.import(snapshot.as_bytes()).is_err() {
         return Outcome::Mismatch;
     }
     let their_vv = theirs.oplog_vv();
@@ -355,7 +355,13 @@ mod tests {
         let covered = ledger.contiguous_end();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
         assert_eq!(
-            check_snapshot(&bob, &ledger, &snapshot, covered, Purpose::Confirm),
+            check_snapshot(
+                &bob,
+                &ledger,
+                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                covered,
+                Purpose::Confirm
+            ),
             Outcome::Match { extras: vec![] }
         );
     }
@@ -377,7 +383,13 @@ mod tests {
         let snapshot = forged.export(ExportMode::Snapshot).expect("snapshot");
         let covered = ledger.contiguous_end();
         assert_eq!(
-            check_snapshot(&bob, &ledger, &snapshot, covered, Purpose::Confirm),
+            check_snapshot(
+                &bob,
+                &ledger,
+                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                covered,
+                Purpose::Confirm
+            ),
             Outcome::Mismatch
         );
     }
@@ -393,7 +405,13 @@ mod tests {
         let seq = ledger.contiguous_end().after();
         ledger.record(seq, Some(&delta(&bob, &from)));
         assert_eq!(
-            check_snapshot(&bob, &ledger, &early, seq, Purpose::Confirm),
+            check_snapshot(
+                &bob,
+                &ledger,
+                &ambre_core::SnapshotBytes::new(early.to_vec()),
+                seq,
+                Purpose::Confirm
+            ),
             Outcome::Mismatch
         );
     }
@@ -404,7 +422,13 @@ mod tests {
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
         let past = ledger.contiguous_end().after().after();
         assert_eq!(
-            check_snapshot(&bob, &ledger, &snapshot, past, Purpose::Confirm),
+            check_snapshot(
+                &bob,
+                &ledger,
+                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                past,
+                Purpose::Confirm
+            ),
             Outcome::Unchecked
         );
     }
@@ -425,7 +449,13 @@ mod tests {
         alice.commit();
         let snapshot = alice.export(ExportMode::Snapshot).expect("snapshot");
         assert_eq!(
-            check_snapshot(&bob, &ledger, &snapshot, covered, Purpose::Confirm),
+            check_snapshot(
+                &bob,
+                &ledger,
+                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                covered,
+                Purpose::Confirm
+            ),
             Outcome::Match {
                 extras: vec![(ambre_core::PeerId(1), vec![7_u8; 4])]
             }
@@ -442,7 +472,7 @@ mod tests {
         let _ = check_snapshot(
             &bob,
             &ledger,
-            &snapshot,
+            &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
             ambre_core::Seq(1),
             Purpose::Confirm,
         );

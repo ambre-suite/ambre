@@ -335,7 +335,7 @@ impl LogicState {
                     document_id,
                     snapshot_id,
                     covered_seq,
-                    payload.as_bytes(),
+                    &payload,
                     purpose,
                 );
             }
@@ -1753,7 +1753,7 @@ mod tests {
         };
         assert_eq!(document_id, doc_id);
         let mut reopened = ToileState::new();
-        let _ = reopened.import_snapshot(payload.as_bytes());
+        let _ = reopened.import_snapshot(&payload);
         assert_eq!(reopened.element_count(), 1);
     }
 

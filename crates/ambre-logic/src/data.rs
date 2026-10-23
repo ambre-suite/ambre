@@ -510,7 +510,7 @@ impl LogicState {
         // (`SCHEMA-012`) and reaches the user as the owning app's own refusal
         // event. A restore that silently does nothing is indistinguishable from
         // a document that never existed.
-        let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(s.as_bytes())) {
+        let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
             Some(Ok(events)) => events,
             Some(Err(e)) => {
                 tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
@@ -996,7 +996,7 @@ impl LogicState {
     pub(crate) fn export_covered_snapshot(
         &self,
         document_id: DocumentId,
-    ) -> Option<(Vec<u8>, Seq)> {
+    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
         let doc = self.docs.get(&document_id)?;
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
@@ -1048,7 +1048,7 @@ impl LogicState {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
         covered: Seq,
-        payload: &[u8],
+        payload: &ambre_core::SnapshotBytes,
         purpose: SnapshotPurpose,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {

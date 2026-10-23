@@ -345,7 +345,7 @@ mod tests {
         let before = state.export_snapshot();
 
         let err = state
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)))
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)).into())
             .expect_err("a newer document is refused");
 
         assert_eq!(

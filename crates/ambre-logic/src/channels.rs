@@ -953,7 +953,10 @@ impl LogicState {
 
     /// The snapshot of a channel document, for the relay's compaction, with
     /// the last delta it folds in (`SRV-083`).
-    pub(crate) fn channel_snapshot(&self, document_id: DocumentId) -> Option<(Vec<u8>, Seq)> {
+    pub(crate) fn channel_snapshot(
+        &self,
+        document_id: DocumentId,
+    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
         let channel = self.channels.values().find(|c| c.holds(document_id))?;
         let payload = channel
             .snapshot(document_id)
@@ -963,7 +966,7 @@ impl LogicState {
             .channel_ledgers
             .get(&document_id)
             .map_or(Seq::ZERO, snapshot_check::SeqLedger::contiguous_end);
-        Some((payload, covered))
+        Some((ambre_core::SnapshotBytes::new(payload), covered))
     }
 
     /// Check a snapshot of a channel document against the state this client
@@ -974,7 +977,7 @@ impl LogicState {
         document_id: DocumentId,
         snapshot_id: ambre_bus::SnapshotId,
         covered: Seq,
-        payload: &[u8],
+        payload: &ambre_core::SnapshotBytes,
         purpose: ambre_bus::SnapshotPurpose,
     ) {
         let Some(channel) = self.channels.values().find(|c| c.holds(document_id)) else {
@@ -988,7 +991,7 @@ impl LogicState {
             SnapshotVerdict::Unchecked
         } else {
             channel
-                .check_snapshot(document_id, covered, payload)
+                .check_snapshot(document_id, covered, payload.as_bytes())
                 .unwrap_or_else(|e| {
                     tracing::warn!("Logic: check of {document_id} failed: {e}");
                     SnapshotVerdict::Unchecked
@@ -5413,7 +5416,13 @@ mod tests {
         let document_id = segment.document_id();
         let (payload, covered) = state.channel_snapshot(document_id).expect("held");
         assert!(matches!(
-            channel_verdict(&mut state, &sync, document_id, covered, payload.clone()),
+            channel_verdict(
+                &mut state,
+                &sync,
+                document_id,
+                covered,
+                payload.clone().into_bytes()
+            ),
             SnapshotVerdict::Match { .. }
         ));
         assert_eq!(
@@ -5422,7 +5431,13 @@ mod tests {
         );
         state.record_channel_seq(document_id, ambre_core::Seq(2), None);
         assert_eq!(
-            channel_verdict(&mut state, &sync, document_id, ambre_core::Seq(2), payload),
+            channel_verdict(
+                &mut state,
+                &sync,
+                document_id,
+                ambre_core::Seq(2),
+                payload.into_bytes()
+            ),
             SnapshotVerdict::Unchecked,
             "the delta numbered 1 is missing"
         );

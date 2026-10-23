@@ -45,7 +45,7 @@ fn corpus(name: &str) -> DocState {
 }
 
 /// The `.ambre` payload of a corpus, for the import benches.
-fn payload(name: &str) -> Vec<u8> {
+fn payload(name: &str) -> ambre_core::SnapshotBytes {
     corpus(name).export_snapshot()
 }
 

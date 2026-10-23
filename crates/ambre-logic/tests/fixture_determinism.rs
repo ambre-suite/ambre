@@ -255,8 +255,8 @@ fn a_two_peer_merge_is_deterministic() {
             text: "from bob".to_owned(),
         });
         // Both directions, so the merged history carries both peers' ops.
-        alice.apply_remote(&bob.export_snapshot());
-        bob.apply_remote(&alice.export_snapshot());
+        alice.apply_remote(bob.export_snapshot().as_bytes());
+        bob.apply_remote(alice.export_snapshot().as_bytes());
         (
             alice
                 .export_ambre_plaintext(doc_id())

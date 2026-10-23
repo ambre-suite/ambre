@@ -168,7 +168,10 @@ impl DocState {
     /// the state is untouched (`SCHEMA-012`). That is why this is a `Result` and
     /// not an event. A caller that ignored it would carry on with a document it
     /// never loaded.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<AppEvent>, SchemaError> {
+    pub fn import_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Result<Vec<AppEvent>, SchemaError> {
         match self {
             DocState::Trame(state) => Ok(state
                 .import_snapshot(payload)?
@@ -339,7 +342,7 @@ impl DocState {
     /// `LogicState::export_covered_snapshot` cannot serve that belt: it takes a
     /// `DocumentId` and needs a live registry entry, where the belt quantifies
     /// over a bare `DocState`.
-    pub fn export_snapshot(&self) -> Vec<u8> {
+    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
         match self {
             DocState::Trame(state) => state.export_snapshot(),
             DocState::Toile(state) => state.export_snapshot(),
@@ -979,7 +982,7 @@ impl LogicState {
         if compact {
             doc.logged = Some(0);
             let snapshot = doc.state.export_snapshot();
-            self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
+            self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot.into_bytes()));
         } else {
             doc.logged = logged;
             for delta in owed.deltas {
@@ -1665,7 +1668,7 @@ mod authorship_tests {
     /// One delta carrying the operations of every delta in `deltas`.
     fn merged(deltas: &[Vec<u8>]) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.import(&TrameState::new().export_snapshot())
+        doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
         let base = doc.oplog_vv();
         for delta in deltas {
@@ -1688,8 +1691,13 @@ mod authorship_tests {
     /// Every operation the document holds, read back from its snapshot.
     fn held(rig: &Rig) -> VersionVector {
         let doc = LoroDoc::new();
-        doc.import(&rig.state.docs[&rig.document_id].state.export_snapshot())
-            .expect("the document's own snapshot");
+        doc.import(
+            rig.state.docs[&rig.document_id]
+                .state
+                .export_snapshot()
+                .as_bytes(),
+        )
+        .expect("the document's own snapshot");
         doc.oplog_vv()
     }
 
@@ -1816,8 +1824,13 @@ mod authorship_tests {
         }
         let read = |rig: &Rig| {
             let doc = LoroDoc::new();
-            doc.import(&rig.state.docs[&rig.document_id].state.export_snapshot())
-                .expect("the document's own snapshot");
+            doc.import(
+                rig.state.docs[&rig.document_id]
+                    .state
+                    .export_snapshot()
+                    .as_bytes(),
+            )
+            .expect("the document's own snapshot");
             (doc.oplog_vv(), doc.get_deep_value())
         };
         let [left, right] = tabs.each_ref().map(read);
@@ -1842,7 +1855,7 @@ mod authorship_tests {
         assert_eq!(authors(&first), vec![rig.peer]);
         let reader = LoroDoc::new();
         reader
-            .import(&TrameState::new().export_snapshot())
+            .import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
         reader.import(&hers).expect("Alice's delta");
         let registry = |doc: &LoroDoc| match doc
@@ -1876,7 +1889,7 @@ mod authorship_tests {
     /// A workbook snapshot holding the scaffolding and `deltas`.
     fn snapshot_of(deltas: &[Vec<u8>]) -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.import(&TrameState::new().export_snapshot())
+        doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
         for delta in deltas {
             doc.import(delta).expect("a delta");
@@ -2103,7 +2116,7 @@ mod authorship_tests {
         let doc = LoroDoc::new();
         doc.set_peer_id(ALICE.0).expect("a PeerID");
         let page = DocState::new(DocType::Prose).expect("a page");
-        doc.import(&page.export_snapshot())
+        doc.import(page.export_snapshot().as_bytes())
             .expect("the scaffolding");
         let tree = doc.get_tree("blocks");
         for root in tree.roots() {

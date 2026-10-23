@@ -909,8 +909,8 @@ impl ProseState {
     ///
     /// It reads through `&self` and advances no cursor (`PROSE-054`).
     #[must_use]
-    pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export(ExportMode::Snapshot).unwrap_or_default()
+    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
+        ambre_core::SnapshotBytes::new(self.doc.export(ExportMode::Snapshot).unwrap_or_default())
     }
 
     /// The CRDT document, read-only. A snapshot check compares its history
@@ -930,8 +930,11 @@ impl ProseState {
     /// # Errors
     /// Every failure of the schema gate: a document a newer client wrote, a
     /// migration the registry cannot run, or bytes the CRDT engine refuses.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<ProseEvent>, SchemaError> {
-        let payload = schema::gate(payload)?;
+    pub fn import_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Result<Vec<ProseEvent>, SchemaError> {
+        let payload = schema::gate(payload.as_bytes())?;
         // A snapshot replaces the document whole (`PROSE-055`), so this peer's
         // own scaffolding must not survive it. The paragraph it grew on opening
         // is dropped when it is still empty and still the only root: what
@@ -1466,7 +1469,7 @@ mod tests {
         let mut reader = ProseState::new().expect("a document is built");
         let grown = reader.root_blocks()[0];
         reader
-            .import_snapshot(&snapshot)
+            .import_snapshot(&ambre_core::SnapshotBytes::new(snapshot.to_vec()))
             .expect("the snapshot imports");
         assert!(!reader.root_blocks().contains(&grown));
         assert_eq!(reader.root_blocks().len(), 1);
@@ -1528,7 +1531,7 @@ mod tests {
             text: "mine".to_owned(),
         });
         reader
-            .import_snapshot(&snapshot)
+            .import_snapshot(&ambre_core::SnapshotBytes::new(snapshot.to_vec()))
             .expect("the snapshot imports");
         assert!(reader.root_blocks().contains(&mine));
         assert_eq!(reader.text_of(&mine).as_deref(), Some("mine"));
@@ -1844,7 +1847,11 @@ mod tests {
             .expect("a newer register");
         doc.commit();
         let newer = doc.export(ExportMode::Snapshot).expect("snapshot");
-        assert!(state.import_snapshot(&newer).is_err());
+        assert!(
+            state
+                .import_snapshot(&ambre_core::SnapshotBytes::new(newer.to_vec()))
+                .is_err()
+        );
         assert_eq!(state.text_of(&block).as_deref(), Some("mine"));
     }
 
