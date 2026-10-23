@@ -32,7 +32,7 @@ pub mod hit;
 pub use hit::HitTest;
 
 pub mod peer;
-pub use peer::{peer_color, peer_css};
+pub use peer::{peer_color, peer_rgb};
 
 pub mod text;
 pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};

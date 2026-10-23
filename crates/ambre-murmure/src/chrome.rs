@@ -304,7 +304,7 @@ fn member_view(
         Presence::Online => ("online", "Online"),
         Presence::Offline => ("offline", "Offline"),
     };
-    let color = ambre_draw::peer_css(&member.user_id);
+    let color = ambre_draw::peer_rgb(&member.user_id);
     let name = member.display_name.into_string();
     let who = view! {
         <ambre_chrome::Avatar name=name.clone() color=color />

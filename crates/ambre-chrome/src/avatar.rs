@@ -5,6 +5,7 @@
 //! The colour comes from the caller, derived from the user's identifier by the
 //! shared presence helper. This crate takes no dependency on the draw layer.
 
+use ambre_core::Rgb;
 use leptos::prelude::*;
 
 /// Up to two uppercase initials of a display name. Two words give the first
@@ -36,16 +37,16 @@ pub fn Avatar(
     /// The display name the initials come from.
     #[prop(into)]
     name: Signal<String>,
-    /// The CSS colour of the user's identity.
+    /// The colour of the user's identity.
     #[prop(into)]
-    color: Signal<String>,
+    color: Signal<Rgb>,
 ) -> impl IntoView {
     view! {
         <span
             class="ambre-avatar"
             aria-hidden="true"
             title=move || name.get()
-            style:background=move || color.get()
+            style:background=move || color.get().to_string()
         >
             {move || avatar_initials(&name.get())}
         </span>

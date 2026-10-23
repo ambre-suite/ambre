@@ -1903,7 +1903,7 @@
   {"edge": "cites-section", "from": "PROFILE-002", "section": "3", "to": "1-Foundations/ambre-spec-profile.md"},
   {"edge": "cites-rule", "from": "PROFILE-002", "to": "PRESENCE-006"},
   {"edge": "verified-by", "from": "PROFILE-002", "to": "ambre_chrome::avatar::tests::initials_come_from_the_first_two_words_or_letters"},
-  {"edge": "verified-by", "from": "PROFILE-002", "to": "ambre_draw::peer::tests::the_css_colour_is_the_canvas_colour_in_hex"},
+  {"edge": "verified-by", "from": "PROFILE-002", "to": "ambre_draw::peer::tests::the_dom_colour_is_the_canvas_colour"},
   {"edge": "verified-by", "from": "PROFILE-002", "to": "ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence"},
   {"edge": "cites-section", "from": "PROFILE-003", "section": "3", "to": "1-Foundations/ambre-spec-profile.md"},
   {"edge": "lands-with", "from": "PROFILE-003", "to": "Avatars"},

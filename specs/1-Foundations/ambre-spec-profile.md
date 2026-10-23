@@ -19,7 +19,7 @@ to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROFILE-001` | `INV` | A user MUST have one avatar, the same in every application and every space. | this spec section 3 | not built | unbuilt -- lands with the `Avatars` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | `ambre_chrome::avatar::tests::initials_come_from_the_first_two_words_or_letters` -- two words, one word and a blank name; `ambre_draw::peer::tests::the_css_colour_is_the_canvas_colour_in_hex` -- the avatar takes the cursor colour; `ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence` -- browser tier, the computed background of a member's avatar is their identity colour | none | verified |
+| `PROFILE-002` | `OBS` | A user with no picture MUST show as their initials on their identity colour. | this spec section 3; `PRESENCE-006` | `ambre_chrome::avatar::tests::initials_come_from_the_first_two_words_or_letters` -- two words, one word and a blank name; `ambre_draw::peer::tests::the_dom_colour_is_the_canvas_colour` -- the avatar takes the cursor colour; `ambre_app::shell::murmure_regions::the_member_list_shows_each_member_by_name_initials_and_presence` -- browser tier, the computed background of a member's avatar is their identity colour | none | verified |
 
 ### 1.2 Set a picture
 

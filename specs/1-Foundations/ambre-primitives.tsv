@@ -1280,7 +1280,6 @@ ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param |
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-chrome | src/app_shell.rs | crate::app_shell | Sidebar.label | field | String	free-text	text, label or user content
-ambre-chrome | src/avatar.rs | crate::avatar | Avatar(color) | param | Signal<String>	debt	finding: `Avatar(color: Signal<String>)`, a CSS colour
 ambre-chrome | src/avatar.rs | crate::avatar | Avatar(name) | param | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
@@ -1913,7 +1912,6 @@ ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb() | ret | (u8,u8,u8)	math	ge
 ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(h) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(l) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(s) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/peer.rs | crate::peer | peer_css() | ret | String	generic	generic parser/reader/formatter over text
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
