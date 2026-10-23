@@ -270,7 +270,7 @@ impl TrameState {
             .get_map(SheetContainer::of(SheetRoot::Filters, &self.active_sheet).as_str());
         clear_loro_map(&filters);
         let record = FilterRecord {
-            col: col_uid.to_key_part(),
+            col: col_uid,
             kind: kind.clone(),
         };
         let bytes = postcard::to_allocvec(&record).unwrap_or_default();
@@ -307,8 +307,7 @@ impl TrameState {
             self.note_undecodable(bytes);
             return None;
         };
-        let col_uid = Uid::parse(&record.col)?;
-        Some((col_uid, record.kind))
+        Some((record.col, record.kind))
     }
 
     /// Rebuild [`Self::hidden_rows`] (grid positions) from the active sheet's

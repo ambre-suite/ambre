@@ -4766,7 +4766,6 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | MAX_DECIMALS | cons
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(decimals) | param | Option<u8>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	generic	wire form: the postcard record field holding the column uid key part; the reader parses it with Uid::parse
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it

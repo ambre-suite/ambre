@@ -53,6 +53,23 @@ impl Uid {
     }
 }
 
+/// A uid serialises as its key part, the string the document stores. A record
+/// that carries one thus keeps the bytes of the string it held before.
+/// The read goes through [`Uid::parse`], and a malformed key part refuses the
+/// whole record.
+impl serde::Serialize for Uid {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_key_part())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Uid {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let part = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Uid::parse(&part).ok_or_else(|| serde::de::Error::custom("not a uid key part"))
+    }
+}
+
 /// The key a cell is stored under in the per-sheet cell, style and merge
 /// maps: the 51-char fixed-length `"{row_uid}:{col_uid}"`, per `trame-schema`.
 /// The one place the pair is joined.

@@ -200,10 +200,15 @@ pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u
 /// Column and kind travel together, so two concurrent filters race exactly once.
 /// The winner is one writer's whole definition, never a blend of one peer's
 /// column and the other's operator (`TRAME-FEAT-025`).
+///
+/// The column is a [`Uid`] in every record a build writes or reads. The type
+/// parameter exists for the frozen layout alone. Its canonical value names the
+/// column `"c"`, a string no uid spells. A uid serialises as a string, so the
+/// layout is the same (`schema_shape::postcard_layouts`).
 #[derive(Serialize, Deserialize)]
-pub(crate) struct FilterRecord {
-    /// The filtered column's stable id, rendered as its 25-char key part.
-    pub col: String,
+pub(crate) struct FilterRecord<C = Uid> {
+    /// The filtered column's stable id, stored as its 25-char key part.
+    pub col: C,
     pub kind: FilterKind,
 }
 
@@ -511,10 +516,7 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), FilterFoldErro
         }
         _ => return Err(FilterFoldError::NoKind),
     };
-    let record = FilterRecord {
-        col: col_uid.to_key_part(),
-        kind,
-    };
+    let record = FilterRecord { col: col_uid, kind };
     let bytes = postcard::to_allocvec(&record).map_err(FilterFoldError::Encode)?;
     // Replace the flat keys with the one register.
     let mut old_keys: Vec<&String> = deep.keys().collect();
@@ -600,6 +602,33 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
 mod tests {
     use super::*;
     use crate::TrameState;
+
+    /// A filter record holds its column as a [`Uid`], and keeps the bytes it
+    /// had when the column was the key part string. A column that is no key
+    /// part refuses the whole record, which the reader reports undecodable.
+    #[test]
+    fn a_filter_column_is_a_uid_stored_as_its_key_part() {
+        let uid = Uid {
+            peer: ambre_core::PeerId(1),
+            counter: 1,
+        };
+        let kind = FilterKind::Values(vec!["v".to_owned()]);
+        let typed = postcard::to_allocvec(&FilterRecord {
+            col: uid,
+            kind: kind.clone(),
+        })
+        .expect("encodes");
+        let text = postcard::to_allocvec(&FilterRecord {
+            col: uid.to_key_part(),
+            kind: kind.clone(),
+        })
+        .expect("encodes");
+        assert_eq!(typed, text, "the bytes are the key part's");
+        let back: FilterRecord = postcard::from_bytes(&typed).expect("decodes");
+        assert_eq!(back.col, uid);
+        let stray = postcard::to_allocvec(&FilterRecord { col: "c", kind }).expect("encodes");
+        assert!(postcard::from_bytes::<FilterRecord>(&stray).is_err());
+    }
 
     /// A snapshot of a workbook carrying `version` in its register. A `None`
     /// version writes no register at all, which is every workbook written
@@ -859,7 +888,7 @@ mod tests {
             panic!("the register is binary");
         };
         let record: FilterRecord = postcard::from_bytes(bytes).expect("decodes");
-        assert_eq!(record.col, "0000000000000001_00000000");
+        assert_eq!(record.col.to_key_part(), "0000000000000001_00000000");
         assert!(
             matches!(record.kind, FilterKind::Condition { op: FilterOp::Gt, value } if value == "1"),
             "the whole condition survived the fold"

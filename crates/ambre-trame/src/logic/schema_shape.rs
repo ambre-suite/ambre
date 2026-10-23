@@ -231,15 +231,17 @@ fn postcard_layouts() -> Vec<(String, String)> {
             },
         },
     };
-    let condition = FilterRecord {
-        col: "c".to_owned(),
+    // The column is the string a uid serialises as. `"c"` is the value the
+    // published sections froze, and no uid spells it.
+    let condition = FilterRecord::<&str> {
+        col: "c",
         kind: FilterKind::Condition {
             op: FilterOp::Ne,
             value: "v".to_owned(),
         },
     };
-    let values = FilterRecord {
-        col: "c".to_owned(),
+    let values = FilterRecord::<&str> {
+        col: "c",
         kind: FilterKind::Values(vec!["v".to_owned()]),
     };
     vec![
