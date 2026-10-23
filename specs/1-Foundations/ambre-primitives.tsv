@@ -2759,7 +2759,7 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | at_least_floor_of
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build(family) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build(width_px) | param | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/measure.rs | crate::layout::measure | marked_text() | ret | (String,Vec<MarkedSpan>)	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
+ambre-prose | src/layout/measure.rs | crate::layout::measure | marked_text() | ret | (String,Vec<MarkedSpan>)	free-text	the block's user text, read whole for layout; the spans beside it are typed ByteOffset, so no bare offset is left
 ambre-prose | src/layout/measure.rs | crate::layout::measure | reshape_paragraph((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | reshape_paragraph(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | reshape_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
@@ -2974,7 +2974,7 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | declarations(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through DocPx
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | hidden() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | hidden(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	predicate result
@@ -3032,7 +3032,7 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refre
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::reply_to_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::set_resolved(resolved) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchors() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
+ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	free-text	the user text of a reply; the error is a WriteError and the stamp a Timestamp, so the finding no longer holds
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
@@ -3099,7 +3099,7 @@ ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block(text) 
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::is_live() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::enable_track_changes(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::is_suggesting() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
+ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	free-text	the user text a suggested insertion types; its position is a DocOffset and its length a DocCount
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::session_runs() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | holds_text() | ret | bool	generic	independent flag or predicate
