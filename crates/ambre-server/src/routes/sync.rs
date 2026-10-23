@@ -107,7 +107,11 @@ pub async fn confirm_snapshot(
         return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
     };
     for key in &fold.dropped_keys {
-        let deleted = state.s3.delete_object().bucket(&state.s3_bucket).key(key);
+        let deleted = state
+            .s3
+            .delete_object()
+            .bucket(state.s3_bucket.as_str())
+            .key(key);
         if let Err(e) = deleted.send().await {
             tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
         }
@@ -167,7 +171,7 @@ pub async fn report_snapshot(
         if let Err(e) = state
             .s3
             .delete_object()
-            .bucket(&state.s3_bucket)
+            .bucket(state.s3_bucket.as_str())
             .key(&key)
             .send()
             .await

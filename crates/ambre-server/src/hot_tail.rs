@@ -55,7 +55,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
 /// The object a batch of deltas is stored under, named by its first and last
 /// numbers. It sits under the document's prefix, so a delete sweeps it.
 pub fn batch_key(
-    env_prefix: &str,
+    env_prefix: &crate::s3::EnvPrefix,
     document_id: &ambre_core::DocumentId,
     first: ambre_core::Seq,
     last: ambre_core::Seq,
@@ -109,7 +109,7 @@ pub async fn move_to_batch(
     state
         .s3
         .put_object()
-        .bucket(&state.s3_bucket)
+        .bucket(state.s3_bucket.as_str())
         .key(&key)
         .body(body.into_body())
         .send()
@@ -157,7 +157,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
         if let Err(e) = state
             .s3
             .delete_object()
-            .bucket(&state.s3_bucket)
+            .bucket(state.s3_bucket.as_str())
             .key(key)
             .send()
             .await

@@ -20,7 +20,7 @@ pub struct AppState {
     /// the only model that supports several connections on the same topic.
     pub pubsub: crate::ws::PubSubHub,
     pub s3: S3Client,
-    pub s3_bucket: String,
+    pub s3_bucket: crate::s3::BucketName,
     pub config: Arc<Config>,
     /// Server Ed25519 keys for minting/verifying access JWTs. Derived once at
     /// startup from `JWT_SIGNING_SEED` (shared across instances).
@@ -64,7 +64,7 @@ pub struct Config {
     /// path.
     pub delta_max_bytes: ambre_core::ByteSize,
     /// Prefix for S3 object keys (for example "dev-ambre").
-    pub s3_env_prefix: String,
+    pub s3_env_prefix: crate::s3::EnvPrefix,
     /// Google OIDC client ID.
     #[allow(dead_code)]
     pub oidc_google_client_id: String,
@@ -134,7 +134,7 @@ impl Default for Config {
             media_max_bytes: ambre_core::ByteSize(100 * 1024 * 1024),
             snapshot_max_bytes: ambre_core::ByteSize(50 * 1024 * 1024),
             delta_max_bytes: ambre_core::ByteSize(4 * 1024 * 1024),
-            s3_env_prefix: "dev-ambre".into(),
+            s3_env_prefix: crate::s3::EnvPrefix::new("dev-ambre".to_owned()),
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: crate::oidc::OidcSecret::default(),
             oidc_google_redirect_uri: String::new(),

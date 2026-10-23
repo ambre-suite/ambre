@@ -53,9 +53,49 @@ use tracing;
 use crate::error::AppError;
 use crate::payload::Payload;
 
+/// Defines a text the object store names a place with. Each is its own type,
+/// so a bucket never takes the place of a key prefix in one signature.
+macro_rules! store_text {
+    ($($(#[$meta:meta])* $name:ident;)*) => {$(
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct $name(String);
+
+        impl $name {
+            /// Wraps the text.
+            pub fn new(text: String) -> Self {
+                Self(text)
+            }
+
+            /// The text, as the object store's client takes it.
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+    )*};
+}
+
+store_text! {
+    /// The prefix every object key of one deployment starts with, read from
+    /// `S3_ENV_PREFIX` (for example `dev-ambre`). Two deployments can share
+    /// one bucket without sharing a key.
+    EnvPrefix;
+    /// The bucket the relay keeps every object in, read from `S3_BUCKET`.
+    BucketName;
+    /// A key prefix inside the bucket: every key under it starts with it.
+    /// [`format_s3_document_prefix`] builds the one prefix a delete sweeps.
+    S3Prefix;
+}
+
 /// S3 object key for a snapshot blob.
 pub fn format_s3_snapshot_key(
-    env_prefix: &str,
+    env_prefix: &EnvPrefix,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
 ) -> ambre_core::ObjectKey {
@@ -66,7 +106,7 @@ pub fn format_s3_snapshot_key(
 
 /// S3 object key for a delta blob (zero-padded seq).
 pub fn format_s3_delta_key(
-    env_prefix: &str,
+    env_prefix: &EnvPrefix,
     document_id: &ambre_core::DocumentId,
     seq: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
@@ -101,7 +141,7 @@ pub fn is_valid_content_hash(content_hash: &ambre_core::ContentHash) -> bool {
 /// (cross-document IDOR). We require the exact per-document snapshot prefix and a
 /// single, slash-free object id (which also rejects `../` traversal).
 pub fn is_valid_snapshot_key(
-    env_prefix: &str,
+    env_prefix: &EnvPrefix,
     document_id: &ambre_core::DocumentId,
     s3_key: &ambre_core::ObjectKey,
 ) -> bool {
@@ -114,7 +154,7 @@ pub fn is_valid_snapshot_key(
 
 /// S3 object key for an encrypted media blob (content-addressed by hash).
 pub fn format_s3_media_key(
-    env_prefix: &str,
+    env_prefix: &EnvPrefix,
     document_id: &ambre_core::DocumentId,
     content_hash: &ambre_core::ContentHash,
 ) -> ambre_core::ObjectKey {
@@ -144,7 +184,7 @@ fn presign_lifetime(ttl: ambre_core::Seconds) -> Duration {
 /// through an otherwise key-only presigned URL.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
-    bucket: &str,
+    bucket: &BucketName,
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
     content_length: ambre_core::ByteSize,
@@ -153,7 +193,7 @@ pub async fn generate_presigned_upload_url(
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.put_object()
-        .bucket(bucket)
+        .bucket(bucket.as_str())
         .key(key.as_str())
         .content_length(i64::try_from(content_length.0).unwrap_or(i64::MAX))
         .presigned(config)
@@ -165,7 +205,7 @@ pub async fn generate_presigned_upload_url(
 /// Generates a presigned S3 GET URL valid for `ttl`.
 pub async fn generate_presigned_download_url(
     s3: &S3Client,
-    bucket: &str,
+    bucket: &BucketName,
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
 ) -> Result<ambre_core::PresignedUrl, AppError> {
@@ -173,7 +213,7 @@ pub async fn generate_presigned_download_url(
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.get_object()
-        .bucket(bucket)
+        .bucket(bucket.as_str())
         .key(key.as_str())
         .presigned(config)
         .await
@@ -183,22 +223,29 @@ pub async fn generate_presigned_download_url(
 
 /// The prefix every object of one document lives under: its snapshots, its
 /// deltas and its media.
-pub fn format_s3_document_prefix(env_prefix: &str, document_id: &ambre_core::DocumentId) -> String {
-    format!("{env_prefix}/documents/{document_id}/")
+pub fn format_s3_document_prefix(
+    env_prefix: &EnvPrefix,
+    document_id: &ambre_core::DocumentId,
+) -> S3Prefix {
+    S3Prefix::new(format!("{env_prefix}/documents/{document_id}/"))
 }
 
 /// Deletes every object under `prefix`, a page of at most a thousand keys at a
 /// time. Returns how many it deleted. An object that fails to delete fails the
 /// call, so the caller can refuse to forget the document (`SRV-057`).
-pub async fn delete_prefix(s3: &S3Client, bucket: &str, prefix: &str) -> Result<usize, AppError> {
+pub async fn delete_prefix(
+    s3: &S3Client,
+    bucket: &BucketName,
+    prefix: &S3Prefix,
+) -> Result<usize, AppError> {
     use aws_sdk_s3::types::{Delete, ObjectIdentifier};
     let mut deleted = 0;
     let mut token: Option<String> = None;
     loop {
         let page = s3
             .list_objects_v2()
-            .bucket(bucket)
-            .prefix(prefix)
+            .bucket(bucket.as_str())
+            .prefix(prefix.as_str())
             .set_continuation_token(token.take())
             .send()
             .await
@@ -219,7 +266,7 @@ pub async fn delete_prefix(s3: &S3Client, bucket: &str, prefix: &str) -> Result<
                 .map_err(|e| AppError::S3(format!("delete request: {e}")))?;
             let out = s3
                 .delete_objects()
-                .bucket(bucket)
+                .bucket(bucket.as_str())
                 .delete(delete)
                 .send()
                 .await
@@ -247,12 +294,12 @@ pub async fn delete_prefix(s3: &S3Client, bucket: &str, prefix: &str) -> Result<
 /// the pending list, rather than treating it as a hard error.
 pub async fn fetch_object(
     s3: &S3Client,
-    bucket: &str,
+    bucket: &BucketName,
     key: &ambre_core::ObjectKey,
 ) -> Result<Option<Payload>, AppError> {
     match s3
         .get_object()
-        .bucket(bucket)
+        .bucket(bucket.as_str())
         .key(key.as_str())
         .send()
         .await
@@ -481,7 +528,7 @@ impl DrainSink for S3Sink<'_> {
         self.state
             .s3
             .put_object()
-            .bucket(&self.state.s3_bucket)
+            .bucket(self.state.s3_bucket.as_str())
             .key(s3_key)
             .body(wire.into_body())
             .send()
@@ -546,6 +593,11 @@ async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl Dra
 mod tests {
     use super::*;
     use ambre_core::{DocumentId, SnapshotId};
+
+    /// The deployment prefix `text`.
+    fn env(text: &str) -> EnvPrefix {
+        EnvPrefix::new(text.to_owned())
+    }
 
     /// A pending entry as `append_pending_delta` stores it.
     fn entry(s3_key: &ambre_core::ObjectKey, seq: u64) -> String {
@@ -619,7 +671,7 @@ mod tests {
     fn snapshot_key_format() {
         let doc_id = DocumentId::from_bytes([0u8; 16]);
         let snap_id = SnapshotId::from_bytes([1u8; 16]);
-        let key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
+        let key = format_s3_snapshot_key(&env("dev"), &doc_id, &snap_id);
         assert!(key.as_str().starts_with("dev/documents/"));
         assert!(key.as_str().contains("/snapshots/"));
         assert_eq!(
@@ -632,8 +684,8 @@ mod tests {
     fn snapshot_key_differs_per_env() {
         let doc_id = DocumentId::from_bytes([0u8; 16]);
         let snap_id = SnapshotId::from_bytes([1u8; 16]);
-        let dev_key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
-        let prod_key = format_s3_snapshot_key("prod", &doc_id, &snap_id);
+        let dev_key = format_s3_snapshot_key(&env("dev"), &doc_id, &snap_id);
+        let prod_key = format_s3_snapshot_key(&env("prod"), &doc_id, &snap_id);
         assert_ne!(dev_key, prod_key);
         assert!(prod_key.as_str().starts_with("prod/"));
     }
@@ -641,21 +693,21 @@ mod tests {
     #[test]
     fn delta_key_zero_pads_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(42));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(42));
         assert!(key.as_str().ends_with("deltas/0000000042"));
     }
 
     #[test]
     fn delta_key_pads_small_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(7));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(7));
         assert!(key.as_str().ends_with("deltas/0000000007"));
     }
 
     #[test]
     fn delta_key_handles_large_seq() {
         let doc_id = DocumentId::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key("dev", &doc_id, ambre_core::Seq(9999999999u64));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(9999999999u64));
         assert!(key.as_str().ends_with("deltas/9999999999"));
     }
 
@@ -663,7 +715,7 @@ mod tests {
     fn media_key_content_addressed() {
         let doc_id = DocumentId::from_bytes([3u8; 16]);
         let hash = "abc123def456";
-        let key = format_s3_media_key("dev", &doc_id, &ambre_core::ContentHash::from(hash));
+        let key = format_s3_media_key(&env("dev"), &doc_id, &ambre_core::ContentHash::from(hash));
         assert!(key.as_str().ends_with("media/abc123def456"));
         assert!(key.as_str().contains("/documents/"));
     }
@@ -672,29 +724,30 @@ mod tests {
     fn snapshot_key_validation_scopes_to_document() {
         let doc = DocumentId::from_bytes([9u8; 16]);
         let other = DocumentId::from_bytes([8u8; 16]);
-        let valid = format_s3_snapshot_key("dev", &doc, &SnapshotId::from_bytes([1u8; 16]));
-        assert!(is_valid_snapshot_key("dev", &doc, &valid));
+        let valid = format_s3_snapshot_key(&env("dev"), &doc, &SnapshotId::from_bytes([1u8; 16]));
+        assert!(is_valid_snapshot_key(&env("dev"), &doc, &valid));
 
         // Another document's snapshot prefix is rejected (cross-document IDOR).
-        let foreign = format_s3_snapshot_key("dev", &other, &SnapshotId::from_bytes([1u8; 16]));
-        assert!(!is_valid_snapshot_key("dev", &doc, &foreign));
+        let foreign =
+            format_s3_snapshot_key(&env("dev"), &other, &SnapshotId::from_bytes([1u8; 16]));
+        assert!(!is_valid_snapshot_key(&env("dev"), &doc, &foreign));
 
         // Wrong env prefix, path traversal, empty id, and nested paths are rejected.
-        assert!(!is_valid_snapshot_key("prod", &doc, &valid));
+        assert!(!is_valid_snapshot_key(&env("prod"), &doc, &valid));
         assert!(!is_valid_snapshot_key(
-            "dev",
+            &env("dev"),
             &doc,
             &ambre_core::ObjectKey(format!(
                 "dev/documents/{doc}/snapshots/../../{other}/snapshots/x"
             ))
         ));
         assert!(!is_valid_snapshot_key(
-            "dev",
+            &env("dev"),
             &doc,
             &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/"))
         ));
         assert!(!is_valid_snapshot_key(
-            "dev",
+            &env("dev"),
             &doc,
             &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/a/b"))
         ));
@@ -724,7 +777,7 @@ mod tests {
         let s3 = test_s3_client();
         let url = generate_presigned_upload_url(
             &s3,
-            "bucket",
+            &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
             ambre_core::Seconds(900),
             ambre_core::ByteSize(4096),
@@ -754,7 +807,7 @@ mod tests {
         let day = 24 * 3600;
         let up = generate_presigned_upload_url(
             &s3,
-            "bucket",
+            &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             ambre_core::Seconds(day),
             ambre_core::ByteSize(1),
@@ -765,7 +818,7 @@ mod tests {
         .to_owned();
         let down = generate_presigned_download_url(
             &s3,
-            "bucket",
+            &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             ambre_core::Seconds(day),
         )
@@ -778,7 +831,7 @@ mod tests {
         }
         let short = generate_presigned_download_url(
             &s3,
-            "bucket",
+            &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             ambre_core::Seconds(60),
         )

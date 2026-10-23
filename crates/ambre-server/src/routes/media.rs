@@ -195,7 +195,7 @@ pub async fn media_erase(
             state
                 .s3
                 .delete_object()
-                .bucket(&state.s3_bucket)
+                .bucket(state.s3_bucket.as_str())
                 .key(&s3_key)
                 .send()
                 .await

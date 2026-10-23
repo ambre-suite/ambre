@@ -3454,7 +3454,6 @@ ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-server | src/hot_tail.rs | crate::hot_tail | IDLE_PASS_LIMIT | const | i64	math	pass limit count
-ambre-server | src/hot_tail.rs | crate::hot_tail | batch_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Result<usize,AppError>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
@@ -3581,30 +3580,17 @@ ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret 
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | S3Sink.doc_prefix | field | Option<&'a str>	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
-ambre-server | src/s3.rs | crate::s3 | delete_prefix(bucket) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | delete_prefix(prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/s3.rs | crate::s3 | drain_front() | ret | isize	math	ltrim index, count of processed entries
 ambre-server | src/s3.rs | crate::s3 | drain_front(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/s3.rs | crate::s3 | fetch_object(bucket) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/s3.rs | crate::s3 | flush_cycle(reconcile) | param | bool	math	named state or style flag, local
 ambre-server | src/s3.rs | crate::s3 | flush_doc_pending(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | flush_doc_pending_locked(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/s3.rs | crate::s3 | format_s3_delta_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | format_s3_document_prefix() | ret | String	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | format_s3_document_prefix(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | format_s3_media_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | format_s3_snapshot_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | generate_presigned_download_url(bucket) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/s3.rs | crate::s3 | generate_presigned_upload_url(bucket) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
-ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key(env_prefix) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
-ambre-server | src/state.rs | crate::state | AppState.s3_bucket | field | String	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.base_url | field | String	free-text	config URL
 ambre-server | src/state.rs | crate::state | Config.oidc_google_client_id | field | String	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.oidc_google_redirect_uri | field | String	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/state.rs | crate::state | Config.s3_env_prefix | field | String	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.ws_msg_burst | field | u32	math	config burst
 ambre-server | src/state.rs | crate::state | Config.ws_msg_rate_per_sec | field | u32	math	config rate; the burst/rate order is right at ws/handler/mod.rs:202
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs

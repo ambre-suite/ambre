@@ -47,8 +47,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let s3_endpoint = std::env::var("S3_ENDPOINT")
         .ok()
         .or_else(|| std::env::var("AWS_ENDPOINT_URL").ok());
-    let s3_bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "ambre-dev".into());
-    let s3_env_prefix = std::env::var("S3_ENV_PREFIX").unwrap_or_else(|_| "dev-ambre".into());
+    let s3_bucket =
+        s3::BucketName::new(std::env::var("S3_BUCKET").unwrap_or_else(|_| "ambre-dev".into()));
+    let s3_env_prefix =
+        s3::EnvPrefix::new(std::env::var("S3_ENV_PREFIX").unwrap_or_else(|_| "dev-ambre".into()));
     let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".into());
 
     let db = sqlx::postgres::PgPoolOptions::new()
@@ -360,7 +362,7 @@ async fn compact_once(state: &state::AppState) {
                 if let Err(e) = state
                     .s3
                     .delete_object()
-                    .bucket(&state.s3_bucket)
+                    .bucket(state.s3_bucket.as_str())
                     .key(&snap.s3_key)
                     .send()
                     .await
