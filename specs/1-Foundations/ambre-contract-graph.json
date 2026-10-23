@@ -264,7 +264,7 @@
   {"edge": "verified-by", "from": "CHROME-085", "to": "ambre_chrome::context_menu::tests::no_overflow_keeps_click_point"},
   {"edge": "cites-section", "from": "CHROME-005", "section": "2", "to": "1-Foundations/ambre-spec-chrome.md"},
   {"edge": "cites-document", "from": "CHROME-005", "to": "ambre-spec-commands.md"},
-  {"edge": "verified-by", "from": "CHROME-005", "to": "ambre_chrome::command::tests::named_keys_map"},
+  {"edge": "verified-by", "from": "CHROME-005", "to": "ambre_commands::keybinding::tests::named_keys_map"},
   {"edge": "verified-by", "from": "CHROME-005", "to": "::function_keys_in_range"},
   {"edge": "verified-by", "from": "CHROME-005", "to": "::single_printable_char_maps"},
   {"edge": "verified-by", "from": "CHROME-005", "to": "::function_keys_out_of_range_rejected"},

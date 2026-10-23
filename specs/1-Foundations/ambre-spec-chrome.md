@@ -44,7 +44,7 @@ the DOM side produces.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`; `::function_keys_in_range`; `::single_printable_char_maps` -- what resolves; `::function_keys_out_of_range_rejected`; `::unmodelled_keys_rejected` -- the refusal, which is the half that keeps an unknown key from binding a command by accident | none | verified |
+| `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_commands::keybinding::tests::named_keys_map`; `::function_keys_in_range`; `::single_printable_char_maps` -- what resolves; `::function_keys_out_of_range_rejected`; `::unmodelled_keys_rejected` -- the refusal, which is the half that keeps an unknown key from binding a command by accident | none | verified |
 
 ### 1.4 A control renders, and reports a click
 

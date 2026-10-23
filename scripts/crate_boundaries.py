@@ -299,7 +299,7 @@ INVITE_OWNER = "crates/ambre-app/src/tofu.rs"
 TWO_STATE_OMITTED = re.compile(r"aria-(?:pressed|expanded|checked|selected)\s*=[^\n]*\bthen_some\b")
 PANEL_MODAL = re.compile(r'role\s*=\s*"(?:alert)?dialog"|\baria-modal\b')
 MENU_ROLE = re.compile(r'role\s*=\s*"menu"')
-MENU_KEYS = re.compile(r"\bon_menu_keydown\b|\bmenu_key\b")
+MENU_KEYS = re.compile(r"\bon_menu_keydown\b|\b(?:event_)?menu_key\b")
 # The content's keyboard pipe, the order it must sit in, and what would take
 # it out of the order or out of the accessibility tree.
 PIPE = "crates/ambre-canvas/src/text_input.rs"
@@ -1245,7 +1245,7 @@ def check_accessibility(errors: list[str]) -> int:
                 errors.append(f"{rel}:{number}: a panel claiming a modal role: `{found.group(0)}`")
         menus = [number for number, line in lines if MENU_ROLE.search(line)]
         if menus and not any(MENU_KEYS.search(line) for _, line in lines):
-            errors.append(f"{rel}:{menus[0]}: a menu with no keyboard: it names neither `on_menu_keydown` nor `menu_key`")
+            errors.append(f"{rel}:{menus[0]}: a menu with no keyboard: it names none of `on_menu_keydown`, `menu_key` and `event_menu_key`")
     pipe = ROOT / PIPE
     if not pipe.exists():
         errors.append(f"{PIPE}: gone from the tree, so the pipe's order and visibility are unread")
