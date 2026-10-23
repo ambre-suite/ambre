@@ -436,7 +436,7 @@ fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported)
 pub(crate) struct InviteParams {
     pub id: RequestId,
     pub document_id: DocumentId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     /// The email phase 1 searched, or `None` for a member known by id.
     pub invitee_email: Option<ambre_core::Email>,
@@ -636,7 +636,7 @@ pub(crate) enum InviteeName {
 pub(crate) struct FetchInviteeKeyParams {
     pub id: RequestId,
     pub document_id: DocumentId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub invitee_email: ambre_core::Email,
 }
@@ -698,7 +698,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
 pub(crate) struct FetchMemberKeyParams {
     pub id: RequestId,
     pub user_id: UserId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
 }
 
@@ -746,7 +746,7 @@ pub(crate) struct RevokeParams {
     pub id: RequestId,
     pub document_id: DocumentId,
     pub user_id: UserId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The key the revoke replaces, sealed under the new one (`SYNC-116`).
@@ -883,7 +883,7 @@ pub(crate) struct LeaveParams {
     pub document_id: DocumentId,
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
@@ -925,7 +925,7 @@ async fn leave_document<H: ShareHttp>(
     http: &H,
     document_id: DocumentId,
     author: &Author,
-    url_scheme: &str,
+    url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
     exchange_key: &StaticSecret,
 ) -> Result<(), String> {
@@ -973,7 +973,7 @@ pub(crate) struct ChannelLeaveParams {
     pub channel_id: ChannelId,
     /// This user, who signs their own revoke on the channel's `meta`.
     pub author: Author,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
@@ -1014,7 +1014,7 @@ pub(crate) struct SegmentCloseParams {
     pub meta_key: DocumentKey,
     /// This user, who creates the successor.
     pub author: Author,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
@@ -1072,7 +1072,7 @@ pub(crate) struct AmendmentsParams {
     pub meta_key: DocumentKey,
     /// This user, who creates the document.
     pub author: Author,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
@@ -1128,7 +1128,7 @@ pub(crate) struct ThreadParams {
     pub meta_key: DocumentKey,
     /// This user, who creates the document.
     pub author: Author,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
 }
@@ -1175,7 +1175,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
 /// Inputs for [`settle_task`].
 pub(crate) struct SettleParams {
     pub document_id: DocumentId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The key the rotation replaces, sealed under the new one (`SYNC-116`).
@@ -1191,7 +1191,7 @@ pub(crate) struct RoleChangeParams {
     /// The member whose role changes.
     pub user_id: UserId,
     pub role: Role,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// The owner who signs the change's entry.
@@ -1365,7 +1365,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
 pub(crate) struct RotateChannelParams {
     pub space_id: ambre_bus::SpaceId,
     pub channel_id: ChannelId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
     /// Signs the link the rotation leaves.
@@ -1455,7 +1455,7 @@ pub(crate) struct ListMembersParams {
     /// directory held changes nothing (`SYNC-037`).
     pub asked: u64,
     pub document_id: DocumentId,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
     pub exchange_key: StaticSecret,
@@ -1798,7 +1798,7 @@ mod tests {
         InviteParams {
             id: RequestId::next(),
             document_id: DocumentId::new(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: Some("invitee@test.local".into()),
             invitee: UserId::parse_str(INVITEE).expect("an id"),
@@ -2043,7 +2043,7 @@ mod tests {
         FetchInviteeKeyParams {
             id: RequestId::next(),
             document_id: DocumentId::new(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: "invitee@test.local".into(),
         }
@@ -2085,7 +2085,7 @@ mod tests {
         FetchMemberKeyParams {
             id: RequestId::next(),
             user_id,
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
         }
     }
@@ -2165,7 +2165,7 @@ mod tests {
             id: RequestId::next(),
             document_id: DocumentId::new(),
             user_id: UserId::new(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
@@ -2261,7 +2261,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 "https://api.test/revoke",
-                409,
+                ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
@@ -2313,7 +2313,7 @@ mod tests {
             script.push(Err(http::HttpError::refused(
                 http::Method::Post,
                 "https://api.test/revoke",
-                409,
+                ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )));
         }
@@ -2350,7 +2350,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 "https://api.test/rotate-key",
-                409,
+                ambre_core::HttpStatus(409),
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
@@ -2402,7 +2402,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 "https://api.test/share",
-                409,
+                ambre_core::HttpStatus(409),
                 Some(RefusalCode::KeyChanged),
             )),
         ]);
@@ -2445,7 +2445,7 @@ mod tests {
         let params = ChannelLeaveParams {
             channel_id,
             author: same(&bob.author),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
@@ -2476,7 +2476,7 @@ mod tests {
         let params = || ChannelLeaveParams {
             channel_id: ChannelId::new(),
             author: author(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
@@ -2509,7 +2509,7 @@ mod tests {
             successor,
             meta_key: DocumentKey::generate(),
             author: author(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
@@ -2588,7 +2588,7 @@ mod tests {
             amendments,
             meta_key: DocumentKey::generate(),
             author: author(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
@@ -2658,7 +2658,7 @@ mod tests {
             thread,
             meta_key: DocumentKey::generate(),
             author: author(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         }
@@ -2756,7 +2756,7 @@ mod tests {
             id: RequestId::next(),
             document_id: DocumentId::new(),
             author,
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk,
         };
@@ -2779,7 +2779,7 @@ mod tests {
     fn settle_params(my_xk: &StaticSecret) -> SettleParams {
         SettleParams {
             document_id: DocumentId::new(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
@@ -2845,7 +2845,7 @@ mod tests {
         let changed = http::HttpError::refused(
             http::Method::Post,
             "x",
-            409,
+            ambre_core::HttpStatus(409),
             Some(RefusalCode::MembersChanged),
         );
         let http = FakeHttp::new(vec![
@@ -2861,7 +2861,7 @@ mod tests {
         let params = RotateChannelParams {
             space_id,
             channel_id,
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
@@ -2909,7 +2909,7 @@ mod tests {
         let params = RotateChannelParams {
             space_id,
             channel_id,
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk,
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
@@ -3033,7 +3033,7 @@ mod tests {
             id: Some(RequestId::next()),
             asked: 1,
             document_id: DocumentId::new(),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
             rule: LogRule::document(),
@@ -3377,7 +3377,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 "https://api.test/share",
-                409,
+                ambre_core::HttpStatus(409),
                 Some(RefusalCode::LogMoved),
             )),
             Ok(logged.answer()),
@@ -3449,7 +3449,7 @@ mod tests {
             id: RequestId::next(),
             document_id: logged.document_id,
             author: same(&bob.author),
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: bob.xk.clone(),
         };
@@ -3487,7 +3487,7 @@ mod tests {
             document_id: logged.document_id,
             user_id: bob.author.user_id,
             role: Role::Viewer,
-            url_scheme: "https",
+            url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: owner.xk.clone(),
             author: same(&owner.author),

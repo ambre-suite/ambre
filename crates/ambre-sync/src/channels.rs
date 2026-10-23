@@ -893,7 +893,7 @@ fn listed_keys(
 async fn open_channel_names(
     answer: &http::MemberChannelsResponse,
     exchange_key: &StaticSecret,
-    url_scheme: &str,
+    url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
     auth: &http::AuthContext,
 ) -> Vec<ChannelName> {
@@ -1526,8 +1526,12 @@ pub(crate) mod tests {
             (403, None),
             (500, None),
         ] {
-            let error =
-                crate::http::HttpError::refused(crate::http::Method::Get, url, status, code);
+            let error = crate::http::HttpError::refused(
+                crate::http::Method::Get,
+                url,
+                ambre_core::HttpStatus(status),
+                code,
+            );
             state.channel_listed(channel_id, None, Err(error));
         }
         let events: Vec<LogicEvent> = rx.try_iter().collect();
@@ -1762,7 +1766,7 @@ pub(crate) mod tests {
         let names = open_channel_names(
             &answer,
             &own,
-            "http",
+            crate::http::UrlScheme::Http,
             &crate::http::RelayHost::new(String::new()),
             &auth,
         )

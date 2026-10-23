@@ -155,7 +155,7 @@ mod tests {
     /// The root the calls under test reach, under [`BASE`].
     fn root() -> crate::http::ApiRoot {
         crate::http::ApiRoot::of(
-            "https",
+            crate::http::UrlScheme::Https,
             &crate::http::RelayHost::new("relay.test".to_owned()),
         )
     }

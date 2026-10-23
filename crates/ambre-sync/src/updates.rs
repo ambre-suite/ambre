@@ -1700,7 +1700,7 @@ mod tests {
     /// The root a relay call under test reaches: `https://relay.test/api`.
     fn root() -> crate::http::ApiRoot {
         crate::http::ApiRoot::of(
-            "https",
+            crate::http::UrlScheme::Https,
             &crate::http::RelayHost::new("relay.test".to_owned()),
         )
     }

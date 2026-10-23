@@ -273,7 +273,8 @@ pub(crate) trait MediaHttp {
     async fn fetch_bytes(&self, url: &ambre_core::PresignedUrl)
     -> Result<Vec<u8>, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
-    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError>;
+    async fn delete(&self, url: &http::RelayUrl)
+    -> Result<ambre_core::HttpStatus, http::HttpError>;
 }
 
 impl MediaHttp for GlooHttp {
@@ -297,7 +298,10 @@ impl MediaHttp for GlooHttp {
     ) -> Result<Vec<u8>, http::HttpError> {
         http::fetch_bytes(url).await
     }
-    async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError> {
+    async fn delete(
+        &self,
+        url: &http::RelayUrl,
+    ) -> Result<ambre_core::HttpStatus, http::HttpError> {
         http::delete_status_auth(url, self.auth.clone()).await
     }
 }
@@ -407,7 +411,9 @@ async fn erase_media(
         .delete(&base.join(format!("/media/{content_hash}")))
         .await
     {
-        Ok(status) if (200..300).contains(&status) || status == 403 || status == 404 => {
+        Ok(status)
+            if status.is_success() || matches!(status, ambre_core::HttpStatus(403 | 404)) =>
+        {
             let _ = tx.send(SyncEvent::MediaErased {
                 id,
                 document_id,
@@ -416,10 +422,7 @@ async fn erase_media(
         }
         Ok(status) => {
             let refused = http::Failed {
-                failure: ApiFailure::Relay {
-                    status: ambre_core::HttpStatus(status),
-                    code: None,
-                },
+                failure: ApiFailure::Relay { status, code: None },
                 message: format!("erase: {status}"),
             };
             report(logic_tx, id, ApiRequest::EraseMedia, refused);
@@ -574,7 +577,7 @@ mod tests {
         fail: &'static str,
         served: Vec<u8>,
         /// The status a `DELETE` answers, when it is not the failing step.
-        erase_status: u16,
+        erase_status: ambre_core::HttpStatus,
         steps: std::cell::RefCell<Vec<&'static str>>,
     }
 
@@ -583,7 +586,7 @@ mod tests {
             Self {
                 fail,
                 served,
-                erase_status: 200,
+                erase_status: ambre_core::HttpStatus(200),
                 steps: Default::default(),
             }
         }
@@ -599,7 +602,7 @@ mod tests {
     /// The relay base every media test addresses.
     fn base() -> crate::http::RelayUrl {
         crate::http::ApiRoot::of(
-            "https",
+            crate::http::UrlScheme::Https,
             &crate::http::RelayHost::new("relay.test".to_owned()),
         )
         .route("/documents/d")
@@ -636,7 +639,10 @@ mod tests {
             self.step("fetch")?;
             Ok(self.served.clone())
         }
-        async fn delete(&self, url: &crate::http::RelayUrl) -> Result<u16, http::HttpError> {
+        async fn delete(
+            &self,
+            url: &crate::http::RelayUrl,
+        ) -> Result<ambre_core::HttpStatus, http::HttpError> {
             assert!(url.as_str().ends_with("/media/hash"), "{url}");
             self.step("delete")?;
             Ok(self.erase_status)
@@ -660,7 +666,7 @@ mod tests {
             ("delete", 200, false),
         ] {
             let mut http = FakeMedia::new(fail, Vec::new());
-            http.erase_status = status;
+            http.erase_status = ambre_core::HttpStatus(status);
             let id = RequestId::next();
             erase_media(&http, &base(), id, document_id, "hash".into(), &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);

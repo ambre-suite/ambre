@@ -359,7 +359,7 @@ impl ListedName<'_> {
     pub(crate) async fn open(
         &self,
         exchange_key: &x25519_dalek::StaticSecret,
-        url_scheme: &str,
+        url_scheme: crate::http::UrlScheme,
         api_base: &crate::http::RelayHost,
         auth: &http::AuthContext,
     ) -> Option<String> {

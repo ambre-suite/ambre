@@ -34,8 +34,15 @@ pub(crate) struct ReplayStops {
 /// socket's first frame, so no log line, proxy record or URL holds it
 /// (`SYNC-061`, `ambre-spec-session.md`, `SRV-031`).
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-pub(crate) fn socket_address(scheme: &str, api_base: &crate::http::RelayHost) -> String {
-    format!("{scheme}://{api_base}/api/ws")
+pub(crate) fn socket_address(
+    scheme: crate::http::UrlScheme,
+    api_base: &crate::http::RelayHost,
+) -> String {
+    let socket = match scheme {
+        crate::http::UrlScheme::Http => "ws",
+        crate::http::UrlScheme::Https => "wss",
+    };
+    format!("{socket}://{api_base}/api/ws")
 }
 
 impl SyncState {
@@ -64,19 +71,14 @@ impl SyncState {
         if self.update_owed || self.inbound_held {
             return;
         }
-        // Mirror the REST scheme: `ws` on localhost (http), `wss` otherwise.
-        // A hardcoded `wss://` fails on a localhost http dev server (TLS error,
+        // The socket mirrors the REST scheme (`socket_address`). A
+        // hardcoded `wss://` fails on a localhost http dev server (TLS error,
         // WS close code 1015).
-        let ws_scheme = if self.url_scheme == "http" {
-            "ws"
-        } else {
-            "wss"
-        };
         if self.tokens.borrow().is_none() {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
         }
-        let url = socket_address(ws_scheme, &self.api_base);
+        let url = socket_address(self.url_scheme, &self.api_base);
         match WebSocket::new(&url) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -1939,7 +1941,7 @@ mod tests {
     fn the_socket_address_carries_no_token() {
         assert_eq!(
             socket_address(
-                "wss",
+                crate::http::UrlScheme::Https,
                 &crate::http::RelayHost::new("relay.example".to_owned())
             ),
             "wss://relay.example/api/ws"

@@ -1025,9 +1025,9 @@ pub struct SyncState {
     /// Base URL for REST API calls (for example `"api.ambre.app"`).
     #[allow(dead_code)]
     api_base: crate::http::RelayHost,
-    /// URL scheme: `"http"` on localhost, `"https"` otherwise.
+    /// URL scheme: `Http` on localhost, `Https` otherwise.
     #[allow(dead_code)]
-    url_scheme: &'static str,
+    url_scheme: crate::http::UrlScheme,
     /// Access + refresh tokens returned by login/setup and rotated by HTTP 401
     /// retry helpers. Kept in worker memory only.
     tokens: http::TokenStore,
@@ -1160,7 +1160,7 @@ impl SyncState {
     #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
     pub fn new(logic_tx: LogicSink, api_base: String) -> Self {
         let api_base = crate::http::RelayHost::new(api_base);
-        let url_scheme = if api_base.is_local() { "http" } else { "https" };
+        let url_scheme = crate::http::UrlScheme::of(&api_base);
         Self {
             logic_tx,
             api_base,
@@ -1787,7 +1787,7 @@ mod setup_tests {
         let refused = http::HttpError::refused(
             http::Method::Get,
             url,
-            403,
+            ambre_core::HttpStatus(403),
             Some(ambre_core::RefusalCode::SetupRequired),
         );
         let _ = sink.send(LogicEvent::ApiError {
@@ -1803,7 +1803,8 @@ mod setup_tests {
             failure: ApiFailure::NoAnswer,
             message: format!("{refused}"),
         });
-        let bare = http::HttpError::refused(http::Method::Get, url, 403, None);
+        let bare =
+            http::HttpError::refused(http::Method::Get, url, ambre_core::HttpStatus(403), None);
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
             request: ApiRequest::ListDocuments,

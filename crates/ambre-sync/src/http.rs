@@ -66,6 +66,35 @@ impl std::fmt::Display for RelayHost {
     }
 }
 
+/// The scheme of every relay address: plain HTTP for a relay on this
+/// machine, TLS for any other. The socket follows the same choice, so a
+/// local dev relay never sees a TLS handshake it cannot answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UrlScheme {
+    Http,
+    Https,
+}
+
+impl UrlScheme {
+    /// The scheme `host` speaks: `Http` on this machine, `Https` elsewhere.
+    pub(crate) fn of(host: &RelayHost) -> Self {
+        if host.is_local() {
+            Self::Http
+        } else {
+            Self::Https
+        }
+    }
+}
+
+impl std::fmt::Display for UrlScheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Http => "http",
+            Self::Https => "https",
+        })
+    }
+}
+
 /// The root of the relay's REST routes, `{scheme}://{host}/api`. Built in
 /// one place, so no route adds or forgets the `/api` itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,7 +102,7 @@ pub(crate) struct ApiRoot(String);
 
 impl ApiRoot {
     /// The root of `host`'s routes under `scheme`.
-    pub(crate) fn of(scheme: &str, host: &RelayHost) -> Self {
+    pub(crate) fn of(scheme: UrlScheme, host: &RelayHost) -> Self {
         Self(format!("{scheme}://{host}/api"))
     }
 
@@ -118,7 +147,7 @@ impl std::fmt::Display for RelayUrl {
 #[derive(Clone)]
 pub(crate) struct AuthContext {
     pub api_base: crate::http::RelayHost,
-    pub url_scheme: &'static str,
+    pub url_scheme: crate::http::UrlScheme,
     pub tokens: TokenStore,
 }
 
@@ -192,7 +221,7 @@ impl AuthContext {
             Ok::<_, HttpError>((request, resp))
         };
         let (mut request, mut resp) = send().await?;
-        if resp.status == 401 {
+        if resp.status == HttpStatus(401) {
             self.refresh_via(transport).await?;
             (request, resp) = send().await?;
         }
@@ -238,6 +267,16 @@ impl Method {
     }
 }
 
+/// The content type of a request body. The client sends JSON to the relay
+/// and opaque sealed bytes to object storage, and nothing else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContentType {
+    /// `application/json`.
+    Json,
+    /// `application/octet-stream`.
+    Octets,
+}
+
 /// One request as the transport sends it. The policy below builds it, and
 /// the transport only moves it.
 #[derive(Clone)]
@@ -250,7 +289,7 @@ pub(crate) struct Outgoing {
     /// the relay that needs one. The transport spells the header at send time.
     pub bearer: Option<SecretToken>,
     /// The content type and the bytes of the body, if any.
-    pub body: Option<(&'static str, Vec<u8>)>,
+    pub body: Option<(ContentType, Vec<u8>)>,
     /// How long the transport waits before it aborts the request.
     pub timeout_ms: ambre_core::Millis,
 }
@@ -274,7 +313,7 @@ impl Outgoing {
             HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
         })?;
         Ok(Self {
-            body: Some(("application/json", bytes)),
+            body: Some((ContentType::Json, bytes)),
             ..Self::new(method, url)
         })
     }
@@ -283,7 +322,7 @@ impl Outgoing {
 /// One answer: its status and its body.
 pub(crate) struct Incoming {
     /// The HTTP status.
-    pub status: u16,
+    pub status: HttpStatus,
     /// The body, empty when there is none.
     pub body: Vec<u8>,
 }
@@ -332,6 +371,10 @@ impl Transport for Fetch {
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
+                let content_type = match content_type {
+                    ContentType::Json => "application/json",
+                    ContentType::Octets => "application/octet-stream",
+                };
                 builder
                     .header("Content-Type", content_type)
                     .body(bytes.clone())
@@ -347,7 +390,7 @@ impl Transport for Fetch {
             .await
             .map_err(|e| format!("binary error: {e}"))?;
         Ok(Incoming {
-            status: resp.status(),
+            status: HttpStatus(resp.status()),
             body,
         })
     }
@@ -436,11 +479,11 @@ impl HttpError {
     pub(crate) fn refused(
         method: Method,
         url: &str,
-        status: u16,
+        status: HttpStatus,
         code: Option<RefusalCode>,
     ) -> Self {
         use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
-        let code = match (status, code) {
+        let code = match (status.0, code) {
             (403, Some(code @ (SetupRequired | Forbidden)))
             | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => Some(code),
             _ => None,
@@ -448,7 +491,7 @@ impl HttpError {
         Self::Refused {
             method,
             url: url.to_owned(),
-            status: HttpStatus(status),
+            status,
             code,
         }
     }
@@ -615,10 +658,10 @@ impl From<HttpError> for String {
 /// The error a refused answer reads as, or `Ok` for a success. The relay's
 /// code is read from the body only on the statuses that may carry one.
 fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
-    if (200..300).contains(&resp.status) {
+    if resp.status.is_success() {
         return Ok(());
     }
-    let code = if resp.status == 403 || resp.status == 409 {
+    let code = if matches!(resp.status, HttpStatus(403 | 409)) {
         serde_json::from_slice::<RefusalBody>(&resp.body)
             .ok()
             .map(|body| body.error)
@@ -683,7 +726,7 @@ async fn exchange_auth(
 ) -> Result<Incoming, HttpError> {
     request.bearer = Some(auth.access_token()?);
     let resp = exchange(transport, request).await?;
-    if resp.status != 401 {
+    if resp.status != HttpStatus(401) {
         return Ok(resp);
     }
     auth.refresh_via(transport).await?;
@@ -699,7 +742,7 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
 ) -> Result<Option<T>, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.as_str());
     let resp = exchange_auth(transport, auth, &mut request).await?;
-    if resp.status == 404 {
+    if resp.status == HttpStatus(404) {
         return Ok(None);
     }
     read_json(&request, &resp).map(Some)
@@ -794,7 +837,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
 /// The sealed blob of one snapshot of `document_id`: a presigned URL from the
 /// relay, then the object itself. `None` when either step fails.
 pub(crate) async fn download_snapshot(
-    url_scheme: &str,
+    url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
     document_id: ambre_core::DocumentId,
     snapshot_id: ambre_core::SnapshotId,
@@ -823,7 +866,7 @@ pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(),
 pub(crate) async fn delete_status_auth(
     url: &RelayUrl,
     auth: AuthContext,
-) -> Result<u16, HttpError> {
+) -> Result<HttpStatus, HttpError> {
     let mut request = Outgoing::new(Method::Delete, url.as_str());
     exchange_auth(&Fetch, &auth, &mut request)
         .await
@@ -849,7 +892,7 @@ pub(crate) async fn put_sealed_via(
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     let request = Outgoing {
-        body: Some(("application/octet-stream", blob.as_bytes().to_vec())),
+        body: Some((ContentType::Octets, blob.as_bytes().to_vec())),
         ..Outgoing::new(Method::Put, url.expose())
     };
     let resp = exchange(transport, &request).await?;
@@ -1686,7 +1729,7 @@ pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLin
 /// The links of `document_id`, or none when the relay cannot serve them: the
 /// frames sealed under a key older than the cache then stay closed.
 pub(crate) async fn fetch_key_links(
-    url_scheme: &str,
+    url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
     document_id: ambre_core::DocumentId,
     auth: AuthContext,
@@ -1830,7 +1873,7 @@ pub(crate) mod scripted {
                 .into_iter()
                 .map(|answer| {
                     answer.map(|(status, body)| Incoming {
-                        status,
+                        status: HttpStatus(status),
                         body: serde_json::to_vec(&body).unwrap(),
                     })
                 })
@@ -1877,7 +1920,7 @@ pub(crate) mod scripted {
     pub(crate) fn session(access: &str, refresh: &str) -> AuthContext {
         AuthContext {
             api_base: crate::http::RelayHost::new("relay.test".to_owned()),
-            url_scheme: "https",
+            url_scheme: UrlScheme::Https,
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),
                 refresh_token: refresh.to_owned().into(),
@@ -1908,7 +1951,7 @@ mod tests {
         } else {
             Method::Post
         };
-        HttpError::refused(method, url, status, code)
+        HttpError::refused(method, url, HttpStatus(status), code)
     }
 
     fn is_setup_refusal(error: &HttpError) -> bool {
@@ -1958,7 +2001,12 @@ mod tests {
     #[test]
     fn a_refusal_carries_its_status_and_code() {
         let url = "https://relay.example/api/documents/d/share";
-        let changed = HttpError::refused(Method::Post, url, 409, Some(RefusalCode::KeyChanged));
+        let changed = HttpError::refused(
+            Method::Post,
+            url,
+            HttpStatus(409),
+            Some(RefusalCode::KeyChanged),
+        );
         assert_eq!(
             changed.failure(),
             ApiFailure::Relay {
@@ -1967,7 +2015,12 @@ mod tests {
             }
         );
         assert_eq!(changed.to_string(), format!("POST {url}: KEY_CHANGED"));
-        let plain = HttpError::refused(Method::Post, url, 500, Some(RefusalCode::KeyChanged));
+        let plain = HttpError::refused(
+            Method::Post,
+            url,
+            HttpStatus(500),
+            Some(RefusalCode::KeyChanged),
+        );
         assert_eq!(plain.code(), None);
         assert_eq!(plain.failure().status(), Some(HttpStatus(500)));
         assert_eq!(plain.to_string(), format!("POST {url}: HTTP 500"));
@@ -2003,8 +2056,8 @@ mod tests {
             Ok((200, serde_json::json!({ "ok": 1 }))),
         ]);
         let auth = session("access-1", "refresh-1");
-        let url =
-            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
+            .route("/documents");
 
         let answer: serde_json::Value =
             post_json_auth_via(&transport, url, &serde_json::json!({ "n": 7 }), &auth)
@@ -2091,8 +2144,8 @@ mod tests {
     /// the relay refuses, ends the request with an error.
     #[tokio::test]
     async fn a_request_is_replayed_at_most_once() {
-        let url =
-            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
+            .route("/documents");
         let refused_twice = Scripted::new([
             Ok((401, serde_json::json!({}))),
             Ok((200, renewed("access-2"))),
@@ -2130,8 +2183,8 @@ mod tests {
     async fn a_request_with_no_answer_is_abandoned_at_its_deadline() {
         let transport = Scripted::default();
         transport.silent.set(true);
-        let url =
-            &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned())).route("/documents");
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
+            .route("/documents");
 
         let error = post_json_auth_via::<_, serde_json::Value>(
             &transport,
@@ -2156,7 +2209,7 @@ mod tests {
     /// renews the token or replays the request (`SYNC-099`).
     #[tokio::test]
     async fn each_answer_maps_to_its_error() {
-        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
             .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
@@ -2218,7 +2271,7 @@ mod tests {
             _role: ambre_core::Role,
             _status: ambre_core::SnapshotStatus,
         }
-        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
             .route("/documents/d/members");
         let auth = session("access-1", "refresh-1");
         let user = &ambre_core::UserId::new().to_string();
@@ -2350,7 +2403,7 @@ mod tests {
     /// moved membership.
     #[tokio::test]
     async fn a_refusal_code_outside_the_set_reads_as_its_status() {
-        let url = &ApiRoot::of("https", &RelayHost::new("relay.test".to_owned()))
+        let url = &ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
             .route("/documents/d/rotate");
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});

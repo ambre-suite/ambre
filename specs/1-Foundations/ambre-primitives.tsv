@@ -4384,13 +4384,11 @@ ambre-sync | src/channels.rs | crate::channels | check_pinned() | ret | Result<(
 ambre-sync | src/channels.rs | crate::channels | direct_message_request() | ret | Result<http::CreateDirectMessageRequest,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | join_key() | ret | Result<(ambre_core::WrappedDocKey,KeyId),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | no_relay() | ret | String	free-text	free text: message, label, name or report
-ambre-sync | src/channels.rs | crate::channels | open_channel_names(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/channels.rs | crate::channels | seal_channel_key() | ret | Result<SealedChannelKey,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | self_join_entry() | ret | Result<Option<ambre_core::EncodedLogEntry>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | unseal_channel_key() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/docfile.rs | crate::docfile | SyncState::handle_open_doc_file(sealed) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::open() | ret | Option<String>	free-text	free text: message, label, name or report
-ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::open(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::sealed() | ret | Option<Vec<u8>>	debt	finding: sealed document name bytes
 ambre-sync | src/documents.rs | crate::documents | SyncState::created_document() | ret | Result<DocumentId,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/documents.rs | crate::documents | open_name() | ret | Option<String>	free-text	free text: message, label, name or report
@@ -4411,9 +4409,7 @@ ambre-sync | src/http.rs | crate::http | <SecretToken as From<String>>::from(tok
 ambre-sync | src/http.rs | crate::http | ActivityEntry.active | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | AmendmentsResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | ApiRoot::of(scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | AuthContext.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -4431,15 +4427,13 @@ ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.url | field | Str
 ambre-sync | src/http.rs | crate::http | HttpError::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
-ambre-sync | src/http.rs | crate::http | HttpError::refused(status) | param | u16	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/http.rs | crate::http | HttpError::refused(url) | param | &str	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/http.rs | crate::http | Incoming.status | field | u16	debt	planned: lot C bis 1 (ApiRequest / HttpStatus)
 ambre-sync | src/http.rs | crate::http | JoinHeadResponse.length | field | u64	debt	finding: membership log position as `u64`
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
-ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(&'static str,Vec<u8>)>	debt	planned: lot C bis 3 (ContentType)
+ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(ContentType,Vec<u8>)>	generic	HTTP body bytes, content type typed
 ambre-sync | src/http.rs | crate::http | Outgoing.url | field | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | Outgoing::json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | Outgoing::new(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
@@ -4456,11 +4450,8 @@ ambre-sync | src/http.rs | crate::http | ThreadResponse.created | field | bool	g
 ambre-sync | src/http.rs | crate::http | Transport::send() | ret | Result<Incoming,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | UNKNOWN_WORD | const | &str	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | bearer() | ret | Zeroizing<String>	generic	generic byte/text API or codec
-ambre-sync | src/http.rs | crate::http | delete_status_auth() | ret | Result<u16,HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
-ambre-sync | src/http.rs | crate::http | download_snapshot(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | encode_link() | ret | Result<ambre_core::EncodedKeyLink,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/http.rs | crate::http | fetch_key_links(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | get_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | is_personal() | ret | bool	generic	predicate result: the serde skip test of CreateDocumentRequest.space
 ambre-sync | src/http.rs | crate::http | post_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
@@ -4510,7 +4501,6 @@ ambre-sync | src/lib.rs | crate | SyncState.resend_ticket | field | u64	debt	fin
 ambre-sync | src/lib.rs | crate | SyncState.setup_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.socket_opens | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState.update_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncState.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/lib.rs | crate | SyncState::documents_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState::new(api_base) | param | String	debt	the relay base as a bare String: RelayUrl exists
 ambre-sync | src/lib.rs | crate | SyncState::send_wire(wire) | param | Vec<u8>	generic	generic byte/text API or codec
@@ -4531,10 +4521,8 @@ ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | b
 ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/local_store.rs | crate::local_store | place_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::delete() | ret | Result<u16,http::HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | Address | alias | [u8;ambre_crypto::commitment::TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
-ambre-sync | src/media.rs | crate::media | MediaHttp::delete() | ret | Result<u16,http::HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | download_leg() | ret | Result<Vec<u8>,http::Failed>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | open_blob() | ret | Result<Vec<u8>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
@@ -4651,21 +4639,8 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::take_from() | ret | Option<(Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | SentFrame.payload | field | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/sharing.rs | crate::sharing | AmendmentsParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | ChannelLeaveParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | FetchInviteeKeyParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | FetchMemberKeyParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | InviteParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | LeaveParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/sharing.rs | crate::sharing | ListMembersParams.asked | field | u64	debt	finding: request generation counters ("asked")
-ambre-sync | src/sharing.rs | crate::sharing | ListMembersParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/sharing.rs | crate::sharing | RevokeParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | RoleChangeParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | RotateChannelParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | SegmentCloseParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | SettleParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
-ambre-sync | src/sharing.rs | crate::sharing | ThreadParams.url_scheme | field | &'static str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/sharing.rs | crate::sharing | build_invite_request() | ret | Result<http::InviteRequest,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/sharing.rs | crate::sharing | close_segment_task() | ret | Result<(SegmentId,bool),http::HttpError>	generic	fact flag on an event
@@ -4675,7 +4650,6 @@ ambre-sync | src/sharing.rs | crate::sharing | decode_signing_pubkey() | ret | R
 ambre-sync | src/sharing.rs | crate::sharing | entry_after() | ret | Result<Option<ambre_core::EncodedLogEntry>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/sharing.rs | crate::sharing | invitee_keys() | ret | Result<InviteeKeys,(ApiFailure,String)>	free-text	error message text
 ambre-sync | src/sharing.rs | crate::sharing | leave_document() | ret | Result<(),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/sharing.rs | crate::sharing | leave_document(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/sharing.rs | crate::sharing | link_to() | ret | Result<(ambre_protocol::KeyLink,ambre_core::EncodedKeyLink),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/sharing.rs | crate::sharing | unwrap_own() | ret | Result<(DocumentKey,Option<EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | HoldCause::Failed.0 | field | u32	math	count, size, limit, index or jitter local to an algorithm
@@ -4709,7 +4683,6 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::retry_replay(ticke
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::socket_closed(code) | param | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay_ms(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | socket_address() | ret | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/websocket.rs | crate::websocket | socket_address(scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/worker.rs | crate::worker | post_bytes(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text
