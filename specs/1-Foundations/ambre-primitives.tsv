@@ -2091,7 +2091,7 @@ ambre-murmure | src/composer.rs | crate::composer | UPLOADING | const | &str	fre
 ambre-murmure | src/composer.rs | crate::composer | also_said() | ret | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(new) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	free-text	the draft text a style mark indexes; the mark range is a CharSpan and char_span_to_bytes turns it into a ByteSpan
 ambre-murmure | src/composer.rs | crate::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion.0 | field | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::get() | ret | u8	newtype-inner	JsonSchemaVersion newtype accessor
@@ -2102,7 +2102,7 @@ ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings
+ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	math	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as a DocumentId inside
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	newtype-inner	the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	math	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
@@ -2117,8 +2117,8 @@ ambre-murmure | src/drafts.rs | crate::drafts | Shelf.version | field | u64	math
 ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
 ambre-murmure | src/emoji.rs | crate::emoji | entry(glyph) | param | &'static str	newtype-inner	the glyph a static Emoji is built from
 ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
-ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
-ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
+ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
+ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
@@ -2177,15 +2177,15 @@ ambre-murmure | src/look.rs | crate::look | QUOTE_RULE | const | (f64,f64)	math	
 ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply() | ret | (String,String)	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
 ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | MARK_CHORDS | const | [(char,TextStyle);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
-ambre-murmure | src/markers.rs | crate::markers | change(old) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	free-text	the draft text after an edit, as its chars; the three offsets it returns are CharOffset
+ambre-murmure | src/markers.rs | crate::markers | change(old) | param | &[char]	free-text	the draft text before an edit, as its chars; the three offsets it returns are CharOffset
 ambre-murmure | src/markers.rs | crate::markers | closed(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_by_break(text) | param | &str	free-text	text, label or user content
@@ -2223,7 +2223,7 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | matches(name) | para
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(ByteOffset,&str)>	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
+ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	math	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	layout geometry in logical px
@@ -2340,7 +2340,7 @@ ambre-murmure | src/schema.rs | crate::schema | DeletedBy::as_str() | ret | &'st
 ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	debt	finding: Loro map key names are bare `&str` consts and parameters
+ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
 ambre-murmure | src/schema.rs | crate::schema | read_as_it_is() | ret | Result<(),String>	trait	signature dictated by SchemaMigration.apply
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
@@ -2364,7 +2364,7 @@ ambre-murmure | src/select.rs | crate::select | Selecting.press | field | Option
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,ByteOffset),(usize,ByteOffset))>	math	count, size or local index
-ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	debt	finding: Two schema-version spaces, and a duplicated frame magic
+ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the Loro bytes past the table, read only by split and loro_part.
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the raw sequence table, cut into fixed rows only by table.
 ambre-murmure | src/sequence.rs | crate::sequence | ROW_LEN | const | usize	math	local count/index/counter
