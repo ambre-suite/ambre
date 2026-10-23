@@ -138,7 +138,7 @@ mod tests {
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
     fn written_by(peer: ambre_core::PeerId, bytes: usize) -> SignedDelta {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, crate::test_entry(peer)));
         let payload = author
             .handle_command(TrameCommand::SetCellText {
                 row: Row::new(0),

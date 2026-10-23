@@ -240,7 +240,7 @@ fn logic_event_roundtrips_through_postcard() {
     roundtrip_event(&LogicEvent::SessionIdentity {
         document_id: doc,
         peer: ambre_core::PeerId(7),
-        entry: vec![8; 96],
+        entry: an_entry(8),
         nonce: ambre_core::SessionNonce([9; 16]),
     });
     roundtrip_event(&LogicEvent::ConnectionStatus {
@@ -436,7 +436,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             snapshot_id: snapshot,
             purpose: SnapshotPurpose::Confirm,
             verdict: SnapshotVerdict::Match {
-                extras: vec![(ambre_core::PeerId(41), vec![2, 3])],
+                extras: vec![(
+                    ambre_core::PeerId(41),
+                    ambre_core::PeerEntryBytes::new(vec![2, 3]),
+                )],
             },
         },
         SyncCommand::SendEphemeral {
@@ -559,7 +562,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SessionIdentity {
             document_id: doc,
             peer: ambre_core::PeerId(9),
-            entry: vec![3; 8],
+            entry: an_entry(3),
             nonce: SessionNonce([1; 16]),
         },
         LogicEvent::RemoteUpdate {
@@ -972,5 +975,14 @@ fn writing_commands_are_mutating() {
     ];
     for cmd in cases {
         assert!(cmd.is_mutating(), "this command writes the CRDT: {cmd:?}");
+    }
+}
+
+/// A registry entry whose every byte is `fill`; no test checks its signature.
+fn an_entry(fill: u8) -> ambre_core::PeerEntry {
+    ambre_core::PeerEntry {
+        user: ambre_core::UserId::from_bytes([fill; 16]),
+        nonce: ambre_core::SessionNonce([fill; 16]),
+        signature: ambre_core::Signature([fill; 64]),
     }
 }

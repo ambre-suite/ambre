@@ -335,7 +335,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: ambre_core::PeerEntry,
     ) {
         let space = ambre_bus::SpaceId::from_document(document_id);
         let expected = self.channels.values().any(|c| c.holds(document_id))
@@ -364,8 +364,8 @@ impl LogicState {
         };
         let adopted =
             if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
-                channel.adopt_session(document_id, peer, entry)
-            } else if let Some(adopted) = self.adopt_space_session(document_id, peer, entry) {
+                channel.adopt_session(document_id, peer, entry.to_bytes())
+            } else if let Some(adopted) = self.adopt_space_session(document_id, peer, &entry) {
                 adopted
             } else {
                 // Its channel or its space is still opening.

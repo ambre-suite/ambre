@@ -90,6 +90,50 @@ impl PeerEntry {
     }
 }
 
+/// Crosses the bus as the bytes [`PeerEntry::to_bytes`] writes, so the event
+/// carries one length-prefixed byte string. Bytes that are not exactly one
+/// entry fail to deserialize.
+impl Serialize for PeerEntry {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serde_bytes::Bytes::new(&self.to_bytes()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PeerEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let bytes = serde_bytes::ByteBuf::deserialize(deserializer)?;
+        Self::from_bytes(&bytes).ok_or_else(|| serde::de::Error::custom("not one peer entry"))
+    }
+}
+
+/// A registry entry as a snapshot holds it, not read yet. The snapshot came
+/// from another writer, so its bytes may not be an entry at all. The reader
+/// that verifies the entry is the one that reads it (`AUTHOR-021`), and a
+/// malformed one fails there. `#[serde(transparent)]`: the bare byte string.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PeerEntryBytes(Vec<u8>);
+
+impl PeerEntryBytes {
+    /// The bytes as the registry stores them.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The entry, or `None` when the bytes are not exactly one.
+    #[must_use]
+    pub fn read(&self) -> Option<PeerEntry> {
+        PeerEntry::from_bytes(&self.0)
+    }
+}
+
+impl From<&PeerEntry> for PeerEntryBytes {
+    fn from(entry: &PeerEntry) -> Self {
+        Self(entry.to_bytes())
+    }
+}
+
 /// The key of a PeerID in the peer registry,
 /// [`crate::crdt::FoundationRoot::Peers`]: sixteen lowercase hex digits
 /// (`AUTHOR-004`). Built from the PeerID alone, so no call site spells the
@@ -127,5 +171,24 @@ mod tests {
         assert_eq!(PeerEntry::from_bytes(&bytes), Some(entry));
         assert_eq!(PeerEntry::from_bytes(&bytes[1..]), None);
         assert_eq!(PeerKey::of(PeerId(0xab)).as_str(), "00000000000000ab");
+    }
+
+    /// An entry crosses the bus as the byte string the registry stores, and
+    /// bytes that are not one entry do not decode as one. An entry a snapshot
+    /// holds is read only by the reader that verifies it.
+    #[test]
+    fn an_entry_crosses_the_bus_as_its_registry_bytes() {
+        let entry = PeerEntry {
+            user: UserId::from_bytes([3; 16]),
+            nonce: SessionNonce([5; SESSION_NONCE_LEN]),
+            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+        };
+        let wire = postcard::to_allocvec(&entry).unwrap();
+        assert_eq!(wire, postcard::to_allocvec(&entry.to_bytes()).unwrap());
+        assert_eq!(postcard::from_bytes::<PeerEntry>(&wire).unwrap(), entry);
+        let short = postcard::to_allocvec(&entry.to_bytes()[1..].to_vec()).unwrap();
+        assert!(postcard::from_bytes::<PeerEntry>(&short).is_err());
+        assert_eq!(PeerEntryBytes::from(&entry).read(), Some(entry));
+        assert_eq!(PeerEntryBytes::new(vec![7; 4]).read(), None);
     }
 }

@@ -137,10 +137,10 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: &ambre_core::PeerEntry,
     ) -> Option<Result<Option<Vec<u8>>, ambre_murmure::MurmureError>> {
         let space = self.spaces.get_mut(&SpaceId::from_document(document_id))?;
-        Some(space.state.adopt_session(peer, entry))
+        Some(space.state.adopt_session(peer, entry.to_bytes()))
     }
 
     /// The document of a space is ready. Returns `false` when no space asked

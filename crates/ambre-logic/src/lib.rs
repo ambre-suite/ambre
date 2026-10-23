@@ -417,7 +417,7 @@ impl DocState {
 
     /// Write under the session identity Sync issued (`AUTHOR-002`), whichever
     /// application owns the document. `false` when the engine refused it.
-    fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
+    fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: ambre_core::PeerEntry) -> bool {
         match self {
             DocState::Trame(state) => state.adopt_session(peer, entry),
             DocState::Toile(state) => state.adopt_session(peer, entry),
@@ -598,7 +598,7 @@ impl LogicState {
         self.handle_logic_event(LogicEvent::SessionIdentity {
             document_id,
             peer,
-            entry: peer.0.to_le_bytes().to_vec(),
+            entry: test_entry(peer),
             nonce: SessionNonce([0; 16]),
         });
         peer
@@ -610,6 +610,19 @@ impl LogicState {
 fn test_peer() -> ambre_core::PeerId {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
     ambre_core::PeerId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+}
+
+/// A registry entry for `peer`, as Sync would issue it; no test reads its
+/// signature.
+#[cfg(test)]
+fn test_entry(peer: ambre_core::PeerId) -> ambre_core::PeerEntry {
+    let mut user = [0; 16];
+    user[..8].copy_from_slice(&peer.0.to_le_bytes());
+    ambre_core::PeerEntry {
+        user: UserId::from_bytes(user),
+        nonce: SessionNonce([0; 16]),
+        signature: ambre_core::Signature([0; 64]),
+    }
 }
 
 /// `channel` with every document under a session identity of its own, as
@@ -797,7 +810,7 @@ struct LogicState {
     /// The session identity Sync issued for a channel or a space document
     /// that no open channel or space holds yet, adopted once one does
     /// (`AUTHOR-002`).
-    murmure_identities: HashMap<DocumentId, (ambre_core::PeerId, Vec<u8>)>,
+    murmure_identities: HashMap<DocumentId, (ambre_core::PeerId, ambre_core::PeerEntry)>,
     /// The channel and space commands that write a document whose session
     /// identity has not landed, in the order they came (`AUTHOR-026`).
     murmure_waiting: HashMap<DocumentId, Vec<channels::HeldCommand>>,
@@ -1654,7 +1667,7 @@ mod authorship_tests {
     /// The delta a session writing under `peer` sends for one cell edit.
     fn written_by(peer: ambre_core::PeerId, text: &str) -> Vec<u8> {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, crate::test_entry(peer)));
         author
             .handle_command(TrameCommand::SetCellText {
                 row: Row::new(0),
@@ -1870,7 +1883,9 @@ mod authorship_tests {
         let after = registry(&reader);
         assert_eq!(
             after.get(ambre_core::PeerKey::of(rig.peer).as_str()),
-            Some(&LoroValue::Binary(rig.peer.0.to_le_bytes().to_vec().into()))
+            Some(&LoroValue::Binary(
+                crate::test_entry(rig.peer).to_bytes().into()
+            ))
         );
         assert_eq!(
             after.len(),
@@ -2190,7 +2205,7 @@ mod authorship_tests {
     /// The deltas one session writing under `peer` sends, one per text.
     fn session_wrote(peer: ambre_core::PeerId, texts: &[&str]) -> Vec<Vec<u8>> {
         let mut author = TrameState::new();
-        assert!(author.adopt_session(peer, peer.0.to_le_bytes().to_vec()));
+        assert!(author.adopt_session(peer, crate::test_entry(peer)));
         texts
             .iter()
             .map(|text| {

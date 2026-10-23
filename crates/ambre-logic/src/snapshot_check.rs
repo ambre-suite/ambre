@@ -167,7 +167,10 @@ pub(crate) fn check_snapshot(
         }
         if theirs_end > ours {
             match registry_entry(&theirs, peer) {
-                Some(entry) => extras.push((ambre_core::PeerId(peer), entry)),
+                Some(entry) => extras.push((
+                    ambre_core::PeerId(peer),
+                    ambre_core::PeerEntryBytes::new(entry),
+                )),
                 None => return Outcome::Unchecked,
             }
         }
@@ -457,7 +460,10 @@ mod tests {
                 Purpose::Confirm
             ),
             Outcome::Match {
-                extras: vec![(ambre_core::PeerId(1), vec![7_u8; 4])]
+                extras: vec![(
+                    ambre_core::PeerId(1),
+                    ambre_core::PeerEntryBytes::new(vec![7_u8; 4])
+                )]
             }
         );
     }

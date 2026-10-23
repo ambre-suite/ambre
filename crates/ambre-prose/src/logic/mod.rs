@@ -480,7 +480,11 @@ impl ProseState {
     /// written now, before any edit opens an undo group it would split. It is
     /// no edit, so it owes no last-modified stamp. `false` when the CRDT engine
     /// refused the identity, and then nothing changed.
-    pub fn adopt_session(&mut self, peer: ambre_core::PeerId, entry: Vec<u8>) -> bool {
+    pub fn adopt_session(
+        &mut self,
+        peer: ambre_core::PeerId,
+        entry: ambre_core::PeerEntry,
+    ) -> bool {
         use ambre_core::authorship::PEERS_ORIGIN;
         self.doc.commit();
         if let Err(e) = self.doc.set_peer_id(peer.0) {
@@ -492,7 +496,7 @@ impl ProseState {
         self.entry_end = match self
             .doc
             .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
-            .insert(ambre_core::PeerKey::of(peer).as_str(), entry)
+            .insert(ambre_core::PeerKey::of(peer).as_str(), entry.to_bytes())
         {
             Ok(()) => {
                 self.doc

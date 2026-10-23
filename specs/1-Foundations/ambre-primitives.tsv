@@ -712,11 +712,9 @@ ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentClosed.created | fi
 ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentFinalizeFailed.message | field | String	free-text	user-facing or log message
 ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentFinalizeFailed.withdrawn | field | bool	generic	fact flag on an event
 ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentFoldFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::SessionIdentity.entry | field | Vec<u8>	debt	planned: lot B bis 11: PeerEntry
 ambre-bus | src/event.rs | crate::event | LogicEvent::SnapshotDropped.refinalize | field | bool	generic	fact flag on an event
 ambre-bus | src/event.rs | crate::event | LogicEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-bus | src/event.rs | crate::event | LogicEvent::ThreadLinkFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | SnapshotVerdict::Match.extras | field | Vec<(ambre_core::PeerId,Vec<u8>)>	debt	planned: lot B bis 11: PeerEntry
 ambre-bus | src/lib.rs | crate | ClipToken.0 | field | String	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::as_str() | ret | &str	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::is() | ret | bool	newtype-inner	ViewportVersion/ClipToken newtype
@@ -1399,6 +1397,8 @@ ambre-core | src/authorship.rs | crate::authorship | PEERS_ORIGIN | const | &str
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::to_bytes() | ret | Vec<u8>	generic	PeerEntry byte codec
+ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes.0 | field | Vec<u8>	newtype-inner	The registry bytes of a peer entry, carried unread until the Sync worker checks them.
+ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::new(bytes) | param | Vec<u8>	newtype-inner	The constructor of PeerEntryBytes, from the bytes a document registry holds.
 ambre-core | src/authorship.rs | crate::authorship | PeerId.0 | field | u64	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	newtype-inner	the registry key newtype, built from a PeerId alone
 ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
@@ -1922,7 +1922,6 @@ ambre-logic | src/bin/ambre-fixtures.rs | crate | freeze(name) | param | &str	fr
 ambre-logic | src/bin/ambre-fixtures.rs | crate | head_commit() | ret | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::adopt_murmure_session(entry) | param | Vec<u8>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote(payloads) | param | &[(Option<Order>,&[u8])]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1944,7 +1943,6 @@ ambre-logic | src/channels.rs | crate::channels | LogicState::record_channel_seq
 ambre-logic | src/channels.rs | crate::channels | LogicState::search_messages(query) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | NAME_NOT_CHANGED | const | &str	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | ReadCursor.active | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/data.rs | crate::data | LogicState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/data.rs | crate::data | LogicState::apply_ephemeral(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
 ambre-logic | src/data.rs | crate::data | LogicState::apply_remote(payload) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/data.rs | crate::data | LogicState::dispatch_outcome(ephemeral) | param | Option<Vec<u8>>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
@@ -2018,7 +2016,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | 
 ambre-logic | src/fixtures.rs | crate::fixtures | unfrozen_versions(current) | param | u8	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/lib.rs | crate | DELTAS_PER_SNAPSHOT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | DocState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(String,Vec<u8>)>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
@@ -2032,7 +2029,6 @@ ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no f
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc::relay_saw(payload) | param | &[u8]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/lib.rs | crate | LogicState.base_faces | field | Vec<Vec<u8>>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
-ambre-logic | src/lib.rs | crate | LogicState.murmure_identities | field | HashMap<DocumentId,(ambre_core::PeerId,Vec<u8>)>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/lib.rs | crate | LogicState.pending_seals | field | HashMap<RequestId,(DocumentId,String)>	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | LogicState.unsent | field | HashMap<DocumentId,Vec<u8>>	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2118,7 +2114,6 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | SeqLedger::record(
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::adopt_space_session() | ret | Option<Result<Option<Vec<u8>>,ambre_murmure::MurmureError>>	debt	planned: lot B bis 1 (DeltaBytes)
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::adopt_space_session(entry) | param | Vec<u8>	debt	planned: lot B bis 11 (PeerEntry, ripple of SessionIdentity.entry)
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote(payloads) | param | &[&[u8]]	debt	planned: lot B bis 1 (DeltaBytes)
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_failed(message) | param | String	free-text	free text: message, label, name or report
@@ -3645,7 +3640,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState.stamped_counter | fie
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.window | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B11 PeerEntry
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote(payload) | param | &[u8]	debt	planned: lot B1 DeltaBytes
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	planned: lot B1 DeltaBytes
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
@@ -5018,7 +5012,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_en
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B item 11 PeerEntry (SessionIdentity.entry)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_remote(update) | param | &[u8]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::apply_remote_batch(updates) | param | &[Vec<u8>]	debt	finding: The Toile engine's CRDT bytes are `Vec<u8>`; lot B item 1 should cover them too (confirmed): toile engine CRDT bytes as Vec<u8>; extends lot B item 1 (DeltaBytes/SnapshotBytes/EphemeralBytes)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
@@ -5948,7 +5941,6 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::displayed
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_ephemeral(_payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_remote(payload) | param | &[u8]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::apply_remote_batch(payloads) | param | &[Vec<u8>]	debt	finding: (FINDING, confirmed): CRDT delta and snapshot as `Vec<u8>` (extends lot B item 1 to Trame)
@@ -5963,7 +5955,6 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::schema_version() | ret | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
-ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry(entry) | param | Vec<u8>	debt	planned: lot B 11 ripple (PeerEntry from SessionIdentity.entry)
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length

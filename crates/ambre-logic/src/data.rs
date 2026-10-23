@@ -577,7 +577,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         peer: ambre_core::PeerId,
-        entry: Vec<u8>,
+        entry: ambre_core::PeerEntry,
         nonce: SessionNonce,
     ) {
         let Some(doc) = self.docs.get(&document_id) else {

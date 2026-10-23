@@ -149,7 +149,7 @@ mod tests {
             nonce: SessionNonce([9; 16]),
             signature: ambre_core::Signature([0; 64]),
         };
-        assert!(bob.adopt_session(ambre_core::PeerId(22), entry.to_bytes()));
+        assert!(bob.adopt_session(ambre_core::PeerId(22), entry));
         let first = bob.root_blocks()[0];
         bob.handle_command(ProseCommand::InsertBlock {
             parent_id: None,

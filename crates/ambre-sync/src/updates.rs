@@ -319,7 +319,7 @@ impl SyncState {
         };
         let passes = match &verdict {
             SnapshotVerdict::Match { extras } => extras.iter().all(|(peer, bytes)| {
-                ambre_core::authorship::PeerEntry::from_bytes(bytes).is_some_and(|entry| {
+                bytes.read().is_some_and(|entry| {
                     ambre_crypto::peer::entry_resolves(&entry, document_id, *peer, &check.author)
                 })
             }),
@@ -857,7 +857,7 @@ impl SyncState {
         self.send_to_logic(LogicEvent::SessionIdentity {
             document_id,
             peer,
-            entry: entry.to_bytes(),
+            entry,
             nonce,
         });
     }
@@ -2965,7 +2965,7 @@ mod tests {
                 ambre_crypto::peer::session_identity(author, UserId::new(), doc, nonce);
             let verdict = if verdict_is_match {
                 SnapshotVerdict::Match {
-                    extras: vec![(peer, entry.to_bytes())],
+                    extras: vec![(peer, ambre_core::PeerEntryBytes::from(&entry))],
                 }
             } else {
                 SnapshotVerdict::Mismatch

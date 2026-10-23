@@ -78,7 +78,7 @@ pub mod version;
 pub mod zoom;
 
 // Re-export the main types for convenient use.
-pub use authorship::{PeerEntry, PeerId, PeerKey, SessionNonce};
+pub use authorship::{PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Rgb, Rgba};
 pub use credential::{OidcCode, OidcState, PresignedUrl};

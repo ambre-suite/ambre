@@ -44,8 +44,8 @@ pub enum LogicEvent {
         document_id: DocumentId,
         /// The PeerID, derived from the signing key and the session nonce.
         peer: ambre_core::PeerId,
-        /// The encoded registry entry of `peer` (`ambre_core::PeerEntry`).
-        entry: Vec<u8>,
+        /// The registry entry of `peer`, which the worker signed.
+        entry: ambre_core::PeerEntry,
         /// The nonce `peer` derives from. The Logic thread keeps it in the
         /// local store, so a later open can send what this session left
         /// unsent (`AUTHOR-028`).
@@ -515,7 +515,7 @@ pub enum SnapshotVerdict {
     /// only the snapshot holds, with its registry entry. The snapshot passes
     /// only if each entry resolves to its author (`AUTHOR-021`).
     Match {
-        extras: Vec<(ambre_core::PeerId, Vec<u8>)>,
+        extras: Vec<(ambre_core::PeerId, ambre_core::PeerEntryBytes)>,
     },
     /// The snapshot contradicts a delta it covers (`AUTHOR-017`).
     Mismatch,
