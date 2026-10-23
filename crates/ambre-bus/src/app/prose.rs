@@ -652,9 +652,32 @@ pub struct CursorPosition {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PresencePayload {
     pub block_id: BlockId,
-    pub cursor: Vec<u8>,
-    pub anchor: Option<(BlockId, Vec<u8>)>,
+    pub cursor: EncodedCursor,
+    pub anchor: Option<(BlockId, EncodedCursor)>,
     pub display_name: Option<ambre_core::DisplayName>,
+}
+
+/// A `loro::Cursor` as `Cursor::encode` writes it (`PROSE-004`).
+///
+/// The bytes are opaque to this plane. Only the engine that holds the document
+/// decodes them, and bytes it cannot decode resolve to no caret
+/// (`PROSE-057`). Serde sees the bare bytes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct EncodedCursor(Vec<u8>);
+
+impl EncodedCursor {
+    /// Wraps the bytes `Cursor::encode` wrote.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes, for `Cursor::decode`.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 /// One live collaborator's caret, as the view is handed it.

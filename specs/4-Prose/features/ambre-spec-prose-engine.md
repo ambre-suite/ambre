@@ -618,8 +618,8 @@ pub struct CursorPosition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PresencePayload {
     pub block_id:     BlockId,
-    pub cursor:       Vec<u8>,
-    pub anchor:       Option<(BlockId, Vec<u8>)>,
+    pub cursor:       EncodedCursor,          // the bytes `Cursor::encode` wrote
+    pub anchor:       Option<(BlockId, EncodedCursor)>,
     pub display_name: String,
 }
 
