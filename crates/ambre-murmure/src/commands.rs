@@ -234,7 +234,7 @@ pub struct MessageTarget {
     /// for a right-click, whose event places the menu itself.
     pub pressed: Option<(f32, f32)>,
     /// The id of the canvas the region paints.
-    pub canvas: &'static str,
+    pub canvas: ambre_core::CanvasId,
     /// The thread a reply also sent to the channel came from, `None` on any
     /// other message (`MURMURE-533`).
     pub from_thread: Option<FromThread>,
@@ -662,7 +662,7 @@ mod tests {
             notice,
             deleted: text.is_empty(),
             pressed: None,
-            canvas: "ambre-canvas",
+            canvas: ambre_core::CanvasId::CONTENT,
             from_thread: None,
         }
     }

@@ -339,7 +339,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 "text"
             };
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
-                && let Some(el) = doc.get_element_by_id("ambre-canvas")
+                && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
             {
                 let _ = html.style().set_property("cursor", cursor);
@@ -383,7 +383,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             else {
                 return;
             };
-            if let Some(canvas) = leptos::prelude::document().get_element_by_id(target) {
+            if let Some(canvas) = leptos::prelude::document().get_element_by_id(target.as_str()) {
                 let rect = canvas.get_bounding_client_rect();
                 ctx_menu.set(Some((
                     rect.left() + f64::from(x),
@@ -427,7 +427,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 ))
             });
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
-                && let Some(el) = doc.get_element_by_id("ambre-canvas")
+                && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
             {
                 let _ = html.style().set_property("cursor", cursor.as_ref());

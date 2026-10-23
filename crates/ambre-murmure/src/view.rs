@@ -46,7 +46,7 @@ use crate::{MessageRef, MurmurePane, Region};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
 /// host binds a cell to it while it is in the page.
-pub const THREAD_CANVAS: &str = "murmure-thread-canvas";
+pub const THREAD_CANVAS: ambre_core::CanvasId = ambre_core::CanvasId::new("murmure-thread-canvas");
 
 /// What the page tells a region: the pane, a member's name, a time.
 #[derive(Clone)]
@@ -132,7 +132,7 @@ pub type SaveFile = Rc<dyn Fn(&Attachment, Vec<u8>)>;
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
-pub const CHANNEL_CANVAS: &str = "ambre-canvas";
+pub const CHANNEL_CANVAS: ambre_core::CanvasId = ambre_core::CanvasId::CONTENT;
 
 /// The button of a pointer event that opens a menu: the right one.
 const SECONDARY_BUTTON: i16 = 2;

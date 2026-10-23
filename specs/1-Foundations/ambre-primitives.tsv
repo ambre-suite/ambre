@@ -2,14 +2,10 @@
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
 key	category	note
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	math	flag cell
-ambre-app | src/host/cell.rs | crate::host::cell | Bound::bind(id) | param | &'static str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
-ambre-app | src/host/cell.rs | crate::host::cell | Cells.bound | field | HashMap<&'static str,Bound>	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	math	named flag
 ambre-app | src/host/cell.rs | crate::host::cell | Cells::route() | ret | Option<bool>	generic	consumed answer
-ambre-app | src/host/cell.rs | crate::host::cell | Claim.id | field | &'static str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	free-text	DOM event names
 ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	free-text	DOM event name
-ambre-app | src/host/cell.rs | crate::host::cell | Typist | alias | Rc<std::cell::Cell<Option<&'static str>>>	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/cell.rs | crate::host::cell | plan_frame(relayout) | param | bool	math	value flag
 ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
 ambre-app | src/host/cell.rs | crate::host::cell | touch_of() | ret | Option<(TouchPhase,f32,f32)>	math	touch position
@@ -47,9 +43,7 @@ ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_TYPE | const | &str	
 ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_WEB_TOKEN_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | AMBRE_CLIPBOARD_WEB_TYPE | const | &str	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | AppView::cell_ids() | ret | &'static[&'static str]	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(height) | param | f64	math	css size
-ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(id) | param | &str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/mod.rs | crate::host | AppView::cell_view(width) | param | f64	math	css size
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text() | ret | bool	generic	consumed answer
@@ -125,7 +119,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ruler_in_css(to_css) | para
 ambre-app | src/host/prose.rs | crate::host::prose | to_css() | ret | (f32,f32)	math	layout px
 ambre-app | src/host/prose.rs | crate::host::prose | to_css(x) | param | f32	math	layout px
 ambre-app | src/host/prose.rs | crate::host::prose | to_css(y) | param | f32	math	layout px
-ambre-app | src/host/run.rs | crate::host::run | run_with(canvas_id) | param | &str	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | layer_click_through(takes_input) | param | bool	math	value flag to the DOM
@@ -158,7 +151,6 @@ ambre-app | src/notify.rs | crate::notify | deliver(asked) | param | &Rc<Cell<bo
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | MENU_CANVASES | const | [&str;2]	debt	planned: lot C bis 10 CanvasId (cell/canvas DOM ids)
 ambre-app | src/platform.rs | crate::platform | OpenedFile.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
@@ -1241,9 +1233,7 @@ ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.gpu_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.hdrs_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.input_lat_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-chrome | src/app_shell.rs | crate::app_shell | AppShell(canvas_id) | param | Option<String>	debt	planned: lot C10 CanvasId
 ambre-chrome | src/app_shell.rs | crate::app_shell | AppShell(panel_open) | param | Option<Signal<bool>>	math	local value
-ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(id) | param | &'static str	debt	planned: lot C10 CanvasId
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
@@ -1393,6 +1383,9 @@ ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	
 ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
 ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
+ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId.0 | field | &'static str	newtype-inner	CanvasId newtype
+ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::as_str() | ret | &'static str	newtype-inner	CanvasId newtype
+ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::new(id) | param | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | ChannelDocumentKind::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/channel_kind.rs | crate::channel_kind | SegmentState::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
@@ -2241,7 +2234,6 @@ ambre-murmure | src/commands.rs | crate::commands | EMOJI_KEY | const | char	deb
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
-ambre-murmure | src/commands.rs | crate::commands | MessageTarget.canvas | field | &'static str	debt	planned: lot C10 CanvasId
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.deleted | field | bool	math	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.notice | field | bool	math	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.pressed | field | Option<(f32,f32)>	math	layout geometry in logical px
@@ -2720,7 +2712,6 @@ ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	fr
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::KB | const | u64	math	byte multiples for a size label
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::MB | const | u64	math	byte multiples for a size label
 ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	layout geometry in logical px
-ambre-murmure | src/view.rs | crate::view | CHANNEL_CANVAS | const | &str	debt	planned: lot C10 CanvasId
 ambre-murmure | src/view.rs | crate::view | Lists.revision | field | u64	math	local count/index/counter
 ambre-murmure | src/view.rs | crate::view | MurmureView.dirty | field | bool	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView.drag | field | Option<bool>	math	state flag/predicate
@@ -2786,7 +2777,6 @@ ambre-murmure | src/view.rs | crate::view | REVEAL_SLACK_PX | const | f32	math	l
 ambre-murmure | src/view.rs | crate::view | Rest::Row.anchor_y | field | f32	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | SECONDARY_BUTTON | const | i16	debt	finding: `SECONDARY_BUTTON` and `PRIMARY_BUTTON` as `i16`
 ambre-murmure | src/view.rs | crate::view | SaveFile | alias | Rc<dyn Fn(&Attachment,Vec<u8>)>	generic	opaque file content bytes
-ambre-murmure | src/view.rs | crate::view | THREAD_CANVAS | const | &str	debt	planned: lot C10 CanvasId
 ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | Sample::bytes() | ret | Vec<u8>	debt	finding: Ephemeral samples as `Vec<u8>`

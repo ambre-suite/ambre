@@ -33,7 +33,7 @@ use super::*;
     reason = "the boot wires the page it was served with, which has no fallback page"
 )]
 pub fn run_with<F, C, P>(
-    canvas_id: &str,
+    canvas_id: ambre_core::CanvasId,
     make_view: F,
     make_child_fn: C,
     pre_frame: P,
@@ -53,7 +53,7 @@ where
         .document()
         .expect("no document");
     let canvas: HtmlCanvasElement = document
-        .get_element_by_id(canvas_id)
+        .get_element_by_id(canvas_id.as_str())
         .unwrap_or_else(|| panic!("no #{canvas_id} element"))
         .dyn_into()
         .expect("element is not a canvas");

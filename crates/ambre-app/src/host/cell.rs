@@ -31,13 +31,13 @@ type Listener = (&'static str, Closure<dyn FnMut(web_sys::Event)>);
 
 /// The id of the cell whose field last took the keys, shared with the
 /// listeners of every cell.
-type Typist = Rc<std::cell::Cell<Option<&'static str>>>;
+type Typist = Rc<std::cell::Cell<Option<CanvasId>>>;
 
 /// A cell's claim on the text pipe. A press, a tap or an edit loaded from a
 /// menu focuses its field. Whoever takes the pipe back lets that field go.
 #[derive(Clone)]
 struct Claim {
-    id: &'static str,
+    id: CanvasId,
     typist: Typist,
 }
 
@@ -53,7 +53,7 @@ impl Claim {
 /// The cells a view shows beside its content canvas, keyed by canvas id.
 #[derive(Default)]
 pub(super) struct Cells {
-    bound: HashMap<&'static str, Bound>,
+    bound: HashMap<CanvasId, Bound>,
     typist: Typist,
     /// Whether the content view's field held the keys at the last settle.
     content_held: bool,
@@ -72,14 +72,14 @@ impl Cells {
         let Some(document) = web_sys::window().and_then(|w| w.document()) else {
             return;
         };
-        let lookup = |id: &str| -> Option<HtmlCanvasElement> {
-            document.get_element_by_id(id)?.dyn_into().ok()
+        let lookup = |id: CanvasId| -> Option<HtmlCanvasElement> {
+            document.get_element_by_id(id.as_str())?.dyn_into().ok()
         };
         self.bound.retain(|id, cell| {
-            ids.contains(id) && lookup(id).is_some_and(|canvas| canvas == cell.canvas)
+            ids.contains(id) && lookup(*id).is_some_and(|canvas| canvas == cell.canvas)
         });
         for &id in ids {
-            if self.bound.contains_key(id) {
+            if self.bound.contains_key(&id) {
                 continue;
             }
             let Some(canvas) = lookup(id) else { continue };
@@ -100,7 +100,7 @@ impl Cells {
     /// content view holds it. A cell holds it from the moment its field took
     /// the keys until its field lets go (`CANVAS-076`).
     pub(super) fn typist(&self) -> Option<Rc<RefCell<AppView>>> {
-        let cell = self.bound.get(self.typist.get()?)?;
+        let cell = self.bound.get(&self.typist.get()?)?;
         cell.view
             .borrow()
             .takes_text()
@@ -190,7 +190,7 @@ impl Bound {
     /// A press that focuses the view's field names `id` the `typist`. `None`
     /// when the page cannot observe the canvas box.
     fn bind(
-        id: &'static str,
+        id: CanvasId,
         canvas: HtmlCanvasElement,
         size: SurfaceSize,
         view: AppView,
@@ -583,7 +583,7 @@ mod tests {
             .unwrap()
             .dyn_into()
             .unwrap();
-        canvas.set_id(THREAD_CANVAS);
+        canvas.set_id(THREAD_CANVAS.as_str());
         canvas
             .set_attribute("style", "display:block;width:100%;height:100%")
             .unwrap();
@@ -637,7 +637,7 @@ mod tests {
         let page = page();
         let mut cells = Cells::default();
         cells.sync(&page);
-        let bound = &cells.bound[THREAD_CANVAS];
+        let bound = &cells.bound[&THREAD_CANVAS];
         assert_eq!(murmure(&bound.view.borrow()).size(), (160.0, 90.0));
         assert_ne!(
             (canvas.width(), canvas.height()),
@@ -648,7 +648,7 @@ mod tests {
         let first = Rc::clone(&bound.view);
         cells.sync(&page);
         assert!(
-            Rc::ptr_eq(&first, &cells.bound[THREAD_CANVAS].view),
+            Rc::ptr_eq(&first, &cells.bound[&THREAD_CANVAS].view),
             "bound once"
         );
 
@@ -673,7 +673,7 @@ mod tests {
         let page = page();
         let mut cells = Cells::default();
         cells.sync(&page);
-        let view = Rc::clone(&cells.bound[THREAD_CANVAS].view);
+        let view = Rc::clone(&cells.bound[&THREAD_CANVAS].view);
         let finger = |kind: &str| {
             let init = web_sys::PointerEventInit::new();
             init.set_pointer_type("touch");
@@ -939,7 +939,7 @@ mod tests {
         let mut page = page();
         let mut cells = Cells::default();
         cells.sync(&page);
-        let bound = cells.bound.get_mut(THREAD_CANVAS).unwrap();
+        let bound = cells.bound.get_mut(&THREAD_CANVAS).unwrap();
         assert!(
             bound.render(ambre_bus::PageTime(0.0)).is_none(),
             "no GPU yet"
@@ -972,7 +972,7 @@ mod tests {
 
         resize(&cell.0, 140, 80);
         sleep(50).await;
-        let bound = &cells.bound[THREAD_CANVAS];
+        let bound = &cells.bound[&THREAD_CANVAS];
         assert!(matches!(
             plan(bound, ambre_bus::PageTime(32.0)),
             ContentRepaint::Full
@@ -997,7 +997,7 @@ mod tests {
 
         let (cell, canvas) = thread_cell(100, 60);
         cells.sync(&page);
-        let first = Rc::clone(&cells.bound[THREAD_CANVAS].view);
+        let first = Rc::clone(&cells.bound[&THREAD_CANVAS].view);
         let document = web_sys::window().and_then(|w| w.document()).unwrap();
         let fresh: HtmlCanvasElement = document
             .create_element("canvas")
@@ -1008,11 +1008,11 @@ mod tests {
             .set_attribute("style", "display:block;width:100%;height:100%")
             .unwrap();
         canvas.remove();
-        fresh.set_id(THREAD_CANVAS);
+        fresh.set_id(THREAD_CANVAS.as_str());
         cell.0.append_child(&fresh).unwrap();
         cells.sync(&page);
         assert!(
-            !Rc::ptr_eq(&first, &cells.bound[THREAD_CANVAS].view),
+            !Rc::ptr_eq(&first, &cells.bound[&THREAD_CANVAS].view),
             "rebound"
         );
 

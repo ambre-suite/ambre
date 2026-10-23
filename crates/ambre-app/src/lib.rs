@@ -1814,7 +1814,7 @@ pub fn main() {
     };
 
     let switcher = host::run_with(
-        "ambre-canvas",
+        ambre_core::CanvasId::CONTENT,
         move |w, h, text_input| {
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id

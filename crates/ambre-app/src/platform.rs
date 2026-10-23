@@ -421,7 +421,8 @@ pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
 
 /// The canvases a right-click opens the DOM menu on: the content's, and the
 /// thread's of a Murmure page.
-pub(crate) const MENU_CANVASES: [&str; 2] = ["ambre-canvas", crate::host::THREAD_CANVAS];
+pub(crate) const MENU_CANVASES: [ambre_core::CanvasId; 2] =
+    [ambre_core::CanvasId::CONTENT, crate::host::THREAD_CANVAS];
 
 /// Listen for `contextmenu` on the document. A right-click on one of the
 /// `MENU_CANVASES` opens the DOM context menu at the click point, and the
@@ -448,7 +449,10 @@ pub(crate) fn install_canvas_context_menu(
         let on_canvas = e
             .target()
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
-            .is_some_and(|el| MENU_CANVASES.contains(&el.id().as_str()));
+            .is_some_and(|el| {
+                let id = el.id();
+                MENU_CANVASES.iter().any(|canvas| canvas.as_str() == id)
+            });
         if !on_canvas && !placed {
             return;
         }
@@ -471,7 +475,9 @@ pub(crate) fn install_board_file_drop(
     toasts: Toasts,
 ) {
     Effect::new(move |_| {
-        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+        let Some(canvas) =
+            leptos::prelude::document().get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+        else {
             return;
         };
         // Without a `dragover` that prevents the default, the browser navigates
@@ -505,7 +511,9 @@ pub(crate) fn install_board_file_drop(
 /// takes no file, so its canvas takes no drop.
 pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRelay) {
     Effect::new(move |_| {
-        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+        let Some(canvas) =
+            leptos::prelude::document().get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
+        else {
             return;
         };
         // Without a `dragover` that prevents the default, the browser navigates
@@ -940,12 +948,15 @@ mod tests {
         install_canvas_context_menu(ctx_menu, silent.into(), Signal::stored(false));
         for id in MENU_CANVASES {
             ctx_menu.set(None);
-            assert!(right_click(id), "{id}: the browser menu stays shut");
+            assert!(
+                right_click(id.as_str()),
+                "{id}: the browser menu stays shut"
+            );
             assert_eq!(ctx_menu.get_untracked(), Some((12.0, 34.0)), "{id}");
         }
         ctx_menu.set(None);
         silent.set(true);
-        assert!(right_click(crate::host::THREAD_CANVAS));
+        assert!(right_click(crate::host::THREAD_CANVAS.as_str()));
         assert_eq!(ctx_menu.get_untracked(), None, "silent opens nothing");
         silent.set(false);
         assert!(!right_click("elsewhere"), "the browser menu of the page");
@@ -973,7 +984,10 @@ mod tests {
         placed.set(true);
         ctx_menu.set(Some((1.0, 2.0)));
         assert!(menu_key_on_the_pipe(), "the pipe's browser menu stays shut");
-        assert!(right_click(crate::host::THREAD_CANVAS), "and the canvas's");
+        assert!(
+            right_click(crate::host::THREAD_CANVAS.as_str()),
+            "and the canvas's"
+        );
         assert_eq!(
             ctx_menu.get_untracked(),
             Some((1.0, 2.0)),

@@ -26,6 +26,7 @@
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+pub mod canvas_id;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
@@ -81,6 +82,7 @@ pub mod zoom;
 
 // Re-export the main types for convenient use.
 pub use authorship::{PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce};
+pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Rgb, Rgba};
 pub use credential::{OidcCode, OidcState, PresignedUrl, ProviderUrl};

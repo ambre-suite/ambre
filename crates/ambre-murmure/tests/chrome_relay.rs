@@ -844,7 +844,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         notice: false,
         deleted: false,
         pressed: None,
-        canvas: "ambre-canvas",
+        canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
     };
     relay.target.set(Some(target.clone()));
@@ -914,7 +914,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         notice: false,
         deleted: false,
         pressed: None,
-        canvas: "ambre-canvas",
+        canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
     };
     relay.target.set(Some(target.clone()));
@@ -983,7 +983,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         notice: false,
         deleted: false,
         pressed: None,
-        canvas: "ambre-canvas",
+        canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
     };
     let other = MessageTarget {
@@ -1130,7 +1130,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         notice: false,
         deleted: false,
         pressed: None,
-        canvas: "ambre-canvas",
+        canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
     }));
     let send = handler.send;

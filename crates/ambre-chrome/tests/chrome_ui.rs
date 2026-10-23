@@ -142,7 +142,7 @@ fn app_shell_owns_the_named_canvas_cell() {
     owner.set();
     let root = mount_in_container(|| {
         view! {
-            <AppShell canvas_id="ambre-canvas">
+            <AppShell canvas_id=ambre_core::CanvasId::CONTENT>
                 <Header slot>"H"</Header>
                 <Toolbar slot>"T"</Toolbar>
                 <StatusBar slot>"S"</StatusBar>

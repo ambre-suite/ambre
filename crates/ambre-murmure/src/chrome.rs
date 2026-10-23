@@ -1577,7 +1577,7 @@ fn canvas_origin(region: Region) -> (f64, f64) {
     };
     leptos::web_sys::window()
         .and_then(|w| w.document())
-        .and_then(|d| d.get_element_by_id(id))
+        .and_then(|d| d.get_element_by_id(id.as_str()))
         .map(|canvas| {
             let rect = canvas.get_bounding_client_rect();
             (rect.left(), rect.top())

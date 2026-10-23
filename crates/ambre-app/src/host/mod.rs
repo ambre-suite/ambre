@@ -44,6 +44,7 @@ use ambre_canvas::{
     start_raf_loop,
 };
 use ambre_chrome::commands::ClipboardWrite;
+use ambre_core::CanvasId;
 use ambre_draw::{DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -525,7 +526,7 @@ impl AppView {
 
     /// The ids of the canvases this view shows beside the content canvas, each
     /// in a cell of its own (`CANVAS-070`). Only Murmure shows one: its thread.
-    fn cell_ids(&self) -> &'static [&'static str] {
+    fn cell_ids(&self) -> &'static [CanvasId] {
         match self {
             AppView::Murmure(_) => &[THREAD_CANVAS],
             AppView::Trame(_) | AppView::Toile(_) | AppView::Prose(_) => &[],
@@ -534,7 +535,7 @@ impl AppView {
 
     /// The view of the cell named `id`, at `width` x `height` logical pixels.
     /// `None` for an id this view does not show.
-    fn cell_view(&self, id: &str, width: f64, height: f64) -> Option<AppView> {
+    fn cell_view(&self, id: CanvasId, width: f64, height: f64) -> Option<AppView> {
         match self {
             AppView::Murmure(v) if id == THREAD_CANVAS => {
                 Some(AppView::Murmure(v.region(width, height)))
