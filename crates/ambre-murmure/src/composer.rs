@@ -35,8 +35,8 @@ use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::Modifiers;
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, HistoryStep, byte_span_to_chars, byte_to_char, char_len,
-    char_span_to_bytes,
+    ByteCount, ByteOffset, CharSpan, HistoryStep, ViewPoint, byte_span_to_chars, byte_to_char,
+    char_len, char_span_to_bytes,
 };
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
@@ -971,7 +971,7 @@ impl Composer {
     /// What the page draws of the `@` list, from the caret `at` of the last
     /// paint. `None` while no list is open or no entry matches
     /// (`MURMURE-555`).
-    pub fn mention_list(&self, at: (f32, f32), region: Region) -> Option<MentionList> {
+    pub fn mention_list(&self, at: ViewPoint, region: Region) -> Option<MentionList> {
         let asking = self.asking.as_ref().filter(|a| !a.offers.is_empty())?;
         Some(MentionList {
             entries: asking.offers.iter().map(Offer::written).collect(),
@@ -993,7 +993,7 @@ impl Composer {
     /// What the page draws of the format bar of the draft `of`, from the
     /// caret `at` of the last paint. `None` while nothing is selected
     /// (`MURMURE-432`).
-    pub fn mark_bar(&self, of: DraftOf, at: (f32, f32), region: Region) -> Option<MarkBar> {
+    pub fn mark_bar(&self, of: DraftOf, at: ViewPoint, region: Region) -> Option<MarkBar> {
         let editor = self.drafts.get(&of)?;
         let bytes = editor.selection()?;
         let text = editor.text();

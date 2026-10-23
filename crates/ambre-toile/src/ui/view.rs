@@ -42,6 +42,7 @@ use ambre_canvas::{
     PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl,
     WHEEL_LINE_PX, WheelDelta,
 };
+use ambre_core::CssPx;
 use ambre_draw::kinetic::{Release, ScrollStep};
 use ambre_draw::{FontContext, Point, Rect, Vec2};
 
@@ -117,7 +118,7 @@ const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
-const WHEEL_MOUSE_NOTCH_PX: f64 = 40.0;
+const WHEEL_MOUSE_NOTCH_PX: CssPx = CssPx::new(40.0);
 
 /// The device a wheel event reads as (`toile-viewport`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -135,10 +136,10 @@ enum WheelDevice {
 /// large `|dy|` with no `dx` is a discrete mouse notch.
 ///
 /// The deltas are pixels, read from the event's own unit first.
-fn wheel_device(delta: WheelDelta, (dx, dy): (f64, f64)) -> Option<WheelDevice> {
+fn wheel_device(delta: WheelDelta, (dx, dy): (CssPx, CssPx)) -> Option<WheelDevice> {
     if delta.is_step() {
         Some(WheelDevice::Mouse)
-    } else if dx != 0.0 {
+    } else if dx != CssPx::ZERO {
         Some(WheelDevice::Trackpad)
     } else if dy.abs() >= WHEEL_MOUSE_NOTCH_PX {
         Some(WheelDevice::Mouse)
@@ -1308,6 +1309,7 @@ impl ToileView {
         let line = (WHEEL_LINE_PX, WHEEL_LINE_PX);
         let page = (self.cam.size.width, self.cam.size.height);
         let (dx, dy) = delta.to_px(line, page);
+        let (dx, dy) = (CssPx::new(dx as f32), CssPx::new(dy as f32));
         // The pointer mode decides zoom against pan (`toile-viewport`). Ctrl
         // always zooms, and so does a trackpad pinch, which the browser reports
         // as a ctrl-wheel.
@@ -1324,7 +1326,7 @@ impl ToileView {
             self.kinetic.stop();
             // Zoom about the cursor. A trackpad pinch and a mouse notch both land
             // here; only `dy` drives the factor.
-            let factor = (-dy * ZOOM_PER_WHEEL_PX).exp();
+            let factor = (-f64::from(dy.get()) * ZOOM_PER_WHEEL_PX).exp();
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
             // Two-finger scroll pans the 2D plane in both axes. The model
@@ -1348,7 +1350,7 @@ impl ToileView {
     /// first. A line or page step is a classic wheel, so a mouse. A non-zero `dx` is a two-axis trackpad glide. A large `|dy|` with
     /// no `dx` is a discrete mouse notch. An ambiguous fine glide leaves the
     /// latch unchanged (`toile-viewport`).
-    fn classify_wheel(&mut self, delta: WheelDelta, px: (f64, f64)) {
+    fn classify_wheel(&mut self, delta: WheelDelta, px: (CssPx, CssPx)) {
         if let Some(device) = wheel_device(delta, px) {
             self.detected_mouse = device == WheelDevice::Mouse;
         }
@@ -4428,6 +4430,7 @@ mod view_tests;
 mod wheel_tests {
     use super::{WHEEL_MOUSE_NOTCH_PX, WheelDevice, wheel_device};
     use ambre_canvas::{WheelDelta, WheelDeltaMode};
+    use ambre_core::CssPx;
 
     /// A notched step, in line units.
     const LINE: WheelDelta = WheelDelta::new(0.0, 1.0, WheelDeltaMode::Line);
@@ -4437,15 +4440,21 @@ mod wheel_tests {
     #[test]
     fn line_or_page_delta_mode_is_a_mouse() {
         // A classic wheel reports line (1) or page (2) units.
-        assert_eq!(wheel_device(LINE, (0.0, 120.0)), Some(WheelDevice::Mouse));
-        assert_eq!(wheel_device(LINE, (0.0, 600.0)), Some(WheelDevice::Mouse));
+        assert_eq!(
+            wheel_device(LINE, (CssPx::new(0.0), CssPx::new(120.0))),
+            Some(WheelDevice::Mouse)
+        );
+        assert_eq!(
+            wheel_device(LINE, (CssPx::new(0.0), CssPx::new(600.0))),
+            Some(WheelDevice::Mouse)
+        );
     }
 
     #[test]
     fn horizontal_component_is_a_trackpad() {
         // Mice have no horizontal wheel axis; a non-zero dx means two fingers.
         assert_eq!(
-            wheel_device(GLIDE, (4.0, 12.0)),
+            wheel_device(GLIDE, (CssPx::new(4.0), CssPx::new(12.0))),
             Some(WheelDevice::Trackpad)
         );
     }
@@ -4453,7 +4462,7 @@ mod wheel_tests {
     #[test]
     fn large_vertical_notch_is_a_mouse() {
         assert_eq!(
-            wheel_device(GLIDE, (0.0, WHEEL_MOUSE_NOTCH_PX)),
+            wheel_device(GLIDE, (CssPx::new(0.0), WHEEL_MOUSE_NOTCH_PX)),
             Some(WheelDevice::Mouse)
         );
     }
@@ -4461,6 +4470,9 @@ mod wheel_tests {
     #[test]
     fn fine_vertical_glide_is_ambiguous() {
         // A small pixel-mode dy with no dx could be either; keep the latch.
-        assert_eq!(wheel_device(GLIDE, (0.0, 6.0)), None);
+        assert_eq!(
+            wheel_device(GLIDE, (CssPx::new(0.0), CssPx::new(6.0))),
+            None
+        );
     }
 }

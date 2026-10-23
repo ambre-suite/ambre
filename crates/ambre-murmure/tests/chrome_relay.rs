@@ -21,7 +21,7 @@ use ambre_bus::{
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, Locale};
-use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
+use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
     MurmureHandler, MurmureRelay, SearchBox, coverage,
@@ -1485,7 +1485,7 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
     let list = MentionList {
         entries,
         chosen: 0,
-        at: (10.0, 20.0),
+        at: ViewPoint::new(ViewPx::new(10.0), ViewPx::new(20.0)),
         region: Region::Channel,
     };
     relay.show_mentions(Region::Channel, Some(list));
@@ -1548,7 +1548,7 @@ async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
             (TextStyle::Italic, Cover::Part),
             (TextStyle::Code, Cover::None),
         ],
-        at: (10.0, 20.0),
+        at: ViewPoint::new(ViewPx::new(10.0), ViewPx::new(20.0)),
         region: Region::Channel,
     };
     relay.show_bar(Region::Channel, Some(bar));

@@ -35,7 +35,7 @@ use ambre_chrome::{
     ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
-use ambre_core::{ChannelId, SpaceId, StepDirection, UserId};
+use ambre_core::{ChannelId, CssPoint, CssPx, SpaceId, StepDirection, UserId};
 use leptos::prelude::*;
 
 /// What the user reads when the root of a copy could not be reached. Replying
@@ -1570,7 +1570,7 @@ pub fn ChannelMentionConfirm(
 
 /// The top-left of the canvas a region paints, in the viewport, `(0, 0)`
 /// with no such canvas in the page.
-fn canvas_origin(region: Region) -> (f64, f64) {
+fn canvas_origin(region: Region) -> CssPoint {
     let id = match region {
         Region::Thread => crate::view::THREAD_CANVAS,
         Region::Channel => crate::view::CHANNEL_CANVAS,
@@ -1580,7 +1580,10 @@ fn canvas_origin(region: Region) -> (f64, f64) {
         .and_then(|d| d.get_element_by_id(id.as_str()))
         .map(|canvas| {
             let rect = canvas.get_bounding_client_rect();
-            (rect.left(), rect.top())
+            CssPoint::new(
+                CssPx::new(rect.left() as f32),
+                CssPx::new(rect.top() as f32),
+            )
         })
         .unwrap_or_default()
 }
@@ -1592,8 +1595,8 @@ fn canvas_origin(region: Region) -> (f64, f64) {
 pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
     move || {
         relay.mentions.get().map(|list| {
-            let (left, top) = canvas_origin(list.region);
-            let (x, y) = (left + f64::from(list.at.0), top + f64::from(list.at.1));
+            let at = list.at.on_page(canvas_origin(list.region));
+            let (x, y) = (at.x.get(), at.y.get());
             let entries = list
                 .entries
                 .into_iter()
@@ -1632,8 +1635,8 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
 pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
     move || {
         relay.mark_bar.get().map(|bar| {
-            let (left, top) = canvas_origin(bar.region);
-            let anchor = (left + f64::from(bar.at.0), top + f64::from(bar.at.1));
+            let at = bar.at.on_page(canvas_origin(bar.region));
+            let anchor = (f64::from(at.x.get()), f64::from(at.y.get()));
             let controls = bar
                 .controls
                 .into_iter()

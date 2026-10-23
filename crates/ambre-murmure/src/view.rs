@@ -25,6 +25,7 @@ use ambre_canvas::{
     Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, Modifiers};
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
@@ -1255,11 +1256,15 @@ impl MurmureView {
                 .pipe
                 .set_caret(f64::from(x), f64::from(y), f64::from(tall.max(1.0)));
         }
-        self.list_mentions(caret.map(|(x, y, _)| (x, y)));
+        self.list_mentions(caret.map(|(x, y, _)| ViewPoint::new(ViewPx::new(x), ViewPx::new(y))));
         // The format bar hangs over a selection, and leaves with it.
-        let bar = caret
-            .zip(writes_in)
-            .and_then(|((x, y, _), of)| self.composer.mark_bar(of, (x, y), self.region));
+        let bar = caret.zip(writes_in).and_then(|((x, y, _), of)| {
+            self.composer.mark_bar(
+                of,
+                ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
+                self.region,
+            )
+        });
         if bar != self.barred {
             self.barred.clone_from(&bar);
             (self.reads.show_bar)(self.region, bar);
@@ -1323,7 +1328,7 @@ impl MurmureView {
     /// Offer the open `@` list the members of its channel, and hand the page
     /// what changed of it, hung from the `caret` (`MURMURE-551`,
     /// `MURMURE-555`). The entry chosen is said to a screen reader.
-    fn list_mentions(&mut self, caret: Option<(f32, f32)>) {
+    fn list_mentions(&mut self, caret: Option<ViewPoint>) {
         if let Some(channel) = self.composer.asks_members_of() {
             let members = (self.reads.members_of)(channel);
             self.composer.offer(&members, (self.reads.me)());
@@ -4958,7 +4963,10 @@ mod tests {
         assert_eq!(listed(&page), Some(all.to_vec()));
         let (in_thread, list) = page.lists.borrow().last().cloned().expect("a list");
         assert_eq!(in_thread, Region::Channel, "the channel's region hangs it");
-        assert!(list.expect("open").at.0 > 0.0, "it hangs from the caret");
+        assert!(
+            list.expect("open").at.x > ViewPx::ZERO,
+            "it hangs from the caret"
+        );
         type_text(&mut page, "c");
         frame_with_fonts(&mut page.view);
         let kept = ["@channel", "@Carol"].map(str::to_owned);

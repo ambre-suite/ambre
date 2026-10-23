@@ -2141,7 +2141,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.query | field | String
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.name | field | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | canvas_origin() | ret | (f64,f64)	math	layout geometry in logical px
 ambre-murmure | src/chrome.rs | crate::chrome | coverage() | ret | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
@@ -2217,8 +2216,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool
 ambre-murmure | src/composer.rs | crate::composer | Composer::key(key) | param | &str	debt	finding: DOM key names passed as `&str`
 ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	debt	finding: DOM key names passed as `&str`
 ambre-murmure | src/composer.rs | crate::composer | Composer::list_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-murmure | src/composer.rs | crate::composer | Composer::mark_bar(at) | param | (f32,f32)	math	layout geometry in logical px
-ambre-murmure | src/composer.rs | crate::composer | Composer::mention_list(at) | param | (f32,f32)	debt	finding: `in_thread: bool` stands in for the private `Region` enum
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	math	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint() | ret | Option<(f32,f32,f32)>	math	layout geometry in logical px
@@ -2361,7 +2358,6 @@ ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | MARK_CHORDS | const | [(char,TextStyle);3]	newtype-inner	table keyed by TextStyle enum
-ambre-murmure | src/markers.rs | crate::markers | MarkBar.at | field | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	debt	finding: Byte and char offsets share bare `usize`
@@ -2399,7 +2395,6 @@ ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	math	stat
 ambre-murmure | src/mention.rs | crate::mention | screen(confirmed) | param | bool	math	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
-ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.at | field | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.chosen | field | usize	math	local count/index/counter
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer.name | field | String	free-text	text, label or user content
@@ -2653,7 +2648,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::hear_latest(at_bottom) 
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer(y) | param | f64	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::list_height() | ret | f32	math	layout geometry in logical px
-ambre-murmure | src/view.rs | crate::view | MurmureView::list_mentions(caret) | param | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	math	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::move_focus(by) | param | isize	math	local count/index/counter
 ambre-murmure | src/view.rs | crate::view | MurmureView::new(size) | param | (f64,f64)	math	layout geometry in logical px
@@ -4836,7 +4830,6 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(skipped) |
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans(grabbable) | param | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | pan_by_wheel(delta) | param | (f64,f64)	debt	bug: Toile treats line and page wheel deltas as pixels (confirmed): wheel delta in line/page units used as px; Trame/Murmure normalise, Toile does not
 ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_FONT_SIZE | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_H | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -4978,7 +4971,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.selection_stale | fie
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.space_down | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.viewport_changed | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::blur_embed() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(px) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::drag_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry_of() | ret | (Point,f32,Rect)	math	geometry, layout, count or size local to the algorithm
@@ -5039,7 +5031,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move(y) | para
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up(y) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/view.rs | crate::ui::view | WHEEL_MOUSE_NOTCH_PX | const | f64	math	wheel tuning constant (see G1 for the unit bug)
 ambre-toile | src/ui/view.rs | crate::ui::view | ZOOM_PER_WHEEL_PX | const | f64	math	wheel tuning constant (see G1 for the unit bug)
 ambre-toile | src/ui/view.rs | crate::ui::view | canvas_client_offset() | ret | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
@@ -5048,7 +5039,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data) | param 
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data)#2 | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename)#2 | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | wheel_device((dx,dy)) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm

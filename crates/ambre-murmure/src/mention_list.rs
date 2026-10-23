@@ -6,7 +6,7 @@
 //! mention over it rides with the message (`MURMURE-552`).
 
 use ambre_bus::{MentionTarget, UserId};
-use ambre_core::ByteOffset;
+use ambre_core::{ByteOffset, ViewPoint};
 
 use crate::Region;
 
@@ -35,8 +35,8 @@ pub struct MentionList {
     pub entries: Vec<String>,
     /// The entry Enter or Tab picks.
     pub chosen: usize,
-    /// The top-left of the caret, in pixels of the region.
-    pub at: (f32, f32),
+    /// The top-left of the caret, in pixels of the region's canvas.
+    pub at: ViewPoint,
     /// The region the list hangs from.
     pub region: Region,
 }

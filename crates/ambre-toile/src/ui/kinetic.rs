@@ -5,6 +5,7 @@
 //! screen pixels. The board moves its camera by it, the content going the
 //! other way, so the zoom never changes how far a flick travels.
 
+use ambre_core::CssPx;
 use ambre_draw::kinetic::{EdgeSpeed, Kinetic, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use kurbo::Point;
@@ -25,16 +26,17 @@ pub fn finger_pans(tool: Tool, grabbable: bool) -> bool {
 
 /// A wheel event that pans the board: the content moves against the delta,
 /// as a page scrolls, and a glide coasts once it pauses (`TOILE-UI-289`).
-/// The `delta` is in pixels already; `mode` is the unit the event came in.
+/// The `dx` and `dy` are in pixels already; `mode` is the unit the event came
+/// in.
 pub fn pan_by_wheel(
     cam: &mut ViewportTransform,
     kinetic: &mut Kinetic,
-    delta: (f64, f64),
+    (dx, dy): (CssPx, CssPx),
     mode: WheelDeltaMode,
     now_ms: ambre_core::PageTime,
 ) {
     let stepped = mode != WheelDeltaMode::Pixel;
-    let step = kinetic.wheel(delta.0 as f32, delta.1 as f32, stepped, now_ms);
+    let step = kinetic.wheel(dx.get(), dy.get(), stepped, now_ms);
     move_view(cam, step);
 }
 
@@ -94,7 +96,7 @@ mod tests {
         pan_by_wheel(
             &mut cam,
             &mut kinetic,
-            (6.0, 12.0),
+            (CssPx::new(6.0), CssPx::new(12.0)),
             WheelDeltaMode::Pixel,
             ambre_bus::PageTime(0.0),
         );
@@ -121,7 +123,7 @@ mod tests {
             pan_by_wheel(
                 &mut cam,
                 &mut kinetic,
-                (0.0, 16.0),
+                (CssPx::new(0.0), CssPx::new(16.0)),
                 WheelDeltaMode::Pixel,
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
@@ -149,7 +151,7 @@ mod tests {
             pan_by_wheel(
                 &mut cam,
                 &mut kinetic,
-                (0.0, 16.0),
+                (CssPx::new(0.0), CssPx::new(16.0)),
                 WheelDeltaMode::Line,
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
