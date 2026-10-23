@@ -548,11 +548,11 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
     let cell = crate::events::block_id(last);
     state.handle_command(ProseCommand::SetCellStyle {
         cell_id: cell,
-        bg: Some(0x00ff_8800),
+        bg: Some(ambre_core::Rgb::from_bits(0x00ff_8800)),
         valign: Some(VAlign::Middle),
         border: Some(CellBorder {
             width_pt: 0.5,
-            color: 0x0000_0000,
+            color: ambre_core::Rgb::from_bits(0x0000_0000),
         }),
         padding_pt: Some(4.0),
     });

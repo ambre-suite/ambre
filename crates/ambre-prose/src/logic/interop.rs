@@ -717,7 +717,7 @@ mod tests {
             .expect("the sample holds a table");
         state.handle_command(ProseCommand::SetCellStyle {
             cell_id: crate::events::block_id(cell),
-            bg: Some(0x00ff_8800),
+            bg: Some(ambre_core::Rgb::from_bits(0x00ff_8800)),
             valign: None,
             border: None,
             padding_pt: None,

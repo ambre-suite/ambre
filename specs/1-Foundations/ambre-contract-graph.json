@@ -8039,7 +8039,7 @@
   {"edge": "cites-section", "from": "PROSE-FEAT-248", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
   {"edge": "verified-by", "from": "PROSE-FEAT-248", "to": "ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone"},
   {"edge": "cites-section", "from": "PROSE-FEAT-294", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
-  {"edge": "verified-by", "from": "PROSE-FEAT-294", "to": "ambre_prose::logic::tables::tests::a_colour_past_24_bits_or_a_bad_width_or_padding_is_refused"},
+  {"edge": "verified-by", "from": "PROSE-FEAT-294", "to": "ambre_prose::logic::tables::tests::a_bad_width_or_padding_is_refused"},
   {"edge": "cites-section", "from": "PROSE-FEAT-249", "section": "3", "to": "4-Prose/features/ambre-spec-prose-tables.md"},
   {"edge": "verified-by", "from": "PROSE-FEAT-249", "to": "ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone"},
   {"edge": "cites-section", "from": "PROSE-FEAT-250", "section": "4", "to": "4-Prose/features/ambre-spec-prose-tables.md"},

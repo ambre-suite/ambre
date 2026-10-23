@@ -12,7 +12,7 @@
 //! (`PROSE-FEAT-229`). Every peer holds both once the documents converge, so
 //! every peer keeps the same regions without exchanging anything more.
 
-use ambre_core::StepDirection;
+use ambre_core::{Rgb, StepDirection};
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId};
 
 use crate::doc::{self, Region};
@@ -185,11 +185,6 @@ fn first_text_block(tree: &LoroTree, block: &TreeID) -> Option<TreeID> {
                 first_text_block(tree, &child)
             }
         })
-}
-
-/// A colour as the document stores it, or `None` past 24 bits.
-fn hex_colour(value: u32) -> Option<String> {
-    (value <= 0x00FF_FFFF).then(|| format!("#{value:06x}"))
 }
 
 /// A width or a padding the format holds: finite, and not negative. A column
@@ -648,7 +643,7 @@ impl ProseState {
     pub(super) fn set_cell_style(
         &mut self,
         cell: &TreeID,
-        bg: Option<u32>,
+        bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
         padding_pt: Option<f32>,
@@ -659,10 +654,7 @@ impl ProseState {
         }
         let mut writes: Vec<(doc::AttrKey, LoroValue)> = Vec::new();
         if let Some(bg) = bg {
-            let Some(hex) = hex_colour(bg) else {
-                return Self::err_table(format!("the colour {bg:#x}"));
-            };
-            writes.push((doc::AttrKey::CellBg, hex.into()));
+            writes.push((doc::AttrKey::CellBg, bg.to_string().into()));
         }
         if let Some(valign) = valign {
             writes.push((doc::AttrKey::VAlign, i64::from(valign.code()).into()));
@@ -671,9 +663,6 @@ impl ProseState {
             if !usable(border.width_pt, Floor::ZeroAllowed) {
                 return Self::err_table(format!("a border of {} pt", border.width_pt));
             }
-            let Some(hex) = hex_colour(border.color) else {
-                return Self::err_table(format!("the colour {:#x}", border.color));
-            };
             for key in [
                 doc::AttrKey::EdgeTop,
                 doc::AttrKey::EdgeBottom,
@@ -682,7 +671,7 @@ impl ProseState {
             ] {
                 writes.push((key, f64::from(border.width_pt).into()));
             }
-            writes.push((doc::AttrKey::EdgeColor, hex.into()));
+            writes.push((doc::AttrKey::EdgeColor, border.color.to_string().into()));
         }
         if let Some(padding) = padding_pt {
             if !usable(padding, Floor::ZeroAllowed) {
@@ -1344,11 +1333,11 @@ pub(crate) mod tests {
         let regions = state.regions_of(&table);
         state.handle_command(ProseCommand::SetCellStyle {
             cell_id: block_id(styled),
-            bg: Some(0x00ff_8800),
+            bg: Some(Rgb::from_bits(0x00ff_8800)),
             valign: Some(VAlign::Middle),
             border: Some(CellBorder {
                 width_pt: 1.5,
-                color: 0x0012_3456,
+                color: Rgb::from_bits(0x0012_3456),
             }),
             padding_pt: Some(4.0),
         });
@@ -1373,20 +1362,19 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_colour_past_24_bits_or_a_bad_width_or_padding_is_refused() {
+    fn a_bad_width_or_padding_is_refused() {
         let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
         let cell = cell_at(&state, table, 0, 0);
-        let style = |bg, padding_pt| ProseCommand::SetCellStyle {
+        let style = |padding_pt| ProseCommand::SetCellStyle {
             cell_id: block_id(cell),
-            bg,
+            bg: None,
             valign: None,
             border: None,
             padding_pt,
         };
         let commands = [
-            style(Some(0x0100_0000), None),
-            style(None, Some(-1.0)),
-            style(None, Some(f32::NAN)),
+            style(Some(-1.0)),
+            style(Some(f32::NAN)),
             ProseCommand::ResizeTableCol {
                 table_id: block_id(table),
                 col_index: 0,

@@ -1153,10 +1153,10 @@ mod tests {
         let (mut state, first, _) = styled_table();
         style(&mut state, first, |command| {
             if let ProseCommand::SetCellStyle { bg, border, .. } = command {
-                *bg = Some(0x00ff_8800);
+                *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
                 *border = Some(CellBorder {
                     width_pt: 3.0,
-                    color: 0x0012_3456,
+                    color: ambre_core::Rgb::from_bits(0x0012_3456),
                 });
             }
         });

@@ -6,7 +6,7 @@
 //! script and a remote reference included, so nothing a page carries runs or
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
-use ambre_core::Rgba;
+use ambre_core::{Rgb, Rgba};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
@@ -650,14 +650,15 @@ fn style_marks(style: &str) -> Vec<Change> {
             },
             "color" => {
                 if let Some(color) = css_color(&lower) {
-                    changes.push(("fg", (!ink(&color)).then_some(color)));
+                    changes.push(("fg", (!ink(color)).then(|| mark::canonical_color(color))));
                 }
             }
             "background-color" | "background" => {
                 if lower == "transparent" {
                     changes.push(("bg", None));
                 } else if let Some(color) = css_color(&lower) {
-                    changes.push(("bg", (color != "#ffffff").then_some(color)));
+                    let white = color == Rgba::from_bits(0xffff_ffff);
+                    changes.push(("bg", (!white).then(|| mark::canonical_color(color))));
                 }
             }
             "font-size" => {
@@ -678,19 +679,10 @@ fn style_marks(style: &str) -> Vec<Change> {
 
 /// Whether a colour reads as the page's body ink: black, or a grey too dark
 /// to tell from it. Sites set `#202122` or `#333` as their text colour.
-fn ink(color: &str) -> bool {
-    let channel = |at: usize| {
-        color
-            .get(at..at + 2)
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok())
-    };
-    match (channel(1), channel(3), channel(5)) {
-        (Some(r), Some(g), Some(b)) => {
-            let (low, high) = (r.min(g).min(b), r.max(g).max(b));
-            high <= 0x40 && high - low <= 0x10
-        }
-        _ => false,
-    }
+fn ink(color: Rgba) -> bool {
+    let [r, g, b, _] = color.channels();
+    let (low, high) = (r.min(g).min(b), r.max(g).max(b));
+    high <= 0x40 && high - low <= 0x10
 }
 
 /// A size in points, from points or pixels. A relative size depends on a
@@ -734,18 +726,16 @@ fn font_family(value: &str) -> Option<String> {
     usable.then(|| first.to_owned())
 }
 
-/// A colour in the stored spelling: hexadecimal, `rgb()`, `rgba()`, or one of
-/// the sixteen basic names.
-fn css_color(value: &str) -> Option<String> {
+/// A colour read from hexadecimal, `rgb()`, `rgba()`, or one of the sixteen
+/// basic names.
+fn css_color(value: &str) -> Option<Rgba> {
     if let Some(hex) = value.strip_prefix('#') {
         let long = match hex.len() {
             3 => hex.chars().flat_map(|c| [c, c]).collect(),
             6 | 8 => hex.to_owned(),
             _ => return None,
         };
-        return mark::parse_color(&format!("#{long}"))
-            .ok()
-            .map(mark::canonical_color);
+        return mark::parse_color(&format!("#{long}")).ok();
     }
     if let Some(args) = value
         .strip_prefix("rgba(")
@@ -776,29 +766,29 @@ fn css_color(value: &str) -> Option<String> {
         if a == 0 {
             return None;
         }
-        return Some(mark::canonical_color(rgba));
+        return Some(rgba);
     }
     let named = match value {
-        "black" => "#000000",
-        "white" => "#ffffff",
-        "red" => "#ff0000",
-        "green" => "#008000",
-        "blue" => "#0000ff",
-        "yellow" => "#ffff00",
-        "gray" | "grey" => "#808080",
-        "silver" => "#c0c0c0",
-        "maroon" => "#800000",
-        "olive" => "#808000",
-        "lime" => "#00ff00",
-        "aqua" | "cyan" => "#00ffff",
-        "teal" => "#008080",
-        "navy" => "#000080",
-        "fuchsia" | "magenta" => "#ff00ff",
-        "purple" => "#800080",
-        "orange" => "#ffa500",
+        "black" => 0x00_0000,
+        "white" => 0xff_ffff,
+        "red" => 0xff_0000,
+        "green" => 0x00_8000,
+        "blue" => 0x00_00ff,
+        "yellow" => 0xff_ff00,
+        "gray" | "grey" => 0x80_8080,
+        "silver" => 0xc0_c0c0,
+        "maroon" => 0x80_0000,
+        "olive" => 0x80_8000,
+        "lime" => 0x00_ff00,
+        "aqua" | "cyan" => 0x00_ffff,
+        "teal" => 0x00_8080,
+        "navy" => 0x00_0080,
+        "fuchsia" | "magenta" => 0xff_00ff,
+        "purple" => 0x80_0080,
+        "orange" => 0xff_a500,
         _ => return None,
     };
-    Some(named.to_owned())
+    Some(Rgb::from_bits(named).to_rgba(u8::MAX))
 }
 
 #[cfg(test)]

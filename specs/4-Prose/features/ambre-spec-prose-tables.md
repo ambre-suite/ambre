@@ -84,7 +84,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-248` | `POST` | A cell style MUST be written on the cell the command names, and on no other. | this spec section 3 | `ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone` | none | verified |
-| `PROSE-FEAT-294` | `FAIL` | A colour past 24 bits, or a width or a padding that is not a finite number above zero, MUST be refused, and nothing MUST be written. | this spec section 3 | `ambre_prose::logic::tables::tests::a_colour_past_24_bits_or_a_bad_width_or_padding_is_refused` | none | verified |
+| `PROSE-FEAT-294` | `FAIL` | A width or a padding that is not a finite number above zero MUST be refused, and nothing MUST be written. | this spec section 3 | `ambre_prose::logic::tables::tests::a_bad_width_or_padding_is_refused` | none | verified |
 | `PROSE-FEAT-249` | `FRAME` | Styling a cell MUST NOT change its text, the column widths, or the merge map. | this spec section 3 | `ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone` | none | verified |
 
 ### 1.8 Move the caret to another cell

@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use ambre_core::{CommentId, FootnoteId, ReplyId, SuggestionId, UserId};
+use ambre_core::{CommentId, FootnoteId, ReplyId, Rgb, SuggestionId, UserId};
 
 ambre_core::define_index! {
     /// A code-point offset into the body of one block, as the CRDT counts it
@@ -483,12 +483,12 @@ impl VAlign {
 
 /// One border, applied to the four edges of a cell at once.
 ///
-/// `color` is `0xRRGGBB`. The document stores it as the `"#rrggbb"` record the
-/// mark registry uses, and a value past 24 bits is refused.
+/// The document stores `color` as the `"#rrggbb"` record the mark registry
+/// uses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellBorder {
     pub width_pt: f32,
-    pub color: u32,
+    pub color: Rgb,
 }
 
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
@@ -908,7 +908,7 @@ pub enum ProseCommand {
     /// Each `None` leaves that property alone.
     SetCellStyle {
         cell_id: BlockId,
-        bg: Option<u32>,
+        bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
         padding_pt: Option<f32>,
@@ -1588,7 +1588,7 @@ pub enum ProseRefusal {
     /// A merge over a cell that still holds text (`PROSE-FEAT-046`).
     #[error("a cell to merge still holds text")]
     MergeOverText,
-    /// A table dimension, a width or a colour the format cannot hold.
+    /// A table dimension or a width the format cannot hold.
     #[error("{0} is not a value a table takes")]
     BadTableValue(String),
     /// A field aimed at the first page's own block while the setting is off
