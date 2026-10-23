@@ -8,14 +8,13 @@
 //! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
 //! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{ByteCount, ByteOffset};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR_PX;
-use crate::layout::run::{ParleyRunData, RunOffset, RunSpan, ShapedRun, TableShape};
+use crate::layout::run::{ParleyRunData, RunCount, RunOffset, RunSpan, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
@@ -73,20 +72,23 @@ fn place(left: f64, body_top: f64, content_width: f64, run: &ShapedRun, piece: F
     }
 }
 
+/// One end of a selection, as the run drawn for its block counts it.
+type RunSpot = (BlockId, RunOffset);
+
 /// The code-point range of `block` a selection from `start` to `end` covers,
-/// the two ends already in flow order.
+/// the two ends already in flow order and read on the runs drawn.
 fn covered(
     ui: &ProseUiState,
     block: BlockId,
-    len: DocCount,
-    ends: (Spot, Spot),
-) -> Option<DocSpan> {
+    len: RunCount,
+    ends: (RunSpot, RunSpot),
+) -> Option<RunSpan> {
     let ((first, from), (last, to)) = ends;
     let len = len.as_end();
     // Within one block, the flow is not asked: a header or a footer holds
     // its own selection and has no place in it.
     if first == last {
-        return (first == block && from < to).then_some(DocSpan::new(from, to.min(len)));
+        return (first == block && from < to).then_some(RunSpan::new(from, to.min(len)));
     }
     let here = ui.flow_index(&crate::events::tree_id(block))?;
     let first_index = ui.flow_index(&crate::events::tree_id(first))?;
@@ -97,18 +99,10 @@ fn covered(
     let start = if here == first_index {
         from
     } else {
-        DocOffset::ZERO
+        RunOffset::ZERO
     };
     let end = if here == last_index { to } else { len };
-    (start < end).then_some(DocSpan::new(start, end))
-}
-
-/// A document span read as the same numbers in a run.
-fn same_offsets(span: DocSpan) -> RunSpan {
-    RunSpan::new(
-        RunOffset::new(span.start.get()),
-        RunOffset::new(span.end.get()),
-    )
+    (start < end).then_some(RunSpan::new(start, end))
 }
 
 /// The two ends of a selection in flow order, or `None` for a caret alone.
@@ -583,23 +577,27 @@ impl ProseUiState {
         block: &ScreenBlock,
     ) {
         let (id, data, placed) = (block.id, block.run.data(), &block.placed);
+        // The local selection counts the document, draft included, as the
+        // local caret does. A peer's counts what the Logic thread answered.
+        let laid = |(at, offset): Spot| (at, self.to_laid(at, offset));
+        let answered = |(at, offset): Spot| (at, crate::view::answered(offset));
         if block.local
-            && let Some(ends) = self
+            && let Some((first, last)) = self
                 .cursor
                 .as_ref()
                 .and_then(|cursor| ordered(self, cursor))
-            && let Some(span) = covered(self, id, DocCount::new(data.len().get()), ends)
+            && let Some(span) = covered(self, id, data.len(), (laid(first), laid(last)))
         {
-            for rect in data.range_boxes(same_offsets(span)) {
+            for rect in data.range_boxes(span) {
                 surface.fill_rect(to_rect(placed, &rect), palette.accent.multiply_alpha(0.2));
             }
         }
         for peer in self.remote_at.get(&id).map_or(&[][..], Vec::as_slice) {
-            if let Some(ends) = ordered(self, &peer.position)
-                && let Some(span) = covered(self, id, DocCount::new(data.len().get()), ends)
+            if let Some((first, last)) = ordered(self, &peer.position)
+                && let Some(span) = covered(self, id, data.len(), (answered(first), answered(last)))
             {
                 let colour = ambre_draw::peer_color(&peer.user_id).multiply_alpha(1.0 / 6.0);
-                for rect in data.range_boxes(same_offsets(span)) {
+                for rect in data.range_boxes(span) {
                     surface.fill_rect(to_rect(placed, &rect), colour);
                 }
             }
@@ -643,7 +641,7 @@ impl ProseUiState {
             let colour = ambre_draw::peer_color(&peer.user_id);
             let caret = to_rect(
                 placed,
-                &data.caret_box(RunOffset::new(peer.position.offset.get())),
+                &data.caret_box(crate::view::answered(peer.position.offset)),
             );
             surface.fill_rect(
                 Rect::new(caret.x0, caret.y0, caret.x0 + CARET_WIDTH_PX, caret.y1),
@@ -832,8 +830,7 @@ mod tests {
             id,
             vec![Highlight {
                 kind: HighlightKind::Comment,
-                start: DocOffset::new(5),
-                end: DocOffset::new(15),
+                span: crate::view::answered_span(DocOffset::new(5), DocOffset::new(15)),
             }],
         );
         let surface = paint(&mut ui);
@@ -912,8 +909,7 @@ mod tests {
             .iter()
             .map(|kind| Highlight {
                 kind: *kind,
-                start: DocOffset::ZERO,
-                end: DocOffset::new(4),
+                span: crate::view::answered_span(DocOffset::ZERO, DocOffset::new(4)),
             })
             .collect();
         ui.highlights.insert(id, marks);
@@ -1031,8 +1027,7 @@ mod tests {
         ui.apply_layout(shaped);
         let mark = Highlight {
             kind: HighlightKind::Comment,
-            start: DocOffset::ZERO,
-            end: DocOffset::new(3),
+            span: crate::view::answered_span(DocOffset::ZERO, DocOffset::new(3)),
         };
         let ids: Vec<BlockId> = ui
             .shaped
@@ -1947,8 +1942,7 @@ mod tests {
         let id = first_block(&ui);
         let mark = |kind| Highlight {
             kind,
-            start: DocOffset::new(2),
-            end: DocOffset::new(6),
+            span: crate::view::answered_span(DocOffset::new(2), DocOffset::new(6)),
         };
         ui.highlights.insert(
             id,
@@ -2016,8 +2010,7 @@ mod tests {
                 id,
                 vec![Highlight {
                     kind: HighlightKind::Comment,
-                    start: DocOffset::new(5),
-                    end: DocOffset::new(15),
+                    span: crate::view::answered_span(DocOffset::new(5), DocOffset::new(15)),
                 }],
             );
             let screen = paint(&mut ui);

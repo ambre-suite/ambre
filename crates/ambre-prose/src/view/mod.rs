@@ -30,7 +30,7 @@ use ambre_bus::app::prose::{DocOffset, ProseCommand};
 use ambre_draw::kinetic::ScrollStep;
 
 use crate::events::{BlockId, TocEntry, tree_id};
-use crate::layout::run::ShapedLayout;
+use crate::layout::run::{RunOffset, RunSpan, ShapedLayout};
 use crate::ui::ProseUiState;
 
 /// The pages asked for beyond those a frame builds, on each side, so a
@@ -46,12 +46,25 @@ pub enum HighlightKind {
     Find,
 }
 
-/// One inline highlight, in its block's own code-point offsets.
+/// One inline highlight, on the laid run of its block.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Highlight {
     pub kind: HighlightKind,
-    pub start: DocOffset,
-    pub end: DocOffset,
+    pub span: RunSpan,
+}
+
+/// Where an offset the Logic thread answered falls on the laid run of its
+/// block. It answers the comments, suggestions, links, find matches and
+/// peers' positions. Those lists and the layout in force count the text it
+/// holds, so the number carries over. The local draft is not in either.
+pub(crate) const fn answered(offset: DocOffset) -> RunOffset {
+    RunOffset::new(offset.get())
+}
+
+/// The span `start..end` the Logic thread answered, on the laid run of its
+/// block (see [`answered`]).
+pub(crate) const fn answered_span(start: DocOffset, end: DocOffset) -> RunSpan {
+    RunSpan::new(answered(start), answered(end))
 }
 
 impl ProseUiState {
@@ -193,10 +206,10 @@ impl ProseUiState {
         let mut marks: HashMap<BlockId, Vec<Highlight>> = HashMap::new();
         let mut push = |block: BlockId, kind: HighlightKind, start: DocOffset, end: DocOffset| {
             if start < end {
-                marks
-                    .entry(block)
-                    .or_default()
-                    .push(Highlight { kind, start, end });
+                marks.entry(block).or_default().push(Highlight {
+                    kind,
+                    span: answered_span(start, end),
+                });
             }
         };
         for thread in &self.comments {

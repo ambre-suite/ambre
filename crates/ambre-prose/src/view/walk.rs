@@ -11,7 +11,7 @@
 use ambre_core::Rgba;
 use ambre_draw::{Affine, Brush, Color, DocumentWalk, DrawSurface, PositionedLayoutItem, Rect};
 
-use crate::layout::run::{CellStyle, ParleyRunData, RunOffset, RunSpan, ShapedRun};
+use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun};
 use crate::view::cache::{RunCache, RunKey};
 use crate::view::{Highlight, HighlightKind};
 
@@ -203,11 +203,7 @@ impl PageWalk<'_> {
         );
         for mark in &block.highlights {
             self.highlights_walked = self.highlights_walked.saturating_add(1);
-            let span = RunSpan::new(
-                RunOffset::new(mark.start.get()),
-                RunOffset::new(mark.end.get()),
-            );
-            for rect in data.range_boxes(span) {
+            for rect in data.range_boxes(mark.span) {
                 let rect = to_rect(placed, &rect);
                 surface.fill_rect(rect, palette.highlight(mark.kind));
                 // A suggestion reads in the text itself: an insertion is

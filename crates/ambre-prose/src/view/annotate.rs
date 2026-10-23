@@ -7,14 +7,14 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::DocSpan;
 use ambre_core::{CommentId, SuggestionId};
 
 use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
-use crate::layout::run::{RunOffset, RunSpan};
+use crate::layout::run::RunSpan;
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
+use crate::view::{answered, answered_span};
 
 /// A rectangle on the canvas, in CSS pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -139,13 +139,13 @@ impl ProseUiState {
         )
     }
 
-    /// The piece of the text `start..end` of `block` drawn under a canvas
+    /// The piece of the text `span` of `block`'s laid run drawn under a canvas
     /// point on `page`, if the point is on it. Only the text answers: the
     /// rest of its line does not.
     fn span_under(
         &self,
         block: BlockId,
-        span: DocSpan,
+        span: RunSpan,
         page: u32,
         (x_px, y_px): (f32, f32),
     ) -> Option<ScreenRect> {
@@ -154,11 +154,7 @@ impl ProseUiState {
         let run = self.shaped.blocks.get(&layout.block_id)?.data();
         let piece = fragment(layout, page, &run.line_tops())?;
         let bottom = piece.run_top + piece.height;
-        let laid = RunSpan::new(
-            RunOffset::new(span.start.get()),
-            RunOffset::new(span.end.get()),
-        );
-        run.range_boxes(laid).into_iter().find_map(|part| {
+        run.range_boxes(span).into_iter().find_map(|part| {
             let (y0, y1) = (part.y0 as f32, part.y1 as f32);
             if y1 <= piece.run_top || y0 >= bottom {
                 return None;
@@ -191,7 +187,7 @@ impl ProseUiState {
             suggestion.spans.iter().find_map(|span| {
                 let rect = self.span_under(
                     span.block_id,
-                    DocSpan::new(span.start, span.end),
+                    answered_span(span.start, span.end),
                     page,
                     (x_px, y_px),
                 )?;
@@ -212,7 +208,7 @@ impl ProseUiState {
         self.links.iter().find(|link| {
             self.span_under(
                 link.block_id,
-                DocSpan::new(link.start, link.end),
+                answered_span(link.start, link.end),
                 page,
                 (x_px, y_px),
             )
@@ -327,7 +323,7 @@ impl ProseUiState {
                     .blocks
                     .get(&layout.block_id)?
                     .data()
-                    .caret_box(RunOffset::new(thread.anchor_start.get()));
+                    .caret_box(answered(thread.anchor_start));
                 let (page, piece) = self.fragment_at(block, caret.y0 as f32)?;
                 let (_, y_px) = self.to_screen(block, page, piece, 0.0, caret.y0 as f32);
                 Some(ThreadAnchor {
