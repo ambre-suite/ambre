@@ -3541,8 +3541,6 @@ ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | cons
 ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
 ambre-server | src/state.rs | crate::state | Config.base_url | field | String	free-text	config URL
-ambre-server | src/state.rs | crate::state | Config.ws_msg_burst | field | u32	math	config burst
-ambre-server | src/state.rs | crate::state | Config.ws_msg_rate_per_sec | field | u32	math	config rate; the burst/rate order is right at ws/handler/mod.rs:202
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFences::holds() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | handle_request_missing::PAGE_SIZE | const | i64	math	a local limit or period, passed to SQL or a loop
@@ -3558,8 +3556,6 @@ ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | ver
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.capacity | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.refill_per_sec | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.tokens | field | f64	math	token bucket arithmetic
-ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::new(capacity) | param | u32	math	token bucket arithmetic
-ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::new(refill_per_sec) | param | u32	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature set by the trait
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | field | String	newtype-inner	newtype inner, accessor or constructor
@@ -5167,3 +5163,4 @@ ambre-server | src/jwt.rs | crate::jwt | JwtSeed.0 | field | [u8;32]	newtype-inn
 ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &str	foreign-api	the JWT_SIGNING_SEED environment value, parsed here once
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::NotHex.0 | field | String	free-text	the hex decoder message a refusal reports
+ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports

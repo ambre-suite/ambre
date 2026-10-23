@@ -182,8 +182,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         media_max_bytes: ambre_core::ByteSize(env_ttl("MEDIA_MAX_BYTES", 100 * 1024 * 1024)),
         snapshot_max_bytes: ambre_core::ByteSize(env_ttl("SNAPSHOT_MAX_BYTES", 50 * 1024 * 1024)),
         delta_max_bytes: ambre_core::ByteSize(env_ttl("DELTA_MAX_BYTES", 4 * 1024 * 1024)),
-        ws_msg_rate_per_sec: env_ttl("WS_MSG_RATE_PER_SEC", 60) as u32,
-        ws_msg_burst: env_ttl("WS_MSG_BURST", 120) as u32,
+        ws_msg_rate_per_sec: state::RatePerSec::from_env(env_ttl(
+            "WS_MSG_RATE_PER_SEC",
+            u64::from(state::RatePerSec::DEFAULT.get()),
+        ))
+        .map_err(|e| format!("WS_MSG_RATE_PER_SEC: {e}"))?,
+        ws_msg_burst: state::Burst::from_env(env_ttl(
+            "WS_MSG_BURST",
+            u64::from(state::Burst::DEFAULT.get()),
+        ))
+        .map_err(|e| format!("WS_MSG_BURST: {e}"))?,
         ephemeral_max_bytes: ambre_core::ByteSize(env_ttl("EPHEMERAL_MAX_BYTES", 64 * 1024)),
         ..Default::default()
     };

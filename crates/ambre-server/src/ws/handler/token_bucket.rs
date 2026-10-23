@@ -14,6 +14,8 @@
 use std::time::Duration;
 use std::time::Instant;
 
+use crate::state::{Burst, RatePerSec};
+
 /// A monotonic-clock token bucket.
 ///
 /// `capacity` tokens accumulate at `refill_per_sec`; each accepted message costs
@@ -35,14 +37,25 @@ impl TokenBucket {
     /// Builds a bucket that starts full (`capacity` tokens), refilling at
     /// `refill_per_sec`. A full start lets a freshly connected client burst up to
     /// `capacity` messages (for example an initial batch of subscribes) immediately.
-    pub(crate) fn new(capacity: u32, refill_per_sec: u32) -> Self {
-        let capacity = capacity.max(1) as f64;
+    pub(crate) fn new(capacity: Burst, refill_per_sec: RatePerSec) -> Self {
+        let capacity = f64::from(capacity.get());
         Self {
             capacity,
-            refill_per_sec: refill_per_sec.max(1) as f64,
+            refill_per_sec: f64::from(refill_per_sec.get()),
             tokens: capacity,
             last_refill: Instant::now(),
         }
+    }
+
+    /// A bucket of `burst` tokens refilling at `rate`, for a test that names
+    /// its limits as plain counts. A count of zero or past `u32::MAX` is a
+    /// typo in the test, and panics.
+    #[cfg(test)]
+    pub(crate) fn of(burst: u64, rate: u64) -> Self {
+        Self::new(
+            Burst::from_env(burst).expect("a valid burst"),
+            RatePerSec::from_env(rate).expect("a valid rate"),
+        )
     }
 
     /// Refills the bucket for the time elapsed since the last call, then tries to
@@ -71,7 +84,7 @@ impl TokenBucket {
 /// Convenience: `Duration` a caller can advance a test clock by to gain one token.
 #[cfg(test)]
 pub(crate) fn one_token_interval(refill_per_sec: u32) -> Duration {
-    Duration::from_secs_f64(1.0 / refill_per_sec.max(1) as f64)
+    Duration::from_secs_f64(1.0 / f64::from(refill_per_sec.max(1)))
 }
 
 #[cfg(test)]
@@ -81,7 +94,7 @@ mod tests {
     #[test]
     fn starts_full_and_allows_a_full_burst() {
         let start = Instant::now();
-        let mut b = TokenBucket::new(5, 1);
+        let mut b = TokenBucket::of(5, 1);
         // Five immediate messages are allowed (the burst), the sixth is not.
         for i in 0..5 {
             assert!(b.try_consume(start), "message {i} within burst must pass");
@@ -95,7 +108,7 @@ mod tests {
     #[test]
     fn refills_at_the_configured_rate() {
         let start = Instant::now();
-        let mut b = TokenBucket::new(2, 10); // 10 tokens/sec
+        let mut b = TokenBucket::of(2, 10); // 10 tokens/sec
         assert!(b.try_consume(start));
         assert!(b.try_consume(start));
         assert!(!b.try_consume(start), "burst of 2 is exhausted");
@@ -109,7 +122,7 @@ mod tests {
     #[test]
     fn refill_is_capped_at_capacity() {
         let start = Instant::now();
-        let mut b = TokenBucket::new(3, 100);
+        let mut b = TokenBucket::of(3, 100);
         // Drain, then wait a long time: the bucket cannot exceed its capacity.
         assert!(b.try_consume(start));
         let much_later = start + Duration::from_secs(3600);
@@ -127,7 +140,7 @@ mod tests {
         // A client sending exactly at the refill rate must never be throttled,
         // even far past the initial burst (fractional tokens are preserved).
         let mut now = Instant::now();
-        let mut b = TokenBucket::new(4, 20); // 20/sec => 50 ms per token
+        let mut b = TokenBucket::of(4, 20); // 20/sec => 50 ms per token
         let step = one_token_interval(20);
         for i in 0..1000 {
             assert!(

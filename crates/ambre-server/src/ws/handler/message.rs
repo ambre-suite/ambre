@@ -1164,7 +1164,7 @@ mod ephemeral_binding_tests {
             last_replay_at: HashMap::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         }
@@ -1483,7 +1483,7 @@ mod delta_size_cap_tests {
             last_replay_at: HashMap::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         }
@@ -1736,7 +1736,7 @@ mod access_tests {
             doc_access_verified_at: HashMap::from([(doc_id, verified)]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         }
@@ -2443,7 +2443,7 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         };
@@ -2556,7 +2556,7 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         };
@@ -2673,7 +2673,7 @@ mod channel_gate_tests {
             doc_access_verified_at: HashMap::new(),
             doc_write_allowed: HashMap::new(),
             last_replay_at: HashMap::new(),
-            msg_bucket: TokenBucket::new(1000, 1000),
+            msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
             doc_channels: HashMap::new(),
         }
