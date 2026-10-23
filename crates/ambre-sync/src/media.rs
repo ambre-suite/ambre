@@ -266,11 +266,12 @@ pub(crate) trait MediaHttp {
     /// A sealed blob to a presigned object-storage link.
     async fn put_sealed(
         &self,
-        url: &str,
+        url: &ambre_core::PresignedUrl,
         blob: &pipeline::SealedBlob,
     ) -> Result<(), http::HttpError>;
     /// A blob from a presigned object-storage link.
-    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, http::HttpError>;
+    async fn fetch_bytes(&self, url: &ambre_core::PresignedUrl)
+    -> Result<Vec<u8>, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
     async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError>;
 }
@@ -285,12 +286,15 @@ impl MediaHttp for GlooHttp {
     }
     async fn put_sealed(
         &self,
-        url: &str,
+        url: &ambre_core::PresignedUrl,
         blob: &pipeline::SealedBlob,
     ) -> Result<(), http::HttpError> {
         http::put_sealed(url, blob).await
     }
-    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, http::HttpError> {
+    async fn fetch_bytes(
+        &self,
+        url: &ambre_core::PresignedUrl,
+    ) -> Result<Vec<u8>, http::HttpError> {
         http::fetch_bytes(url).await
     }
     async fn delete(&self, url: &http::RelayUrl) -> Result<u16, http::HttpError> {
@@ -438,7 +442,7 @@ async fn upload_leg(
         .await
         .map_err(|e| e.at("upload-url"))?;
     // The presigned PUT goes straight to object storage, not to the relay.
-    http.put_sealed(link.upload_url.expose(), blob)
+    http.put_sealed(&link.upload_url, blob)
         .await
         .map_err(|e| e.at("S3 PUT"))?;
     http.post_json::<_, http::WriteAnswer>(
@@ -471,7 +475,7 @@ async fn download_leg(
         .await
         .map_err(|e| e.at("download-url"))?;
     let blob = http
-        .fetch_bytes(link.download_url.expose())
+        .fetch_bytes(&link.download_url)
         .await
         .map_err(|e| e.at("S3 GET"))?;
     open_blob_named(&blob, content_hash, keyring)
@@ -614,12 +618,15 @@ mod tests {
         }
         async fn put_sealed(
             &self,
-            _url: &str,
+            _url: &ambre_core::PresignedUrl,
             _blob: &pipeline::SealedBlob,
         ) -> Result<(), http::HttpError> {
             self.step("put")
         }
-        async fn fetch_bytes(&self, _url: &str) -> Result<Vec<u8>, http::HttpError> {
+        async fn fetch_bytes(
+            &self,
+            _url: &ambre_core::PresignedUrl,
+        ) -> Result<Vec<u8>, http::HttpError> {
             self.step("fetch")?;
             Ok(self.served.clone())
         }

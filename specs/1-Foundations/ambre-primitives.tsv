@@ -4623,14 +4623,11 @@ ambre-sync | src/http.rs | crate::http | download_snapshot() | ret | Option<Vec<
 ambre-sync | src/http.rs | crate::http | download_snapshot(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | encode_link() | ret | Result<ambre_core::EncodedKeyLink,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/http.rs | crate::http | fetch_bytes(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | fetch_key_links(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | get_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | is_personal() | ret | bool	generic	predicate result: the serde skip test of CreateDocumentRequest.space
 ambre-sync | src/http.rs | crate::http | post_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | post_json_via(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | put_sealed(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/http.rs | crate::http | put_sealed_via(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/lib.rs | crate | APPLIED_WINDOW | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | HeldSnapshot.blob | field | Vec<u8>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | MAX_EPHEMERAL_REMOTE_AUTHORS | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -4720,13 +4717,9 @@ ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no
 ambre-sync | src/local_store.rs | crate::local_store | place_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::delete() | ret | Result<u16,http::HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::put_sealed(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/media.rs | crate::media | Address | alias | [u8;ambre_crypto::commitment::TAG_LEN]	debt	finding: media address as an alias, and as a hex `ContentHash` string
 ambre-sync | src/media.rs | crate::media | MediaHttp::delete() | ret | Result<u16,http::HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
 ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
-ambre-sync | src/media.rs | crate::media | MediaHttp::put_sealed(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/media.rs | crate::media | SyncState::handle_upload_media(data) | param | Vec<u8>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-sync | src/media.rs | crate::media | Upload.data | field | Vec<u8>	debt	planned: lot B bis 12 (UploadMedia data / LoadFonts faces)
 ambre-sync | src/media.rs | crate::media | download_leg() | ret | Result<Vec<u8>,http::Failed>	generic	bytes of a codec or a transport

@@ -806,7 +806,7 @@ pub(crate) async fn download_snapshot(
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
-    fetch_bytes(resp.download_url.expose()).await.ok()
+    fetch_bytes(&resp.download_url).await.ok()
 }
 
 pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {
@@ -832,7 +832,7 @@ pub(crate) async fn delete_status_auth(
 /// `ZK-001`).
 #[allow(dead_code)]
 pub(crate) async fn put_sealed(
-    url: &str,
+    url: &ambre_core::PresignedUrl,
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     put_sealed_via(&Fetch, url, blob).await
@@ -842,12 +842,12 @@ pub(crate) async fn put_sealed(
 /// link is its own.
 pub(crate) async fn put_sealed_via(
     transport: &impl Transport,
-    url: &str,
+    url: &ambre_core::PresignedUrl,
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     let request = Outgoing {
         body: Some(("application/octet-stream", blob.as_bytes().to_vec())),
-        ..Outgoing::new(Method::Put, url)
+        ..Outgoing::new(Method::Put, url.expose())
     };
     let resp = exchange(transport, &request).await?;
     expect_ok(&request, &resp)
@@ -889,8 +889,8 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
     send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
 }
 
-pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, HttpError> {
-    let request = Outgoing::new(Method::Get, url);
+pub(crate) async fn fetch_bytes(url: &ambre_core::PresignedUrl) -> Result<Vec<u8>, HttpError> {
+    let request = Outgoing::new(Method::Get, url.expose());
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
     Ok(resp.body)

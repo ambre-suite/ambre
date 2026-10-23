@@ -213,7 +213,7 @@ impl SyncState {
             )
             .await
             {
-                Ok(resp) => http::fetch_bytes(resp.download_url.expose()).await.ok(),
+                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
                 Err(_) => None,
             };
             let _ = tx.send(SyncEvent::SnapshotFetched {
@@ -1598,7 +1598,7 @@ pub(crate) async fn upload_snapshot(
     )
     .await?;
     // The presigned link is its own credential: no session token goes there.
-    http::put_sealed_via(transport, link.upload_url.expose(), &blob).await?;
+    http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
         snapshot_id: SnapshotId::new(),
         author_pubkey,
