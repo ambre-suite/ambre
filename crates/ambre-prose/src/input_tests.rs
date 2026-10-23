@@ -675,7 +675,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let mut ui = ProseUiState::default();
     ui.resize(1200.0, 900.0);
     let empty = crate::layout::run::ShapedLayout::new(
-        1,
+        crate::layout::run::LayoutVersion::new(1),
         Arc::new(crate::layout::pass::PageLayout {
             page_width_px: 800.0,
             page_height_px: 1000.0,
@@ -716,7 +716,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
     logic.load_faces(&crate::layout::fonts::shipped_faces());
     let mut shaped = logic.shaped_layout();
-    shaped.version = 2;
+    shaped.version = crate::layout::run::LayoutVersion::new(2);
     ui.apply_layout(shaped);
     let first = logic.root_blocks()[0];
     assert_eq!(

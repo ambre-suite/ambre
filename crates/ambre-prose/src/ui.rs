@@ -30,6 +30,7 @@ use crate::events::{
     ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
     TextEdit, WordCount,
 };
+use crate::layout::run::LayoutVersion;
 use crate::layout::run::{RunOffset, ShapedLayout, ShapedRun};
 use crate::rebase;
 use crate::view::Highlight;
@@ -338,7 +339,7 @@ pub struct ProseUiState {
     // Handed over by the Logic thread.
     /// The version of the last layout this view adopted. An older one is
     /// dropped (`features/ambre-spec-prose-page-rendering.md`).
-    pub layout_version: u64,
+    pub layout_version: LayoutVersion,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     pub remote_cursors: Vec<RemoteCursor>,
     /// The five figures as last answered, for the shared status bar slot.
@@ -452,7 +453,10 @@ pub struct ProseUiState {
         crate::events::ActiveMarks,
     )>,
     /// The selection and the layout version the last read was asked for.
-    pub(crate) marks_asked: Option<((crate::view::caret::Spot, crate::view::caret::Spot), u64)>,
+    pub(crate) marks_asked: Option<(
+        (crate::view::caret::Spot, crate::view::caret::Spot),
+        LayoutVersion,
+    )>,
     /// The slash menu, while it is open.
     pub(crate) slash: Option<crate::view::slash::SlashMenu>,
     /// The input method's text still being composed. It is drawn at the

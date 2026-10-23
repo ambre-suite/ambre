@@ -943,7 +943,8 @@ mod tests {
             view.apply_event(event);
         }
         assert_eq!(
-            view.layout_version, 2,
+            view.layout_version.get(),
+            2,
             "the later layout is the one in force"
         );
         assert_eq!(view.shaped.layout.page_count.get(), 1);

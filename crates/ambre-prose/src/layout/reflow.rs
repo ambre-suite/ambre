@@ -24,6 +24,7 @@ use crate::layout::geometry::PageBox;
 use crate::layout::measure::Measurer;
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
+use crate::layout::run::LayoutVersion;
 use crate::layout::run::{ShapedLayout, TextEnds, Window, text_ends};
 use crate::toc;
 
@@ -56,7 +57,7 @@ pub struct Paginator {
     notes: pass::NotePlan,
     /// Stamped on each layout this paginator hands over, so the view can
     /// tell a late one from a new one (`PROSE-UI-016`).
-    version: u64,
+    version: LayoutVersion,
     /// Every block of the layout, by its place in the flow. Shared by every
     /// window handed over, and built again only when the blocks change.
     order: Arc<HashMap<TreeID, usize>>,
@@ -89,7 +90,7 @@ impl Paginator {
             toc_pages: HashMap::new(),
             bands: pass::BandHeights::default(),
             notes: pass::NotePlan::default(),
-            version: 0,
+            version: LayoutVersion::FIRST,
             order: Arc::default(),
             ends: None,
         }
@@ -265,7 +266,7 @@ impl Paginator {
             // run may have new text on the same lines, so the view still
             // gets a new version to draw.
             self.measured = measured;
-            self.version = self.version.saturating_add(1);
+            self.version = self.version.next();
             self.layout.first_dirty_page = None;
             return &self.layout;
         };
@@ -295,7 +296,7 @@ impl Paginator {
         let measured = self.remeasure(document, page_box, dirty);
         let Some(from) = first_difference(&self.measured, &measured) else {
             self.measured = measured;
-            self.version = self.version.saturating_add(1);
+            self.version = self.version.next();
             self.layout.first_dirty_page = None;
             return &self.layout;
         };
@@ -454,7 +455,7 @@ impl Paginator {
             )
         }));
         self.measured = measured;
-        self.version = self.version.saturating_add(1);
+        self.version = self.version.next();
         self.layout = pass::layout_of(page_box, &placement);
         self.bands.stamp(&mut self.layout);
         self.layout.first_dirty_page = Some(first_dirty);

@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crate::events::{BlockId, PageIndex, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
+use crate::layout::run::LayoutVersion;
 use ambre_bus::app::prose::DocOffset;
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, char_len, char_to_byte};
 
@@ -35,7 +36,7 @@ pub struct Splitting {
 
 /// What the provisional runs were shaped from: the draft, the layout, the
 /// split and the text held behind it.
-type Key = (u64, u64, Option<Splitting>, String);
+type Key = (u64, LayoutVersion, Option<Splitting>, String);
 
 /// The provisional runs, and what they were shaped from.
 #[derive(Clone, Debug, Default)]

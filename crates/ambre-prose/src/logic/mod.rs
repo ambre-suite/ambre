@@ -85,6 +85,7 @@ use crate::events::{
 };
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::Paginator;
+use crate::layout::run::LayoutVersion;
 use crate::layout::run::ShapedLayout;
 use crate::mark;
 use crate::schema;
@@ -164,7 +165,7 @@ pub struct ProseState {
     /// The version stamped on the last layout handed over. It only grows, even
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
-    handed_version: u64,
+    handed_version: LayoutVersion,
     /// The layouts handed over that the view may still hold. This thread
     /// frees each one once the view has let go of it, so the view never
     /// pays for freeing a whole layout (`PROSE-UI-205`).
@@ -303,7 +304,7 @@ impl ProseState {
             faces: Vec::new(),
             handed: None,
             window: WINDOW_PAGES.span(),
-            handed_version: 0,
+            handed_version: LayoutVersion::FIRST,
             in_view: Vec::new(),
             ids,
             word_count: crate::events::WordCount::default(),
@@ -400,7 +401,7 @@ impl ProseState {
             return None;
         }
         let mut shaped = self.shaped_layout();
-        self.handed_version = self.handed_version.saturating_add(1);
+        self.handed_version = self.handed_version.next();
         shaped.version = self.handed_version;
         self.handed = Some(basis);
         // A layout no one else holds is freed here, on this thread. One the
