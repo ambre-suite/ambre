@@ -1708,7 +1708,7 @@ pub enum ToileCommand {
     ExportAmbreFileSealed {
         /// The passphrase the user typed for this file, and not the account's:
         /// nothing on this path can reach a session (`DOCFILE-014`).
-        passphrase: crate::rest::SecretBytes,
+        passphrase: ambre_core::Passphrase,
     },
 
     // -- Viewport (drives culling; no CRDT effect) --

@@ -3,7 +3,7 @@ use super::*;
 impl SyncState {
     // -- Session handlers ------------------------------------------------------
 
-    pub(crate) fn handle_unlock(&mut self, id: RequestId, passphrase: SecretBytes) {
+    pub(crate) fn handle_unlock(&mut self, id: RequestId, passphrase: ambre_core::Passphrase) {
         tracing::info!("Sync: Unlock");
 
         let logic_tx = self.logic_tx.clone();
@@ -346,7 +346,7 @@ impl SyncState {
     pub(crate) fn handle_setup_account(
         &mut self,
         id: RequestId,
-        passphrase: SecretBytes,
+        passphrase: ambre_core::Passphrase,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
     ) {
@@ -447,8 +447,8 @@ impl SyncState {
 
     pub(crate) fn handle_change_passphrase(
         &mut self,
-        current_passphrase: SecretBytes,
-        new_passphrase: SecretBytes,
+        current_passphrase: ambre_core::Passphrase,
+        new_passphrase: ambre_core::Passphrase,
     ) {
         tracing::info!("Sync: ChangePassphrase");
         // Placeholder until the passphrase-rotation flow lands. The secrets are
@@ -461,7 +461,7 @@ impl SyncState {
     pub(crate) fn handle_recover_account(
         &mut self,
         recovery_words: SecretString,
-        new_passphrase: SecretBytes,
+        new_passphrase: ambre_core::Passphrase,
     ) {
         tracing::info!("Sync: RecoverAccount");
         // Placeholder until account recovery lands. The BIP39 recovery phrase

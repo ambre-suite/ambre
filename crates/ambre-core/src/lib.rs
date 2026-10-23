@@ -58,6 +58,7 @@ pub mod media;
 pub mod mode;
 pub mod name;
 pub mod object_key;
+pub mod passphrase;
 pub mod payload;
 pub mod provider;
 pub mod public_key;
@@ -120,6 +121,7 @@ pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
+pub use passphrase::Passphrase;
 pub use payload::{
     DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
     PlaintextContainer, SealedContainer, SealedRowBytes, SnapshotBytes,

@@ -674,7 +674,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 // The application wraps the passphrase in its sealed-save
                 // command, and nothing else holds it (`ARCH-004`).
                 let commands = commands.clone();
-                move |passphrase: String| commands.seal(passphrase)
+                move |passphrase: ambre_core::Passphrase| commands.seal(passphrase)
             })
         />
 

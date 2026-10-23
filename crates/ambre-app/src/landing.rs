@@ -23,7 +23,7 @@
 // Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand, SecretBytes};
+use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -130,17 +130,14 @@ pub fn landing_view(
     });
     let on_passphrase = {
         let to_logic = to_logic.clone();
-        Callback::new(move |passphrase: String| {
+        Callback::new(move |passphrase: ambre_core::Passphrase| {
             let Some(sealed) = sealed_file.get_untracked() else {
                 return;
             };
             sealed_file.set(None);
             let _ = to_logic.try_send(LogicCommand::Rest {
                 id: RequestId::next(),
-                cmd: RestCommand::OpenDocFile {
-                    sealed,
-                    passphrase: SecretBytes::from(passphrase.into_bytes()),
-                },
+                cmd: RestCommand::OpenDocFile { sealed, passphrase },
             });
         })
     };

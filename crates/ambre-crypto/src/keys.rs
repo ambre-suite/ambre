@@ -231,7 +231,10 @@ impl FileKey {
     ///
     /// [`CryptoError::Argon2Failed`] from the first step, on a `salt` Argon2id
     /// refuses. The BLAKE2b pass is infallible.
-    pub fn from_passphrase(passphrase: &[u8], salt: &[u8]) -> Result<Self, CryptoError> {
+    pub fn from_passphrase(
+        passphrase: &ambre_core::Passphrase,
+        salt: &[u8],
+    ) -> Result<Self, CryptoError> {
         let mut intermediate = crate::passphrase::derive_user_key(passphrase, salt)?;
         let key = Self(derive32(FILE_DOMAIN, &intermediate));
         intermediate.zeroize();
@@ -250,7 +253,9 @@ impl FileKey {
     ///
     /// [`CryptoError::Argon2Failed`] from [`Self::from_passphrase`]. The salt it
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
-    pub fn for_new_file(passphrase: &[u8]) -> Result<(Self, [u8; SALT_LEN]), CryptoError> {
+    pub fn for_new_file(
+        passphrase: &ambre_core::Passphrase,
+    ) -> Result<(Self, [u8; SALT_LEN]), CryptoError> {
         let salt = random::bytes::<SALT_LEN>();
         let key = Self::from_passphrase(passphrase, &salt)?;
         Ok((key, salt))

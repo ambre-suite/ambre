@@ -145,10 +145,8 @@ impl CommandHandler for ToileHandler {
         KeyRoute::Run(Vec::new())
     }
 
-    fn sealed_save(&self, passphrase: String) -> Option<AppCommand> {
-        // The typed text becomes a `SecretBytes` here and goes nowhere else
-        // (`ARCH-004`).
-        let passphrase = ambre_bus::SecretBytes::from(passphrase.into_bytes());
+    fn sealed_save(&self, passphrase: ambre_core::Passphrase) -> Option<AppCommand> {
+        // The passphrase goes into the command and nowhere else (`ARCH-004`).
         Some(AppCommand::Toile(ToileCommand::ExportAmbreFileSealed {
             passphrase,
         }))

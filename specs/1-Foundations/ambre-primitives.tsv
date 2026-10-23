@@ -179,7 +179,6 @@ ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(na
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.palette_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.seal_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
-ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::seal(passphrase) | param | String	debt	finding: Passphrase passed as a plain String (confirmed)
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(anchor_slot) | param | Slot<RwSignal<Option<(f64,f64)>>>	math	css position
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
@@ -1276,7 +1275,6 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	math	state flag/predicate
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
-ambre-chrome | src/handler.rs | crate::handler | CommandHandler::sealed_save(passphrase) | param | String	debt	finding: Passphrases pass as plain `String`
 ambre-chrome | src/handler.rs | crate::handler | FilePick.accept | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | FilePick.read | field | Box<dyn Fn(Vec<u8>)->C>	generic	opaque file content bytes
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
@@ -1301,12 +1299,8 @@ ambre-chrome | src/palette.rs | crate::palette | matches() | ret | bool	math	sta
 ambre-chrome | src/palette.rs | crate::palette | matches(label) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | matches(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | rows(query) | param | &str	free-text	text, label or user content
-ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseDialog(on_submit) | param | Callback<String>	debt	finding: Passphrases pass as plain `String`
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseDialog(open) | param | RwSignal<bool>	math	state flag/predicate
-ambre-chrome | src/passphrase.rs | crate::passphrase | vet() | ret | Result<(),&'static str>	debt	finding: Passphrases pass as plain `String`
-ambre-chrome | src/passphrase.rs | crate::passphrase | vet(first) | param | &str	debt	finding: Passphrases pass as plain `String`
-ambre-chrome | src/passphrase.rs | crate::passphrase | vet(sealing) | param | bool	debt	finding: Passphrases pass as plain `String`
-ambre-chrome | src/passphrase.rs | crate::passphrase | vet(second) | param | &str	debt	finding: Passphrases pass as plain `String`
+ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
 ambre-chrome | src/status.rs | crate::status | PerfChip(fps) | param | Signal<f32>	math	layout geometry in logical px
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZOOM_PRESETS | const | [f64;6]	math	layout geometry in logical px
@@ -1555,6 +1549,11 @@ ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::as_str() | ret | &str	newtype-inner	ObjectKey newtype
+ambre-core | src/passphrase.rs | crate::passphrase | <Passphrase as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/passphrase.rs | crate::passphrase | Passphrase.0 | field | Zeroizing<String>	newtype-inner	secret newtype
+ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::as_bytes() | ret | &[u8]	newtype-inner	secret newtype
+ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::is_empty() | ret | bool	generic	predicate
+ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::new(text) | param | String	newtype-inner	secret newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
@@ -1742,8 +1741,6 @@ ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	g
 ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey::for_new_file() | ret | Result<(Self,[u8;SALT_LEN]),CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | FileKey::for_new_file(passphrase) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | FileKey::from_passphrase(passphrase) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/keys.rs | crate::keys | FileKey::from_passphrase(salt) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
@@ -1763,7 +1760,6 @@ ambre-crypto | src/passphrase.rs | crate::passphrase | LANES | const | u32	math	
 ambre-crypto | src/passphrase.rs | crate::passphrase | MEM_KIB | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-crypto | src/passphrase.rs | crate::passphrase | USER_KEY_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/passphrase.rs | crate::passphrase | derive_user_key() | ret | Result<[u8;USER_KEY_LEN],CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/passphrase.rs | crate::passphrase | derive_user_key(passphrase) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/passphrase.rs | crate::passphrase | derive_user_key(salt) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/peer.rs | crate::peer | ENTRY_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/peer.rs | crate::peer | PEER_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -2140,7 +2136,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Pending.session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Seek.lost | field | bool	math	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ThreadLinked.open | field | bool	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | <MurmureHandler as CommandHandler>::sealed_save(_passphrase) | param | String	debt	finding: Passphrases pass as plain `String`
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	math	state flag/predicate
@@ -2810,7 +2805,6 @@ ambre-prose | src/band.rs | crate::band | months(lang) | param | &str	debt	findi
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | resolve(page_count) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/chrome/handler.rs | crate::chrome::handler | <ProseHandler as CommandHandler>::sealed_save(_passphrase) | param | String	debt	finding: passphrase as String (confirmed)
 ambre-prose | src/chrome/mod.rs | crate::chrome | History.can_redo | field | bool	generic	independent flag or predicate
 ambre-prose | src/chrome/mod.rs | crate::chrome | History.can_undo | field | bool	generic	independent flag or predicate
 ambre-prose | src/chrome/mod.rs | crate::chrome | MENU_DROP_PX | const | f32	math	layout geometry local to algorithm
@@ -4562,7 +4556,6 @@ ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() |
 ambre-toile | src/chrome/deck.rs | crate::chrome::deck | DeckPanel(state) | param | RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindQuery.query | field | String	free-text	label, message or user text
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | <ToileHandler as CommandHandler>::sealed_save(passphrase) | param | String	trait	fixed by ambre-chrome FrameHandler::sealed_save; SecretString would be the chrome slice's fix
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_doc_open | field | RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_open | field | RwSignal<bool>	math	local state flag or value, not a mode selector
@@ -5270,7 +5263,6 @@ ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | Replace
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.replacement | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(cell_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(content) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/handler.rs | crate::chrome::handler | <TrameHandler as CommandHandler>::sealed_save(passphrase) | param | String	trait	ambre-chrome CommandHandler trait fixes the signature (passphrase typing belongs to that trait)
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.anchor | field | RwSignal<Option<(f64,f64)>>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor() | ret | (f64,f64)	math	local geometry / pixel arithmetic

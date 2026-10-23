@@ -9,7 +9,6 @@ use super::*;
 // The deck's PDF export is answered here rather than inside `ToileState`.
 // This file therefore names the two Toile bus types the rest of the module
 // reaches only through `AppCommand` / `AppEvent`.
-use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 
@@ -85,10 +84,14 @@ impl LogicState {
     /// never leaves this thread -- it waits in `pending_seals` with the id that
     /// will bring the bytes home.
     ///
-    /// The passphrase travels as [`SecretBytes`](ambre_bus::SecretBytes):
+    /// The passphrase travels as [`Passphrase`](ambre_core::Passphrase):
     /// every hop that drops it wipes it, and it prints as nothing in a log
     /// line.
-    fn export_ambre_file_sealed(&mut self, document_id: DocumentId, passphrase: SecretBytes) {
+    fn export_ambre_file_sealed(
+        &mut self,
+        document_id: DocumentId,
+        passphrase: ambre_core::Passphrase,
+    ) {
         self.settle_import(document_id);
         let Some(doc) = self.docs.get(&document_id) else {
             tracing::warn!("Logic: sealed .ambre export asked of a document that is not open");

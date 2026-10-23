@@ -6,6 +6,11 @@ use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
 use ambre_core::{Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 
+/// A passphrase as a prompt hands it over.
+fn pass(text: &str) -> ambre_core::Passphrase {
+    ambre_core::Passphrase::new(text.to_owned())
+}
+
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
 }
@@ -404,15 +409,15 @@ fn kek_binds_peer_identity() {
 #[test]
 fn argon2_deterministic() {
     let salt = [0xAB; 16];
-    let k1 = passphrase::derive_user_key(b"correct horse", &salt).unwrap();
-    let k2 = passphrase::derive_user_key(b"correct horse", &salt).unwrap();
+    let k1 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
+    let k2 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     assert_eq!(k1, k2);
 
     let other_salt = [0xCD; 16];
-    let k3 = passphrase::derive_user_key(b"correct horse", &other_salt).unwrap();
+    let k3 = passphrase::derive_user_key(&pass("correct horse"), &other_salt).unwrap();
     assert_ne!(k1, k3);
 
-    let k4 = passphrase::derive_user_key(b"wrong passphrase", &salt).unwrap();
+    let k4 = passphrase::derive_user_key(&pass("wrong passphrase"), &salt).unwrap();
     assert_ne!(k1, k4);
 }
 
@@ -579,8 +584,8 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
     // separation at all. Without it, a file on disk would carry the value that
     // unwraps the account's master key.
     let salt = [0xAB; 16];
-    let user = passphrase::derive_user_key(b"correct horse", &salt).unwrap();
-    let file = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
+    let user = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
+    let file = FileKey::from_passphrase(&pass("correct horse"), &salt).unwrap();
     assert_ne!(file.as_bytes(), &user);
 }
 
@@ -589,11 +594,11 @@ fn a_file_key_is_deterministic_and_per_salt() {
     // Deterministic, or nothing reopens the file; per salt, or two files
     // sealed under one passphrase share a key.
     let salt = [0xAB; 16];
-    let first = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
-    let again = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
+    let first = FileKey::from_passphrase(&pass("correct horse"), &salt).unwrap();
+    let again = FileKey::from_passphrase(&pass("correct horse"), &salt).unwrap();
     assert_eq!(first.as_bytes(), again.as_bytes());
 
-    let elsewhere = FileKey::from_passphrase(b"correct horse", &[0xCD; 16]).unwrap();
+    let elsewhere = FileKey::from_passphrase(&pass("correct horse"), &[0xCD; 16]).unwrap();
     assert_ne!(first.as_bytes(), elsewhere.as_bytes());
 }
 
@@ -602,14 +607,14 @@ fn each_new_file_draws_its_own_salt() {
     // The salt is what keeps two files sealed under one passphrase from sharing
     // a key. So this entry point draws one per file, and the caller cannot
     // supply it here at all.
-    let (first, first_salt) = FileKey::for_new_file(b"correct horse").unwrap();
-    let (again, again_salt) = FileKey::for_new_file(b"correct horse").unwrap();
+    let (first, first_salt) = FileKey::for_new_file(&pass("correct horse")).unwrap();
+    let (again, again_salt) = FileKey::for_new_file(&pass("correct horse")).unwrap();
     assert_ne!(first_salt, again_salt);
     assert_ne!(first.as_bytes(), again.as_bytes());
 
     // And the salt it returns is the one that reopens the file. The header
     // carries this value in the clear, and nothing else can re-derive the key.
-    let reopened = FileKey::from_passphrase(b"correct horse", &first_salt).unwrap();
+    let reopened = FileKey::from_passphrase(&pass("correct horse"), &first_salt).unwrap();
     assert_eq!(reopened.as_bytes(), first.as_bytes());
 }
 
@@ -618,7 +623,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     let salt = [0x01; 16];
     let aad = b"the-sealed-header";
     let plaintext = b"a whole plaintext container";
-    let key = FileKey::from_passphrase(b"open sesame", &salt).unwrap();
+    let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
     let (nonce, ciphertext) = aead::seal_file(plaintext, aad, &key).unwrap();
     assert_eq!(
         aead::open_file(&nonce, &ciphertext, aad, &key).unwrap(),
@@ -628,7 +633,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     // A wrong passphrase is a wrong key, and Poly1305 is what says so. Nothing
     // cheaper sits upstream of it: no password verifier, no checksum. The tag
     // is the whole of "that passphrase does not open this file".
-    let wrong = FileKey::from_passphrase(b"open sesa", &salt).unwrap();
+    let wrong = FileKey::from_passphrase(&pass("open sesa"), &salt).unwrap();
     assert_eq!(
         aead::open_file(&nonce, &ciphertext, aad, &wrong),
         Err(CryptoError::AeadFailed)

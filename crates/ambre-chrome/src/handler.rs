@@ -86,5 +86,5 @@ pub trait CommandHandler {
 
     /// The command a sealed save ends in, once the prompt holds a passphrase.
     /// `None` for an application with no sealed file.
-    fn sealed_save(&self, passphrase: String) -> Option<Self::Command>;
+    fn sealed_save(&self, passphrase: ambre_core::Passphrase) -> Option<Self::Command>;
 }

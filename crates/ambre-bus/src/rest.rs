@@ -48,10 +48,10 @@ use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 // Secret-carrying IPC fields (H5)
 // -----------------------------------------------------------------------------
 
-/// Secret byte material crossing the UI -> Logic -> Sync boundary: a passphrase, or a
-/// document's plaintext on its way to or from a seal.
+/// Secret byte material crossing the UI -> Logic -> Sync boundary: a document's plaintext
+/// on its way to or from a seal. A passphrase travels as [`ambre_core::Passphrase`].
 ///
-/// The second use is deliberate. A `Vec<u8>` would relay the same bytes, and also render
+/// A `Vec<u8>` would relay the same bytes, and also render
 /// them in a `Debug` line and leave its copy in the heap after the hop. In a feature about
 /// a document at rest, that is the wrong default.
 ///
@@ -287,16 +287,16 @@ pub enum RestCommand {
     // -- Session -----------------------------------------------------------------
     /// Bootstrap auth after OIDC callback. -> `SessionReady` / `AccountSetupRequired`.
     Unlock {
-        /// UTF-8 passphrase bytes. Zeroized on drop by [`SecretBytes`] once the
-        /// Sync thread finishes deriving the user key.
-        passphrase: SecretBytes,
+        /// The account passphrase. Wiped on drop by [`ambre_core::Passphrase`]
+        /// once the Sync thread finishes deriving the user key.
+        passphrase: ambre_core::Passphrase,
     },
     /// First-time account setup. -> `AccountCreated { recovery_words }`.
     /// `email`/`display_name` are the user-supplied identity; the server records
     /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
     /// handle other members resolve when sharing a document.
     SetupAccount {
-        passphrase: SecretBytes,
+        passphrase: ambre_core::Passphrase,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
     },
@@ -307,13 +307,13 @@ pub enum RestCommand {
     DevLogin { username: String },
     /// Change the account passphrase. -> `PassphraseChanged`.
     ChangePassphrase {
-        current_passphrase: SecretBytes,
-        new_passphrase: SecretBytes,
+        current_passphrase: ambre_core::Passphrase,
+        new_passphrase: ambre_core::Passphrase,
     },
     /// Account recovery via 24-word BIP39 phrase. -> `AccountRecovered`.
     RecoverAccount {
         recovery_words: SecretString,
-        new_passphrase: SecretBytes,
+        new_passphrase: ambre_core::Passphrase,
     },
     /// Log out. The Logic thread clears its document registry on dispatch (hook),
     /// then the Sync thread zeroizes all keys. -> `LoggedOut`.
@@ -430,14 +430,14 @@ pub enum RestCommand {
     SealDocFile {
         /// A whole plaintext container, header included.
         plaintext: SecretBytes,
-        passphrase: SecretBytes,
+        passphrase: ambre_core::Passphrase,
     },
     /// Open a sealed `.ambre` with `passphrase`. -> `DocFileOpened`
     /// / `DocFileOpenFailed`.
     OpenDocFile {
         /// A whole sealed container, header included.
         sealed: ambre_core::SealedContainer,
-        passphrase: SecretBytes,
+        passphrase: ambre_core::Passphrase,
     },
 
     // -- The local store (`ambre-spec-residency.md` section 3) -------------------

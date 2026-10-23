@@ -13,6 +13,11 @@ use ambre_crypto::{envelope, passphrase};
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
+/// A passphrase as a prompt hands it over.
+fn pass(text: &str) -> ambre_core::Passphrase {
+    ambre_core::Passphrase::new(text.to_owned())
+}
+
 fn bench_envelope(c: &mut Criterion) {
     let doc_key = DocumentKey::from_array([0x11; 32]);
     let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
@@ -34,7 +39,8 @@ fn bench_argon2(c: &mut Criterion) {
     let salt = [0xABu8; 16];
     c.bench_function("argon2id_derive", |b| {
         b.iter(|| {
-            passphrase::derive_user_key(black_box(b"correct horse"), black_box(&salt)).unwrap()
+            passphrase::derive_user_key(black_box(&pass("correct horse")), black_box(&salt))
+                .unwrap()
         });
     });
 }

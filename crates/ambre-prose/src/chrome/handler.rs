@@ -74,7 +74,7 @@ impl CommandHandler for ProseHandler {
         KeyRoute::Run(Vec::new())
     }
 
-    fn sealed_save(&self, _passphrase: String) -> Option<AppCommand> {
+    fn sealed_save(&self, _passphrase: ambre_core::Passphrase) -> Option<AppCommand> {
         // Prose declares no sealed save.
         None
     }

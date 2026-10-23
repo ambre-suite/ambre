@@ -1401,7 +1401,7 @@ impl CommandHandler for MurmureHandler {
         KeyRoute::Run(Vec::new())
     }
 
-    fn sealed_save(&self, _passphrase: String) -> Option<AppCommand> {
+    fn sealed_save(&self, _passphrase: ambre_core::Passphrase) -> Option<AppCommand> {
         // Murmure declares no sealed save.
         None
     }

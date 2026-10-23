@@ -1087,7 +1087,7 @@ mod tests {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();
         state.open_with_identity(document_id, doc_type);
-        let passphrase = ambre_bus::SecretBytes::from(b"a passphrase".to_vec());
+        let passphrase = ambre_core::Passphrase::new("a passphrase".to_owned());
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase }),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase }),
@@ -1957,13 +1957,14 @@ mod tests {
         use ambre_bus::rest::{SecretBytes, SecretString};
         use ambre_bus::{MeetingId, Role, UserId};
         let secret = || SecretBytes::new(b"pass".to_vec());
+        let typed = || ambre_core::Passphrase::new("pass".to_owned());
         let (user, meeting) = (UserId::new(), MeetingId::new());
         let all = vec![
             RestCommand::Unlock {
-                passphrase: secret(),
+                passphrase: typed(),
             },
             RestCommand::SetupAccount {
-                passphrase: secret(),
+                passphrase: typed(),
                 email: ambre_core::Email::from("a@b.c"),
                 display_name: ambre_core::DisplayName::new("A").unwrap(),
             },
@@ -1971,12 +1972,12 @@ mod tests {
                 username: "a".to_owned(),
             },
             RestCommand::ChangePassphrase {
-                current_passphrase: secret(),
-                new_passphrase: secret(),
+                current_passphrase: typed(),
+                new_passphrase: typed(),
             },
             RestCommand::RecoverAccount {
                 recovery_words: SecretString::new("words".to_owned()),
-                new_passphrase: secret(),
+                new_passphrase: typed(),
             },
             RestCommand::ListDocuments,
             RestCommand::CreateDocument {
@@ -2028,11 +2029,11 @@ mod tests {
             },
             RestCommand::SealDocFile {
                 plaintext: secret(),
-                passphrase: secret(),
+                passphrase: typed(),
             },
             RestCommand::OpenDocFile {
                 sealed: ambre_core::SealedContainer::new(vec![1]),
-                passphrase: secret(),
+                passphrase: typed(),
             },
             RestCommand::SealLocalRow {
                 place: ambre_bus::RowPlace::Document(doc),

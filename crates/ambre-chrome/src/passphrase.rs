@@ -9,6 +9,7 @@
 // not into a log line.
 // ============================================================================
 
+use ambre_core::Passphrase;
 use leptos::prelude::*;
 
 use crate::Dialog;
@@ -35,14 +36,37 @@ pub enum PassphraseIntent {
 /// nothing downstream can notice (`DOCFILE-015`). An empty confirmation is the same
 /// mistake as a mismatched one, and the message says so rather than counting
 /// characters at the user.
-fn vet(first: &str, second: &str, sealing: bool) -> Result<(), &'static str> {
+fn vet(
+    first: &Passphrase,
+    second: &Passphrase,
+    intent: PassphraseIntent,
+) -> Result<(), PassphraseRefusal> {
     if first.is_empty() {
-        return Err("Type a passphrase.");
+        return Err(PassphraseRefusal::Empty);
     }
-    if sealing && second != first {
-        return Err("The two passphrases do not match.");
+    if intent == PassphraseIntent::Seal && second != first {
+        return Err(PassphraseRefusal::Mismatch);
     }
     Ok(())
+}
+
+/// Why the prompt holds a submission back.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PassphraseRefusal {
+    /// Nothing typed in the first field.
+    Empty,
+    /// A seal whose confirmation differs from the first field.
+    Mismatch,
+}
+
+impl PassphraseRefusal {
+    /// The line the prompt shows under its fields.
+    fn message(self) -> &'static str {
+        match self {
+            Self::Empty => "Type a passphrase.",
+            Self::Mismatch => "The two passphrases do not match.",
+        }
+    }
 }
 
 /// A modal that asks for one passphrase.
@@ -59,11 +83,11 @@ pub fn PassphraseDialog(
     intent: PassphraseIntent,
     /// The passphrase the user settled on. Fired once per submission.
     #[prop(into)]
-    on_submit: Callback<String>,
+    on_submit: Callback<Passphrase>,
 ) -> impl IntoView {
     let first = RwSignal::new(String::new());
     let second = RwSignal::new(String::new());
-    let error = RwSignal::new(None::<&'static str>);
+    let error = RwSignal::new(None::<PassphraseRefusal>);
     let sealing = intent == PassphraseIntent::Seal;
 
     let clear = move || {
@@ -73,9 +97,10 @@ pub fn PassphraseDialog(
     };
 
     let submit = move || {
-        let typed = first.get_untracked();
-        if let Err(message) = vet(&typed, &second.get_untracked(), sealing) {
-            error.set(Some(message));
+        let typed = Passphrase::new(first.get_untracked());
+        let confirmed = Passphrase::new(second.get_untracked());
+        if let Err(refusal) = vet(&typed, &confirmed, intent) {
+            error.set(Some(refusal));
             return;
         }
         on_submit.run(typed);
@@ -133,7 +158,7 @@ pub fn PassphraseDialog(
                     />
                 </Show>
                 <p class="ambre-passphrase-error" aria-live="polite">
-                    {move || error.get().unwrap_or("")}
+                    {move || error.get().map_or("", PassphraseRefusal::message)}
                 </p>
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| {
@@ -153,28 +178,58 @@ pub fn PassphraseDialog(
 mod tests {
     use super::*;
 
+    fn vetted(
+        first: &str,
+        second: &str,
+        intent: PassphraseIntent,
+    ) -> Result<(), PassphraseRefusal> {
+        vet(
+            &Passphrase::new(first.to_owned()),
+            &Passphrase::new(second.to_owned()),
+            intent,
+        )
+    }
+
     #[test]
     fn sealing_needs_the_two_fields_to_agree() {
-        assert_eq!(vet("correct horse", "correct horse", true), Ok(()));
-        assert!(vet("correct horse", "correct hors", true).is_err());
+        assert_eq!(
+            vetted("correct horse", "correct horse", PassphraseIntent::Seal),
+            Ok(())
+        );
+        assert_eq!(
+            vetted("correct horse", "correct hors", PassphraseIntent::Seal),
+            Err(PassphraseRefusal::Mismatch)
+        );
         // The confirmation left empty is a mismatch, not a second empty-field
         // case: a submission on the first field alone would seal the file.
-        assert!(vet("correct horse", "", true).is_err());
+        assert_eq!(
+            vetted("correct horse", "", PassphraseIntent::Seal),
+            Err(PassphraseRefusal::Mismatch)
+        );
     }
 
     #[test]
     fn opening_asks_once_and_ignores_the_second_field() {
         // Opening renders no confirmation field, so its signal keeps whatever
         // the last seal left in it. The rule must not read it.
-        assert_eq!(vet("correct horse", "", false), Ok(()));
-        assert_eq!(vet("correct horse", "stale", false), Ok(()));
+        assert_eq!(vetted("correct horse", "", PassphraseIntent::Open), Ok(()));
+        assert_eq!(
+            vetted("correct horse", "stale", PassphraseIntent::Open),
+            Ok(())
+        );
     }
 
     #[test]
     fn nothing_is_submitted_from_an_empty_prompt() {
         // Sealing under an empty passphrase derives a key like any other, so
         // the refusal is here rather than in the worker.
-        assert!(vet("", "", true).is_err());
-        assert!(vet("", "", false).is_err());
+        assert_eq!(
+            vetted("", "", PassphraseIntent::Seal),
+            Err(PassphraseRefusal::Empty)
+        );
+        assert_eq!(
+            vetted("", "", PassphraseIntent::Open),
+            Err(PassphraseRefusal::Empty)
+        );
     }
 }

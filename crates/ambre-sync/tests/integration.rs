@@ -59,7 +59,7 @@ fn unlock_returns_session_ready() {
         &mut state,
         id,
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
 
@@ -78,7 +78,7 @@ fn setup_account_returns_created_with_recovery_words() {
         &mut state,
         id,
         RestCommand::SetupAccount {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
             email: "alice@example.com".into(),
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),
         },
@@ -105,7 +105,7 @@ fn logout_returns_logged_out_and_clears_session() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -282,7 +282,7 @@ fn open_document_subscribes_via_mock_ws() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -322,7 +322,7 @@ fn close_document_unsubscribes_via_mock_ws() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
     rx.try_iter().count();
@@ -357,7 +357,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
     rx.try_iter().count();
@@ -404,7 +404,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
         &mut state,
         id1,
         RestCommand::Unlock {
-            passphrase: b"pass".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("pass".to_owned()),
         },
     );
     match drain_rest(&rx, id1) {
@@ -511,7 +511,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         seal_id,
         RestCommand::SealDocFile {
             plaintext: plaintext.clone().into(),
-            passphrase: b"correct horse".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
@@ -535,7 +535,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         open_id,
         RestCommand::OpenDocFile {
             sealed: ambre_core::SealedContainer::new(sealed),
-            passphrase: b"correct horse".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
         },
     );
     match drain_rest(&rx, open_id) {
@@ -563,7 +563,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         seal_id,
         RestCommand::SealDocFile {
             plaintext: plaintext.into(),
-            passphrase: b"correct horse".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("correct horse".to_owned()),
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
@@ -572,7 +572,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     };
 
     for (case, bytes, passphrase) in [
-        ("wrong passphrase", sealed.clone(), &b"correct horsf"[..]),
+        ("wrong passphrase", sealed.clone(), "correct horsf"),
         (
             "tampered ciphertext",
             {
@@ -581,7 +581,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
                 t[last] ^= 0x01;
                 t
             },
-            &b"correct horse"[..],
+            "correct horse",
         ),
         (
             "tampered salt",
@@ -590,7 +590,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
                 t[5] ^= 0x01;
                 t
             },
-            &b"correct horse"[..],
+            "correct horse",
         ),
     ] {
         let id = RequestId::next();
@@ -599,7 +599,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
             id,
             RestCommand::OpenDocFile {
                 sealed: ambre_core::SealedContainer::new(bytes),
-                passphrase: passphrase.to_vec().into(),
+                passphrase: ambre_core::Passphrase::new(passphrase.to_owned()),
             },
         );
         match drain_rest(&rx, id) {
@@ -623,7 +623,7 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
         id,
         RestCommand::OpenDocFile {
             sealed: ambre_core::SealedContainer::new(plaintext),
-            passphrase: b"anything".to_vec().into(),
+            passphrase: ambre_core::Passphrase::new("anything".to_owned()),
         },
     );
     match drain_rest(&rx, id) {
