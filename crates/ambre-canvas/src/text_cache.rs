@@ -38,12 +38,14 @@ pub fn registered_family_name(label: Option<&str>) -> &'static str {
 // Cache key
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct CacheKey {
     text: Box<str>,
     font_size_x100: u32,
     max_width_x10: u32,
-    align: u8, // 0=Start, 1=Center, 2=End
+    /// Each of the six alignments is its own entry: `Left` and `Start`
+    /// differ in a right-to-left text, and `Justify` spreads its lines.
+    align: Alignment,
     bold: bool,
     italic: bool,
     /// Allow emergency (within-word) breaking so a long unbreakable token wraps
@@ -54,6 +56,22 @@ struct CacheKey {
     font: Option<Box<str>>,
     /// The ranges shaped in a face of their own, empty for a plain text.
     spans: Box<[SpanShape]>,
+}
+
+/// Parley's `Alignment` derives no `Hash`, so the key hashes its
+/// discriminant; `Eq` still compares the alignment itself.
+impl std::hash::Hash for CacheKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
+        self.font_size_x100.hash(state);
+        self.max_width_x10.hash(state);
+        std::mem::discriminant(&self.align).hash(state);
+        self.bold.hash(state);
+        self.italic.hash(state);
+        self.break_word.hash(state);
+        self.font.hash(state);
+        self.spans.hash(state);
+    }
 }
 
 /// What a span shapes over its byte range: a weight, a slant, a family, an
@@ -398,16 +416,11 @@ impl TextCache {
             family,
             break_word,
         } = look;
-        let align_u8 = match align {
-            Alignment::Center => 1,
-            Alignment::End | Alignment::Right => 2,
-            _ => 0,
-        };
         let key = CacheKey {
             text: text.into(),
             font_size_x100: (font_size * 100.0) as u32,
             max_width_x10: (max_width * 10.0) as u32,
-            align: align_u8,
+            align,
             bold,
             italic,
             break_word,
@@ -692,6 +705,59 @@ mod tests {
         cache.lazy_fonts.deliver(b"face".to_vec());
         assert_eq!(cache.poll_lazy_fonts(&mut cx).len(), 1);
         assert_eq!(cache.cache_size(), 0, "the stale layouts are dropped");
+    }
+
+    /// Each alignment of one text is cached apart. A justified text is never
+    /// served the start-aligned layout (`CANVAS-086`).
+    #[test]
+    fn each_alignment_of_a_text_is_cached_apart() {
+        let mut cx = font_cx();
+        let mut cache = TextCache::new(1.0);
+        let text = "word ".repeat(20);
+        let all = [
+            Alignment::Start,
+            Alignment::End,
+            Alignment::Left,
+            Alignment::Center,
+            Alignment::Right,
+            Alignment::Justify,
+        ];
+        for align in all {
+            cache.get_or_build(&mut cx, &text, 14.0, 120.0, align, false, false);
+        }
+        assert_eq!(
+            cache.cache_size(),
+            all.len(),
+            "two alignments shared an entry"
+        );
+        // Where the first line's last glyph lands: justify spreads the
+        // words, so it lands further right than in the start-aligned line.
+        let last_x = |layout: &parley::Layout<ambre_draw::Brush>| {
+            layout
+                .lines()
+                .next()
+                .into_iter()
+                .flat_map(|line| line.items())
+                .filter_map(|item| match item {
+                    parley::PositionedLayoutItem::GlyphRun(run) => {
+                        run.positioned_glyphs().last().map(|glyph| glyph.x)
+                    }
+                    parley::PositionedLayoutItem::InlineBox(_) => None,
+                })
+                .last()
+        };
+        let start =
+            last_x(cache.get_or_build(&mut cx, &text, 14.0, 120.0, Alignment::Start, false, false));
+        let justified = last_x(cache.get_or_build(
+            &mut cx,
+            &text,
+            14.0,
+            120.0,
+            Alignment::Justify,
+            false,
+            false,
+        ));
+        assert!(justified > start, "the justified line was not spread");
     }
 
     #[test]

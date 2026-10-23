@@ -1927,6 +1927,8 @@
   {"edge": "cites-section", "from": "CANVAS-081", "section": "2", "to": "1-Foundations/ambre-spec-render-assets.md"},
   {"edge": "cites-rule", "from": "CANVAS-081", "to": "MURMURE-565"},
   {"edge": "verified-by", "from": "CANVAS-081", "to": "ambre_canvas::text_cache::tests::each_set_of_spans_shapes_and_caches_apart"},
+  {"edge": "cites-section", "from": "CANVAS-086", "section": "2", "to": "1-Foundations/ambre-spec-render-assets.md"},
+  {"edge": "verified-by", "from": "CANVAS-086", "to": "ambre_canvas::text_cache::tests::each_alignment_of_a_text_is_cached_apart"},
   {"edge": "cites-section", "from": "CANVAS-084", "section": "2", "to": "1-Foundations/ambre-spec-render-assets.md"},
   {"edge": "cites-rule", "from": "CANVAS-084", "to": "MURMURE-570"},
   {"edge": "verified-by", "from": "CANVAS-084", "to": "ambre_canvas::text_cache::tests::an_indent_starts_each_line_of_its_paragraphs_past_it"},
