@@ -2143,17 +2143,14 @@ ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | boo
 ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	math	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | check(thread_of) | param | impl Fn(&ContainerID)->Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | check_amendments(thread_of) | param | impl Fn(MessageId)->Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | encode() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | read(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/delta.rs | crate::delta | thread_field() | ret | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | thread_in() | ret | Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/delta.rs | crate::delta | thread_set(current) | param | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
+ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	newtype-inner	the raw string the Loro thread field stores, parsed into the enum here
+ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	math	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype

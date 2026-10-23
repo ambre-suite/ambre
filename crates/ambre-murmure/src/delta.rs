@@ -196,7 +196,7 @@ pub(crate) fn check(
     signer: Signer,
     registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
     reactions: impl Fn(&ContainerID) -> bool,
-    thread_of: impl Fn(&ContainerID) -> Option<Option<String>>,
+    thread_of: impl Fn(&ContainerID) -> Option<ThreadField>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
@@ -302,7 +302,7 @@ pub(crate) fn check_amendments(
     signer: Signer,
     registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
     author_of: impl Fn(MessageId) -> Option<UserId>,
-    thread_of: impl Fn(MessageId) -> Option<String>,
+    thread_of: impl Fn(MessageId) -> ThreadField,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
@@ -348,10 +348,9 @@ pub(crate) fn check_amendments(
                     let Some(message) = message_key(key).filter(|m| author_of(*m).is_some()) else {
                         return Err(Refusal::NotInSegment);
                     };
-                    let named = thread_of(message);
-                    if DocumentId::parse_str(value).is_err()
-                        || named.is_some_and(|set| set.as_str() != value.as_str())
-                    {
+                    let takes = DocumentId::parse_str(value)
+                        .is_ok_and(|thread| thread_of(message).takes(thread));
+                    if !takes {
                         return Err(Refusal::ForeignMessage);
                     }
                 }
@@ -391,19 +390,50 @@ pub(crate) fn author_in(segment: &LoroDoc, key: MessageId) -> Option<UserId> {
     })
 }
 
-/// The `thread` field `segment` holds for the message `key` names, `None`
+/// What a message's `thread` field holds, as the check reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThreadField {
+    /// No thread is named yet.
+    Unset,
+    /// The thread document the field names.
+    Names(DocumentId),
+    /// A value no reader takes for a document. It is set, so it takes no
+    /// other.
+    Unreadable,
+}
+
+impl ThreadField {
+    /// The field as `stored` holds it, `None` for an absent one.
+    fn read(stored: Option<String>) -> Self {
+        stored.map_or(Self::Unset, |stored| {
+            DocumentId::parse_str(&stored).map_or(Self::Unreadable, Self::Names)
+        })
+    }
+
+    /// Whether the field takes `thread`: an absent field takes any, and a
+    /// set one the same again (`MURMURE-108`).
+    fn takes(self, thread: DocumentId) -> bool {
+        match self {
+            Self::Unset => true,
+            Self::Names(set) => set == thread,
+            Self::Unreadable => false,
+        }
+    }
+}
+
+/// The `thread` field `segment` holds for the message `key` names, unset
 /// when it holds no such message or no thread.
-fn thread_in(segment: &LoroDoc, key: MessageId) -> Option<String> {
+fn thread_in(segment: &LoroDoc, key: MessageId) -> ThreadField {
     let key = key.to_string();
     let key = key.as_str();
     let list = crate::schema::root_list(segment, Root::Messages);
-    (0..list.len()).find_map(|index| {
+    ThreadField::read((0..list.len()).find_map(|index| {
         let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
         if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
             return None;
         }
         schema::string(&map, MessageKey::Thread)
-    })
+    }))
 }
 
 /// Whether a write to another author's message sets its `thread` field to a
@@ -413,7 +443,7 @@ fn thread_in(segment: &LoroDoc, key: MessageId) -> Option<String> {
 /// The verdict reads the field as the receiver holds it. A member who sets a
 /// first value thus refuses every other one, the relay's included. The relay
 /// links one document per root (`SRV-214`), so only one value is due.
-fn thread_set(content: &JsonOpContent, current: Option<Option<String>>) -> bool {
+fn thread_set(content: &JsonOpContent, current: Option<ThreadField>) -> bool {
     let JsonOpContent::Map(MapOp::Insert {
         key,
         value: LoroValue::String(value),
@@ -425,13 +455,12 @@ fn thread_set(content: &JsonOpContent, current: Option<Option<String>>) -> bool 
         return false;
     };
     MessageKey::parse(key) == Some(MessageKey::Thread)
-        && DocumentId::parse_str(value).is_ok()
-        && current.is_none_or(|set| set.as_str() == value.as_str())
+        && DocumentId::parse_str(value).is_ok_and(|thread| current.takes(thread))
 }
 
 /// The `thread` field of `id` when it is a message map of `doc`, `None` for
 /// any other container.
-pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<Option<String>> {
+pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<ThreadField> {
     let path = doc.get_path_to_container(id)?;
     let [(list, _), (_, Index::Seq(_))] = path.as_slice() else {
         return None;
@@ -442,7 +471,10 @@ pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<Option<Str
     let Some(Container::Map(map)) = doc.get_container(id.clone()) else {
         return None;
     };
-    Some(schema::string(&Fields::of(map), MessageKey::Thread))
+    Some(ThreadField::read(schema::string(
+        &Fields::of(map),
+        MessageKey::Thread,
+    )))
 }
 
 /// Whether a registry write is the signer's own: its PeerID's key alone. An
@@ -599,7 +631,10 @@ pub(crate) fn verdict(
                 schema::string_value(
                     crate::schema::root_map(doc, Root::Threads).get(&key.to_string()),
                 )
-                .or_else(|| thread_in(segment, key))
+                .map_or_else(
+                    || thread_in(segment, key),
+                    |named| ThreadField::read(Some(named)),
+                )
             },
         ),
     }
@@ -641,4 +676,24 @@ pub(crate) fn binary_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
         meta.mode == loro::EncodedBlobMode::Updates
             && meta.partial_end_vv.keys().all(|p| *p == peer.0)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An absent thread field takes any thread, a set one the same again,
+    /// and one no reader takes for a document takes none.
+    #[test]
+    fn a_thread_field_takes_a_thread_only_when_absent_or_the_same() {
+        let (thread, other) = (DocumentId::new(), DocumentId::new());
+        assert!(ThreadField::read(None).takes(thread));
+        let set = ThreadField::read(Some(thread.to_string()));
+        assert_eq!(set, ThreadField::Names(thread));
+        assert!(set.takes(thread));
+        assert!(!set.takes(other));
+        let unreadable = ThreadField::read(Some("not a document".to_owned()));
+        assert_eq!(unreadable, ThreadField::Unreadable);
+        assert!(!unreadable.takes(thread));
+    }
 }
