@@ -152,6 +152,7 @@ mod finalize;
 mod fold;
 #[cfg(feature = "fuzz")]
 pub mod fuzz;
+mod generation;
 mod http;
 mod lifecycle;
 mod light;
@@ -224,14 +225,14 @@ enum SyncEvent {
     /// makes the timer stale.
     ReplayRetry {
         document_id: DocumentId,
-        ticket: u64,
+        ticket: generation::ReplayTicket,
     },
     /// Fired by the timer armed when the relay failed to sequence a delta:
     /// send it again with every later one (`SYNC-159`). A later failure or
     /// refusal makes the timer stale.
     ResendRetry {
         document_id: DocumentId,
-        ticket: u64,
+        ticket: generation::ResendTicket,
     },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
@@ -1083,10 +1084,10 @@ pub struct SyncState {
     replay_stops: HashMap<DocumentId, websocket::ReplayStops>,
     /// The ticket of the last replay timer armed. It only grows, so a timer
     /// armed before a reset never matches one armed after it.
-    replay_ticket: u64,
+    replay_ticket: generation::ReplayTicket,
     /// The ticket of the last resend timer armed. It only grows, like
     /// `replay_ticket` (`SYNC-159`).
-    resend_ticket: u64,
+    resend_ticket: generation::ResendTicket,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1178,8 +1179,8 @@ impl SyncState {
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
             replay_stops: HashMap::new(),
-            replay_ticket: 0,
-            resend_ticket: 0,
+            replay_ticket: generation::ReplayTicket::ZERO,
+            resend_ticket: generation::ResendTicket::ZERO,
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             member_channels_asked: 0,

@@ -3687,8 +3687,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | f
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::ProviderSignedIn.keys_stored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncEvent::ReplayRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
-ambre-sync | src/lib.rs | crate | SyncEvent::ResendRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncEvent::SegmentClosed.result | field | Result<(ambre_bus::SegmentId,bool),http::HttpError>	generic	fact flag on an event
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
@@ -3696,8 +3694,6 @@ ambre-sync | src/lib.rs | crate | SyncState.held_outbox | field | RefCell<Vec<Ve
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.member_channels_asked | field | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/lib.rs | crate | SyncState.mock_ws_tx | field | Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>	generic	generic byte/text API or codec
-ambre-sync | src/lib.rs | crate | SyncState.replay_ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
-ambre-sync | src/lib.rs | crate | SyncState.resend_ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncState.setup_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.socket_opens | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState.update_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3804,7 +3800,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (CompressionVersion,Vec<u8>)	generic	bytes of a codec: the plaintext body after its scheme
 ambre-sync | src/rekey.rs | crate::rekey | RefusedFrames | alias | Vec<(Clock,Vec<u8>)>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/rekey.rs | crate::rekey | Rekey.failed | field | Option<(Signature,u64)>	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.failures | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.in_flight | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3814,7 +3809,6 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::clock_refused() | ret | Option
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_locked() | ret | Option<Vec<Vec<u8>>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::failed() | ret | Option<u32>	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::failed(ticket) | param | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold(payload) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::holds_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3824,7 +3818,6 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::pay_now() | ret | bool	generic
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Clock)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::resend_failed() | ret | Option<(Signature,Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::resend_failed(ticket) | param | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::take_from() | ret | Option<(Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | SentFrame.payload | field | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
@@ -3850,7 +3843,6 @@ ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
-ambre-sync | src/updates.rs | crate::updates | SyncState::resend_failed(ticket) | param | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/updates.rs | crate::updates | SyncState::resend_refused(refused) | param | Vec<(Clock,Vec<u8>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/updates.rs | crate::updates | SyncState::resend_refused(waiting) | param | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/updates.rs | crate::updates | SyncState::seal_and_send(body) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
@@ -3863,12 +3855,10 @@ ambre-sync | src/updates.rs | crate::updates | resend_retry_delay_ms(failure) | 
 ambre-sync | src/updates.rs | crate::updates | send_vouch() | ret | Result<Option<DocumentId>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(reason) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | SyncState::retry_replay(ticket) | param | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay_ms(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | socket_address() | ret | String	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec

@@ -1235,7 +1235,7 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        let ticket = self.resend_ticket + 1;
+        let ticket = self.resend_ticket.next();
         let Some(failure) = doc_state.rekey.failed(&signature, ticket) else {
             // A delta this log forgot: answer, so the fence never stands.
             self.ws_send(&WsClientMsg::ClockResync {
@@ -1264,7 +1264,11 @@ impl SyncState {
     /// stale, the answer lifts the relay's fence (`SRV-169`). Then the failed
     /// delta and every later one leave again from its own clock, which the
     /// relay never took (`SYNC-159`).
-    pub(crate) fn resend_failed(&mut self, document_id: DocumentId, ticket: u64) {
+    pub(crate) fn resend_failed(
+        &mut self,
+        document_id: DocumentId,
+        ticket: crate::generation::ResendTicket,
+    ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -3439,7 +3443,11 @@ mod tests {
     }
 
     /// The relay failed to sequence the delta signed `signature`.
-    fn fail_sequencing(state: &mut SyncState, doc: DocumentId, signature: Signature) -> u64 {
+    fn fail_sequencing(
+        state: &mut SyncState,
+        doc: DocumentId,
+        signature: Signature,
+    ) -> crate::generation::ResendTicket {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
             signature,
@@ -3469,7 +3477,7 @@ mod tests {
         );
         state.handle_sync_event(SyncEvent::ResendRetry {
             document_id: doc,
-            ticket: ticket + 1,
+            ticket: ticket.next(),
         });
         assert!(drain_ws(&ws_rx).is_empty(), "a stale timer sent a delta");
 
@@ -3491,6 +3499,51 @@ mod tests {
         assert!(
             drain(&rx).is_empty(),
             "a failure within the budget was reported"
+        );
+    }
+
+    /// A replay timer and a resend timer count apart. Each starts from the same first ticket, and each fires its own work
+    /// alone: the replay asks the missing deltas, the resend lifts the fence.
+    #[test]
+    fn a_replay_timer_and_a_resend_timer_fire_their_own_work_alone() {
+        let (mut state, _rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let resend = fail_sequencing(&mut state, doc, sent[0]);
+        state.handle_ws_message(WsServerMsg::ReplayStopped {
+            document_id: doc,
+            after_seq: Seq(0),
+        });
+        let replay = state.replay_ticket;
+        assert!(drain_ws(&ws_rx).is_empty(), "no timer fired yet");
+
+        state.handle_sync_event(SyncEvent::ReplayRetry {
+            document_id: doc,
+            ticket: replay,
+        });
+        let asked = drain_ws(&ws_rx);
+        assert!(
+            matches!(asked.as_slice(), [WsClientMsg::RequestMissing { .. }]),
+            "the replay timer asks the missing deltas alone: {asked:?}"
+        );
+
+        state.handle_sync_event(SyncEvent::ResendRetry {
+            document_id: doc,
+            ticket: resend,
+        });
+        let resent = drain_ws(&ws_rx);
+        assert!(
+            matches!(resent.first(), Some(WsClientMsg::ClockResync { signature, .. }) if *signature == sent[0]),
+            "the resend timer lifts the fence: {resent:?}"
+        );
+        assert!(
+            !resent
+                .iter()
+                .any(|m| matches!(m, WsClientMsg::RequestMissing { .. })),
+            "the resend timer asks no replay"
         );
     }
 

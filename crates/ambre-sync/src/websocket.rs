@@ -27,7 +27,7 @@ pub(crate) struct ReplayStops {
     /// The last delta the latest stop named.
     after: Seq,
     /// The ticket of the timer armed for the latest stop, if any.
-    ticket: u64,
+    ticket: crate::generation::ReplayTicket,
 }
 
 /// The socket address. It carries no credential: the token travels in the
@@ -318,7 +318,7 @@ impl SyncState {
         tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
         let delay = replay_retry_delay_ms(stop);
         if delay.is_some() {
-            self.replay_ticket += 1;
+            self.replay_ticket = self.replay_ticket.next();
         }
         self.replay_stops.insert(
             document_id,
@@ -364,7 +364,7 @@ impl SyncState {
     /// A replay timer fired. A later stop or a reconnect since it was armed
     /// makes it stale. Otherwise ask again from the document's own cursor,
     /// which the delivered part of the replay already advanced (`SYNC-153`).
-    fn retry_replay(&mut self, document_id: DocumentId, ticket: u64) {
+    fn retry_replay(&mut self, document_id: DocumentId, ticket: crate::generation::ReplayTicket) {
         let live = self
             .replay_stops
             .get(&document_id)
@@ -2023,7 +2023,7 @@ mod tests {
         })
     }
 
-    fn retry(document_id: DocumentId, ticket: u64) -> SyncEvent {
+    fn retry(document_id: DocumentId, ticket: crate::generation::ReplayTicket) -> SyncEvent {
         SyncEvent::ReplayRetry {
             document_id,
             ticket,
@@ -2031,7 +2031,7 @@ mod tests {
     }
 
     /// The ticket of the timer armed for the latest stop of `id`.
-    fn armed(state: &SyncState, id: DocumentId) -> u64 {
+    fn armed(state: &SyncState, id: DocumentId) -> crate::generation::ReplayTicket {
         state.replay_stops[&id].ticket
     }
 
