@@ -171,7 +171,7 @@ pub struct FixtureManifest {
 
     /// Container version (`docfile`) at write time -- current for a
     /// generated artifact, superseded for a frozen one.
-    pub ambre_version: u8,
+    pub ambre_version: crate::ContainerVersion,
 
     /// Payload schema version (`ambre-spec-schema-version.md`). Distinct from
     /// [`generator_version`](Self::generator_version), which tracks authorial
@@ -235,7 +235,7 @@ mod tests {
             generator_version: 3,
             seed: 0x0123_4567_89AB_CDEF,
             doc_type: DocType::Trame,
-            ambre_version: 1,
+            ambre_version: crate::AMBRE_VERSION,
             schema_version: 0,
             digest: [0xAB; 32],
             shape: FixtureShape {

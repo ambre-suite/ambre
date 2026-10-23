@@ -51,6 +51,9 @@
 //! * **Writer rule** -- writers only ever emit [`AMBRE_VERSION`]. Compatibility
 //!   is a read-side obligation: one writer path, N reader paths.
 
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{DocType, DocumentId, Uuid};
@@ -61,7 +64,7 @@ pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
 /// The container version this build writes, and the only one it parses without
 /// migrating first. Bumping it obliges a [`MIGRATIONS`] row and a fixture freeze
 /// (`ambre-spec-fixtures.md`).
-pub const AMBRE_VERSION: u8 = 0x01;
+pub const AMBRE_VERSION: ContainerVersion = ContainerVersion(0x01);
 
 /// Fixed header size; the payload starts at this offset.
 pub const HEADER_LEN: usize = 22;
@@ -76,7 +79,7 @@ pub const SEALED_BIT: u8 = 0x80;
 
 /// The sealed container version this build writes, and the only sealed layout it
 /// parses. There is no sealed migration registry: see [`parse_sealed_header`].
-pub const AMBRE_SEALED_VERSION: u8 = 0x80;
+pub const AMBRE_SEALED_VERSION: ContainerVersion = ContainerVersion(0x80);
 
 /// Argon2id salt width in a sealed header.
 pub const SALT_LEN: usize = 16;
@@ -112,6 +115,49 @@ const DOCUMENT_ID_AT: usize = 6;
 const SALT_AT: usize = 5;
 const SEAL_NONCE_AT: usize = SALT_AT + SALT_LEN;
 
+/// The version byte of an `.ambre` container, offset 4.
+///
+/// Any byte reads as one: what the file carries is a fact about the file, and
+/// the readers decide what to do with it. Its [`SEALED_BIT`] names the
+/// lineage, so one value says both which lineage and which version
+/// (`DOCFILE-010`). The order compares two versions of one lineage; the walk
+/// of [`migrate_ambre`] reaches it only for a plaintext one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ContainerVersion(u8);
+
+impl ContainerVersion {
+    /// The version a file's byte at offset 4 names.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Self {
+        Self(byte)
+    }
+
+    /// The byte written at offset 4.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self.0
+    }
+
+    /// Whether it names the sealed lineage: [`SEALED_BIT`] is set.
+    #[must_use]
+    pub const fn is_sealed(self) -> bool {
+        self.0 & SEALED_BIT != 0
+    }
+}
+
+impl fmt::Display for ContainerVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl fmt::LowerHex for ContainerVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
 /// A parsed `.ambre` container: the header fields plus the payload that followed
 /// them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -119,7 +165,7 @@ pub struct AmbreHeader {
     /// Container version the bytes carried. Always [`AMBRE_VERSION`] once the
     /// reader has returned: the reader migrates an older file before it gets
     /// here, and refuses a newer one.
-    pub version: u8,
+    pub version: ContainerVersion,
     /// Which app wrote the file. The caller compares it against its own and
     /// re-dispatches on mismatch (dispatch rule) rather than coercing.
     pub doc_type: DocType,
@@ -144,7 +190,7 @@ pub enum DocFileError {
     /// `found < AMBRE_VERSION` -> recoverable via [`migrate_ambre`].
     /// `found > AMBRE_VERSION` -> unrecoverable, prompt the user to update.
     #[error("unsupported .ambre container version: {found}")]
-    UnsupportedVersion { found: u8 },
+    UnsupportedVersion { found: ContainerVersion },
 
     /// The version byte has [`SEALED_BIT`] set, so the file is a sealed
     /// container and there is no payload to read without a passphrase. The
@@ -167,7 +213,7 @@ pub enum DocFileError {
     /// for the older half. The sealed lineage has none: rewriting the envelope
     /// means deriving the key it wraps.
     #[error("unsupported sealed .ambre layout: {found:#04x}")]
-    SealedVersionUnsupported { found: u8 },
+    SealedVersionUnsupported { found: ContainerVersion },
 
     /// The `doc_type` byte names no app this build knows. Distinct from
     /// [`Self::WrongDocType`], a *valid* type belonging to another app: that one
@@ -213,10 +259,10 @@ pub enum DocFileError {
 pub enum ContainerKind {
     /// A plaintext container at this version. [`AMBRE_VERSION`] parses as it
     /// stands; an older one migrates first, and a newer one fails.
-    Plaintext(u8),
+    Plaintext(ContainerVersion),
     /// A sealed container at this sealed-layout version. Needs a passphrase
     /// before any of the above applies.
-    Sealed(u8),
+    Sealed(ContainerVersion),
 }
 
 /// Read the magic and the version byte, and say which lineage the file belongs
@@ -233,13 +279,14 @@ pub enum ContainerKind {
 /// [`DocFileError::InvalidMagic`] when the first four bytes are not
 /// [`AMBRE_MAGIC`].
 pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
-    let Some(&version) = data.get(VERSION_AT) else {
+    let Some(&byte) = data.get(VERSION_AT) else {
         return Err(DocFileError::TruncatedHeader);
     };
     if data.get(..AMBRE_MAGIC.len()) != Some(&AMBRE_MAGIC[..]) {
         return Err(DocFileError::InvalidMagic);
     }
-    if version & SEALED_BIT == 0 {
+    let version = ContainerVersion::from_byte(byte);
+    if !version.is_sealed() {
         Ok(ContainerKind::Plaintext(version))
     } else {
         Ok(ContainerKind::Sealed(version))
@@ -261,7 +308,7 @@ pub fn write_ambre_plaintext(
 ) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
-    out.push(AMBRE_VERSION);
+    out.push(AMBRE_VERSION.as_u8());
     out.push(doc_type.as_u8());
     out.extend_from_slice(document_id.as_bytes());
     debug_assert_eq!(out.len(), HEADER_LEN);
@@ -300,8 +347,8 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     // confusion the partition prevents. A future plaintext version may redefine
     // that byte too, so it is worth checking against *this* build's DocType set
     // only once the version matches.
-    let version = head[VERSION_AT];
-    if version & SEALED_BIT != 0 {
+    let version = ContainerVersion::from_byte(head[VERSION_AT]);
+    if version.is_sealed() {
         return Err(DocFileError::SealedFile);
     }
     if version != AMBRE_VERSION {
@@ -389,7 +436,7 @@ pub fn read_ambre_plaintext_as(
 pub struct SealedAmbre {
     /// Sealed-layout version the bytes carried. Always [`AMBRE_SEALED_VERSION`]
     /// once the parser has returned.
-    pub version: u8,
+    pub version: ContainerVersion,
     /// Argon2id salt, fresh per file.
     pub salt: [u8; SALT_LEN],
     /// AEAD nonce, fresh per file.
@@ -413,10 +460,10 @@ impl SealedAmbre {
 /// Assemble the authenticated prefix of a sealed header. The one place that
 /// writes the sealed layout down, called by [`sealed_aad`] and by
 /// [`SealedAmbre::aad`].
-fn sealed_aad_at(version: u8, salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
+fn sealed_aad_at(version: ContainerVersion, salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
     let mut out = [0u8; SEALED_AAD_LEN];
     out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
-    out[VERSION_AT] = version;
+    out[VERSION_AT] = version.as_u8();
     out[SALT_AT..].copy_from_slice(salt);
     out
 }
@@ -506,8 +553,8 @@ pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
 /// `meta` / `schema_version` register versions the CRDT schema inside the
 /// snapshot (`ambre-spec-schema-version.md`, `ARCH P8`).
 struct Migration {
-    from: u8,
-    to: u8,
+    from: ContainerVersion,
+    to: ContainerVersion,
     apply: fn(&[u8]) -> Result<Vec<u8>, DocFileError>,
 }
 
@@ -532,12 +579,12 @@ const MIGRATIONS: &[Migration] = &[];
 /// [`DocFileError::UnsupportedVersion`] when the registry holds no step out of
 /// a version the walk reaches. A step of the registry raises its own error
 /// unchanged.
-pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
+pub fn migrate_ambre(from: ContainerVersion, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
     // The walk would refuse a sealed version anyway, since every one of them
     // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
     // version, the one message that sends the user to the changelog instead of
     // to their passphrase.
-    if from & SEALED_BIT != 0 {
+    if from.is_sealed() {
         return Err(DocFileError::SealedFile);
     }
     migrate_steps(MIGRATIONS, from, AMBRE_VERSION, bytes)
@@ -547,8 +594,8 @@ pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
 /// a synthetic registry while the shipping one is still empty.
 fn migrate_steps(
     steps: &[Migration],
-    from: u8,
-    target: u8,
+    from: ContainerVersion,
+    target: ContainerVersion,
     bytes: &[u8],
 ) -> Result<Vec<u8>, DocFileError> {
     if from > target {
@@ -590,7 +637,7 @@ mod tests {
     fn header_layout_is_the_spec_layout() {
         let bytes = sample(DocType::Toile);
         assert_eq!(&bytes[..4], b"AMBR");
-        assert_eq!(bytes[VERSION_AT], AMBRE_VERSION);
+        assert_eq!(bytes[VERSION_AT], AMBRE_VERSION.as_u8());
         assert_eq!(bytes[DOC_TYPE_AT], DocType::Toile.as_u8());
         assert_eq!(&bytes[DOCUMENT_ID_AT..HEADER_LEN], &DOC_ID);
         assert_eq!(&bytes[HEADER_LEN..], b"snapshot-bytes");
@@ -653,11 +700,11 @@ mod tests {
     #[test]
     fn a_newer_version_is_refused_and_an_older_one_is_attempted() {
         let mut newer = sample(DocType::Trame);
-        newer[VERSION_AT] = AMBRE_VERSION + 1;
+        newer[VERSION_AT] = AMBRE_VERSION.as_u8() + 1;
         assert_eq!(
             read_ambre_plaintext(&newer),
             Err(DocFileError::UnsupportedVersion {
-                found: AMBRE_VERSION + 1
+                found: ContainerVersion(AMBRE_VERSION.as_u8() + 1)
             }),
             "a newer container is never read best-effort"
         );
@@ -669,7 +716,9 @@ mod tests {
         older[VERSION_AT] = 0;
         assert_eq!(
             read_ambre_plaintext(&older),
-            Err(DocFileError::UnsupportedVersion { found: 0 })
+            Err(DocFileError::UnsupportedVersion {
+                found: ContainerVersion(0)
+            })
         );
     }
 
@@ -711,7 +760,7 @@ mod tests {
             },
             {
                 let mut b = sample(DocType::Trame);
-                b[VERSION_AT] = AMBRE_VERSION + 1;
+                b[VERSION_AT] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
             {
@@ -737,7 +786,7 @@ mod tests {
             let before = bytes.clone();
             let _ = read_ambre_plaintext(&bytes);
             let _ = read_ambre_plaintext_as(DocType::Trame, &bytes);
-            let _ = migrate_ambre(0, &bytes);
+            let _ = migrate_ambre(ContainerVersion(0), &bytes);
             let _ = classify(&bytes);
             let _ = parse_sealed_header(&bytes);
             assert_eq!(bytes, before, "an error path rewrote its input");
@@ -754,9 +803,9 @@ mod tests {
     fn migrating_from_a_newer_version_is_refused() {
         let bytes = sample(DocType::Trame);
         assert_eq!(
-            migrate_ambre(AMBRE_VERSION + 1, &bytes),
+            migrate_ambre(ContainerVersion(AMBRE_VERSION.as_u8() + 1), &bytes),
             Err(DocFileError::UnsupportedVersion {
-                found: AMBRE_VERSION + 1
+                found: ContainerVersion(AMBRE_VERSION.as_u8() + 1)
             })
         );
     }
@@ -788,13 +837,13 @@ mod tests {
 
     const SYNTHETIC: &[Migration] = &[
         Migration {
-            from: 1,
-            to: 2,
+            from: ContainerVersion(1),
+            to: ContainerVersion(2),
             apply: bump_to_2,
         },
         Migration {
-            from: 2,
-            to: 3,
+            from: ContainerVersion(2),
+            to: ContainerVersion(3),
             apply: bump_to_3,
         },
     ];
@@ -802,7 +851,8 @@ mod tests {
     #[test]
     fn the_walk_applies_one_step_per_version() {
         let bytes = sample(DocType::Trame);
-        let out = migrate_steps(SYNTHETIC, 1, 2, &bytes).expect("one step");
+        let out = migrate_steps(SYNTHETIC, ContainerVersion(1), ContainerVersion(2), &bytes)
+            .expect("one step");
         assert_eq!(out[VERSION_AT], 2);
         assert_eq!(&out[HEADER_LEN..], b"snapshot-bytes");
     }
@@ -810,7 +860,8 @@ mod tests {
     #[test]
     fn the_walk_chains_steps_in_order() {
         let bytes = sample(DocType::Trame);
-        let out = migrate_steps(SYNTHETIC, 1, 3, &bytes).expect("two steps");
+        let out = migrate_steps(SYNTHETIC, ContainerVersion(1), ContainerVersion(3), &bytes)
+            .expect("two steps");
         assert_eq!(out[VERSION_AT], 3);
         assert_eq!(&out[HEADER_LEN..], b"snapshot-bytes+v3");
     }
@@ -821,8 +872,10 @@ mod tests {
         // No row leaves 3, so a 3 -> 4 target reports the version it got stuck on
         // rather than silently returning a half-migrated file.
         assert_eq!(
-            migrate_steps(SYNTHETIC, 3, 4, &bytes),
-            Err(DocFileError::UnsupportedVersion { found: 3 })
+            migrate_steps(SYNTHETIC, ContainerVersion(3), ContainerVersion(4), &bytes),
+            Err(DocFileError::UnsupportedVersion {
+                found: ContainerVersion(3)
+            })
         );
     }
 
@@ -830,7 +883,12 @@ mod tests {
     fn a_failing_step_fails_the_whole_migration() {
         let truncated = sample(DocType::Trame)[..2].to_vec();
         assert_eq!(
-            migrate_steps(SYNTHETIC, 1, 2, &truncated),
+            migrate_steps(
+                SYNTHETIC,
+                ContainerVersion(1),
+                ContainerVersion(2),
+                &truncated
+            ),
             Err(DocFileError::TruncatedHeader)
         );
     }
@@ -848,7 +906,7 @@ mod tests {
     fn the_sealed_layout_is_the_spec_layout() {
         let bytes = sealed_sample();
         assert_eq!(&bytes[..4], b"AMBR");
-        assert_eq!(bytes[VERSION_AT], AMBRE_SEALED_VERSION);
+        assert_eq!(bytes[VERSION_AT], AMBRE_SEALED_VERSION.as_u8());
         assert_eq!(&bytes[SALT_AT..SEAL_NONCE_AT], &SALT);
         assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], &NONCE);
         assert_eq!(&bytes[SEALED_HEADER_LEN..], b"ciphertext-bytes");
@@ -943,7 +1001,9 @@ mod tests {
         bytes[VERSION_AT] = 0x81;
         assert_eq!(
             parse_sealed_header(&bytes),
-            Err(DocFileError::SealedVersionUnsupported { found: 0x81 }),
+            Err(DocFileError::SealedVersionUnsupported {
+                found: ContainerVersion(0x81)
+            }),
             "a sealed layout has no migration, so the refusal must not promise one"
         );
     }

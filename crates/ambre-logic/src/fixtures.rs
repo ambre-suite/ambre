@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ambre_core::docfile::{AMBRE_VERSION, DocFileError, read_ambre_plaintext};
+use ambre_core::docfile::{AMBRE_VERSION, ContainerVersion, DocFileError, read_ambre_plaintext};
 use ambre_core::{
     DocType, DocumentId, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape,
 };
@@ -693,7 +693,7 @@ pub struct FrozenEntry {
     /// The generator the artifact came from -- the part before the `@`.
     pub generator: String,
     /// The two versions the artifact was written at, that is, the outgoing ones.
-    pub ambre_version: u8,
+    pub ambre_version: ContainerVersion,
     pub schema_version: u32,
 }
 
@@ -710,7 +710,7 @@ impl FrozenEntry {
         Some(Self {
             stem: stem.to_owned(),
             generator: generator.to_owned(),
-            ambre_version: ambre.parse().ok()?,
+            ambre_version: ContainerVersion::from_byte(ambre.parse().ok()?),
             schema_version: schema.parse().ok()?,
         })
     }
@@ -722,7 +722,7 @@ impl FrozenEntry {
     /// only while every version stays one digit. `s10` sorts before `s9` as text
     /// and after it as a number. A corpus that survives ten schema bumps would
     /// start dropping its newest artifact instead of its oldest.
-    fn age_key(&self) -> (u8, u32) {
+    fn age_key(&self) -> (ContainerVersion, u32) {
         (self.ambre_version, self.schema_version)
     }
 }
@@ -870,7 +870,7 @@ pub enum Drift {
     /// version kept.
     Unfrozen {
         doc_type: DocType,
-        ambre_version: u8,
+        ambre_version: ContainerVersion,
     },
 }
 
@@ -1006,12 +1006,12 @@ pub fn check_corpus(
 pub fn unfrozen_versions(
     registry: &[&dyn FixtureGen],
     root: &Path,
-    current: u8,
+    current: ContainerVersion,
 ) -> Result<Vec<Drift>, FixtureError> {
     let frozen = root.join(FROZEN_DIR);
     // An unreadable sidecar is reported by `check_frozen`; it attributes
     // nothing here.
-    let typed: Vec<(DocType, u8)> = frozen_entries(root)?
+    let typed: Vec<(DocType, ContainerVersion)> = frozen_entries(root)?
         .into_iter()
         .filter_map(|entry| {
             let manifest = read_manifest(&frozen, &entry.stem).ok()?;
@@ -1027,7 +1027,7 @@ pub fn unfrozen_versions(
     let mut owed = Vec::new();
     for doc_type in doc_types {
         let of_type = || typed.iter().filter(move |(t, _)| *t == doc_type);
-        for ambre_version in 1..current {
+        for ambre_version in (1..current.as_u8()).map(ContainerVersion::from_byte) {
             let newer = of_type().filter(|(_, v)| *v > ambre_version).count();
             let held = of_type().any(|(_, v)| *v == ambre_version);
             if newer < FROZEN_KEEP_PER_TYPE && !held {

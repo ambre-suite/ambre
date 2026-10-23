@@ -248,7 +248,7 @@ mod tests {
             },
             {
                 let mut b = good.clone();
-                b[4] = AMBRE_VERSION + 1;
+                b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
             write_ambre_plaintext(DocType::Toile, doc_id(), b"whatever"),

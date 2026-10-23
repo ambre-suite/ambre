@@ -25,7 +25,7 @@
 use std::path::{Path, PathBuf};
 
 use ambre_bus::{CellPos, Col, Row, TrameCommand};
-use ambre_core::{DocType, FixtureGen, seeded_document_id};
+use ambre_core::{ContainerVersion, DocType, FixtureGen, seeded_document_id};
 use ambre_logic::fixtures::{
     self, Drift, FROZEN_KEEP_PER_TYPE, REGISTRY, check_corpus, freeze, generate_into,
     retain_frozen, unfrozen_versions, write_fixture,
@@ -466,17 +466,19 @@ fn a_superseded_container_version_with_no_frozen_artifact_fails_the_gate() {
     let root = TempRoot::new("unfrozen");
     seed_corpus(&root, &[&ALPHA]);
 
-    let owed = unfrozen_versions(&[&ALPHA], root.path(), 2).expect("the check runs");
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), ContainerVersion::from_byte(2))
+        .expect("the check runs");
     assert_eq!(
         owed,
         vec![Drift::Unfrozen {
             doc_type: DocType::Trame,
-            ambre_version: 1,
+            ambre_version: ContainerVersion::from_byte(1),
         }]
     );
 
     freeze(root.path(), ALPHA.name()).expect("the artifact freezes");
-    let owed = unfrozen_versions(&[&ALPHA], root.path(), 2).expect("the check runs");
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), ContainerVersion::from_byte(2))
+        .expect("the check runs");
     assert!(owed.is_empty(), "the freeze pays the version: {owed:?}");
 }
 
@@ -491,12 +493,13 @@ fn a_version_retention_has_moved_past_owes_nothing() {
         plant_frozen(&root, &format!("{}{stem}", ALPHA.name()));
     }
 
-    let owed = unfrozen_versions(&[&ALPHA], root.path(), 5).expect("the check runs");
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), ContainerVersion::from_byte(5))
+        .expect("the check runs");
     assert_eq!(
         owed,
         vec![Drift::Unfrozen {
             doc_type: DocType::Trame,
-            ambre_version: 3,
+            ambre_version: ContainerVersion::from_byte(3),
         }],
         "version 1 sits behind three newer artifacts, and version 3 holds none"
     );

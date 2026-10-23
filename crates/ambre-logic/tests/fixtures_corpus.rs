@@ -180,7 +180,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
     assert_eq!(manifest.digest, digest_of(&bytes));
     // `ambre_version` matches the version the artifact itself carries.
     assert_eq!(manifest.ambre_version, AMBRE_VERSION);
-    assert_eq!(manifest.ambre_version, bytes[4]);
+    assert_eq!(manifest.ambre_version.as_u8(), bytes[4]);
     // The identity fields are the generator's, copied verbatim -- the driver has
     // no other source for them.
     assert_eq!(manifest.generator, TRAME.name());
@@ -436,11 +436,11 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             "newer version",
             {
                 let mut b = good.clone();
-                b[4] = AMBRE_VERSION + 1;
+                b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
             DocFileError::UnsupportedVersion {
-                found: AMBRE_VERSION + 1,
+                found: ambre_core::ContainerVersion::from_byte(AMBRE_VERSION.as_u8() + 1),
             },
         ),
         (
@@ -452,7 +452,9 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
                 b[4] = 0;
                 b
             },
-            DocFileError::UnsupportedVersion { found: 0 },
+            DocFileError::UnsupportedVersion {
+                found: ambre_core::ContainerVersion::from_byte(0),
+            },
         ),
         (
             "unknown doc type discriminant",
