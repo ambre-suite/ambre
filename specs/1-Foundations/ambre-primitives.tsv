@@ -4167,8 +4167,6 @@ ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaC
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve(pixels) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | PLACEHOLDER_PREFIX | const | &str	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
-ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | is_resolved() | ret | bool	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.image_png | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.text | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Decode.0 | field | String	free-text	foreign error message
@@ -4198,7 +4196,6 @@ ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_expor
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUMB_MAX_EDGE | const | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | import_raster(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | pending_hash(index) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_shape() | ret | Option<String>	generic	SVG serialisation text
@@ -4213,13 +4210,11 @@ ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_expor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_image(media_counter) | param | &mut usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | paint_rgba(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(media_counter) | param | &mut usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/schema.rs | crate::logic::schema | body_text_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/schema.rs | crate::logic::schema | font_points_step() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | presentation_root_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
@@ -4316,7 +4311,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | IMPORT_S
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob.creates | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob.done | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob::total() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | PendingImport.outstanding | field | HashMap<RequestId,usize>	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_image_bytes(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
@@ -4326,7 +4320,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::run_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::seed_media() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(slot) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it

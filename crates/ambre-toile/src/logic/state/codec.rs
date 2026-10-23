@@ -9,7 +9,7 @@ use ambre_core::crdt::FieldKey;
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use loro::{Container, LoroMap, LoroText, LoroValue, ValueOrContainer};
 
-use crate::logic::command::{ClipValue, InitContent};
+use crate::logic::command::{ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
@@ -150,7 +150,7 @@ pub(super) fn content_matches(kind: ElementKind, content: &InitContent) -> bool 
         (kind, content),
         (ElementKind::Shape(ShapeKind::Path), InitContent::Path(_))
             | (ElementKind::Shape(_), InitContent::None)
-            | (ElementKind::Image, InitContent::Image(_))
+            | (ElementKind::Image, InitContent::Image(MediaRef::Stored(_)))
             | (ElementKind::Embed, InitContent::Embed(_))
             | (ElementKind::DocEmbed, InitContent::DocEmbed { .. })
             | (

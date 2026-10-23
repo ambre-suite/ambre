@@ -11,7 +11,7 @@ use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::align::{AlignOp, align_deltas};
 use crate::logic::command::{
-    CorrelationToken, InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget,
+    CorrelationToken, InitContent, MediaRef, ToileError, ToileEvent, ToileOutcome, ZTarget,
 };
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{
@@ -132,7 +132,7 @@ impl ToileState {
                     let _ = em.insert(ElementKey::Path, p.to_svg());
                 }
             }
-            (ElementKind::Image, InitContent::Image(hash)) => {
+            (ElementKind::Image, InitContent::Image(MediaRef::Stored(hash))) => {
                 let _ = em.insert(ElementKey::Hash, hash.as_str());
             }
             (ElementKind::Embed, InitContent::Embed(url)) => {
@@ -665,6 +665,27 @@ mod inner_tests {
             None,
         )
         .expect("create")
+    }
+
+    /// `TOILE-IO-059`: an image create naming an import slot Sync has not
+    /// answered is refused, so the slot's token never lands in the document.
+    #[test]
+    fn an_image_naming_a_pending_slot_is_refused() {
+        let mut st = ToileState::new();
+        let refused = st.create_element_inner(
+            ElementKind::Image,
+            Point::ZERO,
+            Size::new(10.0, 10.0),
+            InitContent::Image(crate::logic::command::MediaRef::Pending(
+                crate::logic::command::ImportSlot::ZERO,
+            )),
+            None,
+        );
+        assert_eq!(
+            refused,
+            Err(crate::logic::command::ToileError::ContentKindMismatch)
+        );
+        assert_eq!(st.element_count(), 0);
     }
 
     #[test]

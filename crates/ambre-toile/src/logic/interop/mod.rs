@@ -17,7 +17,7 @@
 
 use kurbo::{BezPath, Point, Rect};
 
-use crate::logic::command::ToileCommand;
+use crate::logic::command::{MediaRef, ToileCommand};
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
 /// The native `.ambre` container (`ambre-spec-docfile.md`). Lossless, so it sits
@@ -147,14 +147,13 @@ impl ImportReport {
     }
 }
 
-/// One plaintext media blob produced by an import. The `hash` is the content address
-/// (blake2b) the Sync thread computes. Phase 0 leaves it empty
-/// (`ContentHash::default`-like) unless a caller injects one, since interop never
-/// hashes. `width`/`height` are the native resolution (the media map value), `thumb`
-/// is a small PNG-encoded placeholder for the first paint.
+/// One plaintext media blob produced by an import. `media` names it by its
+/// import slot until Sync returns the content address (blake2b), since interop
+/// never hashes. `width`/`height` are the native resolution (the media map
+/// value), `thumb` is a small PNG-encoded placeholder for the first paint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBlob {
-    pub hash: ContentHash,
+    pub media: MediaRef,
     pub plaintext: Vec<u8>,
     pub mime: ambre_core::MediaType,
     pub width: u32,

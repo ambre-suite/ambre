@@ -5657,6 +5657,7 @@
   {"edge": "cites-section", "from": "TOILE-IO-059", "section": "3", "to": "3-Toile/features/ambre-spec-toile-media.md"},
   {"edge": "verified-by", "from": "TOILE-IO-059", "to": "ambre_toile::logic::state::import::tests::a_placeholder_token_never_becomes_a_key"},
   {"edge": "verified-by", "from": "TOILE-IO-059", "to": "ambre_toile::logic::state::import::tests::seed_media_skips_unresolved_hash"},
+  {"edge": "verified-by", "from": "TOILE-IO-059", "to": "ambre_toile::logic::state::elements::inner_tests::an_image_naming_a_pending_slot_is_refused"},
   {"edge": "cites-section", "from": "TOILE-IO-060", "section": "3", "to": "3-Toile/features/ambre-spec-toile-media.md"},
   {"edge": "verified-by", "from": "TOILE-IO-060", "to": "ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import"},
   {"edge": "cites-section", "from": "TOILE-IO-061", "section": "3", "to": "3-Toile/features/ambre-spec-toile-media.md"},

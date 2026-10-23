@@ -17,16 +17,6 @@ use std::collections::HashMap;
 /// Sync-side; interop only routes it.
 pub use ambre_core::ContentHash;
 
-/// The prefix of the token an import names a blob by until Sync returns its
-/// address. It is never an address, so it never becomes a key.
-pub(crate) const PLACEHOLDER_PREFIX: &str = "pending:";
-
-/// Whether `hash` is an address Sync returned. An empty key and a
-/// placeholder token are not (`TOILE-IO-059`).
-pub fn is_resolved(hash: &ContentHash) -> bool {
-    !hash.0.is_empty() && !hash.0.starts_with(PLACEHOLDER_PREFIX)
-}
-
 /// Lifecycle of one cached blob. `Loading` is in-flight (a download was issued,
 /// pixels not yet back) and `Ready` holds decoded pixels. `Failed` recorded a
 /// fetch/decode error, so the UI can paint a broken-image affordance without

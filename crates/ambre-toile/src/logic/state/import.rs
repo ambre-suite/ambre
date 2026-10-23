@@ -15,7 +15,8 @@ use kurbo::Point;
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::command::{
-    InitContent, RequestId, ToileCommand, ToileEvent, ToileOutcome, ToileRequest,
+    ImportSlot, InitContent, MediaRef, RequestId, ToileCommand, ToileEvent, ToileOutcome,
+    ToileRequest,
 };
 use crate::logic::interop::{
     ContentHash, ImportBatch, ImportConnector, ImportError, ImportGroup, ImportRef, ImportReport,
@@ -26,23 +27,24 @@ use crate::logic::model::{ElementId, ElementStyle};
 use super::ToileState;
 use super::names::{Fields, MediaKey, Root};
 
-/// Rewrite the `pending:{slot}` placeholder to the real blake2b `hash` in both
-/// the `media` blob at `slot` and every `image` element that referenced it
+/// Rewrite the pending `slot` to the real blake2b `hash` in both the `media`
+/// blob at `slot` and every `image` element that referenced it
 /// (`toile-media`). Called as each upload confirmation lands, so by the time
-/// the batch is applied no placeholder survives.
-fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &ContentHash) {
-    let placeholder = format!("pending:{slot}");
-    if let Some(blob) = batch.media.get_mut(slot) {
-        blob.hash = hash.clone();
+/// the batch is applied no pending slot survives.
+fn rewrite_hash(batch: &mut ImportBatch, slot: ImportSlot, hash: &ContentHash) {
+    let pending = MediaRef::Pending(slot);
+    let stored = MediaRef::Stored(hash.clone());
+    if let Some(blob) = slot.to_index().and_then(|i| batch.media.get_mut(i)) {
+        blob.media = stored.clone();
     }
     for cmd in &mut batch.commands {
         if let ToileCommand::CreateElement {
-            content: InitContent::Image(h),
+            content: InitContent::Image(media),
             ..
         } = cmd
-            && h.as_str() == placeholder
+            && *media == pending
         {
-            *h = hash.clone();
+            *media = stored.clone();
         }
     }
 }
@@ -50,11 +52,11 @@ fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &ContentHash) {
 /// An import applied only once every embedded media blob has a real content hash
 /// back from Sync (`toile-media`). Holds the fully converted batch and the set
 /// of upload `RequestId`s still outstanding. Each id maps to the `media` slot
-/// (and the `pending:{slot}` placeholder) it will resolve.
+/// it will resolve.
 pub(super) struct PendingImport {
     batch: ImportBatch,
     /// Outstanding `UploadMedia` request -> the `batch.media` index it fills.
-    outstanding: HashMap<RequestId, usize>,
+    outstanding: HashMap<RequestId, ImportSlot>,
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). A unit is
@@ -147,7 +149,7 @@ impl ToileState {
         let mut requests = Vec::with_capacity(batch.media.len());
         for (slot, blob) in batch.media.iter().enumerate() {
             let id = RequestId::next();
-            outstanding.insert(id, slot);
+            outstanding.insert(id, ImportSlot::from_usize(slot));
             requests.push(ToileRequest::UploadMedia {
                 id,
                 data: ambre_core::MediaBytes::new(blob.plaintext.clone()),
@@ -463,10 +465,12 @@ impl ToileState {
         let media = self.doc.get_map(Root::Media.as_str());
         let mut created = 0;
         for blob in blobs {
-            let key = blob.hash.as_str();
-            if !crate::logic::interop::media::is_resolved(&blob.hash) || media.get(key).is_some() {
-                // No address from Sync yet, or the entry already exists
-                // (dedup). A placeholder token never becomes a key.
+            let Some(key) = blob.media.stored().map(ContentHash::as_str) else {
+                // No address from Sync yet: a pending slot never becomes a key.
+                continue;
+            };
+            if media.get(key).is_some() {
+                // The entry already exists (dedup).
                 continue;
             }
             let Ok(entry) = media
@@ -526,7 +530,7 @@ mod tests {
     use ambre_core::Rgba;
     use kurbo::{Point, Size};
 
-    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
     use crate::logic::interop::{ContentHash, ImportBatch, ImportGroup, ImportRef, MediaBlob};
     use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
     use crate::logic::state::ToileState;
@@ -636,7 +640,7 @@ mod tests {
 
     fn blob(hash: &str, w: u32, h: u32, mime: &str) -> MediaBlob {
         MediaBlob {
-            hash: ContentHash(hash.to_owned()),
+            media: MediaRef::Stored(ContentHash(hash.to_owned())),
             plaintext: vec![0u8; 4],
             mime: ambre_core::MediaType::from(mime),
             width: w,
@@ -682,8 +686,8 @@ mod tests {
         assert_eq!(st.media_count(), 0);
     }
 
-    /// `TOILE-IO-059`: the token an import names a blob by until Sync answers
-    /// is refused as a key, the very token the decoder mints included.
+    /// `TOILE-IO-059`: the slot an import names a blob by until Sync answers
+    /// is refused as a key, the very slot the decoder mints included.
     #[test]
     fn a_placeholder_token_never_becomes_a_key() {
         let mut st = ToileState::new();
@@ -693,15 +697,12 @@ mod tests {
         )
         .expect("a picture");
         let minted = decoded.media[0].clone();
-        assert!(
-            !crate::logic::interop::media::is_resolved(&minted.hash),
-            "{:?}",
-            minted.hash
-        );
-        assert_eq!(
-            st.seed_media(&[minted, blob("pending:7", 1, 1, "image/png")]),
-            0
-        );
+        assert_eq!(minted.media.stored(), None, "{:?}", minted.media);
+        let pending = MediaBlob {
+            media: MediaRef::Pending(ImportSlot::ZERO.next()),
+            ..blob("unused", 1, 1, "image/png")
+        };
+        assert_eq!(st.seed_media(&[minted, pending]), 0);
         assert_eq!(st.media_count(), 0);
         assert_eq!(st.seed_media(&[blob("realhash", 1, 1, "image/png")]), 1);
     }

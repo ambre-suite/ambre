@@ -492,7 +492,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Image,
         Point::new(0.0, 200.0),
-        InitContent::Image("h".into()),
+        InitContent::Image(crate::logic::command::MediaRef::Stored("h".into())),
         None,
     );
     let _embed = create(
@@ -654,7 +654,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         )
         .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
-        hash: ContentHash("h".to_owned()),
+        media: crate::logic::command::MediaRef::Stored(ContentHash("h".to_owned())),
         plaintext: vec![1],
         mime: ambre_core::MediaType::from("image/png"),
         width: 1,

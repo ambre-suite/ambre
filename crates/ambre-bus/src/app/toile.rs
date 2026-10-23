@@ -906,13 +906,53 @@ pub struct ClipboardPayload {
 pub enum InitContent {
     None,
     Path(BezPath),
-    Image(ambre_core::ContentHash), // blake2b plaintext hash, key into `media`
-    Embed(WebAddress),              // web url (sandboxed iframe)
+    Image(MediaRef),   // the picture's blob, key into `media` once stored
+    Embed(WebAddress), // web url (sandboxed iframe)
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
     }, // nested Ambre document (`toile-embeds`)
-    Text(String),                   // initial plain body (sticky / text)
+    Text(String),      // initial plain body (sticky / text)
+}
+
+ambre_core::define_index! {
+    /// The rank of a media blob in one import batch (`toile-media`). It names
+    /// the blob until Sync returns the blob's address, and it means nothing
+    /// outside that batch.
+    pub struct ImportSlot(u32);
+    /// A number of media blobs in one import batch.
+    pub struct ImportSlotCount;
+    /// The signed gap between two import slots.
+    pub struct ImportSlotDelta(i64);
+    /// A run of import slots.
+    pub struct ImportSlotSpan;
+    /// A list indexed by import slot.
+    pub struct ImportSlotVec;
+}
+
+/// The blob a picture names: one Sync stored, or one an import still holds.
+///
+/// An import names its blobs by slot until Sync answers. A pending blob is
+/// therefore never spelled as an address, and never lands in the document
+/// (`TOILE-IO-059`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MediaRef {
+    /// The content address Sync returned.
+    Stored(ambre_core::ContentHash),
+    /// The blob at this slot of an import, before Sync answers.
+    Pending(ImportSlot),
+}
+
+impl MediaRef {
+    /// The address, or `None` while the blob is pending. An empty address
+    /// is no address either.
+    #[must_use]
+    pub fn stored(&self) -> Option<&ambre_core::ContentHash> {
+        match self {
+            Self::Stored(hash) if !hash.as_str().is_empty() => Some(hash),
+            Self::Stored(_) | Self::Pending(_) => None,
+        }
+    }
 }
 
 /// Z-order target for `Reorder` (`toile-z-order`).

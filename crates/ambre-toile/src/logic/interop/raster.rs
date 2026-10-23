@@ -4,34 +4,26 @@
 //! dimensions against [`Limits`], and builds a small placeholder thumbnail for
 //! the first paint. It then emits a single `image` `CreateElement` plus the
 //! plaintext [`MediaBlob`] the Sync layer will encrypt/upload. Interop never
-//! hashes: the blob's content address is a **pre-upload placeholder token**
-//! (`pending:{n}`) that Phase 1 rewrites to the real blake2b once Sync returns
-//! `MediaUploaded { content_hash }`.
+//! hashes: the blob is named by its **import slot** until Phase 1 rewrites it
+//! to the real blake2b once Sync returns `MediaUploaded { content_hash }`.
 
 use std::io::Cursor;
 
 use image::{GenericImageView, ImageFormat};
 use kurbo::{Point, Size};
 
-use super::{ContentHash, ImportBatch, ImportError, Limits, MediaBlob};
-use crate::logic::command::{InitContent, ToileCommand};
+use super::{ImportBatch, ImportError, Limits, MediaBlob};
+use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::ElementKind;
 
 /// Largest edge (px) of the placeholder thumbnail stored inline in the media
 /// entry. Small enough to paint instantly, large enough to preview.
 const THUMB_MAX_EDGE: u32 = 256;
 
-/// The placeholder content-address token minted for the `n`-th media blob of an
-/// import. Not a hash -- interop does not hash. Phase 1 replaces it with the
-/// blake2b `content_hash` the Sync thread returns.
-pub(super) fn pending_hash(index: usize) -> ContentHash {
-    ContentHash(format!("{}{index}", super::media::PLACEHOLDER_PREFIX))
-}
-
 /// Import a single raster file: decode, bound, thumbnail, and place one
 /// `image` element at the origin sized to the native (clamped) resolution. The
 /// full-res plaintext rides in the returned [`MediaBlob`]; the element references
-/// it by the placeholder token.
+/// it by its import slot.
 ///
 /// # Errors
 ///
@@ -39,14 +31,14 @@ pub(super) fn pending_hash(index: usize) -> ContentHash {
 /// [`ImportError::ImageTooLarge`] when the decoded image exceeds `limits`.
 pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportError> {
     let mut batch = ImportBatch::default();
-    let hash = pending_hash(0);
-    let blob = decode_media(bytes, limits, hash.clone())?;
+    let media = MediaRef::Pending(ImportSlot::ZERO);
+    let blob = decode_media(bytes, limits, media.clone())?;
     let size = Size::new(f64::from(blob.width), f64::from(blob.height));
     batch.commands.push(ToileCommand::CreateElement {
         kind: ElementKind::Image,
         at: Point::ZERO,
         size,
-        content: InitContent::Image(hash.clone()),
+        content: InitContent::Image(media),
         fill: None,
         correlate: None,
     });
@@ -55,12 +47,12 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
     Ok(batch)
 }
 
-/// Decode raster bytes into a [`MediaBlob`] under `hash`, enforcing the image
+/// Decode raster bytes into a [`MediaBlob`] named `media`, enforcing the image
 /// dimension bound. Shared by [`import_raster`] and the SVG `<image>` path.
 pub(super) fn decode_media(
     bytes: &[u8],
     limits: &Limits,
-    hash: ContentHash,
+    media: MediaRef,
 ) -> Result<MediaBlob, ImportError> {
     let format = image::guess_format(bytes).map_err(|e| ImportError::Decode(e.to_string()))?;
     // The header first (`TOILE-IO-052`). A decoded picture is four bytes per
@@ -105,7 +97,7 @@ pub(super) fn decode_media(
         .map_err(|e| ImportError::Decode(e.to_string()))?;
 
     Ok(MediaBlob {
-        hash,
+        media,
         plaintext: bytes.to_vec(),
         mime: mime_of(format),
         width,
@@ -167,7 +159,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(*size, Size::new(64.0, 48.0));
-                assert_eq!(h, &blob.hash, "element references its blob token");
+                assert_eq!(h, &blob.media, "element references its blob slot");
             }
             other => panic!("expected an image CreateElement, got {other:?}"),
         }
@@ -218,7 +210,12 @@ mod tests {
     #[test]
     fn thumbnail_is_bounded() {
         let png = solid_png(1024, 512);
-        let blob = decode_media(&png, &Limits::default(), pending_hash(0)).unwrap();
+        let blob = decode_media(
+            &png,
+            &Limits::default(),
+            MediaRef::Pending(ImportSlot::ZERO),
+        )
+        .unwrap();
         // The thumbnail decodes back to something within the max edge.
         let thumb = image::load_from_memory(&blob.thumb).unwrap();
         assert!(thumb.width() <= THUMB_MAX_EDGE && thumb.height() <= THUMB_MAX_EDGE);
@@ -228,7 +225,12 @@ mod tests {
     /// placeholder never holds more pixels than the picture.
     #[test]
     fn a_small_picture_is_not_inflated() {
-        let blob = decode_media(&solid_png(8, 4), &Limits::default(), pending_hash(0)).unwrap();
+        let blob = decode_media(
+            &solid_png(8, 4),
+            &Limits::default(),
+            MediaRef::Pending(ImportSlot::ZERO),
+        )
+        .unwrap();
         let thumb = image::load_from_memory(&blob.thumb).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (8, 4));
     }

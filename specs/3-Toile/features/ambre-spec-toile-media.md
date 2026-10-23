@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-057` | `POST` | The last address to return MUST land the whole batch in one commit, elements and entries together. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` -- the element, the entry and the single delta once the confirmation arrives | none | verified |
 | `TOILE-IO-058` | `POST` | A seeded entry MUST record the picture's dimensions and its type, so a box can be laid out before the pixels arrive. | this spec section 3 | `ambre_toile::logic::state::import::tests::seed_media_writes_load_info`; `ambre_toile::logic::state::import::tests::import_seeds_the_media_map` -- the same read through a whole import | none | verified |
 | `TOILE-IO-036` | `POST` | Undoing an import MUST take back the media entries that import seeded. | this spec section 3 | `ambre_toile::logic::state::import::tests::undoing_an_image_import_takes_its_media_entry_back` | none | verified |
-| `TOILE-IO-059` | `FRAME` | A seed MUST NOT put a placeholder token in the document: only an address Sync returned MAY become a key. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_placeholder_token_never_becomes_a_key`; `ambre_toile::logic::state::import::tests::seed_media_skips_unresolved_hash` -- the empty key | none | verified |
+| `TOILE-IO-059` | `FRAME` | A seed MUST NOT put a placeholder token in the document: only an address Sync returned MAY become a key. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_placeholder_token_never_becomes_a_key`; `ambre_toile::logic::state::import::tests::seed_media_skips_unresolved_hash` -- the empty key; `ambre_toile::logic::state::elements::inner_tests::an_image_naming_a_pending_slot_is_refused` -- an image create naming a pending slot | none | verified |
 | `TOILE-IO-060` | `FAIL` | A failed upload MUST abort the whole pending import and leave the board untouched. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` -- the notice, the empty board and the drained registry | none | verified |
 | `TOILE-IO-061` | `FAIL` | A confirmation matching no pending import MUST be dropped, and MUST change nothing. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_stale_service_response_is_dropped` | none | verified |
 
@@ -134,8 +134,8 @@ pub enum RequestOutcome { Fetch, CacheHit(MediaState) }
 2. decode under that same bound, so a header that lies about its size is refused by the decoder.
    Then measure the decoded form and build a bounded thumbnail (`TOILE-IO-009`);
 3. hand the plaintext up as an upload and apply nothing yet (`TOILE-IO-008`);
-4. rewrite the placeholder address to the one the Sync thread returns, in the blob and in every
-   element that named it;
+4. rewrite the pending import slot to the address the Sync thread returns, in the blob and in every
+   element that named it. A slot is no address, so an image create naming one is refused;
 5. seed the entry when the address is new, and leave it alone when it is not (`TOILE-IO-006`);
 6. commit once, with the elements, so the entry belongs to the import's undo item
    (`TOILE-IO-036`).

@@ -415,7 +415,7 @@ mod media_request_tests {
             )
             .unwrap();
         MediaBlob {
-            hash: ContentHash(hash.to_owned()),
+            media: crate::logic::command::MediaRef::Stored(ContentHash(hash.to_owned())),
             plaintext: vec![0u8; 4],
             mime: ambre_core::MediaType::from("image/png"),
             width: w,

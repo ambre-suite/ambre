@@ -48,9 +48,9 @@ use ambre_core::{Rgb, Rgba};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
-use super::raster::{decode_media, pending_hash};
+use super::raster::decode_media;
 use super::{ImportBatch, ImportError, ImportGroup, ImportRef, Limits};
-use crate::logic::command::{InitContent, ToileCommand};
+use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 
 /// Parse SVG `bytes` and convert to an atomic [`ImportBatch`]. Returns
@@ -67,7 +67,6 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
     let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
 
     let mut batch = ImportBatch::default();
-    let mut media_counter = 0usize;
     // The source tree, for the text nodes usvg refuses to carry. A body that is
     // not UTF-8, or not well-formed XML, costs the drawing its text. The report
     // says so, rather than letting the shapes land as though the file had
@@ -88,14 +87,7 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
     let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
-    walk_group(
-        tree.root(),
-        root_xml,
-        0,
-        limits,
-        &mut batch,
-        &mut media_counter,
-    )?;
+    walk_group(tree.root(), root_xml, 0, limits, &mut batch)?;
 
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
@@ -181,8 +173,7 @@ fn is_drawn(node: roxmltree::Node) -> bool {
 
 /// Recursively walk a usvg group, appending commands, and return the
 /// [`ImportRef`]s of the elements/subgroups that are this group's direct members
-/// (in child order). `depth` guards nesting; `media_counter` mints the placeholder
-/// token for each `<image>`. A nested `<g>` recurses first, then pushes its
+/// (in child order). `depth` guards nesting. A nested `<g>` recurses first, then pushes its
 /// [`ImportGroup`] and contributes a `Group` ref here. Post-order is
 /// innermost-first, so a `Group(i)` member always refers to an already-pushed
 /// entry.
@@ -192,7 +183,6 @@ fn walk_group(
     depth: usize,
     limits: &Limits,
     batch: &mut ImportBatch,
-    media_counter: &mut usize,
 ) -> Result<Vec<ImportRef>, ImportError> {
     limits.check_depth(depth)?;
     let mut members = Vec::new();
@@ -227,7 +217,7 @@ fn walk_group(
         let paired = take_text_before_next!();
         match node {
             usvg::Node::Group(g) => {
-                let child_members = walk_group(g, paired, depth + 1, limits, batch, media_counter)?;
+                let child_members = walk_group(g, paired, depth + 1, limits, batch)?;
                 match child_members.len() {
                     // A group of one member, or of none, is not a group the
                     // board can rebuild. Its children keep their geometry and
@@ -254,7 +244,7 @@ fn walk_group(
             // source walk above carries `<text>` instead (see module note).
             usvg::Node::Text(_) => {}
             usvg::Node::Image(img) => {
-                if let Some(r) = import_image(img, limits, batch, media_counter)? {
+                if let Some(r) = import_image(img, limits, batch)? {
                     members.push(r);
                 }
             }
@@ -307,7 +297,6 @@ fn import_image(
     image: &usvg::Image,
     limits: &Limits,
     batch: &mut ImportBatch,
-    media_counter: &mut usize,
 ) -> Result<Option<ImportRef>, ImportError> {
     limits.check_element_count(batch.commands.len())?;
 
@@ -325,16 +314,16 @@ fn import_image(
         }
     };
 
-    let hash = pending_hash(*media_counter);
-    let blob = decode_media(raw, limits, hash.clone())?;
-    *media_counter += 1;
+    // The blob's slot is its rank in the batch's media, pushed below.
+    let media = MediaRef::Pending(ImportSlot::from_usize(batch.media.len()));
+    let blob = decode_media(raw, limits, media.clone())?;
 
     let rect = limits.clamp_rect(rect_from_usvg(image.abs_bounding_box()));
     let slot = push_element(
         batch,
         ElementKind::Image,
         rect,
-        InitContent::Image(hash),
+        InitContent::Image(media),
         None,
     );
     batch.media.push(blob);
