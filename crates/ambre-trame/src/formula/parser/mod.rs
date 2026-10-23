@@ -17,7 +17,7 @@ use super::types::{
     UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
-use ambre_bus::{DefinedName, Row, SheetId};
+use ambre_bus::{DefinedName, Row, SheetId, SheetName};
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -207,18 +207,32 @@ fn cell_or_range(input: &str) -> nom::IResult<&str, Expr> {
 }
 
 /// A sheet name preceding a `!`: a bareword identifier (`Sheet2`) or a
-/// single-quoted name (`'My Sheet'`, allowing spaces). The closing `!` is not
-/// consumed here.
-fn sheet_name(input: &str) -> nom::IResult<&str, String> {
-    if let Ok((rest, _)) = char::<&str, nom::error::Error<&str>>('\'').parse(input) {
-        // Quoted: read until the closing quote (no escaping in the MVP).
-        let end = rest.find('\'').ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::new(rest, nom::error::ErrorKind::Tag))
-        })?;
-        let name = rest[..end].to_string();
-        return Ok((&rest[end + 1..], name));
+/// single-quoted name (`'My Sheet'`, allowing spaces). Inside the quotes a
+/// doubled apostrophe is one apostrophe (`'Bob''s'`), as Excel writes it. The
+/// closing `!` is not consumed here.
+///
+/// The name is read as written, never checked against the rule a rename
+/// obeys. A qualifier only names a sheet; resolution refuses a name that no
+/// tab carries (`TRAME-211`, `TRAME-235`).
+fn sheet_name(input: &str) -> nom::IResult<&str, SheetName> {
+    if let Ok((mut rest, _)) = char::<&str, nom::error::Error<&str>>('\'').parse(input) {
+        let mut name = String::new();
+        loop {
+            let end = rest.find('\'').ok_or_else(|| {
+                nom::Err::Error(nom::error::Error::new(rest, nom::error::ErrorKind::Tag))
+            })?;
+            name.push_str(&rest[..end]);
+            let after = &rest[end + 1..];
+            match after.strip_prefix('\'') {
+                Some(more) => {
+                    name.push('\'');
+                    rest = more;
+                }
+                None => return Ok((after, SheetName::stored(name))),
+            }
+        }
     }
-    map(identifier, |s: &str| s.to_string()).parse(input)
+    map(identifier, |s: &str| SheetName::stored(s.to_owned())).parse(input)
 }
 
 /// A stable sheet id token in canonical form: `#` followed by id characters

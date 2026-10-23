@@ -13,8 +13,8 @@
 // ============================================================================
 
 use ambre_bus::{
-    AppCommand, AppEvent, FilterKind, SheetId, SheetTab, StylePatch, TrameCommand, TrameEvent,
-    UiEvent,
+    AppCommand, AppEvent, FilterKind, SheetId, SheetName, SheetTab, StylePatch, TrameCommand,
+    TrameEvent, UiEvent,
 };
 use leptos::prelude::*;
 
@@ -43,7 +43,7 @@ pub enum TrameIntent {
     /// Add a sheet after the last one.
     CreateSheet,
     /// Rename a sheet, as `(id, name)`.
-    RenameSheet(SheetId, String),
+    RenameSheet(SheetId, SheetName),
     /// Delete a sheet.
     DeleteSheet(SheetId),
     /// Move a sheet to another position.
@@ -96,8 +96,11 @@ impl TrameRelay {
                 options: r.options,
             },
             TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
+            // `Sheet` and a number is always a valid name, and the Logic thread
+            // makes a taken one free (`TRAME-078`).
             TrameIntent::CreateSheet => TrameCommand::CreateSheet {
-                name: format!("Sheet{}", self.sheets.get_untracked().len() + 1),
+                name: SheetName::new(&format!("Sheet{}", self.sheets.get_untracked().len() + 1))
+                    .unwrap_or_default(),
             },
             TrameIntent::RenameSheet(sheet_id, name) => {
                 TrameCommand::RenameSheet { sheet_id, name }

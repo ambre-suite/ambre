@@ -441,7 +441,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
 
     // A builds the workbook: Sheet2!A1 = 5, Sheet1!B1 = Sheet2!A1 * 2.
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&a);
     a.handle_command(TrameCommand::ActivateSheet {
@@ -479,7 +479,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     // dep.
     b.handle_command(TrameCommand::RenameSheet {
         sheet_id: s2.clone(),
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     a.import_snapshot(&b.export_snapshot())
         .expect("the snapshot imports");
@@ -497,7 +497,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
 fn create_sheet_lists_and_isolates() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::CreateSheet {
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     let TrameEvent::SheetList { sheets, active } = &evts.display[0] else {
         panic!("expected SheetList")
@@ -508,11 +508,11 @@ fn create_sheet_lists_and_isolates() {
         sheets[0],
         SheetTab {
             id: SheetId("s0".to_owned()),
-            name: "Sheet1".to_owned()
+            name: crate::test_support::sheet("Sheet1")
         },
         "default tab first"
     );
-    assert_eq!(sheets[1].name, "Data");
+    assert_eq!(sheets[1].name.as_str(), "Data");
 
     let s1 = sheets[1].id.0.clone();
     // Write on the default sheet, switch to the new one: it is blank.
@@ -569,7 +569,7 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
         sheets,
         &vec![SheetTab {
             id: SheetId("s0".to_owned()),
-            name: "Sheet1".to_owned()
+            name: crate::test_support::sheet("Sheet1")
         }]
     );
 
@@ -590,7 +590,7 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
 fn cross_sheet_formula_evaluates_end_to_end() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&state);
 
@@ -628,7 +628,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // reader `Sheet1!B1 = =Sheet2!A2`. Both peers inherit identical ids.
     let mut base = TrameState::new();
     base.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&base);
     base.handle_command(TrameCommand::ActivateSheet {
@@ -726,7 +726,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
 fn rename_sheet_keeps_id_and_cells() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     let s1 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
@@ -740,12 +740,16 @@ fn rename_sheet_keeps_id_and_cells() {
 
     let evts = state.handle_command(TrameCommand::RenameSheet {
         sheet_id: s1.clone(),
-        name: "Renamed".to_owned(),
+        name: crate::test_support::sheet("Renamed"),
     });
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
         panic!()
     };
-    assert!(sheets.iter().any(|t| t.id == s1 && t.name == "Renamed"));
+    assert!(
+        sheets
+            .iter()
+            .any(|t| t.id == s1 && t.name.as_str() == "Renamed")
+    );
     // The value survives the rename (same id, same container).
     assert_eq!(read_cell(&mut state, 0, 0), "v");
 }
@@ -755,7 +759,7 @@ fn rename_sheet_keeps_id_and_cells() {
 fn move_sheet_reorders_tabs() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "B".to_owned(),
+        name: crate::test_support::sheet("B"),
     });
     let b = second_sheet_id(&state);
     // Order is [s0, B]; move B to the front.
@@ -787,7 +791,7 @@ fn delete_last_sheet_rejected() {
 fn delete_active_sheet_falls_back() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "B".to_owned(),
+        name: crate::test_support::sheet("B"),
     });
     let b = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
@@ -881,7 +885,7 @@ fn tab_name(state: &TrameState, sheet_id: &SheetId) -> String {
         TrameEvent::SheetList { sheets, .. } => sheets
             .into_iter()
             .find(|t| t.id == *sheet_id)
-            .map(|t| t.name)
+            .map(|t| t.name.to_string())
             .expect("the sheet is listed"),
         other => panic!("expected SheetList, got {other:?}"),
     }
@@ -890,7 +894,9 @@ fn tab_name(state: &TrameState, sheet_id: &SheetId) -> String {
 /// Every label the strip shows, in order.
 fn tab_names(state: &TrameState) -> Vec<String> {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|t| t.name).collect(),
+        TrameEvent::SheetList { sheets, .. } => {
+            sheets.into_iter().map(|t| t.name.to_string()).collect()
+        }
         other => panic!("expected SheetList, got {other:?}"),
     }
 }
@@ -903,7 +909,7 @@ fn created_sheet_never_repeats_a_name() {
     let mut state = TrameState::new();
     for name in ["Sheet2", "Sheet3"] {
         state.handle_command(TrameCommand::CreateSheet {
-            name: name.to_owned(),
+            name: crate::test_support::sheet(name),
         });
     }
     let first_added = second_sheet_id(&state);
@@ -911,7 +917,7 @@ fn created_sheet_never_repeats_a_name() {
         sheet_id: first_added,
     });
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet3".to_owned(),
+        name: crate::test_support::sheet("Sheet3"),
     });
     assert_eq!(tab_names(&state), vec!["Sheet1", "Sheet3", "Sheet3 (2)"]);
 }
@@ -921,12 +927,12 @@ fn created_sheet_never_repeats_a_name() {
 fn rename_to_a_taken_name_is_refused() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     let data = second_sheet_id(&state);
     let evts = state.handle_command(TrameCommand::RenameSheet {
         sheet_id: data.clone(),
-        name: "Sheet1".to_owned(),
+        name: crate::test_support::sheet("Sheet1"),
     });
     assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
     assert!(evts.update.is_none());
@@ -939,7 +945,7 @@ fn rename_to_a_taken_name_is_refused() {
 fn concurrent_duplicate_names_read_apart() {
     let mut a = TrameState::new();
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Two".to_owned(),
+        name: crate::test_support::sheet("Two"),
     });
     let mut b = TrameState::new();
     b.import_snapshot(&a.export_snapshot())
@@ -947,11 +953,11 @@ fn concurrent_duplicate_names_read_apart() {
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::RenameSheet {
         sheet_id: two.clone(),
-        name: "Budget".to_owned(),
+        name: crate::test_support::sheet("Budget"),
     });
     b.handle_command(TrameCommand::RenameSheet {
         sheet_id: SheetId("s0".to_owned()),
-        name: "Budget".to_owned(),
+        name: crate::test_support::sheet("Budget"),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
     a.import_snapshot(&sb).expect("the snapshot imports");
@@ -963,20 +969,131 @@ fn concurrent_duplicate_names_read_apart() {
     assert!(names.contains(&"Budget".to_owned()));
 }
 
-/// A blank rename is refused whatever path sent it (`TRAME-160`): the tab
-/// keeps its label.
+/// A create asking for a name another sheet carries in another case takes
+/// the first free variant: case does not tell two tabs apart (`TRAME-078`).
 #[test]
-fn rename_to_a_blank_name_is_refused() {
+fn created_sheet_never_repeats_a_name_whatever_its_case() {
     let mut state = TrameState::new();
-    for blank in ["", "   "] {
-        let evts = state.handle_command(TrameCommand::RenameSheet {
-            sheet_id: SheetId("s0".to_owned()),
-            name: blank.to_owned(),
+    for name in ["Data", "DATA"] {
+        state.handle_command(TrameCommand::CreateSheet {
+            name: crate::test_support::sheet(name),
         });
-        assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
-        assert!(evts.update.is_none());
     }
-    assert_eq!(tab_name(&state, &default_sheet()), "Sheet1");
+    assert_eq!(tab_names(&state), vec!["Sheet1", "Data", "DATA (2)"]);
+}
+
+/// A rename to a name another sheet carries in another case is refused and
+/// said (`TRAME-078`). A sheet may still change the case of its own name.
+#[test]
+fn rename_to_a_name_taken_in_another_case_is_refused() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("Data"),
+    });
+    let data = second_sheet_id(&state);
+    let evts = state.handle_command(TrameCommand::RenameSheet {
+        sheet_id: data.clone(),
+        name: crate::test_support::sheet("sheet1"),
+    });
+    assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
+    assert!(evts.update.is_none());
+    assert_eq!(tab_name(&state, &data), "Data");
+
+    let evts = state.handle_command(TrameCommand::RenameSheet {
+        sheet_id: data.clone(),
+        name: crate::test_support::sheet("DATA"),
+    });
+    assert!(
+        evts.update.is_some(),
+        "a sheet changes the case of its own name"
+    );
+    assert_eq!(tab_name(&state, &data), "DATA");
+}
+
+/// Two peers give two sheets names that differ only in case, concurrently
+/// (`TRAME-078`). Every peer reads the second one with a suffix.
+#[test]
+fn concurrent_names_differing_in_case_read_apart() {
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("Two"),
+    });
+    let mut b = TrameState::new();
+    b.import_snapshot(&a.export_snapshot())
+        .expect("a snapshot this build wrote reads back at the current schema");
+    let two = second_sheet_id(&a);
+    a.handle_command(TrameCommand::RenameSheet {
+        sheet_id: two,
+        name: crate::test_support::sheet("Budget"),
+    });
+    b.handle_command(TrameCommand::RenameSheet {
+        sheet_id: SheetId("s0".to_owned()),
+        name: crate::test_support::sheet("BUDGET"),
+    });
+    let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
+    a.import_snapshot(&sb).expect("the snapshot imports");
+    b.import_snapshot(&sa).expect("the snapshot imports");
+    assert_eq!(tab_names(&a), tab_names(&b));
+    let names: Vec<String> = tab_names(&a).iter().map(|n| n.to_lowercase()).collect();
+    assert_eq!(names.len(), 2);
+    assert_ne!(names[0], names[1], "two tabs read apart: {names:?}");
+}
+
+/// A name the document already holds is read as stored, even one the rule
+/// of a rename refuses (`TRAME-235`). Its tab shows it, and a formula still
+/// names it.
+#[test]
+fn a_stored_name_the_rule_refuses_is_read_as_stored() {
+    let mut state = TrameState::new();
+    let stored = "Q1:Q2 [draft] of the year two thousand";
+    let _ = state
+        .doc
+        .get_map(crate::logic::Root::Sheets.as_str())
+        .insert("s0", stored);
+    state.doc.commit();
+    state.reseed_engine();
+    assert_eq!(tab_names(&state), vec![stored]);
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(0),
+        col: Col::new(0),
+        text: "7".to_owned(),
+    });
+    let evts = state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(1),
+        col: Col::new(0),
+        text: format!("='{stored}'!A1*2"),
+    });
+    assert!(
+        !evts
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. })),
+        "the formula names the stored sheet"
+    );
+    assert_eq!(read_raw(&mut state, 1, 0), format!("='{stored}'!A1*2"));
+}
+
+/// A formula qualifier resolves whatever its case, as two names differing
+/// only in case are one name (`TRAME-236`). The formula bar then shows the
+/// name as the tab spells it.
+#[test]
+fn a_qualifier_resolves_whatever_its_case() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("Data"),
+    });
+    let evts = state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(0),
+        col: Col::new(0),
+        text: "=data!A1*2".to_owned(),
+    });
+    assert!(
+        !evts
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. }))
+    );
+    assert_eq!(read_raw(&mut state, 0, 0), "=Data!A1*2");
 }
 
 /// A deleted sheet leaves none of its data in the document (`TRAME-076`):
@@ -987,7 +1104,7 @@ fn deleted_sheet_leaves_no_data() {
     use loro::LoroValue;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Gone".to_owned(),
+        name: crate::test_support::sheet("Gone"),
     });
     let gone = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
@@ -1079,7 +1196,7 @@ fn formula_naming_a_missing_sheet_is_refused() {
     assert_eq!(read_raw(&mut state, 0, 0), "", "nothing was stored");
     // The same formula lands once the sheet exists, stored by its id.
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Nowhere".to_owned(),
+        name: crate::test_support::sheet("Nowhere"),
     });
     let evts = state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -1128,7 +1245,7 @@ fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&a);
     a.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
@@ -1146,7 +1263,7 @@ fn a_new_sheet_leaves_a_cross_sheet_formula_on_its_sheet() {
     assert_eq!(read_cell(&mut a, 0, 0), "5");
 
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet3".to_owned(),
+        name: crate::test_support::sheet("Sheet3"),
     });
     // A recompute of A1 reads Sheet1!A1 again, through the compiled index.
     a.handle_command(TrameCommand::SetCellText {

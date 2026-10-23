@@ -26,7 +26,7 @@
 
 use ambre_bus::{
     AppCommand, AppEvent, CellFormat, CellStyle, Col, DocumentId, HAlign, Row, RowCount, SheetId,
-    SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
+    SheetName, SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
@@ -509,7 +509,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
     let container = mount_in_container(move || {
         let tab = |id: &str, name: &str| SheetTab {
             id: SheetId(id.to_owned()),
-            name: name.to_owned(),
+            name: SheetName::new(name).unwrap(),
         };
         let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
         let active = RwSignal::new(SheetId("s1".to_owned()));
@@ -519,7 +519,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
                 active=active
                 on_activate=Callback::new(move |id| activated.set(Some(id)))
                 on_create=Callback::new(move |()| created.update(|n| *n += 1))
-                on_rename=Callback::new(move |_: (SheetId, String)| {})
+                on_rename=Callback::new(move |_: (SheetId, SheetName)| {})
                 on_delete=Callback::new(move |_: SheetId| {})
                 on_reorder=Callback::new(move |_: ReorderSheet| {})
             />
@@ -550,6 +550,71 @@ fn sheet_tabs_render_active_and_emit_intents() {
     add.click();
     assert_eq!(created.get_untracked(), 1);
 
+    container.remove();
+}
+
+/// A rename to a name the rule refuses keeps the editor open, its reason on
+/// the field, and sends nothing. A valid name is sent (`TRAME-234`).
+#[wasm_bindgen_test]
+fn sheet_tabs_refuse_a_name_the_rule_refuses() {
+    let renamed = RwSignal::new(None::<(SheetId, SheetName)>);
+    let container = mount_in_container(move || {
+        let sheets = RwSignal::new(vec![SheetTab {
+            id: SheetId("s0".to_owned()),
+            name: SheetName::new("One").unwrap(),
+        }]);
+        view! {
+            <SheetTabs
+                sheets=sheets
+                active=RwSignal::new(SheetId("s0".to_owned()))
+                on_activate=Callback::new(move |_: SheetId| {})
+                on_create=Callback::new(move |()| {})
+                on_rename=Callback::new(move |pair| renamed.set(Some(pair)))
+                on_delete=Callback::new(move |_: SheetId| {})
+                on_reorder=Callback::new(move |_: ReorderSheet| {})
+            />
+        }
+    });
+    let tab: web_sys::HtmlElement = container
+        .query_selector(".tab")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    // The chrome delegates its listeners to the document, so each event
+    // bubbles.
+    let dbl = web_sys::Event::new("dblclick").unwrap();
+    dbl.init_event_with_bubbles("dblclick", true);
+    tab.dispatch_event(&dbl).unwrap();
+    let field = || -> web_sys::HtmlInputElement {
+        container
+            .query_selector(".tab-rename")
+            .unwrap()
+            .expect("the rename editor is open")
+            .dyn_into()
+            .unwrap()
+    };
+    let enter = || {
+        let init = web_sys::KeyboardEventInit::new();
+        init.set_key("Enter");
+        init.set_bubbles(true);
+        web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init).unwrap()
+    };
+
+    field().set_value("Q1:Q2");
+    field().dispatch_event(&enter()).unwrap();
+    assert_eq!(renamed.get_untracked(), None, "a refused name is not sent");
+    assert_eq!(
+        field().get_attribute("aria-invalid").as_deref(),
+        Some("true")
+    );
+
+    field().set_value("Data");
+    field().dispatch_event(&enter()).unwrap();
+    assert_eq!(
+        renamed.get_untracked(),
+        Some((SheetId("s0".to_owned()), SheetName::new("Data").unwrap()))
+    );
     container.remove();
 }
 

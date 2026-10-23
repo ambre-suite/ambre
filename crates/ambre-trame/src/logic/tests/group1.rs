@@ -426,7 +426,7 @@ fn read_cell_v(state: &mut TrameState, row: u32, col: u32, version: u64) -> Stri
 fn unqualified_name_resolves_the_same_for_every_reader() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Other".to_owned(),
+        name: crate::test_support::sheet("Other"),
     });
     let other = second_sheet_id(&state);
     // Sheet1!A1:A2 holds 1 and 2; Other!A1:A2 holds 10 and 20.
@@ -471,7 +471,7 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
 fn name_on_another_sheet_survives_its_rename() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     let data = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
@@ -497,7 +497,7 @@ fn name_on_another_sheet_survives_its_rename() {
     assert_eq!(read_a1(&mut state, 1), "14");
     state.handle_command(TrameCommand::RenameSheet {
         sheet_id: data,
-        name: "Inputs".to_owned(),
+        name: crate::test_support::sheet("Inputs"),
     });
     assert_eq!(
         read_a1(&mut state, 2),
@@ -654,8 +654,14 @@ fn sum_over_plain_literals_survives_reseed() {
 #[test]
 fn multi_sheet_isolation_and_name_lookup() {
     let mut state = TrameState::new();
-    assert_eq!(state.sheet_name_to_id("Sheet1"), Some(default_sheet()));
-    assert_eq!(state.sheet_name_to_id("Nope"), None);
+    assert_eq!(
+        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Sheet1".to_owned())),
+        Some(default_sheet())
+    );
+    assert_eq!(
+        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Nope".to_owned())),
+        None
+    );
 
     // Write to the default sheet, then to a second sheet's containers
     // directly (the add-sheet command lands in a later step).
@@ -693,7 +699,7 @@ fn multi_sheet_isolation_and_name_lookup() {
         loro::LoroValue::Map(ref m) if m.is_empty()
     ));
     assert_eq!(
-        state.sheet_name_to_id("Sheet2"),
+        state.sheet_name_to_id(&ambre_bus::SheetName::stored("Sheet2".to_owned())),
         Some(SheetId("s1".to_owned()))
     );
 }
@@ -706,7 +712,7 @@ fn multi_sheet_isolation_and_name_lookup() {
 fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&state);
 
@@ -748,7 +754,7 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
     // Rename the target: the reference keeps computing and the bar follows.
     state.handle_command(TrameCommand::RenameSheet {
         sheet_id: s2.clone(),
-        name: "Data".to_owned(),
+        name: crate::test_support::sheet("Data"),
     });
     assert_eq!(
         read_cell(&mut state, 0, 1),

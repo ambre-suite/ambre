@@ -210,8 +210,8 @@ const S5: EngineSheet = EngineSheet::new(5);
 /// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
 struct TestCtx;
 impl FormulaCtx for TestCtx {
-    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet> {
-        match name {
+    fn resolve_sheet(&self, name: &ambre_bus::SheetName) -> Option<EngineSheet> {
+        match name.as_str() {
             "Sheet1" => Some(S0),
             "Sheet2" => Some(S2),
             "My Sheet" => Some(S5),

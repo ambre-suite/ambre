@@ -159,7 +159,7 @@ fn a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write() {
 fn a_commit_after_a_tab_switch_lands_on_the_session_sheet() {
     let (mut a, _) = two_peers();
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Two".to_owned(),
+        name: crate::test_support::sheet("Two"),
     });
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::BeginCellEdit {
@@ -211,7 +211,7 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
         &mut b,
         &mut a,
         TrameCommand::CreateSheet {
-            name: "Two".to_owned(),
+            name: crate::test_support::sheet("Two"),
         },
     );
     let two = second_sheet_id(&a);

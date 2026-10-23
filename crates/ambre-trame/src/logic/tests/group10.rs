@@ -171,7 +171,7 @@ fn a_fill_on_another_sheet_touches_nothing() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "a");
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let other = second_sheet_id(&state);
     let out = state.handle_command(TrameCommand::FillRange {
@@ -244,7 +244,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "foo");
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let other = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {

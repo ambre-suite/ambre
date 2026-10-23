@@ -233,7 +233,7 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 .iter()
                 .position(|id| id.as_str() == key)?;
             let name = reader.sheet_names().remove(&SheetId(key.to_owned()))?;
-            Some(format!("tab {} named {name:?}", tab + 1))
+            Some(format!("tab {} named {:?}", tab + 1, name.as_str()))
         }
         Root::SheetOrder => {
             let LoroValue::String(id) = &stored.value else {

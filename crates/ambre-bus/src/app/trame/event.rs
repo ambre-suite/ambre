@@ -5,7 +5,7 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
-use super::{CellPos, CellRect, Col, ColCount, EditSessionId, MergeSpan, Row, RowCount};
+use super::{CellPos, CellRect, Col, ColCount, EditSessionId, MergeSpan, Row, RowCount, SheetName};
 use crate::UserId;
 use ambre_core::{DocPx, Rgb};
 
@@ -359,7 +359,7 @@ pub struct CondFormatId(pub String);
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SheetTab {
     pub id: SheetId,
-    pub name: String,
+    pub name: SheetName,
 }
 
 /// A single cell ready for display.

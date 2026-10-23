@@ -717,10 +717,10 @@ fn tab_order(state: &TrameState) -> Vec<String> {
 fn concurrent_tab_moves_converge_on_one_order() {
     let mut a = TrameState::new();
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Two".to_owned(),
+        name: crate::test_support::sheet("Two"),
     });
     a.handle_command(TrameCommand::CreateSheet {
-        name: "Three".to_owned(),
+        name: crate::test_support::sheet("Three"),
     });
     let base = a.export_snapshot();
     let mut b = TrameState::new();

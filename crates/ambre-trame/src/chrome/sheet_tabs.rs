@@ -13,7 +13,7 @@
 // signals, mirrored from `TrameEvent::SheetList`.
 // ============================================================================
 
-use ambre_bus::{SheetId, SheetTab};
+use ambre_bus::{SheetId, SheetName, SheetTab};
 use leptos::prelude::*;
 use leptos::web_sys;
 
@@ -33,7 +33,7 @@ pub fn SheetTabs(
     active: RwSignal<SheetId>,
     on_activate: Callback<SheetId>,
     on_create: Callback<()>,
-    on_rename: Callback<(SheetId, String)>,
+    on_rename: Callback<(SheetId, SheetName)>,
     on_delete: Callback<SheetId>,
     on_reorder: Callback<ReorderSheet>,
 ) -> impl IntoView {
@@ -147,7 +147,7 @@ pub fn SheetTabs(
                                             drop_idx.set(None);
                                         }
                                     >
-                                        {name.clone()}
+                                        {name.to_string()}
                                     </button>
                                 }
                             }
@@ -156,7 +156,7 @@ pub fn SheetTabs(
                         {
                             let rename_id = rename_id.clone();
                             let blur_id = blur_id.clone();
-                            let init_name = init_name.clone();
+                            let init_name = init_name.to_string();
                             view! {
                                 <input
                                     class="tab-rename"
@@ -173,21 +173,27 @@ pub fn SheetTabs(
                                     on:keydown={
                                         let rename_id = rename_id.clone();
                                         move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
-                                            "Enter" => {
-                                                let v = event_target_value(&ev).trim().to_owned();
-                                                if !v.is_empty() {
-                                                    on_rename.run((rename_id.clone(), v));
+                                            // A name the rule refuses keeps the editor open,
+                                            // its reason on the field (`TRAME-234`).
+                                            "Enter" => match SheetName::new(&event_target_value(&ev)) {
+                                                Ok(name) => {
+                                                    on_rename.run((rename_id.clone(), name));
+                                                    renaming.set(None);
                                                 }
-                                                renaming.set(None);
-                                            }
+                                                Err(refusal) => {
+                                                    let input = event_target::<web_sys::HtmlInputElement>(&ev);
+                                                    input.set_title(&refusal.to_string());
+                                                    let _ = input.set_attribute("aria-invalid", "true");
+                                                }
+                                            },
                                             "Escape" => renaming.set(None),
                                             _ => {}
                                         }
                                     }
+                                    // Leaving the field with a refused name drops the edit.
                                     on:blur=move |ev| {
-                                        let v = event_target_value(&ev).trim().to_owned();
-                                        if !v.is_empty() {
-                                            on_rename.run((blur_id.clone(), v));
+                                        if let Ok(name) = SheetName::new(&event_target_value(&ev)) {
+                                            on_rename.run((blur_id.clone(), name));
                                         }
                                         renaming.set(None);
                                     }

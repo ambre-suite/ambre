@@ -468,13 +468,11 @@ ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | Clipboar
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CreateSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RenameSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.query | field | String	free-text	cell text / query / user message
@@ -501,7 +499,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.wrap
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | FilterViewId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::as_str() | ret | &str	newtype-inner	id newtype
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetTab.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
@@ -4474,10 +4471,8 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BO
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_ALIGNS | const | &[(HAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameIntent::RenameSheet.1 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | ReorderSheet.to_index | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | SheetTabs(on_rename) | param | Callback<(SheetId,String)>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.avg | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count_num | field | u64	math	count, length, local index, limit or calendar/arith helper
@@ -4597,7 +4592,6 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number() 
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | row_number(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,SheetId>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_qualified() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_qualified(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4616,10 +4610,8 @@ ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | whole_rows(in
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | within_bounds(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | ws() | ret | impl Parser<&'a str,Output=O,Error=nom::error::Error<&'a str>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | binop_symbol() | ret | &'static str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | canonicalize(name_to_id) | param | &impl Fn(&str)->Option<SheetId>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/render.rs | crate::formula::render | emit() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | emit(min_prec) | param | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | first_name_qualifier() | ret | Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | precedence() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4632,8 +4624,6 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_range() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/formula/render.rs | crate::formula::render | to_display_form(id_to_name) | param | &impl Fn(&SheetId)->Option<String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/formula/types.rs | crate::formula::types | <SingleSheetCtx as FormulaCtx>::resolve_sheet(_name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4643,7 +4633,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::index() | ret | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(index) | param | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/formula/types.rs | crate::formula::types | FormulaCtx::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4658,7 +4647,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(col
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(row) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(cols) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | SheetQualifier::Name.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
@@ -4724,17 +4712,11 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimite
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/mod.rs | crate::logic | DEFAULT_SHEET_NAME | const | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_name | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.uid_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
-ambre-trame | src/logic/mod.rs | crate::logic | WriteRefusal::UnknownSheet.0 | field | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Date.1 | field | usize	math	count, length, local index, limit or calendar/arith helper
@@ -4774,14 +4756,9 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::create_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name() | ret | String	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::free_sheet_name(wanted) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::move_sheet(to_index) | param | u32	math	tab order position, a count
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::rename_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::sheet_names() | ret | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
@@ -4799,7 +4776,6 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(origin) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
@@ -5166,7 +5142,6 @@ ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | S
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | GridCursor::css() | ret | &'static str	foreign-api	the CSS cursor value the DOM style takes
-ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::canonicalize_input() | ret | Result<StoredFormula,String>	debt	finding: the error is the display name of an unknown sheet, a bare String until the SheetName rule lands
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar::sync(seed) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Invalid.0 | field | String	free-text	the column text it could not read, echoed in the message
 ambre-trame | src/columns.rs | crate::columns | ColumnParseError::Overflow.0 | field | String	free-text	the column text past the last column, echoed in the message
@@ -5175,6 +5150,15 @@ ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::as_st
 ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::parse(text) | param | &str	newtype-inner	the text the constructor checks
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
-ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::UnknownSheet.0 | field | String	free-text	the qualifier text no sheet answers, echoed in the message
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableColumn.0 | field | String	free-text	the stored key text it could not read, echoed in the message
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableOperator.0 | field | String	free-text	the stored key text it could not read, echoed in the message
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName.0 | field | String	newtype-inner	the text of a sheet display name
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	newtype-inner	the characters the SheetName rule refuses
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::MAX_CHARS | const | usize	newtype-inner	the character count the SheetName rule caps
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::free_variant(taken) | param | impl Fn(&SheetNameKey)->bool	generic	predicate over typed keys
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the Excel rule
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::stored(text) | param | String	newtype-inner	the read-policy constructor for a name the document or a formula already holds (TRAME-235)
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | String	newtype-inner	the case-folded text of a sheet name key
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	newtype-inner	SheetNameRefusal field: the refused character, echoed in the refusal
+ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes

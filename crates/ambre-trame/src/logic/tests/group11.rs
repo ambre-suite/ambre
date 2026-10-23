@@ -453,7 +453,7 @@ fn a_write_past_the_line_cap_is_refused() {
 fn three_sheets(state: &mut TrameState) -> Vec<SheetId> {
     for name in ["Two", "Three"] {
         state.handle_command(TrameCommand::CreateSheet {
-            name: name.to_owned(),
+            name: crate::test_support::sheet(name),
         });
     }
     let ids = state.sheet_order_ids();
@@ -494,7 +494,7 @@ fn a_rename_keeps_the_tab_order() {
     for (id, name) in [(&ids[0], "Zulu"), (&ids[2], "Alpha")] {
         state.handle_command(TrameCommand::RenameSheet {
             sheet_id: id.clone(),
-            name: name.to_owned(),
+            name: crate::test_support::sheet(name),
         });
     }
     assert_eq!(state.sheet_order_ids(), ids);
@@ -552,13 +552,13 @@ fn two_peers_adding_a_sheet_keep_both() {
     let (mut a, mut b) = two_peers(&TrameState::new());
     let from_a = a
         .handle_command(TrameCommand::CreateSheet {
-            name: "Budget".to_owned(),
+            name: crate::test_support::sheet("Budget"),
         })
         .update
         .expect("the create");
     let from_b = b
         .handle_command(TrameCommand::CreateSheet {
-            name: "Budget".to_owned(),
+            name: crate::test_support::sheet("Budget"),
         })
         .update
         .expect("the create");
@@ -576,9 +576,13 @@ fn two_peers_adding_a_sheet_keep_both() {
 /// The tab strip one peer reads: each sheet's id and name, and the active id.
 fn strip(state: &TrameState) -> (Vec<(SheetId, String)>, SheetId) {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, active } => {
-            (sheets.into_iter().map(|t| (t.id, t.name)).collect(), active)
-        }
+        TrameEvent::SheetList { sheets, active } => (
+            sheets
+                .into_iter()
+                .map(|t| (t.id, t.name.to_string()))
+                .collect(),
+            active,
+        ),
         other => panic!("not a sheet list: {other:?}"),
     }
 }
@@ -591,7 +595,7 @@ fn strip(state: &TrameState) -> (Vec<(SheetId, String)>, SheetId) {
 fn two_peers_deleting_the_last_two_sheets_keep_one() {
     let mut base = TrameState::new();
     base.handle_command(TrameCommand::CreateSheet {
-        name: "Two".to_owned(),
+        name: crate::test_support::sheet("Two"),
     });
     let ids = base.sheet_order_ids();
     assert_eq!(ids.len(), 2);
@@ -645,7 +649,7 @@ fn two_peers_deleting_the_last_two_sheets_keep_one() {
         .expect("the write");
     let from_b = b
         .handle_command(TrameCommand::CreateSheet {
-            name: "New".to_owned(),
+            name: crate::test_support::sheet("New"),
         })
         .update
         .expect("the create");

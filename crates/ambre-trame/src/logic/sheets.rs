@@ -91,7 +91,7 @@ impl TrameState {
     /// peers -- only stability within this session matters.
     pub(super) fn rebuild_sheet_maps(&mut self) {
         // Collect {id -> name}, each name unique (`TRAME-078`).
-        let mut entries: Vec<(SheetId, String)> = self.sheet_names().into_iter().collect();
+        let mut entries: Vec<(SheetId, SheetName)> = self.sheet_names().into_iter().collect();
         // Active sheet first (index 0), then the rest by id for determinism.
         entries.sort_by(|a, b| {
             let a_active = a.0 == self.active_sheet;
@@ -105,7 +105,7 @@ impl TrameState {
         self.sheet_id_to_name.clear();
         for (idx, (id, name)) in entries.into_iter().enumerate() {
             let sheet = EngineSheet::new(idx as u16);
-            self.engine_sheet_by_name.insert(name.clone(), sheet);
+            self.engine_sheet_by_name.insert(name.key(), sheet);
             self.engine_sheet_by_id.insert(id.clone(), sheet);
             self.sheet_id_to_name.insert(id.clone(), name);
             self.sheets_by_idx.push(id);
@@ -241,7 +241,7 @@ impl TrameState {
                 let sheet = match sheet {
                     SheetQualifier::Name(name) => SheetQualifier::Id(
                         self.engine_sheet_by_name
-                            .get(&name)
+                            .get(&name.key())
                             .and_then(|idx| self.sheets_by_idx.get(idx.position()))
                             .cloned()?,
                     ),
@@ -288,65 +288,64 @@ impl TrameState {
     // -------------------------------------------------------------------------
 
     /// Every sheet's name as the user reads it, keyed by id, no two alike
-    /// (`TRAME-078`). A create and a rename never store a taken name, but two
-    /// peers can store one concurrently. The sheet with the smaller id then keeps
-    /// the stored name, and the other reads it with the first free ` (n)` suffix.
-    /// The result depends on the document alone, so every peer reads the same.
-    pub(super) fn sheet_names(&self) -> HashMap<SheetId, String> {
-        let mut stored: Vec<(SheetId, String)> =
+    /// whatever their case (`TRAME-078`). A create and a rename never store a
+    /// taken name, but two peers can store one concurrently. The sheet with
+    /// the smaller id then keeps the stored name, and the other reads it with
+    /// the first free ` (n)` suffix. The result depends on the document alone,
+    /// so every peer reads the same.
+    ///
+    /// A stored name is read as stored, even one the rule of a rename refuses
+    /// (`TRAME-235`). A value that is not text reads as the sheet id.
+    pub(super) fn sheet_names(&self) -> HashMap<SheetId, SheetName> {
+        let mut stored: Vec<(SheetId, SheetName)> =
             match self.doc.get_map(Root::Sheets.as_str()).get_value() {
                 LoroValue::Map(sheets) => sheets
                     .iter()
-                    .map(|(id, name)| match name {
-                        LoroValue::String(s) => (SheetId(id.clone()), s.to_string()),
-                        _ => (SheetId(id.clone()), id.clone()),
+                    .map(|(id, name)| {
+                        let name = match name {
+                            LoroValue::String(s) => s.to_string(),
+                            _ => id.clone(),
+                        };
+                        (SheetId(id.clone()), SheetName::stored(name))
                     })
                     .collect(),
                 _ => Vec::new(),
             };
         // A workbook with no stored sheet reads the default one (`TRAME-022`).
         if stored.is_empty() {
-            stored.push((default_sheet(), DEFAULT_SHEET_NAME.to_owned()));
+            stored.push((default_sheet(), SheetName::default()));
         }
         stored.sort();
-        let mut taken: HashSet<String> = HashSet::new();
+        let mut taken: HashSet<SheetNameKey> = HashSet::new();
         let mut names = HashMap::with_capacity(stored.len());
         // Stored names claim first, so a suffixed name never takes one a later
         // sheet stores as is.
         let mut clashing = Vec::new();
         for (id, name) in stored {
-            if taken.insert(name.clone()) {
+            if taken.insert(name.key()) {
                 names.insert(id, name);
             } else {
                 clashing.push((id, name));
             }
         }
         for (id, name) in clashing {
-            let unique = (2..)
-                .map(|n| format!("{name} ({n})"))
-                .find(|candidate| !taken.contains(candidate))
-                .unwrap_or(name);
-            taken.insert(unique.clone());
+            let unique = name.free_variant(|key| taken.contains(key));
+            taken.insert(unique.key());
             names.insert(id, unique);
         }
         names
     }
 
     /// `wanted`, or the first ` (n)` variant of it no sheet carries, for a create
-    /// whose name is taken (`TRAME-078`). A blank name becomes `Sheet`.
-    pub(super) fn free_sheet_name(&self, wanted: &str) -> String {
-        let wanted = match wanted.trim() {
-            "" => "Sheet",
-            trimmed => trimmed,
-        };
-        let taken: HashSet<String> = self.sheet_names().into_values().collect();
-        if !taken.contains(wanted) {
-            return wanted.to_owned();
+    /// whose name is taken, case ignored (`TRAME-078`).
+    pub(super) fn free_sheet_name(&self, wanted: &SheetName) -> SheetName {
+        let taken: HashSet<SheetNameKey> =
+            self.sheet_names().values().map(SheetName::key).collect();
+        if taken.contains(&wanted.key()) {
+            wanted.free_variant(|key| taken.contains(key))
+        } else {
+            wanted.clone()
         }
-        (2..)
-            .map(|n| format!("{wanted} ({n})"))
-            .find(|candidate| !taken.contains(candidate))
-            .unwrap_or_else(|| wanted.to_owned())
     }
 
     /// Every live sheet id, unordered. It is each id the `sheets` CRDT map
@@ -381,7 +380,7 @@ impl TrameState {
         let _ = self
             .doc
             .get_map(Root::Sheets.as_str())
-            .insert(default_sheet().as_str(), DEFAULT_SHEET_NAME);
+            .insert(default_sheet().as_str(), SheetName::default().as_str());
         true
     }
 
@@ -441,7 +440,9 @@ impl TrameState {
             .sheet_order_ids()
             .into_iter()
             .map(|id| {
-                let name = names.remove(&id).unwrap_or_else(|| id.to_string());
+                let name = names
+                    .remove(&id)
+                    .unwrap_or_else(|| SheetName::stored(id.to_string()));
                 SheetTab { id, name }
             })
             .collect();
@@ -484,7 +485,7 @@ impl TrameState {
     /// sheet is
     /// empty; its containers are created lazily on first write. Does not switch
     /// the active sheet (the UI sends [`TrameCommand::ActivateSheet`] for that).
-    pub(super) fn create_sheet(&mut self, name: &str) -> TrameOutcome {
+    pub(super) fn create_sheet(&mut self, name: &SheetName) -> TrameOutcome {
         self.hold_default_sheet();
         let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
         self.sheet_counter += 1;
@@ -514,32 +515,29 @@ impl TrameState {
     /// untouched. The name -> index map changes, so reseed to recompile any
     /// cross-sheet reference (the display-name binding is the `trame-sheets` MVP
     /// gap).
-    /// A no-op if the id is unknown.
-    pub(super) fn rename_sheet(&mut self, sheet_id: &SheetId, name: &str) -> TrameOutcome {
+    /// A no-op if the id is unknown. The name already obeys the rule, as
+    /// [`SheetName::new`] is the only way to give one (`TRAME-160`,
+    /// `TRAME-234`).
+    pub(super) fn rename_sheet(&mut self, sheet_id: &SheetId, name: &SheetName) -> TrameOutcome {
         if !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
             return TrameOutcome::display_only(vec![]);
         }
-        // A blank name leaves a tab with no label to click (`TRAME-160`), and a
-        // taken one leaves two tabs no reader can tell apart (`TRAME-078`).
-        let name = name.trim();
-        let refusal = if name.is_empty() {
-            Some("a sheet name cannot be empty".to_owned())
-        } else if self
+        // A taken name leaves two tabs no reader can tell apart, and two names
+        // that differ only in case are one name (`TRAME-078`).
+        let key = name.key();
+        if self
             .sheet_names()
             .iter()
-            .any(|(id, taken)| id != sheet_id && taken == name)
+            .any(|(id, taken)| id != sheet_id && taken.key() == key)
         {
-            Some(format!("a sheet named \"{name}\" already exists"))
-        } else {
-            None
-        };
-        if let Some(message) = refusal {
-            return TrameOutcome::display_only(vec![TrameEvent::Error { message }]);
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: format!("a sheet named \"{name}\" already exists"),
+            }]);
         }
         let _ = self
             .doc
             .get_map(Root::Sheets.as_str())
-            .insert(sheet_id.as_str(), name);
+            .insert(sheet_id.as_str(), name.as_str());
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();

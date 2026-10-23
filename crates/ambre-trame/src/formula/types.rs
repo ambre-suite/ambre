@@ -1,6 +1,6 @@
 use std::fmt;
 
-use ambre_bus::{CellPos, Col, DefinedName, Row, SheetId};
+use ambre_bus::{CellPos, Col, DefinedName, Row, SheetId, SheetName};
 
 use crate::model::{Line, SheetIndex, Uid};
 
@@ -485,7 +485,7 @@ pub enum ParseError {
     /// The text ended inside an expression.
     Incomplete,
     /// A sheet display name no tab carries, as the formula spells it.
-    UnknownSheet(String),
+    UnknownSheet(SheetName),
 }
 
 impl fmt::Display for ParseError {
@@ -772,7 +772,7 @@ pub enum NameTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SheetQualifier {
     /// A display name (`Sheet2`, `'My Sheet'`).
-    Name(String),
+    Name(SheetName),
     /// A stable CRDT `sheet_id` (`s0`, `00..0_0000002a`), prefixed `#` in text.
     Id(SheetId),
 }
@@ -784,7 +784,7 @@ pub enum SheetQualifier {
 pub trait FormulaCtx {
     /// Resolve a sheet display name (`Sheet2`) to its local index, or `None`
     /// if no such sheet exists (the reference becomes a parse error).
-    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet>;
+    fn resolve_sheet(&self, name: &SheetName) -> Option<EngineSheet>;
     /// Resolve a stable sheet id (`#s0_a1b2` canonical form) to its local index,
     /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
     fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet>;
@@ -797,7 +797,7 @@ pub trait FormulaCtx {
 pub struct SingleSheetCtx;
 
 impl FormulaCtx for SingleSheetCtx {
-    fn resolve_sheet(&self, _name: &str) -> Option<EngineSheet> {
+    fn resolve_sheet(&self, _name: &SheetName) -> Option<EngineSheet> {
         None
     }
     fn resolve_sheet_id(&self, _id: &SheetId) -> Option<EngineSheet> {
@@ -949,7 +949,7 @@ mod tests {
             (ParseError::Near("+*".to_owned()), "parse error near '+*'"),
             (ParseError::Incomplete, "incomplete input"),
             (
-                ParseError::UnknownSheet("Nope".to_owned()),
+                ParseError::UnknownSheet(SheetName::stored("Nope".to_owned())),
                 "unknown sheet: Nope",
             ),
         ];

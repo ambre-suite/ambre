@@ -395,7 +395,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         },
     });
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Two".to_owned(),
+        name: crate::test_support::sheet("Two"),
     });
     state
 }

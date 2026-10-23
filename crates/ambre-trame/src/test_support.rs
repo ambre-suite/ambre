@@ -134,3 +134,12 @@ pub fn session(n: u64) -> crate::EditSessionId {
 pub fn name(text: &str) -> crate::DefinedName {
     crate::DefinedName::new(text).expect("a test name has a name's shape")
 }
+
+/// The sheet name `text`, which a test writes under the rule a rename obeys.
+///
+/// # Panics
+///
+/// When the rule refuses `text`.
+pub fn sheet(text: &str) -> ambre_bus::SheetName {
+    ambre_bus::SheetName::new(text).expect("a test sheet name obeys the rule")
+}

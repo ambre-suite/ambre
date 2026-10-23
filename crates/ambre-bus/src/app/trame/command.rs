@@ -68,6 +68,119 @@ impl std::borrow::Borrow<str> for DefinedName {
     }
 }
 
+/// Why a text cannot be a sheet name (`TRAME-234`). The rule is Excel's, so
+/// a workbook written here opens there under the same names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SheetNameRefusal {
+    /// Nothing is left once the spaces at both ends are trimmed.
+    #[error("a sheet name cannot be empty")]
+    Empty,
+    /// More than [`SheetName::MAX_CHARS`] characters.
+    #[error("a sheet name cannot be longer than 31 characters")]
+    TooLong,
+    /// A character a sheet name cannot hold.
+    #[error("a sheet name cannot contain {0:?}")]
+    Forbidden(char),
+    /// An apostrophe as the first or the last character. A formula quotes a
+    /// sheet name with apostrophes.
+    #[error("a sheet name cannot start or end with an apostrophe")]
+    EdgeApostrophe,
+}
+
+/// The display name of a Trame sheet, the label of its tab (`trame-sheets`).
+/// A formula names a sheet by it (`'My Sheet'!A1`), and the document stores a
+/// sheet by its id, never by it.
+///
+/// [`SheetName::new`] holds the rule a create or a rename obeys (`TRAME-234`).
+/// [`SheetName::stored`] is the read policy: a name the document already
+/// holds is kept as stored, whatever the rule says (`TRAME-235`). Uniqueness
+/// compares [`SheetName::key`], which ignores case (`TRAME-078`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SheetName(String);
+
+/// The comparison key of a [`SheetName`]: the name with its case folded. Two
+/// names with one key are one name to the uniqueness rule and to a formula
+/// qualifier (`TRAME-078`, `TRAME-236`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SheetNameKey(String);
+
+impl SheetName {
+    /// The most characters a sheet name holds.
+    pub const MAX_CHARS: usize = 31;
+
+    /// The characters a sheet name cannot hold. A `:` or a bracket would read
+    /// as reference syntax, and the rest are Excel's.
+    pub const FORBIDDEN: [char; 7] = [':', '\\', '/', '?', '*', '[', ']'];
+
+    /// The name `text` is, trimmed of its spaces at both ends.
+    ///
+    /// # Errors
+    ///
+    /// [`SheetNameRefusal`] when the trimmed text breaks the rule.
+    pub fn new(text: &str) -> Result<Self, SheetNameRefusal> {
+        let text = text.trim();
+        if text.is_empty() {
+            return Err(SheetNameRefusal::Empty);
+        }
+        if text.chars().count() > Self::MAX_CHARS {
+            return Err(SheetNameRefusal::TooLong);
+        }
+        if let Some(c) = text.chars().find(|c| Self::FORBIDDEN.contains(c)) {
+            return Err(SheetNameRefusal::Forbidden(c));
+        }
+        if text.starts_with('\'') || text.ends_with('\'') {
+            return Err(SheetNameRefusal::EdgeApostrophe);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The name a document or a formula already holds, kept verbatim
+    /// (`TRAME-235`). An older build, a concurrent peer or an import may have
+    /// stored a name the rule refuses. Its tab still shows it, and a formula
+    /// still resolves it. Only a create or a rename goes through
+    /// [`SheetName::new`].
+    pub fn stored(text: String) -> Self {
+        Self(text)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The key uniqueness and qualifier lookup compare (`TRAME-078`).
+    pub fn key(&self) -> SheetNameKey {
+        SheetNameKey(self.0.to_lowercase())
+    }
+
+    /// The first ` (n)` variant of this name, from `n = 2`, whose key `taken`
+    /// refuses. The name is cut first where the suffix would pass
+    /// [`SheetName::MAX_CHARS`], so a valid name yields a valid variant.
+    pub fn free_variant(&self, taken: impl Fn(&SheetNameKey) -> bool) -> Self {
+        (2_u64..)
+            .map(|n| {
+                let suffix = format!(" ({n})");
+                let room = Self::MAX_CHARS.saturating_sub(suffix.len());
+                let base: String = self.0.chars().take(room).collect();
+                Self(format!("{}{suffix}", base.trim_end()))
+            })
+            .find(|candidate| !taken(&candidate.key()))
+            .unwrap_or_else(|| self.clone())
+    }
+}
+
+/// The name of the sheet a new workbook holds, `Sheet1`.
+impl Default for SheetName {
+    fn default() -> Self {
+        Self("Sheet1".to_owned())
+    }
+}
+
+impl std::fmt::Display for SheetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// A byte refused as a CSV field separator: the double quote, CR, LF, or a
 /// byte outside ASCII.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -565,12 +678,12 @@ pub enum TrameCommand {
     /// new sheet is registered in `sheets` and appended to `sheet_order`, and the reply is
     /// a refreshed [`SheetList`](super::TrameEvent::SheetList) (`trame-sheets`). Cells are
     /// created lazily on first write.
-    CreateSheet { name: String },
+    CreateSheet { name: SheetName },
 
     /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
     /// is untouched, so same-name references keep resolving; cross-sheet formula
     /// text bound to the old display name is the known MVP gap (`trame-sheets`).
-    RenameSheet { sheet_id: SheetId, name: String },
+    RenameSheet { sheet_id: SheetId, name: SheetName },
 
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
@@ -854,7 +967,82 @@ impl TrameCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::{CsvDelimiter, DefinedName};
+    use super::{CsvDelimiter, DefinedName, SheetName, SheetNameRefusal};
+
+    /// The Excel rule: 1 to 31 characters, none of `: \ / ? * [ ]`, and no
+    /// apostrophe at either end (`TRAME-234`).
+    #[test]
+    fn a_sheet_name_follows_the_excel_rule() {
+        for name in [
+            "Sheet1",
+            "My Sheet",
+            "Bob's",
+            "a",
+            "x".repeat(31).as_str(),
+            "\u{e9}t\u{e9} 2026",
+        ] {
+            assert_eq!(
+                SheetName::new(name).map(|n| n.as_str().to_owned()),
+                Ok(name.to_owned())
+            );
+        }
+        assert_eq!(SheetName::new(""), Err(SheetNameRefusal::Empty));
+        assert_eq!(SheetName::new("   "), Err(SheetNameRefusal::Empty));
+        assert_eq!(
+            SheetName::new(&"x".repeat(32)),
+            Err(SheetNameRefusal::TooLong)
+        );
+        assert_eq!(
+            SheetName::new(&"\u{e9}".repeat(32)),
+            Err(SheetNameRefusal::TooLong)
+        );
+        for c in [':', '\\', '/', '?', '*', '[', ']'] {
+            assert_eq!(
+                SheetName::new(&format!("a{c}b")),
+                Err(SheetNameRefusal::Forbidden(c)),
+                "{c:?} is refused"
+            );
+        }
+        assert_eq!(
+            SheetName::new("'Data"),
+            Err(SheetNameRefusal::EdgeApostrophe)
+        );
+        assert_eq!(
+            SheetName::new("Data'"),
+            Err(SheetNameRefusal::EdgeApostrophe)
+        );
+    }
+
+    /// Two names that differ only in case share one key (`TRAME-078`).
+    #[test]
+    fn a_sheet_name_key_ignores_case() -> Result<(), SheetNameRefusal> {
+        let data = SheetName::new("Data")?;
+        assert_eq!(data.key(), SheetName::new("DATA")?.key());
+        assert_eq!(data.key(), SheetName::new("data")?.key());
+        assert_eq!(
+            SheetName::new("\u{c9}t\u{e9}")?.key(),
+            SheetName::new("\u{e9}T\u{c9}")?.key()
+        );
+        assert_ne!(data.key(), SheetName::new("Data2")?.key());
+        Ok(())
+    }
+
+    /// A numbered variant stays within the 31 characters, so it is a name a
+    /// create can store (`TRAME-234`).
+    #[test]
+    fn a_numbered_variant_is_a_valid_name() -> Result<(), SheetNameRefusal> {
+        let short = SheetName::new("Data")?;
+        let taken = [short.key()];
+        assert_eq!(
+            short.free_variant(|key| taken.contains(key)).as_str(),
+            "Data (2)"
+        );
+        let long = SheetName::new(&"x".repeat(31))?;
+        let variant = long.free_variant(|key| *key == long.key());
+        assert_eq!(variant.as_str(), format!("{} (2)", "x".repeat(27)));
+        assert_eq!(SheetName::new(variant.as_str()).as_ref(), Ok(&variant));
+        Ok(())
+    }
 
     #[test]
     fn a_name_is_a_letter_or_underscore_then_word_characters() {

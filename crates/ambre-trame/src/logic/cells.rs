@@ -84,14 +84,14 @@ impl TrameState {
         text: &FormulaSource,
         sheet_id: &SheetId,
         lines: &SheetLines<'_>,
-    ) -> Result<StoredFormula, String> {
+    ) -> Result<StoredFormula, SheetName> {
         let verbatim = || StoredFormula::new(text.as_str().to_owned());
         let Some(body) = text.formula_body() else {
             return Ok(verbatim());
         };
-        let name_to_id = |name: &str| {
+        let name_to_id = |name: &SheetName| {
             self.engine_sheet_by_name
-                .get(name)
+                .get(&name.key())
                 .and_then(|idx| self.sheets_by_idx.get(idx.position()))
                 .cloned()
         };
@@ -392,7 +392,7 @@ impl TrameState {
             .iter()
             .filter(|r| **r == WriteRefusal::BeyondCap)
             .count();
-        let mut unknown: Vec<String> = refusals
+        let mut unknown: Vec<SheetName> = refusals
             .into_iter()
             .filter_map(|r| match r {
                 WriteRefusal::UnknownSheet(name) => Some(name),
@@ -433,7 +433,7 @@ impl SheetLines<'_> {
         let idx = match q {
             None => state.engine_sheet_by_id.get(sheet_id),
             Some(SheetQualifier::Id(id)) => state.engine_sheet_by_id.get(id),
-            Some(SheetQualifier::Name(name)) => state.engine_sheet_by_name.get(name),
+            Some(SheetQualifier::Name(name)) => state.engine_sheet_by_name.get(&name.key()),
         }
         .copied()?;
         if idx == EngineSheet::ACTIVE {

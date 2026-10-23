@@ -19,7 +19,7 @@ use super::types::{
 };
 use crate::columns::row_label;
 use crate::model::Uid;
-use ambre_bus::SheetId;
+use ambre_bus::{SheetId, SheetName};
 
 // -----------------------------------------------------------------------------
 // Qualifier rewriting
@@ -53,7 +53,7 @@ fn map_qualifiers(expr: Expr, f: &impl Fn(SheetQualifier) -> SheetQualifier) -> 
 /// Rewrite display-name qualifiers (`Sheet2!`) into stable-id form (`#s0!`).
 /// A name that `name_to_id` cannot resolve is left as-is (it will surface as a
 /// parse error, never silently dropping user input).
-pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&str) -> Option<SheetId>) -> Expr {
+pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&SheetName) -> Option<SheetId>) -> Expr {
     map_qualifiers(expr, &|q| match q {
         SheetQualifier::Name(n) => match name_to_id(&n) {
             Some(id) => SheetQualifier::Id(id),
@@ -65,7 +65,7 @@ pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&str) -> Option<SheetId>) -
 
 /// The first display-name qualifier left in `expr`, the one
 /// [`canonicalize`] could not resolve to a sheet id.
-pub fn first_name_qualifier(expr: &Expr) -> Option<String> {
+pub fn first_name_qualifier(expr: &Expr) -> Option<SheetName> {
     match expr {
         Expr::SheetRef {
             sheet: SheetQualifier::Name(name),
@@ -84,7 +84,7 @@ pub fn first_name_qualifier(expr: &Expr) -> Option<String> {
 /// Rewrite stable-id qualifiers (`#s0!`) back into the sheet's current display
 /// name (`Data!`). An id that `id_to_name` cannot resolve (deleted sheet) is
 /// left in `#id` form, which signals the dangling reference in the formula bar.
-pub fn to_display_form(expr: Expr, id_to_name: &impl Fn(&SheetId) -> Option<String>) -> Expr {
+pub fn to_display_form(expr: Expr, id_to_name: &impl Fn(&SheetId) -> Option<SheetName>) -> Expr {
     map_qualifiers(expr, &|q| match q {
         SheetQualifier::Id(id) => match id_to_name(&id) {
             Some(name) => SheetQualifier::Name(name),
@@ -263,11 +263,13 @@ fn render_uid(uid: Uid) -> String {
 fn render_qualifier(q: &SheetQualifier) -> String {
     match q {
         SheetQualifier::Id(id) => format!("#{id}"),
+        // An apostrophe inside a quoted name doubles, as Excel writes it, so
+        // the parser reads the name back whole (`TRAME-236`).
         SheetQualifier::Name(name) => {
-            if needs_quoting(name) {
-                format!("'{name}'")
+            if needs_quoting(name.as_str()) {
+                format!("'{}'", name.as_str().replace('\'', "''"))
             } else {
-                name.clone()
+                name.to_string()
             }
         }
     }
@@ -354,7 +356,8 @@ mod tests {
     #[test]
     fn canonicalize_name_to_id() {
         let ast = parse_formula("Sheet2!A1+1").unwrap();
-        let name_to_id = |n: &str| (n == "Sheet2").then(|| SheetId("s0_a1b2".to_owned()));
+        let name_to_id =
+            |n: &SheetName| (n.as_str() == "Sheet2").then(|| SheetId("s0_a1b2".to_owned()));
         let canon = canonicalize(ast, &name_to_id);
         assert_eq!(render(&canon), "#s0_a1b2!A1+1");
     }
@@ -362,7 +365,8 @@ mod tests {
     #[test]
     fn display_id_to_name() {
         let ast = parse_formula("#s0_a1b2!A1+1").unwrap();
-        let id_to_name = |id: &SheetId| (id.as_str() == "s0_a1b2").then(|| "Data".to_string());
+        let id_to_name =
+            |id: &SheetId| (id.as_str() == "s0_a1b2").then(|| SheetName::stored("Data".to_owned()));
         let disp = to_display_form(ast, &id_to_name);
         assert_eq!(render(&disp), "Data!A1+1");
     }
@@ -370,9 +374,24 @@ mod tests {
     #[test]
     fn display_quotes_name_with_space() {
         let ast = parse_formula("#s0!A1").unwrap();
-        let id_to_name = |id: &SheetId| (id.as_str() == "s0").then(|| "My Sheet".to_string());
+        let id_to_name =
+            |id: &SheetId| (id.as_str() == "s0").then(|| SheetName::stored("My Sheet".to_owned()));
         let disp = to_display_form(ast, &id_to_name);
         assert_eq!(render(&disp), "'My Sheet'!A1");
+    }
+
+    /// An apostrophe inside a name doubles in the quoted form, and the parser
+    /// reads it back as one (`TRAME-236`).
+    #[test]
+    fn an_apostrophe_in_a_name_round_trips() {
+        let ast = parse_formula("#s0!A1").unwrap();
+        let id_to_name =
+            |id: &SheetId| (id.as_str() == "s0").then(|| SheetName::stored("Bob's".to_owned()));
+        let shown = render(&to_display_form(ast, &id_to_name));
+        assert_eq!(shown, "'Bob''s'!A1");
+        let back = parse_formula(&shown).unwrap();
+        let name_to_id = |n: &SheetName| (n.as_str() == "Bob's").then(|| SheetId("s0".to_owned()));
+        assert_eq!(render(&canonicalize(back, &name_to_id)), "#s0!A1");
     }
 
     #[test]

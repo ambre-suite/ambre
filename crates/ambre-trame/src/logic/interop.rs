@@ -102,7 +102,7 @@ impl TrameState {
         // commit that lists it is a local one inside the undo group. Listed
         // before them, it formed an undo item of its own (`TRAME-IO-025`).
         if created {
-            let name = self.free_sheet_name("CSV Import");
+            let name = self.free_sheet_name(&SheetName::new("CSV Import").unwrap_or_default());
             let _ = self
                 .doc
                 .get_map(Root::Sheets.as_str())

@@ -30,7 +30,7 @@ use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
     ClipboardPayload, Col, ColCount, FilterKind, FilterOp, MergeSpan, Row, RowCount, RowSpan,
-    SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
+    SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, SortKey, StylePatch,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
@@ -45,14 +45,16 @@ pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 /// borrowing the whole state. The engine, a sibling field, is mutated in the
 /// same call.
 struct TrameCtx<'a> {
-    engine_sheet_by_name: &'a HashMap<String, EngineSheet>,
+    engine_sheet_by_name: &'a HashMap<SheetNameKey, EngineSheet>,
     engine_sheet_by_id: &'a HashMap<SheetId, EngineSheet>,
     named: &'a HashMap<DefinedName, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
-    fn resolve_sheet(&self, name: &str) -> Option<EngineSheet> {
-        self.engine_sheet_by_name.get(name).copied()
+    /// A qualifier resolves whatever its case, as uniqueness ignores case
+    /// (`TRAME-236`).
+    fn resolve_sheet(&self, name: &SheetName) -> Option<EngineSheet> {
+        self.engine_sheet_by_name.get(&name.key()).copied()
     }
     fn resolve_sheet_id(&self, id: &SheetId) -> Option<EngineSheet> {
         self.engine_sheet_by_id.get(id).copied()
@@ -114,7 +116,7 @@ enum WriteRefusal {
     /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
     BeyondCap,
     /// The formula qualifies a sheet no tab carries (`TRAME-211`).
-    UnknownSheet(String),
+    UnknownSheet(SheetName),
 }
 
 /// Per-document state for a Trame (spreadsheet) document.
@@ -196,8 +198,9 @@ pub struct TrameState {
     /// order. Rebuilt by [`Self::rebuild_sheet_maps`].
     sheets_by_idx: Vec<SheetId>,
     /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
-    /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
-    engine_sheet_by_name: HashMap<String, EngineSheet>,
+    /// references in formulas. Keyed by the case-folded name, so `sheet2!A1`
+    /// resolves too (`TRAME-236`). Derived alongside [`Self::sheets_by_idx`].
+    engine_sheet_by_name: HashMap<SheetNameKey, EngineSheet>,
     /// Stable `sheet_id` -> local engine index, for resolving the canonical
     /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable,
     /// `trame-sheets`).
@@ -205,7 +208,7 @@ pub struct TrameState {
     engine_sheet_by_id: HashMap<SheetId, EngineSheet>,
     /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
     /// text from the canonical id form. Derived alongside [`Self::sheets_by_idx`].
-    sheet_id_to_name: HashMap<SheetId, String>,
+    sheet_id_to_name: HashMap<SheetId, SheetName>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<DefinedName, NameTarget>,
@@ -262,17 +265,13 @@ pub struct TrameState {
     entry_end: Option<i32>,
 }
 
-/// The name the default sheet is stored and read under. It is a value, not a
-/// schema key.
-const DEFAULT_SHEET_NAME: &str = "Sheet1";
-
 /// The workbook scaffolding, which every peer writes on open, before any edit.
 fn write_scaffold(doc: &LoroDoc) {
     // Register the implicit default sheet's name (idempotent map insert, so
     // a peer that also "creates" s0 converges to the same entry).
     let _ = doc
         .get_map(crate::logic::Root::Sheets.as_str())
-        .insert(default_sheet().as_str(), DEFAULT_SHEET_NAME);
+        .insert(default_sheet().as_str(), SheetName::default().as_str());
     // The schema version is workbook scaffolding too, and it is written in
     // the same commit so a workbook is never persisted without it
     // (`SCHEMA-004`).

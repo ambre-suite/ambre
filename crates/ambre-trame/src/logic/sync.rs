@@ -176,10 +176,11 @@ impl TrameState {
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
     /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
     /// over the `sheets` map -- there are only a handful of sheets.
-    pub fn sheet_name_to_id(&self, name: &str) -> Option<SheetId> {
+    pub fn sheet_name_to_id(&self, name: &SheetName) -> Option<SheetId> {
+        let key = name.key();
         self.sheet_names()
             .into_iter()
-            .find_map(|(id, n)| (n == name).then_some(id))
+            .find_map(|(id, n)| (n.key() == key).then_some(id))
     }
 
     /// Shared import path for both a local snapshot restore and a remote delta.

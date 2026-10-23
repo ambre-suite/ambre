@@ -90,8 +90,7 @@ impl TrameState {
             let name = self
                 .sheet_id_to_name
                 .get(&sheet)
-                .cloned()
-                .unwrap_or_else(|| sheet.to_string());
+                .map_or_else(|| sheet.to_string(), SheetName::to_string);
             out.push_str(&format!("sheet {sheet} {name}\n"));
             // One index per sheet: `self.index` tracks only the active sheet, and
             // a dump quantifies over all of them.
@@ -370,7 +369,7 @@ fn build_multi_sheet(state: &mut TrameState) {
     });
     for name in ["Data", "Notes"] {
         let outcome = state.handle_command(TrameCommand::CreateSheet {
-            name: name.to_owned(),
+            name: SheetName::new(name).expect("a fixed name"),
         });
         let sheet_id = new_sheet_id(&outcome, name);
         state.handle_command(TrameCommand::ActivateSheet {
@@ -469,7 +468,7 @@ fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> SheetId {
         .find_map(|event| match event {
             TrameEvent::SheetList { sheets, .. } => sheets
                 .iter()
-                .find(|tab| tab.name == name)
+                .find(|tab| tab.name.as_str() == name)
                 .map(|tab| tab.id.clone()),
             _ => None,
         })

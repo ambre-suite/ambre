@@ -271,7 +271,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         text: "grape".to_owned(),
     });
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
@@ -430,7 +430,7 @@ fn replace_all_spans_sheets() {
     });
     // Sheet2!A1 = "foo".
     state.handle_command(TrameCommand::CreateSheet {
-        name: "Sheet2".to_owned(),
+        name: crate::test_support::sheet("Sheet2"),
     });
     let s2 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
