@@ -1,8 +1,8 @@
 //! The values that name and measure a media blob.
 //!
-//! Each that travels is `#[serde(transparent)]`: it reads and writes the bare
-//! string or integer the relay exchanges, so the type changes no byte on the
-//! wire. [`MediaAddress`] never travels; its hex spelling does.
+//! Each that travels is `#[serde(transparent)]`. It reads and writes the bare
+//! string or integer the relay exchanges, and changes no byte on the wire.
+//! [`MediaAddress`] never travels; its hex spelling does.
 
 use serde::{Deserialize, Serialize};
 

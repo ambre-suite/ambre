@@ -2,10 +2,10 @@
 
 /// A well-formed BCP 47 language tag: `en`, `fr-CA`, `zh-Hant-TW`.
 ///
-/// The check is RFC 5646's shape, not its registry: subtags of one to eight
-/// ASCII letters and digits joined by `-`, the first of two to eight letters,
-/// or the `x` and `i` prefixes. A tag that passes may still name no language
-/// anybody speaks; a text that fails is no tag at all.
+/// The check is RFC 5646's shape, not its registry. Subtags hold one to eight
+/// ASCII letters and digits and are joined by `-`. The first holds two to
+/// eight letters, or is the `x` or `i` prefix. A tag that passes may still
+/// name no language anybody speaks; a text that fails is no tag at all.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LangTag(String);
 

@@ -4,8 +4,8 @@
 //! A passphrase travels from the prompt that reads it to the worker that
 //! derives a key from it, and no further. Along that path it is a type of its
 //! own, not a `String` or a `&[u8]` beside a salt of the same shape. Its
-//! `Debug` prints no character of it, and its bytes are wiped when the last
-//! copy drops, including a copy a relay merely binds and drops.
+//! `Debug` prints no character of it. Its bytes are wiped when the last copy
+//! drops, including a copy a relay merely binds and drops.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
