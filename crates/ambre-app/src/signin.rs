@@ -20,20 +20,9 @@ const RETURN_PREFIX: &str = "/signin/";
 /// A return from the provider, as read from the page's address.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderReturn {
-    pub provider: String,
+    pub provider: ambre_core::OidcProvider,
     pub code: ambre_core::OidcCode,
     pub state: ambre_core::OidcState,
-}
-
-/// Whether `provider` may name a provider in a relay path: lowercase ASCII
-/// letters and digits. The Sync worker holds the same rule; this one keeps a
-/// crafted link from reaching it at all.
-fn is_provider_name(provider: &str) -> bool {
-    !provider.is_empty()
-        && provider.len() <= 32
-        && provider
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 /// Whether `path` is a provider return address, whatever its query.
@@ -41,20 +30,20 @@ pub(crate) fn is_return_path(path: &str) -> bool {
     path.starts_with(RETURN_PREFIX)
 }
 
-/// Read a provider return from a path and its query string. `None` unless the
-/// path is `/signin/<provider>` and the query carries both a `code` and a
-/// `state`: a provider that answers an error carries no code.
+/// Read a provider return from a path and its query string. The path must be
+/// `/signin/<provider>`, for a provider of the closed set. The query must carry
+/// both a `code` and a `state`. Otherwise the result is `None`. A
+/// provider that answers an error carries no code. A crafted link that names
+/// no provider reaches no worker.
 pub(crate) fn parse_return(path: &str, query: &str) -> Option<ProviderReturn> {
     let provider = path.strip_prefix(RETURN_PREFIX)?;
     let provider = provider.strip_suffix('/').unwrap_or(provider);
-    if !is_provider_name(provider) {
-        return None;
-    }
+    let provider = ambre_core::OidcProvider::parse(provider)?;
     let params = web_sys::UrlSearchParams::new_with_str(query).ok()?;
     let code = params.get("code").filter(|c| !c.is_empty())?;
     let state = params.get("state").filter(|s| !s.is_empty())?;
     Some(ProviderReturn {
-        provider: provider.to_owned(),
+        provider,
         code: ambre_core::OidcCode::new(code),
         state: ambre_core::OidcState::new(state),
     })
@@ -152,7 +141,7 @@ mod tests {
 
     fn google(state: &str) -> ProviderReturn {
         ProviderReturn {
-            provider: "google".into(),
+            provider: ambre_core::OidcProvider::Google,
             code: ambre_core::OidcCode::new("4/0Ab".to_owned()),
             state: ambre_core::OidcState::new(state.to_owned()),
         }

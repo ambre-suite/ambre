@@ -646,7 +646,7 @@ fn sign_in_panel(
                             let _ = to_logic.try_send(LogicCommand::Rest {
                                 id: RequestId::next(),
                                 cmd: RestCommand::ProviderSignIn {
-                                    provider: "google".to_owned(),
+                                    provider: ambre_core::OidcProvider::Google,
                                 },
                             });
                         }
@@ -862,7 +862,7 @@ mod tests {
         assert!(matches!(
             &sent[0],
             LogicCommand::Rest { cmd: RestCommand::ProviderSignIn { provider }, .. }
-                if provider == "google"
+                if *provider == ambre_core::OidcProvider::Google
         ));
         assert_eq!(
             web_sys::window().unwrap().location().href().unwrap(),

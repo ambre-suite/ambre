@@ -1812,7 +1812,7 @@ mod handler_tests {
         let app = shipped_router(state.clone());
         let user = crate::db::upsert_user_from_oidc(
             &state.db,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-1",
             &ambre_core::Email::from("new@example.com"),
             &ambre_core::DisplayName::new("New").unwrap(),
@@ -1895,7 +1895,7 @@ mod handler_tests {
         let doc_id = create_test_doc(&app, &auth).await;
         let keyless = crate::db::upsert_user_from_oidc(
             &state.db,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-2",
             &ambre_core::Email::from("keyless@example.com"),
             &ambre_core::DisplayName::new("Keyless").unwrap(),
@@ -1982,7 +1982,7 @@ mod handler_tests {
     async fn an_account_holds_both_keys_or_neither(pool: sqlx::PgPool) {
         let user = crate::db::upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-3",
             &ambre_core::Email::from("c@example.com"),
             &ambre_core::DisplayName::new("C").unwrap(),
@@ -2006,7 +2006,7 @@ mod handler_tests {
         let state = test_app_state(pool).await;
         let user = crate::db::upsert_user_from_oidc(
             &state.db,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-4",
             &ambre_core::Email::from("d@example.com"),
             &ambre_core::DisplayName::new("D").unwrap(),

@@ -1071,7 +1071,7 @@
   {"edge": "cites-rule", "from": "CHROME-095", "to": "SRV-172"},
   {"edge": "verified-by", "from": "CHROME-095", "to": "ambre_app::landing::tests::the_provider_control_asks_for_the_address"},
   {"edge": "verified-by", "from": "CHROME-095", "to": "ambre_app::signin::tests::the_provider_address_is_followed_and_its_state_kept"},
-  {"edge": "verified-by", "from": "CHROME-095", "to": "ambre_sync::auth::provider_tests::a_provider_name_outside_its_alphabet_is_refused"},
+  {"edge": "verified-by", "from": "CHROME-095", "to": "ambre_core::provider::tests::a_provider_parses_from_its_word_alone"},
   {"edge": "cites-section", "from": "CHROME-096", "section": "2", "to": "1-Foundations/ambre-spec-launcher.md"},
   {"edge": "cites-document", "from": "CHROME-096", "to": "ambre-spec-sync.md"},
   {"edge": "cites-rule", "from": "CHROME-096", "to": "SYNC-060"},

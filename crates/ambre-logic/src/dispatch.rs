@@ -2056,10 +2056,10 @@ mod tests {
                 meeting_id: meeting,
             },
             RestCommand::ProviderSignIn {
-                provider: "p".to_owned(),
+                provider: ambre_core::OidcProvider::Google,
             },
             RestCommand::ProviderReturn {
-                provider: "p".to_owned(),
+                provider: ambre_core::OidcProvider::Google,
                 code: ambre_core::OidcCode::new("c".to_owned()),
                 state: ambre_core::OidcState::new("s".to_owned()),
             },

@@ -8,8 +8,6 @@ use super::*;
 pub struct UserRow {
     pub id: ambre_core::UserId,
     #[allow(dead_code)]
-    pub oidc_provider: Option<String>,
-    #[allow(dead_code)]
     pub oidc_subject: Option<String>,
     pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
@@ -55,7 +53,6 @@ pub async fn get_user(
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
@@ -105,7 +102,6 @@ pub async fn get_user_by_email(
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
@@ -153,7 +149,6 @@ pub async fn create_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
@@ -189,7 +184,7 @@ pub async fn create_user(
 /// one transaction so a concurrent login cannot observe a half-freed email.
 pub async fn upsert_user_from_oidc(
     pool: &PgPool,
-    oidc_provider: &str,
+    oidc_provider: ambre_core::OidcProvider,
     oidc_subject: &str,
     email: &ambre_core::Email,
     display_name: &ambre_core::DisplayName,
@@ -209,7 +204,7 @@ pub async fn upsert_user_from_oidc(
            AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)",
     )
     .bind(email.as_str())
-    .bind(oidc_provider)
+    .bind(oidc_provider.as_str())
     .bind(oidc_subject)
     .execute(&mut *tx)
     .await?;
@@ -217,7 +212,7 @@ pub async fn upsert_user_from_oidc(
     let row = sqlx::query(
         "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
-    .bind(oidc_provider)
+    .bind(oidc_provider.as_str())
     .bind(oidc_subject)
     .bind(email.as_str())
     .bind(display_name.as_str())
@@ -228,7 +223,6 @@ pub async fn upsert_user_from_oidc(
     let inserted: bool = row.try_get("inserted")?;
     let user = UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
@@ -287,7 +281,6 @@ pub async fn dev_upsert_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
@@ -418,7 +411,7 @@ mod tests {
 
         let oidc = upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-123",
             &ambre_core::Email::from("Alice@example.com"),
             &ambre_core::DisplayName::new("Alice").unwrap(),
@@ -454,7 +447,7 @@ mod tests {
     async fn verified_email_cannot_be_squatted_by_setup(pool: PgPool) {
         upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-1",
             &ambre_core::Email::from("dave@example.com"),
             &ambre_core::DisplayName::new("Dave").unwrap(),
@@ -476,15 +469,15 @@ mod tests {
         assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
     }
 
-    /// #3: two DIFFERENT verified identities cannot hold the same email -- the
-    /// second login surfaces 409 rather than silently stealing it (reclaim only
-    /// applies to UNVERIFIED holders).
+    /// #3: two DIFFERENT verified identities (one provider, two subjects) cannot
+    /// hold the same email -- the second login surfaces 409 rather than
+    /// silently stealing it (reclaim only applies to UNVERIFIED holders).
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn verified_email_collision_is_conflict(pool: PgPool) {
         upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-a",
             &ambre_core::Email::from("erin@example.com"),
             &ambre_core::DisplayName::new("Erin").unwrap(),
@@ -494,7 +487,7 @@ mod tests {
 
         let err = upsert_user_from_oidc(
             &pool,
-            "github",
+            ambre_core::OidcProvider::Google,
             "sub-b",
             &ambre_core::Email::from("erin@example.com"),
             &ambre_core::DisplayName::new("Erin").unwrap(),
@@ -511,7 +504,7 @@ mod tests {
     async fn oidc_relogin_keeps_its_own_email(pool: PgPool) {
         let first = upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-x",
             &ambre_core::Email::from("frank@example.com"),
             &ambre_core::DisplayName::new("Frank").unwrap(),
@@ -520,7 +513,7 @@ mod tests {
         .expect("first login");
         let second = upsert_user_from_oidc(
             &pool,
-            "google",
+            ambre_core::OidcProvider::Google,
             "sub-x",
             &ambre_core::Email::from("frank@example.com"),
             &ambre_core::DisplayName::new("Frank").unwrap(),

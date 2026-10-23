@@ -242,14 +242,12 @@ impl SyncState {
     /// Ask the relay for `provider`'s authorization address and hand it to
     /// the UI, which sends the browser there (`CHROME-095`). Unauthenticated:
     /// no session exists yet.
-    pub(crate) fn handle_provider_sign_in(&mut self, id: RequestId, provider: String) {
+    pub(crate) fn handle_provider_sign_in(
+        &mut self,
+        id: RequestId,
+        provider: ambre_core::OidcProvider,
+    ) {
         tracing::info!("Sync: ProviderSignIn ({provider})");
-        if !is_provider_name(&provider) {
-            self.send_to_logic(LogicEvent::AuthError {
-                message: PROVIDER_REFUSED.into(),
-            });
-            return;
-        }
         if self.event_tx.is_none() {
             self.send_to_logic(LogicEvent::AuthError {
                 message: "Sign-in failed: no relay to ask".into(),
@@ -282,17 +280,11 @@ impl SyncState {
     pub(crate) fn handle_provider_return(
         &mut self,
         id: RequestId,
-        provider: String,
+        provider: ambre_core::OidcProvider,
         code: ambre_core::OidcCode,
         state: ambre_core::OidcState,
     ) {
         tracing::info!("Sync: ProviderReturn ({provider})");
-        if !is_provider_name(&provider) {
-            self.send_to_logic(LogicEvent::AuthError {
-                message: PROVIDER_REFUSED.into(),
-            });
-            return;
-        }
         let Some(tx) = self.event_tx.clone() else {
             self.send_to_logic(LogicEvent::AuthError {
                 message: "Sign-in failed: no relay to ask".into(),
@@ -533,20 +525,6 @@ impl SyncState {
     }
 }
 
-/// The user-facing refusal of a provider name that is not one.
-const PROVIDER_REFUSED: &str = "Sign-in failed: unknown provider";
-
-/// Whether `provider` may name a provider in a relay path: lowercase ASCII
-/// letters and digits only. Anything else could reach another route, so it
-/// is refused before a request is built.
-pub(crate) fn is_provider_name(provider: &str) -> bool {
-    !provider.is_empty()
-        && provider.len() <= 32
-        && provider
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-}
-
 #[cfg(test)]
 mod provider_tests {
     use super::*;
@@ -608,37 +586,5 @@ mod provider_tests {
         assert!(state.setup_owed);
         state.handle_sync_event(SyncEvent::ReconnectNow);
         assert_eq!(state.socket_opens, 0);
-    }
-
-    /// A provider name that could reach another relay route is refused before
-    /// any request is built (`CHROME-095`).
-    #[test]
-    fn a_provider_name_outside_its_alphabet_is_refused() {
-        assert!(is_provider_name("google"));
-        assert!(is_provider_name("entra2"));
-        for bad in ["", "../keys/master", "Google", "google?x=1", "a/b", "é"] {
-            assert!(!is_provider_name(bad), "{bad:?} was accepted");
-        }
-        let (mut state, rx) = worker();
-        state.handle_rest(
-            RequestId::next(),
-            RestCommand::ProviderSignIn {
-                provider: "../keys/master".into(),
-            },
-        );
-        state.handle_rest(
-            RequestId::next(),
-            RestCommand::ProviderReturn {
-                provider: "../keys/master".into(),
-                code: ambre_core::OidcCode::new("c".to_owned()),
-                state: ambre_core::OidcState::new("s".to_owned()),
-            },
-        );
-        let told: Vec<LogicEvent> = rx.try_iter().collect();
-        assert_eq!(told.len(), 2);
-        assert!(told.iter().all(|e| matches!(
-            e,
-            LogicEvent::AuthError { message } if message == PROVIDER_REFUSED
-        )));
     }
 }

@@ -40,11 +40,12 @@ pub struct OidcProviderState {
     pub http_client: reqwest::Client,
 }
 
-/// Map of OIDC provider name ("google", "github", ...) to its state.
+/// Map of each configured OIDC provider to its state. A provider absent from
+/// it is not configured.
 ///
 /// Wrapped in `Arc` so every Axum handler can reference the same
 /// discovered clients without cloning the entire map.
-pub type OidcClients = Arc<HashMap<String, OidcProviderState>>;
+pub type OidcClients = Arc<HashMap<ambre_core::OidcProvider, OidcProviderState>>;
 
 /// Returned by `GET /auth/{provider}/login`.
 ///
@@ -174,7 +175,7 @@ async fn init_oidc_clients(
 
     let mut map = HashMap::new();
     map.insert(
-        "google".to_string(),
+        ambre_core::OidcProvider::Google,
         OidcProviderState {
             client,
             redirect_uri,
@@ -499,9 +500,11 @@ mod tests {
     async fn a_provider_code_is_exchanged_for_a_verified_identity() {
         let stub = StubProvider::spawn().await;
         let clients = client_of(&stub).await;
-        let (login, kept) = login_url(&clients["google"]).await.unwrap();
+        let (login, kept) = login_url(&clients[&ambre_core::OidcProvider::Google])
+            .await
+            .unwrap();
         let code = stub.authorize(&login.url);
-        let claims = exchange_code(&clients["google"], code, &kept)
+        let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], code, &kept)
             .await
             .unwrap();
         assert_eq!(claims.subject().as_str(), SUBJECT);
@@ -516,7 +519,7 @@ mod tests {
     async fn an_identity_the_relay_cannot_verify_is_refused() {
         let stub = StubProvider::spawn().await;
         let clients = client_of(&stub).await;
-        let provider = &clients["google"];
+        let provider = &clients[&ambre_core::OidcProvider::Google];
         let refused_at = |result: Result<CoreIdTokenClaims, AppError>, stage: &str| match result {
             Err(AppError::Oidc(reason)) => assert!(reason.starts_with(stage), "{reason}"),
             Err(other) => panic!("{other}"),
@@ -577,7 +580,9 @@ mod tests {
         let clients = start_oidc_clients(&issuer, "client", &secret(), "https://app/cb")
             .await
             .unwrap();
-        let (login, _) = login_url(&clients["google"]).await.unwrap();
+        let (login, _) = login_url(&clients[&ambre_core::OidcProvider::Google])
+            .await
+            .unwrap();
         assert!(
             login.url.starts_with(&format!("{issuer}/authorize?")),
             "{}",

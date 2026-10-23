@@ -2,6 +2,8 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::OidcProvider;
+
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
@@ -159,6 +161,18 @@ pub async fn refresh(
     }))
 }
 
+/// The provider a sign-in path names, and the client the relay discovered for
+/// it. A word outside the closed set and a provider this deployment did not
+/// configure get the one refusal, which echoes the word the path carried.
+fn provider_client<'a>(
+    state: &'a AppState,
+    word: &str,
+) -> Result<(OidcProvider, &'a oidc::OidcProviderState), AppError> {
+    OidcProvider::parse(word)
+        .and_then(|provider| Some((provider, state.oidc_clients.get(&provider)?)))
+        .ok_or_else(|| AppError::UnknownProvider(word.to_owned()))
+}
+
 /// `GET /auth/{provider}/login`
 ///
 /// Generates an OIDC authorization URL (with PKCE, CSRF state, and nonce),
@@ -169,10 +183,7 @@ pub async fn oidc_login(
     State(state): State<Arc<AppState>>,
     Path(provider): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let oidc_state = state
-        .oidc_clients
-        .get(&provider)
-        .ok_or(AppError::UnknownProvider(provider.clone()))?;
+    let (_, oidc_state) = provider_client(&state, &provider)?;
 
     let (login_resp, auth_state) = oidc::login_url(oidc_state).await?;
 
@@ -198,10 +209,7 @@ pub async fn oidc_callback(
     Path(provider): Path<String>,
     Json(req): Json<CallbackRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let provider_state = state
-        .oidc_clients
-        .get(&provider)
-        .ok_or(AppError::UnknownProvider(provider.clone()))?;
+    let (provider, provider_state) = provider_client(&state, &provider)?;
 
     let stored_state = redis_ops::oidc_state_take(&state.redis, &req.state).await?;
 
@@ -230,9 +238,8 @@ pub async fn oidc_callback(
     )
     .ok_or_else(|| AppError::BadRequest("OIDC provider returned a blank subject".into()))?;
 
-    let user =
-        db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)
-            .await?;
+    let user = db::upsert_user_from_oidc(&state.db, provider, &oidc_subject, &email, &display_name)
+        .await?;
 
     let user_id = user.id;
     let signing_pubkey = account_session_key(&user);
@@ -305,7 +312,6 @@ mod tests {
     fn provider_row(signing_pubkey: Option<ambre_core::PublicKey>) -> db::UserRow {
         db::UserRow {
             id: ambre_core::UserId::new(),
-            oidc_provider: Some("google".into()),
             oidc_subject: Some("subject".into()),
             email: "a@example.com".into(),
             email_verified: true,

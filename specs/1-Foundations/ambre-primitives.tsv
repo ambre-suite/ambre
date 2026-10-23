@@ -203,7 +203,6 @@ ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param |
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | param | RwSignal<String>	free-text	presenter notes text
 ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
-ambre-app | src/signin.rs | crate::signin | ProviderReturn.provider | field | String	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
 ambre-app | src/signin.rs | crate::signin | accept_return(pending) | param | Option<String>	debt	planned: lot C bis 5 OidcState
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
@@ -212,8 +211,6 @@ ambre-app | src/signin.rs | crate::signin | follow_address(state) | param | &str
 ambre-app | src/signin.rs | crate::signin | follow_address(url) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_followable(url) | param | &str	debt	planned: lot C bis 5 addresses (validated URL, OidcState, WebAddress)
-ambre-app | src/signin.rs | crate::signin | is_provider_name() | ret | bool	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
-ambre-app | src/signin.rs | crate::signin | is_provider_name(provider) | param | &str	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	trait	reload closure signature
@@ -773,8 +770,6 @@ ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	
 ambre-bus | src/rest.rs | crate::rest | RestCommand::CreateMeeting.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
 ambre-bus | src/rest.rs | crate::rest | RestCommand::OpenDocFile.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
-ambre-bus | src/rest.rs | crate::rest | RestCommand::ProviderReturn.provider | field | String	debt	planned: lot C bis 4: ProviderName
-ambre-bus | src/rest.rs | crate::rest | RestCommand::ProviderSignIn.provider | field | String	debt	planned: lot C bis 4: ProviderName
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestCommand::UploadMedia.data | field | Vec<u8>	debt	planned: lot B bis 12: UploadMedia.data / LoadFonts.faces
 ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
@@ -1611,6 +1606,8 @@ ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::as_str() | ret | &str	newtype-inner	ObjectKey newtype
+ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
+ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Held.immutable | field | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | Held.pinned | field | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | Held.unsent | field | bool	generic	residency fact flag or its setter; named field, no mode switch
@@ -4232,10 +4229,8 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | par
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/db/users.rs | crate::db::users | UserRow.oidc_provider | field | Option<String>	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
 ambre-server | src/db/users.rs | crate::db::users | UserRow.oidc_subject | field | Option<String>	debt	finding: OIDC subject as String or &str (confirmed)
 ambre-server | src/db/users.rs | crate::db::users | search_users(query) | param | &str	free-text	search text
-ambre-server | src/db/users.rs | crate::db::users | upsert_user_from_oidc(oidc_provider) | param | &str	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
 ambre-server | src/db/users.rs | crate::db::users | upsert_user_from_oidc(oidc_subject) | param | &str	debt	finding: OIDC subject as String or &str (confirmed)
 ambre-server | src/deletion.rs | crate::deletion | PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param | bool	math	named state or style flag, local
@@ -4247,7 +4242,7 @@ ambre-server | src/error.rs | crate::error | AppError::Oidc.0 | field | String	f
 ambre-server | src/error.rs | crate::error | AppError::PayloadTooLarge.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Redis.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::S3.0 | field | String	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
+ambre-server | src/error.rs | crate::error | AppError::UnknownProvider.0 | field | String	free-text	the path segment that named no provider, echoed in the refusal
 ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | String	free-text	message
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
@@ -4286,7 +4281,6 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | re
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	math	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | GOOGLE_ISSUER | const | &str	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
-ambre-server | src/oidc.rs | crate::oidc | OidcClients | alias | Arc<HashMap<String,OidcProviderState>>	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret::expose() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
@@ -4357,8 +4351,9 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock::LUA
 ambre-server | src/redis_ops.rs | crate::redis_ops | verify_clock_and_assign_seq(pub_key_hex) | param | &str	debt	finding: Signing key hex passed as &str (confirmed)
 ambre-server | src/routes/auth.rs | crate::routes::auth | AuthConfigResponse.dev_mode | field | bool	math	named state or style flag, local
 ambre-server | src/routes/auth.rs | crate::routes::auth | DevLoginRequest.username | field | String	debt	bug: The display-name rule is enforced on one write path only (BUG, confirmed)
-ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
-ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	debt	planned: lot C bis 4 ProviderName / lot A bis 3 provider enum
+ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
+ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
+ambre-server | src/routes/auth.rs | crate::routes::auth | provider_client(word) | param | &str	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(given_name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(subject) | param | &str	foreign-api	claims of the identity provider, read as text
@@ -4454,14 +4449,9 @@ ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | f
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	free-text	private hub channel name constant
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
-ambre-sync | src/auth.rs | crate::auth | PROVIDER_REFUSED | const | &str	free-text	free text: message, label, name or report
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_dev_login(username) | param | String	free-text	free text: message, label, name or report
-ambre-sync | src/auth.rs | crate::auth | SyncState::handle_provider_return(provider) | param | String	debt	planned: lot C bis 4 (ProviderName)
-ambre-sync | src/auth.rs | crate::auth | SyncState::handle_provider_sign_in(provider) | param | String	debt	planned: lot C bis 4 (ProviderName)
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
-ambre-sync | src/auth.rs | crate::auth | is_provider_name() | ret | bool	debt	planned: lot C bis 4 (ProviderName)
-ambre-sync | src/auth.rs | crate::auth | is_provider_name(provider) | param | &str	debt	planned: lot C bis 4 (ProviderName)
 ambre-sync | src/channels.rs | crate::channels | SyncState::channel_creation() | ret | Result<(ambre_bus::conduit::UnboundedSender<SyncEvent>,DocumentKey,StaticSecret,crate::sharing::Author,),String,>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | SyncState::member_channels_listed(asked) | param | u32	debt	finding: request generation counters ("asked")
 ambre-sync | src/channels.rs | crate::channels | SyncState::seal_channel_name() | ret | Result<ambre_core::SealedName,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix

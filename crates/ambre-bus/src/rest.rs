@@ -437,14 +437,13 @@ pub enum RestCommand {
 
     // -- Provider sign-in ----------------------------------------------------------
     /// Ask the relay for the address of `provider`'s authorization page.
-    /// -> `ProviderAddress`. `provider` is a lowercase ASCII name; any other
-    /// value is refused before a request leaves the Sync worker.
-    ProviderSignIn { provider: String },
+    /// -> `ProviderAddress`.
+    ProviderSignIn { provider: ambre_core::OidcProvider },
     /// Exchange the `code` and `state` a provider returned with. -> `ProviderSignedIn`.
     /// The session tokens stay on the Sync worker; the socket stays closed until
     /// the keys are unlocked or set up.
     ProviderReturn {
-        provider: String,
+        provider: ambre_core::OidcProvider,
         code: ambre_core::OidcCode,
         state: ambre_core::OidcState,
     },
