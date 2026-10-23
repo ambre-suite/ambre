@@ -60,7 +60,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-177` | `POST` | The bold toggle MUST write the two weights the renderer reads. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- both weights off the toggle | none | verified |
 | `TOILE-UI-178` | `POST` | Resetting the family MUST write the default face, not an absent one. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- the reset writes the default label, and a chosen family writes its own | none | verified |
 | `TOILE-UI-179` | `POST` | Each bar edit MUST start from the selection's style as it stands, so two quick edits compose. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` -- the second edit carries the first, echoed back with the selection | none | verified |
-| `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the auto sentinel. | this spec section 6 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- a negative size changes nothing, and zero still lands as the auto sentinel | none | verified |
+| `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the automatic size. | this spec section 6 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- a negative size does not decode and changes nothing, and Auto lands as the automatic size | none | verified |
 | `TOILE-UI-181` | `FRAME` | A bar edit MUST NOT change what is selected. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` | none | verified |
 
 * **Budget.** the view-state update under 0.5 ms, one row of `ambre-spec-budgets.md section 2`. Both models
@@ -137,8 +137,8 @@ weight (`TOILE-UI-174`).
 5. the locked members are refused by the engine, not filtered by the surface (`TOILE-UI-182`).
 
 **Per-kind defaults.** Birth seeds a per-kind style rather than a bare default. Everything is white with no
-border except a note, which is born a plain yellow card with no border and square corners. Its size sentinel
-makes its body track the card (`features/ambre-spec-toile-elements.md`,
+border except a note, which is born a plain yellow card with no border and square corners. Its automatic
+size makes its body track the card (`features/ambre-spec-toile-elements.md`,
 `features/ambre-spec-toile-text-editing.md`).
 
 **Code:**
@@ -166,8 +166,9 @@ box (`TOILE-UI-068`, `TOILE-UI-167`).
 divergence empties it (`TOILE-UI-165`, `TOILE-UI-166`). A field that differs across the selection carries
 a mixed flag (`TOILE-UI-164`), so the bar never shows one member's value as the selection's.
 
-**The size control's "Auto" entry** maps to the note sentinel, and choosing a number sets an explicit
-size that overrides it (`features/ambre-spec-toile-text-editing.md`). The sentinel is zero, and a
+**The size control's "Auto" entry** maps to the automatic size, and choosing a number sets an explicit
+size that overrides it (`features/ambre-spec-toile-text-editing.md`). A free text has no card, so it
+draws an automatic size at the default 12 points. The register stores automatic as zero points, and a
 negative number is refused, not clamped to it (`TOILE-UI-180`). The style holds points, the unit of
 the control. The board lays them out at 96/72 world px per point, as Trame and Prose do.
 

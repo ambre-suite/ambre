@@ -85,8 +85,8 @@ impl InlineEditor {
         let color = super::walk::resolved_text_ink(host, elem.style.text_color, elem.style.fill)
             .map(|c| ink_color(c, elem.style.opacity))
             .unwrap_or(palette.cell_text);
-        // Size: sticky auto-sizes from bounds unless overridden. A zero size is
-        // kept, not floored, so an invisible body stays invisible under edit
+        // Size: the one the board draws, sticky auto-size and the free text
+        // default included, so the body keeps its height under edit
         // (`TOILE-UI-188`).
         let base_size = super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
         let style = TextEditorStyle {
@@ -298,19 +298,22 @@ mod tests {
         assert_eq!(pinned.color.to_rgba8().a, 128);
     }
 
-    /// `TOILE-UI-188`: a zero-size text element keeps zero under edit, matching
-    /// the committed (invisible) body rather than flooring to one pixel.
+    /// `TOILE-UI-188`: a text element on an automatic size keeps under edit
+    /// the size the board draws it at, the default 12 points.
     #[test]
-    fn a_zero_size_element_keeps_zero_under_edit() {
+    fn an_automatic_size_text_keeps_its_drawn_size_under_edit() {
         let style = ElementStyle {
             font: FontSpec {
-                size: ambre_core::FontSize::from_whole_points(0),
+                size: ambre_bus::app::toile::FontSizeChoice::AUTO,
                 ..Default::default()
             },
             ..ElementStyle::default()
         };
         let e = elem(style, ElementKind::Text);
+        let drawn =
+            super::super::walk::sticky_or_style_font_size(TextHost::Text, &e.style, e.bounds);
         let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
-        assert_eq!(editor.style().base_size, 0.0);
+        assert_eq!(editor.style().base_size, drawn);
+        assert_eq!(drawn, 16.0);
     }
 }

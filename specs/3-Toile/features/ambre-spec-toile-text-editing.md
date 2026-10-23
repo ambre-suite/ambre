@@ -32,7 +32,7 @@ editor and not restated here.
 | `TOILE-UI-185` | `OBS` | The body under edit MUST be drawn at the size the committed body uses: the element's own, or for a note one that tracks the card. | this spec section 3 | `ambre_toile::ui::render::tests::sticky_font_size_auto_unless_overridden` -- the element's own size; `ambre_toile::ui::render::tests::sticky_font_size_tracks_the_card_and_is_clamped` -- the note tracking its card; structural -- the editor seeds its size from `ambre_toile::ui::render::sticky_or_style_font_size`, the function those two drive | none | verified |
 | `TOILE-UI-186` | `OBS` | The body under edit MUST carry the element's opacity, like the committed one. | this spec section 3 | `ambre_toile::ui::edit::tests::the_pinned_style_carries_opacity_and_decorations` -- the pinned ink's alpha carries the element opacity, as the committed pass bakes it | none | verified |
 | `TOILE-UI-187` | `OBS` | The body under edit MUST carry the underline and the strikethrough the committed body paints. | this spec section 3 | `ambre_toile::ui::edit::tests::the_pinned_style_carries_opacity_and_decorations` -- the pinned style seeds both decorations, and the editor paints them in the body ink | none | verified |
-| `TOILE-UI-188` | `OBS` | An element whose style size is zero MUST look the same under edit as outside it. | this spec section 3 | `ambre_toile::ui::edit::tests::a_zero_size_element_keeps_zero_under_edit` -- the pinned size is the style size, never floored, so zero stays zero | none | verified |
+| `TOILE-UI-188` | `OBS` | An element whose style size is automatic MUST look the same under edit as outside it. | this spec section 3 | `ambre_toile::ui::edit::tests::an_automatic_size_text_keeps_its_drawn_size_under_edit` -- the pinned size is the one the board draws, the free text default included | none | verified |
 | `TOILE-UI-189` | `OBS` | The body under edit MUST start at the committed body's origin and wrap at its width, so entering edit does not reflow it. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_body_under_edit_replaces_the_committed_one_in_place` -- each glyph run lands where the committed run did | none | verified |
 | `TOILE-UI-190` | `OBS` | A rotated note MUST keep its rotation while it is edited. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_rotated_note_keeps_its_rotation_while_edited` -- each run lands where the rotated committed run did, the pushed rotation folded in | none | verified |
 | `TOILE-UI-191` | `OBS` | The committed body MUST NOT be painted under the editor: one body is on screen, not two. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_body_under_edit_replaces_the_committed_one_in_place` -- the open editor paints as many runs as the committed body, not twice as many | none | verified |
@@ -149,13 +149,13 @@ same two helpers, so the text does not change style at the seam:
 
 * the ink is the explicit text colour when the element carries one. Otherwise it is a fixed readable
   ink for a note, whose fill is the card and not the text. For a text element it is the theme colour;
-* the size is the element's own when it carries a positive one. Otherwise, for a note, it is a size
-  that tracks the card, clamped at both ends.
+* the size is the element's own when the style names one. For a note, an automatic size tracks the
+  card, clamped at both ends. A text element has no card, so its automatic size is the default 12 points.
 
 The pinned style carries the whole committed look. It bakes the opacity into the ink, keeps the
-decorations, and uses the committed size, zero included (`TOILE-UI-186` to `TOILE-UI-188`). The origin
-and the wrap width are shared for real: both passes inset the element box by the same padding. The
-body does not re-wrap at the seam (`TOILE-UI-189`).
+decorations, and uses the committed size, an automatic one included (`TOILE-UI-186` to `TOILE-UI-188`).
+The origin and the wrap width are shared for real: both passes inset the element box by the same
+padding. The body does not re-wrap at the seam (`TOILE-UI-189`).
 
 **Steps, when an editor opens:** find the element in the visible set, read its body, and seed the
 core with the pinned style. The element becomes the whole selection (`TOILE-UI-200`), and the whole

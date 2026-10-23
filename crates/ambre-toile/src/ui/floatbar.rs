@@ -19,8 +19,10 @@
 // selection into an anchored [`FloatBar`].
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily};
-use ambre_core::{FontSize, Rgba};
+use ambre_bus::app::toile::{
+    DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
+};
+use ambre_core::Rgba;
 use ambre_draw::{Point, Rect};
 
 use super::style::MixedFlags;
@@ -78,10 +80,10 @@ pub enum StyleEdit {
     Opacity(f32),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<Rgba>),
-    /// Font family label (`None` == the "Default" reset -> the app default face).
-    Font(Option<String>),
-    /// Font size in points (`0.0` == the auto sentinel: size to the card).
-    Size(f32),
+    /// Font family. The picker's "Default" reset is [`FontFamily::Sans`].
+    Font(FontFamily),
+    /// Font size, or automatic: a note's body then tracks its card.
+    Size(FontSizeChoice),
     /// Bold toggle (maps to `font.weight` 700 / 400).
     Bold(bool),
     /// Italic toggle.
@@ -98,8 +100,7 @@ impl StyleEdit {
     /// freshly-derived common style so back-to-back bar edits never clobber one
     /// another. The inspector applies it to its working copy for the same reason
     /// (`TOILE-UI-172`). Kept in the always-compiled `ui` module so it is
-    /// host-tested: both callers are wasm-only. A `None` family maps to the default
-    /// sans family, which the renderer resolves to the bundled sans face.
+    /// host-tested: both callers are wasm-only.
     pub fn apply_to(self, style: &mut ElementStyle) {
         match self {
             StyleEdit::Fill(c) => style.fill = c,
@@ -107,18 +108,10 @@ impl StyleEdit {
             StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(0.0),
             StyleEdit::Opacity(o) => style.opacity = o.clamp(0.0, 1.0),
             StyleEdit::TextColor(c) => style.text_color = c,
-            StyleEdit::Font(f) => {
-                style.font.family = f
-                    .as_deref()
-                    .map_or(FontFamily::Sans, FontFamily::from_label);
-            }
-            // A negative size is refused, never clamped to the zero sentinel:
-            // the control cannot mean a negative number (`TOILE-UI-180`).
-            StyleEdit::Size(s) => {
-                if let Some(size) = FontSize::new(s) {
-                    style.font.size = size;
-                }
-            }
+            StyleEdit::Font(f) => style.font.family = f,
+            // The choice holds no negative size, so none reaches the style
+            // (`TOILE-UI-180`).
+            StyleEdit::Size(s) => style.font.size = s,
             StyleEdit::Bold(b) => style.font.weight = if b { 700 } else { 400 },
             StyleEdit::Italic(i) => style.font.italic = i,
             StyleEdit::Underline(u) => style.font.underline = u,
@@ -479,7 +472,7 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             text_color: Some(Rgba::from_bits(0x4455_66ff)),
             font: ambre_bus::app::toile::FontSpec {
-                size: ambre_core::FontSize::from_whole_points(18),
+                size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: 700,
                 italic: true,
                 underline: false,
@@ -509,13 +502,14 @@ mod tests {
         assert_eq!(s.text_color, base.text_color);
     }
 
-    // Bold / size map onto the underlying representation (weight 700/400, size
-    // sentinel); a `None` family resets to the default sans label.
+    // Bold / size map onto the underlying representation (weight 700/400, an
+    // automatic size); the family lands as the picker named it.
     #[test]
     fn style_edit_field_mappings() {
+        let eighteen = FontSizeChoice::from_whole_points(Some(18));
         let mut s = ElementStyle {
             font: FontSpec {
-                size: ambre_core::FontSize::from_whole_points(18),
+                size: eighteen,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -524,23 +518,20 @@ mod tests {
         assert_eq!(s.font.weight, 400);
         StyleEdit::Bold(true).apply_to(&mut s);
         assert_eq!(s.font.weight, 700);
-        // A negative size is refused, never clamped to the auto sentinel.
-        StyleEdit::Size(-3.0).apply_to(&mut s);
-        assert_eq!(
-            s.font.size,
-            ambre_core::FontSize::from_whole_points(18),
+        // A negative size is refused, never clamped to automatic: no choice
+        // holds one, and a decoded one does not decode.
+        assert!(
+            FontSizeChoice::try_from(-3.0_f32).is_err(),
             "a negative size is refused"
         );
-        // Zero is the auto sentinel, and it is a meaning the control has.
-        StyleEdit::Size(0.0).apply_to(&mut s);
-        assert_eq!(
-            s.font.size,
-            ambre_core::FontSize::from_whole_points(0),
-            "zero stays the auto sentinel"
-        );
-        StyleEdit::Font(None).apply_to(&mut s);
+        assert_eq!(s.font.size, eighteen);
+        // Automatic is a meaning the control has.
+        StyleEdit::Size(FontSizeChoice::AUTO).apply_to(&mut s);
+        assert_eq!(s.font.size, FontSizeChoice::AUTO, "Auto lands as automatic");
+        assert_eq!(FontSizeChoice::try_from(0.0_f32), Ok(FontSizeChoice::AUTO));
+        StyleEdit::Font(FontFamily::Sans).apply_to(&mut s);
         assert_eq!(s.font.family, FontFamily::Sans);
-        StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
+        StyleEdit::Font(FontFamily::Serif).apply_to(&mut s);
         assert_eq!(s.font.family, FontFamily::Serif);
     }
 
@@ -558,7 +549,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: FontFamily::Other("Comic Sans MS".to_owned()),
-                size: ambre_core::FontSize::from_whole_points(18),
+                size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: 600,
                 italic: true,
                 ..Default::default()
@@ -619,7 +610,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0x0000_00ff)),
             font: FontSpec {
                 family: FontFamily::Sans,
-                size: ambre_core::FontSize::from_whole_points(12),
+                size: FontSizeChoice::from_whole_points(Some(12)),
                 weight: 400,
                 italic: false,
                 underline: false,
@@ -632,7 +623,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0xffff_ffff)),
             font: FontSpec {
                 family: FontFamily::Serif,
-                size: ambre_core::FontSize::from_whole_points(24),
+                size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: 700,
                 italic: true,
                 underline: true,

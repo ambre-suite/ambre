@@ -212,17 +212,16 @@ pub enum TextHost {
     Sticky,
 }
 
-/// The effective body font size (world units) for a sticky / text element. A sticky
-/// auto-sizes from its bounds while `style.font.size` is the auto sentinel
-/// (`STICKY_AUTO_FONT_SIZE`, that is, not positive). A positive size set from the
-/// style inspector overrides it. A text element always uses its style size. The
-/// style holds points, and a world unit is a CSS pixel at zoom 1, so the style
-/// size goes through [`FontSize::to_px`](ambre_core::FontSize::to_px).
+/// The effective body font size (world units) for a sticky / text element. A size
+/// the style names wins. An automatic one sizes a sticky from its bounds. A text
+/// element has no card to track, so it draws at the default size, which the
+/// export also writes (`TOILE-IO-088`). The style holds points, and a world unit is a
+/// CSS pixel at zoom 1, so the size goes through
+/// [`FontSize::to_px`](ambre_core::FontSize::to_px).
 pub(crate) fn sticky_or_style_font_size(host: TextHost, style: &ElementStyle, bounds: Rect) -> f32 {
-    if host == TextHost::Sticky && style.font.size <= ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE {
-        sticky_font_size(bounds)
-    } else {
-        style.font.size.to_px()
+    match (host, style.font.size.as_fixed()) {
+        (TextHost::Sticky, None) => sticky_font_size(bounds),
+        (TextHost::Text, _) | (TextHost::Sticky, Some(_)) => style.font.size.or_default().to_px(),
     }
 }
 

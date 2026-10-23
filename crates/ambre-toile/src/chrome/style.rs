@@ -27,10 +27,10 @@
 
 use std::time::Duration;
 
-use ambre_bus::app::toile::{ElementStyle, STICKY_AUTO_FONT_SIZE};
+use ambre_bus::app::toile::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
-use ambre_core::{FontSize, Rgba};
+use ambre_core::Rgba;
 use leptos::prelude::*;
 
 use crate::ui::floatbar::StyleEdit;
@@ -65,7 +65,7 @@ pub fn StyleInspector(
     // Text (foreground) colour + font controls.
     let text_color = RwSignal::new(None::<Rgba>);
     let font_family = RwSignal::new(None::<String>);
-    let font_size = RwSignal::new(FontSize::default());
+    let font_size = RwSignal::new(FontSizeChoice::DEFAULT);
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
     let underline = RwSignal::new(false);
@@ -118,18 +118,18 @@ pub fn StyleInspector(
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());
-        commit(StyleEdit::Font(f));
+        // The picker's "Default" reset is `None`, the default family.
+        commit(StyleEdit::Font(FontFamily::from_label(
+            f.as_deref().unwrap_or_default(),
+        )));
     });
     // Size: the shared dropdown speaks whole points (`Option<u16>`, `None` =
-    // auto); the working copy stores points with zero as the auto sentinel.
-    let size_current = Signal::derive(move || {
-        let s = font_size.get();
-        (s > STICKY_AUTO_FONT_SIZE).then_some(s.whole_points())
-    });
+    // auto), which is the choice the style holds.
+    let size_current = Signal::derive(move || font_size.get().whole_points());
     let on_size = Callback::new(move |p: Option<u16>| {
-        let size = FontSize::from_whole_points(p.unwrap_or(0));
+        let size = FontSizeChoice::from_whole_points(p);
         font_size.set(size);
-        commit(StyleEdit::Size(size.points()));
+        commit(StyleEdit::Size(size));
     });
     // The four format toggles flip their signal and commit.
     let on_bold = Callback::new(move |()| {

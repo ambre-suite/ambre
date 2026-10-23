@@ -276,7 +276,9 @@ mod tests {
     fn two_elements_on_the_default_family_are_not_mixed() {
         let fresh = ElementStyle::default();
         let mut reset = ElementStyle::default();
-        crate::ui::floatbar::StyleEdit::Font(None).apply_to(&mut reset);
+        // The picker names the default "Sans"; a fresh element stores "sans-serif".
+        let picked = ambre_bus::app::toile::FontFamily::from_label("Sans");
+        crate::ui::floatbar::StyleEdit::Font(picked).apply_to(&mut reset);
         let dv = viewport(vec![elem("a", fresh), elem("b", reset)]);
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         assert!(!model.mixed.font_family);

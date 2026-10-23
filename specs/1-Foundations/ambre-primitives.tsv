@@ -351,6 +351,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.pages | field | u32
 ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.paragraphs | field | u32	math	word-count tallies
 ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.words | field | u32	math	word-count tallies
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontFamily as From<String>>::from(label) | param | String	newtype-inner	FontFamily constructor or accessor
+ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Anchor::Free.u | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | Anchor::Free.v | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | AutoLayout.gap | field | f64	math	board geometry, style metric, opacity or pressure
@@ -407,6 +408,8 @@ ambre-bus | src/app/toile.rs | crate::app::toile | FontFamily::Other.0 | field |
 ambre-bus | src/app/toile.rs | crate::app::toile | FontFamily::from_label(label) | param | &str	newtype-inner	FontFamily constructor or accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | FontFamily::label() | ret | &str	newtype-inner	FontFamily constructor or accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | FontFamily::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
+ambre-bus | src/app/toile.rs | crate::app::toile | FontSizeChoice::from_whole_points(points) | param | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
+ambre-bus | src/app/toile.rs | crate::app::toile | FontSizeChoice::whole_points() | ret | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.italic | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.strikethrough | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.underline | field | bool	generic	named flag, setter of a flag, or predicate
@@ -1762,7 +1765,7 @@ ambre-draw | src/text.rs | crate::text | ScriptSet.0 | field | u8	newtype-inner	
 ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
-ambre-draw | src/text.rs | crate::text | resolve_family(label) | param | Option<&str>	debt	bug: The default font family has two spellings (confirmed, low impact): default font family spelled 'sans-serif' (FontSpec::default) and 'Sans' (StyleEdit reset); closed set held as String
+ambre-draw | src/text.rs | crate::text | resolve_family(label) | param | Option<&str>	free-text	a family name from any app's store (Prose runs, Trame cells, Toile styles, imported files), an open set this maps onto the typed BundledFamily; Toile's FontFamily lives in ambre-bus, which ambre-draw may not depend on
 ambre-draw | src/wheel.rs | crate::wheel | WHEEL_LINE_PX | const | f64	math	pixels per wheel line, a conversion constant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dx | field | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dy | field | f64	newtype-inner	WheelDelta field, constructor or accessor
@@ -4471,10 +4474,8 @@ ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field 
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.x | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.y | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Bold.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Font.0 | field | Option<String>	debt	bug: The default font family has two spellings (confirmed, low impact): default font family spelled 'sans-serif' (FontSpec::default) and 'Sans' (StyleEdit reset); closed set held as String
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Italic.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Opacity.0 | field | f32	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Size.0 | field | f32	debt	finding: Font size 0.0 means auto (confirmed, low): font size 0.0 = auto sentinel
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Strikethrough.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::StrokeWidth.0 | field | f32	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Underline.0 | field | bool	newtype-inner	single field of its own wrapper

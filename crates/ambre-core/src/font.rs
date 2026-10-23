@@ -15,8 +15,8 @@ pub const PX_PER_PT: f32 = 96.0 / 72.0;
 /// A font size in typographic points.
 ///
 /// The value is finite and never negative. Zero is a valid size, and an
-/// application may give it a meaning of its own, for example Toile's
-/// auto-size sentinel. The type serializes as the bare `f32` it wraps, and a
+/// application that means "automatic" says so in a type of its own rather
+/// than in a zero. The type serializes as the bare `f32` it wraps, and a
 /// decoded value outside that range is refused.
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(try_from = "f32", into = "f32")]

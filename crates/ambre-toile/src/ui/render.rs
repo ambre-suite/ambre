@@ -957,12 +957,12 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 120.0, 120.0);
         let auto = ElementStyle {
             font: ambre_bus::app::toile::FontSpec {
-                size: ambre_core::FontSize::from_whole_points(0),
+                size: ambre_bus::app::toile::FontSizeChoice::AUTO,
                 ..Default::default()
             },
             ..ElementStyle::default()
         };
-        // Sticky with the auto sentinel -> size derived from the card.
+        // Sticky on an automatic size -> size derived from the card.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Sticky, &auto, bounds),
             sticky_font_size(bounds)
@@ -970,7 +970,7 @@ mod tests {
         // A positive size overrides the auto-sizing.
         let manual = ElementStyle {
             font: ambre_bus::app::toile::FontSpec {
-                size: ambre_core::FontSize::from_whole_points(30),
+                size: ambre_bus::app::toile::FontSizeChoice::from_whole_points(Some(30)),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -980,10 +980,11 @@ mod tests {
             sticky_or_style_font_size(TextHost::Sticky, &manual, bounds),
             40.0
         );
-        // A text element always uses its style size, never auto.
+        // A text element has no card to track. Auto draws it at the default
+        // size: 12 points lay out at 16 px, never at zero.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Text, &auto, bounds),
-            0.0
+            16.0
         );
     }
 

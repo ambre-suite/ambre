@@ -280,8 +280,8 @@ impl From<FontFamily> for String {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
     pub family: FontFamily,
-    /// The size. Zero is the sticky auto-size sentinel [`STICKY_AUTO_FONT_SIZE`].
-    pub size: FontSize,
+    /// The size, or automatic: a note's body then tracks its card.
+    pub size: FontSizeChoice,
     pub weight: u16, // CSS weight scale, 400 = regular, 700 = bold
     pub italic: bool,
     pub underline: bool,
@@ -292,7 +292,7 @@ impl Default for FontSpec {
     fn default() -> Self {
         Self {
             family: FontFamily::Sans,
-            size: FontSize::from_whole_points(12),
+            size: FontSizeChoice::DEFAULT,
             weight: 400,
             italic: false,
             underline: false,
@@ -365,11 +365,82 @@ pub const STICKY_DEFAULT_FILL: Rgba = Rgba::from_bits(0xFEF0_8AFF);
 /// shape spec-anchored and easy to revisit.
 pub const STICKY_CORNER: f32 = 0.0;
 
-/// Sentinel `FontSpec.size` meaning "auto-size to the note" for a sticky. The
-/// renderer then computes the body size from the card bounds, not from a fixed
-/// value (`toile-styles`). A positive size from the style inspector overrides
-/// it.
-pub const STICKY_AUTO_FONT_SIZE: FontSize = FontSize::from_whole_points(0);
+/// The size of a text body: automatic, or a positive size the style names.
+///
+/// Automatic sizes a note's body from its card (`toile-styles`). A free text
+/// has no card, so it draws an automatic size at [`FontSizeChoice::DEFAULT`].
+/// A named size is never zero, so the two meanings cannot collide. The type is
+/// stored as the bare `f32` of points, where zero is automatic, so the style
+/// register keeps its layout.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(try_from = "f32", into = "f32")]
+pub struct FontSizeChoice(Option<FontSize>);
+
+/// The size behind [`FontSizeChoice::DEFAULT`].
+const DEFAULT_FONT_SIZE: FontSize = FontSize::from_whole_points(12);
+
+impl FontSizeChoice {
+    /// The automatic size.
+    pub const AUTO: Self = Self(None);
+
+    /// The size a fresh element names, and the one an automatic free text
+    /// draws at: 12 points.
+    pub const DEFAULT: Self = Self(Some(DEFAULT_FONT_SIZE));
+
+    /// The named size `size`, or `None` for a zero size, which names nothing.
+    #[must_use]
+    pub fn fixed(size: FontSize) -> Option<Self> {
+        (size.points() > 0.0).then_some(Self(Some(size)))
+    }
+
+    /// The choice a whole-point picker holds: `None` is automatic, and so is
+    /// a zero, which no picker lists.
+    #[must_use]
+    pub fn from_whole_points(points: Option<u16>) -> Self {
+        points
+            .map(FontSize::from_whole_points)
+            .and_then(Self::fixed)
+            .unwrap_or(Self::AUTO)
+    }
+
+    /// The named size, or `None` when the size is automatic.
+    #[must_use]
+    pub const fn as_fixed(self) -> Option<FontSize> {
+        self.0
+    }
+
+    /// The size rounded to whole points, as a picker lists it, or `None`
+    /// when the size is automatic.
+    #[must_use]
+    pub fn whole_points(self) -> Option<u16> {
+        self.0.map(FontSize::whole_points)
+    }
+
+    /// The size a free text draws at: the named size, or the default when
+    /// the size is automatic. The board and the export both read it, so a
+    /// text leaves at the size it was drawn with.
+    #[must_use]
+    pub fn or_default(self) -> FontSize {
+        self.0.unwrap_or(DEFAULT_FONT_SIZE)
+    }
+}
+
+impl TryFrom<f32> for FontSizeChoice {
+    type Error = ambre_core::InvalidFontSize;
+
+    /// Zero points read as automatic; a negative or non-finite number is
+    /// refused.
+    fn try_from(points: f32) -> Result<Self, Self::Error> {
+        let size = FontSize::try_from(points)?;
+        Ok(Self::fixed(size).unwrap_or(Self::AUTO))
+    }
+}
+
+impl From<FontSizeChoice> for f32 {
+    fn from(choice: FontSizeChoice) -> Self {
+        choice.0.map_or(0.0, FontSize::points)
+    }
+}
 
 /// The style register's own layout version, its first byte (`TOILE-UI-071`). A
 /// later layout change bumps it and adds a migration row, so an older build's
@@ -380,7 +451,7 @@ impl ElementStyle {
     /// The style seeded at element birth (`toile-styles`, "Per-kind
     /// defaults"). Every kind uses [`ElementStyle::default`] EXCEPT `sticky`. A
     /// sticky gets the sticky yellow, no border, `corner = 0` (a plain card) and
-    /// the auto-size font sentinel. A fresh, still-empty note is therefore
+    /// an automatic font size. A fresh, still-empty note is therefore
     /// visible at once, and its text tracks the card size. The Sticky tool
     /// overrides the fill per placement via `CreateElement.fill`.
     pub fn for_kind(kind: ElementKind) -> Self {
@@ -391,7 +462,7 @@ impl ElementStyle {
                 stroke_w: 0.0,
                 corner: STICKY_CORNER,
                 font: FontSpec {
-                    size: STICKY_AUTO_FONT_SIZE,
+                    size: FontSizeChoice::AUTO,
                     ..FontSpec::default()
                 },
                 ..Self::default()
@@ -2379,7 +2450,7 @@ mod tests {
             }),
             font: FontSpec {
                 family: FontFamily::Serif,
-                size: FontSize::from_whole_points(24),
+                size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: 600,
                 italic: true,
                 underline: false,
@@ -2390,6 +2461,35 @@ mod tests {
         let bytes = style.to_bytes();
         assert_eq!(bytes[0], STYLE_VERSION);
         assert_eq!(ElementStyle::try_from_bytes(&bytes), Some(style));
+    }
+
+    /// A size choice is stored as the bare points it names, zero for
+    /// automatic, and a named size is never zero.
+    #[test]
+    fn a_size_choice_is_stored_as_its_points() {
+        let twelve = FontSizeChoice::from_whole_points(Some(12));
+        let bytes = postcard::to_allocvec(&twelve).expect("encodes");
+        assert_eq!(bytes, postcard::to_allocvec(&12.0_f32).expect("encodes"));
+        assert_eq!(postcard::from_bytes::<FontSizeChoice>(&bytes), Ok(twelve));
+        let auto = postcard::to_allocvec(&FontSizeChoice::AUTO).expect("encodes");
+        assert_eq!(auto, postcard::to_allocvec(&0.0_f32).expect("encodes"));
+        assert_eq!(
+            postcard::from_bytes::<FontSizeChoice>(&auto),
+            Ok(FontSizeChoice::AUTO)
+        );
+        let negative = postcard::to_allocvec(&-1.0_f32).expect("encodes");
+        assert!(postcard::from_bytes::<FontSizeChoice>(&negative).is_err());
+        assert_eq!(FontSizeChoice::fixed(FontSize::from_whole_points(0)), None);
+        assert_eq!(
+            FontSizeChoice::from_whole_points(Some(0)),
+            FontSizeChoice::AUTO
+        );
+        assert_eq!(
+            FontSizeChoice::AUTO.or_default(),
+            FontSize::from_whole_points(12)
+        );
+        assert_eq!(twelve.whole_points(), Some(12));
+        assert_eq!(FontSizeChoice::AUTO.whole_points(), None);
     }
 
     /// `TOILE-UI-071`: a register carrying a layout this build does not know is

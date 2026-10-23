@@ -250,7 +250,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         corner: 3.5,
         font: FontSpec {
             family: ambre_bus::app::toile::FontFamily::Other("f".to_owned()),
-            size: ambre_core::FontSize::new(7.5).unwrap(),
+            size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
             weight: 700,
             italic: true,
             underline: true,
@@ -785,11 +785,11 @@ fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
         // `4 -> 5` step carries to points.
         4 => board_at(Some(4), |doc| {
             for (id, kind, px) in [
-                ("e1", ElementKind::Text, 16),
-                ("e2", ElementKind::Sticky, 0),
+                ("e1", ElementKind::Text, Some(16)),
+                ("e2", ElementKind::Sticky, None),
             ] {
                 let mut style = ElementStyle::default();
-                style.font.size = ambre_core::FontSize::from_whole_points(px);
+                style.font.size = ambre_bus::app::toile::FontSizeChoice::from_whole_points(px);
                 let element = entry_map(doc, Root::Elements, id);
                 element
                     .insert(ElementKey::Type, kind.type_tag())

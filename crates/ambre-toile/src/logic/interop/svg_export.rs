@@ -16,7 +16,6 @@
 
 use std::fmt::Write as _;
 
-use ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE;
 use ambre_core::Rgba;
 use base64::Engine as _;
 use kurbo::Rect;
@@ -168,14 +167,10 @@ fn element_shape(el: &ExportElement) -> Option<String> {
         ElementKind::Text => {
             // The size and the ink the board drew it with, so the text comes
             // back as it left rather than in the reader's default
-            // (`TOILE-IO-088`). A size the style leaves automatic is the box
-            // height, which is what the board itself lays out to.
+            // (`TOILE-IO-088`). A size the style leaves automatic is the
+            // default the board draws a free text at.
             let body = xml_escape(el.text.as_deref().unwrap_or(""));
-            let size = if el.style.font.size > STICKY_AUTO_FONT_SIZE {
-                f64::from(el.style.font.size.to_px())
-            } else {
-                r.height()
-            };
+            let size = f64::from(el.style.font.size.or_default().to_px());
             let paint = SvgPaint {
                 attribute: PaintAttribute::Fill,
                 colour: el.style.text_color.unwrap_or(Rgba::from_bits(0x0000_00FF)),
@@ -305,6 +300,7 @@ fn xml_escape(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::logic::model::ElementStyle;
+    use ambre_bus::app::toile::FontSizeChoice;
 
     fn rect_el() -> ExportElement {
         let mut el = ExportElement::new(
@@ -445,12 +441,23 @@ mod tests {
     fn text_carries_its_size_and_its_ink() {
         let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
         el.text = Some("sized".to_owned());
-        el.style.font.size = ambre_core::FontSize::from_whole_points(24);
+        el.style.font.size = FontSizeChoice::from_whole_points(Some(24));
         el.style.text_color = Some(Rgba::from_bits(0x1122_33FF));
         let svg = export_svg(&[el]).document;
         assert!(
             svg.contains("font-size=\"32\" fill=\"#112233\""),
             "the text left bare: {svg}"
         );
+    }
+
+    /// `TOILE-IO-088`: a text whose size is automatic leaves at the size the
+    /// board draws it with, the default 12 points, not at its box height.
+    #[test]
+    fn auto_sized_text_leaves_at_the_size_it_was_drawn_with() {
+        let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
+        el.text = Some("auto".to_owned());
+        el.style.font.size = FontSizeChoice::AUTO;
+        let svg = export_svg(&[el]).document;
+        assert!(svg.contains("font-size=\"16\""), "the size drifted: {svg}");
     }
 }

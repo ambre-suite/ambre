@@ -210,12 +210,13 @@ fn rewrite_style_registers<K: ambre_core::crdt::FieldKey>(
 /// is CSS px at zoom 1. This build stores points and lays them out through
 /// [`FontSize::to_px`](ambre_core::FontSize::to_px). The step divides each
 /// size by [`PX_PER_PT`](ambre_core::PX_PER_PT), so a body keeps the height it
-/// had. Zero, the sticky auto-size sentinel, stays zero.
+/// had. Zero, an automatic size, stays automatic.
 fn font_points_step(doc: &LoroDoc) -> Result<(), String> {
     rewrite_styles(doc, |bytes| {
         let mut style = ElementStyle::try_from_bytes(bytes)?;
+        let px = f32::from(style.font.size);
         style.font.size =
-            ambre_core::FontSize::new(style.font.size.points() / ambre_core::PX_PER_PT)?;
+            ambre_bus::app::toile::FontSizeChoice::try_from(px / ambre_core::PX_PER_PT).ok()?;
         Some(style.to_bytes())
     })?;
     stamp(doc);
@@ -503,8 +504,10 @@ mod tests {
         // The `4 -> 5` row then reads the stored size as px, and carries it to
         // points.
         let mut kept = style;
-        kept.font.size = ambre_core::FontSize::new(kept.font.size.points() / ambre_core::PX_PER_PT)
-            .expect("a size");
+        kept.font.size = ambre_bus::app::toile::FontSizeChoice::try_from(
+            f32::from(kept.font.size) / ambre_core::PX_PER_PT,
+        )
+        .expect("a size");
         assert_eq!(
             styles_of(gated.as_bytes()),
             vec![Some(kept.clone()), Some(kept)],
@@ -605,9 +608,9 @@ mod tests {
     fn a_board_whose_font_sizes_are_px_keeps_their_height() {
         let doc = LoroDoc::new();
         let elements = doc.get_map(Root::Elements.as_str());
-        for (id, px) in [("e1", 16), ("e2", 0)] {
+        for (id, px) in [("e1", Some(16)), ("e2", None)] {
             let mut style = ElementStyle::default();
-            style.font.size = ambre_core::FontSize::from_whole_points(px);
+            style.font.size = ambre_bus::app::toile::FontSizeChoice::from_whole_points(px);
             elements
                 .insert_container(id, loro::LoroMap::new())
                 .expect("seed")
@@ -639,9 +642,14 @@ mod tests {
                 .font
                 .size
         };
-        assert_eq!(size_of("e1").to_px(), 16.0, "16 px read back as 16 px");
-        assert_eq!(size_of("e1"), ambre_core::FontSize::from_whole_points(12));
-        assert_eq!(size_of("e2"), ambre_bus::app::toile::STICKY_AUTO_FONT_SIZE);
+        let e1 = size_of("e1").as_fixed();
+        assert_eq!(
+            e1.map(ambre_core::FontSize::to_px),
+            Some(16.0),
+            "16 px read back as 16 px"
+        );
+        assert_eq!(e1, Some(ambre_core::FontSize::from_whole_points(12)));
+        assert_eq!(size_of("e2"), ambre_bus::app::toile::FontSizeChoice::AUTO);
     }
 
     /// `SCHEMA-020`: two peers open one version 3 board, and each migrates its

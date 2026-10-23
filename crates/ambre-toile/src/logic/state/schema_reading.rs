@@ -206,6 +206,8 @@ fn style_reading(style: &ElementStyle) -> String {
         underline,
         strikethrough,
     } = font;
+    // The stored points, zero for an automatic size.
+    let size = f32::from(*size);
     let mut parts = vec![
         format!("fill {}", maybe_colour(*fill)),
         format!("stroke {} {stroke_w} px", maybe_colour(*stroke)),
