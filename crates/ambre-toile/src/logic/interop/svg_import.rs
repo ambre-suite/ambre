@@ -363,7 +363,7 @@ fn push_element(
         size: Size::new(rect.width(), rect.height()),
         content,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     batch.styles.push(style);
     slot

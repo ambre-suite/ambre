@@ -539,7 +539,7 @@ mod tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         }
     }
 
@@ -808,7 +808,7 @@ mod tests {
                 size: kurbo::Size::new(40.0, 40.0),
                 content: crate::logic::command::InitContent::None,
                 fill: None,
-                correlate: 0,
+                correlate: None,
             })
             .display
             .into_iter()

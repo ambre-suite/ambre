@@ -36,7 +36,10 @@ impl ToileState {
         // Seed the group's derived bounds from its members, then feed the R-tree.
         self.recompute_groups();
         self.emit_with_update(vec![
-            ToileEvent::ElementCreated { id, correlate: 0 },
+            ToileEvent::ElementCreated {
+                id,
+                correlate: None,
+            },
             self.viewport_event(),
         ])
     }
@@ -164,9 +167,7 @@ impl ToileState {
                 continue;
             }
             match self.element_map(group) {
-                None => display.push(ToileEvent::Error(ToileError::NoSuchElement(
-                    group.0.clone(),
-                ))),
+                None => display.push(ToileEvent::Error(ToileError::NoSuchElement(group.clone()))),
                 Some(gm) if !has_type(&gm, ElementKind::Group) => {
                     not_a_group = not_a_group.or(Some(group));
                 }
@@ -178,7 +179,7 @@ impl ToileState {
         }
         if unbound.is_empty() {
             if let Some(id) = not_a_group {
-                display.push(ToileEvent::Error(ToileError::NotAGroup(id.0.clone())));
+                display.push(ToileEvent::Error(ToileError::NotAGroup(id.clone())));
             }
             return ToileOutcome::display_only(display);
         }
@@ -635,7 +636,7 @@ mod tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         out.display
             .iter()

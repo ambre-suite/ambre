@@ -17,8 +17,8 @@ use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
-    PresentMode, Reaction, ReactionKind, Sources, StatsRequestKind, TextDelta, ToileCommand,
-    ToileError, ToileEvent, ZTarget,
+    PresentFocus, PresentMode, Reaction, ReactionKind, SlideIndex, Sources, StatsRequestKind,
+    TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
@@ -67,7 +67,7 @@ fn a_remote_change_is_never_re_broadcast() {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         })
         .update
         .expect("a create writes");
@@ -80,7 +80,7 @@ fn a_remote_change_is_never_re_broadcast() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let from_b = out.update.expect("a create writes");
     let sent = loro::LoroDoc::decode_import_blob_meta(from_a.as_bytes(), false).expect("a delta");
@@ -143,7 +143,7 @@ fn create_rect(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         size,
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     assert!(out.update.is_some(), "a create must produce a CRDT delta");
     created_id(&out)
@@ -180,7 +180,7 @@ fn set_text_overwrites_sticky_body() {
         size: Size::new(120.0, 80.0),
         content: InitContent::Text("hello".to_owned()),
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let id = created_id(&out);
     assert_eq!(body_of(&st, &id).as_deref(), Some("hello"));
@@ -272,7 +272,7 @@ fn two_authors_typing_in_one_note_both_keep_their_words() {
             size: Size::new(120.0, 80.0),
             content: InitContent::Text("buy milk".to_owned()),
             fill: None,
-            correlate: 0,
+            correlate: None,
         }));
         b.apply_remote_snapshot(&a.export_snapshot());
 
@@ -1019,7 +1019,7 @@ fn group_and_drawing_are_not_creatable() {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         assert!(matches!(
             out.display.first(),
@@ -1042,7 +1042,7 @@ fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
         size: Size::new(80.0, 80.0),
         content: InitContent::Text(body.to_owned()),
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     created_id(&out)
 }
@@ -1693,7 +1693,7 @@ fn an_import_is_not_broadcast_back() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let delta = out.update.expect("a create must produce a delta");
 
@@ -1735,7 +1735,7 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let delta = out.update.expect("a create must produce a delta");
 
@@ -2074,7 +2074,7 @@ fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         size,
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     }))
 }
 
@@ -3306,9 +3306,19 @@ fn an_arrow_off_screen_is_culled() {
 // Presentation: slide sequence CRDT + playback (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
-fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
+/// The playback as `(mode, slide, focus)`, with the slide as a bare rank.
+fn played(st: &ToileState) -> (PresentMode, u32, bool) {
+    let (mode, playback) = st.playback();
+    (
+        mode,
+        playback.active.get(),
+        playback.focus == PresentFocus::Focus,
+    )
+}
+
+fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
     out.display.iter().find_map(|e| match e {
-        ToileEvent::SlideChanged(c) => Some(c.position.index()),
+        ToileEvent::SlideChanged(c) => Some(c.position.index().get()),
         _ => None,
     })
 }
@@ -3375,14 +3385,14 @@ fn shorter_deck_clamps_the_active_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b, c],
     });
-    st.handle_command(ToileCommand::GotoSlide(2));
-    assert_eq!(st.playback().1, 2);
+    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
+    assert_eq!(st.playback().1.active.get(), 2);
 
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone()],
     });
     assert_eq!(
-        st.playback().1,
+        st.playback().1.active.get(),
         0,
         "a deck shorter than the viewer's cursor clamps it to the new last slide"
     );
@@ -3397,7 +3407,7 @@ fn deleting_a_frame_drops_its_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), c.clone()],
     });
-    st.handle_command(ToileCommand::GotoSlide(2));
+    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
 
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![b.clone()],
@@ -3408,7 +3418,7 @@ fn deleting_a_frame_drops_its_slide() {
         "the deck must hold only slides whose frame still exists"
     );
     assert_eq!(
-        st.playback().1,
+        st.playback().1.active.get(),
         1,
         "the shortened deck clamps the viewer's cursor like any other write"
     );
@@ -3463,7 +3473,7 @@ fn playback_bounds() {
     );
     // Goto clamps to the deck length.
     assert_eq!(
-        slide_changed(&st.handle_command(ToileCommand::GotoSlide(99))),
+        slide_changed(&st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(99)))),
         Some(2)
     );
 }
@@ -3490,7 +3500,7 @@ fn slide_change_carries_snapshots_and_fit_rect() {
     });
 
     let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
-    assert_eq!(change.position.index(), 1);
+    assert_eq!(change.position.index().get(), 1);
     // `from` is slide 0, `to` is slide 1, each the engine's own frame snapshot.
     assert_eq!(change.from, st.frame_snapshot(&a));
     assert_eq!(change.to, st.frame_snapshot(&b));
@@ -3521,7 +3531,7 @@ fn slide_change_carries_count_frame_and_notes() {
 
     let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
     assert_eq!(
-        change.position.count(),
+        change.position.count().get(),
         2,
         "the whole deck length drives the k / n counter"
     );
@@ -3550,8 +3560,10 @@ fn enter_present_starts_from_empty_snapshot() {
         order: vec![a.clone()],
     });
 
-    let change = slide_change(&st.handle_command(ToileCommand::EnterPresent { focus: true }));
-    assert_eq!(change.position.index(), 0);
+    let change = slide_change(&st.handle_command(ToileCommand::EnterPresent {
+        focus: PresentFocus::Focus,
+    }));
+    assert_eq!(change.position.index().get(), 0);
     assert!(change.from.elements.is_empty(), "no source frame on entry");
     assert_eq!(change.to, st.frame_snapshot(&a));
     assert_eq!(change.to_rect, st.element_rect(&a));
@@ -3564,7 +3576,9 @@ fn present_mode_toggle_is_local() {
     st.handle_command(ToileCommand::SetSlideOrder { order: vec![a] });
     st.handle_command(ToileCommand::NextSlide); // cursor is not at 0
 
-    let out = st.handle_command(ToileCommand::EnterPresent { focus: true });
+    let out = st.handle_command(ToileCommand::EnterPresent {
+        focus: PresentFocus::Focus,
+    });
     assert!(
         out.update.is_none(),
         "present mode is local, never a CRDT delta"
@@ -3580,7 +3594,7 @@ fn present_mode_toggle_is_local() {
         Some(0),
         "EnterPresent resets to slide 0"
     );
-    assert_eq!(st.playback(), (PresentMode::Presenting, 0, true));
+    assert_eq!(played(&st), (PresentMode::Presenting, 0, true));
 
     let out = st.handle_command(ToileCommand::ExitPresent);
     assert!(out.update.is_none());
@@ -3602,7 +3616,9 @@ fn present_mode_toggle_is_local() {
 fn leaving_the_presentation_stops_the_broadcast() {
     let mut st = ToileState::new();
     deck_of_three(&mut st);
-    st.handle_command(ToileCommand::EnterPresent { focus: true });
+    st.handle_command(ToileCommand::EnterPresent {
+        focus: PresentFocus::Focus,
+    });
     st.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     assert!(st.broadcast().is_on());
 
@@ -3621,7 +3637,8 @@ fn leaving_the_presentation_stops_the_broadcast() {
     let presenter = UserId::new();
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
-        rx.peer_presence(&presenter).and_then(|p| p.present_slide),
+        rx.peer_presence(&presenter)
+            .and_then(|p| p.present_slide.map(SlideIndex::get)),
         None
     );
 }
@@ -3672,14 +3689,16 @@ fn playback_is_not_synced() {
 
     // A enters present mode and steps forward; neither produces a delta to relay.
     assert!(
-        a.handle_command(ToileCommand::EnterPresent { focus: false })
-            .update
-            .is_none()
+        a.handle_command(ToileCommand::EnterPresent {
+            focus: PresentFocus::WithChrome
+        })
+        .update
+        .is_none()
     );
     assert!(a.handle_command(ToileCommand::NextSlide).update.is_none());
-    assert_eq!(a.playback(), (PresentMode::Presenting, 1, false));
+    assert_eq!(played(&a), (PresentMode::Presenting, 1, false));
     assert_eq!(
-        b.playback(),
+        played(&b),
         (PresentMode::Editing, 0, false),
         "B's playback is untouched by A's presentation"
     );
@@ -3690,11 +3709,11 @@ fn playback_is_not_synced() {
 // -----------------------------------------------------------------------------
 
 /// Decode a broadcast slide index out of an outcome's ephemeral, if any.
-fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
+fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
     let bytes = out.ephemeral.as_ref()?;
     let p: PresencePayload =
         postcard::from_bytes(bytes.as_bytes()).expect("decodable presence sample");
-    p.present_slide
+    p.present_slide.map(SlideIndex::get)
 }
 
 /// A three-frame deck shared by the follow-presenter tests.
@@ -3818,7 +3837,9 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
     });
     let mut b = ToileState::new();
     b.apply_remote_snapshot(&a.export_snapshot());
-    b.handle_command(ToileCommand::EnterPresent { focus: true });
+    b.handle_command(ToileCommand::EnterPresent {
+        focus: PresentFocus::Focus,
+    });
 
     let delta = a
         .handle_command(ToileCommand::EditNotes {
@@ -3872,7 +3893,8 @@ fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
     let presenter = UserId::new();
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
-        rx.peer_presence(&presenter).and_then(|p| p.present_slide),
+        rx.peer_presence(&presenter)
+            .and_then(|p| p.present_slide.map(SlideIndex::get)),
         None,
         "the peer is still offered as a presenter"
     );
@@ -3893,7 +3915,7 @@ fn follower_adopts_presenter_slide() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(2))
+        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -3904,11 +3926,15 @@ fn follower_adopts_presenter_slide() {
 
     let before = rx.export_snapshot();
     let events = rx.apply_ephemeral(alice, &frame);
-    assert_eq!(rx.playback().1, 2, "the follower adopted slide 2");
+    assert_eq!(
+        rx.playback().1.active.get(),
+        2,
+        "the follower adopted slide 2"
+    );
     assert!(
         events
             .iter()
-            .any(|e| matches!(e, ToileEvent::SlideChanged(c) if c.position.index() == 2)),
+            .any(|e| matches!(e, ToileEvent::SlideChanged(c) if c.position.index().get() == 2)),
         "adoption emits a SlideChanged so the camera glides"
     );
     assert_eq!(
@@ -3925,14 +3951,18 @@ fn non_follower_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(2))
+        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
     let mut rx = ToileState::new();
     rx.apply_remote_snapshot(&presenter.export_snapshot());
     let events = rx.apply_ephemeral(UserId::new(), &frame);
-    assert_eq!(rx.playback().1, 0, "a non-follower does not move");
+    assert_eq!(
+        rx.playback().1.active.get(),
+        0,
+        "a non-follower does not move"
+    );
     assert!(
         !events
             .iter()
@@ -3949,7 +3979,7 @@ fn following_other_peer_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(2))
+        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -3960,7 +3990,7 @@ fn following_other_peer_ignores_broadcast() {
     let alice = UserId::new();
     rx.apply_ephemeral(alice, &frame);
     assert_eq!(
-        rx.playback().1,
+        rx.playback().1.active.get(),
         0,
         "a frame from a non-followed peer never moves us"
     );
@@ -3974,13 +4004,13 @@ fn adopted_slide_is_clamped_to_deck() {
     let alice = UserId::new();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(99),
+        present_slide: Some(SlideIndex::new(99)),
         ..Default::default()
     })
     .unwrap();
     rx.apply_ephemeral(alice, &frame.into());
     assert_eq!(
-        rx.playback().1,
+        rx.playback().1.active.get(),
         2,
         "an out-of-range index clamps to len - 1"
     );
@@ -4014,16 +4044,20 @@ fn follow_snaps_to_last_known_slide() {
     let alice = UserId::new();
     // Store a broadcast frame from alice before following her.
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(2),
+        present_slide: Some(SlideIndex::new(2)),
         ..Default::default()
     })
     .unwrap();
     rx.apply_ephemeral(alice, &frame.into());
-    assert_eq!(rx.playback().1, 0, "no adoption before following");
+    assert_eq!(
+        rx.playback().1.active.get(),
+        0,
+        "no adoption before following"
+    );
 
     let out = rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     assert_eq!(
-        rx.playback().1,
+        rx.playback().1.active.get(),
         2,
         "following snaps to the last known slide"
     );
@@ -4072,7 +4106,7 @@ fn follow_state_is_not_synced() {
             .is_none()
     );
     assert_eq!(
-        b.playback(),
+        played(&b),
         (PresentMode::Editing, 0, false),
         "B's playback is untouched by A's follow / broadcast toggles"
     );
@@ -4556,7 +4590,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
             doc_type: ambre_core::DocType::Trame,
         },
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
 
     let geom = only_doc_embed(&st).expect("the embed must derive as DocEmbed");
@@ -4588,7 +4622,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
             document_id: ambre_core::DocumentId::new(),
             doc_type: ambre_core::DocType::Toile,
         },
-        correlate: 0,
+        correlate: None,
     });
     let id = st
         .debug_viewport()
@@ -4642,7 +4676,7 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
             content: InitContent::Embed(
                 ambre_bus::app::toile::WebAddress::parse("example.com").expect("a safe address"),
             ),
-            correlate: 0,
+            correlate: None,
         });
         let id = created_id(&out);
         // The peer writes the field as raw text, past every check its own
@@ -4677,7 +4711,7 @@ fn a_copied_embed_is_a_second_reference_to_the_same_document() {
             document_id: child,
             doc_type: ambre_core::DocType::Prose,
         },
-        correlate: 0,
+        correlate: None,
     });
     let source = created_ids(&out).pop().expect("the embed");
 
@@ -5870,7 +5904,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
             size: Size::new(20.0, 20.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         }),
         PeerOp::MoveNth { nth: n, dx, dy } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::MoveElements {
@@ -5964,7 +5998,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
             size: Size::new(200.0, 200.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         }),
         PeerOp::FrameNth { frame, nth: n } => match (nth(*frame), nth(*n)) {
             (Some(f), Some(id)) => st.handle_command(ToileCommand::SetFrameChildren {
@@ -6389,7 +6423,7 @@ fn a_batch_with_one_failed_delta_reports_the_failure() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let good = out.update.expect("a create carries a delta");
 
@@ -6484,7 +6518,7 @@ fn a_create_to_a_missing_element_is_refused() {
         assert!(out.update.is_none(), "a refused create writes nothing");
         assert!(matches!(
             out.display.as_slice(),
-            [ToileEvent::Error(ToileError::NoSuchElement(id))] if id == &ghost.0
+            [ToileEvent::Error(ToileError::NoSuchElement(id))] if id == &ghost
         ));
     }
     assert!(st.connector_ids().is_empty());
@@ -6550,7 +6584,7 @@ fn re_aiming_an_unknown_arrow_changes_nothing() {
     assert!(out.update.is_none());
     assert!(matches!(
         out.display.as_slice(),
-        [ToileEvent::Error(ToileError::NoSuchConnector(id))] if id == "ffff_0000"
+        [ToileEvent::Error(ToileError::NoSuchConnector(id))] if id.as_str() == "ffff_0000"
     ));
     assert_eq!(st.crdt().oplog_vv(), before, "nothing was written");
 }
@@ -6646,7 +6680,7 @@ fn filled_rect(st: &mut ToileState, x: f64, fill: Rgba) -> ElementId {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: Some(fill),
-        correlate: 0,
+        correlate: None,
     }))
 }
 

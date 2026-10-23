@@ -152,18 +152,6 @@ pub enum BorderPreset {
     Right,
 }
 
-/// Border edge bits for [`CellStyle::border_edges`] / [`DisplayCell::border_edges`]
-/// (`trame-cell-styles`). A [`BorderPreset`] applied over a selection is resolved by the
-/// Logic thread into the per-cell set of edges these bits represent. A selection-level
-/// "Outline" therefore lands only on the perimeter cells, not the interior.
-pub const BORDER_EDGE_TOP: u8 = 1 << 0;
-pub const BORDER_EDGE_RIGHT: u8 = 1 << 1;
-pub const BORDER_EDGE_BOTTOM: u8 = 1 << 2;
-pub const BORDER_EDGE_LEFT: u8 = 1 << 3;
-/// All four edges (the `All` preset, per cell).
-pub const BORDER_EDGE_ALL: u8 =
-    BORDER_EDGE_TOP | BORDER_EDGE_RIGHT | BORDER_EDGE_BOTTOM | BORDER_EDGE_LEFT;
-
 /// The stroke style of a cell border, conflating line pattern and weight into a
 /// single choice (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

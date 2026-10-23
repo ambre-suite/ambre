@@ -4,6 +4,7 @@
 //! detached, and a frame paints into a recording surface.
 
 use super::*;
+use crate::ui::kinetic::FingerRole;
 use ambre_bus::UserId;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
@@ -474,14 +475,14 @@ fn a_write_refused_for_its_lost_target_is_told_and_another_refusal_is_not() {
         [.., ToileCommand::SetText { id, .. }] if id == &eid("a")
     ));
     use ambre_bus::app::toile::ToileError;
-    rig.answer(lost(ToileError::NoSuchElement("b".to_owned())));
+    rig.answer(lost(ToileError::NoSuchElement(eid("b"))));
     assert!(
         rig.notices.take().is_empty(),
         "another id's refusal says nothing"
     );
-    rig.answer(lost(ToileError::NoSuchElement("a".to_owned())));
+    rig.answer(lost(ToileError::NoSuchElement(eid("a"))));
     assert_eq!(rig.notices.take().len(), 1, "the user is told once");
-    rig.answer(lost(ToileError::NoSuchElement("a".to_owned())));
+    rig.answer(lost(ToileError::NoSuchElement(eid("a"))));
     assert!(rig.notices.take().is_empty(), "and only once");
 }
 
@@ -1758,7 +1759,7 @@ fn a_finger_pans_only_the_empty_board() {
         rig.view
             .touch_down(empty.0, empty.1, ambre_bus::PageTime(0.0))
     );
-    assert_eq!(rig.view.finger_pans, Some(true));
+    assert_eq!(rig.view.finger, Some(FingerRole::Pans));
     let centre = rig.view.cam.center;
     rig.view
         .touch_move(empty.0 - 60.0, empty.1, ambre_bus::PageTime(16.0));
@@ -1770,7 +1771,11 @@ fn a_finger_pans_only_the_empty_board() {
     let on_a = rig.screen(50.0, 50.0);
     rig.view
         .touch_down(on_a.0, on_a.1, ambre_bus::PageTime(100.0));
-    assert_eq!(rig.view.finger_pans, Some(false), "an element is grabbed");
+    assert_eq!(
+        rig.view.finger,
+        Some(FingerRole::ActsAsMouse),
+        "an element is grabbed"
+    );
     rig.view
         .touch_up(on_a.0, on_a.1, ambre_bus::PageTime(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
@@ -1780,13 +1785,21 @@ fn a_finger_pans_only_the_empty_board() {
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
     rig.view
         .touch_down(knob.x, knob.y, ambre_bus::PageTime(200.0));
-    assert_eq!(rig.view.finger_pans, Some(false), "a handle is grabbed");
+    assert_eq!(
+        rig.view.finger,
+        Some(FingerRole::ActsAsMouse),
+        "a handle is grabbed"
+    );
     rig.view.touch_cancel();
 
     rig.view.set_tool(Tool::Pen);
     rig.view
         .touch_down(empty.0, empty.1, ambre_bus::PageTime(300.0));
-    assert_eq!(rig.view.finger_pans, Some(false), "a drawing tool draws");
+    assert_eq!(
+        rig.view.finger,
+        Some(FingerRole::ActsAsMouse),
+        "a drawing tool draws"
+    );
 }
 
 /// `TOILE-UI-380`: a drag held in the right-hand band pans the board right

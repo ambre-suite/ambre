@@ -14,13 +14,17 @@
 
 use ambre_core::{CharCount, CharOffset, Utf16Offset, char_len, char_to_utf16, utf16_to_char};
 
-use crate::logic::command::{SlidePosition, TextDelta};
+use crate::logic::command::{SlideCount, SlidePosition, TextDelta};
 
 /// The presenter panel's slide counter, `1`-based for humans: `"3 / 10"`. An
 /// empty deck reads `"0 / 0"` rather than `"1 / 0"`.
 pub fn slide_counter_label(slide: SlidePosition) -> String {
     let count = slide.count();
-    let human = if count == 0 { 0 } else { slide.index() + 1 };
+    let human = if count.is_zero() {
+        SlideCount::ZERO
+    } else {
+        slide.index().number()
+    };
     format!("{human} / {count}")
 }
 
@@ -89,6 +93,7 @@ pub fn caret_through(before: &str, caret: Utf16Offset, after: &str) -> Utf16Offs
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logic::command::SlideIndex;
 
     #[test]
     fn a_caret_keeps_its_place_under_a_peer_write() {
@@ -117,9 +122,13 @@ mod tests {
         );
     }
 
+    fn position(index: u32, count: u32) -> SlidePosition {
+        SlidePosition::new(SlideIndex::new(index), SlideCount::new(count))
+    }
+
     #[test]
     fn counter_label_is_one_based() {
-        let label = |i, n| slide_counter_label(SlidePosition::new(i, n));
+        let label = |i, n| slide_counter_label(position(i, n));
         assert_eq!(label(0, 10), "1 / 10");
         assert_eq!(label(2, 10), "3 / 10");
         assert_eq!(label(9, 10), "10 / 10");
@@ -127,15 +136,15 @@ mod tests {
 
     #[test]
     fn counter_label_empty_deck() {
-        assert_eq!(slide_counter_label(SlidePosition::new(0, 0)), "0 / 0");
+        assert_eq!(slide_counter_label(position(0, 0)), "0 / 0");
     }
 
     /// A slide position keeps its index inside the deck (`UI-THREAD-060`).
     #[test]
     fn a_slide_position_stays_inside_its_deck() {
-        assert_eq!(SlidePosition::new(12, 10).index(), 9);
-        assert_eq!(SlidePosition::new(3, 0).index(), 0);
-        assert_eq!(slide_counter_label(SlidePosition::new(12, 10)), "10 / 10");
+        assert_eq!(position(12, 10).index(), SlideIndex::new(9));
+        assert_eq!(position(3, 0).index(), SlideIndex::ZERO);
+        assert_eq!(slide_counter_label(position(12, 10)), "10 / 10");
     }
 
     #[test]

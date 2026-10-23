@@ -55,7 +55,7 @@ fn toile_file() -> Vec<u8> {
         size: kurbo::Size::new(120.0, 80.0),
         content: ambre_toile::InitContent::Text("hello".to_owned()),
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     state
         .export_ambre_plaintext(doc_id(2))

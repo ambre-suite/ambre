@@ -941,7 +941,10 @@ impl ToileState {
     /// The speaker notes of the slide on screen, read before a write this
     /// viewer did not make (`TOILE-UI-316`). `None` when no slide resolves.
     pub(super) fn active_notes(&self) -> Option<(FrameId, String)> {
-        let frame = self.slide_order().get(self.playback.active).cloned()?;
+        let frame = self
+            .slide_order()
+            .get(self.playback.active.to_index()?)
+            .cloned()?;
         let notes = self.notes(&frame);
         Some((frame, notes))
     }
@@ -1164,13 +1167,13 @@ impl ToileState {
 
     pub(super) fn err_no_element(&self, id: &ElementId) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchElement(
-            id.0.clone(),
+            id.clone(),
         ))])
     }
 
     pub(super) fn err_no_connector(&self, id: &ConnectorId) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchConnector(
-            id.0.clone(),
+            id.clone(),
         ))])
     }
 
@@ -1367,7 +1370,7 @@ mod schema_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         st
     }
@@ -1557,7 +1560,7 @@ mod undo_state_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         assert!(
             matches!(
@@ -1593,7 +1596,7 @@ mod undo_state_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         for no_op in [
             ToileCommand::Redo,

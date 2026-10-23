@@ -77,7 +77,7 @@ fn board(base: &str, stored: &str) -> (ToileState, ElementId) {
         size: Size::new(400.0, 400.0),
         content: InitContent::Text(base.to_owned()),
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     let id = out
         .display

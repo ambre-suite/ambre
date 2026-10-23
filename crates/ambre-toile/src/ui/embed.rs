@@ -239,7 +239,7 @@ pub fn placement(placed: PlacedEmbed, cam: &ViewportTransform) -> ToileCommand {
         size,
         content,
         fill: None,
-        correlate: 0,
+        correlate: None,
     }
 }
 

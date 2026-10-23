@@ -400,7 +400,7 @@ fn create(
         size,
         content,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     outcome
         .display

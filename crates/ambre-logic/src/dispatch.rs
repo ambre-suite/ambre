@@ -2284,7 +2284,7 @@ mod tests {
                 size: kurbo::Size::new(100.0, 60.0),
                 content: ambre_bus::app::toile::InitContent::None,
                 fill: None,
-                correlate: 0,
+                correlate: None,
             }),
         });
         doc_id

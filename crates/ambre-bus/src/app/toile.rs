@@ -1127,9 +1127,60 @@ pub struct AutoLayout {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackState {
     /// Index into the shared slide `order`; clamped to the deck length.
-    pub active: usize,
-    /// Focus (present) mode: the UI hides its chrome and fits the active frame.
-    pub focus: bool,
+    pub active: SlideIndex,
+    /// Whether the presentation hides the editing chrome.
+    pub focus: PresentFocus,
+}
+
+ambre_core::define_index! {
+    /// A slide's zero-based rank in the shared slide order
+    /// (`toile-presentation`). The deck names frames by id, and this rank
+    /// only says which of them a viewer is on.
+    pub struct SlideIndex(u32);
+    /// A number of slides.
+    pub struct SlideCount;
+    /// The signed gap between two slide ranks.
+    pub struct SlideDelta(i64);
+    /// A run of slide ranks.
+    pub struct SlideSpan;
+    /// A list indexed by slide rank.
+    pub struct SlideVec;
+}
+
+impl SlideIndex {
+    /// The number a person reads for this slide: the first slide is 1. It is
+    /// the count of slides up to and with this one, so it saturates with the
+    /// axis.
+    #[must_use]
+    pub const fn number(self) -> SlideCount {
+        self.next().count_from(Self::ZERO)
+    }
+}
+
+impl SlideCount {
+    /// `index` pulled back into a deck of this many slides. A rank past the
+    /// end reads as the last slide, and an empty deck reads as the first.
+    #[must_use]
+    pub fn clamp(self, index: SlideIndex) -> SlideIndex {
+        index.min(self.as_end().prev().unwrap_or(SlideIndex::ZERO))
+    }
+}
+
+impl std::fmt::Display for SlideCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+/// Whether a presentation hides the editing chrome (`toile-presentation`,
+/// `EnterPresent { focus }`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PresentFocus {
+    /// The editing chrome stays on screen around the slide.
+    #[default]
+    WithChrome,
+    /// Focus mode: the UI hides its chrome and fits the active frame.
+    Focus,
 }
 
 // =============================================================================
@@ -1211,26 +1262,26 @@ impl Broadcast {
 /// The index is below the count, and both read 0 on an empty deck.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SlidePosition {
-    index: usize,
-    count: usize,
+    index: SlideIndex,
+    count: SlideCount,
 }
 
 impl SlidePosition {
     /// Slide `index` of a deck of `count`, the index pulled back into the deck.
-    pub fn new(index: usize, count: usize) -> Self {
+    pub fn new(index: SlideIndex, count: SlideCount) -> Self {
         Self {
-            index: index.min(count.saturating_sub(1)),
+            index: count.clamp(index),
             count,
         }
     }
 
     /// The zero-based index of the slide on screen.
-    pub fn index(self) -> usize {
+    pub fn index(self) -> SlideIndex {
         self.index
     }
 
     /// How many slides the deck holds.
-    pub fn count(self) -> usize {
+    pub fn count(self) -> SlideCount {
         self.count
     }
 }
@@ -1269,6 +1320,27 @@ pub struct SlideChange {
     pub transition: std::time::Duration,
 }
 
+/// The token a `CreateElement` carries and its `ElementCreated` echoes, so
+/// the view that asked claims the element it created and no other
+/// (`TOILE-UI-194`).
+///
+/// No token is zero, so "no deferred open" is an `Option` and never a
+/// reserved value. The view mints the tokens, one after another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CorrelationToken(std::num::NonZeroU64);
+
+impl CorrelationToken {
+    /// The first token a view mints.
+    pub const FIRST: Self = Self(std::num::NonZeroU64::MIN);
+
+    /// The token after this one. It saturates at the last token, which a
+    /// view minting one per placement never reaches.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
@@ -1285,10 +1357,10 @@ pub enum ToileCommand {
         /// note in the picked palette colour atomically (one element, one undo
         /// item). `None` keeps the per-kind default. See `toile-styles`.
         fill: Option<Rgba>,
-        /// A request token the UI echoes in `ElementCreated`, so a deferred
-        /// open claims the element this command created and no other
-        /// (`TOILE-UI-194`). Zero means no deferred open is pending.
-        correlate: u64,
+        /// A request token the engine echoes in `ElementCreated`, so a
+        /// deferred open claims the element this command created and no other
+        /// (`TOILE-UI-194`). `None` when no deferred open is pending.
+        correlate: Option<CorrelationToken>,
     },
     MoveElements {
         ids: Vec<ElementId>,
@@ -1416,12 +1488,12 @@ pub enum ToileCommand {
     PrevSlide,
     /// Jump the local playback cursor to `0`-based slide index, clamped to the
     /// deck length (`toile-presentation`). Local only.
-    GotoSlide(usize),
+    GotoSlide(SlideIndex),
     /// Enter presentation (focus) mode, resetting the cursor to the first slide;
     /// `focus` drives whether the UI hides its chrome
     /// (`toile-presentation`). Local only.
     EnterPresent {
-        focus: bool,
+        focus: PresentFocus,
     },
     /// Leave presentation mode (`toile-presentation`). Local only.
     ExitPresent,
@@ -1823,7 +1895,7 @@ pub struct PresencePayload {
     /// it. `None` = not broadcasting. Purely ephemeral, like every other field
     /// here (the playback position is never CRDT -- see the rejected-decisions
     /// table).
-    pub present_slide: Option<usize>,
+    pub present_slide: Option<SlideIndex>,
 }
 
 /// A remote peer's latest presence, keyed by the canonical `UserId`
@@ -1844,10 +1916,10 @@ pub struct PresenceUpdate {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ToileError {
-    #[error("element {0} not found")]
-    NoSuchElement(String),
-    #[error("connector {0} not found")]
-    NoSuchConnector(String),
+    #[error("element {} not found", .0.as_str())]
+    NoSuchElement(ElementId),
+    #[error("connector {} not found", .0.as_str())]
+    NoSuchConnector(ConnectorId),
     #[error("{kind} cannot be created via CreateElement")]
     NotCreatable { kind: &'static str },
     #[error("InitContent does not match the requested element kind")]
@@ -1856,8 +1928,8 @@ pub enum ToileError {
     UnusableSize,
     #[error("a group needs at least two distinct members")]
     GroupNeedsTwo,
-    #[error("element {0} is not a group")]
-    NotAGroup(String),
+    #[error("element {} is not a group", .0.as_str())]
+    NotAGroup(ElementId),
     #[error("a collaborator's change could not be applied; the board may be behind")]
     RemoteImportFailed,
     #[error("boolean op needs at least two eligible shape / path elements")]
@@ -1915,11 +1987,11 @@ pub enum ToileEvent {
         pixels: Vec<u8>,
     },
     /// A freshly-created element, with the `correlate` token its `CreateElement`
-    /// carried (`TOILE-UI-194`). Zero means the create requested no deferred
+    /// carried (`TOILE-UI-194`). `None` when the create requested no deferred
     /// open.
     ElementCreated {
         id: ElementId,
-        correlate: u64,
+        correlate: Option<CorrelationToken>,
     },
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
     /// clipboard for cross-tab paste (`toile-clipboard`).

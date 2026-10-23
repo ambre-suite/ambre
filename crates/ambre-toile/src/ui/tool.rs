@@ -793,7 +793,7 @@ impl ToolMachine {
                         size: rect.size(),
                         content: InitContent::None,
                         fill: None,
-                        correlate: 0,
+                        correlate: None,
                     })
                 }
                 Draft::Connector {
@@ -849,7 +849,7 @@ impl ToolMachine {
                         size,
                         content: InitContent::Text(String::new()),
                         fill,
-                        correlate: 0,
+                        correlate: None,
                     })
                 }
             };
@@ -892,7 +892,7 @@ impl ToolMachine {
             size: bb.size(),
             content: InitContent::Path(path),
             fill: None,
-            correlate: 0,
+            correlate: None,
         })
     }
 

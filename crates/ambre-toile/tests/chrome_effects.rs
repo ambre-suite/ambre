@@ -15,7 +15,7 @@
 )]
 
 use ambre_bus::app::toile::{
-    Broadcast, DeckFrame, DeckView, ElementId, PresentMode, SlidePosition,
+    Broadcast, DeckFrame, DeckView, ElementId, PresentMode, SlideCount, SlideIndex, SlidePosition,
 };
 use ambre_toile::chrome::{DeckIntent, DeckPanel, PresenterIntent, PresenterPanel};
 use leptos::mount::mount_to;
@@ -46,7 +46,7 @@ async fn a_peer_note_write_keeps_the_caret() {
         view! {
             <PresenterPanel
                 open=RwSignal::new(PresentMode::Presenting)
-                slide=RwSignal::new(SlidePosition::new(0, 1))
+                slide=RwSignal::new(SlidePosition::new(SlideIndex::ZERO, SlideCount::ONE))
                 notes=notes
                 broadcasting=RwSignal::new(Broadcast::Private)
                 following=RwSignal::new(None)

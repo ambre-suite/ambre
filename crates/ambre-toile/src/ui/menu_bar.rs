@@ -19,7 +19,7 @@
 // here.
 // ============================================================================
 
-use ambre_bus::app::toile::ToileCommand;
+use ambre_bus::app::toile::{PresentFocus, ToileCommand};
 use ambre_commands::CommandId;
 
 use super::menu;
@@ -251,7 +251,9 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         // Enter presentation (focus) mode; the presenter overlay / playback
         // controls of toile-presentation will layer on the resulting
         // PresentModeChanged signal later.
-        PRESENT => Some(ToileCommand::EnterPresent { focus: true }),
+        PRESENT => Some(ToileCommand::EnterPresent {
+            focus: PresentFocus::Focus,
+        }),
         // The board is on the Logic thread, so the serialization is too. The
         // bytes come back as an event the view hands to the browser
         // (`TOILE-IO-085`).
@@ -368,7 +370,9 @@ mod tests {
         // `ToileCommand` is not `PartialEq`, so match on the shape instead.
         assert!(matches!(
             menu_bar_edit(PRESENT),
-            Some(ToileCommand::EnterPresent { focus: true })
+            Some(ToileCommand::EnterPresent {
+                focus: PresentFocus::Focus
+            })
         ));
     }
 

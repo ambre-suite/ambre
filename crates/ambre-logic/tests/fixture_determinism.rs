@@ -95,7 +95,7 @@ fn build_toile(seed: u64, doc_id: DocumentId) -> Vec<u8> {
             size: Size::new(100.0, 50.0),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
     }
     state.handle_command(ToileCommand::CreateElement {
@@ -104,7 +104,7 @@ fn build_toile(seed: u64, doc_id: DocumentId) -> Vec<u8> {
         size: Size::new(640.0, 480.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     state
         .export_ambre_plaintext(doc_id)
@@ -386,7 +386,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
         size: Size::new(3.0, 4.0),
         content: InitContent::None,
         fill: None,
-        correlate: 0,
+        correlate: None,
     });
     assert_round_trip(&DocState::Toile(Box::new(toile)), DocType::Toile);
 

@@ -10,7 +10,9 @@ use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::align::{AlignOp, align_deltas};
-use crate::logic::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
+use crate::logic::command::{
+    CorrelationToken, InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget,
+};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{
     ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
@@ -32,7 +34,7 @@ impl ToileState {
         size: kurbo::Size,
         content: InitContent,
         fill: Option<Rgba>,
-        correlate: u64,
+        correlate: Option<CorrelationToken>,
     ) -> ToileOutcome {
         let id = match self.create_element_inner(kind, at, size, content, fill) {
             Ok(id) => id,
@@ -84,7 +86,7 @@ impl ToileState {
             .insert_container(id.as_str(), LoroMap::new())
             .map(Fields::<ElementKey>::of)
         else {
-            return Err(ToileError::NoSuchElement(id.0));
+            return Err(ToileError::NoSuchElement(id));
         };
         let _ = em.insert(ElementKey::Type, kind.type_tag());
         let _ = em.insert(ElementKey::X, at.x);
@@ -629,7 +631,10 @@ impl ToileState {
             .insert(ElementBounds::from_rect(id.clone(), rect));
         self.layers.push(NodeId::Element(id.clone()));
         self.emit_with_update(vec![
-            ToileEvent::ElementCreated { id, correlate: 0 },
+            ToileEvent::ElementCreated {
+                id,
+                correlate: None,
+            },
             self.viewport_event(),
         ])
     }
@@ -645,7 +650,9 @@ mod inner_tests {
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
-    use crate::logic::command::{DisplayGeom, DisplayNode, InitContent, ToileCommand, ToileEvent};
+    use crate::logic::command::{
+        CorrelationToken, DisplayGeom, DisplayNode, InitContent, ToileCommand, ToileEvent,
+    };
     use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
 
@@ -939,6 +946,7 @@ mod inner_tests {
     /// can match this reply and no other create's.
     #[test]
     fn a_create_echoes_its_correlate_token() {
+        let token = CorrelationToken::FIRST.next();
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),
@@ -946,13 +954,12 @@ mod inner_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
-            correlate: 7,
+            correlate: Some(token),
         });
-        assert!(
-            out.display
-                .iter()
-                .any(|e| matches!(e, ToileEvent::ElementCreated { correlate: 7, .. }))
-        );
+        assert!(out.display.iter().any(|e| matches!(
+            e,
+            ToileEvent::ElementCreated { correlate: Some(echo), .. } if *echo == token
+        )));
     }
 
     /// `TOILE-UI-209`: a locked element refuses the text write, so the screen

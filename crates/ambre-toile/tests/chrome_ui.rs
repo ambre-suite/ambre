@@ -30,8 +30,8 @@ use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementId, PresencePayload, PresenceUpdate, PresentMode, SlidePosition, ToileCommand,
-    ToileEvent,
+    ElementId, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex, SlidePosition,
+    ToileCommand, ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
 use ambre_canvas::PerfSnapshot;
@@ -560,7 +560,10 @@ fn mount_presenter_follow(
     } else {
         PresentMode::Editing
     });
-    let slide = RwSignal::new(SlidePosition::new(index, count));
+    let slide = RwSignal::new(SlidePosition::new(
+        SlideIndex::from_usize(index),
+        SlideCount::from_len(count),
+    ));
     let notes = RwSignal::new(notes.to_owned());
     let broadcasting = RwSignal::new(if broadcasting {
         Broadcast::Broadcasting
@@ -761,12 +764,15 @@ fn deck_panel_edits_fire_intents() {
     assert!(click_by_aria(&root, "Move down"));
     assert_eq!(
         fired.get_untracked(),
-        Some(DeckIntent::Shift(0, DeckMove::Down)),
+        Some(DeckIntent::Shift(SlideIndex::ZERO, DeckMove::Down)),
         "the first row's only reorder step is downwards"
     );
 
     assert!(click_by_aria(&root, "Remove from deck"));
-    assert_eq!(fired.get_untracked(), Some(DeckIntent::Remove(0)));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(DeckIntent::Remove(SlideIndex::ZERO))
+    );
 
     let add: web_sys::HtmlElement = root
         .query_selector(".ambre-deck-add-btn")
@@ -1226,11 +1232,11 @@ fn board_event(ev: ToileEvent) -> UiEvent {
 }
 
 /// One peer of the live set, broadcasting `slide` or not.
-fn peer(user_id: UserId, slide: Option<usize>) -> PresenceUpdate {
+fn peer(user_id: UserId, slide: Option<u32>) -> PresenceUpdate {
     PresenceUpdate {
         user_id,
         presence: PresencePayload {
-            present_slide: slide,
+            present_slide: slide.map(SlideIndex::new),
             ..Default::default()
         },
     }

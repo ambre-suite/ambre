@@ -18,10 +18,10 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
-    PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError, ToileEvent,
-    Viewport,
+    ClipboardPayload as ToileClipboardPayload, ConnectorId, CorrelationToken, DisplayConnector,
+    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End,
+    LinkTarget, PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError,
+    ToileEvent, Viewport,
 };
 
 /// What the user is told when an edit is lost with its target
@@ -58,6 +58,7 @@ use super::deck::{self, DeckIntent};
 use super::edit::{EditIntent, EditTarget, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
+use super::kinetic::FingerRole;
 use super::label;
 use super::link::{self, LinkAction};
 use super::presence::{PeerCursors, PresenceSender};
@@ -338,9 +339,9 @@ pub struct ToileView {
     /// The `correlate` token the Sticky / Text tool's `CreateElement` carried,
     /// so the deferred open claims that element and no other (`TOILE-UI-194`).
     /// `None` when no placement awaits its reply.
-    edit_open_on_create: Option<u64>,
-    /// Monotonic source of `CreateElement.correlate` tokens.
-    next_create_token: u64,
+    edit_open_on_create: Option<CorrelationToken>,
+    /// The token the next placement's `CreateElement.correlate` carries.
+    next_create_token: CorrelationToken,
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
@@ -366,9 +367,8 @@ pub struct ToileView {
     /// The shared kinetic scroll: wheel glides, finger pans and the motion
     /// either leaves (`1-Foundations/ambre-spec-kinetic-scroll.md`).
     kinetic: ambre_draw::kinetic::Kinetic,
-    /// The finger down, if any: `true` when it pans, `false` when it acts
-    /// as the mouse.
-    finger_pans: Option<bool>,
+    /// The role of the finger down, if any.
+    finger: Option<FingerRole>,
     /// The edge pan of a held gesture (`TOILE-UI-380`).
     edge: ambre_draw::kinetic::EdgeScroll,
     /// Space held: a drag pans in any tool (`toile-viewport`).
@@ -735,7 +735,7 @@ impl ToileView {
             edit_frame: None,
             edit_pending_open: None,
             edit_open_on_create: None,
-            next_create_token: 1,
+            next_create_token: CorrelationToken::FIRST,
             edit_closing: false,
             caret_drawn: None,
             edit_dirty: false,
@@ -744,7 +744,7 @@ impl ToileView {
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
             kinetic: Default::default(),
-            finger_pans: None,
+            finger: None,
             edge: ambre_draw::kinetic::EdgeScroll::default(),
             space_down: false,
             pointer_mode: PointerMode::default(),
@@ -1019,7 +1019,7 @@ impl ToileView {
             // inline editor opens on it once its `DisplayViewport` lands
             // (`toile-text-editing`).
             ToileEvent::ElementCreated { id, correlate } => {
-                if self.edit_open_on_create == Some(correlate) {
+                if correlate.is_some_and(|token| self.edit_open_on_create == Some(token)) {
                     self.edit_open_on_create = None;
                     self.edit_pending_open = Some(id);
                 }
@@ -1376,8 +1376,8 @@ impl ToileView {
                 } = &mut cmd
                 {
                     let token = self.next_create_token;
-                    self.next_create_token += 1;
-                    *correlate = token;
+                    self.next_create_token = token.next();
+                    *correlate = Some(token);
                     self.edit_open_on_create = Some(token);
                     // A placement is a one-shot action. Revert to Select. The
                     // just-created note then carries the selection and is ready
@@ -1638,9 +1638,9 @@ impl ToileView {
                 .machine
                 .hover_handle(&self.selection, &self.display, &self.cam, screen)
                 .is_some();
-        let pans = super::kinetic::finger_pans(self.machine.tool(), grabbable);
-        self.finger_pans = Some(pans);
-        if pans {
+        let role = super::kinetic::finger_role(self.machine.tool(), grabbable);
+        self.finger = Some(role);
+        if role == FingerRole::Pans {
             self.last_pointer = screen;
             self.kinetic.press(x as f32, y as f32, now_ms);
             return true;
@@ -1657,8 +1657,8 @@ impl ToileView {
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
     pub fn touch_move(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
-        match self.finger_pans {
-            Some(true) => {
+        match self.finger {
+            Some(FingerRole::Pans) => {
                 self.last_pointer = Point::new(x, y);
                 if let Some(step) = self.kinetic.sample(x as f32, y as f32, now_ms) {
                     super::kinetic::move_view(&mut self.cam, step);
@@ -1666,7 +1666,7 @@ impl ToileView {
                 }
                 true
             }
-            Some(false) => self.handle_input(&InputEvent::PointerMove { x, y }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerMove { x, y }),
             None => false,
         }
     }
@@ -1674,8 +1674,8 @@ impl ToileView {
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
     pub fn touch_up(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
-        match self.finger_pans.take() {
-            Some(true) => {
+        match self.finger.take() {
+            Some(FingerRole::Pans) => {
                 if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
                     let (x, y) = (f64::from(x), f64::from(y));
                     self.handle_input(&InputEvent::PointerDown {
@@ -1694,7 +1694,7 @@ impl ToileView {
                 }
                 true
             }
-            Some(false) => self.handle_input(&InputEvent::PointerUp {
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 x,
                 y,
                 button: 0,
@@ -1708,12 +1708,12 @@ impl ToileView {
     /// click and no flick. A finger acting as the mouse ends its gesture where
     /// it last was, as a release would (`KINETIC-011`).
     pub fn touch_cancel(&mut self) -> bool {
-        match self.finger_pans.take() {
-            Some(true) => {
+        match self.finger.take() {
+            Some(FingerRole::Pans) => {
                 self.kinetic.cancel();
                 true
             }
-            Some(false) => {
+            Some(FingerRole::ActsAsMouse) => {
                 let at = self.last_pointer;
                 self.handle_input(&InputEvent::PointerUp {
                     x: at.x,
@@ -3419,9 +3419,9 @@ impl ToileView {
         let named = match (&self.edit_written, error) {
             (
                 Some(EditTarget::Element(id) | EditTarget::FrameTitle(id)),
-                ToileError::NoSuchElement(s),
-            ) => id.0 == *s,
-            (Some(EditTarget::ConnectorLabel(id)), ToileError::NoSuchConnector(s)) => id.0 == *s,
+                ToileError::NoSuchElement(gone),
+            ) => id == gone,
+            (Some(EditTarget::ConnectorLabel(id)), ToileError::NoSuchConnector(gone)) => id == gone,
             _ => false,
         };
         if named {

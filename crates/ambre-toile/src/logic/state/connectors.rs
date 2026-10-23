@@ -56,10 +56,11 @@ impl ToileState {
                 self.emit_with_update(vec![self.viewport_event()])
             }
             // Unreachable in practice: a container insert of a freshly minted,
-            // unique id never collides. Reported defensively, no id to name.
-            None => ToileOutcome::display_only(vec![ToileEvent::Error(
-                ToileError::NoSuchConnector(String::new()),
-            )]),
+            // unique id never collides. Reported defensively as a failed
+            // write, since no connector id exists to name.
+            None => ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::WriteFailed(
+                "the board refused the new connector".to_owned(),
+            ))]),
         }
     }
 

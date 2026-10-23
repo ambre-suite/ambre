@@ -13,14 +13,24 @@ use kurbo::Point;
 use super::tool::Tool;
 use super::viewport::ViewportTransform;
 
-/// Whether a finger pressed with `tool` pans the board rather than acting
-/// as the mouse. The hand always pans. The select tool pans on the empty
-/// board, and grabs what it can grab; a drawing tool always draws.
-pub fn finger_pans(tool: Tool, grabbable: bool) -> bool {
+/// What a finger on the board does for the length of its touch
+/// (`TOILE-UI-378`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FingerRole {
+    /// The finger drags the board, and a flick coasts.
+    Pans,
+    /// The finger acts as the mouse: it grabs, selects or draws.
+    ActsAsMouse,
+}
+
+/// The role of a finger pressed with `tool`. The hand always pans. The
+/// select tool pans on the empty board, and grabs what it can grab; a
+/// drawing tool always draws.
+pub fn finger_role(tool: Tool, grabbable: bool) -> FingerRole {
     match tool {
-        Tool::Hand => true,
-        Tool::Select => !grabbable,
-        _ => false,
+        Tool::Hand => FingerRole::Pans,
+        Tool::Select if !grabbable => FingerRole::Pans,
+        _ => FingerRole::ActsAsMouse,
     }
 }
 
@@ -77,11 +87,11 @@ mod tests {
     /// a drawing tool.
     #[test]
     fn a_finger_pans_the_empty_board_and_grabs_or_draws_otherwise() {
-        assert!(finger_pans(Tool::Hand, true));
-        assert!(finger_pans(Tool::Select, false));
-        assert!(!finger_pans(Tool::Select, true));
-        assert!(!finger_pans(Tool::Pen, false));
-        assert!(!finger_pans(Tool::Draw, false));
+        assert_eq!(finger_role(Tool::Hand, true), FingerRole::Pans);
+        assert_eq!(finger_role(Tool::Select, false), FingerRole::Pans);
+        assert_eq!(finger_role(Tool::Select, true), FingerRole::ActsAsMouse);
+        assert_eq!(finger_role(Tool::Pen, false), FingerRole::ActsAsMouse);
+        assert_eq!(finger_role(Tool::Draw, false), FingerRole::ActsAsMouse);
     }
 
     /// `TOILE-UI-289`: a wheel turned down moves the content up, and one

@@ -10,7 +10,7 @@
 // DOM names no command queue, and the panel keeps no order of its own.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckView, FrameId};
+use ambre_bus::app::toile::{DeckView, FrameId, SlideCount, SlideIndex};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast as _;
 
@@ -61,10 +61,11 @@ pub fn DeckPanel(
                     <ol class="ambre-deck-list">
                         {move || {
                             let slides = view.get().slides;
-                            let last = slides.len().saturating_sub(1);
+                            let last = SlideCount::from_len(slides.len()).clamp(SlideIndex::MAX);
                             slides
                                 .into_iter()
                                 .enumerate()
+                                .map(|(rank, frame)| (SlideIndex::from_usize(rank), frame))
                                 .map(|(rank, frame)| view! {
                                     <li class="ambre-deck-row">
                                         <button
@@ -72,7 +73,7 @@ pub fn DeckPanel(
                                             aria-label="Go to slide"
                                             on:click=move |_| on_intent.run(DeckIntent::Goto(rank))
                                         >
-                                            <span class="ambre-deck-rank">{(rank + 1).to_string()}</span>
+                                            <span class="ambre-deck-rank">{rank.number().to_string()}</span>
                                         </button>
                                         <input
                                             class="ambre-deck-name"
@@ -84,7 +85,7 @@ pub fn DeckPanel(
                                         <button
                                             class="ambre-deck-up"
                                             aria-label="Move up"
-                                            disabled=rank == 0
+                                            disabled=rank == SlideIndex::ZERO
                                             on:click=move |_| {
                                                 on_intent.run(DeckIntent::Shift(rank, Move::Up))
                                             }
@@ -124,6 +125,9 @@ pub fn DeckPanel(
                                         .into_iter()
                                         .enumerate()
                                         .map(|(rank, frame)| {
+                                            // The pool numbers its unnamed
+                                            // frames the way the deck does.
+                                            let rank = SlideIndex::from_usize(rank);
                                             let id = frame.id.clone();
                                             view! {
                                                 <li class="ambre-deck-pool-row">

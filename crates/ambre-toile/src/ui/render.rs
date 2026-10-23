@@ -1318,7 +1318,7 @@ mod tests {
                 size: kurbo::Size::new(50.0, 50.0),
                 content: InitContent::None,
                 fill: None,
-                correlate: 0,
+                correlate: None,
             });
             ids.extend(out.display.iter().filter_map(|e| match e {
                 ToileEvent::ElementCreated { id, .. } => Some(id.clone()),

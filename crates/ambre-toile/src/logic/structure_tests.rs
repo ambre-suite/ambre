@@ -29,7 +29,7 @@ fn create(st: &mut ToileState, kind: ElementKind, at: Point, size: Size) -> Toil
         size,
         content,
         fill: None,
-        correlate: 0,
+        correlate: None,
     })
 }
 
@@ -208,7 +208,7 @@ fn a_seed_of_another_kind_is_refused() {
             size: Size::new(10.0, 10.0),
             content,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         assert!(out.update.is_none());
         assert_eq!(errors(&out), [&ToileError::ContentKindMismatch]);
@@ -241,7 +241,7 @@ fn a_write_to_a_missing_element_is_refused() {
     ] {
         let out = st.handle_command(cmd);
         assert!(out.update.is_none());
-        assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost.0.clone())]);
+        assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost.clone())]);
     }
     assert_eq!(st.element_count(), 1);
     assert_eq!(st.bounds_of(&kept), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
@@ -472,7 +472,7 @@ fn ungrouping_a_missing_id_says_so() {
         groups: vec![ghost.clone()],
     });
     assert!(out.update.is_none());
-    assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost.0)]);
+    assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost)]);
 }
 
 /// `TOILE-162`: deleting a group removes its own subtree and no element

@@ -57,7 +57,6 @@ pub use event::{
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
-    BORDER_EDGE_ALL, BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
     CondFormatId, CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind, FilterOp,

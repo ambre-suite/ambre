@@ -213,7 +213,10 @@ impl ToileState {
         self.rebuild_caches();
         let mut display: Vec<ToileEvent> = created
             .into_iter()
-            .map(|id| ToileEvent::ElementCreated { id, correlate: 0 })
+            .map(|id| ToileEvent::ElementCreated {
+                id,
+                correlate: None,
+            })
             .collect();
         display.push(self.viewport_event());
         display.push(self.undo_state_event());

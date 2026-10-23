@@ -472,28 +472,28 @@ pub(super) fn board_of_every_key() -> ToileState {
         ElementKind::Shape(ShapeKind::Rect),
         Point::new(0.0, 0.0),
         InitContent::None,
-        0,
+        None,
     );
     let sticky = create(
         &mut st,
         ElementKind::Sticky,
         Point::new(40.0, 0.0),
         InitContent::Text("note".to_owned()),
-        1,
+        None,
     );
     let frame = create(
         &mut st,
         ElementKind::Frame,
         Point::new(0.0, 80.0),
         InitContent::None,
-        2,
+        None,
     );
     let _image = create(
         &mut st,
         ElementKind::Image,
         Point::new(0.0, 200.0),
         InitContent::Image("h".into()),
-        3,
+        None,
     );
     let _embed = create(
         &mut st,
@@ -503,7 +503,7 @@ pub(super) fn board_of_every_key() -> ToileState {
             ambre_bus::app::toile::WebAddress::parse("https://example.invalid")
                 .expect("a safe address"),
         ),
-        4,
+        None,
     );
     let _doc_embed = create(
         &mut st,
@@ -513,7 +513,7 @@ pub(super) fn board_of_every_key() -> ToileState {
             document_id: DocumentId::from_bytes([1; 16]),
             doc_type: DocType::Toile,
         },
-        5,
+        None,
     );
     let mut path = BezPath::new();
     path.move_to(Point::new(0.0, 0.0));
@@ -523,7 +523,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         ElementKind::Shape(ShapeKind::Path),
         Point::new(120.0, 200.0),
         InitContent::Path(path),
-        6,
+        None,
     );
 
     st.handle_command(ToileCommand::SetText {

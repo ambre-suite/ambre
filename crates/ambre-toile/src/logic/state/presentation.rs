@@ -24,8 +24,9 @@ use crate::logic::interop::{PageSize, PdfPage};
 use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
 use crate::logic::command::{
-    Broadcast, DeckFrame, DeckView, PresencePayload, PresentMode, SlideChange, SlidePosition,
-    TextDelta, ToileError, ToileEvent, ToileOutcome,
+    Broadcast, DeckFrame, DeckView, PlaybackState, PresencePayload, PresentFocus, PresentMode,
+    SlideChange, SlideCount, SlideIndex, SlidePosition, TextDelta, ToileError, ToileEvent,
+    ToileOutcome,
 };
 use crate::logic::model::{ElementId, ElementKind, FrameId, NodeId};
 use crate::logic::text_merge::{Merge, merge_edits};
@@ -51,10 +52,10 @@ impl ToileState {
     /// length.
     pub(super) fn set_slide_order(&mut self, order: &[FrameId]) -> ToileOutcome {
         // De-duplicate, keeping first occurrence (idempotent membership).
-        let mut target: Vec<&str> = Vec::new();
+        let mut target: Vec<&FrameId> = Vec::new();
         for id in order {
-            if !target.contains(&id.as_str()) {
-                target.push(id.as_str());
+            if !target.contains(&id) {
+                target.push(id);
             }
         }
 
@@ -62,7 +63,7 @@ impl ToileState {
         // Skip a no-op set so an unchanged order produces neither a commit nor a
         // delta (it would otherwise be a spurious undo item).
         let current = slide_order_of(&list);
-        if current.len() == target.len() && current.iter().zip(&target).all(|(a, b)| a == b) {
+        if current.len() == target.len() && current.iter().zip(&target).all(|(a, b)| a == *b) {
             return ToileOutcome::display_only(Vec::new());
         }
         // Clear then re-push: LoroMovableList merges concurrent replacements, and
@@ -73,13 +74,12 @@ impl ToileState {
             let _ = list.delete(0, items.len());
         }
         for id in &target {
-            let _ = list.push(*id);
+            let _ = list.push(id.as_str());
         }
         self.doc.commit();
 
         // Clamp the local cursor to the new deck length (empty deck -> 0).
-        let len = target.len();
-        self.playback.active = self.playback.active.min(len.saturating_sub(1));
+        self.playback.active = SlideCount::from_len(target.len()).clamp(self.playback.active);
         self.emit_with_update(vec![ToileEvent::DeckChanged])
     }
 
@@ -133,9 +133,6 @@ impl ToileState {
     /// Test / integration accessor.
     pub fn slide_order(&self) -> Vec<FrameId> {
         slide_order_of(&self.order_list())
-            .into_iter()
-            .map(|s| ElementId(s.to_owned()))
-            .collect()
     }
 
     // -- playback (local,) ------------------------------------------------
@@ -145,9 +142,9 @@ impl ToileState {
     /// ("Follow presenter"). Broadcasts the new position when broadcasting.
     pub(super) fn next_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
-        let len = self.slide_len();
-        if len > 0 && self.playback.active + 1 < len {
-            self.playback.active += 1;
+        let next = old.next();
+        if next < self.slide_len().as_end() {
+            self.playback.active = next;
         }
         self.manual_nav_outcome(old)
     }
@@ -156,16 +153,15 @@ impl ToileState {
     /// Takes control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn prev_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
-        self.playback.active = self.playback.active.saturating_sub(1);
+        self.playback.active = old.prev().unwrap_or(SlideIndex::ZERO);
         self.manual_nav_outcome(old)
     }
 
     /// Jump to `idx`, clamped to the deck length. Local only. Takes
     /// control (clears any follow) and broadcasts, like [`next_slide`].
-    pub(super) fn goto_slide(&mut self, idx: usize) -> ToileOutcome {
+    pub(super) fn goto_slide(&mut self, idx: SlideIndex) -> ToileOutcome {
         let old = self.playback.active;
-        let len = self.slide_len();
-        self.playback.active = if len == 0 { 0 } else { idx.min(len - 1) };
+        self.playback.active = self.slide_len().clamp(idx);
         self.manual_nav_outcome(old)
     }
 
@@ -173,7 +169,7 @@ impl ToileState {
     /// `playback.active`. Emit the `SlideChanged` glide, clear any active
     /// follow first ("take control", prepending `FollowingChanged(None)`), and
     /// attach a broadcast sample when broadcasting.
-    fn manual_nav_outcome(&mut self, old: usize) -> ToileOutcome {
+    fn manual_nav_outcome(&mut self, old: SlideIndex) -> ToileOutcome {
         let mut display = Vec::new();
         if self.following.is_some() {
             self.following = None;
@@ -186,12 +182,12 @@ impl ToileState {
 
     /// Enter presentation (focus) mode, resetting to the first slide.
     /// Local only. Broadcasts slide 0 when already broadcasting.
-    pub(super) fn enter_present(&mut self, focus: bool) -> ToileOutcome {
+    pub(super) fn enter_present(&mut self, focus: PresentFocus) -> ToileOutcome {
         self.present = PresentMode::Presenting;
         self.playback.focus = focus;
-        self.playback.active = 0;
+        self.playback.active = SlideIndex::ZERO;
         // No source frame on entry: `from` is empty so slide 0's content fades in.
-        let change = self.slide_change(None, 0);
+        let change = self.slide_change(None, SlideIndex::ZERO);
         ToileOutcome::display_and_ephemeral(
             vec![
                 ToileEvent::PresentModeChanged(PresentMode::Presenting),
@@ -258,8 +254,7 @@ impl ToileState {
             && let Some(idx) = self.peer_presence(&u).and_then(|p| p.present_slide)
         {
             let old = self.playback.active;
-            let len = self.slide_len();
-            let clamped = if len == 0 { 0 } else { idx.min(len - 1) };
+            let clamped = self.slide_len().clamp(idx);
             if clamped != old {
                 self.playback.active = clamped;
                 let change = self.slide_change(Some(old), clamped);
@@ -274,20 +269,20 @@ impl ToileState {
     /// Animate solver tweens, plus the target frame's world rect the camera fits.
     /// An out-of-range or dangling index yields an empty snapshot / `None` rect,
     /// so a missing frame degrades to a plain fade rather than a panic.
-    pub(super) fn slide_change(&self, from_idx: Option<usize>, to_idx: usize) -> SlideChange {
+    pub(super) fn slide_change(
+        &self,
+        from_idx: Option<SlideIndex>,
+        to_idx: SlideIndex,
+    ) -> SlideChange {
         let order = self.slide_order();
-        let snap = |i: usize| {
-            order
-                .get(i)
-                .map(|f| self.frame_snapshot(f))
-                .unwrap_or_default()
-        };
-        let frame = order.get(to_idx).cloned();
+        let slide = |i: SlideIndex| i.to_index().and_then(|i| order.get(i));
+        let snap = |i: SlideIndex| slide(i).map(|f| self.frame_snapshot(f)).unwrap_or_default();
+        let frame = slide(to_idx).cloned();
         SlideChange {
-            position: SlidePosition::new(to_idx, order.len()),
+            position: SlidePosition::new(to_idx, SlideCount::from_len(order.len())),
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
-            to_rect: order.get(to_idx).and_then(|f| self.element_rect(f)),
+            to_rect: slide(to_idx).and_then(|f| self.element_rect(f)),
             notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
             frame,
             transition: self.transition(),
@@ -345,16 +340,17 @@ impl ToileState {
     }
 
     /// Number of slides in the shared deck (`0` if absent). Local read.
-    pub(super) fn slide_len(&self) -> usize {
+    pub(super) fn slide_len(&self) -> SlideCount {
         match self.order_list().get_deep_value() {
-            LoroValue::List(items) => items.len(),
-            _ => 0,
+            LoroValue::List(items) => SlideCount::from_len(items.len()),
+            _ => SlideCount::ZERO,
         }
     }
 
-    /// Current playback state: `(present, active, focus)`. Test accessor.
-    pub fn playback(&self) -> (PresentMode, usize, bool) {
-        (self.present, self.playback.active, self.playback.focus)
+    /// Current playback state: the mode, then the slide and the focus.
+    /// Test accessor.
+    pub fn playback(&self) -> (PresentMode, PlaybackState) {
+        (self.present, self.playback)
     }
 
     // -- speaker notes (CRDT,) --------------------------------------------
@@ -517,12 +513,7 @@ impl ToileState {
         if before.is_empty() {
             return false;
         }
-        let dead: HashSet<&str> = deleted.iter().map(|id| id.as_str()).collect();
-        let kept: Vec<String> = before
-            .iter()
-            .filter(|id| !dead.contains(id.as_str()))
-            .cloned()
-            .collect();
+        let kept: Vec<&FrameId> = before.iter().filter(|id| !deleted.contains(id)).collect();
         if kept.len() == before.len() {
             return false;
         }
@@ -535,7 +526,7 @@ impl ToileState {
             let _ = list.push(id.as_str());
         }
         // Clamp this viewer's cursor, as a shorter deck does anywhere else.
-        self.playback.active = self.playback.active.min(kept.len().saturating_sub(1));
+        self.playback.active = SlideCount::from_len(kept.len()).clamp(self.playback.active);
         true
     }
 
@@ -599,13 +590,13 @@ fn notes_text_or_seed(em: &Fields<ElementKey>) -> Option<LoroText> {
     em.insert_container(ElementKey::Notes, LoroText::new()).ok()
 }
 
-/// Read a movable list's string entries in order.
-fn slide_order_of(list: &LoroMovableList) -> Vec<String> {
+/// Read the slide order's frame ids, in order.
+fn slide_order_of(list: &LoroMovableList) -> Vec<FrameId> {
     let mut out = Vec::new();
     if let LoroValue::List(items) = list.get_deep_value() {
         for v in items.iter() {
             if let LoroValue::String(s) = v {
-                out.push(s.to_string());
+                out.push(ElementId(s.to_string()));
             }
         }
     }
@@ -630,7 +621,7 @@ mod pdf_tests {
             size: Size::new(w, h),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         out.display
             .into_iter()
@@ -701,7 +692,7 @@ mod pdf_tests {
             size: Size::new(w, h),
             content: InitContent::None,
             fill: None,
-            correlate: 0,
+            correlate: None,
         });
         out.display
             .into_iter()

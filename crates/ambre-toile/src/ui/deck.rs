@@ -11,15 +11,15 @@
 // signals declared at the bottom.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckFrame, FrameId};
+use ambre_bus::app::toile::{DeckFrame, FrameId, SlideIndex};
 
 /// What a deck row reads (`TOILE-UI-317`). The frame's title, or its rank when
 /// the frame has never been named, so a deck of unnamed frames is still
 /// navigable. `rank` is 0-based and shown 1-based, like the slide counter.
-pub fn deck_label(frame: &DeckFrame, rank: usize) -> String {
+pub fn deck_label(frame: &DeckFrame, rank: SlideIndex) -> String {
     let name = frame.name.trim();
     if name.is_empty() {
-        format!("Frame {}", rank + 1)
+        format!("Frame {}", rank.number())
     } else {
         name.to_owned()
     }
@@ -39,10 +39,8 @@ pub fn add(order: &[FrameId], frame: &FrameId) -> Option<Vec<FrameId>> {
 
 /// Drop the slide at `at` from the deck, or `None` when `at` names no slide.
 /// The frame itself is untouched: leaving the deck is not a deletion.
-pub fn remove(order: &[FrameId], at: usize) -> Option<Vec<FrameId>> {
-    if at >= order.len() {
-        return None;
-    }
+pub fn remove(order: &[FrameId], at: SlideIndex) -> Option<Vec<FrameId>> {
+    let at = at.to_index().filter(|at| *at < order.len())?;
     let mut next = order.to_vec();
     next.remove(at);
     Some(next)
@@ -51,14 +49,16 @@ pub fn remove(order: &[FrameId], at: usize) -> Option<Vec<FrameId>> {
 /// Swap the slide at `at` with its neighbour one step towards `to`
 /// (`Move::Up` earlier, `Move::Down` later), or `None` when it is already at
 /// that end. One swap is one `SetSlideOrder`, so one reorder is one undo item.
-pub fn shift(order: &[FrameId], at: usize, to: Move) -> Option<Vec<FrameId>> {
+pub fn shift(order: &[FrameId], at: SlideIndex, to: Move) -> Option<Vec<FrameId>> {
     let other = match to {
-        Move::Up => at.checked_sub(1)?,
-        Move::Down => at + 1,
+        Move::Up => at.prev()?,
+        Move::Down => at.next(),
     };
-    if at >= order.len() || other >= order.len() {
-        return None;
-    }
+    let len = order.len();
+    let at = at.to_index().filter(|at| *at < len)?;
+    let other = other
+        .to_index()
+        .filter(|other| *other < len && *other != at)?;
     let mut next = order.to_vec();
     next.swap(at, other);
     Some(next)
@@ -80,11 +80,11 @@ pub enum DeckIntent {
     /// Add a frame the deck does not name yet, at the end.
     Add(FrameId),
     /// Drop the slide at this rank.
-    Remove(usize),
+    Remove(SlideIndex),
     /// Move the slide at this rank one step.
-    Shift(usize, Move),
+    Shift(SlideIndex, Move),
     /// Move this viewer's playback to a slide (`TOILE-FEAT-081`).
-    Goto(usize),
+    Goto(SlideIndex),
     /// Name a frame, deck member or not (`TOILE-247`). It names the frame
     /// rather than a rank, because the panel's second list holds frames no
     /// rank addresses.
@@ -118,19 +118,29 @@ mod tests {
         }
     }
 
+    fn rank(at: u32) -> SlideIndex {
+        SlideIndex::new(at)
+    }
+
     fn ids(names: &[&str]) -> Vec<FrameId> {
         names.iter().map(|n| ElementId((*n).to_owned())).collect()
     }
 
     #[test]
     fn an_unnamed_frame_reads_by_rank() {
-        assert_eq!(deck_label(&frame("a", ""), 0), "Frame 1");
-        assert_eq!(deck_label(&frame("a", "   "), 2), "Frame 3");
+        assert_eq!(deck_label(&frame("a", ""), SlideIndex::new(0)), "Frame 1");
+        assert_eq!(
+            deck_label(&frame("a", "   "), SlideIndex::new(2)),
+            "Frame 3"
+        );
     }
 
     #[test]
     fn a_named_frame_reads_by_name() {
-        assert_eq!(deck_label(&frame("a", "Agenda"), 4), "Agenda");
+        assert_eq!(
+            deck_label(&frame("a", "Agenda"), SlideIndex::new(4)),
+            "Agenda"
+        );
     }
 
     #[test]
@@ -146,22 +156,32 @@ mod tests {
     #[test]
     fn removing_drops_that_rank_alone() {
         let order = ids(&["a", "b", "c"]);
-        assert_eq!(remove(&order, 1), Some(ids(&["a", "c"])));
-        assert_eq!(remove(&order, 3), None, "a rank past the deck is no slide");
+        assert_eq!(remove(&order, rank(1)), Some(ids(&["a", "c"])));
+        assert_eq!(
+            remove(&order, rank(3)),
+            None,
+            "a rank past the deck is no slide"
+        );
     }
 
     #[test]
     fn shifting_swaps_with_the_neighbour() {
         let order = ids(&["a", "b", "c"]);
-        assert_eq!(shift(&order, 1, Move::Up), Some(ids(&["b", "a", "c"])));
-        assert_eq!(shift(&order, 1, Move::Down), Some(ids(&["a", "c", "b"])));
+        assert_eq!(
+            shift(&order, rank(1), Move::Up),
+            Some(ids(&["b", "a", "c"]))
+        );
+        assert_eq!(
+            shift(&order, rank(1), Move::Down),
+            Some(ids(&["a", "c", "b"]))
+        );
     }
 
     #[test]
     fn shifting_past_either_end_writes_nothing() {
         let order = ids(&["a", "b"]);
-        assert_eq!(shift(&order, 0, Move::Up), None);
-        assert_eq!(shift(&order, 1, Move::Down), None);
-        assert_eq!(shift(&order, 7, Move::Up), None);
+        assert_eq!(shift(&order, rank(0), Move::Up), None);
+        assert_eq!(shift(&order, rank(1), Move::Down), None);
+        assert_eq!(shift(&order, rank(7), Move::Up), None);
     }
 }

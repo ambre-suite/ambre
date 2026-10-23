@@ -416,9 +416,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::from_bytes(bytes)
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | NodeId::decode(s) | param | &str	newtype-inner	NodeId storage codec
 ambre-bus | src/app/toile.rs | crate::app::toile | NodeId::encode() | ret | String	newtype-inner	NodeId storage codec
-ambre-bus | src/app/toile.rs | crate::app::toile | PlaybackState.active | field | usize	debt	finding: Toile slide index as usize (low, confirmed)
-ambre-bus | src/app/toile.rs | crate::app::toile | PlaybackState.focus | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | PresencePayload.present_slide | field | Option<usize>	debt	finding: Toile slide index as usize (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | PresentMode::is_presenting() | ret | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionKind::Vote.0 | field | i32	math	vote weight / tally
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.emoji | field | Vec<(crate::app::murmure::Emoji,u32)>	math	count, size, limit, index or jitter local to an algorithm
@@ -433,24 +430,15 @@ ambre-bus | src/app/toile.rs | crate::app::toile | Shadow.dy | field | f32	math	
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | SlideChange.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition.count | field | usize	newtype-inner	SlidePosition newtype constructor/accessor
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition.index | field | usize	newtype-inner	SlidePosition newtype constructor/accessor
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::count() | ret | usize	newtype-inner	SlidePosition newtype constructor/accessor
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::index() | ret | usize	newtype-inner	SlidePosition newtype constructor/accessor
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::new(count) | param | usize	newtype-inner	SlidePosition newtype constructor/accessor
-ambre-bus | src/app/toile.rs | crate::app::toile | SlidePosition::new(index) | param | usize	newtype-inner	SlidePosition newtype constructor/accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | SnapElement.opacity | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateElement.correlate | field | u64	debt	finding: Toile `correlate: u64` where 0 is a sentinel (medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditComment.message | field | usize	math	index of a message in its thread
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EnterPresent.focus | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.query | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::GotoSlide.0 | field | usize	debt	finding: Toile slide index as usize (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportFigma.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportImage.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportMiro.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
@@ -464,13 +452,9 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLab
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.text | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::NoSuchConnector.0 | field | String	debt	finding: ToileError carries String where ElementId exists (low-medium, confirmed)
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::NoSuchElement.0 | field | String	debt	finding: ToileError carries String where ElementId exists (low-medium, confirmed)
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::NotAGroup.0 | field | String	debt	finding: ToileError carries String where ElementId exists (low-medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::NotCreatable.kind | field | &'static str	free-text	static element kind label
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::WriteFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ElementCreated.correlate | field | u64	debt	finding: Toile `correlate: u64` where 0 is a sentinel (medium, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.filename | field | String	free-text	file name / skipped item labels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
@@ -594,11 +578,6 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Validation
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::contains() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_ALL | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_BOTTOM | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_LEFT | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_RIGHT | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | BORDER_EDGE_TOP | const | u8	debt	finding: Dead BORDER_EDGE_* u8 bit constants (low, confirmed)
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::Custom.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::default_decimals() | ret | Option<u8>	math	decimal places
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::has_decimals() | ret | bool	generic	predicate
@@ -4286,7 +4265,6 @@ ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileSta
 ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::style_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/docfile.rs | crate::logic::state::docfile | ToileState::import_ambre_plaintext(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::create_element(correlate) | param | u64	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::delete_from_doc() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::holds_a_lock() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::lock_elements(locked) | param | bool	math	local state flag or value, not a mode selector
@@ -4371,18 +4349,10 @@ ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | Toil
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | DEFAULT_TRANSITION_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::drop_slides() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::edit_notes(base) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::enter_present(focus) | param | bool	debt	finding: Present and broadcast modes are bools, though the enums already exist (confirmed): present/broadcast mode as bool though bus PresentMode/Broadcast exist
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::goto_slide(idx) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::is_frame() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::manual_nav_outcome(old) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::notes() | ret | String	free-text	label, message or user text
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::playback() | ret | (PresentMode,usize,bool)	debt	finding: the playback tuple still carries the slide index as usize and the focus flag as bool; the present mode is typed
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_change(from_idx) | param | Option<usize>	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_change(to_idx) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::slide_len() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::transition_ms() | ret | f64	math	CRDT ms read, converted to Duration at once (transition())
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::transition_ms::MAX_TRANSITION_MS | const | f64	math	a constant local to one function
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | slide_order_of() | ret | Vec<String>	debt	finding: Frame ids are read back as strings (confirmed): frame ids read back as Vec<String>
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | accumulate(emoji) | param | &mut BTreeMap<ambre_bus::Emoji,u32>	math	count, size, limit, index or jitter local to an algorithm
@@ -4469,15 +4439,9 @@ ambre-toile | src/ui/comments.rs | crate::ui::comments | badge_color(resolved) |
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | press_target(button) | param | i16	debt	finding: The DOM pointer button is an i16 with magic numbers (confirmed): DOM pointer button as i16 magic numbers 0/1/2
 ambre-toile | src/ui/comments.rs | crate::ui::comments | press_target(select_tool) | param | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Goto.0 | field | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
-ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Remove.0 | field | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Rename.1 | field | String	free-text	label, message or user text
-ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Shift.0 | field | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckSignals.panel | field | leptos::prelude::RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/deck.rs | crate::ui::deck | deck_label() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/deck.rs | crate::ui::deck | deck_label(rank) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/deck.rs | crate::ui::deck | remove(at) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
-ambre-toile | src/ui/deck.rs | crate::ui::deck | shift(at) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::committed_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(wrap_w) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | param | &str	free-text	label, message or user text
@@ -4550,8 +4514,7 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | 
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(imported) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(skipped) | param | &[String]	free-text	label, message or user text
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_pans(grabbable) | param | bool	math	local state flag or value, not a mode selector
+ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | finger_role(grabbable) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_FONT_SIZE | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_H | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -4676,16 +4639,13 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.data_dirty | field | 
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.detected_mouse | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.edit_closing | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.edit_dirty | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.edit_open_on_create | field | Option<u64>	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.edit_pointer_down | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.embedded | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.fatal | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.finger_pans | field | Option<bool>	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.gesture_commit_pending | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.initial_viewport_sent | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.media_retry | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.needs_full | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.next_create_token | field | u64	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.overlay_dirty | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.pending_fit | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.select_all_pending | field | bool	math	local state flag or value, not a mode selector
