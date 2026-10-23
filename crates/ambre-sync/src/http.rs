@@ -2284,7 +2284,7 @@ mod tests {
         );
         let blob = crate::pipeline::object_blob(
             b"media",
-            b"aad",
+            &ambre_core::Aad::of(b"aad"),
             &ambre_crypto::DocumentKey::generate(),
             &ed25519_dalek::SigningKey::from_bytes(&[7; 32]),
         )

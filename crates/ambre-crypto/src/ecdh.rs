@@ -134,7 +134,7 @@ pub fn wrap_anchored(
     if let Some(anchor) = anchor {
         plaintext.extend_from_slice(&anchor.0);
     }
-    let (nonce, ciphertext) = aead::seal(&plaintext, KEK_DOMAIN, &kek)?;
+    let (nonce, ciphertext) = aead::seal(&plaintext, &ambre_core::Aad::of(KEK_DOMAIN), &kek)?;
     Ok(WrappedKey { nonce, ciphertext })
 }
 
@@ -174,7 +174,7 @@ pub fn unwrap_anchored(
     let bytes = Zeroizing::new(aead::open(
         &wrapped.nonce,
         &wrapped.ciphertext.0,
-        KEK_DOMAIN,
+        &ambre_core::Aad::of(KEK_DOMAIN),
         &kek,
     )?);
     let (key, anchor) = match bytes.len() {

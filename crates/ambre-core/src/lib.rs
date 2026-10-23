@@ -103,7 +103,7 @@ pub use encoded::{
     EncodedKeyLink, EncodedLogEntry, EscrowedKey, MasterKeySalt, SealedName, SealedShare,
     WrappedDocKey, WrappedMasterKey,
 };
-pub use envelope::{ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
+pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 pub use fingerprint::KeyFingerprint;
 #[cfg(feature = "fixtures")]

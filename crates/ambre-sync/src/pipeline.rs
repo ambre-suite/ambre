@@ -13,7 +13,7 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
-use ambre_core::{EphemeralBytes, KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
+use ambre_core::{Aad, EphemeralBytes, KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -314,7 +314,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
 
 fn seal_payload(
     payload: &[u8],
-    aad: &[u8],
+    aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Sealed, PipelineError> {
@@ -327,7 +327,7 @@ fn seal_payload(
 
 fn open_payload(
     sealed: &Sealed,
-    aad: &[u8],
+    aad: &Aad,
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
 ) -> Result<Vec<u8>, PipelineError> {
@@ -336,8 +336,10 @@ fn open_payload(
     decompress(CompressionVersion::from_byte(*version)?, body)
 }
 
-fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Vec<u8>, PipelineError> {
-    postcard::to_allocvec(public_data).map_err(|_| PipelineError::Postcard)
+fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Aad, PipelineError> {
+    postcard::to_allocvec(public_data)
+        .map(Aad::new)
+        .map_err(|_| PipelineError::Postcard)
 }
 
 /// Rebuilds a [`Sealed`] from a wire message's envelope fields.
@@ -639,7 +641,7 @@ pub fn snapshot_blob(
 /// Every error [`seal_object`] raises.
 pub fn object_blob(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<SealedBlob, PipelineError> {
@@ -670,10 +672,10 @@ const OBJECT_HEADER_LEN: usize = LAYOUT_LEN
 const NAME_DOMAIN: &[u8] = b"ambre-doc-name-v2";
 
 /// The additional data of a document name: the domain, then the document id.
-pub fn name_aad(document_id: ambre_core::DocumentId) -> Vec<u8> {
+pub fn name_aad(document_id: ambre_core::DocumentId) -> Aad {
     let mut aad = NAME_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
-    aad
+    Aad::new(aad)
 }
 
 /// Domain of a sealed media blob. The document id and the address follow it,
@@ -683,24 +685,21 @@ const MEDIA_DOMAIN: &[u8] = b"ambre-media-v2";
 
 /// The additional data of a media blob: the domain, the document id, then the
 /// address the document stores.
-pub fn media_aad(
-    document_id: ambre_core::DocumentId,
-    address: &ambre_core::MediaAddress,
-) -> Vec<u8> {
+pub fn media_aad(document_id: ambre_core::DocumentId, address: &ambre_core::MediaAddress) -> Aad {
     let mut aad = MEDIA_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(address.as_bytes());
-    aad
+    Aad::new(aad)
 }
 
 /// The additional data an object is sealed under: the layout and the key
 /// identifier its header names, then the caller's own. The signature covers
 /// all three, so a header cannot be made to name another layout or key.
-fn object_aad(key_id: KeyId, aad: &[u8]) -> Vec<u8> {
+fn object_aad(key_id: KeyId, aad: &Aad) -> Aad {
     let mut bound = vec![OBJECT_LAYOUT];
     bound.extend_from_slice(key_id.as_array());
-    bound.extend_from_slice(aad);
-    bound
+    bound.extend_from_slice(aad.as_bytes());
+    Aad::new(bound)
 }
 
 /// Refuses an object whose first byte names a layout this build does not read,
@@ -723,7 +722,7 @@ fn check_layout(bytes: &[u8]) -> Result<(), PipelineError> {
 /// nonce || ciphertext`.
 pub fn seal_object(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Vec<u8>, PipelineError> {
@@ -791,7 +790,7 @@ fn object_parts(
 /// * [`PipelineError::Crypto`] when any of the three checks fails.
 pub fn open_object(
     bytes: &[u8],
-    aad: &[u8],
+    aad: &Aad,
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, PipelineError> {
     let (key_id, author, sealed) = object_parts(bytes, doc_key)?;
@@ -811,11 +810,11 @@ const LINK_DOMAIN: &[u8] = b"ambre-key-link-v1";
 
 /// The additional data of a link: the domain, the document id, then the
 /// identifier of the key it seals.
-fn link_aad(document_id: ambre_core::DocumentId, previous: KeyId) -> Vec<u8> {
+fn link_aad(document_id: ambre_core::DocumentId, previous: KeyId) -> Aad {
     let mut aad = LINK_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(previous.as_array());
-    aad
+    Aad::new(aad)
 }
 
 /// Seals `previous` under `next` and signs it: the link a rotation leaves
@@ -1239,19 +1238,31 @@ mod tests {
     #[test]
     fn an_object_names_the_key_that_sealed_it() {
         let (doc_key, signing, _) = keys();
-        let sealed = seal_object(b"Budget 2027", b"aad", &doc_key, &signing).unwrap();
+        let sealed = seal_object(
+            b"Budget 2027",
+            &ambre_core::Aad::of(b"aad"),
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
 
         let other = DocumentKey::from_array([0x44; 32]);
         assert!(matches!(
-            open_object(&sealed, b"aad", &other),
+            open_object(&sealed, &ambre_core::Aad::of(b"aad"), &other),
             Err(PipelineError::WrongKey)
         ));
 
         // A header rewritten to name another key no longer opens under it.
-        let mut renamed = seal_object(b"Budget 2027", b"aad", &other, &signing).unwrap();
+        let mut renamed = seal_object(
+            b"Budget 2027",
+            &ambre_core::Aad::of(b"aad"),
+            &other,
+            &signing,
+        )
+        .unwrap();
         renamed[LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN].copy_from_slice(doc_key.id().as_array());
-        assert!(open_object(&renamed, b"aad", &doc_key).is_err());
+        assert!(open_object(&renamed, &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
     }
 
     /// An object of a layout this build does not read is refused by that
@@ -1260,11 +1271,17 @@ mod tests {
     #[test]
     fn an_unknown_object_layout_is_refused_before_any_check() {
         let (doc_key, signing, _) = keys();
-        let mut later = seal_object(b"a picture", b"aad", &doc_key, &signing).unwrap();
+        let mut later = seal_object(
+            b"a picture",
+            &ambre_core::Aad::of(b"aad"),
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert_eq!(later[0], OBJECT_LAYOUT);
         later[0] = OBJECT_LAYOUT + 1;
         assert!(matches!(
-            open_object(&later, b"aad", &doc_key),
+            open_object(&later, &ambre_core::Aad::of(b"aad"), &doc_key),
             Err(PipelineError::UnknownLayout(2))
         ));
         assert!(matches!(
@@ -1273,11 +1290,11 @@ mod tests {
         ));
         // One byte alone: the layout is the first thing read.
         assert!(matches!(
-            open_object(&[OBJECT_LAYOUT + 1], b"aad", &doc_key),
+            open_object(&[OBJECT_LAYOUT + 1], &ambre_core::Aad::of(b"aad"), &doc_key),
             Err(PipelineError::UnknownLayout(2))
         ));
         assert!(matches!(
-            open_object(&[], b"aad", &doc_key),
+            open_object(&[], &ambre_core::Aad::of(b"aad"), &doc_key),
             Err(PipelineError::ShortObject)
         ));
     }
@@ -1352,7 +1369,7 @@ mod tests {
         use ambre_crypto::{commitment, signature};
 
         let (doc_key, signing, _) = keys();
-        let aad = b"ambre-media";
+        let aad = &ambre_core::Aad::of(b"ambre-media");
         let sealed = seal_object(b"a picture", aad, &doc_key, &signing).unwrap();
         assert_eq!(open_object(&sealed, aad, &doc_key).unwrap(), b"a picture");
 

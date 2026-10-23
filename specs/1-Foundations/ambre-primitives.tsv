@@ -1313,7 +1313,6 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SealedAmbre.ciphertext | field | Vec<u8>	generic	AEAD output bytes of the sealed container, opened only by ambre-crypto
-ambre-core | src/docfile.rs | crate::docfile | SealedAmbre::aad() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | classify(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_ambre() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
@@ -1324,8 +1323,6 @@ ambre-core | src/docfile.rs | crate::docfile | parse_header(data) | param | &[u8
 ambre-core | src/docfile.rs | crate::docfile | parse_sealed_header(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext_as(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | sealed_aad() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
-ambre-core | src/docfile.rs | crate::docfile | sealed_aad_at() | ret | [u8;SEALED_AAD_LEN]	generic	fixed-length arrays of distinct sizes (salt, nonce, aad); the compiler already separates them
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext() | ret | Vec<u8>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext(payload) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | write_ambre_sealed() | ret | Vec<u8>	generic	byte codec over a whole file
@@ -1557,51 +1554,34 @@ ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	new
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | ROW_VERSION | const | u8	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_document_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_document_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_file() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_file(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_file(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_row(context) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_under(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_document_key(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_file(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_file(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_row(context) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_under(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | MEDIA_ADDRESS_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | TAG_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | commitment_tag(aad) | param | &[u8]	generic	associated data the caller frames (document, object or catalogue aad); verify_commitment(aad), sign(aad) and every aead aad take the same bytes
 ambre-crypto | src/commitment.rs | crate::commitment | keyed(key) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | mac(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(nonce) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TAG_LEN]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(recipient_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(sender_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/envelope.rs | crate::envelope | open(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/envelope.rs | crate::envelope | seal(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1613,8 +1593,6 @@ ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generi
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | DocumentKey::open_previous(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | DocumentKey::seal_previous(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | EXCH_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
@@ -1623,7 +1601,6 @@ ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::recovery_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | MasterSeed::wrap_for_storage(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | SIGN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | STORE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | StoreKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
@@ -1646,15 +1623,12 @@ ambre-crypto | src/random.rs | crate::random | bytes() | ret | [u8;N]	generic	ge
 ambre-crypto | src/random.rs | crate::random | fill(buf) | param | &mut[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | SIGNATURE_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | message() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | message(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | message(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | message(commitment_tag) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | message(nonce) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | sign(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | verify(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(y) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -3570,7 +3544,6 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) |
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_dev_login(username) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
-ambre-sync | src/channels.rs | crate::channels | channel_key_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
 ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -3665,7 +3638,6 @@ ambre-sync | src/light.rs | crate::light | LightSubscription.on_relay | field | 
 ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/local_store.rs | crate::local_store | place_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/media.rs | crate::media | open_blob(blob) | param | &[u8]	generic	generic byte/text API or codec
@@ -3708,33 +3680,22 @@ ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::as_bytes() | ret | &[u8]	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::len() | ret | usize	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/pipeline.rs | crate::pipeline | aad_of() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | check_layout(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress(body) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded(body) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | link_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | media_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | name_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_aad() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_aad(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_author(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_blob(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_blob(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_key(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | object_parts(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_object(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
@@ -5164,3 +5125,7 @@ ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &str	
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::NotHex.0 | field | String	free-text	the hex decoder message a refusal reports
 ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports
+ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype-inner	Aad newtype
+ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
+ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
+ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag

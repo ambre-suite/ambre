@@ -24,7 +24,7 @@ pub const NONCE_LEN: usize = 24;
 /// XChaCha20-Poly1305. The cipher raises nothing else.
 pub fn seal(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &DocumentKey,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_under(plaintext, aad, key.as_bytes())
@@ -39,7 +39,7 @@ pub fn seal(
 pub fn open(
     nonce: &Nonce,
     ciphertext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &DocumentKey,
 ) -> Result<Vec<u8>, CryptoError> {
     open_under(nonce, ciphertext, aad, key.as_bytes())
@@ -57,7 +57,7 @@ pub fn open(
 /// XChaCha20-Poly1305.
 pub fn seal_file(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_under(plaintext, aad, key.as_bytes())
@@ -75,7 +75,7 @@ pub fn seal_file(
 pub fn open_file(
     nonce: &Nonce,
     ciphertext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<Vec<u8>, CryptoError> {
     open_under(nonce, ciphertext, aad, key.as_bytes())
@@ -94,7 +94,11 @@ pub const ROW_VERSION: u8 = 1;
 ///
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305.
-pub fn seal_row(plaintext: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, CryptoError> {
+pub fn seal_row(
+    plaintext: &[u8],
+    context: &ambre_core::Aad,
+    key: &StoreKey,
+) -> Result<Vec<u8>, CryptoError> {
     let (nonce, ciphertext) = seal_under(plaintext, context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(ROW_VERSION);
@@ -110,7 +114,11 @@ pub fn seal_row(plaintext: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<
 /// [`CryptoError::AeadFailed`] for a row of another layout, a row too short to
 /// hold a nonce, a wrong key, another `context` or a modified row. The caller
 /// treats them alike: the row is not one this session can read.
-pub fn open_row(row: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, CryptoError> {
+pub fn open_row(
+    row: &[u8],
+    context: &ambre_core::Aad,
+    key: &StoreKey,
+) -> Result<Vec<u8>, CryptoError> {
     let Some((&ROW_VERSION, rest)) = row.split_first() else {
         return Err(CryptoError::AeadFailed);
     };
@@ -132,7 +140,7 @@ pub fn open_row(row: &[u8], context: &[u8], key: &StoreKey) -> Result<Vec<u8>, C
 /// [`CryptoError::EncryptionFailed`], which 32 bytes never reach.
 pub fn seal_document_key(
     inner: &DocumentKey,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
     seal_anchored_key(inner, aad, outer, None)
@@ -149,7 +157,7 @@ pub fn seal_document_key(
 /// [`CryptoError::EncryptionFailed`], which 64 bytes never reach.
 pub fn seal_anchored_key(
     inner: &DocumentKey,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     outer: &DocumentKey,
     anchor: Option<&EntryDigest>,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
@@ -170,7 +178,7 @@ pub fn seal_anchored_key(
 pub fn open_document_key(
     nonce: &Nonce,
     ciphertext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<DocumentKey, CryptoError> {
     open_anchored_key(nonce, ciphertext, aad, outer).map(|(key, _)| key)
@@ -185,7 +193,7 @@ pub fn open_document_key(
 pub fn open_anchored_key(
     nonce: &Nonce,
     ciphertext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
     let plain = zeroize::Zeroizing::new(open_under(nonce, ciphertext, aad, outer.as_bytes())?);
@@ -208,7 +216,7 @@ pub fn open_anchored_key(
 /// call site.
 fn seal_under(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &[u8; 32],
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
     let nonce = crate::random::bytes::<NONCE_LEN>();
@@ -221,7 +229,7 @@ fn seal_under(
             XNonce::from_slice(&nonce),
             Payload {
                 msg: plaintext,
-                aad,
+                aad: aad.as_bytes(),
             },
         )
         .map_err(|_| CryptoError::EncryptionFailed)?;
@@ -233,7 +241,7 @@ fn seal_under(
 fn open_under(
     nonce: &Nonce,
     ciphertext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     key: &[u8; 32],
 ) -> Result<Vec<u8>, CryptoError> {
     let cipher = XChaCha20Poly1305::new(key.into());
@@ -242,7 +250,7 @@ fn open_under(
             XNonce::from_slice(&nonce.0),
             Payload {
                 msg: ciphertext,
-                aad,
+                aad: aad.as_bytes(),
             },
         )
         .map_err(|_| CryptoError::AeadFailed)

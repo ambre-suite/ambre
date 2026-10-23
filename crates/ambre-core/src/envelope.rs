@@ -42,6 +42,33 @@ impl std::fmt::Debug for Ciphertext {
     }
 }
 
+/// The associated data a seal binds its ciphertext to: the public context
+/// (document, place, version) the ciphertext must open under.
+///
+/// A type of its own, so a call that takes plaintext, ciphertext and
+/// associated data side by side cannot take one for another. Every byte
+/// string is valid associated data, so the constructor takes any; the bytes
+/// are the ones the seal authenticates, unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Aad(Vec<u8>);
+
+impl Aad {
+    /// The associated data `bytes` spell.
+    pub const fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The associated data of a fixed domain tag.
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
+    }
+
+    /// The bytes the seal authenticates.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// One link of the snapshot integrity chain. It folds a parent proof with
 /// the bytes of a sealed snapshot, so a reordered or substituted snapshot
 /// breaks the chain. Distinct from [`EntryDigest`] and from any

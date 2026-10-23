@@ -100,7 +100,7 @@ impl MasterSeed {
     pub fn wrap_for_storage(
         &self,
         key: &DocumentKey,
-        aad: &[u8],
+        aad: &ambre_core::Aad,
     ) -> Result<WrappedMasterKey, CryptoError> {
         let (nonce, ciphertext) = aead::seal(&self.0, aad, key)?;
         let mut wrapped = nonce.0.to_vec();
@@ -152,7 +152,7 @@ impl DocumentKey {
     pub fn seal_previous(
         &self,
         previous: &DocumentKey,
-        aad: &[u8],
+        aad: &ambre_core::Aad,
         signing_key: &SigningKey,
     ) -> Result<crate::Sealed, CryptoError> {
         crate::envelope::seal(&previous.0, aad, self, signing_key)
@@ -170,7 +170,7 @@ impl DocumentKey {
     pub fn open_previous(
         &self,
         sealed: &crate::Sealed,
-        aad: &[u8],
+        aad: &ambre_core::Aad,
         author: &ambre_core::PublicKey,
     ) -> Result<DocumentKey, CryptoError> {
         let mut bytes = crate::envelope::open(sealed, aad, self, author)?;

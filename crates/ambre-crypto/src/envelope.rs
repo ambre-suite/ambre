@@ -50,7 +50,7 @@ impl core::fmt::Debug for Sealed {
 /// signature are infallible.
 pub fn seal(
     plaintext: &[u8],
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Sealed, CryptoError> {
@@ -79,7 +79,7 @@ pub fn seal(
 /// * [`CryptoError::AeadFailed`] when the ciphertext does not verify.
 pub fn open(
     sealed: &Sealed,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
 ) -> Result<Vec<u8>, CryptoError> {

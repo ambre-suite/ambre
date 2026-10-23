@@ -62,7 +62,9 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
         snapshot_id: SnapshotId::new(),
         clock: Clock(1),
     };
-    let aad = postcard::to_allocvec(&public_data).map_err(|_| PipelineError::Postcard)?;
+    let aad = postcard::to_allocvec(&public_data)
+        .map(ambre_core::Aad::new)
+        .map_err(|_| PipelineError::Postcard)?;
     let sealed = envelope::seal(plaintext, &aad, &key, &signing)?;
     let update = Update {
         ciphertext: sealed.ciphertext,

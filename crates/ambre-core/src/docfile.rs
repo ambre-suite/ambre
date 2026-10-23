@@ -470,7 +470,7 @@ impl SealedAmbre {
     ///
     /// A prefix of the header by construction, not by convention: the writer
     /// and this method assemble from the same code, and cannot drift apart.
-    pub fn aad(&self) -> [u8; SEALED_AAD_LEN] {
+    pub fn aad(&self) -> crate::Aad {
         sealed_aad_at(self.version, &self.salt)
     }
 }
@@ -478,12 +478,12 @@ impl SealedAmbre {
 /// Assemble the authenticated prefix of a sealed header. The one place that
 /// writes the sealed layout down, called by [`sealed_aad`] and by
 /// [`SealedAmbre::aad`].
-fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> [u8; SEALED_AAD_LEN] {
+fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> crate::Aad {
     let mut out = [0u8; SEALED_AAD_LEN];
     out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
     out[VERSION_AT] = version.as_u8();
     out[SALT_AT..].copy_from_slice(salt.as_array());
-    out
+    crate::Aad::of(&out)
 }
 
 /// The associated data a seal covers, for a file about to go out under `salt`.
@@ -492,7 +492,7 @@ fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> [u8; SEALED_AAD_
 /// associated data *before* it has a ciphertext to put in a [`SealedAmbre`], so
 /// it asks here. It hands the same salt to [`write_ambre_sealed`] afterwards,
 /// along with the nonce the cipher drew.
-pub fn sealed_aad(salt: &FileSalt) -> [u8; SEALED_AAD_LEN] {
+pub fn sealed_aad(salt: &FileSalt) -> crate::Aad {
     sealed_aad_at(AMBRE_SEALED_VERSION, salt)
 }
 
@@ -502,7 +502,7 @@ pub fn sealed_aad(salt: &FileSalt) -> [u8; SEALED_AAD_LEN] {
 /// emits [`AMBRE_SEALED_VERSION`] or nothing at all.
 pub fn write_ambre_sealed(salt: &FileSalt, nonce: &Nonce, ciphertext: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
-    out.extend_from_slice(&sealed_aad(salt));
+    out.extend_from_slice(sealed_aad(salt).as_bytes());
     out.extend_from_slice(&nonce.0);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
     out.extend_from_slice(ciphertext);
@@ -937,7 +937,7 @@ mod tests {
         // bytes on disk, or a file seals against one and opens against another.
         let bytes = sealed_sample();
         let envelope = parse_sealed_header(&bytes).expect("valid sealed container");
-        assert_eq!(&sealed_aad(&SALT), &bytes[..SEALED_AAD_LEN]);
+        assert_eq!(sealed_aad(&SALT).as_bytes(), &bytes[..SEALED_AAD_LEN]);
         assert_eq!(envelope.aad(), sealed_aad(&SALT));
         // The nonce is deliberately outside it: the AEAD authenticates the
         // nonce on its own, and naming it here would add nothing.

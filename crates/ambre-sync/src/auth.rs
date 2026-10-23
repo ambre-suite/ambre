@@ -72,7 +72,7 @@ impl SyncState {
                         let seed_bytes = match ambre_crypto::aead::open(
                             &ambre_core::Nonce(*nonce),
                             ciphertext,
-                            b"ambre-master-seed",
+                            &ambre_core::Aad::of(b"ambre-master-seed"),
                             &user_doc_key,
                         ) {
                             Ok(bytes) => bytes,
@@ -379,7 +379,7 @@ impl SyncState {
                         master_seed
                             .wrap_for_storage(
                                 &DocumentKey::from_array(user_key),
-                                b"ambre-master-seed",
+                                &ambre_core::Aad::of(b"ambre-master-seed"),
                             )
                             .map(|wrapped| (salt, wrapped))
                             .map_err(|e| format!("master-seed wrap failed: {e}"))

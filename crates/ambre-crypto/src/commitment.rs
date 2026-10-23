@@ -26,11 +26,11 @@ fn keyed(key: &[u8]) -> HmacSha256 {
     HmacSha256::new_from_slice(key).expect("HMAC accepts a key of any length")
 }
 
-fn mac(key: &DocumentKey, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HmacSha256 {
+fn mac(key: &DocumentKey, nonce: &[u8], ciphertext: &[u8], aad: &ambre_core::Aad) -> HmacSha256 {
     let mut m = keyed(key.as_bytes());
     m.update(nonce);
     m.update(ciphertext);
-    m.update(aad);
+    m.update(aad.as_bytes());
     m
 }
 
@@ -39,7 +39,7 @@ pub fn commitment_tag(
     key: &DocumentKey,
     nonce: &Nonce,
     ciphertext: &Ciphertext,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
 ) -> CommitmentTag {
     CommitmentTag(
         mac(key, &nonce.0, &ciphertext.0, aad)
@@ -89,7 +89,7 @@ pub fn verify_commitment(
     key: &DocumentKey,
     nonce: &Nonce,
     ciphertext: &Ciphertext,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     tag: &CommitmentTag,
 ) -> Result<(), CryptoError> {
     mac(key, &nonce.0, &ciphertext.0, aad)

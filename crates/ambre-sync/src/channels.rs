@@ -958,10 +958,10 @@ async fn put_cursors(
 
 /// The aad of a sealed channel key: it binds the key to its channel, so a
 /// catalogue entry moved under another channel fails to open.
-fn channel_key_aad(channel_id: ChannelId) -> Vec<u8> {
+fn channel_key_aad(channel_id: ChannelId) -> ambre_core::Aad {
     let mut aad = b"ambre-channel-key:".to_vec();
     aad.extend_from_slice(ambre_core::Uuid::from(channel_id).as_bytes());
-    aad
+    ambre_core::Aad::new(aad)
 }
 
 /// The digest of an entry in request form: the anchor of the log a first
@@ -1355,8 +1355,9 @@ pub(crate) mod tests {
 
     /// Whether two keys are one: what one seals, the other opens.
     fn same_key(a: &DocumentKey, b: &DocumentKey) -> bool {
-        let (nonce, ct) = ambre_crypto::aead::seal(b"probe", b"", a).expect("seal");
-        ambre_crypto::aead::open(&nonce, &ct.0, b"", b).is_ok()
+        let (nonce, ct) =
+            ambre_crypto::aead::seal(b"probe", &ambre_core::Aad::of(b""), a).expect("seal");
+        ambre_crypto::aead::open(&nonce, &ct.0, &ambre_core::Aad::of(b""), b).is_ok()
     }
 
     // --- The Murmure spaces spec: the sealed catalogue key and a self-join ---

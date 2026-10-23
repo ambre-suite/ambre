@@ -13,11 +13,11 @@ use ambre_bus::{RowPlace, SealedRow};
 use super::*;
 
 /// The associated data of a row: where it sits in the store.
-fn place_bytes(place: &RowPlace) -> Vec<u8> {
-    match place {
+fn place_bytes(place: &RowPlace) -> ambre_core::Aad {
+    ambre_core::Aad::new(match place {
         RowPlace::Document(id) => [b"doc:".as_slice(), id.as_bytes()].concat(),
         RowPlace::Draft(key) => [b"draft:".as_slice(), key.as_str().as_bytes()].concat(),
-    }
+    })
 }
 
 impl SyncState {

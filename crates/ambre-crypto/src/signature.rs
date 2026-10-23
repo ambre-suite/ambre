@@ -35,12 +35,18 @@ fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
     msg.extend_from_slice(field);
 }
 
-fn message(nonce: &[u8], ciphertext: &[u8], aad: &[u8], commitment_tag: &[u8]) -> Vec<u8> {
-    let mut msg =
-        Vec::with_capacity(16 + nonce.len() + ciphertext.len() + aad.len() + commitment_tag.len());
+fn message(
+    nonce: &[u8],
+    ciphertext: &[u8],
+    aad: &ambre_core::Aad,
+    commitment_tag: &[u8],
+) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(
+        16 + nonce.len() + ciphertext.len() + aad.as_bytes().len() + commitment_tag.len(),
+    );
     push_framed(&mut msg, nonce);
     push_framed(&mut msg, ciphertext);
-    push_framed(&mut msg, aad);
+    push_framed(&mut msg, aad.as_bytes());
     push_framed(&mut msg, commitment_tag);
     msg
 }
@@ -50,7 +56,7 @@ pub fn sign(
     signing_key: &SigningKey,
     nonce: &Nonce,
     ciphertext: &Ciphertext,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     commitment_tag: &CommitmentTag,
 ) -> Signature {
     let msg = message(&nonce.0, &ciphertext.0, aad, &commitment_tag.0);
@@ -68,7 +74,7 @@ pub fn verify(
     author_pub: &PublicKey,
     nonce: &Nonce,
     ciphertext: &Ciphertext,
-    aad: &[u8],
+    aad: &ambre_core::Aad,
     commitment_tag: &CommitmentTag,
     signature: &Signature,
 ) -> Result<(), CryptoError> {
@@ -153,16 +159,48 @@ mod tests {
     fn sign_then_verify_roundtrips() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, &nonce(), &ct(b"cipher"), b"aad", &tag());
-        assert!(verify(&pk, &nonce(), &ct(b"cipher"), b"aad", &tag(), &sig).is_ok());
+        let sig = sign(
+            &sk,
+            &nonce(),
+            &ct(b"cipher"),
+            &ambre_core::Aad::of(b"aad"),
+            &tag(),
+        );
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"cipher"),
+                &ambre_core::Aad::of(b"aad"),
+                &tag(),
+                &sig
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn tampered_field_rejected() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, &nonce(), &ct(b"cipher"), b"aad", &tag());
-        assert!(verify(&pk, &nonce(), &ct(b"CIPHER"), b"aad", &tag(), &sig).is_err());
+        let sig = sign(
+            &sk,
+            &nonce(),
+            &ct(b"cipher"),
+            &ambre_core::Aad::of(b"aad"),
+            &tag(),
+        );
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"CIPHER"),
+                &ambre_core::Aad::of(b"aad"),
+                &tag(),
+                &sig
+            )
+            .is_err()
+        );
     }
 
     /// The order of the Ed25519 group, little-endian.
@@ -191,9 +229,29 @@ mod tests {
     fn only_the_canonical_signature_is_accepted() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, &nonce(), &ct(b"c"), b"a", &tag());
-        assert!(verify(&pk, &nonce(), &ct(b"c"), b"a", &tag(), &sig).is_ok());
-        assert!(verify(&pk, &nonce(), &ct(b"c"), b"a", &tag(), &malleated(&sig)).is_err());
+        let sig = sign(&sk, &nonce(), &ct(b"c"), &ambre_core::Aad::of(b"a"), &tag());
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"c"),
+                &ambre_core::Aad::of(b"a"),
+                &tag(),
+                &sig
+            )
+            .is_ok()
+        );
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"c"),
+                &ambre_core::Aad::of(b"a"),
+                &tag(),
+                &malleated(&sig)
+            )
+            .is_err()
+        );
 
         // The identity point, and the signature (R = identity, S = 0).
         let mut identity = [0u8; 32];
@@ -201,7 +259,17 @@ mod tests {
         let mut forged = Signature([0u8; SIGNATURE_LEN]);
         forged.0[..32].copy_from_slice(&identity);
         let identity_key = PublicKey::from_array(identity);
-        assert!(verify(&identity_key, &nonce(), &ct(b"c"), b"a", &tag(), &forged).is_err());
+        assert!(
+            verify(
+                &identity_key,
+                &nonce(),
+                &ct(b"c"),
+                &ambre_core::Aad::of(b"a"),
+                &tag(),
+                &forged
+            )
+            .is_err()
+        );
     }
 
     /// The length prefixes make the ciphertext|aad boundary unambiguous. Two
@@ -212,10 +280,36 @@ mod tests {
     fn ciphertext_aad_boundary_is_unambiguous() {
         let sk = test_key();
         let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
-        let sig = sign(&sk, &nonce(), &ct(b"ab"), b"c", &tag());
+        let sig = sign(
+            &sk,
+            &nonce(),
+            &ct(b"ab"),
+            &ambre_core::Aad::of(b"c"),
+            &tag(),
+        );
         // Same concatenation, different split -> must be rejected.
-        assert!(verify(&pk, &nonce(), &ct(b"a"), b"bc", &tag(), &sig).is_err());
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"a"),
+                &ambre_core::Aad::of(b"bc"),
+                &tag(),
+                &sig
+            )
+            .is_err()
+        );
         // Exact split -> accepted.
-        assert!(verify(&pk, &nonce(), &ct(b"ab"), b"c", &tag(), &sig).is_ok());
+        assert!(
+            verify(
+                &pk,
+                &nonce(),
+                &ct(b"ab"),
+                &ambre_core::Aad::of(b"c"),
+                &tag(),
+                &sig
+            )
+            .is_ok()
+        );
     }
 }

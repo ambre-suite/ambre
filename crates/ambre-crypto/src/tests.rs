@@ -4,7 +4,7 @@ use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
-use ambre_core::{Ciphertext, EntryDigest, FileSalt, MasterKeySalt, Nonce};
+use ambre_core::{Aad, Ciphertext, EntryDigest, FileSalt, MasterKeySalt, Nonce};
 
 /// A passphrase as a prompt hands it over.
 fn pass(text: &str) -> ambre_core::Passphrase {
@@ -26,7 +26,7 @@ fn roundtrip_envelope() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-    let aad = b"public-data";
+    let aad = &Aad::of(b"public-data");
     let plaintext = b"hello, encrypted world";
 
     let sealed = envelope::seal(plaintext, aad, &doc_key, &signing).unwrap();
@@ -39,7 +39,8 @@ fn roundtrip_envelope() {
 #[test]
 fn an_envelope_debug_form_prints_no_byte_of_it() {
     let signing = fixed_seed().derive_signing_key();
-    let mut sealed = envelope::seal(b"payload", b"aad", &fixed_doc_key(), &signing).unwrap();
+    let mut sealed =
+        envelope::seal(b"payload", &Aad::of(b"aad"), &fixed_doc_key(), &signing).unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
     sealed.ciphertext = Ciphertext(vec![0xAB; 7]);
     sealed.nonce = Nonce([0xCD; aead::NONCE_LEN]);
@@ -52,7 +53,7 @@ fn tampered_ciphertext_fails() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-    let aad = b"aad";
+    let aad = &Aad::of(b"aad");
 
     let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     sealed.ciphertext.0[0] ^= 0xFF;
@@ -69,10 +70,10 @@ fn commitment_tag_wrong_aad_rejected() {
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
 
-    let sealed = envelope::seal(b"payload", b"document-A", &doc_key, &signing).unwrap();
+    let sealed = envelope::seal(b"payload", &Aad::of(b"document-A"), &doc_key, &signing).unwrap();
     // Re-sign over the altered aad so the signature passes but the HMAC commitment
     // (and the AEAD aad) no longer match -- models inter-document substitution.
-    let forged_aad = b"document-B";
+    let forged_aad = &Aad::of(b"document-B");
     let signature = crate::signature::sign(
         &signing,
         &sealed.nonce,
@@ -97,7 +98,7 @@ fn every_seal_draws_a_fresh_nonce() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
     let sealed: Vec<_> = (0..64)
-        .map(|_| envelope::seal(b"same payload", b"aad", &doc_key, &signing).unwrap())
+        .map(|_| envelope::seal(b"same payload", &Aad::of(b"aad"), &doc_key, &signing).unwrap())
         .collect();
     let nonces: std::collections::HashSet<Nonce> = sealed.iter().map(|s| s.nonce).collect();
     let ciphertexts: std::collections::HashSet<&[u8]> =
@@ -117,7 +118,7 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
     let other_key = DocumentKey::from_array([0x33; 32]);
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-    let aad = b"aad";
+    let aad = &Aad::of(b"aad");
     let mut forged = envelope::seal(b"payload", aad, &other_key, &signing).unwrap();
     forged.ciphertext.0[0] ^= 0xFF;
     let resign = |sealed: &mut envelope::Sealed| {
@@ -152,7 +153,7 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
 fn invalid_signature_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let aad = b"aad";
+    let aad = &Aad::of(b"aad");
 
     let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     let wrong_author = ambre_core::PublicKey::from_array(
@@ -172,7 +173,7 @@ fn wrong_document_key_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-    let aad = b"aad";
+    let aad = &Aad::of(b"aad");
 
     let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     let other_key = DocumentKey::from_array([0x44; 32]);
@@ -249,23 +250,26 @@ fn the_store_key_matches_its_frozen_domain() {
 #[test]
 fn a_store_row_opens_only_where_it_was_sealed() {
     let key = fixed_seed().derive_store_key();
-    let row = aead::seal_row(b"a copy", b"doc:0a", &key).unwrap();
+    let row = aead::seal_row(b"a copy", &Aad::of(b"doc:0a"), &key).unwrap();
     assert_eq!(row.first(), Some(&aead::ROW_VERSION));
     assert!(!row.windows(6).any(|w| w == b"a copy"));
-    assert_eq!(aead::open_row(&row, b"doc:0a", &key).unwrap(), b"a copy");
+    assert_eq!(
+        aead::open_row(&row, &Aad::of(b"doc:0a"), &key).unwrap(),
+        b"a copy"
+    );
 
     let stranger = MasterSeed::from_array([0x33; 32]).derive_store_key();
-    assert!(aead::open_row(&row, b"doc:0a", &stranger).is_err());
-    assert!(aead::open_row(&row, b"doc:0b", &key).is_err());
+    assert!(aead::open_row(&row, &Aad::of(b"doc:0a"), &stranger).is_err());
+    assert!(aead::open_row(&row, &Aad::of(b"doc:0b"), &key).is_err());
     let mut flipped = row.clone();
     if let Some(last) = flipped.last_mut() {
         *last ^= 1;
     }
-    assert!(aead::open_row(&flipped, b"doc:0a", &key).is_err());
+    assert!(aead::open_row(&flipped, &Aad::of(b"doc:0a"), &key).is_err());
     // A row the store held in the clear, or a stub, opens as nothing.
-    assert!(aead::open_row(b"a copy", b"doc:0a", &key).is_err());
-    assert!(aead::open_row(&[], b"doc:0a", &key).is_err());
-    assert!(aead::open_row(&[aead::ROW_VERSION], b"doc:0a", &key).is_err());
+    assert!(aead::open_row(b"a copy", &Aad::of(b"doc:0a"), &key).is_err());
+    assert!(aead::open_row(&[], &Aad::of(b"doc:0a"), &key).is_err());
+    assert!(aead::open_row(&[aead::ROW_VERSION], &Aad::of(b"doc:0a"), &key).is_err());
 }
 
 // -- ECDH --------------------------------------------------------------------
@@ -364,7 +368,7 @@ fn a_wrap_has_a_length_the_wire_reads() {
     assert_eq!(ambre_core::WrappedDocKey::LENGTHS, [bare, anchored]);
 
     let seed = MasterSeed::from_array([0x03; 32]);
-    let wrapped = seed.wrap_for_storage(&doc_key, b"aad").unwrap();
+    let wrapped = seed.wrap_for_storage(&doc_key, &Aad::of(b"aad")).unwrap();
     assert_eq!(
         ambre_core::WrappedMasterKey::LENGTHS,
         [wrapped.as_bytes().len()]
@@ -481,21 +485,29 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
     let previous = DocumentKey::from_array([0x21; 32]);
     let next = fixed_doc_key();
     let author = fixed_seed().derive_signing_key();
-    let sealed = next.seal_previous(&previous, b"link", &author).unwrap();
+    let sealed = next
+        .seal_previous(&previous, &Aad::of(b"link"), &author)
+        .unwrap();
     let author_pub = ambre_core::PublicKey::from_array(author.verifying_key().to_bytes());
 
-    let opened = next.open_previous(&sealed, b"link", &author_pub).unwrap();
+    let opened = next
+        .open_previous(&sealed, &Aad::of(b"link"), &author_pub)
+        .unwrap();
     assert_eq!(opened.id(), previous.id());
     assert!(
         previous
-            .open_previous(&sealed, b"link", &author_pub)
+            .open_previous(&sealed, &Aad::of(b"link"), &author_pub)
             .is_err()
     );
-    assert!(next.open_previous(&sealed, b"other", &author_pub).is_err());
+    assert!(
+        next.open_previous(&sealed, &Aad::of(b"other"), &author_pub)
+            .is_err()
+    );
     let stranger = MasterSeed::from_array([0x33; 32]).derive_signing_key();
     let stranger_pub = ambre_core::PublicKey::from_array(stranger.verifying_key().to_bytes());
     assert_eq!(
-        next.open_previous(&sealed, b"link", &stranger_pub).err(),
+        next.open_previous(&sealed, &Aad::of(b"link"), &stranger_pub)
+            .err(),
         Some(CryptoError::InvalidSignature)
     );
 }
@@ -535,7 +547,7 @@ proptest! {
         let doc_key = DocumentKey::from_array(key);
         let signing = fixed_seed().derive_signing_key();
         let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-        let aad = b"aad";
+        let aad = &Aad::of(b"aad");
         let sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
         prop_assert_eq!(opened, data);
@@ -550,7 +562,7 @@ proptest! {
         let doc_key = fixed_doc_key();
         let signing = fixed_seed().derive_signing_key();
         let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
-        let aad = b"aad";
+        let aad = &Aad::of(b"aad");
         let mut sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
@@ -652,7 +664,7 @@ fn each_new_file_draws_its_own_salt() {
 #[test]
 fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     let salt = FileSalt::from_array([0x01; 16]);
-    let aad = b"the-sealed-header";
+    let aad = &Aad::of(b"the-sealed-header");
     let plaintext = b"a whole plaintext container";
     let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
     let (nonce, ciphertext) = aead::seal_file(plaintext, aad, &key).unwrap();
@@ -673,7 +685,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     // And the seal binds the header it covered: an edited salt, nonce or
     // lineage byte fails the tag rather than deriving quietly.
     assert_eq!(
-        aead::open_file(&nonce, &ciphertext.0, b"the-sealed-headeR", &key),
+        aead::open_file(&nonce, &ciphertext.0, &Aad::of(b"the-sealed-headeR"), &key),
         Err(CryptoError::AeadFailed)
     );
 }
@@ -695,21 +707,25 @@ fn the_sealed_header_widths_match_the_primitives() {
 #[test]
 fn a_document_key_sealed_under_another_opens_to_the_same_key() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
-    let (nonce, sealed) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
-    let opened = aead::open_document_key(&nonce, &sealed.0, b"channel-1", &outer).unwrap();
+    let (nonce, sealed) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
+    let opened =
+        aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer).unwrap();
     // The opened key reads what the original sealed.
-    let (n, ct) = aead::seal(b"a message", b"", &inner).unwrap();
-    assert_eq!(aead::open(&n, &ct.0, b"", &opened).unwrap(), b"a message");
+    let (n, ct) = aead::seal(b"a message", &Aad::of(b""), &inner).unwrap();
+    assert_eq!(
+        aead::open(&n, &ct.0, &Aad::of(b""), &opened).unwrap(),
+        b"a message"
+    );
 }
 
 #[test]
 fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
-    let (nonce, sealed) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
-    let wrong_key = aead::open_document_key(&nonce, &sealed.0, b"channel-1", &inner);
+    let (nonce, sealed) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
+    let wrong_key = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &inner);
     assert_eq!(wrong_key.err(), Some(CryptoError::AeadFailed));
     // The aad binds the sealed key to one channel: moved to another, it fails.
-    let moved = aead::open_document_key(&nonce, &sealed.0, b"channel-2", &outer);
+    let moved = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-2"), &outer);
     assert_eq!(moved.err(), Some(CryptoError::AeadFailed));
 }
 
@@ -719,26 +735,32 @@ fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
 #[test]
 fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
-    let (nonce, sealed) =
-        aead::seal_anchored_key(&inner, b"channel-1", &outer, Some(&EntryDigest([0x33; 32])))
-            .unwrap();
-    let (key, anchor) = aead::open_anchored_key(&nonce, &sealed.0, b"channel-1", &outer).unwrap();
+    let (nonce, sealed) = aead::seal_anchored_key(
+        &inner,
+        &Aad::of(b"channel-1"),
+        &outer,
+        Some(&EntryDigest([0x33; 32])),
+    )
+    .unwrap();
+    let (key, anchor) =
+        aead::open_anchored_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer).unwrap();
     assert_eq!(key.as_bytes(), inner.as_bytes());
     assert_eq!(anchor, Some(EntryDigest([0x33; 32])));
 
-    let (nonce, bare) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
-    let (_, anchor) = aead::open_anchored_key(&nonce, &bare.0, b"channel-1", &outer).unwrap();
+    let (nonce, bare) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
+    let (_, anchor) =
+        aead::open_anchored_key(&nonce, &bare.0, &Aad::of(b"channel-1"), &outer).unwrap();
     assert_eq!(anchor, None);
 
-    let (nonce, partial) = aead::seal(&[7; 48], b"channel-1", &outer).unwrap();
-    let partial = aead::open_anchored_key(&nonce, &partial.0, b"channel-1", &outer);
+    let (nonce, partial) = aead::seal(&[7; 48], &Aad::of(b"channel-1"), &outer).unwrap();
+    let partial = aead::open_anchored_key(&nonce, &partial.0, &Aad::of(b"channel-1"), &outer);
     assert_eq!(partial.err(), Some(CryptoError::InvalidKeyLength));
 }
 
 #[test]
 fn a_sealed_value_that_is_no_key_is_refused() {
     let outer = DocumentKey::generate();
-    let (nonce, sealed) = aead::seal(&[7; 16], b"channel-1", &outer).unwrap();
-    let short = aead::open_document_key(&nonce, &sealed.0, b"channel-1", &outer);
+    let (nonce, sealed) = aead::seal(&[7; 16], &Aad::of(b"channel-1"), &outer).unwrap();
+    let short = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer);
     assert_eq!(short.err(), Some(CryptoError::InvalidKeyLength));
 }
