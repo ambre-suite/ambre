@@ -2237,7 +2237,6 @@ ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed(delta) |
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::changed_at(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in() | ret | Result<u32,MurmureError>	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::create(name) | param | Option<&str>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | ret | bool	math	state flag/predicate
@@ -2245,18 +2244,15 @@ ambre-murmure | src/channel.rs | crate::channel | ChannelState::is_pending() | r
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::lacks_closing() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::load_older(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::name() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::name_direct(name) | param | Option<&str>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(meta_bytes) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(segments) | param | &HashMap<SegmentId,Vec<u8>>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::reacted(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::reacted_at(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::replace_from_shallow(snapshot) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | Created::Meta.name | field | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel.rs | crate::channel | Held.probe_at | field | usize	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | Named.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | Sent.delta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | fitting(name) | param | Option<&str>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendable() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendments_failed() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::apply_amendment(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2807,11 +2803,9 @@ ambre-murmure | src/sidebar.rs | crate::sidebar | SidebarSection.title | field |
 ambre-murmure | src/sidebar.rs | crate::sidebar | push(title) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/sidebar.rs | crate::sidebar | rank() | ret | (u32,[u8;16])	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | Listing.position | field | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
-ambre-murmure | src/space.rs | crate::space | SpaceState.created | field | Option<(String,Timestamp)>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session(entry) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::apply_remote(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::create(name) | param | &str	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/space.rs | crate::space | SpaceState::export() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	math	state flag/predicate
@@ -2819,13 +2813,11 @@ ambre-murmure | src/space.rs | crate::space | SpaceState::list_channel() | ret |
 ambre-murmure | src/space.rs | crate::space | SpaceState::name() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/space.rs | crate::space | SpaceState::open(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::put_category() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::put_category(name) | param | &str	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/space.rs | crate::space | SpaceState::put_category(position) | param | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | SpaceState::reseal_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::snapshot() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::unlist_channel() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | position_of() | ret | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
-ambre-murmure | src/space.rs | crate::space | write_created(name) | param | &str	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	debt	finding: Link addresses as `String`

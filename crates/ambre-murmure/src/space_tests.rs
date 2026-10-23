@@ -11,7 +11,13 @@ use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, Sp
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
 fn channel(channel_type: ChannelType, name: &str) -> ChannelState {
-    ChannelState::create(ChannelId::new(), channel_type, Some(name), NOW).expect("create")
+    ChannelState::create(
+        ChannelId::new(),
+        channel_type,
+        Some(&crate::fit_name(name)),
+        NOW,
+    )
+    .expect("create")
 }
 
 fn sealed(byte: u8) -> SealedChannelKey {
@@ -48,7 +54,7 @@ fn root_names(doc: &LoroDoc) -> Vec<String> {
 #[test]
 fn a_new_space_is_one_document_that_holds_no_member() {
     let space_id = SpaceId::new();
-    let space = SpaceState::create(space_id, "Acme", NOW).expect("create");
+    let space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW).expect("create");
     assert_eq!(space.document_id(), space_id.document_id());
     assert_eq!(space.name().as_deref(), Some("Acme"));
     let header = crate::schema::header(space.doc());
@@ -68,7 +74,7 @@ fn a_new_space_is_one_document_that_holds_no_member() {
 #[test]
 fn a_space_reopens_from_its_payloads() {
     let space_id = SpaceId::new();
-    let mut space = SpaceState::create(space_id, "Acme", NOW)
+    let mut space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let first = space.export_all().expect("export");
@@ -83,7 +89,7 @@ fn a_space_reopens_from_its_payloads() {
 
 #[test]
 fn a_document_of_another_space_is_refused() {
-    let space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW).expect("create");
     let other = SpaceId::new();
     let refused = SpaceState::open(other, &[&space.export_all().expect("export")]);
     assert_eq!(
@@ -121,11 +127,13 @@ fn a_channel_document_is_no_space() {
 /// unopened: the engine has no key to open it with.
 #[test]
 fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+    let mut space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let category = CategoryId::new();
-    space.put_category(category, "Teams", 1).expect("category");
+    space
+        .put_category(category, &crate::fit_name("Teams"), 1)
+        .expect("category");
     let public = channel(ChannelType::Public, "budget");
     let figures = topic("the weekly figures");
     space
@@ -153,7 +161,7 @@ fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
 
 #[test]
 fn an_unset_topic_and_category_are_absent_keys() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+    let mut space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let public = channel(ChannelType::Public, "general");
@@ -176,7 +184,7 @@ fn an_unset_topic_and_category_are_absent_keys() {
 /// key, never an empty string.
 #[test]
 fn an_unnamed_channel_lists_with_no_name_key() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+    let mut space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let unnamed =
@@ -215,7 +223,7 @@ fn an_unnamed_channel_lists_with_no_name_key() {
 
 #[test]
 fn a_channel_the_catalogue_does_not_list_has_no_key() {
-    let space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW).expect("create");
     let absent = ChannelId::new();
     assert_eq!(
         space.sealed_key(absent),
@@ -231,12 +239,14 @@ fn a_channel_the_catalogue_does_not_list_has_no_key() {
 #[test]
 fn a_reseal_replaces_the_key_and_nothing_else() {
     let space_id = SpaceId::new();
-    let mut space = SpaceState::create(space_id, "Acme", NOW)
+    let mut space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let first = space.export_all().expect("export");
     let category = CategoryId::new();
-    let named = space.put_category(category, "Teams", 1).expect("category");
+    let named = space
+        .put_category(category, &crate::fit_name("Teams"), 1)
+        .expect("category");
     let (budget, general) = (
         channel(ChannelType::Public, "budget"),
         channel(ChannelType::Public, "general"),
@@ -287,7 +297,7 @@ fn a_reseal_replaces_the_key_and_nothing_else() {
 /// direct message never enters it, and the refusal writes nothing.
 #[test]
 fn the_catalogue_refuses_a_private_channel_and_a_direct_message() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+    let mut space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let before = space.version();
@@ -308,7 +318,7 @@ fn the_catalogue_refuses_a_private_channel_and_a_direct_message() {
 /// channel moves, and the space holds no member list for it.
 #[test]
 fn listing_a_channel_writes_the_space_document_alone() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+    let mut space = SpaceState::create(SpaceId::new(), &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let public = channel(ChannelType::Public, "general");
@@ -347,7 +357,7 @@ fn listing_a_channel_writes_the_space_document_alone() {
 #[test]
 fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
     let space_id = SpaceId::new();
-    let mut space = SpaceState::create(space_id, "Acme", NOW)
+    let mut space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW)
         .expect("create")
         .identify();
     let first = space.export_all().expect("export");
@@ -381,19 +391,4 @@ fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
     let before = space.version();
     assert_eq!(space.unlist_channel(gone.channel_id()), Ok(None));
     assert_eq!(space.version(), before, "an absent entry writes nothing");
-}
-
-/// `MURMURE-579`: a space or a category named past the cap writes nothing.
-#[test]
-fn a_space_or_a_category_named_past_the_cap_writes_nothing() {
-    let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
-    assert!(matches!(
-        SpaceState::create(SpaceId::new(), &past, NOW),
-        Err(MurmureError::NameTooLong)
-    ));
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
-    assert!(matches!(
-        space.put_category(CategoryId::new(), &past, 0),
-        Err(MurmureError::NameTooLong)
-    ));
 }

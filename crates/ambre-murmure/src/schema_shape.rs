@@ -198,7 +198,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     let mut state = ChannelState::create(
         ChannelId::new(),
         ChannelType::Public,
-        Some("general"),
+        Some(&crate::fit_name("general")),
         Timestamp(1_700_000_000_000),
     )
     .expect("create");
@@ -411,13 +411,19 @@ pub(crate) fn amended(state: &ChannelState) -> (SegmentId, DocumentId) {
 /// A space that reaches every key the schema declares: a name, a category,
 /// and a listed channel with a topic and a category.
 pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
-    let mut space =
-        SpaceState::create(SpaceId::new(), "Acme", Timestamp(1_700_000_000_000)).expect("create");
+    let mut space = SpaceState::create(
+        SpaceId::new(),
+        &crate::fit_name("Acme"),
+        Timestamp(1_700_000_000_000),
+    )
+    .expect("create");
     space
         .adopt_session(ambre_core::PeerId(SPACE_PEER), entry())
         .expect("adopt");
     let category = CategoryId::new();
-    space.put_category(category, "Teams", 0).expect("category");
+    space
+        .put_category(category, &crate::fit_name("Teams"), 0)
+        .expect("category");
     let topic = Topic::new("everything").expect("a topic");
     space
         .list_channel(

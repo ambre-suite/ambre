@@ -593,7 +593,10 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
 fn a_meta_delta_under_another_peer_is_refused() {
     let mut alice = founder(ChannelType::Direct);
     let mut bob = join(&alice);
-    let named = alice.state.name_direct(Some("us")).expect("name");
+    let named = alice
+        .state
+        .name_direct(Some(&crate::fit_name("us")))
+        .expect("name");
     let meta = named.meta.document_id();
     let by = Signer {
         peer: alice.state.peer(meta).expect("a session"),

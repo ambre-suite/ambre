@@ -1419,7 +1419,7 @@ impl LogicState {
                     }
                     None => None,
                 };
-                match channel.name_direct(name.as_ref().map(Name::as_str)) {
+                match channel.name_direct(name.as_ref()) {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
                             document_id: named.meta.document_id(),

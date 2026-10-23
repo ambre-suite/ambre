@@ -37,10 +37,6 @@ pub enum MurmureError {
     #[error("channel {0} is not a direct message, so no member renames it")]
     NotDirect(ChannelId),
 
-    /// A channel, space or category name past its cap (`MURMURE-579`).
-    #[error("a name is longer than {} characters", ambre_core::NAME_MAX_CHARS)]
-    NameTooLong,
-
     /// The catalogue lists no channel of that identifier.
     #[error("the catalogue lists no channel {0}")]
     NotListed(ChannelId),

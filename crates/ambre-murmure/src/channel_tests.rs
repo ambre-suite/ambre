@@ -738,8 +738,13 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
 
 #[test]
 fn meta_holds_no_member_list() {
-    let state = ChannelState::create(ChannelId::new(), ChannelType::Private, Some("team"), NOW)
-        .expect("create");
+    let state = ChannelState::create(
+        ChannelId::new(),
+        ChannelType::Private,
+        Some(&crate::fit_name("team")),
+        NOW,
+    )
+    .expect("create");
     let meta = state.doc(state.meta_id().document_id()).expect("meta");
     let text = format!("{:?}", meta.get_deep_value());
     assert!(!text.contains("member"));
@@ -763,8 +768,13 @@ fn an_unset_property_is_an_absent_key() {
     let channel =
         crate::schema::channel(unnamed.doc(unnamed.meta_id().document_id()).expect("meta"));
     assert!(channel.get(ChannelKey::Name).is_none());
-    let named = ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
-        .expect("create");
+    let named = ChannelState::create(
+        ChannelId::new(),
+        ChannelType::Public,
+        Some(&crate::fit_name("general")),
+        NOW,
+    )
+    .expect("create");
     let channel = crate::schema::channel(named.doc(named.meta_id().document_id()).expect("meta"));
     assert_eq!(
         schema::string(&channel, ChannelKey::Name).as_deref(),
@@ -796,7 +806,9 @@ fn a_name_one_member_sets_reaches_every_member() {
         .identify();
     let mut bob = second_member(&alice);
 
-    let named = alice.name_direct(Some("  trip  ")).expect("name");
+    let named = alice
+        .name_direct(Some(&crate::fit_name("  trip  ")))
+        .expect("name");
     assert_eq!(named.meta, alice.meta_id());
     assert_eq!(
         named.event,
@@ -815,7 +827,9 @@ fn a_name_one_member_sets_reaches_every_member() {
     );
     assert_eq!(bob.name().as_deref(), Some("trip"));
 
-    let renamed = bob.name_direct(Some("holiday")).expect("rename");
+    let renamed = bob
+        .name_direct(Some(&crate::fit_name("holiday")))
+        .expect("rename");
     alice
         .apply_remote(renamed.meta.document_id(), &renamed.delta)
         .expect("apply");
@@ -873,14 +887,19 @@ fn a_notice_of_a_kind_no_build_wrote_is_skipped() {
 
 #[test]
 fn clearing_a_name_removes_its_key() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, Some("trip"), NOW)
-        .expect("create")
-        .identify();
+    let mut alice = ChannelState::create(
+        ChannelId::new(),
+        ChannelType::Direct,
+        Some(&crate::fit_name("trip")),
+        NOW,
+    )
+    .expect("create")
+    .identify();
     let mut bob = second_member(&alice);
     let meta = alice.meta_id().document_id();
 
-    for cleared in [None, Some("   ")] {
-        let named = alice.name_direct(cleared).expect("clear");
+    for cleared in [None, Some(crate::fit_name("   "))] {
+        let named = alice.name_direct(cleared.as_ref()).expect("clear");
         assert_eq!(named.event, MurmureEvent::Named { name: None });
         bob.apply_remote(meta, &named.delta).expect("apply");
         for state in [&alice, &bob] {
@@ -898,9 +917,12 @@ fn clearing_a_name_removes_its_key() {
 fn only_a_direct_message_takes_a_name_from_a_member() {
     for kind in [ChannelType::Private, ChannelType::Public] {
         let mut state =
-            ChannelState::create(ChannelId::new(), kind, Some("team"), NOW).expect("create");
+            ChannelState::create(ChannelId::new(), kind, Some(&crate::fit_name("team")), NOW)
+                .expect("create");
         assert_eq!(
-            state.name_direct(Some("other")).map(|n| n.event),
+            state
+                .name_direct(Some(&crate::fit_name("other")))
+                .map(|n| n.event),
             Err(MurmureError::NotDirect(state.channel_id()))
         );
         assert_eq!(state.name().as_deref(), Some("team"));
@@ -1374,17 +1396,13 @@ fn an_older_segment_nobody_asked_for_is_not_ready() {
     );
 }
 
-/// `MURMURE-579`: a channel named past the cap is not created, a name of the
-/// longest length is.
+/// `MURMURE-579`: a channel takes a name of the longest length. One past it
+/// makes no `Name`, so no channel is created under it.
 #[test]
-fn a_channel_named_past_the_cap_is_not_created() {
-    let longest = "\u{1F600}".repeat(ambre_core::NAME_MAX_CHARS);
-    let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+fn a_channel_takes_the_longest_name() {
+    let longest = crate::fit_name(&"\u{1F600}".repeat(ambre_core::NAME_MAX_CHARS));
     for kind in [ChannelType::Public, ChannelType::Private] {
-        assert!(ChannelState::create(ChannelId::new(), kind, Some(&longest), NOW).is_ok());
-        assert!(matches!(
-            ChannelState::create(ChannelId::new(), kind, Some(&past), NOW),
-            Err(MurmureError::NameTooLong)
-        ));
+        let state = ChannelState::create(ChannelId::new(), kind, Some(&longest), NOW);
+        assert!(state.is_ok());
     }
 }

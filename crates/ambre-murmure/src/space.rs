@@ -8,7 +8,7 @@
 //! (`MURMURE-157`).
 
 use ambre_bus::{CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic};
-use ambre_core::{CategoryId, ChannelId, DocumentId, SpaceId};
+use ambre_core::{CategoryId, ChannelId, DocumentId, Name, SpaceId};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::channel::ChannelState;
@@ -40,7 +40,7 @@ pub struct SpaceState {
     /// The name and the creation time of a space created here, written again
     /// under its PeerID once the session lands. `None` for a space the relay
     /// served.
-    created: Option<(String, Timestamp)>,
+    created: Option<(Name, Timestamp)>,
 }
 
 impl SpaceState {
@@ -55,17 +55,16 @@ impl SpaceState {
     /// ([`SpaceState::adopt_session`]).
     ///
     /// # Errors
-    /// [`MurmureError::NameTooLong`] for a name past its cap.
-    /// [`MurmureError::Crdt`] when Loro refuses a write.
-    pub fn create(space_id: SpaceId, name: &str, now: Timestamp) -> Result<Self, MurmureError> {
-        crate::channel::fitting(Some(name))?;
+    /// [`MurmureError::Crdt`] when Loro refuses a write. A name past its
+    /// cap makes no [`Name`], so it never reaches here (`MURMURE-579`).
+    pub fn create(space_id: SpaceId, name: &Name, now: Timestamp) -> Result<Self, MurmureError> {
         let doc = LoroDoc::new();
         write_created(&doc, space_id, name, now)?;
         Ok(Self {
             space_id,
             doc,
             session: None,
-            created: Some((name.to_owned(), now)),
+            created: Some((name.clone(), now)),
         })
     }
 
@@ -181,21 +180,19 @@ impl SpaceState {
     /// Add a category, or rename and move one, and return the delta.
     ///
     /// # Errors
-    /// [`MurmureError::NameTooLong`] for a name past its cap.
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn put_category(
         &mut self,
         category_id: CategoryId,
-        name: &str,
+        name: &Name,
         position: u32,
     ) -> Result<Vec<u8>, MurmureError> {
-        crate::channel::fitting(Some(name))?;
         self.writable()?;
         let entry = Fields::<CategoryKey>::of(
             crate::schema::root_map(&self.doc, Root::Categories)
                 .ensure_mergeable_map(&category_id.to_string())?,
         );
-        entry.insert(CategoryKey::Name, name)?;
+        entry.insert(CategoryKey::Name, name.as_str())?;
         entry.insert(CategoryKey::Position, i64::from(position))?;
         self.export()
     }
@@ -390,12 +387,12 @@ impl SpaceState {
 fn write_created(
     doc: &LoroDoc,
     space_id: SpaceId,
-    name: &str,
+    name: &Name,
     now: Timestamp,
 ) -> Result<(), MurmureError> {
     schema::write_space_header(doc, space_id, now)?;
     if !name.is_empty() {
-        crate::schema::space(doc).insert(SpaceKey::Name, name)?;
+        crate::schema::space(doc).insert(SpaceKey::Name, name.as_str())?;
     }
     doc.commit();
     Ok(())

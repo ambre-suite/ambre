@@ -44,14 +44,6 @@ pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 
-/// Refuse a name past its cap before anything is written (`MURMURE-579`).
-pub(crate) fn fitting(name: Option<&str>) -> Result<(), MurmureError> {
-    match name {
-        Some(name) if !ambre_core::name_fits(name) => Err(MurmureError::NameTooLong),
-        _ => Ok(()),
-    }
-}
-
 #[cfg(test)]
 pub(crate) use {amending::folded_amendments, folding::header_fold};
 
@@ -105,7 +97,7 @@ enum Created {
     /// The `meta` document, listing the first active segment.
     Meta {
         channel_type: ChannelType,
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
         active: SegmentId,
         now: Timestamp,
     },
@@ -285,15 +277,15 @@ impl ChannelState {
     /// ([`ChannelState::adopt_session`]).
     ///
     /// # Errors
-    /// [`MurmureError::NameTooLong`] for a name past its cap.
-    /// [`MurmureError::Crdt`] when Loro refuses a write.
+    /// [`MurmureError::Crdt`] when Loro refuses a write. A name past its
+    /// cap makes no [`Name`](ambre_core::Name), so it never reaches here
+    /// (`MURMURE-579`).
     pub fn create(
         channel_id: ChannelId,
         channel_type: ChannelType,
-        name: Option<&str>,
+        name: Option<&ambre_core::Name>,
         now: Timestamp,
     ) -> Result<Self, MurmureError> {
-        fitting(name)?;
         let active_id = DocumentId::new();
         let created = |id: DocumentId, created: Created| -> Result<Held, MurmureError> {
             let doc = LoroDoc::new();
@@ -307,7 +299,7 @@ impl ChannelState {
             DocumentId::new(),
             Created::Meta {
                 channel_type,
-                name: name.map(str::to_owned),
+                name: name.cloned(),
                 active: SegmentId::from_document(active_id),
                 now,
             },
@@ -562,17 +554,18 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NotDirect`] for any other channel: a public channel's
-    /// name lives in its catalogue too. [`MurmureError::NameTooLong`] for a
-    /// name past its cap. [`MurmureError::Crdt`] when Loro
+    /// name lives in its catalogue too. [`MurmureError::Crdt`] when Loro
     /// refuses a write or the export. [`MurmureError::NoSession`] before the
     /// PeerID of `meta` landed.
-    pub fn name_direct(&mut self, name: Option<&str>) -> Result<Named, MurmureError> {
+    pub fn name_direct(&mut self, name: Option<&ambre_core::Name>) -> Result<Named, MurmureError> {
         if self.channel_type() != Some(ChannelType::Direct) {
             return Err(MurmureError::NotDirect(self.channel_id));
         }
         let meta = self.meta_id();
-        let name = name.map(str::trim).filter(|n| !n.is_empty());
-        fitting(name)?;
+        let name = name
+            .map(ambre_core::Name::as_str)
+            .map(str::trim)
+            .filter(|n| !n.is_empty());
         let (doc, session) = self.meta.session()?;
         let channel = crate::schema::channel(doc);
         match name {

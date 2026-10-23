@@ -66,10 +66,10 @@ impl LogicState {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
-        if Name::new(name).is_err() {
+        let Ok(name) = Name::new(name) else {
             return self.refuse_long_name(name, ambre_bus::ApiRequest::CreateSpace);
-        }
-        let state = match SpaceState::create(space_id, name, now) {
+        };
+        let state = match SpaceState::create(space_id, &name, now) {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
         };
@@ -377,9 +377,9 @@ impl LogicState {
                     tracing::warn!("Logic: a viewer adds no category to space {space_id}");
                     return;
                 }
-                if Name::new(name.as_str()).is_err() {
+                let Ok(name) = Name::new(name.as_str()) else {
                     return self.refuse_long_name(&name, ambre_bus::ApiRequest::AddCategory);
-                }
+                };
                 match space.state.put_category(category_id, &name, position) {
                     Ok(delta) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
@@ -401,21 +401,17 @@ impl LogicState {
                         "a viewer of the space creates no channel".into(),
                     );
                 }
-                if Name::new(draft.name.as_str()).is_err() {
+                let Ok(name) = Name::new(draft.name.as_str()) else {
                     return self
                         .refuse_long_name(&draft.name, ambre_bus::ApiRequest::CreatePublicChannel);
-                }
-                let channel = match ChannelState::create(
-                    channel_id,
-                    ChannelType::Public,
-                    Some(&draft.name),
-                    now,
-                ) {
-                    Ok(channel) => channel,
-                    Err(error) => {
-                        return self.channel_failed(space_id, channel_id, error.to_string());
-                    }
                 };
+                let channel =
+                    match ChannelState::create(channel_id, ChannelType::Public, Some(&name), now) {
+                        Ok(channel) => channel,
+                        Err(error) => {
+                            return self.channel_failed(space_id, channel_id, error.to_string());
+                        }
+                    };
                 self.create_channel(space_id, channel, NewChannel::Public(draft));
             }
             SpaceCommand::CreatePrivateChannel { draft, now } => {
@@ -425,12 +421,7 @@ impl LogicState {
                     return self
                         .refuse_long_name(&name, ambre_bus::ApiRequest::CreatePrivateChannel);
                 };
-                match ChannelState::create(
-                    channel_id,
-                    ChannelType::Private,
-                    Some(name.as_str()),
-                    now,
-                ) {
+                match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
                     Ok(channel) => {
                         self.create_channel(space_id, channel, NewChannel::Private(name));
                     }
@@ -954,6 +945,11 @@ mod tests {
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
+    /// The name `text` is, within the cap.
+    fn fit_name(text: &str) -> Name {
+        Name::new(text).expect("a name within the cap")
+    }
+
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = test_link();
         let (to_sync, sync_rx) = test_link();
@@ -1141,7 +1137,7 @@ mod tests {
     fn a_space_opens_from_the_payloads_before_its_ready_signal() {
         let (mut state, ui, sync) = harness();
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -1269,7 +1265,7 @@ mod tests {
     fn a_viewer_creates_no_channel_and_adds_no_category() {
         let (mut state, ui, sync) = harness();
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
@@ -1344,7 +1340,7 @@ mod tests {
     fn a_private_channel_writes_no_catalogue() {
         let (mut state, ui, sync) = harness();
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         opened_space(&mut state, &stored, Role::Viewer, &ui, &sync);
         let channel_id = ChannelId::new();
 
@@ -1416,10 +1412,14 @@ mod tests {
     fn a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue() {
         let space_id = SpaceId::new();
         let mut alice =
-            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
-        let listed =
-            ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
-                .expect("channel");
+            identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
+        let listed = ChannelState::create(
+            ChannelId::new(),
+            ChannelType::Public,
+            Some(&fit_name("general")),
+            NOW,
+        )
+        .expect("channel");
         alice
             .list_channel(
                 &listed,
@@ -1491,10 +1491,14 @@ mod tests {
     fn listed_space_as(role: Role) -> (LogicState, SpaceId, ChannelId, Receiver<SyncCommand>) {
         let space_id = SpaceId::new();
         let mut alice =
-            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
-        let listed =
-            ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
-                .expect("channel");
+            identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
+        let listed = ChannelState::create(
+            ChannelId::new(),
+            ChannelType::Public,
+            Some(&fit_name("general")),
+            NOW,
+        )
+        .expect("channel");
         let listing = Listing {
             topic: None,
             category: None,
@@ -1998,7 +2002,7 @@ mod tests {
     fn a_remote_catalogue_delta_reaches_the_open_space() {
         let space_id = SpaceId::new();
         let mut alice =
-            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
+            identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
         let first = alice.export_all().expect("export");
         let (mut bob, ui, sync) = harness();
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
@@ -2009,9 +2013,13 @@ mod tests {
         ready(&mut bob, space_id.document_id(), Role::Editor);
         let _ = (drain(&ui), drain(&sync));
 
-        let listed =
-            ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
-                .expect("channel");
+        let listed = ChannelState::create(
+            ChannelId::new(),
+            ChannelType::Public,
+            Some(&fit_name("general")),
+            NOW,
+        )
+        .expect("channel");
         let delta = alice
             .list_channel(
                 &listed,
@@ -2104,7 +2112,7 @@ mod tests {
         members: Vec<MemberInfo>,
     ) -> SpaceId {
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
@@ -2139,7 +2147,7 @@ mod tests {
     fn opening_a_space_sends_this_users_presence_on_its_document_alone() {
         let (mut state, _ui, sync) = harness();
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
@@ -2164,7 +2172,7 @@ mod tests {
     fn the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else() {
         let (mut state, ui, sync) = harness();
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
@@ -2252,7 +2260,7 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let (alice, bob) = (UserId::new(), UserId::new());
         let space_id = SpaceId::new();
-        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         let changed = |members| LogicEvent::MembersChanged {
             document_id: space_id.document_id(),
