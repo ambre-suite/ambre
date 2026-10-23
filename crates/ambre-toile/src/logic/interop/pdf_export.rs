@@ -448,7 +448,7 @@ mod tests {
             let anim = HashMap::new();
             let camera = ViewportTransform {
                 center: ambre_draw::Point::new(x, y),
-                zoom,
+                zoom: ambre_core::ZoomFactor::positive(zoom),
                 size: ambre_draw::Size::new(width, height),
             };
 

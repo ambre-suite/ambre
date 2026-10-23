@@ -516,6 +516,24 @@ ONE_COPY_ACCEPTED = {
     "crates/ambre-toile/src/ui/view.rs:ToileView.present": (
         "the host build holds no signal; one PresentModeChanged event writes it here and into the signal"
     ),
+    "crates/ambre-toile/src/ui/viewport.rs:ViewportTransform.zoom": (
+        "the camera the frame draws at; the frame reads a chip pick from the zoom signal and publishes the camera back"
+    ),
+    "crates/ambre-toile/src/ui/view.rs:ToileView.zoom_published": (
+        "the zoom the frame last published, which tells a chip pick in the signal from the frame's own write"
+    ),
+    "crates/ambre-toile/src/ui/present.rs:Transition.cam_to_zoom": (
+        "the zoom a slide glide ends on, not the zoom the board shows"
+    ),
+    "crates/ambre-trame/src/ui/grid/mod.rs:TrameUiState.zoom": (
+        "the host build holds no signal; the frame reads a chip pick from the signal and publishes its clamp back"
+    ),
+    "crates/ambre-trame/src/render/layout.rs:GridLayout.zoom": (
+        "a copy the walk borrows for one paint, built from the grid state and dropped with the frame"
+    ),
+    "crates/ambre-prose/src/view/column.rs:Viewport.zoom": (
+        "Prose trades no zoom signal: the zoom signal is the canvas apps' status chip"
+    ),
 }
 # The modules a walk may reach, per application crate, and why each holds no
 # screen state (`CANVAS-074`). A module not listed is refused, so a new reach

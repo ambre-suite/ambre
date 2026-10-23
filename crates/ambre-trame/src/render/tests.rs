@@ -39,7 +39,7 @@ fn layout() -> GridLayout<'static> {
         height: 600.0,
         total_cols: ColCount::new(1000),
         total_rows: RowCount::new(100_000),
-        zoom: 1.0,
+        zoom: ambre_core::ZoomFactor::positive(1.0),
     }
 }
 
@@ -578,7 +578,7 @@ fn glyphs_scale_with_the_zoom() {
     // it is four times larger at a zoom of four.
     let drop = |zoom: f64| {
         let mut l = layout();
-        l.zoom = zoom;
+        l.zoom = ambre_core::ZoomFactor::positive(zoom);
         let top = l.cell_rect(CellPos::new(Row::new(0), Col::new(0))).y0;
         let mut c = CellContent::plain("Ag");
         c.v_align = ambre_bus::VAlign::Top;

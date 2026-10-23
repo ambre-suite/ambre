@@ -1495,7 +1495,7 @@ mod tests {
     fn cam() -> ViewportTransform {
         ViewportTransform {
             center: Point::ZERO,
-            zoom: 1.0,
+            zoom: ambre_core::ZoomFactor::positive(1.0),
             size: ambre_draw::Size::new(1000.0, 1000.0),
         }
     }

@@ -57,7 +57,7 @@ fn filter_button_scales_with_zoom() {
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("button visible");
 
-    state.set_zoom(2.0);
+    state.set_zoom(ambre_core::ZoomFactor::positive(2.0));
     let (.., w200, _) = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("button visible");
@@ -327,8 +327,8 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
 #[test]
 fn zoom_scales_metrics_and_round_trips_hit_test() {
     let mut state = TrameUiState::new(800.0, 600.0);
-    assert!(state.set_zoom(2.0));
-    assert_eq!(state.zoom, 2.0);
+    assert!(state.set_zoom(ambre_core::ZoomFactor::positive(2.0)));
+    assert_eq!(state.zoom.get(), 2.0);
 
     // Header strips and the default cell metrics double.
     assert_eq!(state.header_w(), super::super::HEADER_WIDTH * 2.0);
@@ -354,7 +354,7 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
     assert_eq!(state.cell_at(x, y), Some(at(2, 2)));
 
     // The preset clamp rejects out-of-range factors.
-    state.set_zoom(99.0);
+    state.set_zoom(ambre_core::ZoomFactor::positive(99.0));
     assert_eq!(state.zoom, *TrameUiState::ZOOM_PRESETS.last().unwrap());
 }
 

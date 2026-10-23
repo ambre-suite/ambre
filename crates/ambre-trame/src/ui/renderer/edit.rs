@@ -47,9 +47,9 @@ pub fn draw_edit<S: DrawSurface>(
     // Apply queued intents against this frame's layout. The text wraps to the
     // cell's content width and Alt+Enter inserts explicit newlines, so the edit
     // is multi-line (Excel/Sheets in-cell editor).
-    let pad = CELL_PAD_X * state.zoom;
+    let pad = CELL_PAD_X * state.zoom.get();
     let wrap_w = (cw - 2.0 * pad).max(1.0) as f32;
-    editor.core.flush(font_cx, wrap_w, state.zoom);
+    editor.core.flush(font_cx, wrap_w, state.zoom.get());
 
     // The field grows downward to fit every line, overflowing the cell like a
     // spreadsheet, and is never shorter than the row. A layout that fits the row

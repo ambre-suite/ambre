@@ -31,7 +31,7 @@ fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut state = TrameUiState::new(800.0, 600.0);
     state.scroll_by(RowDelta::new(10), ColDelta::new(3));
-    assert!(state.set_zoom(2.0));
+    assert!(state.set_zoom(ambre_core::ZoomFactor::positive(2.0)));
     for (row, col) in [(10, 3), (12, 4)] {
         let (x, y, w, h) = state
             .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))

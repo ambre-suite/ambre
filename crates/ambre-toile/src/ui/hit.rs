@@ -23,7 +23,7 @@ pub(crate) const PICK_PX: f64 = 4.0;
 /// [`PICK_PX`] in world units under `cam`: the reach of a pointer at this
 /// zoom. Every pointer hit test takes it, so the reach holds on screen.
 pub fn pick_floor(cam: &ViewportTransform) -> f64 {
-    PICK_PX / cam.zoom.max(super::viewport::MIN_ZOOM)
+    PICK_PX / cam.zoom.get().max(super::viewport::MIN_ZOOM.get())
 }
 
 /// Exact hit-test of one element against a world-space point. `pick` is the
@@ -326,8 +326,8 @@ mod tests {
         e.style.stroke_w = 0.5;
         let mut cam = ViewportTransform::default();
         use super::super::viewport::{MAX_ZOOM, MIN_ZOOM};
-        for zoom in [MIN_ZOOM, 0.5, 1.0, 4.0, MAX_ZOOM] {
-            cam.zoom = zoom;
+        for zoom in [MIN_ZOOM.get(), 0.5, 1.0, 4.0, MAX_ZOOM.get()] {
+            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
             let pick = pick_floor(&cam);
             // `px` screen pixels off the line, in world units at this zoom.
             let off = |px: f64| Point::new(500.0, px / zoom);

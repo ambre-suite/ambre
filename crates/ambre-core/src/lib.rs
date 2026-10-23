@@ -75,6 +75,7 @@ pub mod status;
 pub mod text_offset;
 pub mod uuid;
 pub mod version;
+pub mod zoom;
 
 // Re-export the main types for convenient use.
 pub use authorship::{PeerEntry, PeerId, PeerKey, SessionNonce};
@@ -136,3 +137,4 @@ pub use text_offset::{
 };
 pub use uuid::Uuid;
 pub use version::Version;
+pub use zoom::ZoomFactor;

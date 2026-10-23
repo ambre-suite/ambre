@@ -1033,7 +1033,7 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
     let mut rig = Rig::new(&paragraphs);
     let block = rig.blocks()[12];
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
-        rig.ui.viewport.zoom = zoom;
+        rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
         rig.ui.viewport.scroll_y = 0.0;
         rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42, 120] {
@@ -1610,7 +1610,7 @@ fn the_bar_follows_its_text_through_a_scroll_and_a_zoom() {
     assert!((x1 - x0).abs() < 0.01);
     assert!(((y0 - y1) - (line - moved)).abs() < 0.01);
     assert!(y1 < y0);
-    rig.ui.viewport.zoom = 2.0;
+    rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(2.0);
     let (_, zoomed) = rig.ui.toolbar().anchor.expect("the bar shows");
     let (_, line) = text_at(&rig);
     // Above the text it formats, by less than one line at this zoom.
@@ -2547,7 +2547,7 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
     let mut rig = Rig::new(&paragraphs);
     let block = rig.blocks()[12];
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
-        rig.ui.viewport.zoom = zoom;
+        rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
         rig.ui.viewport.scroll_y = 0.0;
         rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42] {

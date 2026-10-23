@@ -40,8 +40,9 @@ const MAX_SPACING_PX: f64 = 96.0;
 /// `MIN_SPACING_PX`. That step is then halved back down while it stays above
 /// `MAX_SPACING_PX`, never below `base`, so the grid stays magnetic to the board
 /// unit.
-pub fn grid_step(zoom: f64, base: f64) -> f64 {
-    debug_assert!(base > 0.0 && zoom > 0.0);
+pub fn grid_step(zoom: ambre_core::ZoomFactor, base: f64) -> f64 {
+    let zoom = zoom.get();
+    debug_assert!(base > 0.0);
     let mut step = base;
     // Zoomed out: coarsen until the spacing is legible.
     while step * zoom < MIN_SPACING_PX {
@@ -123,7 +124,7 @@ mod tests {
         // the minimum legible band.
         let mut z = MIN_SPACING_PX / (BASE_GRID * 64.0); // very zoomed out
         while z <= MAX_ZOOM_SWEEP {
-            let step = grid_step(z, BASE_GRID);
+            let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);
             let spacing = step * z;
             assert!(
                 spacing >= MIN_SPACING_PX - 1e-9,
@@ -140,7 +141,7 @@ mod tests {
     #[test]
     fn step_is_power_of_two_multiple_of_base() {
         for z in [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0] {
-            let step = grid_step(z, BASE_GRID);
+            let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);
             let ratio = step / BASE_GRID;
             assert!(ratio >= 1.0 - 1e-9, "step below base at zoom {z}");
             // ratio must be a power of two.
@@ -203,7 +204,7 @@ mod tests {
     fn a_grid_line_is_one_pixel_at_every_zoom() {
         for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
             let mut cam = ViewportTransform::new(1000.0, 800.0);
-            cam.zoom = zoom;
+            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
             let ops = grid_ops(&cam, BASE_GRID);
             let mut lines = 0;
             for op in &ops {

@@ -477,8 +477,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Text.0 | field |
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::Url.0 | field | String	debt	finding: Addresses not listed in lot C bis 5 (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
-ambre-bus | src/app/toile.rs | crate::app::toile | MAX_ZOOM | const | f64	debt	planned: lot B bis 7: ZoomFactor (bus Viewport.zoom is the carrier of toile ui/viewport.rs)
-ambre-bus | src/app/toile.rs | crate::app::toile | MIN_ZOOM | const | f64	debt	planned: lot B bis 7: ZoomFactor (bus Viewport.zoom is the carrier of toile ui/viewport.rs)
 ambre-bus | src/app/toile.rs | crate::app::toile | NodeId::decode(s) | param | &str	newtype-inner	NodeId storage codec
 ambre-bus | src/app/toile.rs | crate::app::toile | NodeId::encode() | ret | String	newtype-inner	NodeId storage codec
 ambre-bus | src/app/toile.rs | crate::app::toile | PlaybackState.active | field | usize	debt	finding: Toile slide index as usize (low, confirmed)
@@ -551,8 +549,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.widt
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_redo | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_undo | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | Viewport.zoom | field | f64	debt	planned: lot B bis 7: ZoomFactor (bus Viewport.zoom is the carrier of toile ui/viewport.rs)
-ambre-bus | src/app/toile.rs | crate::app::toile | Viewport::clamped_zoom() | ret | f64	debt	planned: lot B bis 7: ZoomFactor (bus Viewport.zoom is the carrier of toile ui/viewport.rs)
 ambre-bus | src/app/toile.rs | crate::app::toile | ZTarget::Index.0 | field | usize	math	z-order index
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
@@ -1348,11 +1344,6 @@ ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | Stri
 ambre-chrome | src/status.rs | crate::status | ZOOM_PRESETS | const | [f64;6]	math	layout geometry in logical px
 ambre-chrome | src/status.rs | crate::status | ZoomChip(presets) | param | Option<Vec<f64>>	debt	finding: `ZoomChip(presets: Option<Vec<f64>>)`
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
-ambre-chrome | src/status.rs | crate::status | ZoomFactor.0 | field | f64	newtype-inner	newtype inner
-ambre-chrome | src/status.rs | crate::status | ZoomFactor::get() | ret | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-chrome | src/status.rs | crate::status | ZoomFactor::within(hi) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-chrome | src/status.rs | crate::status | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-chrome | src/status.rs | crate::status | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-chrome | src/toast.rs | crate::toast | Toast.id | field | u64	math	local count/index/counter
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | ToastKind::class() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
@@ -1694,6 +1685,12 @@ ambre-core | src/version.rs | crate::version | Version.0 | field | u8	newtype-in
 ambre-core | src/version.rs | crate::version | Version::as_u8() | ret | u8	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/version.rs | crate::version | Version::compatible_with() | ret | bool	generic	predicate
 ambre-core | src/version.rs | crate::version | Version::new(value) | param | u8	newtype-inner	Seq/Version newtype accessor
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor.0 | field | f64	newtype-inner	newtype inner
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::get() | ret | f64	newtype-inner	enum/newtype own accessor or constructor
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::positive(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(hi) | param | f64	newtype-inner	enum/newtype own accessor or constructor
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
+ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | ROW_VERSION | const | u8	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
@@ -3948,7 +3945,6 @@ ambre-prose | src/view/column.rs | crate::view::column | PageColumn::visible_pag
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.height_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.scroll_y | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.width_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | Viewport.zoom | field | f32	debt	planned: lot B7 ZoomFactor
 ambre-prose | src/view/column.rs | crate::view::column | Viewport::scale() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | Viewport::visible_height() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::fling_speed() | ret | Option<f32>	math	layout geometry local to algorithm
@@ -5164,14 +5160,12 @@ ambre-toile | src/ui/deck.rs | crate::ui::deck | remove(at) | param | usize	debt
 ambre-toile | src/ui/deck.rs | crate::ui::deck | shift(at) | param | usize	debt	finding: The slide rank is a bare usize (suspected value, low risk): slide rank as bare usize across UI, bus and engine
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::committed_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(wrap_w) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(base_size) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::opened_text() | ret | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad(zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::render(show_caret) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | ink_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
@@ -5217,7 +5211,6 @@ ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit() | ret | f64	math	g
 ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit(register) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | grid_step() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | grid_step(base) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | grid_step(zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/grid.rs | crate::ui::grid | paint_grid(unit) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | snap_world(step) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/hit.rs | crate::ui::hit | PICK_PX | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -5293,8 +5286,6 @@ ambre-toile | src/ui/presence.rs | crate::ui::presence | PRESENCE_HEARTBEAT_MS |
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presence.rs | crate::ui::presence | laser_alpha() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/present.rs | crate::ui::present | Transition.cam_to_zoom | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
-ambre-toile | src/ui/present.rs | crate::ui::present | Transition::new(cam_to_zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/present.rs | crate::ui::present | TransitionFrame.done | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
@@ -5403,7 +5394,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.select_all_pending | 
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.selection_stale | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.space_down | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.viewport_changed | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.zoom_published | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::blur_embed() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::classify_wheel(px) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::drag_arrow_handle() | ret | bool	generic	predicate or handled-flag result
@@ -5478,15 +5468,10 @@ ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename) | pa
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename)#2 | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | wheel_device((dx,dy)) | param | (f64,f64)	debt	wheel delta as bare floats and a mode bool: WheelDelta exists
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform.zoom | field | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom() | ret | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::covering_viewport(to_zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target() | ret | Option<(Point,f64)>	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glide(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glide(to_zoom) | param | f64	debt	planned: lot B item 7 ZoomFactor (absolute zoom)
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::new(height) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::new(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::set_size(height) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -6030,7 +6015,6 @@ ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_heig
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_heights | field | &'a HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.zoom | field | f64	debt	planned: lot B 7 (ZoomFactor, layout.rs:72)
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at(px) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_left() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_w() | ret | f64	math	local geometry / pixel arithmetic
@@ -6141,8 +6125,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_width |
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.zoom | field | f64	debt	planned: lot B 7 (ZoomFactor, grid/mod.rs:499)
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::ZOOM_PRESETS | const | [f64;6]	debt	planned: lot B 7 (ZoomFactor)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::grid_bottom() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
@@ -6152,7 +6134,6 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resi
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom(zoom) | param | f64	debt	planned: lot B 7 (ZoomFactor)
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_active_to_master() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
@@ -6200,9 +6181,7 @@ ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::handle_
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::plan_repaint(hud_tick) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::resize(height) | param | u32	math	canvas size in logical px, local
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::resize(width) | param | u32	math	canvas size in logical px, local
-ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	debt	planned: lot B 7 (ZoomFactor, frame.rs:566/578)
-ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom(zoom) | param | f64	debt	planned: lot B 7 (ZoomFactor, frame.rs:566/578)
-ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::zoom() | ret | f64	debt	planned: lot B 7 (ZoomFactor, frame.rs:566/578)
+ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_col_resize(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::arm_row_resize(y) | param | f64	math	local geometry / pixel arithmetic

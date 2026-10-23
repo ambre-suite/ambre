@@ -449,7 +449,7 @@ pub struct ToileView {
     /// The zoom this view last published. A signal reading anything else was
     /// written by the chip, so the camera follows it. Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom_published: f64,
+    zoom_published: ambre_core::ZoomFactor,
     /// Status-bar selection aggregates (`toile-status-bar`), shared with the
     /// DOM band. The view clears it to `None` on an empty selection: an
     /// empty-ids stats request would mean "whole board" to Logic. It must not
@@ -774,7 +774,7 @@ impl ToileView {
             #[cfg(target_arch = "wasm32")]
             zoom,
             #[cfg(target_arch = "wasm32")]
-            zoom_published: 1.0,
+            zoom_published: ambre_core::ZoomFactor::ONE,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
             #[cfg(target_arch = "wasm32")]
@@ -1931,7 +1931,7 @@ impl ToileView {
         let Some(path) = arrow::path_of(&self.display, &id) else {
             return false;
         };
-        let tol = arrow::HANDLE_R / self.cam.zoom;
+        let tol = arrow::HANDLE_R / self.cam.zoom.get();
         let Some(end) = arrow::handle_at(path, world, tol) else {
             return false;
         };
@@ -2554,14 +2554,14 @@ impl ToileView {
     #[cfg(target_arch = "wasm32")]
     fn publish_zoom(&mut self) {
         let asked = self.zoom.get_untracked().get();
-        if (asked - self.zoom_published).abs() > f64::EPSILON {
-            self.cam.zoom_by_center(asked / self.cam.zoom);
+        if (asked - self.zoom_published.get()).abs() > f64::EPSILON {
+            self.cam.zoom_by_center(asked / self.cam.zoom.get());
             self.needs_full = true;
             self.queue_viewport();
         }
         let (lo, hi) = (super::viewport::MIN_ZOOM, super::viewport::MAX_ZOOM);
-        let shown = ambre_chrome::ZoomFactor::within(self.cam.zoom, lo, hi);
-        self.zoom_published = shown.get();
+        let shown = self.cam.zoom.clamped(lo, hi);
+        self.zoom_published = shown;
         if self.zoom.get_untracked() != shown {
             self.zoom.set(shown);
         }
@@ -3303,7 +3303,7 @@ impl ToileView {
         // scaled by the zoom at paint. Dividing here opens the edited text at
         // the size the band reads today. A zoom during the edit then drifts,
         // which `toile-frames` section 6 records.
-        let base_size = (render::FRAME_TITLE_PX / self.cam.zoom.max(f64::EPSILON)) as f32;
+        let base_size = (render::FRAME_TITLE_PX / self.cam.zoom.get()) as f32;
         self.editor = Some(InlineEditor::open_frame_title(
             id,
             &title,

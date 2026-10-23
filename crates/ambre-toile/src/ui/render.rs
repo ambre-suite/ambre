@@ -300,7 +300,7 @@ fn paint_preview<S: DrawSurface>(
     }
 
     let brush = Brush::Solid(palette.selection);
-    let px = |n: f64| Stroke::new(n / cam.zoom.max(1e-3));
+    let px = |n: f64| Stroke::new(n / cam.zoom.get());
     surface.push_transform(cam.world_to_screen());
     match preview {
         Preview::Marquee(_) => {} // handled above
@@ -414,7 +414,7 @@ fn paint_arrow_selection<S: DrawSurface>(
     surface.stroke_path(
         path,
         &Brush::Solid(palette.selection),
-        &Stroke::new(ARROW_SELECT_W / cam.zoom.max(1e-3)),
+        &Stroke::new(ARROW_SELECT_W / cam.zoom.get()),
     );
     surface.pop_transform();
     let w2s = cam.world_to_screen();
@@ -2034,7 +2034,7 @@ mod tests {
         )]);
         let origin = |zoom: f64| {
             let mut cam = cam();
-            cam.zoom = zoom;
+            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
             let painted = runs(&paint_pass(&vp, &cam, &Pass::default()));
             let (_, first, depth) = *painted.first().expect("the body is shaped");
             assert_eq!(depth, 1, "zoom {zoom}: a run under the camera transform");
@@ -2327,7 +2327,7 @@ mod tests {
     #[test]
     fn every_preview_tracks_the_geometry_it_will_commit() {
         let mut cam = cam();
-        cam.zoom = 2.0;
+        cam.zoom = ambre_core::ZoomFactor::positive(2.0);
         let r = Rect::new(10.0, 20.0, 110.0, 70.0);
         let mut pen = BezPath::new();
         pen.move_to((0.0, 0.0));
@@ -2368,7 +2368,7 @@ mod tests {
                 assert_eq!(*transform, world, "under the camera");
                 assert_eq!(*color, Some(LIGHT_PALETTE.selection));
                 assert_eq!(*b, bounds);
-                assert_eq!(width * cam.zoom, px, "a screen-constant width");
+                assert_eq!(width * cam.zoom.get(), px, "a screen-constant width");
             }
             other => panic!("one stroked path: {other:?}"),
         };

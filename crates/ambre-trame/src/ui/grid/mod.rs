@@ -491,7 +491,7 @@ pub struct TrameUiState {
     /// Pure local view state -- never persisted, never synced (like the scroll
     /// position). The browser's own page zoom (Ctrl+wheel / Ctrl+/-) is left
     /// untouched and zooms the whole page incl. chrome; this scales the grid only.
-    pub zoom: f64,
+    pub zoom: ambre_core::ZoomFactor,
 
     /// Cache of received cells: cell -> display data (text + formatting).
     ///

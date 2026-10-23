@@ -1997,7 +1997,7 @@ mod tests {
             let mut ui = ProseUiState::default();
             ui.resize(width, height);
             ui.apply_layout(shaped);
-            ui.viewport.zoom = zoom;
+            ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
             let bottom = ui.column.page_top_y(1);
             ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, scroll * bottom);
             let id = first_block(&ui);

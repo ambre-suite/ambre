@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn the_drawn_cell_is_the_hit_tested_cell() {
         let mut state = fixture(&[]);
-        assert!(state.set_zoom(1.25));
+        assert!(state.set_zoom(ambre_core::ZoomFactor::positive(1.25)));
         state.col_widths.insert(Col::new(4), 150.0);
         state.col_widths.insert(Col::new(6), 30.0);
         state.row_heights.insert(Row::new(13), 44.0);
@@ -294,7 +294,7 @@ mod tests {
             state.hidden_rows = vec![Row::new(9)];
             state.dirty_cells.insert(CellPos::new(Row::new(2), Col::new(2)));
             state.resize(width, height);
-            state.set_zoom(zoom);
+            state.set_zoom(ambre_core::ZoomFactor::positive(zoom));
             state.left_col = Col::new(left_col);
             state.top_row = Row::new(top_row);
             let palette = Theme::Light.palette();

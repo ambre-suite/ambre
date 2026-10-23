@@ -60,7 +60,7 @@ impl TrameUiState {
             .get(&col)
             .map(|&w| w as f64)
             .unwrap_or(COL_WIDTH)
-            * self.zoom
+            * self.zoom.get()
     }
 
     /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
@@ -69,19 +69,19 @@ impl TrameUiState {
             .get(&row)
             .map(|&h| h as f64)
             .unwrap_or(ROW_HEIGHT)
-            * self.zoom
+            * self.zoom.get()
     }
 
     /// Width (logical px) of the fixed row-number strip on the left, scaled by
     /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
     pub fn header_w(&self) -> f64 {
-        HEADER_WIDTH * self.zoom
+        HEADER_WIDTH * self.zoom.get()
     }
 
     /// Height (logical px) of the fixed column-letter strip on top, scaled by
     /// the current [`zoom`](Self::zoom).
     pub fn header_h(&self) -> f64 {
-        HEADER_HEIGHT * self.zoom
+        HEADER_HEIGHT * self.zoom.get()
     }
 
     /// X of column `col`'s left edge relative to the canvas, summing the variable
@@ -555,7 +555,7 @@ impl TrameUiState {
         let (x, y, w, h) = self.cell_pixel_rect(at)?;
         // Scale the button with the grid zoom so it tracks the cell (which is
         // already zoom-scaled via `cell_pixel_rect`); clamp to the cell height.
-        let s = (FILTER_BUTTON_SIZE * self.zoom).min(h - 2.0).max(0.0);
+        let s = (FILTER_BUTTON_SIZE * self.zoom.get()).min(h - 2.0).max(0.0);
         let bx = x + w - s - 1.0;
         let by = y + (h - s) / 2.0;
         Some((bx, by, s, s))

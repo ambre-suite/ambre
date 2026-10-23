@@ -267,7 +267,7 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         for zoom in [0.5, 1.0, 1.75] {
-            ui.viewport.zoom = zoom;
+            ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
             let ruler = ui.ruler();
             let layout = &ui.shaped.layout;
             let left = ui.column.left_px(&ui.viewport) + layout.margin_left_px * zoom;

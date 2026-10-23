@@ -91,8 +91,8 @@ pub fn to_child_space(elem: &DisplayElement, cam: &ViewportTransform, screen: Po
     let world = cam.screen_to_world() * screen;
     let local = elem.transform.inverse() * world;
     Point::new(
-        (local.x - elem.bounds.x0) * cam.zoom,
-        (local.y - elem.bounds.y0) * cam.zoom,
+        (local.x - elem.bounds.x0) * cam.zoom.get(),
+        (local.y - elem.bounds.y0) * cam.zoom.get(),
     )
 }
 
@@ -109,14 +109,14 @@ pub fn to_screen(elem: &DisplayElement, cam: &ViewportTransform) -> Affine {
     cam.world_to_screen()
         * elem.transform
         * Affine::translate((elem.bounds.x0, elem.bounds.y0))
-        * Affine::scale(1.0 / cam.zoom)
+        * Affine::scale(1.0 / cam.zoom.get())
 }
 
 /// The child's canvas size in logical pixels at the current zoom.
 pub fn child_size(elem: &DisplayElement, cam: &ViewportTransform) -> Size {
     Size::new(
-        elem.bounds.width() * cam.zoom,
-        elem.bounds.height() * cam.zoom,
+        elem.bounds.width() * cam.zoom.get(),
+        elem.bounds.height() * cam.zoom.get(),
     )
 }
 
@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn a_child_pixel_is_a_screen_pixel() {
         let mut cam = ViewportTransform::new(1000.0, 800.0);
-        cam.zoom = 2.5;
+        cam.zoom = ambre_core::ZoomFactor::positive(2.5);
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -787,7 +787,7 @@ mod tests {
     #[test]
     fn child_size_scales_with_zoom() {
         let mut cam = ViewportTransform::new(1000.0, 800.0);
-        cam.zoom = 0.5;
+        cam.zoom = ambre_core::ZoomFactor::positive(0.5);
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -827,7 +827,7 @@ mod tests {
             for zoom in [0.5, 1.0, 2.5] {
                 let e = doc_embed("e", DocumentId::new(), bounds, rot);
                 let cam = ViewportTransform {
-                    zoom,
+                    zoom: ambre_core::ZoomFactor::positive(zoom),
                     size: Size::new(800.0, 600.0),
                     ..Default::default()
                 };
@@ -1492,7 +1492,7 @@ mod web_embed_tests {
             "https://example.com",
         ))]);
         let mut zoomed = cam();
-        zoomed.zoom = 3.0;
+        zoomed.zoom = ambre_core::ZoomFactor::positive(3.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].layout_size;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].layout_size;
         assert_eq!(
@@ -1518,7 +1518,7 @@ mod web_embed_tests {
         ))]);
 
         let mut zoomed = cam();
-        zoomed.zoom = 2.0;
+        zoomed.zoom = ambre_core::ZoomFactor::positive(2.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].screen_rect;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].screen_rect;
         assert!(

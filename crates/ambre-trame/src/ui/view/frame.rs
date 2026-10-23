@@ -253,9 +253,9 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")]
         {
             let asked = self.zoom_sig.get_untracked();
-            self.set_zoom(asked.get());
+            self.set_zoom(asked);
             let [lo, .., hi] = TrameUiState::ZOOM_PRESETS;
-            let shown = ambre_chrome::ZoomFactor::within(self.state.zoom, lo, hi);
+            let shown = self.state.zoom.clamped(lo, hi);
             if shown != asked {
                 self.zoom_sig.set(shown);
             }
@@ -375,8 +375,8 @@ impl TrameView {
                 (ContentRepaint::Full, None)
             } else {
                 // One whole-cell step is the base metric scaled by the grid zoom.
-                let dy_px = (-(dr as f64) * ROW_HEIGHT * self.state.zoom).round() as i32;
-                let dx_px = (-(dc as f64) * COL_WIDTH * self.state.zoom).round() as i32;
+                let dy_px = (-(dr as f64) * ROW_HEIGHT * self.state.zoom.get()).round() as i32;
+                let dx_px = (-(dc as f64) * COL_WIDTH * self.state.zoom.get()).round() as i32;
                 let w = self.state.canvas_width;
                 // Bottom edge of the cell area (now the full canvas: the sheet-tab
                 // strip moved to DOM chrome, so it no longer reserves a band here).
@@ -563,7 +563,7 @@ impl TrameView {
     /// the cell font together (`trame-status-bar`). A no-op when unchanged. On a
     /// real change the visible range shifts, so we request the new viewport and
     /// force a full repaint. Pure local view state -- never synced.
-    pub fn set_zoom(&mut self, zoom: f64) -> bool {
+    pub fn set_zoom(&mut self, zoom: ambre_core::ZoomFactor) -> bool {
         if !self.state.set_zoom(zoom) {
             return false;
         }
@@ -575,7 +575,7 @@ impl TrameView {
     }
 
     /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
-    pub fn zoom(&self) -> f64 {
+    pub fn zoom(&self) -> ambre_core::ZoomFactor {
         self.state.zoom
     }
 

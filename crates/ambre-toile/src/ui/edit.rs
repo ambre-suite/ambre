@@ -162,8 +162,8 @@ impl InlineEditor {
     /// inset (`TEXT_PAD`) under the camera. The editor lays out in screen
     /// pixels, so its caret keeps one width at every zoom, and lands where the
     /// walk's body does.
-    pub fn pad(zoom: f64) -> f64 {
-        TEXT_PAD * zoom
+    pub fn pad(zoom: ambre_core::ZoomFactor) -> f64 {
+        TEXT_PAD * zoom.get()
     }
 
     /// Record an action to apply at the next paint-time flush.
@@ -193,8 +193,8 @@ impl InlineEditor {
     /// Push the pinned style + geometry onto the editor for this paint, then
     /// apply every queued intent. Must run before rendering. `wrap_w` is the wrap
     /// width in screen pixels; `zoom` bakes into the font size.
-    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: f32, zoom: f64) {
-        self.core.flush(font_cx, wrap_w, zoom);
+    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: f32, zoom: ambre_core::ZoomFactor) {
+        self.core.flush(font_cx, wrap_w, zoom.get());
     }
 
     /// The caret rectangle in local editor coordinates, for the transparent

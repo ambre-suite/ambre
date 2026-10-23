@@ -1686,7 +1686,7 @@ fn the_trackpad_mode_pans_both_axes_against_the_delta() {
     let before = rig.screen(0.0, 0.0);
     wheel(&mut rig, (12.0, 18.0), 0, false);
     let after = rig.screen(0.0, 0.0);
-    assert_eq!(rig.view.cam.zoom, 1.0);
+    assert_eq!(rig.view.cam.zoom.get(), 1.0);
     assert!(
         after.0 < before.0 && after.1 < before.1,
         "{before:?} {after:?}"
@@ -1736,14 +1736,14 @@ fn a_picked_mode_ignores_a_contrary_wheel() {
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Trackpad;
     wheel(&mut rig, (0.0, 3.0), 1, false);
-    assert_eq!(rig.view.cam.zoom, 1.0, "a line wheel pans");
+    assert_eq!(rig.view.cam.zoom.get(), 1.0, "a line wheel pans");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Mouse;
     rig.view.detected_mouse = false;
     wheel(&mut rig, (4.0, 6.0), 0, false);
-    assert_ne!(rig.view.cam.zoom, 1.0, "a glide zooms");
+    assert_ne!(rig.view.cam.zoom.get(), 1.0, "a glide zooms");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 }
 
@@ -1796,7 +1796,7 @@ fn a_finger_pans_only_the_empty_board() {
 fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
     let screen_step = |zoom: f64| {
         let mut rig = Rig::with_stickies(&[("a", A)]);
-        rig.view.cam.zoom = zoom;
+        rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
         rig.press(rig.screen(50.0, 50.0));
         rig.input(InputEvent::PointerMove {
             x: 1195.0,
@@ -1822,12 +1822,12 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
 fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.view.cam.center = kurbo::Point::new(40.0, -25.0);
-    rig.view.cam.zoom = 1.5;
+    rig.view.cam.zoom = ambre_core::ZoomFactor::positive(1.5);
     rig.view.update();
     rig.sent();
     rig.view.resize(1600, 900);
     assert_eq!(rig.view.cam.center, kurbo::Point::new(40.0, -25.0));
-    assert_eq!(rig.view.cam.zoom, 1.5);
+    assert_eq!(rig.view.cam.zoom.get(), 1.5);
     rig.view.update();
     let asked = viewport_requests(rig.sent());
     assert_eq!(asked.len(), 1);
@@ -2250,7 +2250,7 @@ fn a_shown_shortcut_does_what_its_entry_does() {
 fn a_zoom_entry_moves_the_camera_and_queues_a_cull() {
     use crate::ui::menu_bar::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.view.cam.zoom = 2.0;
+    rig.view.cam.zoom = ambre_core::ZoomFactor::positive(2.0);
     for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET] {
         let before = rig.view.cam.zoom;
         rig.view.apply_menu_command(id);
@@ -2263,7 +2263,7 @@ fn a_zoom_entry_moves_the_camera_and_queues_a_cull() {
             "{id:?} queues no cull"
         );
     }
-    assert_eq!(rig.view.cam.zoom, 1.0, "reset lands on 100 %");
+    assert_eq!(rig.view.cam.zoom.get(), 1.0, "reset lands on 100 %");
 }
 
 /// `TOILE-UI-158`: a fit asks the Logic thread for the extent first. The
@@ -2931,7 +2931,7 @@ fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for zoom in [0.5, 1.0, 2.0] {
-        rig.view.cam.zoom = zoom;
+        rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
         let (x, y) = rig.screen(50.0, 50.0);
         assert_eq!(rig.view.hit_test(x, y), Some(eid("a")), "zoom {zoom}");
         let (x, y) = rig.screen(900.0, 600.0);

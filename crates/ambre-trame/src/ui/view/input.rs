@@ -719,11 +719,13 @@ impl TrameView {
             Some(HeaderHit::ColBorder(c)) => {
                 // The guide is in logical px, so the minimum width is the base
                 // clamp scaled by the current zoom.
-                let min_x = self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH * self.state.zoom;
+                let min_x =
+                    self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH * self.state.zoom.get();
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
             }
             Some(HeaderHit::RowBorder(r)) => {
-                let min_y = self.state.row_y(r) + crate::ui::grid::MIN_ROW_HEIGHT * self.state.zoom;
+                let min_y =
+                    self.state.row_y(r) + crate::ui::grid::MIN_ROW_HEIGHT * self.state.zoom.get();
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y.max(min_y)));
             }
             _ => {}
@@ -747,14 +749,14 @@ impl TrameView {
                 // The guide is in logical (zoomed) px; the stored width is BASE
                 // px (zoom-independent content). Divide the on-screen extent
                 // back out by the zoom before persisting.
-                let width = ((px - self.state.col_x(c)) / self.state.zoom)
+                let width = ((px - self.state.col_x(c)) / self.state.zoom.get())
                     .max(crate::ui::grid::MIN_COL_WIDTH);
                 for col in self.resize_target_cols(c) {
                     self.send_resize_col(col, width as f32);
                 }
             }
             (HeaderHit::RowBorder(r), crate::ui::grid::ResizePreview::Row(py)) => {
-                let height = ((py - self.state.row_y(r)) / self.state.zoom)
+                let height = ((py - self.state.row_y(r)) / self.state.zoom.get())
                     .max(crate::ui::grid::MIN_ROW_HEIGHT);
                 for row in self.resize_target_rows(r) {
                     self.send_resize_row(row, height as f32);

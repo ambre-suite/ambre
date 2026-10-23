@@ -555,9 +555,9 @@ pub(crate) mod tests {
         let before = logic.export_snapshot();
         let shaped_before = logic.shaped_count();
         let mut ui = a_view();
-        ui.viewport.zoom = 1.5;
+        ui.viewport.zoom = ambre_core::ZoomFactor::positive(1.5);
         assert!(ui.apply_layout(shaped));
-        assert_eq!(ui.viewport.zoom, 1.5);
+        assert_eq!(ui.viewport.zoom.get(), 1.5);
         assert_eq!(logic.shaped_count(), shaped_before);
         assert_eq!(logic.export_snapshot(), before);
         // The view holds the runs it was handed and built none of them.
@@ -580,7 +580,7 @@ pub(crate) mod tests {
     fn a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else() {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 10));
-        ui.viewport.zoom = 2.0;
+        ui.viewport.zoom = ambre_core::ZoomFactor::positive(2.0);
         let (column, version) = (ui.column, ui.layout_version);
         ui.scroll_by(down(300.0));
         assert_eq!(ui.viewport.scroll_y, 150.0);
@@ -588,7 +588,7 @@ pub(crate) mod tests {
         assert_eq!(ui.viewport.scroll_y, 100.0);
         ui.scroll_by(down(-1.0e6));
         assert_eq!(ui.viewport.scroll_y, 0.0);
-        assert_eq!(ui.viewport.zoom, 2.0);
+        assert_eq!(ui.viewport.zoom.get(), 2.0);
         assert_eq!(ui.column, column);
         assert_eq!(ui.layout_version, version);
     }
@@ -597,12 +597,12 @@ pub(crate) mod tests {
     fn a_resize_keeps_the_offset_and_the_zoom() {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 10));
-        ui.viewport.zoom = 0.8;
+        ui.viewport.zoom = ambre_core::ZoomFactor::positive(0.8);
         ui.scroll_by(down(2000.0));
         let scroll_y = ui.viewport.scroll_y;
         ui.resize(300.0, 4000.0);
         assert_eq!(ui.viewport.scroll_y, scroll_y);
-        assert_eq!(ui.viewport.zoom, 0.8);
+        assert_eq!(ui.viewport.zoom.get(), 0.8);
     }
 
     #[test]

@@ -6,7 +6,14 @@ use ambre_commands::SelectionMode;
 
 impl TrameUiState {
     /// Discrete zoom levels cycled by the status-bar zoom control.
-    pub const ZOOM_PRESETS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    pub const ZOOM_PRESETS: [ambre_core::ZoomFactor; 6] = [
+        ambre_core::ZoomFactor::positive(0.5),
+        ambre_core::ZoomFactor::positive(0.75),
+        ambre_core::ZoomFactor::ONE,
+        ambre_core::ZoomFactor::positive(1.25),
+        ambre_core::ZoomFactor::positive(1.5),
+        ambre_core::ZoomFactor::positive(2.0),
+    ];
 
     pub fn new(canvas_width: f64, canvas_height: f64) -> Self {
         let mut s = Self {
@@ -17,7 +24,7 @@ impl TrameUiState {
             viewport_cols: ColCount::ZERO,
             canvas_width,
             canvas_height,
-            zoom: 1.0,
+            zoom: ambre_core::ZoomFactor::ONE,
             cell_cache: HashMap::new(),
             dirty_cells: HashSet::new(),
             formula_errors: HashMap::new(),
@@ -63,18 +70,18 @@ impl TrameUiState {
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows = RowCount::new((grid_h / (ROW_HEIGHT * self.zoom)).ceil() as u32);
-        self.viewport_cols = ColCount::new((grid_w / (COL_WIDTH * self.zoom)).ceil() as u32);
+        self.viewport_rows = RowCount::new((grid_h / (ROW_HEIGHT * self.zoom.get())).ceil() as u32);
+        self.viewport_cols = ColCount::new((grid_w / (COL_WIDTH * self.zoom.get())).ceil() as u32);
     }
 
     /// Set the grid zoom factor (clamped to the preset range), keeping the
     /// top-left scroll origin pinned. Recomputes the visible range. Returns
     /// `true` when the zoom actually changed, so the caller can repaint and
     /// re-request the (now differently sized) viewport.
-    pub fn set_zoom(&mut self, zoom: f64) -> bool {
+    pub fn set_zoom(&mut self, zoom: ambre_core::ZoomFactor) -> bool {
         let [lo, .., hi] = Self::ZOOM_PRESETS;
-        let z = zoom.clamp(lo, hi);
-        if (z - self.zoom).abs() < f64::EPSILON {
+        let z = zoom.clamped(lo, hi);
+        if (z.get() - self.zoom.get()).abs() < f64::EPSILON {
             return false;
         }
         self.zoom = z;

@@ -1064,7 +1064,7 @@ mod tests {
         st.handle_command(large_import());
         let out = st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
             center: Point::ZERO,
-            zoom: 0.5,
+            zoom: ambre_core::ZoomFactor::positive(0.5),
             size: Size::new(800.0, 600.0),
         }));
         assert!(out.update.is_none());

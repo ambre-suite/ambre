@@ -69,7 +69,7 @@ pub struct GridLayout<'a> {
     /// (`col_width`/`row_height` and the per-axis maps, which store BASE px). The
     /// header strip sizes (`header_width`/`header_height`) are passed already
     /// scaled by the caller, so they are not re-multiplied here.
-    pub zoom: f64,
+    pub zoom: ambre_core::ZoomFactor,
 }
 
 impl GridLayout<'_> {
@@ -96,7 +96,7 @@ impl GridLayout<'_> {
             .get(&col)
             .map(|&w| w as f64)
             .unwrap_or(self.col_width)
-            * self.zoom
+            * self.zoom.get()
     }
 
     /// Height (logical px) of row `row`: its per-row entry, else the uniform
@@ -107,7 +107,7 @@ impl GridLayout<'_> {
             .get(&row)
             .map(|&h| h as f64)
             .unwrap_or(self.row_height)
-            * self.zoom
+            * self.zoom.get()
     }
 
     /// X of column `col`'s left edge relative to the surface, summing the

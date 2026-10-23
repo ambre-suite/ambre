@@ -558,9 +558,9 @@ pub struct EndCaps {
 // =============================================================================
 
 /// The smallest zoom the camera allows, and the floor every reader clamps to.
-pub const MIN_ZOOM: f64 = 0.1;
+pub const MIN_ZOOM: ambre_core::ZoomFactor = ambre_core::ZoomFactor::positive(0.1);
 /// The largest zoom the camera allows, and the ceiling every reader clamps to.
-pub const MAX_ZOOM: f64 = 10.0;
+pub const MAX_ZOOM: ambre_core::ZoomFactor = ambre_core::ZoomFactor::positive(10.0);
 
 /// The camera: a world-space center, a zoom factor, and the physical screen
 /// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
@@ -568,7 +568,7 @@ pub const MAX_ZOOM: f64 = 10.0;
 pub struct Viewport {
     pub center: Point,
     /// Read through [`clamped_zoom`](Viewport::clamped_zoom), never raw.
-    pub zoom: f64,
+    pub zoom: ambre_core::ZoomFactor,
     pub size: Size, // screen size in physical pixels
 }
 
@@ -576,7 +576,7 @@ impl Default for Viewport {
     fn default() -> Self {
         Self {
             center: Point::ZERO,
-            zoom: 1.0,
+            zoom: ambre_core::ZoomFactor::ONE,
             size: Size::new(1280.0, 800.0),
         }
     }
@@ -585,19 +585,14 @@ impl Default for Viewport {
 impl Viewport {
     /// The zoom inside `MIN_ZOOM ..= MAX_ZOOM`, so a reader can divide by it
     /// (`TOILE-UI-281`). The fields are public, so the clamp sits on the read.
-    /// A NaN reads as 1.
-    pub fn clamped_zoom(&self) -> f64 {
-        if self.zoom.is_nan() {
-            1.0
-        } else {
-            self.zoom.clamp(MIN_ZOOM, MAX_ZOOM)
-        }
+    pub fn clamped_zoom(&self) -> ambre_core::ZoomFactor {
+        self.zoom.clamped(MIN_ZOOM, MAX_ZOOM)
     }
 
     /// The world-space rectangle currently visible: the screen box mapped back
     /// through the inverse view transform.
     pub fn to_world_rect(&self) -> Rect {
-        let half = Vec2::new(self.size.width, self.size.height) / (2.0 * self.clamped_zoom());
+        let half = Vec2::new(self.size.width, self.size.height) / (2.0 * self.clamped_zoom().get());
         Rect::from_center_size(self.center, Size::new(2.0 * half.x, 2.0 * half.y))
     }
 }
@@ -2091,7 +2086,7 @@ mod tests {
             1e-300,
         ] {
             let r = Viewport {
-                zoom,
+                zoom: ambre_core::ZoomFactor::positive(zoom),
                 ..Viewport::default()
             }
             .to_world_rect();

@@ -95,7 +95,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE * layout.zoom as f32,
+            HEADER_SIZE * layout.zoom.get() as f32,
             cw as f32,
             Alignment::Center,
             false,
@@ -224,7 +224,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE * layout.zoom as f32,
+            HEADER_SIZE * layout.zoom.get() as f32,
             max_width,
             Alignment::End,
             false,

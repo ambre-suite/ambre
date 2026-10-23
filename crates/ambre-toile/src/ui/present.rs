@@ -29,7 +29,7 @@ pub struct Transition {
     dur: std::time::Duration,
     cam_from: ViewportTransform,
     cam_to_center: Point,
-    cam_to_zoom: f64,
+    cam_to_zoom: ambre_core::ZoomFactor,
     from: FrameSnapshot,
     to: FrameSnapshot,
 }
@@ -51,7 +51,7 @@ impl Transition {
     pub fn new(
         cam_from: ViewportTransform,
         cam_to_center: Point,
-        cam_to_zoom: f64,
+        cam_to_zoom: ambre_core::ZoomFactor,
         from: FrameSnapshot,
         to: FrameSnapshot,
         dur: std::time::Duration,
@@ -124,7 +124,7 @@ mod tests {
     fn cam(cx: f64, cy: f64, zoom: f64) -> ViewportTransform {
         ViewportTransform {
             center: Point::new(cx, cy),
-            zoom,
+            zoom: ambre_core::ZoomFactor::positive(zoom),
             size: Size::new(1000.0, 800.0),
         }
     }
@@ -142,7 +142,7 @@ mod tests {
         Transition::new(
             cam(0.0, 0.0, 1.0),
             Point::new(105.0, 105.0),
-            2.0,
+            ambre_core::ZoomFactor::positive(2.0),
             from,
             to,
             std::time::Duration::from_millis(300),
@@ -155,7 +155,7 @@ mod tests {
         let f = t.advance(ambre_bus::PageTime(1000.0));
         // t = 0: camera is exactly the source, no progress yet.
         assert_eq!(f.cam.center, Point::new(0.0, 0.0));
-        assert_eq!(f.cam.zoom, 1.0);
+        assert_eq!(f.cam.zoom.get(), 1.0);
         assert!(!f.done);
         // The shared element sits at its source bounds; the new element is fully
         // transparent (fade-in at t=0).
@@ -181,7 +181,7 @@ mod tests {
         assert!(f.done, "the transition is done at its full duration");
         // Camera reached the fit target exactly.
         assert_eq!(f.cam.center, Point::new(105.0, 105.0));
-        assert!((f.cam.zoom - 2.0).abs() < 1e-9);
+        assert!((f.cam.zoom.get() - 2.0).abs() < 1e-9);
         // The shared element reached its target bounds; the new element is fully
         // opaque.
         let shared = f
@@ -213,7 +213,7 @@ mod tests {
             .unwrap();
         assert_eq!(shared.bounds, Rect::new(50.0, 50.0, 60.0, 60.0));
         assert_eq!(f.cam.center, Point::new(52.5, 52.5));
-        assert!((f.cam.zoom - 1.5).abs() < 1e-9);
+        assert!((f.cam.zoom.get() - 1.5).abs() < 1e-9);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
         let mut t = Transition::new(
             cam(0.0, 0.0, 1.0),
             Point::new(10.0, 10.0),
-            3.0,
+            ambre_core::ZoomFactor::positive(3.0),
             from,
             to,
             std::time::Duration::ZERO,
@@ -248,15 +248,15 @@ mod tests {
         let t = Transition::new(
             from,
             Point::new(4000.0, 0.0),
-            1.0,
+            ambre_core::ZoomFactor::positive(1.0),
             FrameSnapshot::default(),
             FrameSnapshot::default(),
             std::time::Duration::from_millis(300),
         );
         let covering = t.covering_viewport(&from);
-        let half_w = covering.size.width / (2.0 * covering.zoom);
+        let half_w = covering.size.width / (2.0 * covering.zoom.get());
         let (left, right) = (covering.center.x - half_w, covering.center.x + half_w);
-        let start_left = from.center.x - from.size.width / (2.0 * from.zoom);
+        let start_left = from.center.x - from.size.width / (2.0 * from.zoom.get());
         let end_right = 4000.0 + from.size.width / 2.0;
         assert!(
             left <= start_left && right >= end_right,

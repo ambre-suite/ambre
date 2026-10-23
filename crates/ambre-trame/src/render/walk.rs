@@ -166,7 +166,7 @@ impl DocumentWalk for SheetWalk<'_> {
             height: region.y1,
             total_cols: TOTAL_COLS,
             total_rows: TOTAL_ROWS,
-            zoom: 1.0,
+            zoom: ambre_core::ZoomFactor::positive(1.0),
         };
         let hits = |rect: Rect| {
             let hit = rect.intersect(region);

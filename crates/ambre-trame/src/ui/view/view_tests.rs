@@ -960,7 +960,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
 fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
     for zoom in [1.0, 2.0] {
         let mut rig = Rig::new();
-        assert!(rig.view.set_zoom(zoom) || zoom == 1.0);
+        assert!(rig.view.set_zoom(ambre_core::ZoomFactor::positive(zoom)) || zoom == 1.0);
         rig.frame();
         rig.sent();
         let edge = rig.col_edge(1);

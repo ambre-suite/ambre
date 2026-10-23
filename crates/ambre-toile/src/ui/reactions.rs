@@ -262,7 +262,10 @@ mod tests {
         reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 1, 1));
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let near = ViewportTransform::new(800.0, 800.0);
-        let far = ViewportTransform { zoom: 4.0, ..near };
+        let far = ViewportTransform {
+            zoom: ambre_core::ZoomFactor::positive(4.0),
+            ..near
+        };
 
         let (at_1x, at_4x) = (pills(&vp, &near), pills(&vp, &far));
         assert_eq!(at_1x.len(), 2);

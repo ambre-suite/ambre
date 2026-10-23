@@ -21,7 +21,7 @@ pub struct Viewport {
     pub width_px: f32,
     pub height_px: f32,
     /// One at a hundred per cent.
-    pub zoom: f32,
+    pub zoom: ambre_core::ZoomFactor,
 }
 
 impl Default for Viewport {
@@ -30,20 +30,21 @@ impl Default for Viewport {
             scroll_y: 0.0,
             width_px: 0.0,
             height_px: 0.0,
-            zoom: 1.0,
+            zoom: ambre_core::ZoomFactor::ONE,
         }
     }
 }
 
 impl Viewport {
-    /// The zoom a conversion divides by. A zoom of zero or less, or one that
-    /// is not a number, reads as a hundred per cent rather than dividing by
-    /// nothing. Clamping the zoom itself lands with the "One zoom model"
-    /// Story (`ambre-roadmap.md` E8).
+    /// The zoom a conversion divides by. The factor is positive and finite.
+    /// One that an `f32` cannot hold reads as a hundred per cent, so nothing
+    /// divides by zero. Clamping the zoom into a range lands with the "One
+    /// zoom model" Story (`ambre-roadmap.md` E8).
     #[must_use]
     pub fn scale(&self) -> f32 {
-        if self.zoom.is_finite() && self.zoom > 0.0 {
-            self.zoom
+        let zoom = self.zoom.get() as f32;
+        if zoom.is_finite() && zoom > 0.0 {
+            zoom
         } else {
             1.0
         }
@@ -223,7 +224,7 @@ mod tests {
             scroll_y,
             width_px: 1200.0,
             height_px,
-            zoom,
+            zoom: ambre_core::ZoomFactor::positive(f64::from(zoom)),
         }
     }
 
