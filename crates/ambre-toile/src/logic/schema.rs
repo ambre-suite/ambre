@@ -20,8 +20,8 @@ use std::borrow::Cow;
 use loro::{ExportMode, LoroDoc, LoroText, LoroValue};
 
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
+    migrate_schema, migration_peer, verdict,
 };
 
 use crate::logic::model::ElementStyle;
@@ -40,7 +40,7 @@ use crate::logic::state::{
 /// out of the `presentation` map and into two root containers. `3 -> 4` turns
 /// each note and text body from a string register into a text container. `4 ->
 /// 5` stores a style's font size in points rather than in world px.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -52,7 +52,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION),
+            i64::from(SCHEMA_VERSION.get()),
         );
 }
 
@@ -68,7 +68,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
     let Some(value) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -76,9 +76,13 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
-        Ok(LoroValue::I64(n)) => u32::try_from(n).map_err(|_| SchemaError::VersionUnreadable {
-            found: format!("the integer {n}"),
-        }),
+        Ok(LoroValue::I64(n)) => {
+            u32::try_from(n)
+                .map(SchemaVersion::new)
+                .map_err(|_| SchemaError::VersionUnreadable {
+                    found: format!("the integer {n}"),
+                })
+        }
         Ok(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),
@@ -109,28 +113,28 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// picker and every other view use, in place of world px.
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
-        from: 0,
-        to: 1,
+        from: SchemaVersion::new(0),
+        to: SchemaVersion::new(1),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 1,
-        to: 2,
+        from: SchemaVersion::new(1),
+        to: SchemaVersion::new(2),
         apply: style_version_step,
     },
     SchemaMigration {
-        from: 2,
-        to: 3,
+        from: SchemaVersion::new(2),
+        to: SchemaVersion::new(3),
         apply: presentation_root_step,
     },
     SchemaMigration {
-        from: 3,
-        to: 4,
+        from: SchemaVersion::new(3),
+        to: SchemaVersion::new(4),
         apply: body_text_step,
     },
     SchemaMigration {
-        from: 4,
-        to: 5,
+        from: SchemaVersion::new(4),
+        to: SchemaVersion::new(5),
         apply: font_points_step,
     },
 ];
@@ -376,7 +380,7 @@ mod tests {
     /// A snapshot of a board carrying `version` in its register. A `None`
     /// version writes no register at all, which is every board written before
     /// `ARCH P8`.
-    fn snapshot_at(version: Option<u32>) -> Vec<u8> {
+    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
         let doc = LoroDoc::new();
         crate::logic::state::board(&doc)
             .insert(BoardKey::BgColor, 0i64)
@@ -385,7 +389,7 @@ mod tests {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(
                     ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                    i64::from(v),
+                    i64::from(v.get()),
                 )
                 .expect("stamp");
         }
@@ -702,12 +706,12 @@ mod tests {
 
     #[test]
     fn a_board_from_a_newer_client_is_refused_whole() {
-        let bytes = snapshot_at(Some(SCHEMA_VERSION + 1));
+        let bytes = snapshot_at(Some(SCHEMA_VERSION.next()));
         let err = gate(&bytes.clone().into()).expect_err("refused");
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
-                document: SCHEMA_VERSION + 1,
+                document: SCHEMA_VERSION.next(),
                 binary: SCHEMA_VERSION,
             }
         );

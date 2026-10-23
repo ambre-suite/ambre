@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount, SheetId};
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
+    migrate_schema, migration_peer, verdict,
 };
 
 use super::op_from_str;
@@ -279,7 +279,7 @@ impl SheetLine for Col {
 /// ([`FilterRecord`]), which obliges the [`MIGRATIONS`] row carrying an existing
 /// workbook across it (`SCHEMA-009`). `2 -> 3` stores each formula reference
 /// by the row and column it names (`TRAME-226`).
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -291,7 +291,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION),
+            i64::from(SCHEMA_VERSION.get()),
         );
 }
 
@@ -307,7 +307,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
     let Some(value) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -315,9 +315,13 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
-        Ok(LoroValue::I64(n)) => u32::try_from(n).map_err(|_| SchemaError::VersionUnreadable {
-            found: format!("the integer {n}"),
-        }),
+        Ok(LoroValue::I64(n)) => {
+            u32::try_from(n)
+                .map(SchemaVersion::new)
+                .map_err(|_| SchemaError::VersionUnreadable {
+                    found: format!("the integer {n}"),
+                })
+        }
         Ok(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),
@@ -341,18 +345,18 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// ([`stored_reference_step`]).
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
-        from: 0,
-        to: 1,
+        from: SchemaVersion::new(0),
+        to: SchemaVersion::new(1),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 1,
-        to: 2,
+        from: SchemaVersion::new(1),
+        to: SchemaVersion::new(2),
         apply: filter_register_step,
     },
     SchemaMigration {
-        from: 2,
-        to: 3,
+        from: SchemaVersion::new(2),
+        to: SchemaVersion::new(3),
         apply: stored_reference_step,
     },
 ];
@@ -584,7 +588,7 @@ mod tests {
     /// A snapshot of a workbook carrying `version` in its register. A `None`
     /// version writes no register at all, which is every workbook written
     /// before `ARCH P8`.
-    fn snapshot_at(version: Option<u32>) -> Vec<u8> {
+    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.get_map(Root::Sheets.as_str())
             .insert(default_sheet().as_str(), "Sheet1")
@@ -593,7 +597,7 @@ mod tests {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(
                     ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                    i64::from(v),
+                    i64::from(v.get()),
                 )
                 .expect("stamp");
         }
@@ -639,11 +643,11 @@ mod tests {
 
     #[test]
     fn a_workbook_from_a_newer_client_is_refused_whole() {
-        let bytes = snapshot_at(Some(SCHEMA_VERSION + 1));
+        let bytes = snapshot_at(Some(SCHEMA_VERSION.next()));
         assert_eq!(
             gate(&bytes).expect_err("refused"),
             SchemaError::DocumentTooNew {
-                document: SCHEMA_VERSION + 1,
+                document: SCHEMA_VERSION.next(),
                 binary: SCHEMA_VERSION,
             }
         );
@@ -662,13 +666,13 @@ mod tests {
         let before = st.export_snapshot();
 
         let err = st
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)).into())
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())).into())
             .expect_err("refused");
 
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
-                document: SCHEMA_VERSION + 1,
+                document: SCHEMA_VERSION.next(),
                 binary: SCHEMA_VERSION,
             }
         );

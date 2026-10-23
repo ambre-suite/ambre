@@ -1486,7 +1486,6 @@ ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::seed() | ret | u64	
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.digest | field | [u8;32]	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator | field | String	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator_version | field | u32	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.schema_version | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.seed | field | u64	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureShape.peers | field | u8	math	fixture shape counts
 ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Prose.blocks | field | u32	math	fixture shape counts
@@ -1580,25 +1579,16 @@ ambre-core | src/role.rs | crate::role | Role::is_valid_for_organization() | ret
 ambre-core | src/schema.rs | crate::schema | Fnv.0 | field | u64	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | Fnv::feed(bytes) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | Fnv::new(tag) | param | &[u8]	generic	FNV hash over bytes
-ambre-core | src/schema.rs | crate::schema | SCHEMA_VERSION_ABSENT | const | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SchemaError::DocumentTooNew.binary | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SchemaError::DocumentTooNew.document | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SchemaError::MigrationFailed.from | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/schema.rs | crate::schema | SchemaError::MigrationFailed.reason | field | String	free-text	diagnostic text for a report, never a decision
-ambre-core | src/schema.rs | crate::schema | SchemaError::MigrationFailed.to | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SchemaError::NoMigrationPath.from | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/schema.rs | crate::schema | SchemaError::VersionUnreadable.found | field | String	free-text	diagnostic text for a report, never a decision
 ambre-core | src/schema.rs | crate::schema | SchemaMigration.apply | field | fn(&D)->Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
-ambre-core | src/schema.rs | crate::schema | SchemaMigration.from | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | SchemaMigration.to | field | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | migrate_schema(from) | param | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | migrate_schema(target) | param | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
+ambre-core | src/schema.rs | crate::schema | SchemaVersion.0 | field | u32	newtype-inner	SchemaVersion newtype accessor
+ambre-core | src/schema.rs | crate::schema | SchemaVersion::get() | ret | u32	newtype-inner	SchemaVersion newtype accessor
+ambre-core | src/schema.rs | crate::schema | SchemaVersion::new(version) | param | u32	newtype-inner	SchemaVersion newtype accessor
 ambre-core | src/schema.rs | crate::schema | migration_peer(frontiers) | param | impl IntoIterator<Item=(u64,i32)>	debt	finding: migration_peer frontiers as (u64, i32) (low, confirmed)
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint() | ret | u64	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes
-ambre-core | src/schema.rs | crate::schema | verdict(binary) | param | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
-ambre-core | src/schema.rs | crate::schema | verdict(document) | param | u32	debt	finding: Schema version as u32, with same-typed pairs (medium, confirmed)
 ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
 ambre-core | src/seq.rs | crate::seq | Seq.0 | field | u64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/seq.rs | crate::seq | Seq::to_i64_saturating() | ret | i64	newtype-inner	Seq/Version newtype accessor
@@ -1954,9 +1944,7 @@ ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.name | 
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.reason | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::NotFound.name | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.generator | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.schema_version | field | u32	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry.stem | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry::age_key() | ret | (ContainerVersion,u32)	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/fixtures.rs | crate::fixtures | FrozenEntry::parse(stem) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -1981,7 +1969,6 @@ ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::export_complete_event(filename) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/lib.rs | crate | DocState::schema_version() | ret | u32	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.logged | field | Option<usize>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2578,14 +2565,12 @@ ambre-murmure | src/schema.rs | crate::schema | DeletedBy::as_str() | ret | &'st
 ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | SCHEMA_VERSION | const | u32	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/schema.rs | crate::schema | admit(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | admit_all(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | admit_space(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	debt	finding: Loro map key names are bare `&str` consts and parameters
 ambre-murmure | src/schema.rs | crate::schema | import_bytes(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/schema.rs | crate::schema | read_as_it_is() | ret | Result<(),String>	trait	signature dictated by SchemaMigration.apply
-ambre-murmure | src/schema.rs | crate::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: Two schema-version spaces, and a duplicated frame magic
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	newtype-inner	Loro storage adapter for Timestamp
@@ -3530,7 +3515,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | 
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::schema_version() | ret | u32	debt	finding: schema version as a bare integer (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(first) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::show_pages(last) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_MARGIN | const | u32	math	count, size or local index
@@ -3642,11 +3626,9 @@ ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f64)>	math	layout geometry local to algorithm
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
-ambre-prose | src/schema.rs | crate::schema | SCHEMA_VERSION | const | u32	debt	finding: schema version as a bare integer (confirmed)
 ambre-prose | src/schema.rs | crate::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/schema.rs | crate::schema | gate(payload) | param | &[u8]	debt	finding: snapshot payloads as Vec<u8> (confirmed)
 ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/schema.rs | crate::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: schema version as a bare integer (confirmed)
 ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/style.rs | crate::style | BlockContext.heading_level | field | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
@@ -4700,11 +4682,9 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(media_counter) | param | &mut usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
-ambre-toile | src/logic/schema.rs | crate::logic::schema | SCHEMA_VERSION | const | u32	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
 ambre-toile | src/logic/schema.rs | crate::logic::schema | body_text_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/schema.rs | crate::logic::schema | font_points_step() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | presentation_root_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-toile | src/logic/schema.rs | crate::logic::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers() | ret | Result<(),String>	free-text	migration error message
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers(rewrite) | param | &impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
 ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | ret | Result<(),String>	free-text	migration error message
@@ -4828,7 +4808,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::element
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_remote(update) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::schema_version() | ret | u32	debt	finding: The schema version is a raw u32 (confirmed): schema version as raw u32 (core SchemaMigration too)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | waits_for_import() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	newtype-inner	the spelling of ReactionKey, a reactions map key
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey.0 | field | String	newtype-inner	the reactions map key ReactionKey types
@@ -5698,14 +5677,12 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | con
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_ORIGIN | const | &str	debt	finding: (FINDING, confirmed): Loro container names as strings
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SCHEMA_VERSION | const | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
 ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | fold_filter_keys() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | read_version() | ret | Result<u32,SchemaError>	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference() | ret | Option<String>	debt	finding: (FINDING, confirmed): defined names and their reference text
@@ -5737,7 +5714,6 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(origin) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::schema_version() | ret | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::sheet_name_to_id(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length

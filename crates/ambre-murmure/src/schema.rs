@@ -14,8 +14,8 @@
 //! and the verdict and the walk are `ambre_core::schema`'s own.
 
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
+    migrate_schema, migration_peer, verdict,
 };
 use ambre_core::{ChannelId, DocumentId, SpaceId};
 use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
@@ -30,7 +30,7 @@ use crate::error::MurmureError;
 /// Version 2 adds the style marks over a body (`MURMURE-562`), the block
 /// marks among them (`MURMURE-194`). Version 3 adds the attachments of a
 /// message (`MURMURE-017`).
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 
 ambre_core::loro_fields!(pub(crate));
 
@@ -270,13 +270,13 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 /// is too.
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
-        from: 1,
-        to: 2,
+        from: SchemaVersion::new(1),
+        to: SchemaVersion::new(2),
         apply: read_as_it_is,
     },
     SchemaMigration {
-        from: 2,
-        to: 3,
+        from: SchemaVersion::new(2),
+        to: SchemaVersion::new(3),
         apply: read_as_it_is,
     },
 ];
@@ -414,7 +414,7 @@ pub(crate) fn write_header(
     doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION),
+            i64::from(SCHEMA_VERSION.get()),
         )?;
     Ok(())
 }
@@ -436,7 +436,7 @@ pub(crate) fn write_space_header(
     doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION),
+            i64::from(SCHEMA_VERSION.get()),
         )?;
     Ok(())
 }
@@ -484,7 +484,7 @@ pub(crate) fn flag<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> bo
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a non-integer, a container, or an
 /// integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
     let Some(found) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -492,11 +492,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match found {
-        ValueOrContainer::Value(LoroValue::I64(n)) => {
-            u32::try_from(n).map_err(|_| SchemaError::VersionUnreadable {
+        ValueOrContainer::Value(LoroValue::I64(n)) => u32::try_from(n)
+            .map(SchemaVersion::new)
+            .map_err(|_| SchemaError::VersionUnreadable {
                 found: format!("the integer {n}"),
-            })
-        }
+            }),
         ValueOrContainer::Value(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),

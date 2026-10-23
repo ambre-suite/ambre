@@ -464,12 +464,15 @@ fn render(shape: &Shape) -> String {
 }
 
 /// The section of the shape freeze that names this version, if any.
-fn frozen_section(version: u32) -> Option<String> {
+fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version, if any.
-pub(crate) fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(crate) fn section_of(
+    frozen: &str,
+    version: ambre_core::schema::SchemaVersion,
+) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -599,15 +602,18 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// The canonical document of the version a step leaves: that version's
 /// layout, holding what the step rewrites. Each step reads its own, so a step
 /// added later never moves what an earlier one writes.
-fn canonical(from: u32) -> LoroDoc {
-    match from {
+fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
+    match from.get() {
         // A version 1 segment holds one message, its body with no style. A
         // version 2 one holds the same message, which carries no file.
         1 | 2 => {
             let doc = LoroDoc::new();
             doc.set_peer_id(1).expect("a peer");
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), from)
+                .insert(
+                    ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+                    i64::from(from.get()),
+                )
                 .expect("the stamp");
             crate::schema::header(&doc)
                 .insert(

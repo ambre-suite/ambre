@@ -217,7 +217,7 @@ impl DocState {
     /// application owns it. Each declares its own number, so the value is only
     /// comparable against that application's own current version.
     #[must_use]
-    pub fn schema_version(&self) -> u32 {
+    pub fn schema_version(&self) -> ambre_core::SchemaVersion {
         match self {
             DocState::Trame(state) => state.schema_version(),
             DocState::Toile(state) => state.schema_version(),

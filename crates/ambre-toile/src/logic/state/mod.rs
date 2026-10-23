@@ -857,7 +857,7 @@ impl ToileState {
     /// which refuses it instead (`SCHEMA-013`). A caller reaches this one on a
     /// document it just generated, where the case cannot arise.
     #[must_use]
-    pub fn schema_version(&self) -> u32 {
+    pub fn schema_version(&self) -> ambre_core::schema::SchemaVersion {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 
@@ -1386,7 +1386,7 @@ mod schema_tests {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(
                     ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                    i64::from(SCHEMA_VERSION + 1),
+                    i64::from(SCHEMA_VERSION.next().get()),
                 )
                 .expect("stamp");
             doc.get_map(Root::Elements.as_str())
@@ -1405,7 +1405,7 @@ mod schema_tests {
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
-                document: SCHEMA_VERSION + 1,
+                document: SCHEMA_VERSION.next(),
                 binary: SCHEMA_VERSION,
             }
         );

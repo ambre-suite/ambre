@@ -128,8 +128,8 @@ pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::Role;
 pub use schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, scaffold_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
+    migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
 pub use span::{

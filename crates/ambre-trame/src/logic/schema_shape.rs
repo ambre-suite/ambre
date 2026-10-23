@@ -270,12 +270,15 @@ fn render(shape: &Shape) -> String {
 
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
-fn frozen_section(version: u32) -> Option<String> {
+fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version.
-pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(
+    frozen: &str,
+    version: ambre_core::schema::SchemaVersion,
+) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -454,8 +457,8 @@ fn workbook_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
 /// The canonical workbook of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
 /// later never moves what an earlier one writes.
-fn canonical(from: u32) -> LoroDoc {
-    match from {
+fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
+    match from.get() {
         0 => workbook_at(None, |_| {}),
         // The flat filter keys the `1 -> 2` step folds.
         1 => workbook_at(Some(1), |doc| {

@@ -26,6 +26,9 @@
 //! this one guards what is inside. A reader who has learnt one carries the
 //! other for free.
 
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 crate::crdt_names! {
@@ -44,7 +47,43 @@ crate::crdt_names! {
 /// Absent means zero, so no document written before the register existed needs
 /// rewriting. The alternative is a migration whose only purpose is to enable
 /// migrations.
-pub const SCHEMA_VERSION_ABSENT: u32 = 0;
+pub const SCHEMA_VERSION_ABSENT: SchemaVersion = SchemaVersion(0);
+
+/// The version of a document's schema, as its `meta` register holds it
+/// (`SCHEMA-004`).
+///
+/// One space for every application: each declares its own current value, and
+/// a stored document carries the value of the build that wrote it. Compare two
+/// with [`verdict`], which names the three outcomes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SchemaVersion(u32);
+
+impl SchemaVersion {
+    /// The version the register holds.
+    #[must_use]
+    pub const fn new(version: u32) -> Self {
+        Self(version)
+    }
+
+    /// The number written to the register.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
+    /// The version a bump after this one declares.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for SchemaVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The comparison of a document's schema version against the binary's, and the
 /// only three outcomes there are (`SCHEMA-006`).
@@ -66,7 +105,7 @@ pub enum SchemaVerdict {
 /// point. A call site that reads `Older` runs a migration. One that reads
 /// `Less` has to remember which way round the arguments went.
 #[must_use]
-pub fn verdict(document: u32, binary: u32) -> SchemaVerdict {
+pub fn verdict(document: SchemaVersion, binary: SchemaVersion) -> SchemaVerdict {
     match document.cmp(&binary) {
         std::cmp::Ordering::Equal => SchemaVerdict::Current,
         std::cmp::Ordering::Less => SchemaVerdict::Older,
@@ -88,17 +127,24 @@ pub enum SchemaError {
     #[error(
         "this document was written by a newer client (schema {document}, this build reads {binary}); update to open it"
     )]
-    DocumentTooNew { document: u32, binary: u32 },
+    DocumentTooNew {
+        document: SchemaVersion,
+        binary: SchemaVersion,
+    },
 
     /// The document is older and the registry has no step leaving `from`. A
     /// gap in the chain, not a property of the document.
     #[error("no migration path from schema version {from}")]
-    NoMigrationPath { from: u32 },
+    NoMigrationPath { from: SchemaVersion },
 
     /// A registry step ran and failed. Carries the step so a report names the
     /// hop rather than the whole chain.
     #[error("migrating schema {from} -> {to} failed: {reason}")]
-    MigrationFailed { from: u32, to: u32, reason: String },
+    MigrationFailed {
+        from: SchemaVersion,
+        to: SchemaVersion,
+        reason: String,
+    },
 
     /// The register is present and this build cannot read it: not an integer, or
     /// an integer outside `u32`.
@@ -126,8 +172,8 @@ pub enum SchemaError {
 /// shared reference because that is the shape a CRDT handle has: a `LoroDoc`
 /// writes through `&self`.
 pub struct SchemaMigration<D> {
-    pub from: u32,
-    pub to: u32,
+    pub from: SchemaVersion,
+    pub to: SchemaVersion,
     /// Returns the reason on failure; the walk wraps it into
     /// [`SchemaError::MigrationFailed`] with the hop it came from.
     pub apply: fn(&D) -> Result<(), String>,
@@ -145,8 +191,8 @@ pub struct SchemaMigration<D> {
 /// [`SchemaError::MigrationFailed`] when a step itself fails.
 pub fn migrate_schema<D>(
     steps: &[SchemaMigration<D>],
-    from: u32,
-    target: u32,
+    from: SchemaVersion,
+    target: SchemaVersion,
     doc: &D,
 ) -> Result<(), SchemaError> {
     if from > target {
@@ -271,6 +317,10 @@ mod tests {
     #[derive(Default)]
     struct Trace(RefCell<Vec<u32>>);
 
+    fn v(version: u32) -> SchemaVersion {
+        SchemaVersion(version)
+    }
+
     fn step_to(to: u32) -> fn(&Trace) -> Result<(), String> {
         // One body per version this test registry reaches. A registry row holds
         // a plain `fn`, so a closure will not do.
@@ -293,8 +343,8 @@ mod tests {
     fn registry() -> Vec<SchemaMigration<Trace>> {
         (1..=3)
             .map(|to| SchemaMigration {
-                from: to - 1,
-                to,
+                from: v(to - 1),
+                to: v(to),
                 apply: step_to(to),
             })
             .collect()
@@ -302,37 +352,37 @@ mod tests {
 
     #[test]
     fn an_absent_register_reads_as_zero_and_zero_is_older_than_any_release() {
-        assert_eq!(SCHEMA_VERSION_ABSENT, 0);
-        assert_eq!(verdict(SCHEMA_VERSION_ABSENT, 1), SchemaVerdict::Older);
+        assert_eq!(SCHEMA_VERSION_ABSENT.get(), 0);
+        assert_eq!(verdict(SCHEMA_VERSION_ABSENT, v(1)), SchemaVerdict::Older);
     }
 
     #[test]
     fn the_three_comparisons_are_the_three_verdicts() {
-        assert_eq!(verdict(3, 3), SchemaVerdict::Current);
-        assert_eq!(verdict(2, 3), SchemaVerdict::Older);
-        assert_eq!(verdict(4, 3), SchemaVerdict::Newer);
+        assert_eq!(verdict(v(3), v(3)), SchemaVerdict::Current);
+        assert_eq!(verdict(v(2), v(3)), SchemaVerdict::Older);
+        assert_eq!(verdict(v(4), v(3)), SchemaVerdict::Newer);
     }
 
     #[test]
     fn a_chain_runs_every_hop_in_order() {
         let doc = Trace::default();
-        migrate_schema(&registry(), 0, 3, &doc).expect("the registry is complete");
+        migrate_schema(&registry(), v(0), v(3), &doc).expect("the registry is complete");
         assert_eq!(*doc.0.borrow(), vec![1, 2, 3]);
     }
 
     #[test]
     fn a_document_at_the_current_version_runs_nothing() {
         let doc = Trace::default();
-        migrate_schema(&registry(), 3, 3, &doc).expect("the identity");
+        migrate_schema(&registry(), v(3), v(3), &doc).expect("the identity");
         assert!(doc.0.borrow().is_empty());
     }
 
     #[test]
     fn a_gap_in_the_registry_stops_the_walk_where_it_broke() {
         let doc = Trace::default();
-        let gapped: Vec<_> = registry().into_iter().filter(|s| s.from != 1).collect();
-        let err = migrate_schema(&gapped, 0, 3, &doc).expect_err("the walk cannot reach 3");
-        assert_eq!(err, SchemaError::NoMigrationPath { from: 1 });
+        let gapped: Vec<_> = registry().into_iter().filter(|s| s.from != v(1)).collect();
+        let err = migrate_schema(&gapped, v(0), v(3), &doc).expect_err("the walk cannot reach 3");
+        assert_eq!(err, SchemaError::NoMigrationPath { from: v(1) });
         // The hop that did run is not rolled back -- the caller drops the
         // scratch document, which is why nothing here has to undo.
         assert_eq!(*doc.0.borrow(), vec![1]);
@@ -342,17 +392,17 @@ mod tests {
     fn a_failing_step_names_its_own_hop() {
         let doc = Trace::default();
         let steps = vec![SchemaMigration {
-            from: 0,
-            to: 1,
+            from: v(0),
+            to: v(1),
             apply: (|_: &Trace| Err("the register would not write".to_owned()))
                 as fn(&Trace) -> Result<(), String>,
         }];
-        let err = migrate_schema(&steps, 0, 1, &doc).expect_err("the step fails");
+        let err = migrate_schema(&steps, v(0), v(1), &doc).expect_err("the step fails");
         assert_eq!(
             err,
             SchemaError::MigrationFailed {
-                from: 0,
-                to: 1,
+                from: v(0),
+                to: v(1),
                 reason: "the register would not write".to_owned(),
             }
         );
@@ -387,12 +437,12 @@ mod tests {
     #[test]
     fn the_walk_refuses_to_run_backwards() {
         let doc = Trace::default();
-        let err = migrate_schema(&registry(), 4, 3, &doc).expect_err("no downgrade path");
+        let err = migrate_schema(&registry(), v(4), v(3), &doc).expect_err("no downgrade path");
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
-                document: 4,
-                binary: 3
+                document: v(4),
+                binary: v(3)
             }
         );
         assert!(doc.0.borrow().is_empty());

@@ -235,12 +235,15 @@ fn render(shape: &Shape) -> String {
 
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
-fn frozen_section(version: u32) -> Option<String> {
+fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version.
-pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(
+    frozen: &str,
+    version: ambre_core::schema::SchemaVersion,
+) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -607,11 +610,11 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// layout, holding what the step rewrites, written under a fixed identity.
 /// Each step reads its own, so a step added later never moves what an earlier
 /// one writes. Version 0 carries no register.
-fn canonical(from: u32) -> LoroDoc {
+fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
     let doc = LoroDoc::new();
     doc.set_peer_id(1)
         .expect("a fresh document takes a peer id");
-    match from {
+    match from.get() {
         // Each of these steps stamps the number and rewrites nothing.
         0..=7 => {}
         // A footnote whose text, marks and all, sits in its entry: the layout
@@ -633,11 +636,11 @@ fn canonical(from: u32) -> LoroDoc {
         }
         _ => panic!("the step from version {from} has no canonical document: write one here"),
     }
-    if from > 0 {
+    if from > ambre_core::schema::SCHEMA_VERSION_ABSENT {
         doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
             .insert(
                 ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                i64::from(from),
+                i64::from(from.get()),
             )
             .expect("the register");
     }

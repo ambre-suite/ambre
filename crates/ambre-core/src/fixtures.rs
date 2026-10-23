@@ -179,7 +179,7 @@ pub struct FixtureManifest {
     /// than declared, so a manifest cannot name a version its artefact does not
     /// hold. `0` is what a document written before the register existed reads as
     /// (`SCHEMA-005`).
-    pub schema_version: u32,
+    pub schema_version: crate::SchemaVersion,
 
     /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
     /// `document_id` byte is caught by the write-once check. `ambre-crypto`
@@ -236,7 +236,7 @@ mod tests {
             seed: 0x0123_4567_89AB_CDEF,
             doc_type: DocType::Trame,
             ambre_version: crate::AMBRE_VERSION,
-            schema_version: 0,
+            schema_version: crate::SCHEMA_VERSION_ABSENT,
             digest: [0xAB; 32],
             shape: FixtureShape {
                 peers: 2,

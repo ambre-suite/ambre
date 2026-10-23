@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use ambre_core::docfile::{AMBRE_VERSION, ContainerVersion, DocFileError, read_ambre_plaintext};
 use ambre_core::{
     DocType, DocumentId, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape,
+    SchemaVersion,
 };
 
 use ambre_prose::ProseState;
@@ -694,7 +695,7 @@ pub struct FrozenEntry {
     pub generator: String,
     /// The two versions the artifact was written at, that is, the outgoing ones.
     pub ambre_version: ContainerVersion,
-    pub schema_version: u32,
+    pub schema_version: SchemaVersion,
 }
 
 impl FrozenEntry {
@@ -711,7 +712,7 @@ impl FrozenEntry {
             stem: stem.to_owned(),
             generator: generator.to_owned(),
             ambre_version: ContainerVersion::from_byte(ambre.parse().ok()?),
-            schema_version: schema.parse().ok()?,
+            schema_version: SchemaVersion::new(schema.parse().ok()?),
         })
     }
 
@@ -722,7 +723,7 @@ impl FrozenEntry {
     /// only while every version stays one digit. `s10` sorts before `s9` as text
     /// and after it as a number. A corpus that survives ten schema bumps would
     /// start dropping its newest artifact instead of its oldest.
-    fn age_key(&self) -> (ContainerVersion, u32) {
+    fn age_key(&self) -> (ContainerVersion, SchemaVersion) {
         (self.ambre_version, self.schema_version)
     }
 }

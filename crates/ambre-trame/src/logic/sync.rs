@@ -323,7 +323,7 @@ impl TrameState {
     /// refuses it instead (`SCHEMA-013`). This one is called on a document the
     /// caller just generated, where the case cannot arise.
     #[must_use]
-    pub fn schema_version(&self) -> u32 {
+    pub fn schema_version(&self) -> ambre_core::schema::SchemaVersion {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 

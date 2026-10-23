@@ -298,7 +298,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         let LoroValue::I64(n) = stored.value else {
             return None;
         };
-        let version = u32::try_from(n).ok()?;
+        let version = ambre_core::schema::SchemaVersion::new(u32::try_from(n).ok()?);
         return Some(format!(
             "version {version}, {:?}",
             verdict(version, SCHEMA_VERSION)

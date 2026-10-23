@@ -19,8 +19,8 @@ use std::borrow::Cow;
 use loro::{ExportMode, LoroDoc, LoroValue};
 
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
+    migrate_schema, migration_peer, verdict,
 };
 
 /// The schema version this build writes into every document it creates
@@ -29,7 +29,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-018`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(9);
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -41,7 +41,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION),
+            i64::from(SCHEMA_VERSION.get()),
         );
 }
 
@@ -56,7 +56,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
     let Some(value) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -64,9 +64,13 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
-        Ok(LoroValue::I64(n)) => u32::try_from(n).map_err(|_| SchemaError::VersionUnreadable {
-            found: format!("the integer {n}"),
-        }),
+        Ok(LoroValue::I64(n)) => {
+            u32::try_from(n)
+                .map(SchemaVersion::new)
+                .map_err(|_| SchemaError::VersionUnreadable {
+                    found: format!("the integer {n}"),
+                })
+        }
         Ok(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),
@@ -105,48 +109,48 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// rewrites each one: see [`notes_to_blocks`].
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
-        from: 0,
-        to: 1,
+        from: SchemaVersion::new(0),
+        to: SchemaVersion::new(1),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 1,
-        to: 2,
+        from: SchemaVersion::new(1),
+        to: SchemaVersion::new(2),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 2,
-        to: 3,
+        from: SchemaVersion::new(2),
+        to: SchemaVersion::new(3),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 3,
-        to: 4,
+        from: SchemaVersion::new(3),
+        to: SchemaVersion::new(4),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 4,
-        to: 5,
+        from: SchemaVersion::new(4),
+        to: SchemaVersion::new(5),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 5,
-        to: 6,
+        from: SchemaVersion::new(5),
+        to: SchemaVersion::new(6),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 6,
-        to: 7,
+        from: SchemaVersion::new(6),
+        to: SchemaVersion::new(7),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 7,
-        to: 8,
+        from: SchemaVersion::new(7),
+        to: SchemaVersion::new(8),
         apply: stamp_step,
     },
     SchemaMigration {
-        from: 8,
-        to: 9,
+        from: SchemaVersion::new(8),
+        to: SchemaVersion::new(9),
         apply: notes_to_blocks,
     },
 ];
@@ -275,7 +279,7 @@ mod tests {
 
     /// A snapshot carrying `version` in its register. A `None` version writes no
     /// register at all.
-    fn snapshot_at(version: Option<u32>) -> Vec<u8> {
+    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
         let doc = LoroDoc::new();
         crate::doc::meta(&doc)
             .insert(crate::doc::MetaKey::Title, "")
@@ -284,7 +288,7 @@ mod tests {
             doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(
                     ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                    i64::from(v),
+                    i64::from(v.get()),
                 )
                 .expect("stamp");
         }
@@ -322,7 +326,7 @@ mod tests {
 
     #[test]
     fn a_document_a_newer_client_wrote_is_refused_whole() {
-        let bytes = snapshot_at(Some(SCHEMA_VERSION + 1));
+        let bytes = snapshot_at(Some(SCHEMA_VERSION.next()));
         assert!(matches!(
             gate(&bytes),
             Err(SchemaError::DocumentTooNew { .. })
@@ -345,13 +349,13 @@ mod tests {
         let before = state.export_snapshot();
 
         let err = state
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)).into())
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())).into())
             .expect_err("a newer document is refused");
 
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
-                document: SCHEMA_VERSION + 1,
+                document: SCHEMA_VERSION.next(),
                 binary: SCHEMA_VERSION,
             }
         );

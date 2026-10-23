@@ -191,7 +191,7 @@ fn every_document_carries_a_header_and_the_foundation_version() {
                 ),
                 ambre_core::schema::MetaKey::SchemaVersion
             ),
-            Some(u64::from(SCHEMA_VERSION))
+            Some(u64::from(SCHEMA_VERSION.get()))
         );
     }
 }
@@ -421,7 +421,7 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .insert(
             ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(SCHEMA_VERSION) + 1,
+            i64::from(SCHEMA_VERSION.get()) + 1,
         )
         .expect("bump");
     newer.commit();
@@ -435,7 +435,7 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
     assert_eq!(
         refused.err(),
         Some(MurmureError::Schema(SchemaError::DocumentTooNew {
-            document: SCHEMA_VERSION + 1,
+            document: SCHEMA_VERSION.next(),
             binary: SCHEMA_VERSION,
         }))
     );
@@ -491,7 +491,7 @@ fn a_document_with_no_version_finds_no_migration_and_is_refused() {
     assert_eq!(
         refused.err(),
         Some(MurmureError::Schema(SchemaError::NoMigrationPath {
-            from: 0
+            from: ambre_core::schema::SCHEMA_VERSION_ABSENT
         }))
     );
 }

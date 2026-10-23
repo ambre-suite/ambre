@@ -145,7 +145,10 @@ def resolve(base: str) -> str:
 
 # `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
 # `SCHEMA_VERSION_ABSENT` are not a stamped number.
-STAMP = re.compile(r"^pub const SCHEMA_VERSION\s*:\s*u32\s*=\s*(\d+)", re.MULTILINE)
+STAMP = re.compile(
+    r"^pub const SCHEMA_VERSION\s*:\s*SchemaVersion\s*=\s*SchemaVersion::new\((\d+)\)",
+    re.MULTILINE,
+)
 
 
 def crate_of(path: Path) -> str:

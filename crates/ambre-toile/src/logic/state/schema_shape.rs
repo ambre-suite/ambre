@@ -346,12 +346,15 @@ fn render(shape: &Shape) -> String {
 
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
-fn frozen_section(version: u32) -> Option<String> {
+fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version.
-pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(
+    frozen: &str,
+    version: ambre_core::schema::SchemaVersion,
+) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -728,8 +731,8 @@ fn entry_map<K: ambre_core::crdt::FieldKey>(doc: &LoroDoc, root: Root, id: &str)
 /// The canonical board of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
 /// later never moves what an earlier one writes.
-fn canonical(from: u32) -> LoroDoc {
-    match from {
+fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
+    match from.get() {
         0 => board_at(None, |doc| {
             entry_map(doc, Root::Elements, "e1")
                 .insert(ElementKey::Type, ElementKind::Sticky.type_tag())
