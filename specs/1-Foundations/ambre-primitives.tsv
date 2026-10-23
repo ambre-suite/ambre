@@ -148,7 +148,6 @@ ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	ge
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(ctx_menu) | param | RwSignal<Option<(f64,f64)>>	math	css position
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	math	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	math	UI flag signal
-ambre-app | src/platform.rs | crate::platform | open_file_picker(accept) | param | &str	debt	finding: open_file_picker takes accept as &str (confirmed)
 ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
@@ -1186,10 +1185,10 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	math	state flag/predicate
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
-ambre-chrome | src/handler.rs | crate::handler | FilePick.accept | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | FilePick.read | field | Box<dyn Fn(Vec<u8>)->C>	generic	opaque file content bytes
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
+ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Choose.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Focus.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | aria_bool() | ret | &'static str	newtype-inner	enum's own as_str/label accessor

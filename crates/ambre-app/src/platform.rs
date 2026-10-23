@@ -17,7 +17,7 @@ use ambre_chrome::commands::PasteForm;
 /// closure, because the picker is one-shot and lives only until the user picks
 /// a file.
 pub(crate) fn open_file_picker(
-    accept: &str,
+    accept: ambre_chrome::FileAccept,
     unreadable: &'static str,
     toasts: Toasts,
     on_bytes: impl Fn(Vec<u8>) + Clone + 'static,
@@ -33,7 +33,7 @@ pub(crate) fn open_file_picker(
         return;
     };
     input.set_type("file");
-    let _ = input.set_attribute("accept", accept);
+    let _ = input.set_attribute("accept", accept.as_attr());
 
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
@@ -661,7 +661,7 @@ pub(crate) fn open_ambre_file_picker(
         return;
     };
     input.set_type("file");
-    let _ = input.set_attribute("accept", ".ambre");
+    let _ = input.set_attribute("accept", ambre_chrome::FileAccept::Ambre.as_attr());
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {

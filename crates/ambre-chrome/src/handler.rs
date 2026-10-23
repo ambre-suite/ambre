@@ -43,12 +43,37 @@ pub enum ShellAction<C> {
 
 /// A file picker the shell opens on an application's behalf.
 pub struct FilePick<C> {
-    /// The picker's `accept` attribute: what the application reads.
-    pub accept: &'static str,
+    /// What the application reads, the picker's `accept` attribute.
+    pub accept: FileAccept,
     /// What the user reads when the browser could not read the file.
     pub unreadable: &'static str,
     /// The command the file's bytes become.
     pub read: Box<dyn Fn(Vec<u8>) -> C>,
+}
+
+/// The kinds of file a picker offers. Each names the extensions and media
+/// types the browser filters on, so an application picks a kind and never
+/// spells the filter itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FileAccept {
+    /// A whole `.ambre` container.
+    Ambre,
+    /// A Markdown text file.
+    Markdown,
+    /// A comma-separated values file.
+    Csv,
+}
+
+impl FileAccept {
+    /// The picker's `accept` attribute, for the call into the DOM.
+    #[must_use]
+    pub const fn as_attr(self) -> &'static str {
+        match self {
+            Self::Ambre => ".ambre",
+            Self::Markdown => ".md,.markdown,text/markdown",
+            Self::Csv => ".csv,text/csv",
+        }
+    }
 }
 
 /// Where a chord's key went: the page's canvas, or a text field that keeps

@@ -10,7 +10,7 @@
 
 use ambre_bus::AppCommand;
 use ambre_bus::app::prose::{ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand};
-use ambre_chrome::{CommandHandler, FilePick, KeyRoute, ShellAction};
+use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use ambre_commands::{ClipboardWrite, CommandId, PasteForm};
 use leptos::prelude::*;
 
@@ -39,7 +39,7 @@ impl CommandHandler for ProseHandler {
             }
             // The bytes are converted on the client (`PROSE-IO-001`).
             IMPORT_MARKDOWN => ShellAction::PickFile(FilePick {
-                accept: ".md,.markdown,text/markdown",
+                accept: FileAccept::Markdown,
                 unreadable: "Could not read the Markdown file",
                 read: Box::new(|data| {
                     AppCommand::Prose(ProseCommand::ImportDocument {

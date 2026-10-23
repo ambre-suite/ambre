@@ -10,7 +10,7 @@
 
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
 use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
-use ambre_chrome::{CommandHandler, FilePick, KeyRoute, ShellAction};
+use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
 use leptos::prelude::*;
 
 use super::commands::{
@@ -105,7 +105,7 @@ impl CommandHandler for TrameHandler {
             // The CSV becomes a new sheet, converted on the client
             // (`trame-import-export`).
             IMPORT_CSV => ShellAction::PickFile(FilePick {
-                accept: ".csv,text/csv",
+                accept: FileAccept::Csv,
                 unreadable: "Could not read the CSV file",
                 read: Box::new(|data| {
                     AppCommand::Trame(TrameCommand::ImportCsv {
