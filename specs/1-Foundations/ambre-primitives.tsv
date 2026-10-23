@@ -2888,7 +2888,6 @@ ambre-prose | src/band.rs | crate::band | field_value(count) | param | u32	debt	
 ambre-prose | src/band.rs | crate::band | field_value(key) | param | &str	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | format_date(format) | param | &str	debt	planned: lot C9 DateFormat
 ambre-prose | src/band.rs | crate::band | format_date(lang) | param | &str	debt	finding: language tag as &str (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date(ms) | param | i64	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input

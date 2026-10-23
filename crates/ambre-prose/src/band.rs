@@ -9,6 +9,7 @@
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
+use crate::events::DateFieldFormat;
 
 /// The milliseconds of one day.
 const DAY_MS: i64 = 86_400_000;
@@ -49,12 +50,15 @@ fn field_value(document: &LoroDoc, key: &str, value: &LoroValue, page: u32, coun
         "f:pc" => count.to_string(),
         "f:ti" => doc::read_title(document),
         "f:dt" => {
+            // The word `field_mark` stores. Any other value draws the ISO
+            // date, as an unknown format always has.
             let format = match value {
-                LoroValue::String(format) => format.to_string(),
-                _ => String::new(),
+                LoroValue::String(word) if word.as_str() == "short" => DateFieldFormat::Short,
+                LoroValue::String(word) if word.as_str() == "long" => DateFieldFormat::Long,
+                _ => DateFieldFormat::Iso,
             };
             doc::read_updated_at(document)
-                .map(|ms| format_date(ms, &format, &doc::read_lang(document)))
+                .map(|ms| format_date(ms, format, &doc::read_lang(document)))
                 .unwrap_or_default()
         }
         _ => String::new(),
@@ -197,7 +201,7 @@ fn months(lang: &str) -> Option<[&'static str; 12]> {
 /// A stamp drawn in one of the three formats, in the document's language
 /// (`PROSE-FEAT-282`). The language is read from the tag's primary subtag.
 #[must_use]
-pub fn format_date(ms: i64, format: &str, lang: &str) -> String {
+pub fn format_date(ms: i64, format: DateFieldFormat, lang: &str) -> String {
     let (year, month, day) = civil_date(ms);
     let iso = format!("{year:04}-{month:02}-{day:02}");
     let primary = lang.split(['-', '_']).next().unwrap_or("");
@@ -210,15 +214,15 @@ pub fn format_date(ms: i64, format: &str, lang: &str) -> String {
         .copied()
         .unwrap_or("");
     match (format, primary.as_str()) {
-        ("short", "en") => format!("{month}/{day}/{year}"),
-        ("short", "de") => format!("{day:02}.{month:02}.{year}"),
-        ("short", "nl") => format!("{day:02}-{month:02}-{year}"),
-        ("short", _) => format!("{day:02}/{month:02}/{year}"),
-        ("long", "en") => format!("{name} {day}, {year}"),
-        ("long", "de") => format!("{day}. {name} {year}"),
-        ("long", "es" | "pt") => format!("{day} de {name} de {year}"),
-        ("long", _) => format!("{day} {name} {year}"),
-        _ => iso,
+        (DateFieldFormat::Short, "en") => format!("{month}/{day}/{year}"),
+        (DateFieldFormat::Short, "de") => format!("{day:02}.{month:02}.{year}"),
+        (DateFieldFormat::Short, "nl") => format!("{day:02}-{month:02}-{year}"),
+        (DateFieldFormat::Short, _) => format!("{day:02}/{month:02}/{year}"),
+        (DateFieldFormat::Long, "en") => format!("{name} {day}, {year}"),
+        (DateFieldFormat::Long, "de") => format!("{day}. {name} {year}"),
+        (DateFieldFormat::Long, "es" | "pt") => format!("{day} de {name} de {year}"),
+        (DateFieldFormat::Long, _) => format!("{day} {name} {year}"),
+        (DateFieldFormat::Iso, _) => iso,
     }
 }
 
@@ -239,17 +243,41 @@ mod tests {
 
     #[test]
     fn the_date_follows_the_document_language() {
-        assert_eq!(format_date(MARCH_FIFTH, "long", "en"), "March 5, 2026");
-        assert_eq!(format_date(MARCH_FIFTH, "long", "fr-CA"), "5 mars 2026");
-        assert_eq!(format_date(MARCH_FIFTH, "long", "de"), "5. M\u{e4}rz 2026");
-        assert_eq!(format_date(MARCH_FIFTH, "short", "en-US"), "3/5/2026");
-        assert_eq!(format_date(MARCH_FIFTH, "short", "fr"), "05/03/2026");
-        assert_eq!(format_date(MARCH_FIFTH, "iso", "fr"), "2026-03-05");
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Long, "en"),
+            "March 5, 2026"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Long, "fr-CA"),
+            "5 mars 2026"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Long, "de"),
+            "5. M\u{e4}rz 2026"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Short, "en-US"),
+            "3/5/2026"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Short, "fr"),
+            "05/03/2026"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Iso, "fr"),
+            "2026-03-05"
+        );
     }
 
     #[test]
     fn a_language_without_names_draws_the_calendar_form() {
-        assert_eq!(format_date(MARCH_FIFTH, "long", "ja"), "2026-03-05");
-        assert_eq!(format_date(MARCH_FIFTH, "short", ""), "2026-03-05");
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Long, "ja"),
+            "2026-03-05"
+        );
+        assert_eq!(
+            format_date(MARCH_FIFTH, DateFieldFormat::Short, ""),
+            "2026-03-05"
+        );
     }
 }
