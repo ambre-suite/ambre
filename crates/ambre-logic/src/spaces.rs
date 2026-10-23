@@ -542,7 +542,7 @@ impl LogicState {
     fn send_presence(&self, space_id: SpaceId) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: space_id.document_id(),
-            payload: presence_sample().into(),
+            payload: presence_sample(),
         });
     }
 

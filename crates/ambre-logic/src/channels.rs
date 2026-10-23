@@ -1656,7 +1656,7 @@ impl LogicState {
     fn send_sample(&self, meta: DocumentId, sample: Sample) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: meta,
-            payload: sample.bytes().into(),
+            payload: sample.bytes(),
         });
     }
 
@@ -4046,7 +4046,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id,
             from_user_id: from,
-            payload: sample.bytes().into(),
+            payload: sample.bytes(),
         });
     }
 
