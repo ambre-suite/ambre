@@ -7,12 +7,12 @@
 
 use ambre_core::{DocumentId, PublicKey, SnapshotId};
 use ambre_crypto::{DocumentKey, MasterSeed, envelope};
-use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature};
+use ambre_protocol::messages::Clock;
 use ambre_protocol::public_data::UpdatePublicData;
 use ambre_protocol::{Snapshot, Update};
 
 pub use crate::pipeline::PipelineError;
-use crate::pipeline::{decode_snapshot_blob, open_snapshot, open_update};
+use crate::pipeline::{FetchedBlob, decode_snapshot_blob, open_snapshot, open_update};
 
 /// The document key every entry point opens under.
 fn doc_key() -> DocumentKey {
@@ -38,7 +38,10 @@ pub fn open_relayed_update(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
 /// error of the open path for one that is.
 pub fn open_stored_snapshot(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let named: Snapshot = postcard::from_bytes(bytes).map_err(|_| PipelineError::Postcard)?;
-    let snapshot = decode_snapshot_blob(bytes, named.public_data.document_id)?;
+    let snapshot = decode_snapshot_blob(
+        &FetchedBlob::new(bytes.to_vec()),
+        named.public_data.document_id,
+    )?;
     open_snapshot(&snapshot, &doc_key()).map(ambre_core::SnapshotBytes::into_bytes)
 }
 
@@ -62,11 +65,11 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let aad = postcard::to_allocvec(&public_data).map_err(|_| PipelineError::Postcard)?;
     let sealed = envelope::seal(plaintext, &aad, &key, &signing)?;
     let update = Update {
-        ciphertext: Ciphertext(sealed.ciphertext),
-        nonce: Nonce(sealed.nonce),
+        ciphertext: sealed.ciphertext,
+        nonce: sealed.nonce,
         public_data,
-        commitment_tag: CommitmentTag(sealed.commitment_tag),
-        signature: Signature(sealed.signature),
+        commitment_tag: sealed.commitment_tag,
+        signature: sealed.signature,
     };
     open_update(&update, &key)
 }

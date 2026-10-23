@@ -299,7 +299,7 @@ enum SyncEvent {
     OpenDocumentReady {
         document_id: DocumentId,
         doc_key: DocumentKey,
-        snapshot_payload: Option<Vec<u8>>,
+        snapshot_payload: Option<pipeline::FetchedBlob>,
         snapshot_id: SnapshotId,
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
@@ -616,7 +616,7 @@ enum SyncEvent {
         snapshot_id: SnapshotId,
         /// The last delta its author says it folds in.
         covered_seq: Seq,
-        blob: Option<Vec<u8>>,
+        blob: Option<pipeline::FetchedBlob>,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
@@ -771,7 +771,7 @@ struct PendingCheck {
 pub(crate) struct HeldSnapshot {
     pub snapshot_id: SnapshotId,
     pub covered_seq: Seq,
-    pub blob: Vec<u8>,
+    pub blob: pipeline::FetchedBlob,
 }
 
 impl SyncDocumentState {
@@ -944,7 +944,7 @@ impl SyncDocumentState {
     /// before a rotation opens with a key the chain recovers (`SYNC-119`).
     fn open_snapshot_blob(
         &self,
-        blob: &[u8],
+        blob: &pipeline::FetchedBlob,
     ) -> Result<ambre_core::SnapshotBytes, pipeline::PipelineError> {
         self.open_signed_snapshot(blob).map(|(payload, _)| payload)
     }
@@ -953,7 +953,7 @@ impl SyncDocumentState {
     /// member who built it, which the snapshot check needs (`AUTHOR-021`).
     fn open_signed_snapshot(
         &self,
-        blob: &[u8],
+        blob: &pipeline::FetchedBlob,
     ) -> Result<(ambre_core::SnapshotBytes, ambre_core::PublicKey), pipeline::PipelineError> {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self

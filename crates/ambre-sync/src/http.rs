@@ -799,14 +799,17 @@ pub(crate) async fn download_snapshot(
     document_id: ambre_core::DocumentId,
     snapshot_id: ambre_core::SnapshotId,
     auth: AuthContext,
-) -> Option<Vec<u8>> {
+) -> Option<crate::pipeline::FetchedBlob> {
     let url = crate::http::ApiRoot::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/snapshot/download-url"));
     let body = SnapshotDownloadUrlRequest { snapshot_id };
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
-    fetch_bytes(&resp.download_url).await.ok()
+    fetch_bytes(&resp.download_url)
+        .await
+        .ok()
+        .map(crate::pipeline::FetchedBlob::new)
 }
 
 pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {

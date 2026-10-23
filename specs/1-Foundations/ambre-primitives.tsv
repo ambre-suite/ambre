@@ -4495,7 +4495,6 @@ ambre-sync | src/http.rs | crate::http | Transport::send() | ret | Result<Incomi
 ambre-sync | src/http.rs | crate::http | UNKNOWN_WORD | const | &str	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | bearer() | ret | Zeroizing<String>	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | delete_status_auth() | ret | Result<u16,HttpError>	debt	an HTTP status as a bare u16: HttpStatus exists
-ambre-sync | src/http.rs | crate::http | download_snapshot() | ret | Option<Vec<u8>>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/http.rs | crate::http | download_snapshot(url_scheme) | param | &str	debt	planned: lot C bis 2 (UrlScheme)
 ambre-sync | src/http.rs | crate::http | encode_link() | ret | Result<ambre_core::EncodedKeyLink,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
@@ -4505,7 +4504,6 @@ ambre-sync | src/http.rs | crate::http | is_personal() | ret | bool	generic	pred
 ambre-sync | src/http.rs | crate::http | post_json(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/http.rs | crate::http | post_json_via(url) | param | &str	debt	finding: relay URLs and presigned storage URLs are both `&str`
 ambre-sync | src/lib.rs | crate | APPLIED_WINDOW | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | HeldSnapshot.blob | field | Vec<u8>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | MAX_EPHEMERAL_REMOTE_AUTHORS | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | QUARANTINE_ALERT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | QUARANTINE_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -4523,8 +4521,6 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter(co
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	generic	initial value of the server_created fact field
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_ephemeral_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_signed_snapshot(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_snapshot_blob(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | SyncDocumentState::open_update_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
@@ -4536,13 +4532,11 @@ ambre-sync | src/lib.rs | crate | SyncEvent::MemberChannelsListed.asked | field 
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentFailed.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.snapshot_payload | field | Option<Vec<u8>>	debt	finding: plaintext snapshots unwrapped from `SnapshotBytes`
 ambre-sync | src/lib.rs | crate | SyncEvent::ProviderSignedIn.keys_stored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::ReplayRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncEvent::ResendRetry.ticket | field | u64	debt	finding: replay and resend timer tickets are both raw `u64`
 ambre-sync | src/lib.rs | crate | SyncEvent::SegmentClosed.result | field | Result<(ambre_bus::SegmentId,bool),http::HttpError>	generic	fact flag on an event
-ambre-sync | src/lib.rs | crate | SyncEvent::SnapshotFetched.blob | field | Option<Vec<u8>>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.code | field | u16	debt	finding: WebSocket close code, with 0 meaning "no close"
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
@@ -4616,6 +4610,9 @@ ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_mess
 ambre-sync | src/pipeline.rs | crate::pipeline | ABSOLUTE_DECOMPRESS_CAP | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | AUTHOR_KEY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | COMPRESS_THRESHOLD | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob.0 | field | Vec<u8>	newtype-inner	newtype inner
+ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::as_bytes() | ret | &[u8]	newtype-inner	enum/newtype own accessor or constructor
+ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::new(bytes) | param | Vec<u8>	newtype-inner	enum/newtype own accessor or constructor
 ambre-sync | src/pipeline.rs | crate::pipeline | LAYOUT_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -4635,7 +4632,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | aad_of() | ret | Result<Vec<u8>
 ambre-sync | src/pipeline.rs | crate::pipeline | check_layout(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (u8,Vec<u8>)	debt	finding: compression version and summary marker as `u8` though an enum exists
 ambre-sync | src/pipeline.rs | crate::pipeline | compress(data) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | decode_snapshot_blob(blob) | param | &[u8]	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress(body) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress(version) | param | u8	debt	finding: compression version and summary marker as `u8` though an enum exists
@@ -4730,7 +4726,6 @@ ambre-sync | src/updates.rs | crate::updates | MembersAnswer::Unreachable.0 | fi
 ambre-sync | src/updates.rs | crate::updates | MembersAnswer<T>::classify(outcome) | param | Result<Option<T>,impl Into<String>>	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | OpenedMembers.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/updates.rs | crate::updates | SyncState::adopt_fetched_snapshot(blob) | param | Option<Vec<u8>>	debt	planned: lot B bis 9 (SealedBlob)
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report

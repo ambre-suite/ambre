@@ -232,7 +232,10 @@ impl SyncState {
             )
             .await
             {
-                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
+                Ok(resp) => http::fetch_bytes(&resp.download_url)
+                    .await
+                    .ok()
+                    .map(pipeline::FetchedBlob::new),
                 Err(_) => None,
             };
             let _ = tx.send(SyncEvent::SnapshotFetched {
@@ -255,7 +258,7 @@ impl SyncState {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
         covered_seq: Seq,
-        blob: Option<Vec<u8>>,
+        blob: Option<pipeline::FetchedBlob>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -1958,7 +1961,7 @@ mod tests {
         payload: &[u8],
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
-    ) -> Vec<u8> {
+    ) -> pipeline::FetchedBlob {
         let public_data = SnapshotPublicData {
             document_id,
             pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
@@ -1974,7 +1977,7 @@ mod tests {
             signing_key,
         )
         .expect("seal");
-        postcard::to_allocvec(&snapshot).expect("encode")
+        pipeline::FetchedBlob::new(postcard::to_allocvec(&snapshot).expect("encode"))
     }
 
     fn drain(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> Vec<LogicEvent> {
@@ -3144,7 +3147,11 @@ mod tests {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let announced = SnapshotId::new();
         let foreign = snapshot_blob(DocumentId::new(), announced, b"x", &key, &sk);
-        for blob in [None, Some(b"garbage".to_vec()), Some(foreign)] {
+        for blob in [
+            None,
+            Some(pipeline::FetchedBlob::new(b"garbage".to_vec())),
+            Some(foreign),
+        ] {
             state.handle_sync_event(SyncEvent::SnapshotFetched {
                 document_id: doc,
                 snapshot_id: announced,

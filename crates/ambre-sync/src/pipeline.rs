@@ -367,10 +367,11 @@ pub fn seal_snapshot(
 /// [`PipelineError::Postcard`] for bytes that are not a snapshot, and
 /// [`PipelineError::WrongDocument`] for another document's.
 pub fn decode_snapshot_blob(
-    blob: &[u8],
+    blob: &FetchedBlob,
     document_id: ambre_bus::DocumentId,
 ) -> Result<Snapshot, PipelineError> {
-    let snapshot: Snapshot = postcard::from_bytes(blob).map_err(|_| PipelineError::Postcard)?;
+    let snapshot: Snapshot =
+        postcard::from_bytes(blob.as_bytes()).map_err(|_| PipelineError::Postcard)?;
     if snapshot.public_data.document_id != document_id {
         return Err(PipelineError::WrongDocument);
     }
@@ -454,6 +455,32 @@ impl SealedFrame {
             WsClientMsg::Update(update) => Some(update.signature),
             _ => None,
         }
+    }
+}
+
+/// A blob as object storage returned it: sealed by some writer, and neither
+/// verified nor opened yet. Distinct from [`SealedBlob`], which only the
+/// local seal builds, so a download never stands in for an upload.
+/// [`decode_snapshot_blob`] is the one reader. `Debug` prints the length and
+/// none of the bytes.
+#[derive(Clone, PartialEq, Eq)]
+pub struct FetchedBlob(Vec<u8>);
+
+impl FetchedBlob {
+    /// The bytes as the download returned them.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes, for the decoder.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for FetchedBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FetchedBlob({} bytes)", self.0.len())
     }
 }
 
@@ -1055,7 +1082,9 @@ mod tests {
         )
         .unwrap();
         assert!(!contains(snapshot.as_bytes()));
-        let decoded = decode_snapshot_blob(snapshot.as_bytes(), document_id).unwrap();
+        let decoded =
+            decode_snapshot_blob(&FetchedBlob::new(snapshot.as_bytes().to_vec()), document_id)
+                .unwrap();
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);
 
         let aad = name_aad(document_id);
