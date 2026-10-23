@@ -635,6 +635,10 @@ pub(crate) mod tests {
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr");
         let french = crate::band::resolve(state.document(), &header, 0, 1);
         assert_eq!(french, "5 mars 2026");
+        // A peer's malformed tag is no language, not French nor English.
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr_FR");
+        let unnamed = crate::band::resolve(state.document(), &header, 0, 1);
+        assert_eq!(unnamed, "2026-03-05");
     }
 
     #[test]

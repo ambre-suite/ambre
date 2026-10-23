@@ -51,6 +51,7 @@ pub mod id;
 pub mod index;
 pub mod key_hex;
 pub mod key_id;
+pub mod lang;
 /// The target of a link: [`LinkUrl`].
 pub mod link;
 pub mod media;
@@ -114,6 +115,7 @@ pub use id::{
 };
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
+pub use lang::LangTag;
 pub use link::LinkUrl;
 pub use media::{ByteSize, ContentHash, MEDIA_ADDRESS_LEN, MediaAddress, MediaType};
 pub use mode::{HistoryStep, StepDirection, Visibility};

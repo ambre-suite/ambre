@@ -307,7 +307,10 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let key = doc::MetaKey::parse(stored_key)?;
     match key {
         doc::MetaKey::Title => Some(format!("titled {:?}", doc::read_title(document))),
-        doc::MetaKey::Lang => Some(format!("in {:?}", doc::read_lang(document))),
+        doc::MetaKey::Lang => Some(doc::read_lang(document).map_or_else(
+            || "in no well-formed language".to_owned(),
+            |tag| format!("in {:?}", tag.as_str()),
+        )),
         doc::MetaKey::UpdatedAt => {
             let (year, month, day) = crate::band::civil_date(doc::read_updated_at(document)?);
             Some(format!("last modified {year:04}-{month:02}-{day:02} UTC"))

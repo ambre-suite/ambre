@@ -12,6 +12,7 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
+use ambre_core::LangTag;
 use ambre_core::crdt::FieldKey;
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
@@ -1326,12 +1327,14 @@ pub fn read_title(doc: &LoroDoc) -> String {
         .unwrap_or_default()
 }
 
-/// The document language, a BCP 47 tag.
+/// The document language, or `None` when the register is absent or holds no
+/// well-formed tag. A peer may have written any string there; a malformed one
+/// reads as no language rather than as a fixed one.
 #[must_use]
-pub fn read_lang(doc: &LoroDoc) -> String {
+pub fn read_lang(doc: &LoroDoc) -> Option<LangTag> {
     meta_read(doc)
         .and_then(|meta| read_string(&meta, MetaKey::Lang))
-        .unwrap_or_default()
+        .and_then(|text| LangTag::parse(&text))
 }
 
 // -----------------------------------------------------------------------------

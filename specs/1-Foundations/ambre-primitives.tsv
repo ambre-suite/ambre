@@ -1508,6 +1508,10 @@ ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_
 ambre-core | src/key_id.rs | crate::key_id | KeyId::from_array(bytes) | param | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::parse_hex(text) | param | &str	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::to_hex() | ret | String	newtype-inner	KeyId newtype
+ambre-core | src/lang.rs | crate::lang | LangTag.0 | field | String	newtype-inner	LangTag newtype accessor
+ambre-core | src/lang.rs | crate::lang | LangTag::as_str() | ret | &str	newtype-inner	LangTag newtype accessor
+ambre-core | src/lang.rs | crate::lang | LangTag::parse(text) | param | &str	newtype-inner	LangTag constructor, the text it validates
+ambre-core | src/lang.rs | crate::lang | LangTag::primary() | ret | String	newtype-inner	LangTag primary subtag, lowercased
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
 ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | String	newtype-inner	LinkUrl newtype
@@ -2801,10 +2805,8 @@ ambre-prose | src/band.rs | crate::band | field_value(count) | param | u32	debt	
 ambre-prose | src/band.rs | crate::band | field_value(key) | param | &str	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | format_date(lang) | param | &str	debt	finding: language tag as &str (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date(ms) | param | i64	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | months(lang) | param | &str	debt	finding: language tag as &str (confirmed)
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | resolve(page_count) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -2891,7 +2893,6 @@ ambre-prose | src/doc.rs | crate::doc | read_bool() | ret | Option<bool>	generic
 ambre-prose | src/doc.rs | crate::doc | read_f32() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | read_f64() | ret | Option<f64>	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	count, size or local index
-ambre-prose | src/doc.rs | crate::doc | read_lang() | ret | String	debt	finding: language tag as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_updated_at() | ret | Option<i64>	debt	finding: raw timestamps and durations (confirmed)
