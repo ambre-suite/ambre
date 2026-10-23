@@ -54,7 +54,7 @@ async fn dead_letters(state: &AppState, doc_id: DocumentId) -> Vec<(u64, String,
 async fn forget(state: &AppState, doc_id: DocumentId) {
     let _: usize = state
         .redis
-        .del(crate::redis_ops::document_state_keys(&doc_id))
+        .del(crate::redis_keys::DocumentStateKeys::of(&doc_id).texts())
         .await
         .unwrap();
 }

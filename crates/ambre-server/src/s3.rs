@@ -52,6 +52,7 @@ use tracing;
 
 use crate::error::AppError;
 use crate::payload::Payload;
+use crate::redis_keys::{FlushLockKey, PendingKey};
 
 /// Defines a text the object store names a place with. Each is its own type,
 /// so a bucket never takes the place of a key prefix in one signature.
@@ -423,9 +424,9 @@ async fn reconcile_dirty_set(state: &crate::state::AppState) {
                 return;
             }
         };
-        for key in &keys {
-            if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, key).await {
-                tracing::warn!(key, error = %e, "flusher reconcile: mark dirty failed");
+        for key in keys.iter().filter_map(|text| PendingKey::parse(text)) {
+            if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, &key).await {
+                tracing::warn!(%key, error = %e, "flusher reconcile: mark dirty failed");
             }
         }
         cursor = next_cursor;
@@ -444,13 +445,8 @@ async fn reconcile_dirty_set(state: &crate::state::AppState) {
 /// already-sequenced, acknowledged delta. A losing instance simply skips this
 /// document; the next 15 s cycle picks it up. The client write path never takes
 /// this lock, so collaboration latency is unaffected.
-async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
-    let Some(lock_key) = pending_key
-        .strip_suffix(":pending")
-        .map(|prefix| format!("{prefix}:flush:lock"))
-    else {
-        return;
-    };
+async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &PendingKey) {
+    let lock_key = FlushLockKey::of(&pending_key.document());
     let token = crate::redis_ops::LockToken::fresh();
     match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, FLUSH_LOCK_TTL)
         .await
@@ -458,7 +454,7 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
         Ok(true) => {}
         Ok(false) => return,
         Err(e) => {
-            tracing::error!(key = pending_key, error = %e, "flush: lock acquire failed");
+            tracing::error!(key = %pending_key, error = %e, "flush: lock acquire failed");
             return;
         }
     }
@@ -471,20 +467,20 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
     // never clears a marker for a list it did not drain.
     if let Err(e) = crate::redis_ops::clear_pending_dirty_if_empty(&state.redis, pending_key).await
     {
-        tracing::warn!(key = pending_key, error = %e, "flush: clear dirty marker failed");
+        tracing::warn!(key = %pending_key, error = %e, "flush: clear dirty marker failed");
     }
 
     if let Err(e) = crate::redis_ops::release_flush_lock(&state.redis, &lock_key, &token).await {
-        tracing::warn!(key = pending_key, error = %e, "flush: lock release failed");
+        tracing::warn!(key = %pending_key, error = %e, "flush: lock release failed");
     }
 }
 
 /// Drain body, run under the per-document flush lock held by [`flush_doc_pending`].
-async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &str) {
+async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &PendingKey) {
     let entries = match crate::redis_ops::pending_entries(&state.redis, pending_key).await {
         Ok(entries) => entries,
         Err(e) => {
-            tracing::error!(key = pending_key, error = %e, "flush: lrange failed");
+            tracing::error!(key = %pending_key, error = %e, "flush: lrange failed");
             return;
         }
     };
@@ -493,15 +489,16 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
         return;
     }
 
-    // Key prefix of the document, for the dead-letter list of permanently-bad
-    // entries (malformed JSON / base64). It spares re-parsing the doc id.
-    let doc_prefix = pending_key.strip_suffix(":pending");
-
-    let mut sink = S3Sink { state, doc_prefix };
+    // The document whose dead-letter list takes the permanently-bad entries
+    // (malformed JSON / base64).
+    let mut sink = S3Sink {
+        state,
+        document: pending_key.document(),
+    };
     let processed = drain_front(pending_key, &entries, &mut sink).await;
 
     if processed > 0 {
-        let _: Result<(), _> = state.redis.ltrim(pending_key, processed, -1).await;
+        let _: Result<(), _> = state.redis.ltrim(pending_key.as_str(), processed, -1).await;
     }
 }
 
@@ -520,7 +517,7 @@ trait DrainSink {
 /// The production sink: the object store, and the document's dead letters.
 struct S3Sink<'a> {
     state: &'a crate::state::AppState,
-    doc_prefix: Option<&'a str>,
+    document: ambre_core::DocumentId,
 }
 
 impl DrainSink for S3Sink<'_> {
@@ -538,9 +535,7 @@ impl DrainSink for S3Sink<'_> {
     }
 
     async fn dead_letter(&mut self, entry: &Payload) {
-        if let Some(prefix) = self.doc_prefix {
-            let _ = crate::redis_ops::push_poison_entry(&self.state.redis, prefix, entry).await;
-        }
+        let _ = crate::redis_ops::push_poison_entry(&self.state.redis, &self.document, entry).await;
     }
 }
 
@@ -550,7 +545,11 @@ impl DrainSink for S3Sink<'_> {
 /// The count is the exact `ltrim` start index, so it tracks both outcomes. It
 /// stops at the first failed store, which the next cycle retries. The trim
 /// therefore never removes an entry that was neither stored nor dead-lettered.
-async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl DrainSink) -> isize {
+async fn drain_front(
+    pending_key: &PendingKey,
+    entries: &[Payload],
+    sink: &mut impl DrainSink,
+) -> isize {
     let mut processed: isize = 0;
     for entry in entries {
         // An entry carries `update_b64`, the E2EE ciphertext, and a `Payload`
@@ -562,7 +561,7 @@ async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl Dra
         // past it rather than blocking the queue forever.
         let Some((seq, s3_key, update_wire)) = entry.read_pending() else {
             tracing::error!(
-                key = pending_key,
+                key = %pending_key,
                 seq = entry.pending_seq().map_or(0, |s| s.0),
                 entry_len = entry.len(),
                 reason = "malformed json / missing fields / bad base64",
@@ -647,7 +646,12 @@ mod tests {
             }
         }
         let mut sink = Flaky::default();
-        let processed = drain_front("doc:x:pending", &entries, &mut sink).await;
+        let processed = drain_front(
+            &PendingKey::of(&DocumentId::from_bytes([9u8; 16])),
+            &entries,
+            &mut sink,
+        )
+        .await;
 
         // Stored, dead-lettered, stored: the failure at the fourth stops it.
         assert_eq!(processed, 3);

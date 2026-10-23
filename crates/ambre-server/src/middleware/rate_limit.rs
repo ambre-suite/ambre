@@ -51,6 +51,26 @@ static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 static INSTANCE_ID: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
 
+/// The bucket a request counts against: its caller when it signs in, its
+/// peer address otherwise (`SRV-019`, `SRV-094`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RateBucket {
+    /// The user the access token names.
+    User(ambre_core::UserId),
+    /// The address the request comes from, as the socket or the proxy states
+    /// it; `unknown` when neither does.
+    Peer(String),
+}
+
+impl std::fmt::Display for RateBucket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::User(user) => write!(f, "user:{user}"),
+            Self::Peer(peer) => write!(f, "ip:{peer}"),
+        }
+    }
+}
+
 /// The bucket a request lands in.
 ///
 /// Prefers the authenticated user id (verified statelessly from the
@@ -59,14 +79,14 @@ static INSTANCE_ID: std::sync::LazyLock<String> =
 /// in its claims. `X-Forwarded-For` is read only when `trust_proxy` says a
 /// proxy overwrites it. Otherwise it is the caller's to forge, so the socket
 /// peer decides.
-fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Request) -> String {
+fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Request) -> RateBucket {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
         && let Ok(claims) = jwt.verify(&ambre_protocol::ws::AccessToken::new(
             token.trim().to_owned(),
         ))
     {
-        return format!("user:{}", claims.sub);
+        return RateBucket::User(claims.sub);
     }
     let x_forwarded_for =
         header("x-forwarded-for").filter(|_| trust_proxy == ProxyTrust::BehindProxy);
@@ -74,7 +94,7 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Requ
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map_or_else(|| "unknown".to_owned(), |a| a.0.ip().to_string());
-    format!("ip:{}", client_ip_str(x_forwarded_for, &remote_ip))
+    RateBucket::Peer(client_ip_str(x_forwarded_for, &remote_ip))
 }
 
 /// Extracts the client IP address from headers or socket address.
@@ -166,7 +186,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     let category = RateLimitCategory::classify(&path, &method);
     let (max_req, window) = category.limits();
 
-    let key = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
+    let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
 
     let now = ambre_core::UnixMillis(
         std::time::SystemTime::now()
@@ -174,11 +194,8 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
     );
     let window_ms = ambre_core::Millis::from_duration(window.to_duration());
-    // No window bucket in the key: the sorted set is the sliding window.
-    let redis_key = format!("rate:{}:{}", category.prefix(), key);
-
     let (allowed, remaining) =
-        match check_sliding_window(&state, &redis_key, now, window_ms, max_req).await {
+        match check_sliding_window(&state, &category, &bucket, now, window_ms, max_req).await {
             Ok((allowed, rem)) => (allowed, rem),
             Err(e) if category.fail_closed() => {
                 tracing::error!("Rate limiter Redis error on auth tier: {e:?}, failing closed");
@@ -231,18 +248,22 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     response
 }
 
-/// Records the current request in the sliding window for `key` and returns
+/// Records the current request in the sliding window of `bucket` under
+/// `category`, and returns
 /// whether it is allowed along with the remaining quota.
 ///
 /// Runs `SLIDING_WINDOW_LUA` atomically: prune-add-count-expire in one round
 /// trip, so there is no boundary burst and no TTL-less key window.
 async fn check_sliding_window(
     state: &AppState,
-    key: &str,
+    category: &RateLimitCategory,
+    bucket: &RateBucket,
     now: ambre_core::UnixMillis,
     window: ambre_core::Millis,
     max_requests: u64,
 ) -> Result<(bool, u64), AppError> {
+    // No window bucket in the key: the sorted set is the sliding window.
+    let key = format!("rate:{}:{bucket}", category.prefix());
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
     // Unique per (instance, request), so same-millisecond requests are distinct
     // sorted-set members even across pods (see `INSTANCE_ID`).
@@ -252,7 +273,7 @@ async fn check_sliding_window(
         .redis
         .eval(
             SLIDING_WINDOW_LUA,
-            [key],
+            [key.as_str()],
             [now.0.to_string(), window.0.to_string(), member],
         )
         .await
@@ -343,14 +364,14 @@ mod tests {
             let req = request_from(peer, &[("authorization", &bearer)]);
             assert_eq!(
                 request_bucket(&jwt, ProxyTrust::Direct, &req),
-                format!("user:{user}")
+                RateBucket::User(user)
             );
         }
         let forged = crate::jwt::JwtKeys::from_seed(&[6u8; 32]);
         let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
         assert_eq!(
             request_bucket(&forged, ProxyTrust::Direct, &req),
-            "ip:10.0.0.1"
+            RateBucket::Peer("10.0.0.1".to_owned())
         );
     }
 
@@ -362,11 +383,23 @@ mod tests {
         let req = request_from([10, 0, 0, 1], &[("x-forwarded-for", "203.0.113.9")]);
         assert_eq!(
             request_bucket(&jwt, ProxyTrust::Direct, &req),
-            "ip:10.0.0.1"
+            RateBucket::Peer("10.0.0.1".to_owned())
         );
         assert_eq!(
             request_bucket(&jwt, ProxyTrust::BehindProxy, &req),
-            "ip:203.0.113.9"
+            RateBucket::Peer("203.0.113.9".to_owned())
+        );
+    }
+
+    /// A bucket names its store key by kind, so a user id and a peer address
+    /// that spell the same text never share a window.
+    #[test]
+    fn a_bucket_names_its_kind_in_the_key() {
+        let user = ambre_core::UserId::new();
+        assert_eq!(RateBucket::User(user).to_string(), format!("user:{user}"));
+        assert_eq!(
+            RateBucket::Peer(user.to_string()).to_string(),
+            format!("ip:{user}")
         );
     }
 

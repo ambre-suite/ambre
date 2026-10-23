@@ -551,12 +551,14 @@ mod handler_tests {
 
         let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
         let other = ambre_core::DocumentId::parse_str(&other_id).unwrap();
-        let [seq, clocks, ..] = crate::redis_ops::document_state_keys(&doc);
-        let [other_seq, ..] = crate::redis_ops::document_state_keys(&other);
-        state.redis.set(&seq, 7).await.unwrap();
-        state.redis.hset(&clocks, [("aa", "3")]).await.unwrap();
+        let keys = crate::redis_keys::DocumentStateKeys::of(&doc);
+        let other_keys = crate::redis_keys::DocumentStateKeys::of(&other);
+        let [seq, clocks, ..] = keys.texts();
+        let [other_seq, ..] = other_keys.texts();
+        state.redis.set(seq, 7).await.unwrap();
+        state.redis.hset(clocks, [("aa", "3")]).await.unwrap();
         let aa = ambre_core::SigningKeyHex("aa".into());
-        state.redis.set(&other_seq, 4).await.unwrap();
+        state.redis.set(other_seq, 4).await.unwrap();
         crate::redis_ops::doc_session_open(&state.redis, &doc, &aa)
             .await
             .unwrap();
@@ -575,11 +577,11 @@ mod handler_tests {
         assert_eq!(stub.keys(), [object(&other_id, "deltas/0000000001")]);
         let left: usize = state
             .redis
-            .exists(crate::redis_ops::document_state_keys(&doc))
+            .exists(crate::redis_keys::DocumentStateKeys::of(&doc).texts())
             .await
             .unwrap();
         assert_eq!(left, 0, "no relay key survives the delete");
-        let kept: usize = state.redis.exists([&other_seq]).await.unwrap();
+        let kept: usize = state.redis.exists([other_seq]).await.unwrap();
         assert_eq!(kept, 1, "another document keeps its counter");
 
         // The writes an update and a presence sample take, landing late.
@@ -639,12 +641,11 @@ mod handler_tests {
         crate::redis_ops::doc_session_open(redis, &doc, &aa)
             .await
             .unwrap();
-        let prefix = format!("doc:{doc}");
         assert!(gone(
-            crate::redis_ops::push_poison_entry(redis, &prefix, &frame).await
+            crate::redis_ops::push_poison_entry(redis, &doc, &frame).await
         ));
         let left: usize = redis
-            .exists(crate::redis_ops::document_state_keys(&doc))
+            .exists(crate::redis_keys::DocumentStateKeys::of(&doc).texts())
             .await
             .unwrap();
         assert_eq!(left, 0, "a late write recreates no key");
@@ -663,8 +664,8 @@ mod handler_tests {
             .unwrap();
         assert_eq!(marks, 0, "a done sweep drops the mark");
 
-        let gone_key = crate::redis_ops::document_gone_key(&doc);
-        let _ = redis.del([&other_seq, &gone_key]).await;
+        let gone_key = crate::redis_keys::GoneKey::of(&doc);
+        let _ = redis.del([other_seq, gone_key.as_str()]).await;
     }
 
     // `SRV-165`: a delete the object store stops keeps its mark, and the
@@ -692,8 +693,9 @@ mod handler_tests {
         // The object store is down: the delete fails past its mark.
         let down =
             test_app_state_with_s3(pool.clone(), offline_s3(Some("http://127.0.0.1:1"))).await;
-        let [seq, ..] = crate::redis_ops::document_state_keys(&doc);
-        down.redis.set(&seq, 7).await.unwrap();
+        let keys = crate::redis_keys::DocumentStateKeys::of(&doc);
+        let [seq, ..] = keys.texts();
+        down.redis.set(seq, 7).await.unwrap();
         let resp = build_test_router(down.clone())
             .oneshot(
                 Request::delete(format!("/api/documents/{doc_id}"))
@@ -717,8 +719,8 @@ mod handler_tests {
         );
 
         // A reset of the ephemeral store loses the tombstone.
-        let gone_key = crate::redis_ops::document_gone_key(&doc);
-        let _: usize = down.redis.del([&gone_key]).await.unwrap();
+        let gone_key = crate::redis_keys::GoneKey::of(&doc);
+        let _: usize = down.redis.del([gone_key.as_str()]).await.unwrap();
 
         // The store is back, and the pass finishes the delete.
         let stub = S3Stub::spawn([object("snapshots/s1"), object("media/abc")]).await;
@@ -733,11 +735,11 @@ mod handler_tests {
         );
         let left: usize = state
             .redis
-            .exists(crate::redis_ops::document_state_keys(&doc))
+            .exists(crate::redis_keys::DocumentStateKeys::of(&doc).texts())
             .await
             .unwrap();
         assert_eq!(left, 0, "no relay key survives the pass");
-        let fenced: usize = state.redis.exists([&gone_key]).await.unwrap();
+        let fenced: usize = state.redis.exists([gone_key.as_str()]).await.unwrap();
         assert_eq!(fenced, 1, "the pass sets the tombstone again");
         assert_eq!(
             marks(pool.clone()).await,
@@ -758,7 +760,7 @@ mod handler_tests {
         );
         assert_eq!(marks(pool).await, 0, "a done delete drops its mark");
 
-        let _: usize = state.redis.del([&gone_key]).await.unwrap();
+        let _: usize = state.redis.del([gone_key.as_str()]).await.unwrap();
     }
 
     #[sqlx::test]
@@ -3695,7 +3697,7 @@ mod handler_tests {
         let doc = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::parse_str(doc_id).unwrap());
         let n: usize = state
             .redis
-            .exists(crate::redis_ops::rotation_owed_key(&doc))
+            .exists(crate::redis_keys::RotationOwedKey::of(&doc).as_str())
             .await
             .unwrap();
         n == 1

@@ -7,6 +7,10 @@ use rustis::resp::RefBulkString;
 
 use crate::oidc::{OidcAuthState, OidcSecret};
 use crate::payload::Payload;
+use crate::redis_keys::{
+    ClocksKey, DeadLetterKey, DocumentStateKeys, FlushDirtySet, FlushLockKey, GoneKey, LockedKey,
+    PendingKey, PresenceKey, RotationOwedKey, SeqKey, SessionsKey, SnapshotAskedKey,
+};
 use ambre_protocol::messages::Clock;
 use ambre_protocol::ws::RefreshToken;
 
@@ -16,8 +20,8 @@ use ambre_protocol::ws::RefreshToken;
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
 /// - `KEYS[2]` = `doc:{id}:seq`   (counter)
 /// - `KEYS[3]` = `doc:{id}:gone`  (tombstone, see [`mark_document_gone`])
-/// - `KEYS[4]` = `doc:{id}:rotation-owed` (see [`rotation_owed_key`])
-/// - `KEYS[5]` = `doc:{id}:locked` (see [`segment_locked_key`])
+/// - `KEYS[4]` = `doc:{id}:rotation-owed` (see [`RotationOwedKey`])
+/// - `KEYS[5]` = `doc:{id}:locked` (see [`LockedKey`])
 /// - `ARGV[1]` = pub_key_hex
 /// - `ARGV[2]` = incoming clock (must be last_clock + 1)
 ///
@@ -77,11 +81,11 @@ pub async fn verify_clock_and_assign_seq(
     pub_key_hex: &ambre_core::SigningKeyHex,
     clock: Clock,
 ) -> Result<ambre_core::Seq, AppError> {
-    let clocks_key = format!("doc:{document_id}:clocks");
-    let seq_key = format!("doc:{document_id}:seq");
-    let gone_key = document_gone_key(document_id);
-    let owed_key = rotation_owed_key(document_id);
-    let locked_key = segment_locked_key(document_id);
+    let clocks_key = ClocksKey::of(document_id);
+    let seq_key = SeqKey::of(document_id);
+    let gone_key = GoneKey::of(document_id);
+    let owed_key = RotationOwedKey::of(document_id);
+    let locked_key = LockedKey::of(document_id);
 
     let result: i64 = redis
         .eval::<i64>(
@@ -145,7 +149,7 @@ pub async fn document_seqs(
     }
     let keys: Vec<String> = document_ids
         .iter()
-        .map(|id| format!("doc:{id}:seq"))
+        .map(|id| SeqKey::of(id).as_str().to_owned())
         .collect();
     let counters = redis
         .mget::<Vec<Option<u64>>>(keys)
@@ -189,9 +193,9 @@ pub async fn clock_state_is_cold(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
 ) -> Result<bool, AppError> {
-    let clocks_key = format!("doc:{document_id}:clocks");
+    let clocks_key = ClocksKey::of(document_id);
     let existing: usize = redis
-        .exists(clocks_key)
+        .exists(clocks_key.as_str())
         .await
         .map_err(|e| AppError::Redis(format!("clock state EXISTS failed: {e}")))?;
     Ok(existing == 0)
@@ -209,9 +213,9 @@ pub async fn seed_clock_state(
     if author_clocks.is_empty() {
         return Ok(());
     }
-    let clocks_key = format!("doc:{document_id}:clocks");
-    let seq_key = format!("doc:{document_id}:seq");
-    let gone_key = document_gone_key(document_id);
+    let clocks_key = ClocksKey::of(document_id);
+    let seq_key = SeqKey::of(document_id);
+    let gone_key = GoneKey::of(document_id);
     let mut argv = vec![max_seq.0.to_string()];
     for (hex, clock) in author_clocks {
         argv.push(hex.as_str().to_owned());
@@ -244,7 +248,7 @@ pub async fn append_pending_delta(
     s3_key: &ambre_core::ObjectKey,
     update_wire: &Payload,
 ) -> Result<(), AppError> {
-    let key = format!("doc:{document_id}:pending");
+    let key = PendingKey::of(document_id);
     // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
     // commitment + signature), not just the ciphertext. A reconnecting or
     // cross-device client replays these verbatim, and needs every field to
@@ -263,11 +267,11 @@ redis.call('RPUSH', KEYS[1], ARGV[1])
 redis.call('SADD', KEYS[2], KEYS[1])
 return 1
 "#;
-    let gone_key = document_gone_key(document_id);
+    let gone_key = GoneKey::of(document_id);
     redis
         .eval::<i64>(
             LUA,
-            [key.as_str(), FLUSH_DIRTY_SET, gone_key.as_str()],
+            [key.as_str(), FlushDirtySet.as_str(), gone_key.as_str()],
             [RefBulkString::new(entry.expose_bytes())],
         )
         .await
@@ -280,11 +284,11 @@ return 1
 const DOCUMENT_GONE: &str = "DOCUMENT_GONE";
 
 /// The refusal the clock and presence scripts answer for a document that owes
-/// a rotation (see [`rotation_owed_key`]).
+/// a rotation (see [`RotationOwedKey`]).
 const ROTATION_OWED: &str = "ROTATION_OWED";
 
 /// The refusal the clock script answers for a locked segment (see
-/// [`segment_locked_key`]).
+/// [`LockedKey`]).
 const SEGMENT_LOCKED: &str = "SEGMENT_LOCKED";
 
 /// Reads a guarded script's refusal out of a store error: a document being
@@ -299,12 +303,13 @@ fn store_refusal(error: &str, what: &str) -> AppError {
     }
 }
 
-/// RPUSHes `entry` onto `list_key` unless `gone_key` exists. The flusher and
-/// the dead-letter path use it, so neither recreates a purged list.
+/// RPUSHes `entry` onto a document's dead-letter list unless its tombstone
+/// exists. The flusher and the write path use it, so neither recreates a
+/// purged list.
 async fn guarded_rpush(
     redis: &Client,
-    list_key: &str,
-    gone_key: &str,
+    list_key: &DeadLetterKey,
+    gone_key: &GoneKey,
     entry: &Payload,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
@@ -316,7 +321,7 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
     let _: i64 = redis
         .eval::<i64>(
             LUA,
-            [list_key, gone_key],
+            [list_key.as_str(), gone_key.as_str()],
             [RefBulkString::new(entry.expose_bytes())],
         )
         .await
@@ -325,25 +330,28 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
 }
 
 /// Dead-letters a poison pending entry the flusher found, unless the document
-/// is being deleted. `prefix` is the document's `doc:{id}` key prefix.
+/// is being deleted.
 pub async fn push_poison_entry(
     redis: &Client,
-    prefix: &str,
+    document_id: &ambre_core::DocumentId,
     entry: &Payload,
 ) -> Result<(), AppError> {
     guarded_rpush(
         redis,
-        &format!("{prefix}:deadletter"),
-        &format!("{prefix}:gone"),
+        &DeadLetterKey::of(document_id),
+        &GoneKey::of(document_id),
         entry,
     )
     .await
 }
 
 /// The entries of a pending list, front first.
-pub async fn pending_entries(redis: &Client, pending_key: &str) -> Result<Vec<Payload>, AppError> {
+pub async fn pending_entries(
+    redis: &Client,
+    pending_key: &PendingKey,
+) -> Result<Vec<Payload>, AppError> {
     let entries: Vec<String> = redis
-        .lrange(pending_key, 0, -1)
+        .lrange(pending_key.as_str(), 0, -1)
         .await
         .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
     Ok(entries
@@ -352,27 +360,28 @@ pub async fn pending_entries(redis: &Client, pending_key: &str) -> Result<Vec<Pa
         .collect())
 }
 
-/// Redis SET holding the `doc:{id}:pending` keys that currently have unflushed
-/// deltas. The flusher reads this instead of SCANning the keyspace.
-pub const FLUSH_DIRTY_SET: &str = "flush:dirty";
-
 /// Records `pending_key` in the dirty set so the flusher will visit it.
-pub async fn mark_pending_dirty(redis: &Client, pending_key: &str) -> Result<(), AppError> {
+pub async fn mark_pending_dirty(redis: &Client, pending_key: &PendingKey) -> Result<(), AppError> {
     use rustis::commands::SetCommands;
     redis
-        .sadd(FLUSH_DIRTY_SET, [pending_key])
+        .sadd(FlushDirtySet.as_str(), [pending_key.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("mark pending dirty: {e}")))?;
     Ok(())
 }
 
 /// Returns the pending keys currently marked dirty (the flusher's work list).
-pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<String>, AppError> {
+/// A member this relay never writes names no list to flush, and is skipped.
+pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<PendingKey>, AppError> {
     use rustis::commands::SetCommands;
-    redis
-        .smembers(FLUSH_DIRTY_SET)
+    let members: Vec<String> = redis
+        .smembers(FlushDirtySet.as_str())
         .await
-        .map_err(|e| AppError::Redis(format!("dirty pending keys: {e}")))
+        .map_err(|e| AppError::Redis(format!("dirty pending keys: {e}")))?;
+    Ok(members
+        .iter()
+        .filter_map(|member| PendingKey::parse(member))
+        .collect())
 }
 
 /// Atomically clears `pending_key` from the dirty set, but ONLY if its pending
@@ -382,11 +391,15 @@ pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<String>, AppError>
 /// an acknowledged delta is never stranded.
 pub async fn clear_pending_dirty_if_empty(
     redis: &Client,
-    pending_key: &str,
+    pending_key: &PendingKey,
 ) -> Result<(), AppError> {
     const LUA: &str = "if redis.call('LLEN', KEYS[1]) == 0 then return redis.call('SREM', KEYS[2], ARGV[1]) else return 0 end";
     let _: i64 = redis
-        .eval::<i64>(LUA, [pending_key, FLUSH_DIRTY_SET], [pending_key])
+        .eval::<i64>(
+            LUA,
+            [pending_key.as_str(), FlushDirtySet.as_str()],
+            [pending_key.as_str()],
+        )
         .await
         .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
     Ok(())
@@ -410,8 +423,8 @@ pub async fn push_dead_letter(
 ) -> Result<(), AppError> {
     guarded_rpush(
         redis,
-        &format!("doc:{document_id}:deadletter"),
-        &document_gone_key(document_id),
+        &DeadLetterKey::of(document_id),
+        &GoneKey::of(document_id),
         &Payload::pending_entry(seq, s3_key, update_wire),
     )
     .await
@@ -433,7 +446,7 @@ pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
 ) -> Result<std::collections::HashMap<ambre_core::Seq, Payload>, AppError> {
-    let entries = pending_entries(redis, &format!("doc:{document_id}:pending")).await?;
+    let entries = pending_entries(redis, &PendingKey::of(document_id)).await?;
     let mut map = std::collections::HashMap::with_capacity(entries.len());
     for entry in &entries {
         // An entry that names no number cannot answer a replay.
@@ -473,30 +486,36 @@ impl LockToken {
 /// `handle_update`) never touches this lock, so collaborators are unaffected.
 pub async fn try_acquire_flush_lock(
     redis: &Client,
-    lock_key: &str,
+    lock_key: &FlushLockKey,
     token: &LockToken,
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
-    const LUA: &str = "return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])";
     let ttl = ttl.0.to_string();
     let res: Option<String> = redis
-        .eval::<Option<String>>(LUA, [lock_key], [token.as_str(), ttl.as_str()])
+        .eval::<Option<String>>(
+            ACQUIRE_LUA,
+            [lock_key.as_str()],
+            [token.as_str(), ttl.as_str()],
+        )
         .await
         .map_err(|e| AppError::Redis(format!("flush lock acquire: {e}")))?;
     Ok(res.is_some())
 }
+
+/// `SET key token NX EX ttl`: the key is set only when it stands unset.
+const ACQUIRE_LUA: &str = "return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])";
 
 /// Releases the per-document flush lock, but only if `token` still matches
 /// (check-and-del). An expired-then-reacquired lock owned by another instance
 /// is never dropped by a slow predecessor.
 pub async fn release_flush_lock(
     redis: &Client,
-    lock_key: &str,
+    lock_key: &FlushLockKey,
     token: &LockToken,
 ) -> Result<(), AppError> {
     const LUA: &str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
     let _: i64 = redis
-        .eval::<i64>(LUA, [lock_key], [token.as_str()])
+        .eval::<i64>(LUA, [lock_key.as_str()], [token.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("flush lock release: {e}")))?;
     Ok(())
@@ -510,8 +529,13 @@ pub async fn claim_snapshot_ask(
     document_id: &ambre_core::DocumentId,
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
-    let key = format!("doc:{document_id}:snapshot_asked");
-    try_acquire_flush_lock(redis, &key, &LockToken("1".to_owned()), ttl).await
+    let key = SnapshotAskedKey::of(document_id);
+    let ttl = ttl.0.to_string();
+    let res: Option<String> = redis
+        .eval::<Option<String>>(ACQUIRE_LUA, [key.as_str()], ["1", ttl.as_str()])
+        .await
+        .map_err(|e| AppError::Redis(format!("snapshot ask claim: {e}")))?;
+    Ok(res.is_some())
 }
 
 /// The last delta number the relay gave the document, 0 when its counter is
@@ -521,7 +545,7 @@ pub async fn current_seq(
     document_id: &ambre_core::DocumentId,
 ) -> Result<ambre_core::Seq, AppError> {
     let seq: Option<u64> = redis
-        .get(format!("doc:{document_id}:seq"))
+        .get(SeqKey::of(document_id).as_str())
         .await
         .map_err(|e| AppError::Redis(format!("current seq: {e}")))?;
     Ok(ambre_core::Seq(seq.unwrap_or(0)))
@@ -743,9 +767,9 @@ end
 redis.call('HSET', KEYS[1], ARGV[2], ARGV[3])
 return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
 "#;
-    let key = format!("doc:{document_id}:presence");
-    let gone_key = document_gone_key(document_id);
-    let owed_key = rotation_owed_key(document_id);
+    let key = PresenceKey::of(document_id);
+    let gone_key = GoneKey::of(document_id);
+    let owed_key = RotationOwedKey::of(document_id);
     let ttl = ttl.0.to_string();
     redis
         .eval::<Vec<i64>>(
@@ -777,9 +801,9 @@ pub async fn doc_presence_remove(
     document_id: &ambre_core::DocumentId,
     pub_key_hex: &ambre_core::SigningKeyHex,
 ) -> Result<(), AppError> {
-    let key = format!("doc:{document_id}:presence");
+    let key = PresenceKey::of(document_id);
     redis
-        .hdel(&key, pub_key_hex.as_str())
+        .hdel(key.as_str(), pub_key_hex.as_str())
         .await
         .map_err(|e| AppError::Redis(format!("presence remove: {e}")))?;
     Ok(())
@@ -790,11 +814,6 @@ pub async fn doc_presence_remove(
 /// An instance that dies closes none of its sessions; the expiry bounds the
 /// count that death leaves behind (`PRESENCE-015`).
 const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
-
-/// The hash counting, per author key, the sessions watching a document.
-fn doc_sessions_key(document_id: &ambre_core::DocumentId) -> String {
-    format!("doc:{document_id}:sessions")
-}
 
 /// Counts one more session of `pub_key_hex` watching the document, on every
 /// instance (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-015`). A
@@ -812,8 +831,8 @@ redis.call('HINCRBY', KEYS[1], ARGV[2], 1)
 redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
 return 1
 "#;
-    let key = doc_sessions_key(document_id);
-    let gone_key = document_gone_key(document_id);
+    let key = SessionsKey::of(document_id);
+    let gone_key = GoneKey::of(document_id);
     let ttl = SESSION_COUNT_TTL.0.to_string();
     let _: i64 = redis
         .eval(
@@ -844,19 +863,12 @@ if left <= 0 then
 end
 return 0
 "#;
-    let key = doc_sessions_key(document_id);
+    let key = SessionsKey::of(document_id);
     let last: i64 = redis
         .eval(LUA, [key.as_str()], [pub_key_hex.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("session close: {e}")))?;
     Ok(last == 1)
-}
-
-/// The tombstone of a document being deleted. While it lives, every script
-/// that writes a key of the document refuses. A write in flight when the
-/// delete lands cannot recreate what the delete purges (`SRV-017`).
-pub fn document_gone_key(document_id: &ambre_core::DocumentId) -> String {
-    format!("doc:{document_id}:gone")
 }
 
 /// Sets the tombstone of a document for `ttl`: the first step of a
@@ -867,7 +879,7 @@ pub async fn mark_document_gone(
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
-    let gone_key = document_gone_key(document_id);
+    let gone_key = GoneKey::of(document_id);
     let ttl = ttl.0.to_string();
     let _: String = redis
         .eval::<String>(LUA, [gone_key.as_str()], [ttl.as_str()])
@@ -896,21 +908,31 @@ redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7],
 redis.call('SET', KEYS[10], '1', 'EX', ARGV[1])
 return 1
 "#;
-    let keys = document_state_keys(document_id);
-    let gone_key = document_gone_key(document_id);
+    let keys = DocumentStateKeys::of(document_id);
+    let gone_key = GoneKey::of(document_id);
+    let [
+        seq,
+        clocks,
+        pending,
+        presence,
+        dead_letter,
+        owed,
+        sessions,
+        locked,
+    ] = keys.texts();
     let _: i64 = redis
         .eval(
             LUA,
             [
-                keys[0].as_str(),
-                keys[1].as_str(),
-                keys[2].as_str(),
-                keys[3].as_str(),
-                keys[4].as_str(),
-                keys[5].as_str(),
-                keys[6].as_str(),
-                keys[7].as_str(),
-                FLUSH_DIRTY_SET,
+                seq,
+                clocks,
+                pending,
+                presence,
+                dead_letter,
+                owed,
+                sessions,
+                locked,
+                FlushDirtySet.as_str(),
                 gone_key.as_str(),
             ],
             [ttl.0.to_string()],
@@ -918,29 +940,6 @@ return 1
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
     Ok(())
-}
-
-/// The keys the relay holds for one document, in the order
-/// [`purge_document_state`] passes them: seq, clocks, pending, presence,
-/// dead-letter, owed rotation, session counts, segment lock.
-pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 8] {
-    [
-        format!("doc:{document_id}:seq"),
-        format!("doc:{document_id}:clocks"),
-        format!("doc:{document_id}:pending"),
-        format!("doc:{document_id}:presence"),
-        format!("doc:{document_id}:deadletter"),
-        rotation_owed_key(document_id),
-        doc_sessions_key(document_id),
-        segment_locked_key(document_id),
-    ]
-}
-
-/// The mirror of a segment's finalize lock (`SRV-114`). The register holds
-/// the lock; this key lets the clock script refuse a delta with no extra
-/// round trip (`SRV-115`). A subscribe rewrites it from the register.
-pub fn segment_locked_key(document_id: &ambre_core::DocumentId) -> String {
-    format!("doc:{document_id}:locked")
 }
 
 /// Lock a segment against deltas, unless one still waits to be flushed.
@@ -958,9 +957,9 @@ end
 redis.call('SET', KEYS[2], '1')
 return tonumber(redis.call('GET', KEYS[3])) or 0
 "#;
-    let pending = format!("doc:{document_id}:pending");
-    let locked = segment_locked_key(document_id);
-    let seq = format!("doc:{document_id}:seq");
+    let pending = PendingKey::of(document_id);
+    let locked = LockedKey::of(document_id);
+    let seq = SeqKey::of(document_id);
     let answer: i64 = redis
         .eval::<i64>(
             LUA,
@@ -983,8 +982,8 @@ pub async fn lock_segment_now(
 redis.call('SET', KEYS[1], '1')
 return tonumber(redis.call('GET', KEYS[2])) or 0
 "#;
-    let locked = segment_locked_key(document_id);
-    let seq = format!("doc:{document_id}:seq");
+    let locked = LockedKey::of(document_id);
+    let seq = SeqKey::of(document_id);
     let answer: i64 = redis
         .eval::<i64>(LUA, [locked.as_str(), seq.as_str()], Vec::<String>::new())
         .await
@@ -1012,9 +1011,9 @@ end
 redis.call('SET', KEYS[2], '1')
 return 1
 "#;
-    let pending = format!("doc:{document_id}:pending");
-    let locked = segment_locked_key(document_id);
-    let seq = format!("doc:{document_id}:seq");
+    let pending = PendingKey::of(document_id);
+    let locked = LockedKey::of(document_id);
+    let seq = SeqKey::of(document_id);
     let sealed: i64 = redis
         .eval::<i64>(
             LUA,
@@ -1033,17 +1032,9 @@ pub async fn mirror_segment_lock(
     document_id: &ambre_core::DocumentId,
 ) -> Result<(), AppError> {
     redis
-        .set(segment_locked_key(document_id), "1")
+        .set(LockedKey::of(document_id).as_str(), "1")
         .await
         .map_err(|e| AppError::Redis(format!("mirror segment lock: {e}")))
-}
-
-/// The mirror of a rotation the document owes (`SRV-122`). The register holds
-/// the debt; this key lets the clock script and the presence script refuse a
-/// frame with no extra round trip (`SRV-123`). A subscribe rewrites it from the
-/// register, so a reset of this store loses it only until the next subscribe.
-pub fn rotation_owed_key(document_id: &ambre_core::DocumentId) -> String {
-    format!("doc:{document_id}:rotation-owed")
 }
 
 /// Sets or clears the mirror of an owed rotation.
@@ -1059,19 +1050,13 @@ if ARGV[1] == '1' then
 end
 return redis.call('DEL', KEYS[1])
 "#;
-    let key = rotation_owed_key(document_id);
+    let key = RotationOwedKey::of(document_id);
     let flag = if owed { "1" } else { "0" };
     let _: i64 = redis
         .eval::<i64>(LUA, [key.as_str()], [flag])
         .await
         .map_err(|e| AppError::Redis(format!("mirror rotation owed: {e}")))?;
     Ok(())
-}
-
-/// Redis key for the per-document clock hash.
-#[allow(dead_code)]
-pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
-    format!("doc:{document_id}:clocks")
 }
 
 /// Identity bound to a refresh token in Redis.
@@ -1174,15 +1159,6 @@ mod tests {
         let err = clock_refusal("connection reset by peer", Clock(7));
         assert!(matches!(err, AppError::Redis(_)), "{err:?}");
     }
-
-    #[test]
-    fn format_doc_clocks_key_contains_doc_id() {
-        let doc_id = ambre_core::DocumentId::from_bytes([0xabu8; 16]);
-        let key = format_doc_clocks_key(&doc_id);
-        assert!(key.starts_with("doc:"));
-        assert!(key.ends_with(":clocks"));
-        assert!(key.contains(&doc_id.to_string()));
-    }
 }
 
 #[cfg(test)]
@@ -1239,7 +1215,10 @@ mod lua_tests {
             .expect("the same clock is accepted once the debt clears");
         assert_eq!(seq, ambre_core::Seq(1));
 
-        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+        let _ = redis
+            .del(DocumentStateKeys::of(&doc_id).texts())
+            .await
+            .unwrap();
     }
 
     /// `SRV-114`, `SRV-115`: a lock waits for the pending deltas, then answers
@@ -1262,7 +1241,7 @@ mod lua_tests {
         }
         let _: usize = redis.rpush(&pending, "entry").await.unwrap();
         assert_eq!(lock_segment(&redis, &doc_id).await.unwrap(), None);
-        let locked: usize = redis.exists(segment_locked_key(&doc_id)).await.unwrap();
+        let locked: usize = redis.exists(LockedKey::of(&doc_id).as_str()).await.unwrap();
         assert_eq!(locked, 0, "a pending delta holds the lock back");
 
         let _: usize = redis.del(&pending).await.unwrap();
@@ -1278,12 +1257,15 @@ mod lua_tests {
         let seq: Option<u64> = redis.get(format!("doc:{doc_id}:seq")).await.unwrap();
         assert_eq!(seq, Some(2), "a refused delta takes no sequence number");
         let clock: Option<u64> = redis
-            .hget(format_doc_clocks_key(&doc_id), pk_hex.as_str())
+            .hget(ClocksKey::of(&doc_id).as_str(), pk_hex.as_str())
             .await
             .unwrap();
         assert_eq!(clock, Some(2), "a refused delta consumes no clock");
 
-        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+        let _ = redis
+            .del(DocumentStateKeys::of(&doc_id).texts())
+            .await
+            .unwrap();
     }
 
     /// `SRV-147`: a rotation's lock takes no wait for a pending delta. It
@@ -1300,7 +1282,10 @@ mod lua_tests {
             lock_segment_now(&redis, &doc_id).await.unwrap(),
             ambre_core::Seq(0)
         );
-        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+        let _ = redis
+            .del(DocumentStateKeys::of(&doc_id).texts())
+            .await
+            .unwrap();
 
         for clock in 1..=2 {
             verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(clock))
@@ -1321,7 +1306,10 @@ mod lua_tests {
             "{refused:?}"
         );
 
-        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+        let _ = redis
+            .del(DocumentStateKeys::of(&doc_id).texts())
+            .await
+            .unwrap();
     }
 
     /// `SRV-211`: the seal of folded amendments waits for the pending deltas,
@@ -1355,7 +1343,7 @@ mod lua_tests {
                 .unwrap(),
             "a delta waits to be flushed"
         );
-        let locked: usize = redis.exists(segment_locked_key(&doc_id)).await.unwrap();
+        let locked: usize = redis.exists(LockedKey::of(&doc_id).as_str()).await.unwrap();
         assert_eq!(locked, 0, "a refused seal locks nothing");
 
         let _: usize = redis.del(&pending).await.unwrap();
@@ -1370,7 +1358,10 @@ mod lua_tests {
             "{refused:?}"
         );
 
-        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
+        let _ = redis
+            .del(DocumentStateKeys::of(&doc_id).texts())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1388,7 +1379,10 @@ mod lua_tests {
         assert_eq!(seq, ambre_core::Seq(1));
 
         let _ = redis
-            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .del([
+                ClocksKey::of(&doc_id).as_str(),
+                SeqKey::of(&doc_id).as_str(),
+            ])
             .await
             .unwrap();
     }
@@ -1416,7 +1410,10 @@ mod lua_tests {
         assert_eq!(s3, ambre_core::Seq(3));
 
         let _ = redis
-            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .del([
+                ClocksKey::of(&doc_id).as_str(),
+                SeqKey::of(&doc_id).as_str(),
+            ])
             .await
             .unwrap();
     }
@@ -1448,7 +1445,10 @@ mod lua_tests {
         );
 
         let _ = redis
-            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .del([
+                ClocksKey::of(&doc_id).as_str(),
+                SeqKey::of(&doc_id).as_str(),
+            ])
             .await
             .unwrap();
     }
@@ -1480,7 +1480,10 @@ mod lua_tests {
         );
 
         let _ = redis
-            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .del([
+                ClocksKey::of(&doc_id).as_str(),
+                SeqKey::of(&doc_id).as_str(),
+            ])
             .await
             .unwrap();
     }
@@ -1512,7 +1515,10 @@ mod lua_tests {
         assert_eq!(s_a2, ambre_core::Seq(3));
 
         let _ = redis
-            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .del([
+                ClocksKey::of(&doc_id).as_str(),
+                SeqKey::of(&doc_id).as_str(),
+            ])
             .await
             .unwrap();
     }
@@ -1548,7 +1554,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn flush_lock_is_mutually_exclusive() {
         let redis = connect_redis().await;
-        let lock_key = format!("test:flush:lock:{}", ambre_core::DocumentId::new());
+        let lock_key = FlushLockKey::of(&ambre_core::DocumentId::new());
         let _ = redis.del([lock_key.as_str()]).await;
 
         // First caller acquires; a concurrent instance cannot while it is held.
@@ -1662,10 +1668,12 @@ mod redis_integration_tests {
         use rustis::commands::SetCommands;
         let redis = connect_redis().await;
         let doc = ambre_core::DocumentId::new();
-        let pending_key = format!("doc:{doc}:pending");
+        let pending_key = PendingKey::of(&doc);
         let _ = redis.del([pending_key.as_str()]).await;
         // Start from a clean marker for this doc's key.
-        let _: Result<usize, _> = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
+        let _: Result<usize, _> = redis
+            .srem(FlushDirtySet.as_str(), [pending_key.as_str()])
+            .await;
 
         // Appending a delta marks the pending list dirty.
         append_pending_delta(
@@ -1688,7 +1696,7 @@ mod redis_integration_tests {
             .await
             .unwrap();
         let still: bool = redis
-            .sismember(FLUSH_DIRTY_SET, pending_key.as_str())
+            .sismember(FlushDirtySet.as_str(), pending_key.as_str())
             .await
             .unwrap();
         assert!(still, "a non-empty pending list must keep its dirty marker");
@@ -1699,12 +1707,14 @@ mod redis_integration_tests {
             .await
             .unwrap();
         let gone: bool = redis
-            .sismember(FLUSH_DIRTY_SET, pending_key.as_str())
+            .sismember(FlushDirtySet.as_str(), pending_key.as_str())
             .await
             .unwrap();
         assert!(!gone, "a drained pending list must clear its dirty marker");
 
-        let _ = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
+        let _ = redis
+            .srem(FlushDirtySet.as_str(), [pending_key.as_str()])
+            .await;
     }
 
     #[tokio::test]

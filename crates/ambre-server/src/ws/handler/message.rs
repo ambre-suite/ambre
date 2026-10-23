@@ -2887,7 +2887,7 @@ mod channel_gate_tests {
         for document in [thread, segment] {
             let _: Result<usize, _> = state
                 .redis
-                .del(crate::redis_ops::document_state_keys(&document))
+                .del(crate::redis_keys::DocumentStateKeys::of(&document).texts())
                 .await;
         }
     }

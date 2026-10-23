@@ -3681,8 +3681,8 @@ mod tests {
 
     async fn forget_store(state: &AppState, channel: &Channel) {
         use rustis::commands::GenericCommands;
-        let keys = crate::redis_ops::document_state_keys(&channel.segment.document_id());
-        let _: usize = state.redis.del(keys).await.expect("del");
+        let keys = crate::redis_keys::DocumentStateKeys::of(&channel.segment.document_id());
+        let _: usize = state.redis.del(keys.texts()).await.expect("del");
     }
 
     /// `SRV-199`, `SRV-113`, `SRV-114`: no lease before the grace period has
@@ -3743,7 +3743,7 @@ mod tests {
         );
         let mirrored: usize = state
             .redis
-            .exists(crate::redis_ops::segment_locked_key(&segment))
+            .exists(crate::redis_keys::LockedKey::of(&segment).as_str())
             .await
             .expect("exists");
         assert_eq!(mirrored, 1, "the store refuses every later delta");
@@ -3762,7 +3762,7 @@ mod tests {
         use rustis::commands::GenericCommands;
         let mirrored: usize = state
             .redis
-            .exists(crate::redis_ops::segment_locked_key(&segment))
+            .exists(crate::redis_keys::LockedKey::of(&segment).as_str())
             .await
             .expect("exists");
         mirrored == 1

@@ -3470,12 +3470,11 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	free-text	key prefix label of a closed enum
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | check_sliding_window() | ret | Result<(bool,u64),AppError>	math	geometry, layout, GPU or count arithmetic
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | check_sliding_window(key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | check_sliding_window(max_requests) | param | u64	math	count
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str() | ret | String	free-text	bucket text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str(remote_ip) | param | &str	free-text	socket peer text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str(x_forwarded_for) | param | Option<&str>	free-text	header text; an IpAddr parse would be a hardening, not a type rule
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | request_bucket() | ret | String	debt	finding: Stringly Redis keys (confirmed)
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateBucket::Peer.0 | field | String	free-text	peer address text as the socket or the forwarded header states it, or unknown; client_ip_str builds it from header text
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	math	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | GOOGLE_ISSUER | const | &str	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
@@ -3495,7 +3494,6 @@ ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	ne
 ambre-server | src/payload.rs | crate::payload | Payload::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | CLOCK_AND_SEQ_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | DOCUMENT_GONE | const | &str	generic	refusal word shared with the Lua script text
-ambre-server | src/redis_ops.rs | crate::redis_ops | FLUSH_DIRTY_SET | const | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_ops.rs | crate::redis_ops | REHYDRATE_CLOCK_LUA | const | &str	free-text	Lua script text
@@ -3503,43 +3501,28 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | ROTATION_OWED | const | &st
 ambre-server | src/redis_ops.rs | crate::redis_ops | SEGMENT_LOCKED | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | append_pending_delta::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | claim_snapshot_ask() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/redis_ops.rs | crate::redis_ops | clear_pending_dirty_if_empty(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | clear_pending_dirty_if_empty::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | clock_refusal(error) | param | &str	generic	parses a store error text
 ambre-server | src/redis_ops.rs | crate::redis_ops | clock_state_is_cold() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/redis_ops.rs | crate::redis_ops | dirty_pending_keys() | ret | Result<Vec<String>,AppError>	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_presence_update::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_close() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_close::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | doc_session_open::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | doc_sessions_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | document_gone_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | document_state_keys() | ret | [String;8]	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | format_doc_clocks_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | guarded_rpush(gone_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | guarded_rpush(list_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | guarded_rpush::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | lock_segment::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | lock_segment_now::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | mark_document_gone::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | mark_pending_dirty(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | mirror_rotation_owed(owed) | param | bool	math	named state or style flag, local
 ambre-server | src/redis_ops.rs | crate::redis_ops | mirror_rotation_owed::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | pending_entries(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | purge_document_state::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | push_poison_entry(prefix) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | refresh_claim() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/redis_ops.rs | crate::redis_ops | release_flush_lock(lock_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | release_flush_lock::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | rotation_owed_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | seal_folded() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | seal_folded::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | segment_locked_key() | ret | String	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(error) | param | &str	generic	parses a store error text
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(what) | param | &str	free-text	context label
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock(lock_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | ACQUIRE_LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/routes/auth.rs | crate::routes::auth | AuthConfigResponse.dev_mode | field | bool	math	named state or style flag, local
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
@@ -3578,13 +3561,9 @@ ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_publi
 ambre-server | src/routes/sync.rs | crate::routes::sync | DeltasQuery.limit | field | Option<i64>	math	query limit
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
-ambre-server | src/s3.rs | crate::s3 | S3Sink.doc_prefix | field | Option<&'a str>	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
 ambre-server | src/s3.rs | crate::s3 | drain_front() | ret | isize	math	ltrim index, count of processed entries
-ambre-server | src/s3.rs | crate::s3 | drain_front(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | flush_cycle(reconcile) | param | bool	math	named state or style flag, local
-ambre-server | src/s3.rs | crate::s3 | flush_doc_pending(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
-ambre-server | src/s3.rs | crate::s3 | flush_doc_pending_locked(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
@@ -3616,6 +3595,11 @@ ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | f
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	free-text	private hub channel name constant
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/redis_keys.rs | crate::redis_keys | DocumentStateKeys::texts() | ret | [&str;8]	foreign-api	the key texts a DEL, EXISTS or EVAL of the store takes
+ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() | ret | &'static str	newtype-inner	the key text of the dirty set
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	newtype-inner	the key text of PendingKey
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	newtype-inner	the key text of PendingKey
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_dev_login(username) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text

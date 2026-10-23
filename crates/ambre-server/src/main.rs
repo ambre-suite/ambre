@@ -11,6 +11,7 @@ mod jwt;
 mod middleware;
 mod oidc;
 mod payload;
+mod redis_keys;
 mod redis_ops;
 mod routes;
 mod s3;
