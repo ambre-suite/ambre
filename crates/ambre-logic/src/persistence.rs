@@ -986,6 +986,7 @@ fn id_to_hex(id: &[u8; 16]) -> String {
 #[cfg(test)]
 mod wasm_tests {
     use super::*;
+    use ambre_core::PeerId;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -1061,17 +1062,23 @@ mod wasm_tests {
             .expect("channel")
             .expect("store opens");
 
-        let user = [7u8; 16];
+        let user = UserId::from_bytes([7; 16]);
         // Absent before any write.
         assert_eq!(store.load_trusted_key(user).await.unwrap(), None);
 
         // Pin, then read it back byte-for-byte.
-        let key = [0xABu8; 32];
-        store.save_trusted_key(user, key);
+        let key = ambre_core::ExchangePublicKey::from_array([0xAB; 32]);
+        store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
 
         // A different user is still absent (keys are per-UserId).
-        assert_eq!(store.load_trusted_key([9u8; 16]).await.unwrap(), None);
+        assert_eq!(
+            store
+                .load_trusted_key(UserId::from_bytes([9; 16]))
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     /// Confirming a key again moves that recipient's pin and no other
@@ -1085,15 +1092,19 @@ mod wasm_tests {
             .expect("channel")
             .expect("store opens");
 
-        let (alice, bob) = ([1u8; 16], [2u8; 16]);
-        store.save_trusted_key(alice, [0xA1; 32]);
-        store.save_trusted_key(bob, [0xB1; 32]);
-        store.save_trusted_key(alice, [0xA2; 32]);
+        let (alice, bob) = (UserId::from_bytes([1; 16]), UserId::from_bytes([2; 16]));
+        let pin = ambre_core::ExchangePublicKey::from_array;
+        store.save_trusted_key(alice, &pin([0xA1; 32]));
+        store.save_trusted_key(bob, &pin([0xB1; 32]));
+        store.save_trusted_key(alice, &pin([0xA2; 32]));
         assert_eq!(
             store.load_trusted_key(alice).await.unwrap(),
-            Some([0xA2; 32])
+            Some(pin([0xA2; 32]))
         );
-        assert_eq!(store.load_trusted_key(bob).await.unwrap(), Some([0xB1; 32]));
+        assert_eq!(
+            store.load_trusted_key(bob).await.unwrap(),
+            Some(pin([0xB1; 32]))
+        );
     }
 
     #[wasm_bindgen_test]
@@ -1116,9 +1127,9 @@ mod wasm_tests {
         assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(snapshot));
 
         // The new store is usable after the upgrade.
-        let user = [4u8; 16];
-        let key = [0x5Au8; 32];
-        store.save_trusted_key(user, key);
+        let user = UserId::from_bytes([4; 16]);
+        let key = ambre_core::ExchangePublicKey::from_array([0x5A; 32]);
+        store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
     }
 
@@ -1251,19 +1262,25 @@ mod wasm_tests {
         let other = DocumentId::from_bytes([8; 16]);
         let (one, two) = (SessionNonce([1; 16]), SessionNonce([2; 16]));
 
-        store.save_session(doc, 11, one);
-        store.save_session(doc, 22, two);
-        store.save_session(other, 33, one);
+        store.save_session(doc, PeerId(11), one);
+        store.save_session(doc, PeerId(22), two);
+        store.save_session(other, PeerId(33), one);
         let mut sessions = store.load_sessions(doc).await.unwrap();
         sessions.sort_by_key(|(peer, _)| *peer);
-        assert_eq!(sessions, vec![(11, one), (22, two)]);
+        assert_eq!(sessions, vec![(PeerId(11), one), (PeerId(22), two)]);
 
-        store.forget_session(doc, 11);
-        assert_eq!(store.load_sessions(doc).await.unwrap(), vec![(22, two)]);
+        store.forget_session(doc, PeerId(11));
+        assert_eq!(
+            store.load_sessions(doc).await.unwrap(),
+            vec![(PeerId(22), two)]
+        );
 
         store.delete_snapshot(doc);
         assert!(store.load_sessions(doc).await.unwrap().is_empty());
-        assert_eq!(store.load_sessions(other).await.unwrap(), vec![(33, one)]);
+        assert_eq!(
+            store.load_sessions(other).await.unwrap(),
+            vec![(PeerId(33), one)]
+        );
     }
 
     #[wasm_bindgen_test]
@@ -1280,7 +1297,10 @@ mod wasm_tests {
         store.save_delta(doc, &[4]);
         assert_eq!(store.load_deltas(doc).await.unwrap(), vec![vec![4]]);
         let nonce = SessionNonce([3; 16]);
-        store.save_session(doc, 5, nonce);
-        assert_eq!(store.load_sessions(doc).await.unwrap(), vec![(5, nonce)]);
+        store.save_session(doc, PeerId(5), nonce);
+        assert_eq!(
+            store.load_sessions(doc).await.unwrap(),
+            vec![(PeerId(5), nonce)]
+        );
     }
 }
