@@ -381,7 +381,7 @@ impl LogicState {
                 if !self.space_presence_heard(document_id, from_user_id, payload.as_bytes())
                     && !self.channel_sample_heard(document_id, from_user_id, payload.as_bytes())
                 {
-                    self.apply_ephemeral(document_id, from_user_id, payload.as_bytes());
+                    self.apply_ephemeral(document_id, from_user_id, &payload);
                 }
             }
 

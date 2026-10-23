@@ -147,7 +147,7 @@ pub struct ProseState {
     /// it cannot place.
     live: std::collections::HashSet<UserId>,
     /// This session's last presence sample, re-sent to a newcomer.
-    last_frame: Option<Vec<u8>>,
+    last_frame: Option<ambre_core::EphemeralBytes>,
     /// Whether a newcomer has not heard from this session yet.
     owe_greeting: bool,
     /// The paginator, built on the first layout asked for. It is the one place
@@ -839,13 +839,29 @@ impl ProseState {
 
     // -- remote and persistence --------------------------------------------
 
-    /// Apply a remote delta or a remote snapshot, routed here by document id.
+    /// Apply a remote delta, routed here by document id.
     ///
     /// The confirmed-change event carries the payload that arrived, never a
     /// re-export of the current state (`PROSE-048`). A re-export after a local
     /// edit is a different set of operations from the one that came in. Nothing
     /// is re-broadcast (`SYNC-101`): the method answers display events alone.
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
+    pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<ProseEvent> {
+        self.import_remote(payload.as_bytes())
+    }
+
+    /// Apply a snapshot whose contents are trusted the way a remote delta is
+    /// applied: [`apply_remote`](Self::apply_remote) and this share one path.
+    pub fn apply_remote_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Vec<ProseEvent> {
+        self.import_remote(payload.as_bytes())
+    }
+
+    /// The path [`apply_remote`](Self::apply_remote) and
+    /// [`apply_remote_snapshot`](Self::apply_remote_snapshot) share: the CRDT
+    /// engine imports a delta and a snapshot alike.
+    fn import_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
         let known = self.doc.oplog_vv();
         if let Err(e) = self.doc.import(payload) {
             tracing::warn!("Prose: a remote change could not be applied: {e:?}");
@@ -877,16 +893,16 @@ impl ProseState {
     /// change per delta that landed, so the view repaints once. A delta the
     /// engine refuses is skipped and the batch reports the failure rather than
     /// answering success.
-    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<ProseEvent> {
+    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<ProseEvent> {
         if payloads.is_empty() {
             return Vec::new();
         }
         let mut events = Vec::new();
         let mut any_failed = false;
         for payload in payloads {
-            match self.doc.import(payload) {
+            match self.doc.import(payload.as_bytes()) {
                 Ok(_) => events.push(ProseEvent::DocUpdated {
-                    delta: payload.clone(),
+                    delta: payload.as_bytes().to_vec(),
                 }),
                 Err(e) => {
                     tracing::warn!("Prose: a remote change in a batch failed: {e:?}");
@@ -1083,7 +1099,12 @@ impl ProseState {
         }
         let update = self.flush_delta();
         if let Some(delta) = update.clone() {
-            events.insert(0, ProseEvent::DocUpdated { delta });
+            events.insert(
+                0,
+                ProseEvent::DocUpdated {
+                    delta: delta.into_bytes(),
+                },
+            );
         }
         ProseOutcome {
             display: events,
@@ -1160,7 +1181,12 @@ impl ProseState {
         }
         let update = self.flush_delta();
         if let Some(delta) = update.clone() {
-            display.insert(0, ProseEvent::DocUpdated { delta });
+            display.insert(
+                0,
+                ProseEvent::DocUpdated {
+                    delta: delta.into_bytes(),
+                },
+            );
         }
         if let Some(moved) = self.text_changed(catchup::ChangeSource::Command) {
             display.insert(usize::from(update.is_some()), moved);
@@ -1233,7 +1259,7 @@ impl ProseState {
     /// stored version vector rather than a drain. An extra call therefore
     /// cannot truncate the stream. An export that fails leaves the cursor where
     /// it is, so the next flush offers the same range again.
-    fn flush_delta(&mut self) -> Option<Vec<u8>> {
+    fn flush_delta(&mut self) -> Option<ambre_core::DeltaBytes> {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
@@ -1249,7 +1275,7 @@ impl ProseState {
         match self.doc.export(ExportMode::updates(&self.last_exported_vv)) {
             Ok(delta) => {
                 self.last_exported_vv = current;
-                (!delta.is_empty()).then_some(delta)
+                (!delta.is_empty()).then_some(ambre_core::DeltaBytes::new(delta))
             }
             Err(e) => {
                 tracing::error!("Prose: the export failed, the range is kept: {e:?}");

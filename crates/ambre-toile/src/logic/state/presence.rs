@@ -68,8 +68,12 @@ impl ToileState {
     /// The sample is stamped with the last clock a local command carried, which
     /// is what later ages it. A client that has never sent one stamps zero, and
     /// the first heartbeat corrects it.
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ToileEvent> {
-        let presence: PresencePayload = match postcard::from_bytes(payload) {
+    pub fn apply_ephemeral(
+        &mut self,
+        from_user_id: UserId,
+        payload: &ambre_core::EphemeralBytes,
+    ) -> Vec<ToileEvent> {
+        let presence: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
             Ok(p) => p,
             Err(e) => {
                 tracing::warn!("Toile: presence decode failed from {from_user_id:?}: {e}");
@@ -157,7 +161,7 @@ impl ToileState {
 /// input: no `PresencePayload` makes `postcard` refuse.
 fn sample_outcome<T: serde::Serialize>(display: Vec<ToileEvent>, sample: &T) -> ToileOutcome {
     match postcard::to_allocvec(sample) {
-        Ok(bytes) => ToileOutcome::display_and_ephemeral(display, Some(bytes)),
+        Ok(bytes) => ToileOutcome::display_and_ephemeral(display, Some(bytes.into())),
         Err(e) => {
             tracing::warn!("Toile: presence encode failed: {e}");
             ToileOutcome::display_only(display)

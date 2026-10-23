@@ -50,9 +50,9 @@ pub enum ToileRequest {
 pub struct ToileOutcome {
     pub display: Vec<ToileEvent>,
     /// Binary CRDT delta (`ExportMode::Updates`) to encrypt and broadcast.
-    pub update: Option<Vec<u8>>,
+    pub update: Option<ambre_core::DeltaBytes>,
     /// Ephemeral (presence) payload to encrypt and broadcast.
-    pub ephemeral: Option<Vec<u8>>,
+    pub ephemeral: Option<ambre_core::EphemeralBytes>,
     /// Service-plane requests to lower into `RestCommand`s (`toile-media`).
     /// Empty for every command except an import that carries media.
     pub requests: Vec<ToileRequest>,
@@ -71,7 +71,7 @@ impl ToileOutcome {
     /// An outcome that only broadcasts a presence sample: no display
     /// event and no CRDT delta. The local cursor is drawn by the UI itself, so a
     /// `Presence` command produces nothing for the local UI to repaint.
-    pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {
+    pub fn ephemeral_only(ephemeral: ambre_core::EphemeralBytes) -> Self {
         Self {
             display: Vec::new(),
             update: None,
@@ -84,7 +84,10 @@ impl ToileOutcome {
     /// CRDT delta. Used by the playback commands when "Follow presenter"
     /// broadcasting is on. The local `SlideChanged` repaints this viewer, while
     /// the ephemeral carries the active index to followers.
-    pub fn display_and_ephemeral(display: Vec<ToileEvent>, ephemeral: Option<Vec<u8>>) -> Self {
+    pub fn display_and_ephemeral(
+        display: Vec<ToileEvent>,
+        ephemeral: Option<ambre_core::EphemeralBytes>,
+    ) -> Self {
         Self {
             display,
             update: None,

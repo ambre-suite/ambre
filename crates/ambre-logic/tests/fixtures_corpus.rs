@@ -580,7 +580,7 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
         col: Col::new(0),
         text: "b".to_owned(),
     });
-    alice.apply_remote(bob.export_snapshot().as_bytes());
+    alice.apply_remote_snapshot(&bob.export_snapshot());
     let merged = DocState::Trame(Box::new(alice));
     assert_eq!(shape_of(&merged).peers, 2, "two peers' ops are present");
 }

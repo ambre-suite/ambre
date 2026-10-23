@@ -75,7 +75,11 @@ impl ProseState {
         let update = self.flush_delta();
         let display = update
             .clone()
-            .map(|delta| vec![ProseEvent::DocUpdated { delta }])
+            .map(|delta| {
+                vec![ProseEvent::DocUpdated {
+                    delta: delta.into_bytes(),
+                }]
+            })
             .unwrap_or_default();
         ProseOutcome {
             display,

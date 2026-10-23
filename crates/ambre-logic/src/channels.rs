@@ -364,7 +364,9 @@ impl LogicState {
         };
         let adopted =
             if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
-                channel.adopt_session(document_id, peer, entry.to_bytes())
+                channel
+                    .adopt_session(document_id, peer, entry.to_bytes())
+                    .map(|first| first.map(ambre_core::DeltaBytes::new))
             } else if let Some(adopted) = self.adopt_space_session(document_id, peer, &entry) {
                 adopted
             } else {
@@ -1017,7 +1019,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: Option<&[u8]>,
+        payload: Option<&ambre_core::DeltaBytes>,
     ) {
         if self.holds_murmure(document_id) {
             self.channel_ledgers
@@ -1989,11 +1991,7 @@ impl LogicState {
                     .news_of(delta)
                     .map_or(fresh, |mention| Some(mention || fresh.unwrap_or(false)));
             }
-            self.record_channel_seq(
-                document_id,
-                delta.seq,
-                accepted.then_some(delta.payload.as_bytes()),
-            );
+            self.record_channel_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
             match verdict {
                 Ok(produced) => events.extend(produced),
                 Err(error) => {

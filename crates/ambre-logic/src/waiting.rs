@@ -27,7 +27,7 @@ pub(crate) struct Waiting {
 impl Waiting {
     /// Note what the delta numbered `seq` waits on, read after its import.
     /// A seq of 0 is no relay's number and is ignored.
-    pub(crate) fn note(&mut self, seq: Seq, payload: &[u8], doc: &LoroDoc) {
+    pub(crate) fn note(&mut self, seq: Seq, payload: &ambre_core::DeltaBytes, doc: &LoroDoc) {
         if seq == Seq::ZERO {
             return;
         }
@@ -59,8 +59,8 @@ impl Waiting {
 }
 
 /// The dependencies of a delta the document does not hold.
-fn missing(payload: &[u8], doc: &LoroDoc) -> Vec<ID> {
-    let Ok(meta) = LoroDoc::decode_import_blob_meta(payload, false) else {
+fn missing(payload: &ambre_core::DeltaBytes, doc: &LoroDoc) -> Vec<ID> {
+    let Ok(meta) = LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) else {
         return Vec::new();
     };
     let held = doc.oplog_vv();
@@ -102,7 +102,7 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId(8));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(1), &delta, &reader);
+        waiting.note(ambre_core::Seq(1), &delta.clone().into(), &reader);
         waiting.settle(&reader);
         assert!(
             waiting.stalled(ambre_core::Seq(1)),
@@ -120,7 +120,7 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId(7));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(1), &delta, &reader);
+        waiting.note(ambre_core::Seq(1), &delta.clone().into(), &reader);
         assert!(!waiting.stalled(ambre_core::Seq(1)));
     }
 
@@ -132,7 +132,7 @@ mod tests {
         let reader = scaffold(ambre_core::PeerId(7));
         reader.import(&second).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(2), &second, &reader);
+        waiting.note(ambre_core::Seq(2), &second.clone().into(), &reader);
         assert!(
             !waiting.stalled(ambre_core::Seq(0)),
             "seq 1 is not held yet"

@@ -47,9 +47,9 @@ pub struct ProseOutcome {
     pub display: Vec<ProseEvent>,
     /// The CRDT delta to seal and broadcast. `None` when the command wrote
     /// nothing (`PROSE-047`).
-    pub update: Option<Vec<u8>>,
+    pub update: Option<ambre_core::DeltaBytes>,
     /// The presence sample to seal and broadcast.
-    pub ephemeral: Option<Vec<u8>>,
+    pub ephemeral: Option<ambre_core::EphemeralBytes>,
 }
 
 impl ProseOutcome {
@@ -72,7 +72,7 @@ impl ProseOutcome {
     /// An outcome that broadcasts a presence sample alone. The local caret is
     /// drawn by the view itself, so nothing repaints here.
     #[must_use]
-    pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {
+    pub fn ephemeral_only(ephemeral: ambre_core::EphemeralBytes) -> Self {
         Self {
             display: Vec::new(),
             update: None,

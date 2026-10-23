@@ -405,7 +405,8 @@ mod tests {
             snapshot_id,
             clock: Clock(1),
         };
-        let body = pipeline::update_body(&NONCE, summary, b"delta").expect("within bounds");
+        let body = pipeline::update_body(&NONCE, summary, &b"delta".to_vec().into())
+            .expect("within bounds");
         pipeline::seal_update(&body, public_data, doc_key, &signing_key).expect("seal")
     }
 

@@ -98,7 +98,9 @@ fn remote_moves(
 fn bench_remote_change(c: &mut Criterion) {
     let (mut author, ids) = board(5_000);
     let mut opened = ToileState::new();
-    opened.apply_remote(author.export_snapshot().as_bytes());
+    opened
+        .import_snapshot(&author.export_snapshot())
+        .expect("the snapshot imports");
     let mut group = c.benchmark_group("remote_change_5000");
     group.sample_size(10);
     group.bench_function("opened", |b| {
@@ -106,8 +108,12 @@ fn bench_remote_change(c: &mut Criterion) {
     });
     let (mut author, ids) = board(5_000);
     let mut synced = ToileState::new();
-    synced.apply_remote(author.export_snapshot().as_bytes());
-    author.apply_remote(synced.export_snapshot().as_bytes());
+    synced
+        .import_snapshot(&author.export_snapshot())
+        .expect("the snapshot imports");
+    author
+        .import_snapshot(&synced.export_snapshot())
+        .expect("the snapshot imports");
     group.bench_function("synced", |b| {
         b.iter_custom(|iters| remote_moves(&mut author, &mut synced, &ids, iters));
     });

@@ -118,7 +118,7 @@ pub struct UpdateBody {
 pub fn update_body(
     nonce: &SessionNonce,
     summary: Option<&ActivitySummary>,
-    delta: &[u8],
+    delta: &ambre_core::DeltaBytes,
 ) -> Result<Vec<u8>, PipelineError> {
     let summary = summary.map(ActivitySummary::encode).transpose()?;
     let summary_len = summary.as_ref().map_or(0, Vec::len);
@@ -131,7 +131,7 @@ pub fn update_body(
         }
         None => body.push(NO_SUMMARY),
     }
-    body.extend_from_slice(delta);
+    body.extend_from_slice(delta.as_bytes());
     Ok(body)
 }
 
@@ -967,7 +967,7 @@ mod tests {
         let second = SessionNonce([2; SESSION_NONCE_LEN]);
         let seal = |nonce: &SessionNonce| {
             seal_update(
-                &update_body(nonce, None, b"delta").unwrap(),
+                &update_body(nonce, None, &b"delta".to_vec().into()).unwrap(),
                 pd.clone(),
                 &doc_key,
                 &signing,
@@ -1005,7 +1005,7 @@ mod tests {
             anchor: None,
         };
         let seal = |summary: Option<&ActivitySummary>| {
-            let body = update_body(&nonce, summary, b"delta").unwrap();
+            let body = update_body(&nonce, summary, &b"delta".to_vec().into()).unwrap();
             seal_update(&body, pd.clone(), &doc_key, &signing).unwrap()
         };
         let (with, without) = (seal(Some(&summary)), seal(None));
@@ -1034,7 +1034,12 @@ mod tests {
             split_update_body(vec![0; SESSION_NONCE_LEN]),
             Err(PipelineError::ShortBody)
         ));
-        let mut body = update_body(&SessionNonce([1; SESSION_NONCE_LEN]), None, b"d").unwrap();
+        let mut body = update_body(
+            &SessionNonce([1; SESSION_NONCE_LEN]),
+            None,
+            &b"d".to_vec().into(),
+        )
+        .unwrap();
         if let Some(marker) = body.get_mut(SESSION_NONCE_LEN) {
             *marker = 2;
         }
@@ -1048,8 +1053,10 @@ mod tests {
             split_update_body(cut),
             Err(PipelineError::Summary(SummaryError::Short))
         ));
-        let empty =
-            split_update_body(update_body(&SessionNonce([1; 16]), None, b"").unwrap()).unwrap();
+        let empty = split_update_body(
+            update_body(&SessionNonce([1; 16]), None, &b"".to_vec().into()).unwrap(),
+        )
+        .unwrap();
         assert!(empty.delta.is_empty());
     }
 

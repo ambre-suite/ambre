@@ -58,12 +58,12 @@ impl SeqLedger {
 
     /// Record the delta the relay numbered `seq`. `payload` is `None` when the
     /// delta was refused. A seq of 0 is no relay's number and is ignored.
-    pub(crate) fn record(&mut self, seq: Seq, payload: Option<&[u8]>) {
+    pub(crate) fn record(&mut self, seq: Seq, payload: Option<&ambre_core::DeltaBytes>) {
         if seq == Seq::ZERO || seq <= self.floor {
             return;
         }
         let end = payload
-            .and_then(|bytes| LoroDoc::decode_import_blob_meta(bytes, false).ok())
+            .and_then(|delta| LoroDoc::decode_import_blob_meta(delta.as_bytes(), false).ok())
             .and_then(|meta| {
                 let mut peers = meta.partial_end_vv.iter();
                 match (peers.next(), peers.next()) {
@@ -308,7 +308,7 @@ mod tests {
             let bytes = delta(&alice, &from);
             bob.import(&bytes).expect("import");
             seq += 1;
-            ledger.record(ambre_core::Seq(seq), Some(&bytes));
+            ledger.record(ambre_core::Seq(seq), Some(&bytes.clone().into()));
         };
         for (i, ch) in "hello world".chars().enumerate() {
             send(&|| text.insert(i, &ch.to_string()).expect("insert"));
@@ -406,7 +406,7 @@ mod tests {
         bob.get_text("t").insert(0, "B").expect("insert");
         bob.commit();
         let seq = ledger.contiguous_end().after();
-        ledger.record(seq, Some(&delta(&bob, &from)));
+        ledger.record(seq, Some(&delta(&bob, &from).into()));
         assert_eq!(
             check_snapshot(
                 &bob,

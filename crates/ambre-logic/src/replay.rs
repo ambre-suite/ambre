@@ -20,11 +20,15 @@ use std::collections::VecDeque;
 pub(crate) const REPLAY_SLICE_BYTES: usize = 64 << 10;
 
 /// The deltas of a replay not yet imported, oldest first, with their seq.
-pub(crate) type ReplayQueue = VecDeque<(Seq, Vec<u8>)>;
+pub(crate) type ReplayQueue = VecDeque<(Seq, ambre_core::DeltaBytes)>;
 
 impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
-    pub(crate) fn replay(&mut self, document_id: DocumentId, accepted: Vec<(Seq, Vec<u8>)>) {
+    pub(crate) fn replay(
+        &mut self,
+        document_id: DocumentId,
+        accepted: Vec<(Seq, ambre_core::DeltaBytes)>,
+    ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -59,12 +63,10 @@ impl LogicState {
             return;
         }
         let done = doc.replay.is_empty();
-        let (seqs, payloads): (Vec<Seq>, Vec<Vec<u8>>) = slice.into_iter().unzip();
+        let (seqs, payloads): (Vec<Seq>, Vec<ambre_core::DeltaBytes>) = slice.into_iter().unzip();
         self.merge_batch(document_id, &payloads);
-        let applied: Vec<(Seq, &[u8])> = seqs
-            .into_iter()
-            .zip(payloads.iter().map(Vec::as_slice))
-            .collect();
+        let applied: Vec<(Seq, &ambre_core::DeltaBytes)> =
+            seqs.into_iter().zip(payloads.iter()).collect();
         self.track_waiting(document_id, &applied);
         if done {
             self.replay_landed(document_id);
@@ -112,7 +114,7 @@ impl LogicState {
 }
 
 /// Take the oldest deltas up to [`REPLAY_SLICE_BYTES`], and at least one.
-fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, Vec<u8>)> {
+fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, ambre_core::DeltaBytes)> {
     let mut bytes = 0usize;
     let mut slice = Vec::new();
     while let Some((_, payload)) = queue.front() {
@@ -149,7 +151,7 @@ mod tests {
             .expect("an edit writes a delta");
         SignedDelta {
             seq: ambre_core::Seq(peer.0),
-            payload: payload.into(),
+            payload,
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
@@ -207,8 +209,8 @@ mod tests {
     #[test]
     fn a_slice_takes_one_delta_whatever_its_size() {
         let mut queue: ReplayQueue = [
-            (ambre_core::Seq(1), vec![0; REPLAY_SLICE_BYTES * 2]),
-            (ambre_core::Seq(2), vec![0; 1]),
+            (ambre_core::Seq(1), vec![0; REPLAY_SLICE_BYTES * 2].into()),
+            (ambre_core::Seq(2), vec![0; 1].into()),
         ]
         .into_iter()
         .collect();

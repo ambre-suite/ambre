@@ -324,9 +324,11 @@ fn body_text_step(doc: &LoroDoc) -> Result<(), String> {
 ///   bytes.
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the board.
 /// * A migration variant when the chain cannot carry an older board.
-pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
+pub fn gate(
+    payload: &ambre_core::SnapshotBytes,
+) -> Result<Cow<'_, ambre_core::SnapshotBytes>, SchemaError> {
     let scratch = LoroDoc::new();
-    scratch.import(payload).map_err(|e| {
+    scratch.import(payload.as_bytes()).map_err(|e| {
         tracing::warn!("[Toile] snapshot rejected by the CRDT engine: {e:?}");
         SchemaError::PayloadRejected
     })?;
@@ -359,7 +361,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
                         to: SCHEMA_VERSION,
                         reason: format!("re-exporting the migrated board failed: {e:?}"),
                     })?;
-            Ok(Cow::Owned(bytes))
+            Ok(Cow::Owned(ambre_core::SnapshotBytes::new(bytes)))
         }
     }
 }
@@ -400,7 +402,8 @@ mod tests {
     #[test]
     fn a_board_at_the_current_version_is_handed_back_untouched() {
         let bytes = snapshot_at(Some(SCHEMA_VERSION));
-        let gated = gate(&bytes).expect("current");
+        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let gated = gate(&snapshot).expect("current");
         assert!(matches!(gated, Cow::Borrowed(_)));
         assert_eq!(&*gated, &bytes[..]);
     }
@@ -408,10 +411,11 @@ mod tests {
     #[test]
     fn a_board_written_before_the_register_migrates_to_the_current_version() {
         let bytes = snapshot_at(None);
-        let gated = gate(&bytes).expect("version 0 migrates");
+        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let gated = gate(&snapshot).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
-            .import(&gated)
+            .import(gated.as_bytes())
             .expect("the migrated snapshot imports");
         assert_eq!(
             read_version(&migrated).expect("the migrated register reads"),
@@ -485,14 +489,15 @@ mod tests {
             ..ElementStyle::default()
         };
         let board = unversioned_board(&style);
-        let gated = gate(&board).expect("version 1 migrates");
+        let snapshot = ambre_core::SnapshotBytes::new(board.clone());
+        let gated = gate(&snapshot).expect("version 1 migrates");
         // The `4 -> 5` row then reads the stored size as px, and carries it to
         // points.
         let mut kept = style;
         kept.font.size = ambre_core::FontSize::new(kept.font.size.points() / ambre_core::PX_PER_PT)
             .expect("a size");
         assert_eq!(
-            styles_of(&gated),
+            styles_of(gated.as_bytes()),
             vec![Some(kept.clone()), Some(kept)],
             "the element and the connector both keep the style they carried"
         );
@@ -521,9 +526,10 @@ mod tests {
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
 
-        let gated = gate(&bytes).expect("version 2 migrates");
+        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let gated = gate(&snapshot).expect("version 2 migrates");
         let mut state = ToileState::new();
-        state.apply_remote(&gated);
+        state.apply_remote_snapshot(&gated);
         let order: Vec<String> = state
             .slide_order()
             .into_iter()
@@ -532,7 +538,7 @@ mod tests {
         assert_eq!(order, vec!["f1".to_owned(), "f2".to_owned()]);
 
         let migrated = LoroDoc::new();
-        migrated.import(&gated).expect("imports");
+        migrated.import(gated.as_bytes()).expect("imports");
         assert_eq!(
             Fields::<ConfigKey>::of(root_map(&migrated, Root::PresentationConfig))
                 .value(ConfigKey::TransitionMs),
@@ -565,9 +571,10 @@ mod tests {
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
 
-        let gated = gate(&bytes).expect("version 3 migrates");
+        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let gated = gate(&snapshot).expect("version 3 migrates");
         let migrated = LoroDoc::new();
-        migrated.import(&gated).expect("imports");
+        migrated.import(gated.as_bytes()).expect("imports");
         for (id, body) in [("e1", "buy milk"), ("e2", "")] {
             let text = migrated
                 .get_map(Root::Elements.as_str())
@@ -607,9 +614,10 @@ mod tests {
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
 
-        let gated = gate(&bytes).expect("version 4 migrates");
+        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let gated = gate(&snapshot).expect("version 4 migrates");
         let migrated = LoroDoc::new();
-        migrated.import(&gated).expect("imports");
+        migrated.import(gated.as_bytes()).expect("imports");
         let size_of = |id: &str| {
             let Some(LoroValue::Binary(raw)) =
                 entry::<ElementKey>(&root_map(&migrated, Root::Elements), id)
@@ -654,8 +662,12 @@ mod tests {
         let open = |peer: ambre_core::PeerId| {
             let live = LoroDoc::new();
             live.set_peer_id(peer.0).expect("a peer of its own");
-            live.import(&gate(&bytes).expect("version 3 migrates"))
-                .expect("imports");
+            live.import(
+                gate(&bytes.clone().into())
+                    .expect("version 3 migrates")
+                    .as_bytes(),
+            )
+            .expect("imports");
             live
         };
         let body = |live: &LoroDoc| {
@@ -691,7 +703,7 @@ mod tests {
     #[test]
     fn a_board_from_a_newer_client_is_refused_whole() {
         let bytes = snapshot_at(Some(SCHEMA_VERSION + 1));
-        let err = gate(&bytes).expect_err("refused");
+        let err = gate(&bytes.clone().into()).expect_err("refused");
         assert_eq!(
             err,
             SchemaError::DocumentTooNew {
@@ -712,7 +724,7 @@ mod tests {
         doc.commit();
         let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
         assert!(matches!(
-            gate(&bytes).expect_err("refused"),
+            gate(&bytes.clone().into()).expect_err("refused"),
             SchemaError::VersionUnreadable { .. }
         ));
     }
@@ -726,7 +738,7 @@ mod tests {
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(
-            gate(&[0xFF, 0x00, 0xFF]).expect_err("refused"),
+            gate(&vec![0xFF, 0x00, 0xFF].into()).expect_err("refused"),
             SchemaError::PayloadRejected
         ));
     }
@@ -734,7 +746,7 @@ mod tests {
     #[test]
     fn bytes_the_engine_will_not_read_are_told_apart_from_a_version_refusal() {
         assert_eq!(
-            gate(b"not a loro snapshot").expect_err("rejected"),
+            gate(&b"not a loro snapshot".to_vec().into()).expect_err("rejected"),
             SchemaError::PayloadRejected
         );
     }

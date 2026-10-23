@@ -691,10 +691,27 @@ impl ToileState {
 
     // -- remote / persistence --------------------------------------------
 
-    /// Apply a remote delta batch or full snapshot (`doc.import` accepts both),
-    /// refresh the derived caches it touched (`TOILE-092`), and return the
-    /// display events to repaint. A remote import is never re-broadcast.
-    pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
+    /// Apply a remote delta, refresh the derived caches it touched
+    /// (`TOILE-092`), and return the display events to repaint. A remote
+    /// import is never re-broadcast.
+    pub fn apply_remote(&mut self, update: &ambre_core::DeltaBytes) -> Vec<ToileEvent> {
+        self.import_remote(update.as_bytes())
+    }
+
+    /// A snapshot whose contents are trusted, merged the way a remote delta
+    /// is. A board opened from a file or from the local store goes through
+    /// [`import_snapshot`](Self::import_snapshot) instead, which gates its
+    /// schema.
+    pub fn apply_remote_snapshot(
+        &mut self,
+        snapshot: &ambre_core::SnapshotBytes,
+    ) -> Vec<ToileEvent> {
+        self.import_remote(snapshot.as_bytes())
+    }
+
+    /// The tail of [`apply_remote`](Self::apply_remote): `doc.import` reads a
+    /// delta and a snapshot alike.
+    fn import_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
@@ -723,7 +740,7 @@ impl ToileState {
     /// refresh over the whole batch. A delta that fails to import is skipped,
     /// and the batch then reports the failure instead of answering success
     /// (`TOILE-215`).
-    pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent> {
+    pub fn apply_remote_batch(&mut self, updates: &[ambre_core::DeltaBytes]) -> Vec<ToileEvent> {
         if updates.is_empty() {
             return Vec::new();
         }
@@ -734,7 +751,7 @@ impl ToileState {
         let mut any_failed = false;
         self.forget_touched();
         for update in updates {
-            match self.doc.import(update) {
+            match self.doc.import(update.as_bytes()) {
                 Ok(_) => any_ok = true,
                 Err(e) => {
                     tracing::warn!("Toile: remote batch import failed: {e}");
@@ -812,11 +829,11 @@ impl ToileState {
         // Before the caller touches a single container (`SCHEMA-006`). What
         // comes back is the payload itself at the current version, or a migrated
         // snapshot.
-        let payload = schema::gate(payload.as_bytes())?;
+        let payload = schema::gate(payload)?;
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
-        if let Err(e) = self.doc.import(&payload) {
+        if let Err(e) = self.doc.import(payload.as_bytes()) {
             tracing::warn!("Toile: snapshot import failed: {e}");
             return Err(SchemaError::PayloadRejected);
         }
@@ -1074,7 +1091,7 @@ impl ToileState {
     /// No later export would ever carry them, and the two peers stayed apart
     /// until someone sent a full snapshot. This is the shape Trame's
     /// `flush_delta` already had (`features/ambre-spec-trame-engine.md`).
-    fn flush_delta(&mut self) -> Option<Vec<u8>> {
+    fn flush_delta(&mut self) -> Option<ambre_core::DeltaBytes> {
         let current = self.doc.oplog_vv();
         if current == self.exported_vv {
             return None;
@@ -1087,7 +1104,10 @@ impl ToileState {
             }
             self.entry_end = None;
         }
-        let exported = self.doc.export(ExportMode::updates(&self.exported_vv));
+        let exported = self
+            .doc
+            .export(ExportMode::updates(&self.exported_vv))
+            .map(ambre_core::DeltaBytes::new);
         Self::take_delta(&mut self.exported_vv, current, exported)
     }
 
@@ -1102,8 +1122,8 @@ impl ToileState {
     fn take_delta<E: std::fmt::Debug>(
         cursor: &mut VersionVector,
         current: VersionVector,
-        exported: Result<Vec<u8>, E>,
-    ) -> Option<Vec<u8>> {
+        exported: Result<ambre_core::DeltaBytes, E>,
+    ) -> Option<ambre_core::DeltaBytes> {
         match exported {
             Ok(delta) => {
                 *cursor = current;
@@ -1465,7 +1485,7 @@ mod cursor_tests {
         let out = ToileState::take_delta(
             &mut cursor,
             current.clone(),
-            Err::<Vec<u8>, &str>("the exporter said no"),
+            Err::<ambre_core::DeltaBytes, &str>("the exporter said no"),
         );
         assert!(out.is_none(), "a failed export broadcasts nothing");
         assert_eq!(
@@ -1475,9 +1495,12 @@ mod cursor_tests {
         );
 
         // The next flush offers the same range, and this time it lands.
-        let out =
-            ToileState::take_delta(&mut cursor, current.clone(), Ok::<_, &str>(vec![1, 2, 3]));
-        assert_eq!(out.as_deref(), Some([1, 2, 3].as_slice()));
+        let out = ToileState::take_delta(
+            &mut cursor,
+            current.clone(),
+            Ok::<_, &str>(vec![1, 2, 3].into()),
+        );
+        assert_eq!(out, Some(vec![1, 2, 3].into()));
         assert_eq!(cursor, current, "a successful export advances the cursor");
     }
 
@@ -1489,7 +1512,11 @@ mod cursor_tests {
         let current = st.doc.oplog_vv();
         let mut cursor = VersionVector::default();
 
-        let out = ToileState::take_delta(&mut cursor, current.clone(), Ok::<_, &str>(Vec::new()));
+        let out = ToileState::take_delta(
+            &mut cursor,
+            current.clone(),
+            Ok::<_, &str>(ambre_core::DeltaBytes::default()),
+        );
         assert!(out.is_none(), "an empty delta is not broadcast");
         assert_eq!(cursor, current);
     }

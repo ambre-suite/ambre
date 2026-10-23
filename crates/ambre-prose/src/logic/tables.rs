@@ -850,7 +850,11 @@ pub(crate) mod tests {
     }
 
     /// Type into the paragraph of one cell.
-    pub(crate) fn type_in(state: &mut ProseState, cell: TreeID, text: &str) -> Option<Vec<u8>> {
+    pub(crate) fn type_in(
+        state: &mut ProseState,
+        cell: TreeID,
+        text: &str,
+    ) -> Option<ambre_core::DeltaBytes> {
         let block = first_block_of(state, cell);
         state
             .handle_command(ProseCommand::InsertText {

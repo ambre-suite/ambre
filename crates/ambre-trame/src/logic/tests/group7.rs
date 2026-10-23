@@ -169,7 +169,9 @@ fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
         text: "1".to_owned(),
     });
     let mut reader = TrameState::new();
-    reader.apply_remote(author.export_snapshot().as_bytes());
+    reader
+        .import_snapshot(&author.export_snapshot())
+        .expect("the snapshot imports");
     assert_eq!(
         reader.doc.oplog_vv(),
         author.doc.oplog_vv(),

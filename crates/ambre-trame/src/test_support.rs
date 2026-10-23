@@ -54,14 +54,14 @@ impl MockSyncHandle {
         if let Some(payload) = &outcome.update {
             self.send(SyncCommand::SendUpdate {
                 document_id,
-                payload: payload.clone().into(),
+                payload: payload.clone(),
                 summary: None,
             });
         }
         if let Some(payload) = &outcome.ephemeral {
             self.send(SyncCommand::SendEphemeral {
                 document_id,
-                payload: payload.clone().into(),
+                payload: payload.clone(),
             });
         }
     }
@@ -84,11 +84,11 @@ impl MockSyncHandle {
     /// Drain only the CRDT-update payloads (`SendUpdate`), in capture order.
     /// Other captured commands are dropped -- this is the relay payload a
     /// peer needs.
-    pub fn drain_update_payloads(&self) -> Vec<Vec<u8>> {
+    pub fn drain_update_payloads(&self) -> Vec<ambre_core::DeltaBytes> {
         self.drain()
             .into_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
                 _ => None,
             })
             .collect()

@@ -899,7 +899,7 @@ mod tests {
             let (mut alice, block) = document(ambre_core::PeerId(1), ALICE, "aaaa bbbb cccc");
             let id = open(&mut alice, block, (5, 9), "On b.");
             let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
-            let mut pending: Vec<(bool, Vec<u8>)> = Vec::new();
+            let mut pending: Vec<(bool, ambre_core::DeltaBytes)> = Vec::new();
             for (by_alice, insert, at, len) in edits {
                 let state = if by_alice { &mut alice } else { &mut bob };
                 let body = state.text_of(&block).unwrap_or_default().chars().count() as u32;

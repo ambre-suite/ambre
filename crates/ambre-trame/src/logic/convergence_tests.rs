@@ -393,8 +393,10 @@ proptest! {
         // union on both sides.
         let sa = a.export_snapshot();
         let sb = b.export_snapshot();
-        a.apply_remote(sb.as_bytes());
-        b.apply_remote(sa.as_bytes());
+        a.import_snapshot(&sb)
+        .expect("the snapshot imports");
+        b.import_snapshot(&sa)
+        .expect("the snapshot imports");
 
         let grid_a = read_window(&mut a);
         let grid_b = read_window(&mut b);
@@ -606,8 +608,8 @@ fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
     // Full bidirectional exchange.
     let sa = a.export_snapshot();
     let sb = b.export_snapshot();
-    a.apply_remote(sb.as_bytes());
-    b.apply_remote(sa.as_bytes());
+    a.import_snapshot(&sb).expect("the snapshot imports");
+    b.import_snapshot(&sa).expect("the snapshot imports");
 
     let conv_a = read_style(&mut a);
     let conv_b = read_style(&mut b);
@@ -685,8 +687,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     // Full bidirectional exchange.
     let sa = a.export_snapshot();
     let sb = b.export_snapshot();
-    a.apply_remote(sb.as_bytes());
-    b.apply_remote(sa.as_bytes());
+    a.import_snapshot(&sb).expect("the snapshot imports");
+    b.import_snapshot(&sa).expect("the snapshot imports");
 
     let conv_a = read_style(&mut a);
     let conv_b = read_style(&mut b);
@@ -738,8 +740,8 @@ fn concurrent_tab_moves_converge_on_one_order() {
 
     let sa = a.export_snapshot();
     let sb = b.export_snapshot();
-    a.apply_remote(sb.as_bytes());
-    b.apply_remote(sa.as_bytes());
+    a.import_snapshot(&sb).expect("the snapshot imports");
+    b.import_snapshot(&sa).expect("the snapshot imports");
 
     let order = tab_order(&a);
     assert_eq!(order, tab_order(&b), "peers diverged after full exchange");

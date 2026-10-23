@@ -124,7 +124,7 @@ impl LogicState {
         if let Some(payload) = self.unsent.remove(&document_id) {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
-                payload: payload.into(),
+                payload,
                 summary: None,
             });
             self.release_waiting(document_id);
@@ -138,9 +138,14 @@ impl LogicState {
         document_id: DocumentId,
         peer: ambre_core::PeerId,
         entry: &ambre_core::PeerEntry,
-    ) -> Option<Result<Option<Vec<u8>>, ambre_murmure::MurmureError>> {
+    ) -> Option<Result<Option<ambre_core::DeltaBytes>, ambre_murmure::MurmureError>> {
         let space = self.spaces.get_mut(&SpaceId::from_document(document_id))?;
-        Some(space.state.adopt_session(peer, entry.to_bytes()))
+        Some(
+            space
+                .state
+                .adopt_session(peer, entry.to_bytes())
+                .map(|first| first.map(ambre_core::DeltaBytes::new)),
+        )
     }
 
     /// The document of a space is ready. Returns `false` when no space asked
@@ -1119,7 +1124,7 @@ mod tests {
         };
         assert_eq!(*document_id, space_id.document_id());
         assert!(
-            crate::authored_by(payload.as_bytes(), peer),
+            crate::authored_by(payload, peer),
             "the upload is written under the session's PeerID alone"
         );
         let reopened =

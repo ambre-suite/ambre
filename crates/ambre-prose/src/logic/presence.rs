@@ -52,6 +52,7 @@ impl ProseState {
         };
         match postcard::to_allocvec(&payload) {
             Ok(bytes) => {
+                let bytes = ambre_core::EphemeralBytes::new(bytes);
                 self.last_frame = Some(bytes.clone());
                 ProseOutcome::ephemeral_only(bytes)
             }
@@ -66,7 +67,7 @@ impl ProseState {
     /// sent, or a caret at the start of the first block. Sent once the document
     /// is ready, so a session that never moves its caret still counts as
     /// running (`PROSE-121`).
-    pub fn announce(&mut self) -> Option<Vec<u8>> {
+    pub fn announce(&mut self) -> Option<ambre_core::EphemeralBytes> {
         if let Some(frame) = &self.last_frame {
             return Some(frame.clone());
         }
@@ -81,7 +82,7 @@ impl ProseState {
 
     /// The answer owed to a session that joined since this one last spoke:
     /// it has not heard of this one yet. Taken once per newcomer.
-    pub fn take_greeting(&mut self) -> Option<Vec<u8>> {
+    pub fn take_greeting(&mut self) -> Option<ambre_core::EphemeralBytes> {
         if !std::mem::take(&mut self.owe_greeting) {
             return None;
         }
@@ -103,8 +104,12 @@ impl ProseState {
     /// or one already tombstoned, resolves to nothing. The caret is then
     /// dropped rather than raised (`PROSE-057`), and it reappears when the
     /// delta lands.
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent> {
-        let frame: PresencePayload = match postcard::from_bytes(payload) {
+    pub fn apply_ephemeral(
+        &mut self,
+        from_user_id: UserId,
+        payload: &ambre_core::EphemeralBytes,
+    ) -> Vec<ProseEvent> {
+        let frame: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
             Ok(frame) => frame,
             Err(e) => {
                 tracing::warn!("Prose: a presence sample was malformed: {e}");
@@ -315,7 +320,7 @@ mod tests {
     #[test]
     fn a_malformed_sample_is_dropped_rather_than_raised() {
         let mut state = ProseState::new().expect("a document is built");
-        let events = state.apply_ephemeral(a_user(3), &[0xFF, 0x00]);
+        let events = state.apply_ephemeral(a_user(3), &vec![0xFF, 0x00].into());
         assert!(events.is_empty());
     }
 }

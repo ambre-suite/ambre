@@ -969,7 +969,7 @@ impl SyncState {
             return;
         };
         let summary = summary.as_ref().map(ActivitySummary::to_sealed);
-        self.send_update_body(document_id, *nonce, summary.as_ref(), payload.as_bytes());
+        self.send_update_body(document_id, *nonce, summary.as_ref(), &payload);
     }
 
     /// Builds the body of a delta this client writes and sends it.
@@ -978,7 +978,7 @@ impl SyncState {
         document_id: DocumentId,
         nonce: SessionNonce,
         summary: Option<&ambre_core::activity::ActivitySummary>,
-        delta: &[u8],
+        delta: &ambre_core::DeltaBytes,
     ) {
         match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
@@ -1002,7 +1002,7 @@ impl SyncState {
         }
         // What an earlier session left unsent is replayed with no summary:
         // the Logic thread no longer knows what it held.
-        self.send_update_body(document_id, nonce, None, payload.as_bytes());
+        self.send_update_body(document_id, nonce, None, &payload);
     }
 
     /// Seals an update body and sends it, or holds it while the document is
@@ -1869,7 +1869,8 @@ mod tests {
             snapshot_id,
             clock,
         };
-        let body = pipeline::update_body(&TEST_NONCE, None, payload).expect("no summary");
+        let body =
+            pipeline::update_body(&TEST_NONCE, None, &payload.to_vec().into()).expect("no summary");
         pipeline::seal_update(&body, public_data, doc_key, signing_key).expect("seal")
     }
 
@@ -2022,7 +2023,8 @@ mod tests {
             snapshot_id: snap,
             clock: Clock(1),
         };
-        let body = pipeline::update_body(&TEST_NONCE, Some(&summary), b"liked").expect("bounds");
+        let body = pipeline::update_body(&TEST_NONCE, Some(&summary), &b"liked".to_vec().into())
+            .expect("bounds");
         let sealed = pipeline::seal_update(&body, public_data, &key, &sk).expect("seal");
         state.receive_update(Seq(1), sealed);
         state.receive_update(

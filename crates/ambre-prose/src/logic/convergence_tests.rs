@@ -28,7 +28,12 @@ fn two_peers() -> (ProseState, ProseState, crate::events::BlockId) {
 }
 
 /// Hand each peer what the other wrote.
-fn exchange(alice: &mut ProseState, bob: &mut ProseState, from_alice: &[u8], from_bob: &[u8]) {
+fn exchange(
+    alice: &mut ProseState,
+    bob: &mut ProseState,
+    from_alice: &ambre_core::DeltaBytes,
+    from_bob: &ambre_core::DeltaBytes,
+) {
     bob.apply_remote(from_alice);
     alice.apply_remote(from_bob);
 }
@@ -325,7 +330,7 @@ fn the_confirmed_change_carries_the_bytes_that_were_applied() {
         })
         .expect("the confirmed change");
     // The event carries the exported bytes, never a re-export (`PROSE-023`).
-    assert_eq!(confirmed, update);
+    assert_eq!(update, confirmed);
     let echoed = bob.apply_remote(&update);
     let remote_confirmed = echoed
         .iter()
@@ -335,7 +340,7 @@ fn the_confirmed_change_carries_the_bytes_that_were_applied() {
         })
         .expect("the confirmed change");
     // And on the remote path, the payload that arrived (`PROSE-048`).
-    assert_eq!(remote_confirmed, update);
+    assert_eq!(update, remote_confirmed);
 }
 
 #[test]
@@ -567,7 +572,7 @@ fn mark(
     range: (u32, u32),
     key: &str,
     value: Option<&str>,
-) -> Vec<u8> {
+) -> ambre_core::DeltaBytes {
     state
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
@@ -580,7 +585,11 @@ fn mark(
 }
 
 /// The bold mark over one range, and the delta it exported.
-fn bold(state: &mut ProseState, block: crate::events::BlockId, range: (u32, u32)) -> Vec<u8> {
+fn bold(
+    state: &mut ProseState,
+    block: crate::events::BlockId,
+    range: (u32, u32),
+) -> ambre_core::DeltaBytes {
     mark(state, block, range, "b", None)
 }
 
@@ -600,7 +609,7 @@ fn merge_cells(
     table: loro::TreeID,
     start: (u32, u32),
     end: (u32, u32),
-) -> Vec<u8> {
+) -> ambre_core::DeltaBytes {
     state
         .handle_command(ProseCommand::MergeTableCells {
             table_id: crate::events::block_id(table),

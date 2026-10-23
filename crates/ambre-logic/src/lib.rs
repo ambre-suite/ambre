@@ -193,7 +193,7 @@ impl DocState {
 
     /// Import a batch of deltas, whichever application owns the document, and
     /// answer its display events.
-    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<AppEvent> {
+    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<AppEvent> {
         match self {
             DocState::Trame(state) => state
                 .apply_remote_batch(payloads)
@@ -434,8 +434,8 @@ impl DocState {
 /// passes: a snapshot carries the whole history, every author's included.
 /// Bytes the engine cannot read are refused too, since nothing in them can be
 /// attributed.
-fn authored_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
-    match loro::LoroDoc::decode_import_blob_meta(payload, false) {
+fn authored_by(payload: &ambre_core::DeltaBytes, peer: ambre_core::PeerId) -> bool {
+    match loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) {
         Ok(meta) => {
             meta.mode == loro::EncodedBlobMode::Updates
                 && meta.partial_end_vv.keys().all(|p| *p == peer.0)
@@ -457,7 +457,7 @@ enum AnswerFor {
 /// update a segment delta travels as (the Murmure messages spec).
 #[cfg(test)]
 fn sent_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
-    authored_by(payload, peer)
+    authored_by(&payload.to_vec().into(), peer)
         || serde_json::from_slice::<loro::json::JsonSchema>(payload).is_ok_and(|update| {
             !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer.0)
         })
@@ -806,7 +806,7 @@ struct LogicState {
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
     /// The whole content of a document this client created, sent as its first
     /// update once the Sync worker holds its session.
-    unsent: HashMap<DocumentId, Vec<u8>>,
+    unsent: HashMap<DocumentId, ambre_core::DeltaBytes>,
     /// The session identity Sync issued for a channel or a space document
     /// that no open channel or space holds yet, adopted once one does
     /// (`AUTHOR-002`).
@@ -1565,15 +1565,17 @@ mod pass_tests {
         let snapshot = persist
             .try_iter()
             .filter_map(|(_, write)| match write {
-                PersistWrite::Snapshot(bytes) => Some(bytes),
+                PersistWrite::Snapshot(bytes) => Some(ambre_core::SnapshotBytes::new(bytes)),
                 _ => None,
             })
             .last()
             .expect("the close saves a snapshot");
         let mut reopened = board();
-        reopened
-            .state
-            .apply_remote(reopened.document_id, Order::Snapshot(Seq::ZERO), &snapshot);
+        reopened.state.apply_remote(
+            reopened.document_id,
+            Order::Snapshot(Seq::ZERO),
+            crate::data::Remote::Snapshot(&snapshot),
+        );
         assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
     }
 
@@ -1603,7 +1605,11 @@ mod pass_tests {
             })
             .update
             .expect("the peer's delta");
-        state.apply_remote(document_id, Order::Update(Seq(1)), &delta);
+        state.apply_remote(
+            document_id,
+            Order::Update(Seq(1)),
+            crate::data::Remote::Delta(&delta),
+        );
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(elements(&state, document_id), 1_001);
         state.handle_logic_command(LogicCommand::App {
@@ -1665,7 +1671,7 @@ mod authorship_tests {
     }
 
     /// The delta a session writing under `peer` sends for one cell edit.
-    fn written_by(peer: ambre_core::PeerId, text: &str) -> Vec<u8> {
+    fn written_by(peer: ambre_core::PeerId, text: &str) -> ambre_core::DeltaBytes {
         let mut author = TrameState::new();
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         author
@@ -1679,21 +1685,23 @@ mod authorship_tests {
     }
 
     /// One delta carrying the operations of every delta in `deltas`.
-    fn merged(deltas: &[Vec<u8>]) -> Vec<u8> {
+    fn merged(deltas: &[ambre_core::DeltaBytes]) -> ambre_core::DeltaBytes {
         let doc = LoroDoc::new();
         doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
         let base = doc.oplog_vv();
         for delta in deltas {
-            doc.import(delta).expect("a delta");
+            doc.import(delta.as_bytes()).expect("a delta");
         }
-        doc.export(ExportMode::updates(&base)).expect("an export")
+        doc.export(ExportMode::updates(&base))
+            .expect("an export")
+            .into()
     }
 
-    fn signed(payload: Vec<u8>, peer: ambre_core::PeerId) -> SignedDelta {
+    fn signed(payload: ambre_core::DeltaBytes, peer: ambre_core::PeerId) -> SignedDelta {
         SignedDelta {
             seq: ambre_core::Seq(0),
-            payload: payload.into(),
+            payload,
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
@@ -1714,7 +1722,7 @@ mod authorship_tests {
         doc.oplog_vv()
     }
 
-    fn edit(rig: &mut Rig, text: &str) -> Vec<u8> {
+    fn edit(rig: &mut Rig, text: &str) -> ambre_core::DeltaBytes {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
@@ -1726,15 +1734,16 @@ mod authorship_tests {
         rig.sync
             .try_iter()
             .find_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
                 _ => None,
             })
             .expect("a local edit sends a delta")
     }
 
     /// The PeerIDs whose operations a delta carries.
-    fn authors(delta: &[u8]) -> Vec<ambre_core::PeerId> {
-        let meta = LoroDoc::decode_import_blob_meta(delta, false).expect("a readable delta");
+    fn authors(delta: &ambre_core::DeltaBytes) -> Vec<ambre_core::PeerId> {
+        let meta =
+            LoroDoc::decode_import_blob_meta(delta.as_bytes(), false).expect("a readable delta");
         meta.partial_end_vv
             .keys()
             .copied()
@@ -1870,7 +1879,7 @@ mod authorship_tests {
         reader
             .import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
-        reader.import(&hers).expect("Alice's delta");
+        reader.import(hers.as_bytes()).expect("Alice's delta");
         let registry = |doc: &LoroDoc| match doc
             .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
             .get_deep_value()
@@ -1879,7 +1888,7 @@ mod authorship_tests {
             _ => Default::default(),
         };
         let hers_only = registry(&reader);
-        reader.import(&first).expect("the first delta");
+        reader.import(first.as_bytes()).expect("the first delta");
         let after = registry(&reader);
         assert_eq!(
             after.get(ambre_core::PeerKey::of(rig.peer).as_str()),
@@ -1902,18 +1911,18 @@ mod authorship_tests {
     }
 
     /// A workbook snapshot holding the scaffolding and `deltas`.
-    fn snapshot_of(deltas: &[Vec<u8>]) -> Vec<u8> {
+    fn snapshot_of(deltas: &[ambre_core::DeltaBytes]) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
         for delta in deltas {
-            doc.import(delta).expect("a delta");
+            doc.import(delta.as_bytes()).expect("a delta");
         }
         doc.export(ExportMode::Snapshot).expect("a snapshot")
     }
 
     /// Alice's delta, numbered `seq` by the relay, reaches the rig.
-    fn receive(rig: &mut Rig, payload: Vec<u8>, seq: u64) {
+    fn receive(rig: &mut Rig, payload: ambre_core::DeltaBytes, seq: u64) {
         let mut delta = signed(payload, ALICE);
         delta.seq = ambre_core::Seq(seq);
         rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
@@ -1941,7 +1950,7 @@ mod authorship_tests {
     }
 
     /// A delta Alice writes on a scaffolding another build wrote under `peer`.
-    fn on_foreign_scaffold(peer: ambre_core::PeerId) -> Vec<u8> {
+    fn on_foreign_scaffold(peer: ambre_core::PeerId) -> ambre_core::DeltaBytes {
         let doc = LoroDoc::new();
         doc.set_peer_id(peer.0)
             .expect("a fresh document takes a peer id");
@@ -1954,7 +1963,9 @@ mod authorship_tests {
         // A key no schema declares: the delta only has to carry an op.
         meta.insert("note", "x").expect("an insert");
         doc.commit();
-        doc.export(ExportMode::updates(&base)).expect("an export")
+        doc.export(ExportMode::updates(&base))
+            .expect("an export")
+            .into()
     }
 
     /// Whether the UI was told the document cannot be read.
@@ -2110,17 +2121,17 @@ mod authorship_tests {
         assert!(rig.sync.try_recv().is_err(), "a held edit was sent");
 
         let peer = rig.state.grant_identity(rig.document_id);
-        let sent: Vec<Vec<u8>> = rig
+        let sent: Vec<ambre_core::DeltaBytes> = rig
             .sync
             .try_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUpdate { payload, .. } => Some(payload.into_bytes()),
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
                 _ => None,
             })
             .collect();
         assert_eq!(sent.len(), 1, "the held edit did not travel once");
         assert_eq!(
-            sent.iter().flat_map(|d| authors(d)).collect::<Vec<_>>(),
+            sent.iter().flat_map(authors).collect::<Vec<_>>(),
             vec![peer]
         );
     }
@@ -2161,7 +2172,7 @@ mod authorship_tests {
                 let doc = LoroDoc::new();
                 doc.import(&cached).expect("the cached snapshot");
                 for delta in &deltas {
-                    doc.import(delta).expect("a logged delta");
+                    doc.import(delta.as_bytes()).expect("a logged delta");
                 }
                 doc.oplog_vv()
             };
@@ -2170,7 +2181,7 @@ mod authorship_tests {
                     document_id: rig.document_id,
                     doc_type,
                     snapshot: Some(cached.into()),
-                    deltas: deltas.into_iter().map(Into::into).collect(),
+                    deltas,
                     sessions: Vec::new(),
                 });
             assert!(
@@ -2203,7 +2214,7 @@ mod authorship_tests {
     }
 
     /// The deltas one session writing under `peer` sends, one per text.
-    fn session_wrote(peer: ambre_core::PeerId, texts: &[&str]) -> Vec<Vec<u8>> {
+    fn session_wrote(peer: ambre_core::PeerId, texts: &[&str]) -> Vec<ambre_core::DeltaBytes> {
         let mut author = TrameState::new();
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         texts
@@ -2229,7 +2240,7 @@ mod authorship_tests {
     ) -> (
         Vec<SyncCommand>,
         Vec<PersistWrite>,
-        Vec<Vec<u8>>,
+        Vec<ambre_core::DeltaBytes>,
         ambre_core::PeerId,
     ) {
         let hers = session_wrote(ALICE, &["one", "two"]);
@@ -2265,12 +2276,10 @@ mod authorship_tests {
     #[test]
     fn an_earlier_sessions_unsent_edits_travel_with_its_nonce() {
         let (sent, saved, hers, peer) = reopened(1);
-        let unsent: Vec<(Vec<u8>, SessionNonce)> = sent
+        let unsent: Vec<(ambre_core::DeltaBytes, SessionNonce)> = sent
             .into_iter()
             .filter_map(|cmd| match cmd {
-                SyncCommand::SendUnsent { payload, nonce, .. } => {
-                    Some((payload.into_bytes(), nonce))
-                }
+                SyncCommand::SendUnsent { payload, nonce, .. } => Some((payload, nonce)),
                 _ => None,
             })
             .collect();
@@ -2279,8 +2288,10 @@ mod authorship_tests {
         };
         assert_eq!(*nonce, SessionNonce([7; 16]));
         assert_eq!(authors(payload), vec![ALICE]);
-        let meta = LoroDoc::decode_import_blob_meta(payload, false).expect("a readable delta");
-        let first = LoroDoc::decode_import_blob_meta(&hers[0], false).expect("her first delta");
+        let meta =
+            LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).expect("a readable delta");
+        let first =
+            LoroDoc::decode_import_blob_meta(hers[0].as_bytes(), false).expect("her first delta");
         assert_eq!(
             meta.partial_start_vv.get(&ALICE.0),
             first.partial_end_vv.get(&ALICE.0),

@@ -199,7 +199,9 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
         col: Col::new(0),
         text: "concurrent".to_owned(),
     });
-    let conflicts = b.apply_remote(merge_delta.as_bytes());
+    let conflicts = b
+        .import_snapshot(&merge_delta)
+        .expect("the snapshot imports");
     assert!(
         conflicts
             .iter()
@@ -264,8 +266,8 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
         ),
     });
     let (delta_a, delta_b) = (a.export_snapshot(), b.export_snapshot());
-    a.apply_remote(delta_b.as_bytes());
-    b.apply_remote(delta_a.as_bytes());
+    a.import_snapshot(&delta_b).expect("the snapshot imports");
+    b.import_snapshot(&delta_a).expect("the snapshot imports");
 
     let master_key = |state: &TrameState, row: u32, col: u32| {
         let (r, c) = state
@@ -420,7 +422,7 @@ fn a_remote_change_is_never_re_broadcast() {
         })
         .update
         .expect("a delta");
-    let meta = loro::LoroDoc::decode_import_blob_meta(&from_b, false).expect("a delta");
+    let meta = loro::LoroDoc::decode_import_blob_meta(from_b.as_bytes(), false).expect("a delta");
     let a_peer = a.doc.peer_id();
     assert_eq!(
         meta.partial_end_vv.get(&a_peer),
@@ -479,7 +481,8 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
         sheet_id: s2.clone(),
         name: "Data".to_owned(),
     });
-    a.apply_remote(b.export_snapshot().as_bytes());
+    a.import_snapshot(&b.export_snapshot())
+        .expect("the snapshot imports");
 
     // Both peers keep computing and reconstruct the same new label.
     assert_eq!(read_cell(&mut a, 0, 1), "10");
@@ -688,7 +691,9 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
         col: Col::new(0),
         text: "77".to_owned(),
     });
-    let conflicts = b.apply_remote(merge_delta.as_bytes());
+    let conflicts = b
+        .import_snapshot(&merge_delta)
+        .expect("the snapshot imports");
     assert!(
         conflicts
             .iter()
@@ -949,8 +954,8 @@ fn concurrent_duplicate_names_read_apart() {
         name: "Budget".to_owned(),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
-    a.apply_remote(sb.as_bytes());
-    b.apply_remote(sa.as_bytes());
+    a.import_snapshot(&sb).expect("the snapshot imports");
+    b.import_snapshot(&sa).expect("the snapshot imports");
     assert_eq!(tab_names(&a), tab_names(&b));
     let names = tab_names(&a);
     assert_eq!(names.len(), 2);

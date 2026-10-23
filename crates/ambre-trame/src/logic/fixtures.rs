@@ -438,8 +438,12 @@ fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
             })
             .collect(),
     });
-    other.apply_remote(state.export_snapshot().as_bytes());
-    state.apply_remote(other.export_snapshot().as_bytes());
+    other
+        .import_snapshot(&state.export_snapshot())
+        .expect("the snapshot imports");
+    state
+        .import_snapshot(&other.export_snapshot())
+        .expect("the snapshot imports");
     // One edit after convergence, so the artifact holds ops that follow a merge
     // rather than only ops that precede one. The formula reads one cell from each
     // peer, so a reload that lost either side's ops changes the result.

@@ -13,6 +13,26 @@ use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 
+/// What a remote import carries: one delta, or a snapshot whose contents are
+/// trusted. The CRDT engine imports both alike; the local store does not.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Remote<'a> {
+    /// One delta, as the relay delivered it.
+    Delta(&'a ambre_core::DeltaBytes),
+    /// A snapshot adopted whole.
+    Snapshot(&'a ambre_core::SnapshotBytes),
+}
+
+impl Remote<'_> {
+    /// The bytes, for an engine that imports either form.
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Remote::Delta(delta) => delta.as_bytes(),
+            Remote::Snapshot(snapshot) => snapshot.as_bytes(),
+        }
+    }
+}
+
 impl LogicState {
     /// Render a Toile deck to a PDF and answer with the bytes
     /// (`toile-pdf-export`, `TOILE-IO-029`). The board is read through a shared
@@ -365,8 +385,8 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         display: Vec<AppEvent>,
-        update: Option<Vec<u8>>,
-        ephemeral: Option<Vec<u8>>,
+        update: Option<ambre_core::DeltaBytes>,
+        ephemeral: Option<ambre_core::EphemeralBytes>,
         requests: Vec<ToileRequest>,
     ) {
         for event in display {
@@ -379,19 +399,19 @@ impl LogicState {
             );
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.
-            self.owe_delta(document_id, payload.clone().into());
+            self.owe_delta(document_id, payload.clone());
             // A document command carries no activity summary: only Murmure
             // writes one today (the Murmure messages spec).
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
-                payload: payload.into(),
+                payload,
                 summary: None,
             });
         }
         if let Some(payload) = ephemeral {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload: payload.into(),
+                payload,
             });
         }
         // Lower each Toile-level service request to a `RestCommand`, supplying the
@@ -523,10 +543,6 @@ impl LogicState {
         // replay is. The log is folded into a snapshot at once, so the next
         // restore reads one row.
         if !deltas.is_empty() {
-            let deltas: Vec<Vec<u8>> = deltas
-                .into_iter()
-                .map(ambre_core::DeltaBytes::into_bytes)
-                .collect();
             events.extend(doc.apply_remote_batch(&deltas));
             if restore == Restore::Kept {
                 self.owe_snapshot(document_id);
@@ -697,7 +713,7 @@ impl LogicState {
         {
             return;
         }
-        let accepted = authored_by(delta.payload.as_bytes(), delta.peer);
+        let accepted = authored_by(&delta.payload, delta.peer);
         self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
         if !accepted {
             tracing::warn!(
@@ -710,14 +726,18 @@ impl LogicState {
         self.apply_remote(
             document_id,
             Order::Update(delta.seq),
-            delta.payload.as_bytes(),
+            Remote::Delta(&delta.payload),
         );
-        self.track_waiting(document_id, &[(delta.seq, delta.payload.as_bytes())]);
+        self.track_waiting(document_id, &[(delta.seq, &delta.payload)]);
     }
 
     /// Note what the deltas just applied wait on, and drop what the document
     /// now holds. A document left waiting for good is reported (`AUTHOR-025`).
-    pub(crate) fn track_waiting(&mut self, document_id: DocumentId, applied: &[(Seq, &[u8])]) {
+    pub(crate) fn track_waiting(
+        &mut self,
+        document_id: DocumentId,
+        applied: &[(Seq, &ambre_core::DeltaBytes)],
+    ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -758,11 +778,10 @@ impl LogicState {
         seq: Seq,
         payload: Option<&ambre_core::DeltaBytes>,
     ) {
-        let payload = payload.map(ambre_core::DeltaBytes::as_bytes);
         if let Some(doc) = self.docs.get_mut(&document_id) {
             doc.ledger.record(seq, payload);
             if let Some(payload) = payload {
-                doc.relay_saw(payload);
+                doc.relay_saw(payload.as_bytes());
             }
         } else {
             self.record_channel_seq(document_id, seq, payload);
@@ -776,13 +795,13 @@ impl LogicState {
         {
             return;
         }
-        let accepted: Vec<(Seq, Vec<u8>)> = deltas
+        let accepted: Vec<(Seq, ambre_core::DeltaBytes)> = deltas
             .into_iter()
             .filter_map(|delta| {
-                let accepted = authored_by(delta.payload.as_bytes(), delta.peer);
+                let accepted = authored_by(&delta.payload, delta.peer);
                 self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
                 if accepted {
-                    Some((delta.seq, delta.payload.into_bytes()))
+                    Some((delta.seq, delta.payload))
                 } else {
                     tracing::warn!(
                         "Logic: refused a replayed delta on doc {document_id}: an operation is \
@@ -799,7 +818,7 @@ impl LogicState {
         // A replay queues on an open document only. A space document takes
         // the whole batch now. A channel's never reaches here.
         if !self.docs.contains_key(&document_id) {
-            let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_slice()).collect();
+            let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_bytes()).collect();
             if !self.apply_space_remote(document_id, &borrowed) {
                 tracing::warn!(
                     "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
@@ -812,27 +831,36 @@ impl LogicState {
         self.replay(document_id, accepted);
     }
 
-    /// Apply a remote CRDT delta to a document and forward viewport events.
-    /// `order` is where the relay placed it, which only a channel reads.
-    pub(crate) fn apply_remote(&mut self, document_id: DocumentId, order: Order, payload: &[u8]) {
+    /// Apply a remote CRDT delta, or a snapshot whose contents are trusted,
+    /// to a document and forward viewport events. `order` is where the relay
+    /// placed it, which only a channel reads.
+    pub(crate) fn apply_remote(
+        &mut self,
+        document_id: DocumentId,
+        order: Order,
+        payload: Remote<'_>,
+    ) {
         self.settle_import(document_id);
         // A document no entry of `docs` names may belong to an open channel.
         if !self.docs.contains_key(&document_id)
-            && (self.apply_channel_remote(document_id, &[(Some(order), payload)])
-                || self.apply_space_remote(document_id, &[payload]))
+            && (self.apply_channel_remote(document_id, &[(Some(order), payload.as_bytes())])
+                || self.apply_space_remote(document_id, &[payload.as_bytes()]))
         {
             return;
         }
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote for unopened doc {document_id} ({} bytes), dropping",
-                payload.len()
+                payload.as_bytes().len()
             );
             return;
         };
         let (events, persist): (Vec<AppEvent>, bool) = match doc {
             DocState::Trame(state) => {
-                let events = state.apply_remote(payload);
+                let events = match payload {
+                    Remote::Delta(delta) => state.apply_remote(delta),
+                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                };
                 // Persist the merged state locally whenever the remote delta
                 // actually changed the document (it emitted display events). A
                 // refresh then restores it even for a client that only ever
@@ -842,12 +870,18 @@ impl LogicState {
                 (events.into_iter().map(AppEvent::Trame).collect(), persist)
             }
             DocState::Toile(state) => {
-                let events = state.apply_remote(payload);
+                let events = match payload {
+                    Remote::Delta(delta) => state.apply_remote(delta),
+                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                };
                 let persist = !events.is_empty();
                 (events.into_iter().map(AppEvent::Toile).collect(), persist)
             }
             DocState::Prose(state) => {
-                let events = state.apply_remote(payload);
+                let events = match payload {
+                    Remote::Delta(delta) => state.apply_remote(delta),
+                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                };
                 let persist = !events.is_empty();
                 (events.into_iter().map(AppEvent::Prose).collect(), persist)
             }
@@ -856,7 +890,12 @@ impl LogicState {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         if persist {
-            self.owe_delta(document_id, payload.to_vec().into());
+            // A delta joins the local log. A snapshot holds the whole document,
+            // so the store takes one of its own.
+            match payload {
+                Remote::Delta(delta) => self.owe_delta(document_id, delta.clone()),
+                Remote::Snapshot(_) => self.owe_snapshot(document_id),
+            }
             self.owe_layout(document_id);
         }
     }
@@ -867,7 +906,11 @@ impl LogicState {
     ///
     /// It settles a board's import, never the replay it is a slice of. A
     /// channel or space document never queues a replay, so it never comes here.
-    pub(crate) fn merge_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
+    pub(crate) fn merge_batch(
+        &mut self,
+        document_id: DocumentId,
+        payloads: &[ambre_core::DeltaBytes],
+    ) {
         self.settle_board_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
@@ -909,7 +952,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         from_user_id: UserId,
-        payload: &[u8],
+        payload: &ambre_core::EphemeralBytes,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
@@ -945,7 +988,7 @@ impl LogicState {
         if let Some(payload) = greeting {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload: payload.into(),
+                payload,
             });
         }
     }
@@ -960,7 +1003,7 @@ impl LogicState {
         if let Some(payload) = frame {
             self.send_to_sync(SyncCommand::SendEphemeral {
                 document_id,
-                payload: payload.into(),
+                payload,
             });
         }
     }
@@ -1028,7 +1071,11 @@ impl LogicState {
         payload: &ambre_core::SnapshotBytes,
         covered: Seq,
     ) {
-        self.apply_remote(document_id, Order::Snapshot(covered), payload.as_bytes());
+        self.apply_remote(
+            document_id,
+            Order::Snapshot(covered),
+            Remote::Snapshot(payload),
+        );
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);

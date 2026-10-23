@@ -32,7 +32,7 @@ fn write_entry(
 impl TrameState {
     /// Export any new CRDT ops since `last_exported_vv` and bump the tracking
     /// cursor. Returns `Some` binary delta if there were new ops.
-    pub(super) fn flush_delta(&mut self) -> Option<Vec<u8>> {
+    pub(super) fn flush_delta(&mut self) -> Option<ambre_core::DeltaBytes> {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
@@ -65,7 +65,7 @@ impl TrameState {
         };
         self.last_exported_vv = current;
         tracing::info!("[Logic] flush_delta -> {} bytes of CRDT ops", delta.len());
-        Some(delta)
+        Some(ambre_core::DeltaBytes::new(delta))
     }
 
     /// Write under the session identity Sync issued for this workbook
@@ -98,14 +98,24 @@ impl TrameState {
     /// reseed path as [`import_snapshot`](Self::import_snapshot) applies. That
     /// path merges the ops, reseeds the formula engine, and tells the UI to
     /// re-fetch.
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
-        self.import_and_reseed(payload, "apply_remote")
+    pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<TrameEvent> {
+        self.import_and_reseed(payload.as_bytes(), "apply_remote")
+    }
+
+    /// Apply a snapshot whose contents are trusted the way a remote delta is
+    /// applied. Unlike [`import_snapshot`](Self::import_snapshot), it runs no
+    /// schema gate.
+    pub fn apply_remote_snapshot(
+        &mut self,
+        payload: &ambre_core::SnapshotBytes,
+    ) -> Vec<TrameEvent> {
+        self.import_and_reseed(payload.as_bytes(), "apply_remote_snapshot")
     }
 
     /// Apply a remote ephemeral (presence) payload and return presence events.
     ///
     /// Stubbed until collaborator presence is wired.
-    pub fn apply_ephemeral(&mut self, _payload: &[u8]) -> Vec<TrameEvent> {
+    pub fn apply_ephemeral(&mut self, _payload: &ambre_core::EphemeralBytes) -> Vec<TrameEvent> {
         vec![]
     }
 
@@ -186,11 +196,11 @@ impl TrameState {
     /// last delta visibly flickers in from blank. Merging the whole batch first,
     /// then reseeding once, renders the final state in a single repaint. A no-op
     /// (no display events) if nothing imported.
-    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<TrameEvent> {
+    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
         let mut merged_any = false;
         for payload in payloads {
-            merged_any |= self.merge_payload(payload, "apply_remote_batch");
+            merged_any |= self.merge_payload(payload.as_bytes(), "apply_remote_batch");
         }
         if !merged_any {
             return Vec::new();

@@ -165,7 +165,7 @@ mod tests {
             .expect("the peer opens the document");
         let undone = state.handle_command(ProseCommand::Undo);
         assert!(placed(&undone.display).is_some());
-        peer.import(&undone.update.expect("the inverse travels"))
+        peer.import(undone.update.expect("the inverse travels").as_bytes())
             .expect("the peer takes the inverse");
         assert_eq!(
             peer.get_deep_value(),
