@@ -1041,7 +1041,7 @@ pub(crate) fn self_join_entry(
     head: &http::JoinHeadResponse,
     key: KeyId,
 ) -> Result<Option<ambre_core::EncodedLogEntry>, String> {
-    if head.length == 0 {
+    if head.length.is_first() {
         return Ok(None);
     }
     let meta = head.meta_id.document_id();
@@ -1060,7 +1060,10 @@ pub(crate) fn self_join_entry(
     };
     let entry = membership_log::sign(
         draft,
-        (head.length, Some(last)),
+        membership_log::LogHead {
+            position: head.length,
+            previous: Some(last),
+        },
         author.user_id,
         &author.signing_key,
     )?;
@@ -1091,7 +1094,7 @@ pub(crate) fn direct_message_request(
         .map(|(m, signing)| (m.user_id, signing.clone()))
         .chain([(author.user_id, own_key)])
         .collect();
-    let mut next = (0, None);
+    let mut next = membership_log::LogHead::EMPTY;
     let mut root = None;
     let mut entries = Vec::with_capacity(others.len() + 2);
     for (member, act, role) in ambre_protocol::ownerless_log(author.user_id, &others) {
@@ -1109,7 +1112,7 @@ pub(crate) fn direct_message_request(
         let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
         let digest = membership_log::digest(&entry).ok_or("an entry does not encode")?;
         root.get_or_insert(digest);
-        next = (next.0 + 1, Some(digest));
+        next = next.after(digest);
         entries.push(membership_log::encode(&entry)?);
     }
     // The creation goes first, so the first digest is the log's root.

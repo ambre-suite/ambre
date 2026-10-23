@@ -3760,12 +3760,15 @@ ambre-protocol | src/key_link.rs | crate::key_link | KeyLink::encode() | ret | R
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_SIGNATURE_LEN | const | usize	generic	domain-separation tag or length constant
-ambre-protocol | src/membership.rs | crate::membership | MembershipEntry.position | field | u64	debt	finding: Membership log position as u64 (low-medium, suspected)
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::decode(bytes) | param | &[u8]	generic	wire codec
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::encode() | ret | Result<Vec<u8>,SerializationError>	generic	wire codec
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::signed_bytes() | ret | Result<Vec<u8>,SerializationError>	generic	wire codec
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::well_formed() | ret | bool	generic	predicate
-ambre-protocol | src/membership.rs | crate::membership | Signed.position | field | u64	debt	finding: Membership log position as u64 (low-medium, suspected)
+ambre-protocol | src/membership.rs | crate::membership | LogPosition.0 | field | u64	newtype-inner	LogPosition field or accessor
+ambre-protocol | src/membership.rs | crate::membership | LogPosition::after(length) | param | usize	math	entry count of a log, the next place
+ambre-protocol | src/membership.rs | crate::membership | LogPosition::get() | ret | u64	newtype-inner	LogPosition field or accessor
+ambre-protocol | src/membership.rs | crate::membership | LogPosition::is_first() | ret | bool	newtype-inner	LogPosition predicate
+ambre-protocol | src/membership.rs | crate::membership | LogPosition::new(raw) | param | u64	newtype-inner	the raw place the wire and the relay rows carry
 ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
 ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
@@ -3829,7 +3832,6 @@ ambre-server | src/db/documents.rs | crate::db::documents | DocumentSummaryRow.m
 ambre-server | src/db/documents.rs | crate::db::documents | PendingDeletion.rows_left | field | bool	math	named state or style flag, local
 ambre-server | src/db/documents.rs | crate::db::documents | create_document() | ret | Result<(DocumentRow,bool),AppError>	generic	predicate result
 ambre-server | src/db/documents.rs | crate::db::documents | pending_deletions(limit) | param | i64	math	SQL limit
-ambre-server | src/db/members.rs | crate::db::members | LogEntry.position | field | u64	debt	finding: LogEntry.position as u64 (confirmed)
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
@@ -3997,7 +3999,6 @@ ambre-server | src/routes/channels.rs | crate::routes::channels | AmendmentsJson
 ambre-server | src/routes/channels.rs | crate::routes::channels | ClosedSegmentJson.created | field | bool	math	named state or style flag, local
 ambre-server | src/routes/channels.rs | crate::routes::channels | CreateChannelRequest.public | field | bool	math	named state or style flag, local
 ambre-server | src/routes/channels.rs | crate::routes::channels | DirectMessageJson.created | field | bool	math	named state or style flag, local
-ambre-server | src/routes/channels.rs | crate::routes::channels | JoinHeadJson.length | field | u64	math	length count
 ambre-server | src/routes/channels.rs | crate::routes::channels | MemberChannelJson.public | field | bool	math	named state or style flag, local
 ambre-server | src/routes/channels.rs | crate::routes::channels | ThreadJson.created | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | CreateDocumentRequest.space | field | bool	math	named state or style flag, local
@@ -4133,7 +4134,6 @@ ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	pr
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::refused(url) | param | &str	debt	a URL as a bare String: RelayUrl exists
 ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/http.rs | crate::http | JoinHeadResponse.length | field | u64	debt	finding: membership log position as `u64`
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
@@ -4231,18 +4231,16 @@ ambre-sync | src/media.rs | crate::media | seal_blob(data) | param | &[u8]	gener
 ambre-sync | src/members.rs | crate::members | SyncState::handle_search_users(query) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/membership_log.rs | crate::membership_log | Held.present | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/membership_log.rs | crate::membership_log | Log.next | field | (u64,Option<EntryDigest>)	debt	finding: membership log position as `u64`
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/membership_log.rs | crate::membership_log | Log::next() | ret | (u64,Option<EntryDigest>)	debt	finding: membership log position as `u64`
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | encode() | ret | Result<ambre_core::EncodedLogEntry,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | rank() | ret | Option<u8>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/membership_log.rs | crate::membership_log | sign() | ret | Result<MembershipEntry,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/membership_log.rs | crate::membership_log | sign(next) | param | (u64,Option<EntryDigest>)	debt	finding: membership log position as `u64`
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | LogHead::is_empty() | ret | bool	math	named predicate of the log head
 ambre-sync | src/mock.rs | crate::mock | MockWsTransport.client_tx | field | ambre_bus::conduit::UnboundedSender<Vec<u8>>	generic	generic byte/text API or codec
 ambre-sync | src/mock.rs | crate::mock | MockWsTransport.server_rx | field | ambre_bus::conduit::Receiver<Vec<u8>>	generic	generic byte/text API or codec
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay.next_seq | field | u64	debt	finding: ephemeral counter and mock sequence unwrapped

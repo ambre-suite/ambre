@@ -64,6 +64,57 @@ pub fn ownerless_log(
         )))
 }
 
+/// The place of an entry in a document's membership log, from zero. It is
+/// signed with the entry, and the relay appends an entry at its own place
+/// alone. It encodes as the bare `u64` it replaced, so a stored entry and its
+/// digest keep their bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct LogPosition(u64);
+
+impl LogPosition {
+    /// The place of the entry that creates the log.
+    pub const FIRST: Self = Self(0);
+
+    /// The place `raw`, as the wire and the relay's rows carry it.
+    #[must_use]
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// The place a log of `length` entries gives its next entry. A length
+    /// past `u64::MAX` saturates, which no log reaches.
+    #[must_use]
+    pub fn after(length: usize) -> Self {
+        Self(u64::try_from(length).unwrap_or(u64::MAX))
+    }
+
+    /// The number the wire and the relay's rows carry.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The place of the entry after this one. It saturates at `u64::MAX`,
+    /// which no log reaches.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// Whether this is the place of the entry that creates the log.
+    #[must_use]
+    pub const fn is_first(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl std::fmt::Display for LogPosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// One signed change of membership.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MembershipEntry {
@@ -71,7 +122,7 @@ pub struct MembershipEntry {
     pub document: DocumentId,
     /// The place of this entry in the log, from zero. The relay appends an
     /// entry at its own place alone, so two racing writers never fork the log.
-    pub position: u64,
+    pub position: LogPosition,
     /// The member the entry adds, removes or changes.
     pub member: UserId,
     /// The member's signing key, so an entry that member signs later checks
@@ -98,7 +149,7 @@ pub struct MembershipEntry {
 #[derive(Serialize)]
 struct Signed<'a> {
     document: &'a DocumentId,
-    position: u64,
+    position: LogPosition,
     member: &'a UserId,
     member_key: &'a PublicKey,
     act: MembershipAct,
@@ -137,7 +188,7 @@ impl MembershipEntry {
     /// decode.
     #[must_use]
     pub fn well_formed(&self) -> bool {
-        (self.position == 0) == self.previous.is_none()
+        self.position.is_first() == self.previous.is_none()
     }
 
     /// The bytes a request carries and the relay stores.
@@ -175,7 +226,7 @@ mod tests {
     fn entry() -> MembershipEntry {
         MembershipEntry {
             document: DocumentId::from_bytes([1; 16]),
-            position: 1,
+            position: LogPosition::new(1),
             member: UserId::from_bytes([2; 16]),
             member_key: PublicKey::from_array([3; 32]),
             act: MembershipAct::Invite,
@@ -197,7 +248,7 @@ mod tests {
         assert!(signed.starts_with(ENTRY_DOMAIN));
         let changes: [fn(&mut MembershipEntry); 9] = [
             |e| e.document = DocumentId::from_bytes([9; 16]),
-            |e| e.position = 2,
+            |e| e.position = LogPosition::new(2),
             |e| e.member = UserId::from_bytes([9; 16]),
             |e| e.member_key = PublicKey::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
@@ -222,7 +273,7 @@ mod tests {
     fn an_entry_names_a_previous_digest_unless_it_is_the_first() {
         let mut first = entry();
         assert!(first.well_formed());
-        first.position = 0;
+        first.position = LogPosition::FIRST;
         assert!(!first.well_formed());
         first.previous = None;
         assert!(first.well_formed());

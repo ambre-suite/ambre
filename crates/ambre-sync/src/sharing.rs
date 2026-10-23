@@ -24,7 +24,7 @@ use ambre_bus::{
 };
 
 use crate::http;
-use crate::membership_log::{self, Draft, Log, LogRule};
+use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
 use crate::{LogicSink, SyncEvent};
 use ambre_core::RefusalCode;
 
@@ -178,7 +178,7 @@ fn entry_after(
     author: &Author,
 ) -> Result<Option<ambre_core::EncodedLogEntry>, String> {
     let next = log.next();
-    if next.0 == 0 {
+    if next.is_empty() {
         return Ok(None);
     }
     let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
@@ -204,7 +204,7 @@ pub(crate) fn creation(
         role: Role::Owner,
         key: Some(doc_key.id()),
     };
-    let entry = membership_log::sign(draft, (0, None), author.user_id, &author.signing_key)?;
+    let entry = membership_log::sign(draft, LogHead::EMPTY, author.user_id, &author.signing_key)?;
     let anchor = membership_log::digest(&entry).ok_or("the first entry does not encode")?;
     let own_pub = own_exchange_key(exchange_key);
     let doc_key_enc = wrap_anchored_b64(exchange_key, &own_pub, doc_key, Some(anchor))
@@ -3168,6 +3168,7 @@ mod tests {
     // -- The signed membership log (`ambre-spec-membership.md`).
 
     use ambre_bus::MemberStanding;
+    use ambre_protocol::LogPosition;
 
     /// A copy of `author`, for a task that takes its own.
     fn same(author: &Author) -> Author {
@@ -3391,14 +3392,14 @@ mod tests {
         assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
         assert!(lrx.try_recv().is_err());
         let calls = http.calls();
-        let positions: Vec<u64> = calls
+        let positions: Vec<LogPosition> = calls
             .iter()
             .filter_map(|call| match call {
                 Call::Post(_, body) => Some(posted_entry(body).position),
                 _ => None,
             })
             .collect();
-        assert_eq!(positions, vec![1, 2]);
+        assert_eq!(positions, vec![LogPosition::new(1), LogPosition::new(2)]);
     }
 
     /// Holds `SYNC-132` at the revoke: the request carries the entry that

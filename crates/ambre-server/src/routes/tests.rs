@@ -1050,7 +1050,7 @@ mod handler_tests {
     ) -> ambre_protocol::MembershipEntry {
         ambre_protocol::MembershipEntry {
             document: doc,
-            position,
+            position: ambre_protocol::LogPosition::new(position),
             member: member.0,
             member_key: ambre_core::PublicKey::from_array(member.1.verifying_key().to_bytes()),
             act,

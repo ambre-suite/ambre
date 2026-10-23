@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::MemberStanding;
 use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
-use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry, Signature};
+use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -108,6 +108,36 @@ pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
     Some(EntryDigest(ambre_crypto::hash::entry_digest(&bytes)))
 }
 
+/// The place and the previous digest the next entry of a log takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LogHead {
+    /// The place the next entry is signed for.
+    pub position: LogPosition,
+    /// The digest of the last entry, absent on an empty log.
+    pub previous: Option<EntryDigest>,
+}
+
+impl LogHead {
+    /// The head of an empty log: the next entry creates it.
+    pub(crate) const EMPTY: Self = Self {
+        position: LogPosition::FIRST,
+        previous: None,
+    };
+
+    /// Whether the log holds no entry yet.
+    pub(crate) const fn is_empty(self) -> bool {
+        self.position.is_first()
+    }
+
+    /// The head after an entry with `digest` lands at this one.
+    pub(crate) const fn after(self, digest: EntryDigest) -> Self {
+        Self {
+            position: self.position.next(),
+            previous: Some(digest),
+        }
+    }
+}
+
 /// One document's log, as far as a chain of valid entries reaches.
 pub(crate) struct Log {
     held: HashMap<UserId, Held>,
@@ -116,7 +146,7 @@ pub(crate) struct Log {
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
-    next: (u64, Option<EntryDigest>),
+    next: LogHead,
 }
 
 impl Log {
@@ -132,15 +162,15 @@ impl Log {
             held: HashMap::new(),
             signers: HashSet::new(),
             anchored: anchor.is_some(),
-            next: (
-                u64::try_from(entries.len()).unwrap_or(u64::MAX),
-                entries.last().and_then(digest),
-            ),
+            next: LogHead {
+                position: LogPosition::after(entries.len()),
+                previous: entries.last().and_then(digest),
+            },
         };
         let mut previous = None;
         for (place, entry) in entries.iter().enumerate() {
             let fits = entry.document == document
-                && u64::try_from(place).is_ok_and(|place| place == entry.position)
+                && LogPosition::after(place) == entry.position
                 && entry.well_formed()
                 && entry.previous == previous;
             let this = digest(entry);
@@ -285,7 +315,7 @@ impl Log {
 
     /// The place and the previous digest the next entry takes. They follow
     /// every entry served, valid or not: the relay appends at its own end.
-    pub(crate) fn next(&self) -> (u64, Option<EntryDigest>) {
+    pub(crate) fn next(&self) -> LogHead {
         self.next
     }
 }
@@ -314,19 +344,19 @@ pub(crate) struct Draft {
 /// The encoder's error, which a well-formed entry never reaches.
 pub(crate) fn sign(
     draft: Draft,
-    next: (u64, Option<EntryDigest>),
+    next: LogHead,
     author: UserId,
     signing_key: &SigningKey,
 ) -> Result<MembershipEntry, String> {
     let mut entry = MembershipEntry {
         document: draft.document,
-        position: next.0,
+        position: next.position,
         member: draft.member,
         member_key: draft.member_key,
         act: draft.act,
         role: draft.role,
         key: draft.key,
-        previous: next.1,
+        previous: next.previous,
         author,
         signature: Signature([0; ENTRY_SIGNATURE_LEN]),
     };
@@ -390,10 +420,10 @@ pub(crate) mod tests {
         act: MembershipAct,
         role: Role,
     ) {
-        let next = (
-            u64::try_from(log.len()).unwrap(),
-            log.last().and_then(digest),
-        );
+        let next = LogHead {
+            position: LogPosition::after(log.len()),
+            previous: log.last().and_then(digest),
+        };
         let draft = Draft {
             document: DOC,
             member: member.id,
@@ -571,7 +601,13 @@ pub(crate) mod tests {
             Role::Viewer,
         );
         let view = walk(&log);
-        assert_eq!(view.next(), (3, log.last().and_then(digest)));
+        assert_eq!(
+            view.next(),
+            LogHead {
+                position: LogPosition::new(3),
+                previous: log.last().and_then(digest),
+            }
+        );
         let signers = view.signers().unwrap();
         assert!(signers.contains(&alice.public()) && signers.contains(&bob.public()));
         assert!(!signers.contains(&carol.public()));

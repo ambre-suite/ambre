@@ -75,7 +75,7 @@ pub struct MemberWithUserRow {
 #[derive(Debug)]
 pub struct LogEntry {
     /// The place the entry was signed for.
-    pub position: u64,
+    pub position: ambre_protocol::LogPosition,
     pub bytes: ambre_core::EncodedLogEntry,
 }
 
@@ -141,7 +141,7 @@ pub(super) async fn append_entry(
             .bind(document_id)
             .fetch_one(&mut **tx)
             .await?;
-    if i64::try_from(entry.position).ok() != Some(next) {
+    if i64::try_from(entry.position.get()).ok() != Some(next) {
         return Err(AppError::LogMoved);
     }
     sqlx::query(

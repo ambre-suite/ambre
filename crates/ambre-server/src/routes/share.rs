@@ -64,7 +64,7 @@ pub(crate) async fn checked_entry(
         && entry.act == expected.act
         && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
-        && first == (entry.position == 0)
+        && first == entry.position.is_first()
         && member_key.as_ref().map(ambre_core::PublicKey::as_slice)
             == Some(entry.member_key.as_slice());
     if !records {
