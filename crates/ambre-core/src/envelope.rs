@@ -42,6 +42,13 @@ impl std::fmt::Debug for Ciphertext {
     }
 }
 
+/// One link of the snapshot integrity chain. It folds a parent proof with
+/// the bytes of a sealed snapshot, so a reordered or substituted snapshot
+/// breaks the chain. Distinct from [`EntryDigest`] and from any
+/// keyless digest, so no call can pass one where the other is meant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ChainHash(#[serde(with = "serde_bytes")] pub [u8; 32]);
+
 /// The digest of one membership-log entry, which the next entry names. A
 /// wrapped document key also seals the digest of the first entry, as the
 /// anchor of the log (`SYNC-104`).

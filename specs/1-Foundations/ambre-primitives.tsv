@@ -1609,9 +1609,6 @@ ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	g
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | HASH_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/hash.rs | crate::hash | chain_hash() | ret | [u8;HASH_LEN]	debt	finding: `chain_hash` used as a generic hash and KDF
-ambre-crypto | src/hash.rs | crate::hash | chain_hash(parent_proof) | param | &[u8]	debt	finding: `chain_hash` used as a generic hash and KDF
-ambre-crypto | src/hash.rs | crate::hash | chain_hash(snapshot_bytes) | param | &[u8]	debt	finding: `chain_hash` used as a generic hash and KDF
 ambre-crypto | src/hash.rs | crate::hash | entry_digest(encoded_entry) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generic	generic byte/text API or codec
@@ -3330,7 +3327,6 @@ ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::tr
 ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Counter.0 | field | u64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/public_data.rs | crate::public_data | SnapshotPublicData.parent_snapshot_proof | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingClientMsg::Answer.sdp | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingClientMsg::Ice.candidate | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingClientMsg::Offer.sdp | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards
@@ -5160,3 +5156,11 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::s
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | String	newtype-inner	the case-folded text of a sheet name key
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	newtype-inner	SheetNameRefusal field: the refused character, echoed in the refusal
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
+ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
+ambre-crypto | src/hash.rs | crate::hash | dev_seed(username) | param | &str	free-text	dev-only login name, hashed as typed
+ambre-crypto | src/hash.rs | crate::hash | file_digest() | ret | [u8;HASH_LEN]	generic	keyless digest of any file, for the fixture sidecar
+ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	generic	keyless digest of any file, for the fixture sidecar
+ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; each caller wraps the result
+ambre-crypto | src/hash.rs | crate::hash | length_prefixed(head) | param | &[u8]	generic	private hashing construction; each caller wraps the result
+ambre-crypto | src/hash.rs | crate::hash | length_prefixed(tail) | param | &[u8]	generic	private hashing construction; each caller wraps the result

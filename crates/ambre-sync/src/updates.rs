@@ -1496,7 +1496,7 @@ impl SyncState {
             // The BLAKE2b parent chain is a post-MVP hardening (see
             // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
             // which the compaction model accepts for the genesis-parented MVP.
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
@@ -2006,7 +2006,7 @@ mod tests {
             pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
             key_id: doc_key.id(),
             snapshot_id,
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         let snapshot = pipeline::seal_snapshot(
@@ -3131,7 +3131,7 @@ mod tests {
                 pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
                 key_id: key.id(),
                 snapshot_id: reference,
-                parent_snapshot_proof: Vec::new(),
+                parent_snapshot_proof: None,
                 parent_snapshot_update_clocks: Vec::new(),
             };
             SnapshotUpload {

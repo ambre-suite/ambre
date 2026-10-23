@@ -421,10 +421,29 @@ fn argon2_deterministic() {
 
 #[test]
 fn blake2_chain_hash() {
-    let h1 = hash::chain_hash(b"parent", b"snapshot");
-    assert_eq!(h1, hash::chain_hash(b"parent", b"snapshot"));
-    // Order-sensitive: the split point matters.
-    assert_ne!(h1, hash::chain_hash(b"paren", b"tsnapshot"));
+    let snapshot = Ciphertext(b"snapshot".to_vec());
+    let genesis = hash::chain_hash(None, &snapshot);
+    assert_eq!(genesis, hash::chain_hash(None, &snapshot));
+    // The parent is part of the link: a different parent breaks the chain.
+    let child = hash::chain_hash(Some(&genesis), &snapshot);
+    assert_ne!(child, genesis);
+    let other = hash::chain_hash(None, &Ciphertext(b"snapshoT".to_vec()));
+    assert_ne!(child, hash::chain_hash(Some(&other), &snapshot));
+}
+
+#[test]
+fn the_keyless_digests_keep_their_bytes() {
+    // The fixture digest keeps the bytes the chain hash gave it, so a
+    // committed digest survives the split.
+    let mut hasher = <blake2::Blake2b512 as blake2::Digest>::new();
+    blake2::Digest::update(&mut hasher, 0u64.to_le_bytes());
+    blake2::Digest::update(&mut hasher, b"file");
+    let full = blake2::Digest::finalize(hasher);
+    assert_eq!(hash::file_digest(b"file")[..], full[..32]);
+    assert_eq!(
+        hash::chain_hash(None, &Ciphertext(b"file".to_vec())).0,
+        hash::file_digest(b"file")
+    );
 }
 
 // -- Key identifier ----------------------------------------------------------

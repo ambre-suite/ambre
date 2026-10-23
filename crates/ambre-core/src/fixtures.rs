@@ -182,9 +182,8 @@ pub struct FixtureManifest {
     pub schema_version: crate::SchemaVersion,
 
     /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
-    /// `document_id` byte is caught by the write-once check. `ambre-crypto`
-    /// has no plain `hash()`; the call is `hash::chain_hash(&[], bytes)`, an
-    /// empty parent proof degenerating to a keyless 32-byte digest. Hex, not 32
+    /// `document_id` byte is caught by the write-once check. The digest
+    /// is `hash::file_digest`, keyless and 32 bytes. Hex, not 32
     /// raw integers, which would defeat the readable diff this sidecar exists
     /// for.
     #[serde(with = "hex")]

@@ -3,7 +3,7 @@
 //! These fields are visible to the Blind Relay and are used for routing, integrity
 //! verification, and conflict resolution without decrypting the payload.
 
-use ambre_core::{DocumentId, KeyId, PublicKey, SnapshotId};
+use ambre_core::{ChainHash, DocumentId, KeyId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 use crate::messages::{Clock, Counter};
@@ -34,8 +34,10 @@ pub struct SnapshotPublicData {
     pub key_id: KeyId,
     /// Unique identifier of this snapshot.
     pub snapshot_id: SnapshotId,
-    /// BLAKE2b hash chain proving integrity of the parent snapshot without decrypting it.
-    pub parent_snapshot_proof: Vec<u8>,
+    /// BLAKE2b hash chain proving integrity of the parent snapshot without
+    /// decrypting it. `None` on the first snapshot, whose parent is the
+    /// genesis base.
+    pub parent_snapshot_proof: Option<ChainHash>,
     /// For each author, the latest clock value included in this snapshot.
     ///
     /// The vector contains `(pub_key, clock)` pairs. `pub_key` is the author's 32-byte

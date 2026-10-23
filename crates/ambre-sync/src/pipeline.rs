@@ -956,7 +956,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         let snapshot = seal_snapshot(
@@ -984,7 +984,7 @@ mod tests {
             pub_key: author.clone(),
             key_id: key_id(),
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![(author.clone(), Clock(1)), (author, Clock(2))],
         };
         assert!(matches!(
@@ -1163,7 +1163,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         let snapshot = snapshot_blob(

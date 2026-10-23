@@ -176,10 +176,7 @@ impl SyncState {
         // Deterministic seed: domain-separated BLAKE2b of the username. The same
         // username always yields the same keys, so a refresh re-derives the
         // identity with no server-side key storage.
-        let master_seed = MasterSeed::from_array(ambre_crypto::hash::chain_hash(
-            b"ambre-dev-seed",
-            username.as_bytes(),
-        ));
+        let master_seed = ambre_crypto::hash::dev_seed(&username);
         let signing_key = master_seed.derive_signing_key();
         let exchange_key = master_seed.derive_exchange_key();
 

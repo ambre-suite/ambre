@@ -68,13 +68,42 @@ pub fn entry_digest(encoded_entry: &[u8]) -> ambre_core::EntryDigest {
     ambre_core::EntryDigest(prefix(&hasher.finalize()))
 }
 
-/// Computes the chain hash `BLAKE2b(len(parent_proof) || parent_proof ||
-/// snapshot_bytes)`, truncated to 32 bytes. The length prefix makes the field
-/// boundary unambiguous, so distinct `(parent, snapshot)` splits never collide.
-pub fn chain_hash(parent_proof: &[u8], snapshot_bytes: &[u8]) -> [u8; HASH_LEN] {
+/// Computes the chain hash `BLAKE2b(len(parent) || parent || snapshot)`,
+/// truncated to 32 bytes. The first snapshot of a document has no parent, and
+/// its parent field is empty. The length prefix makes the field boundary
+/// unambiguous, so a parent and a snapshot never read as another pair.
+pub fn chain_hash(
+    parent: Option<&ambre_core::ChainHash>,
+    snapshot: &ambre_core::Ciphertext,
+) -> ambre_core::ChainHash {
+    let parent: &[u8] = parent.map_or(&[], |p| &p.0);
+    ambre_core::ChainHash(length_prefixed(parent, &snapshot.0))
+}
+
+/// `BLAKE2b(len(head) || head || tail)`, truncated to 32 bytes: the one
+/// construction behind the chain hash and the two keyless digests below.
+fn length_prefixed(head: &[u8], tail: &[u8]) -> [u8; HASH_LEN] {
     let mut hasher = Blake2b512::new();
-    hasher.update((parent_proof.len() as u64).to_le_bytes());
-    hasher.update(parent_proof);
-    hasher.update(snapshot_bytes);
+    hasher.update((head.len() as u64).to_le_bytes());
+    hasher.update(head);
+    hasher.update(tail);
     prefix(&hasher.finalize())
+}
+
+/// Domain-separation tag of the dev-login seed.
+const DEV_SEED_DOMAIN: &[u8] = b"ambre-dev-seed";
+
+/// The seed a dev login derives from a username. The same username always
+/// yields the same keys, so a refresh re-derives the identity with no
+/// server-side key storage. Dev login only; a real account draws its seed
+/// from the CSPRNG.
+pub fn dev_seed(username: &str) -> crate::keys::MasterSeed {
+    crate::keys::MasterSeed::from_array(length_prefixed(DEV_SEED_DOMAIN, username.as_bytes()))
+}
+
+/// A keyless 32-byte digest of a whole file, for the fixture sidecar that
+/// catches a flipped byte. Not a link of the snapshot chain: its head is
+/// empty, which keeps the digests of the committed corpus.
+pub fn file_digest(bytes: &[u8]) -> [u8; HASH_LEN] {
+    length_prefixed(&[], bytes)
 }

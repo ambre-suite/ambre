@@ -297,7 +297,11 @@ mod validate_tests {
         );
     }
 
-    fn snapshot(cipher: Vec<u8>, proof: Vec<u8>, clocks: Vec<(PublicKey, Clock)>) -> Snapshot {
+    fn snapshot(
+        cipher: Vec<u8>,
+        proof: Option<ambre_core::ChainHash>,
+        clocks: Vec<(PublicKey, Clock)>,
+    ) -> Snapshot {
         Snapshot {
             ciphertext: Ciphertext(cipher),
             nonce: Nonce([0u8; 24]),
@@ -320,19 +324,23 @@ mod validate_tests {
             (PublicKey::from_array([9u8; 32]), Clock(1)),
             (PublicKey::from_array([8u8; 32]), Clock(2)),
         ];
-        assert!(snapshot(vec![1], vec![1], clocks).validate().is_ok());
+        assert!(
+            snapshot(vec![1], Some(ambre_core::ChainHash([1u8; 32])), clocks)
+                .validate()
+                .is_ok()
+        );
     }
 
     #[test]
     fn snapshot_valid_with_empty_genesis_proof() {
         // The first snapshot has the genesis base as parent and no proof.
-        assert!(snapshot(vec![1], vec![], vec![]).validate().is_ok());
+        assert!(snapshot(vec![1], None, vec![]).validate().is_ok());
     }
 
     #[test]
     fn snapshot_rejects_empty_ciphertext() {
         assert_eq!(
-            snapshot(vec![], vec![1], vec![]).validate(),
+            snapshot(vec![], Some(ambre_core::ChainHash([1u8; 32])), vec![]).validate(),
             Err(ValidationError::EmptyCiphertext)
         );
     }
@@ -342,7 +350,7 @@ mod validate_tests {
         let dup = PublicKey::from_array([7u8; 32]);
         let clocks = vec![(dup.clone(), Clock(1)), (dup, Clock(2))];
         assert_eq!(
-            snapshot(vec![1], vec![1], clocks).validate(),
+            snapshot(vec![1], Some(ambre_core::ChainHash([1u8; 32])), clocks).validate(),
             Err(ValidationError::DuplicatePublicKey)
         );
     }

@@ -49,7 +49,7 @@ fn snapshot_roundtrip() {
             pub_key: PublicKey::from_array([12u8; 32]),
             key_id: KeyId::from_array([8u8; 16]),
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: vec![13, 14],
+            parent_snapshot_proof: Some(ambre_core::ChainHash([13u8; 32])),
             parent_snapshot_update_clocks: vec![
                 (PublicKey::from_array([15u8; 32]), Clock(16)),
                 (PublicKey::from_array([17u8; 32]), Clock(18)),
@@ -458,7 +458,7 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk.clone(),
             key_id: kid,
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: vec![],
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![],
         },
         commitment_tag: CommitmentTag([6u8; 32]),

@@ -163,7 +163,7 @@ mod tests {
             pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: SnapshotId::new(),
-            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         SnapshotUpload {

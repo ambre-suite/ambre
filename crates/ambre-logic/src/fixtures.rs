@@ -589,10 +589,10 @@ pub fn manifest_for(
 /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
 /// `document_id` byte is caught by the write-once check.
 ///
-/// `ambre-crypto` has no plain `hash()`; `chain_hash` with an empty parent proof
-/// degenerates to a keyless 32-byte digest, which is exactly what this needs.
+/// The keyless digest is [`ambre_crypto::hash::file_digest`], never a link
+/// of the snapshot chain.
 pub fn digest_of(bytes: &[u8]) -> [u8; 32] {
-    ambre_crypto::hash::chain_hash(&[], bytes)
+    ambre_crypto::hash::file_digest(bytes)
 }
 
 /// Run one generator and write its artifact plus sidecar under `dir`.
