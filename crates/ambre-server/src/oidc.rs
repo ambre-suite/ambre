@@ -120,9 +120,9 @@ pub struct OidcAuthState {
     pub nonce: Nonce,
 }
 
-/// The registration of the relay with one provider: where the provider is
-/// discovered, the client it issued the relay, and where it sends a sign-in
-/// back. Each part is the provider crate's own type, so a client id never
+/// The registration of the relay with one provider. It names where the
+/// provider is discovered, the client it issued the relay, and where it sends
+/// a sign-in back. Each part is the provider crate's own type, so a client id never
 /// takes the place of a redirect.
 #[derive(Debug, Clone)]
 pub struct OidcRegistration {

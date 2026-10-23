@@ -307,8 +307,8 @@ pub async fn dev_upsert_user(
 }
 
 /// The text a user search matches, trimmed and at least two characters long.
-/// A shorter text would match a near-arbitrary slice of the user table, email
-/// and keys with it, and turn the sharing lookup into a directory listing.
+/// A shorter text would match a near-arbitrary slice of the user table. The
+/// sharing lookup would then list the directory, each email and key with it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserSearch(String);
 
