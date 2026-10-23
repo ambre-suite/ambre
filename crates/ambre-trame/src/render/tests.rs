@@ -9,16 +9,16 @@ use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
 /// A shared empty column-width map for uniform-layout fixtures.
-fn empty_widths() -> &'static std::collections::HashMap<Col, f32> {
+fn empty_widths() -> &'static std::collections::HashMap<Col, ambre_core::DocPx> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Col, f32>> = OnceLock::new();
+    static EMPTY: OnceLock<std::collections::HashMap<Col, ambre_core::DocPx>> = OnceLock::new();
     EMPTY.get_or_init(std::collections::HashMap::new)
 }
 
 /// A shared empty row-height map for uniform-layout fixtures.
-fn empty_heights() -> &'static std::collections::HashMap<Row, f32> {
+fn empty_heights() -> &'static std::collections::HashMap<Row, ambre_core::DocPx> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Row, f32>> = OnceLock::new();
+    static EMPTY: OnceLock<std::collections::HashMap<Row, ambre_core::DocPx>> = OnceLock::new();
     EMPTY.get_or_init(std::collections::HashMap::new)
 }
 
@@ -29,8 +29,8 @@ fn layout() -> GridLayout<'static> {
         header_width: 50.0,
         header_height: 24.0,
         top: 0.0,
-        col_width: 80.0,
-        row_height: 20.0,
+        col_width: ambre_core::DocPx::new(80.0),
+        row_height: ambre_core::DocPx::new(20.0),
         col_widths: empty_widths(),
         row_heights: empty_heights(),
         origin_col: Col::new(0),
@@ -64,8 +64,8 @@ fn cell_rect_maps_index_to_pixels() {
 fn variable_metrics_shift_cells_and_hit_test() {
     let mut l = layout();
     // Column 1 widened to 200, row 0 heightened to 50 (absolute keys).
-    let cols = std::collections::HashMap::from([(Col::new(1), 200.0f32)]);
-    let rows = std::collections::HashMap::from([(Row::new(0), 50.0f32)]);
+    let cols = std::collections::HashMap::from([(Col::new(1), ambre_core::DocPx::new(200.0))]);
+    let rows = std::collections::HashMap::from([(Row::new(0), ambre_core::DocPx::new(50.0))]);
     l.col_widths = &cols;
     l.row_heights = &rows;
 

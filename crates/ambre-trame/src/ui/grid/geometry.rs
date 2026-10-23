@@ -56,20 +56,14 @@ impl TrameUiState {
 
     /// Width (logical px) of column `col`: its resized entry, else [`COL_WIDTH`].
     pub fn col_width_of(&self, col: Col) -> f64 {
-        self.col_widths
-            .get(&col)
-            .map(|&w| w as f64)
-            .unwrap_or(COL_WIDTH)
-            * self.zoom.get()
+        let width = self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH);
+        f64::from(width.get()) * self.zoom.get()
     }
 
     /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
     pub fn row_height_of(&self, row: Row) -> f64 {
-        self.row_heights
-            .get(&row)
-            .map(|&h| h as f64)
-            .unwrap_or(ROW_HEIGHT)
-            * self.zoom.get()
+        let height = self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT);
+        f64::from(height.get()) * self.zoom.get()
     }
 
     /// Width (logical px) of the fixed row-number strip on the left, scaled by

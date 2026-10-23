@@ -4,6 +4,7 @@
 use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
+use ambre_core::DocPx;
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
 /// when the drop leaves it in place. `LoroMovableList::mov` takes the index
@@ -60,13 +61,13 @@ impl TrameView {
     /// holds it (`BUS-011`). The local map takes the width only once the outbox
     /// carries the command: a width the document never took hides the loss
     /// (`TRAME-UI-127`).
-    pub(crate) fn send_resize_col(&mut self, col: Col, width: f32) {
+    pub(crate) fn send_resize_col(&mut self, col: Col, width: DocPx) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeCol {
             version,
             sheet_id: self.state.active_sheet.clone(),
             col,
-            width_px: width,
+            width,
         };
         if self.send_command_lossless(cmd).is_err() {
             tracing::error!("Trame: the resize was dropped, the column keeps its width");
@@ -78,13 +79,13 @@ impl TrameView {
     }
 
     /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
-    pub(crate) fn send_resize_row(&mut self, row: Row, height: f32) {
+    pub(crate) fn send_resize_row(&mut self, row: Row, height: DocPx) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeRow {
             version,
             sheet_id: self.state.active_sheet.clone(),
             row,
-            height_px: height,
+            height,
         };
         if self.send_command_lossless(cmd).is_err() {
             tracing::error!("Trame: the resize was dropped, the row keeps its height");
@@ -150,9 +151,9 @@ impl TrameView {
                     max_h = max_h.max(lyt.height());
                 }
                 let height = if max_h > 0.0 {
-                    (max_h + 4.0).max(crate::ui::grid::MIN_ROW_HEIGHT as f32)
+                    DocPx::new(max_h + 4.0).max(crate::ui::grid::MIN_ROW_HEIGHT)
                 } else {
-                    crate::ui::grid::ROW_HEIGHT as f32
+                    crate::ui::grid::ROW_HEIGHT
                 };
                 self.send_resize_row(r, height);
             }
@@ -870,7 +871,7 @@ pub(crate) fn fit_column_width(
     cells: &[crate::DisplayCell],
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-) -> f32 {
+) -> DocPx {
     let pad = (crate::render::CELL_PAD_X * 2.0) as f32;
     let widest = cells
         .iter()
@@ -893,9 +894,9 @@ pub(crate) fn fit_column_width(
         })
         .fold(0.0f32, f32::max);
     if cells.iter().any(|cell| !cell.text.is_empty()) {
-        (widest + pad).max(crate::ui::grid::MIN_COL_WIDTH as f32)
+        DocPx::new(widest + pad).max(crate::ui::grid::MIN_COL_WIDTH)
     } else {
-        crate::ui::grid::COL_WIDTH as f32
+        crate::ui::grid::COL_WIDTH
     }
 }
 
@@ -911,7 +912,7 @@ mod tests {
     fn a_column_fit_sizes_from_content_or_defaults_when_empty() {
         let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new(1.0));
         let empty = fit_column_width(&[], &mut font_cx, &mut cache);
-        assert_eq!(empty, crate::ui::grid::COL_WIDTH as f32);
+        assert_eq!(empty, crate::ui::grid::COL_WIDTH);
         let blank = crate::DisplayCell::default();
         assert_eq!(
             fit_column_width(&[blank], &mut font_cx, &mut cache),
@@ -923,7 +924,7 @@ mod tests {
             ..Default::default()
         };
         let sized = fit_column_width(&[cell], &mut font_cx, &mut cache);
-        assert!(sized >= crate::ui::grid::MIN_COL_WIDTH as f32);
+        assert!(sized >= crate::ui::grid::MIN_COL_WIDTH);
         assert_ne!(sized, empty, "content is measured, not defaulted");
     }
 }

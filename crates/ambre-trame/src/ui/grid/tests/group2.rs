@@ -147,7 +147,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
         .cell_pixel_rect(CellPos::new(Row::new(4), Col::new(0)))
         .expect("row 4 visible");
     // Row 4 sits exactly one slot below row 1 (the two hidden rows took none).
-    assert_eq!(r4.1 - r1.1, super::super::ROW_HEIGHT);
+    assert_eq!(r4.1 - r1.1, f64::from(super::super::ROW_HEIGHT.get()));
 
     // Hit-testing the second visible slot resolves to row 4, not row 2.
     let CellPos {
@@ -398,10 +398,14 @@ fn grid_bottom_floors_at_header_on_tiny_canvas() {
 fn scroll_requests_every_narrow_column_on_screen() {
     let mut state = TrameUiState::new(800.0, 600.0);
     for col in 0..200 {
-        state.col_widths.insert(Col::new(col), 24.0);
+        state
+            .col_widths
+            .insert(Col::new(col), ambre_core::DocPx::new(24.0));
     }
     for row in 0..200 {
-        state.row_heights.insert(Row::new(row), 8.0);
+        state
+            .row_heights
+            .insert(Row::new(row), ambre_core::DocPx::new(8.0));
     }
     let last_col_on_screen = state
         .col_at_x(799.0)

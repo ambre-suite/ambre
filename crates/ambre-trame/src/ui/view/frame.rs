@@ -375,8 +375,10 @@ impl TrameView {
                 (ContentRepaint::Full, None)
             } else {
                 // One whole-cell step is the base metric scaled by the grid zoom.
-                let dy_px = (-(dr as f64) * ROW_HEIGHT * self.state.zoom.get()).round() as i32;
-                let dx_px = (-(dc as f64) * COL_WIDTH * self.state.zoom.get()).round() as i32;
+                let dy_px = (-(dr as f64) * f64::from(ROW_HEIGHT.get()) * self.state.zoom.get())
+                    .round() as i32;
+                let dx_px = (-(dc as f64) * f64::from(COL_WIDTH.get()) * self.state.zoom.get())
+                    .round() as i32;
                 let w = self.state.canvas_width;
                 // Bottom edge of the cell area (now the full canvas: the sheet-tab
                 // strip moved to DOM chrome, so it no longer reserves a band here).

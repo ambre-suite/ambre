@@ -1004,13 +1004,13 @@ fn deleted_sheet_leaves_no_data() {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: gone.clone(),
         col: Col::new(0),
-        width_px: 120.0,
+        width: ambre_core::DocPx::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(2),
         sheet_id: gone.clone(),
         row: Row::new(0),
-        height_px: 40.0,
+        height: ambre_core::DocPx::new(40.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: gone.clone(),

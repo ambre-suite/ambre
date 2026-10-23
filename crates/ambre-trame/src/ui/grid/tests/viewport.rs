@@ -124,16 +124,17 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
         version,
         row_start: Row::new(3),
         col_start: Col::new(2),
-        col_widths: vec![width as f32],
-        row_heights: vec![height as f32],
+        col_widths: vec![ambre_core::DocPx::new(width as f32)],
+        row_heights: vec![ambre_core::DocPx::new(height as f32)],
         cells: vec![],
     };
     state.on_viewport_data(sized(ambre_bus::ViewportVersion(0), 200.0, 45.0));
     assert_eq!(state.col_width_of(Col::new(2)), 200.0);
     assert_eq!(state.row_height_of(Row::new(3)), 45.0);
-    state.on_viewport_data(sized(ambre_bus::ViewportVersion(1), COL_WIDTH, ROW_HEIGHT));
-    assert_eq!(state.col_width_of(Col::new(2)), COL_WIDTH);
-    assert_eq!(state.row_height_of(Row::new(3)), ROW_HEIGHT);
+    let (width, height) = (f64::from(COL_WIDTH.get()), f64::from(ROW_HEIGHT.get()));
+    state.on_viewport_data(sized(ambre_bus::ViewportVersion(1), width, height));
+    assert_eq!(state.col_width_of(Col::new(2)), width);
+    assert_eq!(state.row_height_of(Row::new(3)), height);
     assert!(
         !state.col_widths.contains_key(&Col::new(2))
             && !state.row_heights.contains_key(&Row::new(3))

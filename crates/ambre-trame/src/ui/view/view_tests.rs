@@ -988,20 +988,25 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             ctrl: false,
         });
         let sent = rig.sent();
-        let widths: Vec<f32> = sent
+        let widths: Vec<ambre_core::DocPx> = sent
             .iter()
             .filter_map(|cmd| match cmd {
                 TrameCommand::ResizeCol {
-                    col: COL_1,
-                    width_px,
-                    ..
-                } => Some(*width_px),
+                    col: COL_1, width, ..
+                } => Some(*width),
                 _ => None,
             })
             .collect();
-        assert_eq!(widths, [200.0], "zoom {zoom}: sent {sent:?}");
+        assert_eq!(
+            widths,
+            [ambre_core::DocPx::new(200.0)],
+            "zoom {zoom}: sent {sent:?}"
+        );
         // No answer came back, and the grid already reflowed.
-        assert_eq!(rig.view.state.col_widths.get(&COL_1), Some(&200.0));
+        assert_eq!(
+            rig.view.state.col_widths.get(&COL_1),
+            Some(&ambre_core::DocPx::new(200.0))
+        );
         assert_eq!(
             rig.view.state.col_x(Col::new(2)),
             rig.view.state.col_x(Col::new(1)) + 200.0 * zoom
@@ -1056,11 +1061,11 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     assert!(
         matches!(
             sent.as_slice(),
-            [TrameCommand::ResizeCol { col: COL_0, width_px, .. }] if *width_px == expected
+            [TrameCommand::ResizeCol { col: COL_0, width, .. }] if *width == expected
         ),
         "sent {sent:?}"
     );
-    assert!(expected > crate::ui::grid::COL_WIDTH as f32);
+    assert!(expected > crate::ui::grid::COL_WIDTH);
 }
 
 /// A drag from a merged source previews whole blocks: a 2-row merge grows two
@@ -1144,13 +1149,14 @@ fn a_wheel_delta_lands_once_and_keeps_its_remainder() {
     rig.frame();
     assert!(rig.wheel(3.0, 1, false));
     assert_eq!(rig.top(), 3, "three lines are three rows");
-    let page = (rig.view.state.canvas_height / ROW_HEIGHT) as u32;
+    let row = f64::from(ROW_HEIGHT.get());
+    let page = (rig.view.state.canvas_height / row) as u32;
     assert!(rig.wheel(1.0, 2, false));
     assert_eq!(rig.top(), 3 + page, "a page is a screen of rows");
     let at = rig.top();
-    assert!(rig.wheel(ROW_HEIGHT * 1.5, 0, false));
+    assert!(rig.wheel(row * 1.5, 0, false));
     assert_eq!(rig.top(), at + 1, "a row and a half moves one row");
-    assert!(rig.wheel(ROW_HEIGHT * 0.5, 0, false));
+    assert!(rig.wheel(row * 0.5, 0, false));
     assert_eq!(rig.top(), at + 2, "the half row was kept");
 }
 

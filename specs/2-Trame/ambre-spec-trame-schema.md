@@ -100,7 +100,7 @@ race: the last writer takes that whole unit.
 | `page_setup_{sheet}` | Map | field name | orientation, paper size, margins, scale, flags | the key | `trame-pdf-export` | design |
 
 **Absence is a value.** No key in `cellstyle_{sheet}` means the grid default style; no key in
-`col_widths_{sheet}` means `DEFAULT_COL_WIDTH`; an empty `filters_{sheet}` means no filter. No
+`col_widths_{sheet}` means `COL_WIDTH`; an empty `filters_{sheet}` means no filter. No
 container carries a "cleared" marker.
 
 ---

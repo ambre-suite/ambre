@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use ambre_core::DocPx;
 use ambre_draw::DocumentWalk;
 
 use super::*;
@@ -39,13 +40,13 @@ pub trait SheetCells {
 #[derive(Clone, Copy)]
 pub struct SheetAxes<'v> {
     /// Width of a column with no entry in `col_widths`.
-    pub col_width: f64,
+    pub col_width: DocPx,
     /// Height of a row with no entry in `row_heights`.
-    pub row_height: f64,
+    pub row_height: DocPx,
     /// Explicit column widths, keyed by column.
-    pub col_widths: &'v HashMap<Col, f32>,
+    pub col_widths: &'v HashMap<Col, DocPx>,
     /// Explicit row heights, keyed by row.
-    pub row_heights: &'v HashMap<Row, f32>,
+    pub row_heights: &'v HashMap<Row, DocPx>,
     /// Rows hidden by the shared filter, sorted ascending.
     pub hidden_rows: &'v [Row],
 }
@@ -62,9 +63,9 @@ impl SheetAxes<'_> {
             .col_widths
             .iter()
             .filter(|&(&c, _)| c < col)
-            .map(|(_, &w)| w as f64 - self.col_width)
+            .map(|(_, &w)| f64::from(w.get()) - f64::from(self.col_width.get()))
             .sum();
-        f64::from(col.get()) * self.col_width + resized
+        f64::from(col.get()) * f64::from(self.col_width.get()) + resized
     }
 
     /// Y of row `row`'s top edge. The hidden rows above it take no height.
@@ -74,9 +75,9 @@ impl SheetAxes<'_> {
             .row_heights
             .iter()
             .filter(|&(&r, _)| r < row && !self.is_hidden(r))
-            .map(|(_, &h)| h as f64 - self.row_height)
+            .map(|(_, &h)| f64::from(h.get()) - f64::from(self.row_height.get()))
             .sum();
-        (f64::from(row.get()) - hidden) * self.row_height + resized
+        (f64::from(row.get()) - hidden) * f64::from(self.row_height.get()) + resized
     }
 
     /// The column whose band holds `x`, clamped to the grid.

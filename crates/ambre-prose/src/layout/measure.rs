@@ -854,8 +854,10 @@ mod tests {
                         crate::layout::run::Affinity::Downstream
                     },
                 );
-                let back =
-                    data.offset_at(caret.x0 as f32 + 0.1, ((caret.y0 + caret.y1) / 2.0) as f32);
+                let back = data.offset_at(ambre_core::DocPoint::new(
+                    ambre_core::DocPx::new(caret.x0 as f32 + 0.1),
+                    ambre_core::DocPx::new(((caret.y0 + caret.y1) / 2.0) as f32),
+                ));
                 (offset, rounded(caret), back.get())
             })
             .collect();

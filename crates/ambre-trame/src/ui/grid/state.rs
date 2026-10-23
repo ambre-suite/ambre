@@ -70,8 +70,10 @@ impl TrameUiState {
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows = RowCount::new((grid_h / (ROW_HEIGHT * self.zoom.get())).ceil() as u32);
-        self.viewport_cols = ColCount::new((grid_w / (COL_WIDTH * self.zoom.get())).ceil() as u32);
+        self.viewport_rows =
+            RowCount::new((grid_h / (f64::from(ROW_HEIGHT.get()) * self.zoom.get())).ceil() as u32);
+        self.viewport_cols =
+            ColCount::new((grid_w / (f64::from(COL_WIDTH.get()) * self.zoom.get())).ceil() as u32);
     }
 
     /// Set the grid zoom factor (clamped to the preset range), keeping the
@@ -463,7 +465,7 @@ impl TrameUiState {
             .into_iter()
             .zip(&col_widths)
         {
-            if (*w as f64 - COL_WIDTH).abs() > f64::EPSILON {
+            if *w != COL_WIDTH {
                 self.col_widths.insert(col, *w);
             } else {
                 self.col_widths.remove(&col);
@@ -473,7 +475,7 @@ impl TrameUiState {
             .into_iter()
             .zip(&row_heights)
         {
-            if (*h as f64 - ROW_HEIGHT).abs() > f64::EPSILON {
+            if *h != ROW_HEIGHT {
                 self.row_heights.insert(row, *h);
             } else {
                 self.row_heights.remove(&row);

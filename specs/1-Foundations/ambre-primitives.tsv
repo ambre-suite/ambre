@@ -541,8 +541,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeCol.width_px | field | f32	math	column width / row height in px
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeRow.height_px | field | f32	math	column width / row height in px
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
@@ -593,8 +591,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Undo
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::UndoState.can_undo | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.col_widths | field | Vec<f32>	math	column width / row height in px
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ViewportData.row_heights | field | Vec<f32>	math	column width / row height in px
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.1 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::BottomN.0 | field | u32	math	top/bottom N count
@@ -3082,7 +3078,6 @@ ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::blocks_on_p
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::body_height_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::body_top_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | PageLayout::footnotes_on_page(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/layout/pass.rs | crate::layout::pass | RULE_HEIGHT_PX | const | f32	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | Walk.content_width_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | Walk.toc_pages | field | &'a HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/pass.rs | crate::layout::pass | cell_blocks(width_px) | param | f32	math	layout geometry local to algorithm
@@ -3216,8 +3211,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_under
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::lines() | ret | impl Iterator<Item=(parley::Line<'_,ParleyBrush>,f32)>+'_	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(indent_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_at(x) | param | f32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::offset_at(y) | param | f32	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line() | ret | Option<(&Segment,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(y) | param | f32	math	layout geometry local to algorithm
@@ -5452,20 +5445,14 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimite
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::col_width() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_col(width_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::resize_row(height_px) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/metrics.rs | crate::logic::metrics | TrameState::row_height() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_name(name) | param | &str	debt	finding: (FINDING, confirmed): defined names and their reference text
 ambre-trame | src/logic/mod.rs | crate::logic | <TrameCtx<'_> as FormulaCtx>::resolve_sheet(name) | param | &str	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | DEFAULT_SHEET_NAME | const | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.engine_sheet_by_name | field | &'a HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameCtx.named | field | &'a HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_sheet_by_name | field | HashMap<String,EngineSheet>	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.named | field | HashMap<String,NameTarget>	debt	finding: (FINDING, confirmed): defined names and their reference text
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_id_to_name | field | HashMap<SheetId,String>	debt	finding: (FINDING, confirmed): sheet name (lot A item 4 leaves SheetName open)
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
@@ -5507,12 +5494,8 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | MAX_DECIMALS | cons
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(decimals) | param | Option<u8>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/schema.rs | crate::logic::schema | DEFAULT_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterRecord.col | field | String	debt	finding: (FINDING, confirmed): FilterRecord.col holds a Uid key part as String
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_COL_WIDTH | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/logic/schema.rs | crate::logic::schema | MIN_ROW_HEIGHT | const | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
 ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	debt	finding: (FINDING, confirmed): errors carried as String
@@ -5589,13 +5572,9 @@ ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x1
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y0) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y1) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_width | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.col_widths | field | &'a HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_height | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_width | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_height | field | f64	math	the surface offset of the content area, in the f64 of the grid's other surface coordinates: the sheet walk sets it to an absolute sheet position, up to 100000 rows of 20 px, where the f32 that ViewPx holds steps by a quarter pixel
+ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_width | field | f64	math	the surface offset of the content area, in the f64 of the grid's other surface coordinates: the sheet walk sets it to an absolute sheet position, up to 100000 rows of 20 px, where the f32 that ViewPx holds steps by a quarter pixel
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_height | field | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.row_heights | field | &'a HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at(px) | param | f64	math	local geometry / pixel arithmetic
@@ -5622,10 +5601,6 @@ ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_x) | p
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.col_width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.col_widths | field | &'v HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.row_height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes.row_heights | field | &'v HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_at(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_x() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
@@ -5670,7 +5645,6 @@ ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_y() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | COL_WIDTH | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.bold | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.font | field | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.is_filtered | field | bool	generic	independent state or style flag, not a mode selector
@@ -5692,10 +5666,7 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | 
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_HEIGHT | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_WIDTH | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | MIN_COL_WIDTH | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | MIN_ROW_HEIGHT | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | RESIZE_BAND | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ROW_HEIGHT | const | f64	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Col.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Row.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::band_contains() | ret | bool	generic	predicate result
@@ -5705,9 +5676,7 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row() |
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::is_multi() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_height | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.col_widths | field | HashMap<Col,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.row_heights | field | HashMap<Row,f32>	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::grid_bottom() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
@@ -5795,9 +5764,6 @@ ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::i
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_col(width) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::send_resize_row(height) | param | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | fit_column_width() | ret | f32	debt	finding: (FINDING, confirmed): base px and zoomed px share f32/f64, and the constants are duplicated
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::active_cell_ref() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::begin_edit(seed) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::cell_seed() | ret | String	free-text	free text: user content, label, message or display string

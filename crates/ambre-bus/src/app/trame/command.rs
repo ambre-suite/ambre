@@ -183,7 +183,7 @@ pub enum TrameCommand {
     /// inside a merge.
     UnmergeCells { row: Row, col: Col },
 
-    /// Set the width (physical px) of column `col` on `sheet_id` (`trame-resize`,
+    /// Set the width (document px) of column `col` on `sheet_id` (`trame-resize`,
     /// `trame-engine`). The Logic thread writes the value into the per-sheet
     /// `col_widths_{sheet}` LWW map keyed by the column's stable `Uid`, clamped to
     /// a minimum. It then replies with a [`DataReset`], so the UI re-fetches the
@@ -197,15 +197,15 @@ pub enum TrameCommand {
         version: crate::ViewportVersion,
         sheet_id: SheetId,
         col: Col,
-        width_px: f32,
+        width: ambre_core::DocPx,
     },
-    /// Set the height (physical px) of row `row` on `sheet_id`. Row analogue of
+    /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
         version: crate::ViewportVersion,
         sheet_id: SheetId,
         row: Row,
-        height_px: f32,
+        height: ambre_core::DocPx,
     },
 
     // -- Parameterless structural intents (grid context menu,

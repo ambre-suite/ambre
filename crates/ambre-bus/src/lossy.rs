@@ -99,7 +99,7 @@ mod tests {
                 version: crate::ViewportVersion(1),
                 sheet_id: crate::SheetId("s1".to_string()),
                 col: Col::new(0),
-                width_px: 120.0,
+                width: ambre_core::DocPx::new(120.0),
             },
         ]
         .into_iter()

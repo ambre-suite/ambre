@@ -10,7 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
-use ambre_core::Rgb;
+use ambre_core::{DocPx, Rgb};
 use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
@@ -29,20 +29,11 @@ use crate::{
 mod geometry;
 mod state;
 
-pub const ROW_HEIGHT: f64 = 20.0;
-
-pub const COL_WIDTH: f64 = 80.0;
-
 pub const HEADER_HEIGHT: f64 = 24.0;
 
 pub const HEADER_WIDTH: f64 = 50.0;
 
-/// Lower clamp on a column/row resize (logical px); mirrors the Logic-side
-/// `MIN_COL_WIDTH` / `MIN_ROW_HEIGHT` so the UI preview and the persisted value
-/// agree.
-pub const MIN_COL_WIDTH: f64 = 24.0;
-
-pub const MIN_ROW_HEIGHT: f64 = 12.0;
+pub use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
 
 /// Half-width (logical px) of the grab band straddling a header boundary that
 /// arms a resize drag (`trame-resize`). A press within +/- this of a column's right
@@ -540,10 +531,10 @@ pub struct TrameUiState {
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
-    pub col_widths: HashMap<Col, f32>,
+    pub col_widths: HashMap<Col, DocPx>,
     /// Per-row heights (logical px) keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
-    pub row_heights: HashMap<Row, f32>,
+    pub row_heights: HashMap<Row, DocPx>,
 
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the

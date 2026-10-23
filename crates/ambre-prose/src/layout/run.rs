@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, FootnoteId};
+use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, DocPoint, FootnoteId};
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
@@ -459,9 +459,11 @@ impl ParleyRunData {
         tops
     }
 
-    /// The code-point offset under a point inside the run.
+    /// The code-point offset under a point inside the run, measured from the
+    /// run's top-left corner.
     #[must_use]
-    pub fn offset_at(&self, x: f32, y: f32) -> RunOffset {
+    pub fn offset_at(&self, at: DocPoint) -> RunOffset {
+        let (x, y) = (at.x.get(), at.y.get());
         let index = self
             .lines
             .partition_point(|at| at.top <= y)
@@ -1174,6 +1176,7 @@ mod tests {
     use crate::layout::run::RunOffset;
     use crate::layout::run::RunSpan;
     use ambre_bus::app::prose::ParagraphStyle;
+    use ambre_core::{DocPoint, DocPx};
 
     fn style() -> EffectiveStyle {
         EffectiveStyle::from_parts(
@@ -1190,7 +1193,10 @@ mod tests {
         let run = run.data();
         for offset in (0..=run.len().get()).map(RunOffset::new) {
             let caret = run.caret_box(offset);
-            let back = run.offset_at(caret.x0 as f32 + 0.1, (caret.y0 + caret.y1) as f32 / 2.0);
+            let back = run.offset_at(DocPoint::new(
+                DocPx::new(caret.x0 as f32 + 0.1),
+                DocPx::new((caret.y0 + caret.y1) as f32 / 2.0),
+            ));
             assert_eq!(back, offset, "offset {}", offset.get());
         }
     }
@@ -1213,7 +1219,10 @@ mod tests {
         assert!(lines[1..].iter().all(|line| line.x0.abs() < 1e-3));
         assert!((run.caret_box(RunOffset::ZERO).x0 - 40.0).abs() < 1e-3);
         // A click inside the indent lands before the first character.
-        assert_eq!(run.offset_at(5.0, 5.0), RunOffset::ZERO);
+        assert_eq!(
+            run.offset_at(DocPoint::new(DocPx::new(5.0), DocPx::new(5.0))),
+            RunOffset::ZERO
+        );
         // The plain run is untouched.
         assert!(plain.data().caret_box(RunOffset::ZERO).x0.abs() < 1e-3);
         let (_, empty) = measurer.measure_run("", &indented, 120.0);

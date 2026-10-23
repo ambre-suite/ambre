@@ -81,16 +81,16 @@ rather than storing the default (`ambre-spec-trame-schema.md section 4`, "absenc
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::ResizeCol { version, sheet_id, col, width_px }` | UI to Logic | the column's position and its new width, in unzoomed px (`TRAME-UI-040`) |
-| `TrameCommand::ResizeRow { version, sheet_id, row, height_px }` | UI to Logic | the row analogue |
+| `TrameCommand::ResizeCol { version, sheet_id, col, width }` | UI to Logic | the column's position and its new width, a `DocPx` before the zoom (`TRAME-UI-040`) |
+| `TrameCommand::ResizeRow { version, sheet_id, row, height }` | UI to Logic | the row analogue |
 | `TrameEvent::DataReset` | Logic to UI | the confirmation: repaint, then adopt the sizes the next answer carries |
 
 **View state.** Two fields of `TrameUiState`, holding only the sizes that differ from the default,
 plus the live guide:
 
 ```rust
-col_widths: HashMap<u32, f32>,            // keyed by grid position, mirrors the container
-row_heights: HashMap<u32, f32>,
+col_widths: HashMap<Col, DocPx>,          // keyed by grid position, mirrors the container
+row_heights: HashMap<Row, DocPx>,
 resize_preview: Option<ResizePreview>,    // Col(x) or Row(y), in physical px
 ```
 

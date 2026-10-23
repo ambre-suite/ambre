@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{BlockType, DocOffset, ParagraphStyle};
-use ambre_core::{FootnoteId, Pt};
+use ambre_core::{DocPx, FootnoteId, Pt};
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
@@ -22,9 +22,9 @@ use crate::layout::run::{CellBorderPx, CellShape, CellStyle, ShapedRun, TableSha
 use crate::logic::tables::{Grid, surviving_regions};
 use crate::note;
 
-/// The height of a horizontal rule, in pixels. One device pixel, per the
-/// measurement table of section 2.
-const RULE_HEIGHT_PX: f32 = 1.0;
+/// The height of a horizontal rule: one pixel of the document, per the
+/// measurement table of the pagination spec.
+const RULE_HEIGHT: DocPx = DocPx::new(1.0);
 
 /// The whole document laid out: the page box, and every block on a page.
 ///
@@ -553,7 +553,7 @@ fn measure_one(
     let (height_px, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (0.0, None),
-        BlockType::HRule => (RULE_HEIGHT_PX, None),
+        BlockType::HRule => (RULE_HEIGHT.get(), None),
         BlockType::Image => (
             image_height(measurer, tree, id, &style, text_width_px),
             None,
@@ -942,7 +942,7 @@ mod tests {
         let measured = measure_document(&mut measurer, &document, 400.0);
         assert_eq!(measured.len(), 2);
         assert_eq!(measured[0].height_px, 0.0);
-        assert_eq!(measured[1].height_px, RULE_HEIGHT_PX);
+        assert_eq!(measured[1].height_px, RULE_HEIGHT.get());
     }
 
     #[test]

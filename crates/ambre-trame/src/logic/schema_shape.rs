@@ -366,13 +366,13 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: default_sheet(),
         col: Col::new(0),
-        width_px: 120.0,
+        width: ambre_core::DocPx::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: default_sheet(),
         row: Row::new(0),
-        height_px: 33.0,
+        height: ambre_core::DocPx::new(33.0),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(

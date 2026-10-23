@@ -103,7 +103,9 @@ fn single_cell_selection_tracks_active() {
 #[test]
 fn axis_pointer_resolution_follows_variable_metrics() {
     let mut state = TrameUiState::new(800.0, 600.0);
-    state.col_widths.insert(Col::new(0), 160.0); // col 0 widened
+    state
+        .col_widths
+        .insert(Col::new(0), ambre_core::DocPx::new(160.0)); // col 0 widened
     // x just past the wide col 0 lands in col 1.
     assert_eq!(
         state.col_at_x(super::super::HEADER_WIDTH + 160.0 + 5.0),
@@ -115,7 +117,9 @@ fn axis_pointer_resolution_follows_variable_metrics() {
     );
     assert_eq!(state.col_at_x(0.0), None); // over the row-header strip
 
-    state.row_heights.insert(Row::new(0), 50.0);
+    state
+        .row_heights
+        .insert(Row::new(0), ambre_core::DocPx::new(50.0));
     assert_eq!(
         state.row_at_y(super::super::HEADER_HEIGHT + 50.0 + 5.0),
         Some(Row::new(1))
@@ -132,7 +136,7 @@ fn axis_pointer_resolution_follows_variable_metrics() {
 #[test]
 fn header_boundary_splits_insert_and_resize() {
     let state = TrameUiState::new(800.0, 600.0);
-    let boundary = super::super::HEADER_WIDTH + super::super::COL_WIDTH; // col 0's right edge
+    let boundary = super::super::HEADER_WIDTH + f64::from(super::super::COL_WIDTH.get()); // col 0's right edge
     // Lower half -> resize col 0.
     assert_eq!(
         state.header_hit(boundary, super::super::HEADER_HEIGHT * 0.8),
@@ -160,7 +164,7 @@ fn header_hit_resolves_zones() {
     // Column 0 right border (~130), lower half of the band, arms a resize.
     assert_eq!(
         state.header_hit(
-            super::super::HEADER_WIDTH + super::super::COL_WIDTH,
+            super::super::HEADER_WIDTH + f64::from(super::super::COL_WIDTH.get()),
             super::super::HEADER_HEIGHT * 0.8
         ),
         Some(HeaderHit::ColBorder(Col::new(0)))
@@ -169,7 +173,7 @@ fn header_hit_resolves_zones() {
     assert_eq!(
         state.header_hit(
             10.0,
-            super::super::HEADER_HEIGHT + super::super::ROW_HEIGHT + 5.0
+            super::super::HEADER_HEIGHT + f64::from(super::super::ROW_HEIGHT.get()) + 5.0
         ),
         Some(HeaderHit::RowBody(Row::new(1)))
     );
@@ -177,7 +181,7 @@ fn header_hit_resolves_zones() {
     assert_eq!(
         state.header_hit(
             super::super::HEADER_WIDTH * 0.8,
-            super::super::HEADER_HEIGHT + super::super::ROW_HEIGHT
+            super::super::HEADER_HEIGHT + f64::from(super::super::ROW_HEIGHT.get())
         ),
         Some(HeaderHit::RowBorder(Row::new(0)))
     );
@@ -295,11 +299,18 @@ fn extending_a_header_band_makes_the_selection_multi() {
 fn variable_metrics_round_trip_pixel_and_hit_test() {
     let mut state = TrameUiState::new(800.0, 600.0);
     // Col 0 widened to 160, row 0 heightened to 40.
-    state.col_widths.insert(Col::new(0), 160.0);
-    state.row_heights.insert(Row::new(0), 40.0);
+    state
+        .col_widths
+        .insert(Col::new(0), ambre_core::DocPx::new(160.0));
+    state
+        .row_heights
+        .insert(Row::new(0), ambre_core::DocPx::new(40.0));
 
     assert_eq!(state.col_width_of(Col::new(0)), 160.0);
-    assert_eq!(state.col_width_of(Col::new(1)), super::super::COL_WIDTH);
+    assert_eq!(
+        state.col_width_of(Col::new(1)),
+        f64::from(super::super::COL_WIDTH.get())
+    );
     assert_eq!(state.row_height_of(Row::new(0)), 40.0);
 
     // Cell (1,1) sits after the wide col 0 and below the tall row 0.
@@ -308,7 +319,13 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
         .expect("visible");
     assert_eq!(x, super::super::HEADER_WIDTH + 160.0);
     assert_eq!(y, super::super::HEADER_HEIGHT + 40.0);
-    assert_eq!((w, h), (super::super::COL_WIDTH, super::super::ROW_HEIGHT));
+    assert_eq!(
+        (w, h),
+        (
+            f64::from(super::super::COL_WIDTH.get()),
+            f64::from(super::super::ROW_HEIGHT.get())
+        )
+    );
 
     // Hit-testing the interior of that cell returns it.
     assert_eq!(state.cell_at(x + 5.0, y + 5.0), Some(at(1, 1)));
@@ -335,22 +352,22 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
     assert_eq!(state.header_h(), super::super::HEADER_HEIGHT * 2.0);
     assert_eq!(
         state.col_width_of(Col::new(0)),
-        super::super::COL_WIDTH * 2.0
+        f64::from(super::super::COL_WIDTH.get()) * 2.0
     );
     assert_eq!(
         state.row_height_of(Row::new(0)),
-        super::super::ROW_HEIGHT * 2.0
+        f64::from(super::super::ROW_HEIGHT.get()) * 2.0
     );
 
     // Column 1's left edge is the (doubled) header plus one (doubled) column.
     assert_eq!(
         state.col_x(Col::new(1)),
-        super::super::HEADER_WIDTH * 2.0 + super::super::COL_WIDTH * 2.0
+        super::super::HEADER_WIDTH * 2.0 + f64::from(super::super::COL_WIDTH.get()) * 2.0
     );
 
     // A point inside cell (2, 2) at 200% maps back to it.
-    let x = state.header_w() + super::super::COL_WIDTH * 2.0 * 2.0 + 1.0;
-    let y = state.header_h() + super::super::ROW_HEIGHT * 2.0 * 2.0 + 1.0;
+    let x = state.header_w() + f64::from(super::super::COL_WIDTH.get()) * 2.0 * 2.0 + 1.0;
+    let y = state.header_h() + f64::from(super::super::ROW_HEIGHT.get()) * 2.0 * 2.0 + 1.0;
     assert_eq!(state.cell_at(x, y), Some(at(2, 2)));
 
     // The preset clamp rejects out-of-range factors.

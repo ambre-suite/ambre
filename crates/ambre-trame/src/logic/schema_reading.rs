@@ -298,7 +298,7 @@ fn sheet_reading(
             Some(format!(
                 "column {} is {} px wide",
                 ordinal(col.get()),
-                reader.col_width(col)
+                reader.col_width(col).get()
             ))
         }
         SheetRoot::RowHeights => {
@@ -306,7 +306,7 @@ fn sheet_reading(
             Some(format!(
                 "row {} is {} px tall",
                 ordinal(row.get()),
-                reader.row_height(row)
+                reader.row_height(row).get()
             ))
         }
         SheetRoot::Cols => Some(format!(
@@ -452,7 +452,7 @@ fn a_stored_value_moving_moves_the_reading() {
         version: ambre_bus::ViewportVersion(0),
         sheet_id: super::schema::default_sheet(),
         col: Col::new(0),
-        width_px: 90.0,
+        width: ambre_core::DocPx::new(90.0),
     });
     let after = readings_of(&moved, &reopened(&moved)).lines;
     assert_ne!(render(&before), render(&after));

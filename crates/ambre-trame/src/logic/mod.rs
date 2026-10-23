@@ -13,6 +13,7 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
+use ambre_core::DocPx;
 use std::collections::{HashMap, HashSet};
 
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
@@ -177,12 +178,12 @@ pub struct TrameState {
     /// Active-sheet column widths (logical px) per grid column position,
     /// derived cache of `col_widths_{sheet}` (a `{col_uid -> width}` map),
     /// rebuilt by [`Self::reseed_metrics`] after any import or structural op.
-    /// Absence means the uniform [`DEFAULT_COL_WIDTH`]; the viewport response
+    /// Absence means the uniform [`COL_WIDTH`]; the viewport response
     /// fills the gap so the UI gets a complete slice (`trame-resize`).
-    col_widths: HashMap<Col, f32>,
+    col_widths: HashMap<Col, DocPx>,
     /// Active-sheet row heights (logical px) per grid row position. Row analogue
     /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
-    row_heights: HashMap<Row, f32>,
+    row_heights: HashMap<Row, DocPx>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
     /// formula engine

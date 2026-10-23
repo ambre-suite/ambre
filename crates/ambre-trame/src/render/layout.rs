@@ -6,6 +6,8 @@
 
 use std::collections::HashMap;
 
+use ambre_core::DocPx;
+
 use super::*;
 
 // -----------------------------------------------------------------------------
@@ -41,18 +43,18 @@ pub struct GridLayout<'a> {
     pub top: f64,
     /// Default column width (content area), used for any column without an
     /// explicit entry in [`col_widths`](Self::col_widths).
-    pub col_width: f64,
+    pub col_width: DocPx,
     /// Default row height (content area), used for any row without an explicit
     /// entry in [`row_heights`](Self::row_heights).
-    pub row_height: f64,
+    pub row_height: DocPx,
     /// Per-column widths (logical px) keyed by absolute grid column. A column
     /// with no entry (the common case, and PDF export with an empty map) falls
     /// back to the uniform [`col_width`](Self::col_width). Fed by the Logic
     /// thread's `col_widths_{sheet}` map (`trame-resize`).
-    pub col_widths: &'a HashMap<Col, f32>,
+    pub col_widths: &'a HashMap<Col, DocPx>,
     /// Per-row heights keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths).
-    pub row_heights: &'a HashMap<Row, f32>,
+    pub row_heights: &'a HashMap<Row, DocPx>,
     /// Absolute grid column at the content area's left edge.
     pub origin_col: Col,
     /// Absolute grid row at the content area's top edge.
@@ -92,22 +94,20 @@ impl GridLayout<'_> {
     /// Width (logical px) of column `col`: its per-column entry, else the
     /// uniform [`col_width`](Self::col_width).
     pub fn col_w(&self, col: Col) -> f64 {
-        self.col_widths
-            .get(&col)
-            .map(|&w| w as f64)
-            .unwrap_or(self.col_width)
-            * self.zoom.get()
+        let width = self.col_widths.get(&col).copied().unwrap_or(self.col_width);
+        f64::from(width.get()) * self.zoom.get()
     }
 
     /// Height (logical px) of row `row`: its per-row entry, else the uniform
     /// [`row_height`](Self::row_height). A hidden row still reports its natural
     /// height (callers skip it explicitly).
     pub fn row_h(&self, row: Row) -> f64 {
-        self.row_heights
+        let height = self
+            .row_heights
             .get(&row)
-            .map(|&h| h as f64)
-            .unwrap_or(self.row_height)
-            * self.zoom.get()
+            .copied()
+            .unwrap_or(self.row_height);
+        f64::from(height.get()) * self.zoom.get()
     }
 
     /// X of column `col`'s left edge relative to the surface, summing the

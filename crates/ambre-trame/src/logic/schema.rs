@@ -112,11 +112,11 @@ ambre_core::crdt_names! {
         /// The column-width map: `{col_uid -> width_px}` as an f64, keyed by
         /// the column's stable `Uid` so the width follows its column across
         /// inserts, deletes and reorders (`trame-resize`). Absence = the
-        /// uniform default [`DEFAULT_COL_WIDTH`]. LWW: concurrent resizes of
+        /// uniform default [`COL_WIDTH`]. LWW: concurrent resizes of
         /// the same column converge on the last writer, like any cell.
         ColWidths = "col_widths",
         /// The row-height map: `{row_uid -> height_px}`. Row analogue of
-        /// [`SheetRoot::ColWidths`]; absence = [`DEFAULT_ROW_HEIGHT`].
+        /// [`SheetRoot::ColWidths`]; absence = [`ROW_HEIGHT`].
         RowHeights = "row_heights",
     }
 }
@@ -207,15 +207,7 @@ pub(crate) struct FilterRecord {
     pub kind: FilterKind,
 }
 
-/// Uniform fallback metrics (logical px) for never-resized axes. Mirror the UI
-/// `COL_WIDTH` / `ROW_HEIGHT` defaults (`ui/grid.rs`); the viewport response
-/// fills unset columns/rows with these so the UI gets a complete slice.
-pub(crate) const DEFAULT_COL_WIDTH: f32 = 80.0;
-pub(crate) const DEFAULT_ROW_HEIGHT: f32 = 20.0;
-/// Lower clamp on a resize (logical px), matching the UI `MIN_COL_WIDTH` /
-/// `MIN_ROW_HEIGHT`. The resize pins a drag that would shrink past this.
-pub(crate) const MIN_COL_WIDTH: f32 = 24.0;
-pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;
+pub(crate) use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
 
 /// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
 /// [`delete_axis`](TrameState::delete_axis) share one body across rows/columns.

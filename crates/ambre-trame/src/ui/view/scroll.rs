@@ -37,7 +37,10 @@ impl GridScroll {
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let z = grid.zoom.get();
-        let line = (COL_WIDTH * z, ROW_HEIGHT * z);
+        let line = (
+            f64::from(COL_WIDTH.get()) * z,
+            f64::from(ROW_HEIGHT.get()) * z,
+        );
         let page = (grid.canvas_width, grid.canvas_height);
         let (dx, dy) = delta.to_px(line, page);
         // The shared model applies the step one for one, and lets a trackpad
@@ -63,8 +66,8 @@ impl GridScroll {
     /// Peel whole rows and columns out of the accumulator and pan the grid,
     /// keeping the sub-cell remainder.
     fn apply(&mut self, grid: &mut TrameUiState) -> ScrollOutcome {
-        let step_x = COL_WIDTH * grid.zoom.get();
-        let step_y = ROW_HEIGHT * grid.zoom.get();
+        let step_x = f64::from(COL_WIDTH.get()) * grid.zoom.get();
+        let step_y = f64::from(ROW_HEIGHT.get()) * grid.zoom.get();
         let dc = (self.accum_x / step_x) as i32;
         let dr = (self.accum_y / step_y) as i32;
         if dr == 0 && dc == 0 {

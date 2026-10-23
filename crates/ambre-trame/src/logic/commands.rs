@@ -177,14 +177,14 @@ impl TrameState {
                 version: _,
                 sheet_id,
                 col,
-                width_px,
-            } => self.resize_col(&sheet_id, col, width_px),
+                width,
+            } => self.resize_col(&sheet_id, col, width),
             TrameCommand::ResizeRow {
                 version: _,
                 sheet_id,
                 row,
-                height_px,
-            } => self.resize_row(&sheet_id, row, height_px),
+                height,
+            } => self.resize_row(&sheet_id, row, height),
             // -- Parameterless structural intents (grid context menu). Geometry
             // comes from the tracked active cell / selection (`SetActiveCell`).
             TrameCommand::InsertRowAbove => self.insert_axis(self.active.row),

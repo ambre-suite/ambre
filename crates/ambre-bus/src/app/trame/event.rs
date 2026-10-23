@@ -7,7 +7,7 @@
 
 use super::{CellPos, CellRect, Col, ColCount, MergeSpan, Row, RowCount};
 use crate::UserId;
-use ambre_core::Rgb;
+use ambre_core::{DocPx, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -28,16 +28,16 @@ pub enum TrameEvent {
         row_start: Row,
         col_start: Col,
         cells: Vec<DisplayCell>,
-        /// Per-column widths (physical px) for the requested column window,
+        /// Per-column widths (document px, before the zoom) for the requested column window,
         /// `col_widths[i]` being the width of column `col_start + i`
         /// (`trame-resize`, `trame-engine`). A column never resized carries
         /// the uniform default, so the UI can feed the slice straight into the
         /// variable-metric `GridLayout`. Empty only on an out-of-range request.
-        col_widths: Vec<f32>,
-        /// Per-row heights (physical px) for the requested row window, aligned to
+        col_widths: Vec<DocPx>,
+        /// Per-row heights (document px, before the zoom) for the requested row window, aligned to
         /// `row_start` the same way [`col_widths`](Self::ViewportData::col_widths)
         /// is to `col_start`.
-        row_heights: Vec<f32>,
+        row_heights: Vec<DocPx>,
     },
 
     /// The resolved formatting of the **active cell** after a

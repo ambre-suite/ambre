@@ -232,5 +232,8 @@ fn viewport_metrics(
     else {
         panic!("expected ViewportData");
     };
-    (col_widths, row_heights)
+    (
+        col_widths.iter().map(|w| w.get()).collect(),
+        row_heights.iter().map(|h| h.get()).collect(),
+    )
 }

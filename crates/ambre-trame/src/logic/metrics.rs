@@ -27,12 +27,12 @@ impl TrameState {
         &mut self,
         sheet_id: &SheetId,
         col: Col,
-        width_px: f32,
+        width: DocPx,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let width = width_px.max(MIN_COL_WIDTH);
+        let width = width.max(MIN_COL_WIDTH);
         // Materialize the column to mint/resolve its stable id (materialize keys
         // on a cell; row 0 is the cheapest anchor). Beyond the cap: drop.
         let Some((_, col_uid)) = self.materialize(CellPos::new(Row::ZERO, col)) else {
@@ -41,7 +41,7 @@ impl TrameState {
         let _ = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::ColWidths, &self.active_sheet).as_str())
-            .insert(&col_uid.to_key_part(), width as f64);
+            .insert(&col_uid.to_key_part(), f64::from(width.get()));
         self.doc.commit();
         self.col_widths.insert(col, width);
         let update = self.flush_delta();
@@ -59,19 +59,19 @@ impl TrameState {
         &mut self,
         sheet_id: &SheetId,
         row: Row,
-        height_px: f32,
+        height: DocPx,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let height = height_px.max(MIN_ROW_HEIGHT);
+        let height = height.max(MIN_ROW_HEIGHT);
         let Some((row_uid, _)) = self.materialize(CellPos::new(row, Col::ZERO)) else {
             return TrameOutcome::display_only(vec![]);
         };
         let _ = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::RowHeights, &self.active_sheet).as_str())
-            .insert(&row_uid.to_key_part(), height as f64);
+            .insert(&row_uid.to_key_part(), f64::from(height.get()));
         self.doc.commit();
         self.row_heights.insert(row, height);
         let update = self.flush_delta();
@@ -101,7 +101,7 @@ impl TrameState {
                     continue;
                 };
                 if let Some(pos) = self.index.col_pos(&uid) {
-                    self.col_widths.insert(pos, *w as f32);
+                    self.col_widths.insert(pos, DocPx::new(*w as f32));
                 }
             }
         }
@@ -115,26 +115,20 @@ impl TrameState {
                     continue;
                 };
                 if let Some(pos) = self.index.row_pos(&uid) {
-                    self.row_heights.insert(pos, *h as f32);
+                    self.row_heights.insert(pos, DocPx::new(*h as f32));
                 }
             }
         }
     }
 
     /// Width (logical px) of column `col` on the active sheet: its resized value
-    /// or the uniform [`DEFAULT_COL_WIDTH`]. Used to pack the viewport slice.
-    pub(super) fn col_width(&self, col: Col) -> f32 {
-        self.col_widths
-            .get(&col)
-            .copied()
-            .unwrap_or(DEFAULT_COL_WIDTH)
+    /// or the uniform [`COL_WIDTH`]. Used to pack the viewport slice.
+    pub(super) fn col_width(&self, col: Col) -> DocPx {
+        self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH)
     }
     /// Height (logical px) of row `row`: its resized value or the uniform
-    /// [`DEFAULT_ROW_HEIGHT`].
-    pub(super) fn row_height(&self, row: Row) -> f32 {
-        self.row_heights
-            .get(&row)
-            .copied()
-            .unwrap_or(DEFAULT_ROW_HEIGHT)
+    /// [`ROW_HEIGHT`].
+    pub(super) fn row_height(&self, row: Row) -> DocPx {
+        self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT)
     }
 }

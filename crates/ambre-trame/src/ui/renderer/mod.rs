@@ -205,9 +205,15 @@ mod tests {
     fn the_drawn_cell_is_the_hit_tested_cell() {
         let mut state = fixture(&[]);
         assert!(state.set_zoom(ambre_core::ZoomFactor::positive(1.25)));
-        state.col_widths.insert(Col::new(4), 150.0);
-        state.col_widths.insert(Col::new(6), 30.0);
-        state.row_heights.insert(Row::new(13), 44.0);
+        state
+            .col_widths
+            .insert(Col::new(4), ambre_core::DocPx::new(150.0));
+        state
+            .col_widths
+            .insert(Col::new(6), ambre_core::DocPx::new(30.0));
+        state
+            .row_heights
+            .insert(Row::new(13), ambre_core::DocPx::new(44.0));
         state.hidden_rows = vec![Row::new(12), Row::new(15)];
         assert!(state.scroll_by(RowDelta::new(10), ColDelta::new(3)));
         let layout = screen_layout(&state);
@@ -289,8 +295,8 @@ mod tests {
                 (9, 1, "hidden"),
             ]);
             state.cell_cache.get_mut(&at(4, 3)).unwrap().merge_span = Some(span(2, 2));
-            state.col_widths.insert(Col::new(3), 150.0);
-            state.row_heights.insert(Row::new(5), 44.0);
+            state.col_widths.insert(Col::new(3), ambre_core::DocPx::new(150.0));
+            state.row_heights.insert(Row::new(5), ambre_core::DocPx::new(44.0));
             state.hidden_rows = vec![Row::new(9)];
             state.dirty_cells.insert(CellPos::new(Row::new(2), Col::new(2)));
             state.resize(width, height);
@@ -423,7 +429,7 @@ mod tests {
             HEADER_WIDTH,
             HEADER_HEIGHT,
             800.0,
-            HEADER_HEIGHT + ROW_HEIGHT,
+            HEADER_HEIGHT + f64::from(ROW_HEIGHT.get()),
         );
         draw_cells(
             &mut surface,
@@ -510,7 +516,12 @@ mod tests {
         // a rect (the per-cell separators are only ever stroked as lines). The
         // walk draws in sheet coordinates: the camera maps the span onto the
         // screen layout's rect.
-        let span_rect = Rect::new(0.0, 0.0, 2.0 * COL_WIDTH, 2.0 * ROW_HEIGHT);
+        let span_rect = Rect::new(
+            0.0,
+            0.0,
+            2.0 * f64::from(COL_WIDTH.get()),
+            2.0 * f64::from(ROW_HEIGHT.get()),
+        );
         assert_eq!(
             cells::sheet_camera(&state).transform_rect_bbox(span_rect),
             screen_layout(&state).merge_rect(at(0, 0), span(2, 2)),

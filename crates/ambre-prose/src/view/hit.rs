@@ -5,7 +5,7 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
-use ambre_core::{ViewPoint, ViewPx};
+use ambre_core::{DocPoint, DocPx, ViewPoint, ViewPx};
 use ambre_draw::HitTest;
 use loro::TreeID;
 
@@ -100,7 +100,10 @@ fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> 
     let data = run.data();
     let x = x - frame.text_x - data.indent_px();
     let y = (y - top).clamp(0.0, data.height().max(0.0));
-    Some((id, data.offset_at(x, y)))
+    Some((
+        id,
+        data.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y))),
+    ))
 }
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
@@ -254,7 +257,10 @@ impl ProseUiState {
         let run = self.drawn_of(slot.block)?.data();
         let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
         let y = (y_in_page - slot.top).clamp(0.0, (slot.bottom - slot.top).max(0.0));
-        Some((block_id(slot.block), run.offset_at(x, y)))
+        Some((
+            block_id(slot.block),
+            run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y))),
+        ))
     }
 
     /// The indices of the blocks a page shows, in flow order. Read from the
@@ -304,7 +310,10 @@ impl ProseUiState {
             let x = x_in_page - layout.margin_left_px - run.indent_px();
             return Some((
                 new_block,
-                HitOffset::Drawn(DocOffset::new(run.offset_at(x, y_body - at.top).get())),
+                HitOffset::Drawn(DocOffset::new(
+                    run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y_body - at.top)))
+                        .get(),
+                )),
             ));
         }
         let mut chosen: Option<&crate::view::provisional::Piece> = None;
@@ -342,7 +351,7 @@ impl ProseUiState {
                 let run = run.data();
                 let x = x_in_page - layout.margin_left_px - run.indent_px();
                 let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
-                run.offset_at(x, y)
+                run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y)))
             }
             None => RunOffset::ZERO,
         };

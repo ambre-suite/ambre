@@ -85,7 +85,10 @@ fn metrics(state: &mut TrameState, n: u32) -> (Vec<f32>, Vec<f32>) {
     else {
         panic!("expected ViewportData");
     };
-    (col_widths, row_heights)
+    (
+        col_widths.iter().map(|w| w.get()).collect(),
+        row_heights.iter().map(|h| h.get()).collect(),
+    )
 }
 
 /// Two peers on one workbook, each with its own identity.
@@ -358,13 +361,13 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
         row: Row::new(1),
-        height_px: 40.0,
+        height: ambre_core::DocPx::new(40.0),
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_bus::ViewportVersion(1),
         sheet_id: sheet_id.clone(),
         col: Col::new(2),
-        width_px: 150.0,
+        width: ambre_core::DocPx::new(150.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id,
@@ -413,11 +416,11 @@ fn a_column_is_never_narrower_than_its_minimum() {
             version: ambre_bus::ViewportVersion(1),
             sheet_id: sheet_id.clone(),
             col: Col::new(col),
-            width_px: width,
+            width: ambre_core::DocPx::new(width),
         });
     }
     let (widths, _) = metrics(&mut state, 3);
-    assert_eq!(widths, [MIN_COL_WIDTH; 3]);
+    assert_eq!(widths, [MIN_COL_WIDTH.get(); 3]);
 }
 
 /// A write ten thousand lines past the used range is refused with no
