@@ -3060,7 +3060,7 @@ mod tests {
             document_id: space.document_id(),
             key: ambre_core::KeyId::from_array([2; 16]),
             previous: ambre_core::KeyId::from_array([1; 16]),
-            sealed: vec![2; 200],
+            sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
         };
         let revoked = crate::routes::share::revoke_and_rotate(
             State(state.clone()),
@@ -3256,7 +3256,7 @@ mod tests {
             document_id: meta,
             key: ambre_core::KeyId::from_array([2; 16]),
             previous: ambre_core::KeyId::from_array([1; 16]),
-            sealed: vec![2; 200],
+            sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
         };
         let keys = members
             .iter()

@@ -759,7 +759,7 @@ pub fn seal_link(
         document_id,
         key,
         previous: previous.id(),
-        sealed: object_bytes(key, signing_key, &sealed),
+        sealed: ambre_core::SealedPreviousKey::new(object_bytes(key, signing_key, &sealed)),
     })
 }
 
@@ -782,7 +782,7 @@ pub fn open_link(
         return Err(PipelineError::WrongDocument);
     }
     check_key(link.key, next)?;
-    let (key_id, author, sealed) = object_parts(&link.sealed, next)?;
+    let (key_id, author, sealed) = object_parts(link.sealed.as_bytes(), next)?;
     let aad = object_aad(key_id, &link_aad(document_id, link.previous));
     let previous = next.open_previous(&sealed, &aad, &author)?;
     if previous.id() == link.previous {

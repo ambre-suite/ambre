@@ -1506,7 +1506,7 @@ mod handler_tests {
             document_id: ambre_core::DocumentId::parse_str(doc_id).unwrap(),
             key: ambre_core::KeyId::from_array([key; 16]),
             previous: ambre_core::KeyId::from_array([previous; 16]),
-            sealed: vec![key; 200],
+            sealed: ambre_core::SealedPreviousKey::new(vec![key; 200]),
         };
         base64_encode(&link.encode().unwrap())
     }

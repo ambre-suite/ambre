@@ -142,6 +142,14 @@ define_payload! {
 }
 
 define_payload! {
+    /// A document's previous key, sealed under the key that replaced it and
+    /// signed by the rotator: the body of a key link. The relay stores it and
+    /// opens none. Transparent to serde, so a link's postcard bytes are those
+    /// of the plain byte string it replaced.
+    SealedPreviousKey
+}
+
+define_payload! {
     /// One font file, as the Main thread fetched it for the Logic thread to
     /// shape on.
     FontBytes

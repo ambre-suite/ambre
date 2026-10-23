@@ -3900,7 +3900,6 @@ ambre-prose | src/xref.rs | crate::xref | Record.label | field | String	free-tex
 ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | encode() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	text content / label / parser input
-ambre-protocol | src/key_link.rs | crate::key_link | KeyLink.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-protocol | src/key_link.rs | crate::key_link | KeyLink::decode(bytes) | param | &[u8]	generic	wire codec
 ambre-protocol | src/key_link.rs | crate::key_link | KeyLink::encode() | ret | Result<Vec<u8>,SerializationError>	generic	wire codec
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant

@@ -124,7 +124,7 @@ pub use object_key::ObjectKey;
 pub use passphrase::Passphrase;
 pub use payload::{
     DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
-    PlaintextContainer, SealedContainer, SealedRowBytes, SnapshotBytes,
+    PlaintextContainer, SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};

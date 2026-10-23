@@ -86,7 +86,9 @@ pub(crate) fn signed_by_writers(
     };
     links
         .into_iter()
-        .filter(|link| pipeline::object_author(&link.sealed).is_ok_and(|a| signers.contains(&a)))
+        .filter(|link| {
+            pipeline::object_author(link.sealed.as_bytes()).is_ok_and(|a| signers.contains(&a))
+        })
         .collect()
 }
 
@@ -203,8 +205,10 @@ mod tests {
         let document_id = DocumentId::new();
         let (keys, links) = rotations(document_id, 1);
         let mut tampered = links[0].clone();
-        let last = tampered.sealed.len() - 1;
-        tampered.sealed[last] ^= 1;
+        let mut sealed = tampered.sealed.into_bytes();
+        let last = sealed.len() - 1;
+        sealed[last] ^= 1;
+        tampered.sealed = ambre_core::SealedPreviousKey::new(sealed);
         let chain = Chain::new(document_id, [tampered]);
         assert!(chain.recover(document_id, &keys[1], keys[0].id()).is_none());
 

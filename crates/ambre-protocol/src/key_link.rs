@@ -25,7 +25,7 @@ pub struct KeyLink {
     pub previous: KeyId,
     /// `previous`, sealed under `key` and signed by the rotator. Its header
     /// names `key` and the rotator's signing key.
-    pub sealed: Vec<u8>,
+    pub sealed: ambre_core::SealedPreviousKey,
 }
 
 impl KeyLink {
@@ -77,7 +77,7 @@ mod tests {
             document_id: DocumentId::from_bytes([1; 16]),
             key: KeyId::from_array([2; 16]),
             previous: KeyId::from_array([previous; 16]),
-            sealed: vec![7; sealed],
+            sealed: ambre_core::SealedPreviousKey::new(vec![7; sealed]),
         }
     }
 
@@ -94,5 +94,17 @@ mod tests {
         assert_eq!(link(220, 2).validate(), Err(ValidationError::SelfLink));
         let sent = link(220, 3);
         assert_eq!(KeyLink::decode(&sent.encode().unwrap()).unwrap(), sent);
+    }
+
+    /// The seal travels as the byte string it always did, last in the link:
+    /// its length as a varint, then the bytes.
+    #[test]
+    fn a_link_encodes_its_seal_as_a_plain_byte_string() {
+        let encoded = link(220, 3).encode().unwrap();
+        let seal = [[0xdc, 0x01].as_slice(), &[7; 220]].concat();
+        assert!(
+            encoded.ends_with(&seal),
+            "220 as a postcard varint, then the bytes"
+        );
     }
 }
