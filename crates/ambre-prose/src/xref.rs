@@ -15,30 +15,22 @@ use crate::events::{CrossRefKind, ResolvedCrossRef, block_id};
 use crate::layout::pass::PageLayout;
 use crate::numbering;
 
-/// The record's wire form. `postcard` prefixes the label with its length, so
+/// The record's wire form. `postcard` prefixes a label with its length, so
 /// no character of it can be read as a delimiter.
 #[derive(Serialize, Deserialize)]
 struct Record {
     peer: ambre_core::PeerId,
     counter: ambre_core::OpCounter,
-    /// 0 a page number, 1 a section number, 2 a label.
-    kind: u8,
-    label: String,
+    kind: CrossRefKind,
 }
 
 /// The mark value of a reference to `target`.
 #[must_use]
 pub fn encode(target: TreeID, kind: &CrossRefKind) -> String {
-    let (code, label) = match kind {
-        CrossRefKind::PageNumber => (0, String::new()),
-        CrossRefKind::SectionNumber => (1, String::new()),
-        CrossRefKind::CustomText(label) => (2, label.clone()),
-    };
     let record = Record {
         peer: ambre_core::PeerId(target.peer),
         counter: ambre_core::OpCounter(target.counter),
-        kind: code,
-        label,
+        kind: kind.clone(),
     };
     postcard::to_allocvec(&record)
         .map(|bytes| bytes.iter().map(|byte| format!("{byte:02x}")).collect())
@@ -61,13 +53,7 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)> {
         })
         .collect();
     let record: Record = postcard::from_bytes(&bytes?).ok()?;
-    let kind = match record.kind {
-        0 => CrossRefKind::PageNumber,
-        1 => CrossRefKind::SectionNumber,
-        2 => CrossRefKind::CustomText(record.label),
-        _ => return None,
-    };
-    Some((TreeID::new(record.peer.0, record.counter.0), kind))
+    Some((TreeID::new(record.peer.0, record.counter.0), record.kind))
 }
 
 /// What a reference to `target` shows, or `None` for the broken mark
@@ -154,6 +140,16 @@ mod tests {
             "no separator reaches the stored value"
         );
         assert_eq!(decode("zz"), None);
+        // The kind is the record's last byte: a code no kind holds is not read.
+        let page = encode(target, &CrossRefKind::PageNumber);
+        let head = page
+            .strip_suffix("00")
+            .expect("a page number ends in its code");
+        assert_eq!(
+            decode(&format!("{head}00")),
+            Some((target, CrossRefKind::PageNumber))
+        );
+        assert_eq!(decode(&format!("{head}03")), None);
         assert_eq!(decode("1:2"), None);
     }
 }

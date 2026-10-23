@@ -984,7 +984,10 @@ pub struct Suggestion {
 }
 
 /// What a cross reference shows (`features/ambre-spec-prose-cross-references.md`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// The reference record stores it, and the variant's position is its stored
+/// code: a new kind is appended, never inserted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CrossRefKind {
     /// The page the target starts on.
     PageNumber,

@@ -3545,8 +3545,6 @@ ambre-prose | src/view/walk.rs | crate::view::walk | draw_lines(x) | param | f64
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_lines(y) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_shape(x) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_shape(y) | param | f64	math	layout geometry local to algorithm
-ambre-prose | src/xref.rs | crate::xref | Record.kind | field | u8	debt	finding: cross-ref kind as u8 code (confirmed)
-ambre-prose | src/xref.rs | crate::xref | Record.label | field | String	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | encode() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	text content / label / parser input
