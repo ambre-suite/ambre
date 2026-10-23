@@ -647,7 +647,7 @@ pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath)
 /// One path, taken every time, beats two that differ by the byte at offset 5.
 pub(crate) fn open_ambre_file_picker(
     toasts: Toasts,
-    on_sealed: Callback<Vec<u8>>,
+    on_sealed: Callback<ambre_core::SealedContainer>,
     opened: RwSignal<Option<OpenedFile>>,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
@@ -688,7 +688,7 @@ pub(crate) fn open_ambre_file_picker(
 fn read_ambre_file(
     file: web_sys::File,
     toasts: Toasts,
-    on_sealed: Callback<Vec<u8>>,
+    on_sealed: Callback<ambre_core::SealedContainer>,
     opened: RwSignal<Option<OpenedFile>>,
 ) {
     wasm_bindgen_futures::spawn_local(async move {
@@ -707,18 +707,18 @@ fn read_ambre_file(
             ambre_core::classify(&bytes),
             Ok(ambre_core::ContainerKind::Sealed(_))
         ) {
-            on_sealed.run(bytes);
+            on_sealed.run(ambre_core::SealedContainer::new(bytes));
             return;
         }
         // The per-frame relay holds the store's seal, and resumes from here
         // (`RESID-025`).
-        opened.set(Some(OpenedFile(bytes)));
+        opened.set(Some(OpenedFile(ambre_core::PlaintextContainer::new(bytes))));
     });
 }
 
 /// A plaintext container the picker read, on its way to the store's seal.
 #[derive(Clone)]
-pub(crate) struct OpenedFile(pub(crate) Vec<u8>);
+pub(crate) struct OpenedFile(pub(crate) ambre_core::PlaintextContainer);
 
 /// Attribute a plaintext container, persist its payload sealed and navigate
 /// to it.
@@ -727,8 +727,13 @@ pub(crate) struct OpenedFile(pub(crate) Vec<u8>);
 /// point too, one round trip later and by way of the Sync worker. What it holds
 /// is a whole plaintext container, so the two lineages share every step after
 /// the seal comes off (`DOCFILE-014`).
-pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: crate::vault::Vault) {
-    let Some((document_id, doc_type, payload)) = read_container(&bytes, toasts) else {
+pub(crate) fn open_plaintext_container(
+    container: ambre_core::PlaintextContainer,
+    toasts: Toasts,
+    vault: crate::vault::Vault,
+) {
+    let Some((document_id, doc_type, payload)) = read_container(container.as_bytes(), toasts)
+    else {
         return;
     };
     // The payload lands as every copy does, sealed under the session's key.

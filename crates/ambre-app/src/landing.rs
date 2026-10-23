@@ -122,10 +122,10 @@ pub fn landing_view(
     // (`DOCFILE-014`). The bytes stay in this signal, not in the dialog: the
     // prompt owns the passphrase and nothing else, and the two only meet on
     // submission.
-    let sealed_file = RwSignal::new(None::<Vec<u8>>);
+    let sealed_file = RwSignal::new(None::<ambre_core::SealedContainer>);
     let passphrase_open = RwSignal::new(false);
-    let on_sealed = Callback::new(move |bytes: Vec<u8>| {
-        sealed_file.set(Some(bytes));
+    let on_sealed = Callback::new(move |file: ambre_core::SealedContainer| {
+        sealed_file.set(Some(file));
         passphrase_open.set(true);
     });
     let on_passphrase = {

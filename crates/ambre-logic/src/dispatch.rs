@@ -1152,7 +1152,7 @@ mod tests {
             state.handle_logic_event(LogicEvent::Rest {
                 id,
                 evt: RestEvent::DocFileSealed {
-                    data: b"sealed bytes".to_vec(),
+                    data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
                 },
             });
             assert_eq!(export_bytes(&ui).as_deref(), Some(&b"sealed bytes"[..]));
@@ -1208,7 +1208,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Rest {
             id,
             evt: RestEvent::DocFileSealed {
-                data: b"sealed bytes".to_vec(),
+                data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
             },
         });
         assert_eq!(
@@ -2031,7 +2031,7 @@ mod tests {
                 passphrase: secret(),
             },
             RestCommand::OpenDocFile {
-                sealed: vec![1],
+                sealed: ambre_core::SealedContainer::new(vec![1]),
                 passphrase: secret(),
             },
             RestCommand::SealLocalRow {

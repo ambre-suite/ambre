@@ -38,7 +38,11 @@ impl SyncState {
         };
         match ambre_crypto::aead::seal_file(&plaintext, &sealed_aad(&salt), &key) {
             Ok((nonce, ciphertext)) => {
-                let data = write_ambre_sealed(&salt, &nonce, &ciphertext);
+                let data = ambre_core::SealedContainer::new(write_ambre_sealed(
+                    &salt,
+                    &nonce,
+                    &ciphertext,
+                ));
                 self.reply(id, RestEvent::DocFileSealed { data });
             }
             Err(_) => {
@@ -58,10 +62,10 @@ impl SyncState {
     pub(crate) fn handle_open_doc_file(
         &self,
         id: RequestId,
-        sealed: Vec<u8>,
+        sealed: ambre_core::SealedContainer,
         passphrase: SecretBytes,
     ) {
-        let Ok(envelope) = parse_sealed_header(&sealed) else {
+        let Ok(envelope) = parse_sealed_header(sealed.as_bytes()) else {
             tracing::warn!("Sync: OpenDocFile: not a sealed .ambre file");
             self.reply(id, RestEvent::DocFileOpenFailed);
             return;

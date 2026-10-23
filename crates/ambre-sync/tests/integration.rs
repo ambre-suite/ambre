@@ -515,7 +515,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
-        RestEvent::DocFileSealed { data } => data,
+        RestEvent::DocFileSealed { data } => data.into_bytes(),
         other => panic!("expected DocFileSealed, got {other:?}"),
     };
 
@@ -534,7 +534,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         &mut state,
         open_id,
         RestCommand::OpenDocFile {
-            sealed,
+            sealed: ambre_core::SealedContainer::new(sealed),
             passphrase: b"correct horse".to_vec().into(),
         },
     );
@@ -567,7 +567,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         },
     );
     let sealed = match drain_rest(&rx, seal_id) {
-        RestEvent::DocFileSealed { data } => data,
+        RestEvent::DocFileSealed { data } => data.into_bytes(),
         other => panic!("expected DocFileSealed, got {other:?}"),
     };
 
@@ -598,7 +598,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
             &mut state,
             id,
             RestCommand::OpenDocFile {
-                sealed: bytes,
+                sealed: ambre_core::SealedContainer::new(bytes),
                 passphrase: passphrase.to_vec().into(),
             },
         );
@@ -622,7 +622,7 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
         &mut state,
         id,
         RestCommand::OpenDocFile {
-            sealed: plaintext,
+            sealed: ambre_core::SealedContainer::new(plaintext),
             passphrase: b"anything".to_vec().into(),
         },
     );

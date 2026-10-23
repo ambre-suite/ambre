@@ -436,7 +436,7 @@ pub enum RestCommand {
     /// / `DocFileOpenFailed`.
     OpenDocFile {
         /// A whole sealed container, header included.
-        sealed: Vec<u8>,
+        sealed: ambre_core::SealedContainer,
         passphrase: SecretBytes,
     },
 
@@ -591,7 +591,7 @@ pub enum RestEvent {
     // -- The native file (`.ambre`) ----------------------------------------------
     /// The sealed file, ready for the user's disk.
     DocFileSealed {
-        data: Vec<u8>,
+        data: ambre_core::SealedContainer,
     },
     /// Sealing did not happen, so there is no file. Carries no detail. Two
     /// failures reach here: a key derivation out of memory, and a document past

@@ -151,19 +151,15 @@ ambre-app | src/notify.rs | crate::notify | deliver(asked) | param | &Rc<Cell<bo
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | OpenedFile.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(ctx_menu) | param | RwSignal<Option<(f64,f64)>>	math	css position
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	math	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	math	UI flag signal
-ambre-app | src/platform.rs | crate::platform | open_ambre_file_picker(on_sealed) | param | Callback<Vec<u8>>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | open_file_picker(accept) | param | &str	debt	finding: open_file_picker takes accept as &str (confirmed)
 ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
-ambre-app | src/platform.rs | crate::platform | open_plaintext_container(bytes) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
-ambre-app | src/platform.rs | crate::platform | read_ambre_file(on_sealed) | param | Callback<Vec<u8>>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Option<(ambre_bus::ClipboardBlob,Option<String>)>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
@@ -738,9 +734,7 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	new
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
 ambre-bus | src/rest.rs | crate::rest | RestCommand::CreateMeeting.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
-ambre-bus | src/rest.rs | crate::rest | RestCommand::OpenDocFile.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
-ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
 ambre-bus | src/rest.rs | crate::rest | SecretBytes.0 | field | Zeroizing<Vec<u8>>	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype
@@ -4277,7 +4271,6 @@ ambre-sync | src/channels.rs | crate::channels | no_relay() | ret | String	free-
 ambre-sync | src/channels.rs | crate::channels | seal_channel_key() | ret | Result<SealedChannelKey,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | self_join_entry() | ret | Result<Option<ambre_core::EncodedLogEntry>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | unseal_channel_key() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/docfile.rs | crate::docfile | SyncState::handle_open_doc_file(sealed) | param | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::open() | ret | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::sealed() | ret | Option<Vec<u8>>	debt	finding: sealed document name bytes
 ambre-sync | src/documents.rs | crate::documents | SyncState::created_document() | ret | Result<DocumentId,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix

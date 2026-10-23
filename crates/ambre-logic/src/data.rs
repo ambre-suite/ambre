@@ -123,7 +123,7 @@ impl LogicState {
     /// Nothing remains to download into, and the bytes go out of scope sealed.
     pub(crate) fn resolve_pending_seal(&mut self, id: RequestId, evt: &RestEvent) -> bool {
         let answer = match evt {
-            RestEvent::DocFileSealed { data } => Ok(data.clone()),
+            RestEvent::DocFileSealed { data } => Ok(data.clone().into_bytes()),
             RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
             _ => return false,
         };

@@ -6,8 +6,9 @@
 //! Sync encrypts the ones it sends. They may hold document plaintext, so
 //! `Debug` prints the length alone, as the encoded roles do. Serde sees the
 //! bare bytes: the envelope that carries one is the same as the envelope that
-//! carried a `Vec<u8>`. One role is sealed rather than plaintext: the row of
-//! the local store, [`SealedRowBytes`].
+//! carried a `Vec<u8>`. Two roles are sealed rather than plaintext: the row of
+//! the local store, [`SealedRowBytes`], and the `.ambre` file sealed under a
+//! passphrase, [`SealedContainer`].
 
 use serde::{Deserialize, Serialize};
 
@@ -124,6 +125,20 @@ define_payload! {
     /// browser's database and cannot open it. A plaintext snapshot or delta is
     /// never one of these, so the store cannot receive one.
     SealedRowBytes
+}
+
+define_payload! {
+    /// A whole plaintext `.ambre` container, header included, as the picker
+    /// read it or as a sealed file opened to (`ambre-spec-docfile.md`).
+    PlaintextContainer
+}
+
+define_payload! {
+    /// A whole passphrase-sealed `.ambre` container, header included, as it
+    /// sits on the user's disk (`DOCFILE-010`). Only the Sync worker opens it,
+    /// to a [`PlaintextContainer`]; a store row is a [`SealedRowBytes`]
+    /// instead, under another key.
+    SealedContainer
 }
 
 define_payload! {
