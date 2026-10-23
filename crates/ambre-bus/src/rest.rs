@@ -264,7 +264,7 @@ pub enum RowPlace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealedRow {
     pub place: RowPlace,
-    pub sealed: Vec<u8>,
+    pub sealed: ambre_core::SealedRowBytes,
 }
 
 /// User (search result).
@@ -611,7 +611,7 @@ pub enum RestEvent {
     // -- The local store ---------------------------------------------------------
     /// The row, sealed for the store.
     LocalRowSealed {
-        sealed: Vec<u8>,
+        sealed: ambre_core::SealedRowBytes,
     },
     /// The rows asked for, in their order. `None` is a row this session cannot
     /// open. It was sealed under another key or at another place, modified, or

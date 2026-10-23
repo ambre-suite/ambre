@@ -11,13 +11,15 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
+use ambre_core::SealedRowBytes;
+
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::{
     LogicCommand, RequestId, RestCommand, RestEvent, RowPlace, SealedRow, SecretBytes,
 };
 
 /// What one sealed row comes back as: `None` when the store is locked.
-type Sealed = Box<dyn FnOnce(Option<Vec<u8>>)>;
+type Sealed = Box<dyn FnOnce(Option<SealedRowBytes>)>;
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.
 type Opened = Box<dyn FnOnce(Option<Vec<Option<SecretBytes>>>)>;
@@ -55,13 +57,10 @@ impl Vault {
     pub(crate) fn seal(
         &self,
         place: RowPlace,
-        plaintext: Vec<u8>,
-        done: impl FnOnce(Option<Vec<u8>>) + 'static,
+        plaintext: SecretBytes,
+        done: impl FnOnce(Option<SealedRowBytes>) + 'static,
     ) {
-        let cmd = RestCommand::SealLocalRow {
-            place,
-            plaintext: SecretBytes::new(plaintext),
-        };
+        let cmd = RestCommand::SealLocalRow { place, plaintext };
         self.ask(cmd, Pending::Seal(Box::new(done)));
     }
 
@@ -160,10 +159,14 @@ mod tests {
         let vault = Vault::new(tx);
         let got = Rc::new(RefCell::new(None));
         let doc = DocumentId::new();
-        vault.seal(RowPlace::Document(doc), b"plain".to_vec(), {
-            let got = Rc::clone(&got);
-            move |sealed| *got.borrow_mut() = Some(sealed)
-        });
+        vault.seal(
+            RowPlace::Document(doc),
+            SecretBytes::new(b"plain".to_vec()),
+            {
+                let got = Rc::clone(&got);
+                move |sealed| *got.borrow_mut() = Some(sealed)
+            },
+        );
         let (id, cmd) = request(&rx);
         let RestCommand::SealLocalRow { place, plaintext } = cmd else {
             panic!("expected a seal, got {cmd:?}");
@@ -173,10 +176,13 @@ mod tests {
 
         assert!(!vault.answer(RequestId(u64::MAX), &RestEvent::LocalStoreLocked));
         let sealed = RestEvent::LocalRowSealed {
-            sealed: b"sealed".to_vec(),
+            sealed: SealedRowBytes::new(b"sealed".to_vec()),
         };
         assert!(vault.answer(id, &sealed));
-        assert_eq!(*got.borrow(), Some(Some(b"sealed".to_vec())));
+        assert_eq!(
+            *got.borrow(),
+            Some(Some(SealedRowBytes::new(b"sealed".to_vec())))
+        );
         assert!(!vault.answer(id, &sealed), "an answer is taken once");
     }
 
@@ -190,7 +196,7 @@ mod tests {
         let opened = Rc::new(Cell::new(false));
         vault.seal(
             RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
-            b"x".to_vec(),
+            SecretBytes::new(b"x".to_vec()),
             {
                 let sealed = Rc::clone(&sealed);
                 move |row| sealed.set(row.is_none())
@@ -198,7 +204,7 @@ mod tests {
         );
         let row = SealedRow {
             place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
-            sealed: vec![1],
+            sealed: SealedRowBytes::new(vec![1]),
         };
         vault.open(vec![row], {
             let opened = Rc::clone(&opened);
@@ -220,7 +226,7 @@ mod tests {
         for key in ["a", "b"] {
             vault.seal(
                 RowPlace::Draft(ambre_bus::DraftKey::new(key.into())),
-                Vec::new(),
+                SecretBytes::new(Vec::new()),
                 |_| {},
             );
         }

@@ -12,7 +12,7 @@ use ambre_bus::DocumentId;
 use ambre_core::ByteSize;
 use ambre_core::residency::{Held, Residency, ViewTick};
 
-use crate::PersistWrite;
+use crate::SealedWrite;
 
 /// The bytes the local store may hold on one client: the row "Local store,
 /// per client" of `ambre-spec-budgets.md` section 6.
@@ -160,32 +160,32 @@ impl StoreLedger {
     /// Count one write or signal from Logic, and name the copies that leave.
     ///
     /// Any write marks the document unsent: only the relay's acknowledgement,
-    /// [`PersistWrite::Sent`], clears it (`RESID-019`).
-    pub fn observe(&mut self, id: DocumentId, write: &PersistWrite) -> Observed {
+    /// [`SealedWrite::Sent`], clears it (`RESID-019`).
+    pub fn observe(&mut self, id: DocumentId, write: &SealedWrite) -> Observed {
         let before = self.meta(id);
         let mut cost = self.costs.get(&id).copied().unwrap_or_default();
         match write {
-            PersistWrite::Snapshot(bytes) => {
+            SealedWrite::Snapshot(bytes) => {
                 cost = Cost {
                     snapshot: ByteSize::of_len(bytes.len()),
                     deltas: ByteSize(0),
                 };
                 self.charge(id, cost, true);
             }
-            PersistWrite::Delta(bytes) => {
+            SealedWrite::Delta(bytes) => {
                 cost.deltas = cost.deltas.saturating_add(ByteSize::of_len(bytes.len()));
                 self.charge(id, cost, true);
             }
-            PersistWrite::Session { .. } => self.charge(id, cost, true),
-            PersistWrite::Shown => {
+            SealedWrite::Session { .. } => self.charge(id, cost, true),
+            SealedWrite::Shown => {
                 if !self.residency.holds(id) {
                     self.charge(id, cost, false);
                 }
                 self.residency.pin(id);
             }
-            PersistWrite::Hidden => self.residency.unpin(id),
-            PersistWrite::Sent => self.residency.set_unsent(id, false),
-            PersistWrite::ForgetSession { .. } | PersistWrite::ReadBack { .. } => {}
+            SealedWrite::Hidden => self.residency.unpin(id),
+            SealedWrite::Sent => self.residency.set_unsent(id, false),
+            SealedWrite::ForgetSession { .. } | SealedWrite::ReadBack { .. } => {}
         }
         // The delta bytes alone change at every keystroke: a reload counts
         // them from the last row, which the next snapshot corrects.
@@ -285,6 +285,7 @@ impl StoreLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::SealedRowBytes;
 
     fn doc(n: u8) -> DocumentId {
         DocumentId::from_bytes([n; 16])
@@ -294,10 +295,10 @@ mod tests {
     /// Returns every copy that left on the way.
     fn settled(ledger: &mut StoreLedger, id: DocumentId, bytes: usize) -> Vec<DocumentId> {
         [
-            PersistWrite::Shown,
-            PersistWrite::Snapshot(vec![0; bytes]),
-            PersistWrite::Hidden,
-            PersistWrite::Sent,
+            SealedWrite::Shown,
+            SealedWrite::Snapshot(SealedRowBytes::new(vec![0; bytes])),
+            SealedWrite::Hidden,
+            SealedWrite::Sent,
         ]
         .iter()
         .flat_map(|write| ledger.observe(id, write).evict)
@@ -320,18 +321,24 @@ mod tests {
     #[test]
     fn a_shown_or_unsent_copy_never_leaves() {
         let mut ledger = StoreLedger::new(ByteSize(100));
-        ledger.observe(doc(1), &PersistWrite::Shown);
-        ledger.observe(doc(1), &PersistWrite::Snapshot(vec![0; 80]));
-        ledger.observe(doc(1), &PersistWrite::Hidden);
+        ledger.observe(doc(1), &SealedWrite::Shown);
+        ledger.observe(
+            doc(1),
+            &SealedWrite::Snapshot(SealedRowBytes::new(vec![0; 80])),
+        );
+        ledger.observe(doc(1), &SealedWrite::Hidden);
         assert!(ledger.unsent(doc(1)));
-        ledger.observe(doc(2), &PersistWrite::Shown);
-        let observed = ledger.observe(doc(2), &PersistWrite::Delta(vec![0; 80]));
+        ledger.observe(doc(2), &SealedWrite::Shown);
+        let observed = ledger.observe(
+            doc(2),
+            &SealedWrite::Delta(SealedRowBytes::new(vec![0; 80])),
+        );
         assert!(observed.evict.is_empty(), "both stay");
         assert_eq!(
             ledger.refused(doc(2), ByteSize(10), QuotaAttempt::First),
             Refusal::Full
         );
-        let observed = ledger.observe(doc(1), &PersistWrite::Sent);
+        let observed = ledger.observe(doc(1), &SealedWrite::Sent);
         assert_eq!(observed.evict, vec![doc(1)], "once acknowledged, it may go");
     }
 
@@ -343,8 +350,11 @@ mod tests {
         settled(&mut ledger, doc(1), 30);
         settled(&mut ledger, doc(2), 30);
         settled(&mut ledger, doc(3), 30);
-        ledger.observe(doc(4), &PersistWrite::Shown);
-        ledger.observe(doc(4), &PersistWrite::Delta(vec![0; 10]));
+        ledger.observe(doc(4), &SealedWrite::Shown);
+        ledger.observe(
+            doc(4),
+            &SealedWrite::Delta(SealedRowBytes::new(vec![0; 10])),
+        );
         assert_eq!(
             ledger.refused(doc(4), ByteSize(50), QuotaAttempt::First),
             Refusal::Retry {
@@ -369,8 +379,8 @@ mod tests {
         let mut ledger = StoreLedger::new(ByteSize(100));
         settled(&mut ledger, doc(1), 40);
         settled(&mut ledger, doc(2), 40);
-        ledger.observe(doc(1), &PersistWrite::Shown);
-        ledger.observe(doc(1), &PersistWrite::Hidden);
+        ledger.observe(doc(1), &SealedWrite::Shown);
+        ledger.observe(doc(1), &SealedWrite::Hidden);
         let mut reloaded = StoreLedger::new(ByteSize(100));
         for id in [doc(1), doc(2)] {
             let row = ledger.meta(id).map(|meta| meta.encode());
@@ -391,13 +401,17 @@ mod tests {
     #[test]
     fn only_a_change_of_the_row_is_recorded() {
         let mut ledger = StoreLedger::default();
-        assert!(ledger.observe(doc(1), &PersistWrite::Shown).record);
-        assert!(ledger.observe(doc(1), &PersistWrite::Delta(vec![1])).record);
+        assert!(ledger.observe(doc(1), &SealedWrite::Shown).record);
+        assert!(
+            ledger
+                .observe(doc(1), &SealedWrite::Delta(SealedRowBytes::new(vec![1])))
+                .record
+        );
         assert!(
             !ledger
                 .observe(
                     doc(1),
-                    &PersistWrite::ForgetSession {
+                    &SealedWrite::ForgetSession {
                         peer: ambre_core::PeerId(1)
                     }
                 )

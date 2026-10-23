@@ -2041,7 +2041,7 @@ mod tests {
             RestCommand::OpenLocalRows {
                 rows: vec![ambre_bus::SealedRow {
                     place: ambre_bus::RowPlace::Document(doc),
-                    sealed: vec![1],
+                    sealed: ambre_core::SealedRowBytes::new(vec![1]),
                 }],
             },
             RestCommand::CreateMeeting {

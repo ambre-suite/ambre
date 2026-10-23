@@ -16,10 +16,10 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::Sender;
 use ambre_bus::{DocType, DocumentId, LogicCommand, RowPlace, SealedRow};
-use ambre_logic::PersistWrite;
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
 use ambre_logic::store_ledger::{QuotaAttempt, Refusal, StoreLedger};
+use ambre_logic::{PersistWrite, SealedWrite};
 
 use crate::vault::Vault;
 
@@ -59,7 +59,7 @@ struct Inner {
     ledger: RefCell<StoreLedger>,
     /// Writes of a change the relay has not acknowledged, which the browser
     /// still refuses. Each is retried until it lands.
-    held: RefCell<Vec<(DocumentId, PersistWrite)>>,
+    held: RefCell<Vec<(DocumentId, SealedWrite)>>,
     /// Frames since the held writes were last tried.
     frames: Cell<u32>,
     to_logic: Sender<LogicCommand>,
@@ -141,7 +141,7 @@ impl LocalStore {
     }
 
     /// Perform one write or signal, its row sealed.
-    fn land(&self, id: DocumentId, write: PersistWrite) {
+    fn land(&self, id: DocumentId, write: SealedWrite) {
         let observed = self.inner.ledger.borrow_mut().observe(id, &write);
         for gone in &observed.evict {
             self.inner.store.delete_snapshot(*gone);
@@ -250,7 +250,7 @@ impl LocalStore {
     }
 
     /// Write a snapshot or a delta, and meet its outcome once it lands.
-    fn write(&self, id: DocumentId, write: PersistWrite, attempt: Attempt) {
+    fn write(&self, id: DocumentId, write: SealedWrite, attempt: Attempt) {
         let landed = match &write {
             PersistWrite::Snapshot(bytes) => self.inner.store.save_snapshot(id, bytes),
             PersistWrite::Delta(bytes) => self.inner.store.save_delta(id, bytes),
@@ -268,7 +268,7 @@ impl LocalStore {
 
     /// Meet a write the browser refused for its quota (`RESID-017`,
     /// `RESID-018`).
-    fn refused(&self, id: DocumentId, write: PersistWrite, attempt: Attempt) {
+    fn refused(&self, id: DocumentId, write: SealedWrite, attempt: Attempt) {
         let need = match &write {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
             _ => 0,
@@ -327,6 +327,7 @@ impl LocalStore {
 mod tests {
     use ambre_bus::conduit::{self, Receiver};
     use ambre_bus::{RequestId, RestCommand, RestEvent, SecretBytes};
+    use ambre_core::SealedRowBytes;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;
@@ -390,8 +391,14 @@ mod tests {
         let vault = local.inner.vault.clone();
         let doc = DocumentId::new();
 
-        local.apply(doc, PersistWrite::Snapshot(b"the document".to_vec()));
-        local.apply(doc, PersistWrite::Delta(b"an edit".to_vec()));
+        local.apply(
+            doc,
+            PersistWrite::Snapshot(ambre_core::SnapshotBytes::new(b"the document".to_vec())),
+        );
+        local.apply(
+            doc,
+            PersistWrite::Delta(ambre_core::DeltaBytes::new(b"an edit".to_vec())),
+        );
         let (first, cmd) = request(&vault_rx).await;
         let RestCommand::SealLocalRow { place, plaintext } = cmd else {
             panic!("expected a seal");
@@ -404,22 +411,22 @@ mod tests {
         vault.answer(
             second,
             &RestEvent::LocalRowSealed {
-                sealed: b"sealed edit".to_vec(),
+                sealed: SealedRowBytes::new(b"sealed edit".to_vec()),
             },
         );
         vault.answer(
             first,
             &RestEvent::LocalRowSealed {
-                sealed: b"sealed document".to_vec(),
+                sealed: SealedRowBytes::new(b"sealed document".to_vec()),
             },
         );
         assert_eq!(
-            store.load_snapshot(doc).await.unwrap().as_deref(),
-            Some(b"sealed document".as_slice())
+            store.load_snapshot(doc).await.unwrap(),
+            Some(SealedRowBytes::new(b"sealed document".to_vec()))
         );
         assert_eq!(
             store.load_deltas(doc).await.unwrap(),
-            [b"sealed edit".to_vec()]
+            [SealedRowBytes::new(b"sealed edit".to_vec())]
         );
 
         // A read back asks the worker to open both rows, in order.
@@ -433,7 +440,7 @@ mod tests {
         let RestCommand::OpenLocalRows { rows } = cmd else {
             panic!("expected an open");
         };
-        let sealed: Vec<&[u8]> = rows.iter().map(|row| row.sealed.as_slice()).collect();
+        let sealed: Vec<&[u8]> = rows.iter().map(|row| row.sealed.as_bytes()).collect();
         assert_eq!(sealed, [b"sealed document".as_slice(), b"sealed edit"]);
         vault.answer(
             id,

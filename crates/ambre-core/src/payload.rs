@@ -1,4 +1,4 @@
-//! Plaintext bytes, one type per role.
+//! Bytes that cross the threads, one type per role.
 //!
 //! A delta, a snapshot, an ephemeral sample, a media file and a font file all
 //! cross the threads as bytes. A bare `Vec<u8>` lets a snapshot pass where a
@@ -6,7 +6,8 @@
 //! Sync encrypts the ones it sends. They may hold document plaintext, so
 //! `Debug` prints the length alone, as the encoded roles do. Serde sees the
 //! bare bytes: the envelope that carries one is the same as the envelope that
-//! carried a `Vec<u8>`.
+//! carried a `Vec<u8>`. One role is sealed rather than plaintext: the row of
+//! the local store, [`SealedRowBytes`].
 
 use serde::{Deserialize, Serialize};
 
@@ -115,6 +116,14 @@ define_payload! {
     /// A media file as the user placed it, before Sync seals it or after Sync
     /// opens it.
     MediaBytes
+}
+
+define_payload! {
+    /// One row of the local store, sealed by the Sync worker under the store
+    /// key (`RESID-025`). The Main thread moves it between the worker and the
+    /// browser's database and cannot open it. A plaintext snapshot or delta is
+    /// never one of these, so the store cannot receive one.
+    SealedRowBytes
 }
 
 define_payload! {

@@ -651,14 +651,21 @@ const DELTAS_PER_SNAPSHOT: usize = 256;
 const HELD_EDITS_LIMIT: usize = 256;
 
 /// One write to local persistence, which the Main thread performs.
+///
+/// Logic makes it with the plaintext of the document: a [`SnapshotBytes`]
+/// and a [`DeltaBytes`]. The store receives it as a [`SealedWrite`], whose
+/// rows the Sync worker sealed (`RESID-025`). One variant never holds both.
+///
+/// [`SnapshotBytes`]: ambre_core::SnapshotBytes
+/// [`DeltaBytes`]: ambre_core::DeltaBytes
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PersistWrite {
+pub enum PersistWrite<S = ambre_core::SnapshotBytes, D = ambre_core::DeltaBytes> {
     /// The whole document. It replaces the stored one and every delta logged
     /// since, which it holds.
-    Snapshot(Vec<u8>),
+    Snapshot(S),
     /// A change appended to the document's log, imported after the snapshot on
     /// restore.
-    Delta(Vec<u8>),
+    Delta(D),
     /// A session's PeerID and the nonce it derives from, kept so a later
     /// open sends what the session left unsent (`AUTHOR-028`).
     Session {
@@ -683,7 +690,11 @@ pub enum PersistWrite {
     Sent,
 }
 
-impl PersistWrite {
+/// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
+/// row the Sync worker sealed.
+pub type SealedWrite = PersistWrite<ambre_core::SealedRowBytes, ambre_core::SealedRowBytes>;
+
+impl<S, D> PersistWrite<S, D> {
     /// Whether it writes to the store, rather than read it back or tell the
     /// store's ledger what the document is.
     #[must_use]
@@ -995,12 +1006,12 @@ impl LogicState {
         if compact {
             doc.logged = Some(0);
             let snapshot = doc.state.export_snapshot();
-            self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot.into_bytes()));
+            self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
         } else {
             doc.logged = logged;
             for delta in owed.deltas {
                 // The store row is sealed next, so it leaves as bare bytes.
-                self.send_to_persist(document_id, PersistWrite::Delta(delta.into_bytes()));
+                self.send_to_persist(document_id, PersistWrite::Delta(delta));
             }
         }
     }
@@ -1332,8 +1343,8 @@ mod pass_tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id,
             doc_type: DocType::Prose,
-            snapshot: snapshot.map(Into::into),
-            deltas: deltas.into_iter().map(Into::into).collect(),
+            snapshot,
+            deltas,
             sessions: Vec::new(),
         });
         state.grant_identity(document_id);
@@ -1565,7 +1576,7 @@ mod pass_tests {
         let snapshot = persist
             .try_iter()
             .filter_map(|(_, write)| match write {
-                PersistWrite::Snapshot(bytes) => Some(ambre_core::SnapshotBytes::new(bytes)),
+                PersistWrite::Snapshot(bytes) => Some(bytes),
                 _ => None,
             })
             .last()

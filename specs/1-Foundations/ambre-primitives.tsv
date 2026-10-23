@@ -168,7 +168,6 @@ ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Op
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | remember_dev_user(username) | param | &str	free-text	dev username
-ambre-app | src/platform.rs | crate::platform | store_container(sealed) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
@@ -201,10 +200,7 @@ ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	ge
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-app | src/tofu.rs | crate::tofu | TofuPrompt.changed | field | bool	math	named flag
 ambre-app | src/tofu.rs | crate::tofu | TofuPrompt::email() | ret | Option<&str>	free-text	email shown in the prompt (ambre_core::Email exists, display only)
-ambre-app | src/vault.rs | crate::vault | Sealed | alias | Box<dyn FnOnce(Option<Vec<u8>>)>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/vault.rs | crate::vault | Vault::answer() | ret | bool	generic	predicate result
-ambre-app | src/vault.rs | crate::vault | Vault::seal(done) | param | impl FnOnce(Option<Vec<u8>>)+'static	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
-ambre-app | src/vault.rs | crate::vault | Vault::seal(plaintext) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/activity.rs | crate::activity | ActivitySummary.mentions_all | field | bool	generic	fact flag mirrored from ambre-core ActivitySummary
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
@@ -745,9 +741,7 @@ ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field |
 ambre-bus | src/rest.rs | crate::rest | RestCommand::OpenDocFile.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
-ambre-bus | src/rest.rs | crate::rest | RestEvent::LocalRowSealed.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
-ambre-bus | src/rest.rs | crate::rest | SealedRow.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | SecretBytes.0 | field | Zeroizing<Vec<u8>>	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | SecretString.0 | field | Zeroizing<String>	newtype-inner	secret newtype
@@ -2015,9 +2009,7 @@ ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes
 ambre-logic | src/lib.rs | crate | LogicState.pending_seals | field | HashMap<RequestId,(DocumentId,String)>	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.snapshot | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | PersistWrite::Delta.0 | field | Vec<u8>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/lib.rs | crate | PersistWrite::Snapshot.0 | field | Vec<u8>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/lib.rs | crate | PersistWrite::is_write() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-logic | src/lib.rs | crate | PersistWrite<S,D>::is_write() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | authored_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | pass_clock() | ret | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | pass_clock()#2 | ret | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
@@ -2025,19 +2017,11 @@ ambre-logic | src/lib.rs | crate | stamp_pass(_start) | param | Option<f64>	math
 ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/persistence.rs | crate::persistence | DB_NAME | const | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | DB_VERSION | const | u32	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_deltas() | ret | oneshot::Receiver<Vec<Vec<u8>>>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_drafts() | ret | oneshot::Receiver<Vec<(DraftKey,Vec<u8>)>>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_snapshot() | ret | oneshot::Receiver<Option<Vec<u8>>>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named(db_name) | param | &str	generic	generic byte/text API or codec
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_delta(delta) | param | &[u8]	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_draft(row) | param | &[u8]	generic	generic byte/text API or codec
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot(snapshot) | param | &[u8]	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed() | ret | oneshot::Receiver<bool>	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed(snapshot) | param | Vec<u8>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::sessions_store(hex) | param | &str	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::write_snapshot(snapshot) | param | &[u8]	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | STORE_DELTAS | const | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | STORE_DRAFTS | const | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | STORE_META | const | &str	debt	finding: IndexedDB keys and store names as strings
@@ -2069,8 +2053,6 @@ ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() |
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::store_full(full) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/seal_queue.rs | crate::seal_queue | SealQueue.next | field | u64	newtype-inner	newtype field, constructor or accessor
-ambre-logic | src/seal_queue.rs | crate::seal_queue | SealQueue::push() | ret | Option<(SealTicket,Vec<u8>)>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/seal_queue.rs | crate::seal_queue | SealQueue::sealed(sealed) | param | Option<Vec<u8>>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/seal_queue.rs | crate::seal_queue | SealTicket.0 | field | u64	newtype-inner	newtype field, constructor or accessor
 ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report

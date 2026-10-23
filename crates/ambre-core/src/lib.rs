@@ -121,7 +121,8 @@ pub use name::{
 };
 pub use object_key::ObjectKey;
 pub use payload::{
-    DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes, SnapshotBytes,
+    DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes, SealedRowBytes,
+    SnapshotBytes,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};

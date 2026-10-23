@@ -22,7 +22,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_bus::DraftKey;
-use ambre_core::{DocumentId, SessionNonce, UserId};
+use ambre_core::{DocumentId, SealedRowBytes, SessionNonce, UserId};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -204,7 +204,7 @@ impl PersistenceStore {
     pub fn save_snapshot(
         &self,
         document_id: DocumentId,
-        snapshot: &[u8],
+        snapshot: &SealedRowBytes,
     ) -> oneshot::Receiver<Stored> {
         outcome(self.write_snapshot(document_id, snapshot))
     }
@@ -213,7 +213,11 @@ impl PersistenceStore {
     ///
     /// The next [`save_snapshot`](Self::save_snapshot) folds it away. The
     /// receiver says how the write ended.
-    pub fn save_delta(&self, document_id: DocumentId, delta: &[u8]) -> oneshot::Receiver<Stored> {
+    pub fn save_delta(
+        &self,
+        document_id: DocumentId,
+        delta: &SealedRowBytes,
+    ) -> oneshot::Receiver<Stored> {
         let hex = id_to_hex(document_id.as_bytes());
         let key = format!("{hex}:{}", unique_suffix());
         let txn = match self
@@ -229,7 +233,10 @@ impl PersistenceStore {
         let Ok(store) = txn.object_store(STORE_DELTAS) else {
             return outcome(None);
         };
-        if let Err(e) = store.put_with_key(bytes_to_js(delta).as_ref(), &JsValue::from_str(&key)) {
+        if let Err(e) = store.put_with_key(
+            bytes_to_js(delta.as_bytes()).as_ref(),
+            &JsValue::from_str(&key),
+        ) {
             tracing::warn!("Persistence: delta put failed for {hex}: {e:?}");
             return outcome(None);
         }
@@ -330,7 +337,7 @@ impl PersistenceStore {
     fn write_snapshot(
         &self,
         document_id: DocumentId,
-        snapshot: &[u8],
+        snapshot: &SealedRowBytes,
     ) -> Option<web_sys::IdbTransaction> {
         let key = id_to_hex(document_id.as_bytes());
         let stores = js_sys::Array::of2(
@@ -354,9 +361,10 @@ impl PersistenceStore {
             tracing::warn!("Persistence: save object_store failed for {key}");
             return None;
         };
-        if let Err(e) =
-            snapshots.put_with_key(bytes_to_js(snapshot).as_ref(), &JsValue::from_str(&key))
-        {
+        if let Err(e) = snapshots.put_with_key(
+            bytes_to_js(snapshot.as_bytes()).as_ref(),
+            &JsValue::from_str(&key),
+        ) {
             tracing::warn!("Persistence: save put failed for {key}: {e:?}");
             return None;
         }
@@ -387,7 +395,7 @@ impl PersistenceStore {
     pub fn save_snapshot_committed(
         &self,
         document_id: DocumentId,
-        snapshot: Vec<u8>,
+        snapshot: SealedRowBytes,
     ) -> oneshot::Receiver<bool> {
         let (tx, rx) = answer();
         let Some(txn) = self.write_snapshot(document_id, &snapshot) else {
@@ -423,7 +431,10 @@ impl PersistenceStore {
     ///
     /// Returns a one-shot receiver resolving to `Some(bytes)` if a snapshot
     /// exists, or `None` (no snapshot / read error). Awaited on the Main thread.
-    pub fn load_snapshot(&self, document_id: DocumentId) -> oneshot::Receiver<Option<Vec<u8>>> {
+    pub fn load_snapshot(
+        &self,
+        document_id: DocumentId,
+    ) -> oneshot::Receiver<Option<SealedRowBytes>> {
         let (tx, rx) = answer();
         let key = id_to_hex(document_id.as_bytes());
 
@@ -459,7 +470,7 @@ impl PersistenceStore {
                     .ok()
                     .filter(|v| !v.is_undefined() && !v.is_null())
                     .and_then(|v| v.dyn_into::<Uint8Array>().ok())
-                    .map(|a| a.to_vec());
+                    .map(|a| SealedRowBytes::new(a.to_vec()));
                 tx_ok.send(data);
             });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
@@ -477,7 +488,7 @@ impl PersistenceStore {
     /// Load every delta written since a document's snapshot, in no set order.
     ///
     /// Resolves to an empty list when there is none or the read failed.
-    pub fn load_deltas(&self, document_id: DocumentId) -> oneshot::Receiver<Vec<Vec<u8>>> {
+    pub fn load_deltas(&self, document_id: DocumentId) -> oneshot::Receiver<Vec<SealedRowBytes>> {
         let (tx, rx) = answer();
         let key = id_to_hex(document_id.as_bytes());
         let request = self
@@ -503,7 +514,7 @@ impl PersistenceStore {
                     .map(|rows| {
                         rows.iter()
                             .filter_map(|row| row.dyn_into::<Uint8Array>().ok())
-                            .map(|a| a.to_vec())
+                            .map(|a| SealedRowBytes::new(a.to_vec()))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -753,9 +764,12 @@ impl PersistenceStore {
     /// Keep a draft's sealed `row` under `key`, in place of the row there
     /// (fire-and-forget). A lost write leaves the draft as it was at the
     /// write before.
-    pub fn save_draft(&self, key: &DraftKey, row: &[u8]) {
+    pub fn save_draft(&self, key: &DraftKey, row: &SealedRowBytes) {
         if let Some(store) = self.drafts_store()
-            && let Err(e) = store.put_with_key(&bytes_to_js(row), &JsValue::from_str(key.as_str()))
+            && let Err(e) = store.put_with_key(
+                &bytes_to_js(row.as_bytes()),
+                &JsValue::from_str(key.as_str()),
+            )
         {
             tracing::warn!("Persistence: draft put failed: {e:?}");
         }
@@ -816,7 +830,7 @@ impl PersistenceStore {
         &self,
         lower: &DraftKey,
         upper: &DraftKey,
-    ) -> oneshot::Receiver<Vec<(DraftKey, Vec<u8>)>> {
+    ) -> oneshot::Receiver<Vec<(DraftKey, SealedRowBytes)>> {
         let (tx, rx) = answer();
         let range = web_sys::IdbKeyRange::bound(
             &JsValue::from_str(lower.as_str()),
@@ -859,7 +873,7 @@ impl PersistenceStore {
                             Some(text) => text.into_bytes(),
                             None => row.dyn_into::<Uint8Array>().ok()?.to_vec(),
                         };
-                        Some((DraftKey::new(key.as_string()?), row))
+                        Some((DraftKey::new(key.as_string()?), SealedRowBytes::new(row)))
                     })
                     .collect();
                 tx_ok.send(drafts);
@@ -990,6 +1004,11 @@ mod wasm_tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    /// A stored row: the store keeps the bytes it is handed, sealed or not.
+    fn row(bytes: &[u8]) -> SealedRowBytes {
+        SealedRowBytes::new(bytes.to_vec())
+    }
 
     /// The `IdbFactory` for this origin (headless Chrome always has one).
     fn factory() -> web_sys::IdbFactory {
@@ -1124,7 +1143,10 @@ mod wasm_tests {
             .expect("v1 database upgrades to v2 cleanly");
 
         // The pre-existing snapshot survived the upgrade untouched.
-        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(snapshot));
+        assert_eq!(
+            store.load_snapshot(doc).await.unwrap(),
+            Some(row(&snapshot))
+        );
 
         // The new store is usable after the upgrade.
         let user = UserId::from_bytes([4; 16]);
@@ -1145,25 +1167,28 @@ mod wasm_tests {
         let other = DocumentId::from_bytes([6; 16]);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
 
-        store.save_delta(doc, &[1]);
-        store.save_delta(doc, &[2]);
-        store.save_delta(other, &[9]);
+        store.save_delta(doc, &row(&[1]));
+        store.save_delta(doc, &row(&[2]));
+        store.save_delta(other, &row(&[9]));
         let mut deltas = store.load_deltas(doc).await.unwrap();
-        deltas.sort();
+        deltas.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
         assert_eq!(
             deltas,
-            vec![vec![1], vec![2]],
+            vec![row(&[1]), row(&[2])],
             "each document reads its own"
         );
 
         // A snapshot holds every delta before it, so it drops them.
-        assert_eq!(store.save_snapshot(doc, &[7, 7]).await, Ok(Stored::Done));
+        assert_eq!(
+            store.save_snapshot(doc, &row(&[7, 7])).await,
+            Ok(Stored::Done)
+        );
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
-        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(vec![7, 7]));
-        assert_eq!(store.load_deltas(other).await.unwrap(), vec![vec![9]]);
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(row(&[7, 7])));
+        assert_eq!(store.load_deltas(other).await.unwrap(), vec![row(&[9])]);
 
         // A delete takes both.
-        store.save_delta(doc, &[3]);
+        store.save_delta(doc, &row(&[3]));
         store.delete_snapshot(doc);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
         assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
@@ -1186,36 +1211,30 @@ mod wasm_tests {
             DraftKey::new(format!("{hex}:a")),
             DraftKey::new("z/b".to_owned()),
         );
-        assert_eq!(store.save_snapshot(doc, &[1]).await, Ok(Stored::Done));
-        store.save_delta(doc, &[2]);
-        store.save_draft(&mine, b"one");
-        store.save_draft(&theirs, b"two");
+        assert_eq!(store.save_snapshot(doc, &row(&[1])).await, Ok(Stored::Done));
+        store.save_delta(doc, &row(&[2]));
+        store.save_draft(&mine, &row(b"one"));
+        store.save_draft(&theirs, &row(b"two"));
         store.delete_snapshot(doc);
         let (first, last) = DraftKey::every();
         let every = || store.load_drafts(&first, &last);
         let rows = every().await.unwrap();
         assert_eq!(
             rows,
-            [
-                (mine.clone(), b"one".to_vec()),
-                (theirs.clone(), b"two".to_vec())
-            ]
+            [(mine.clone(), row(b"one")), (theirs.clone(), row(b"two"))]
         );
 
-        store.save_draft(&mine, b"one again");
+        store.save_draft(&mine, &row(b"one again"));
         store.delete_drafts(
             &DraftKey::new("z/".to_owned()),
             &DraftKey::new("z/\u{10FFFF}".to_owned()),
         );
-        assert_eq!(
-            every().await.unwrap(),
-            [(mine.clone(), b"one again".to_vec())]
-        );
+        assert_eq!(every().await.unwrap(), [(mine.clone(), row(b"one again"))]);
         store.delete_draft(&mine);
         assert!(every().await.unwrap().is_empty());
 
-        store.save_draft(&mine, b"one");
-        store.save_draft(&theirs, b"two");
+        store.save_draft(&mine, &row(b"one"));
+        store.save_draft(&theirs, &row(b"two"));
         store.clear_drafts();
         assert!(every().await.unwrap().is_empty());
     }
@@ -1236,8 +1255,11 @@ mod wasm_tests {
             DocumentId::from_bytes([10; 16]),
         );
         let mut ledger = StoreLedger::default();
-        ledger.observe(doc, &crate::PersistWrite::Shown);
-        ledger.observe(doc, &crate::PersistWrite::Snapshot(vec![1; 40]));
+        ledger.observe(doc, &crate::SealedWrite::Shown);
+        ledger.observe(
+            doc,
+            &crate::SealedWrite::Snapshot(ambre_core::SealedRowBytes::new(vec![1; 40])),
+        );
         let meta = ledger.meta(doc).expect("held");
         store.save_meta(doc, &meta);
         store.save_meta(other, &meta);
@@ -1293,9 +1315,9 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("the database upgrades cleanly");
-        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(vec![1, 2]));
-        store.save_delta(doc, &[4]);
-        assert_eq!(store.load_deltas(doc).await.unwrap(), vec![vec![4]]);
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(row(&[1, 2])));
+        store.save_delta(doc, &row(&[4]));
+        assert_eq!(store.load_deltas(doc).await.unwrap(), vec![row(&[4])]);
         let nonce = SessionNonce([3; 16]);
         store.save_session(doc, PeerId(5), nonce);
         assert_eq!(

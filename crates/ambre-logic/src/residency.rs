@@ -280,7 +280,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id,
             doc_type: DocType::Prose,
-            snapshot: saved.map(Into::into),
+            snapshot: saved,
             deltas: Vec::new(),
             sessions: Vec::new(),
         });

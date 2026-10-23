@@ -168,7 +168,8 @@ impl DraftKeeper {
                     };
                     let (sink, sealing) = (sink.clone(), Rc::clone(&sealing));
                     let place = RowPlace::Draft(key.clone());
-                    vault.seal(place, row.into_bytes(), move |sealed| {
+                    let plaintext = ambre_bus::SecretBytes::new(row.into_bytes());
+                    vault.seal(place, plaintext, move |sealed| {
                         let mut sealing = sealing.borrow_mut();
                         if sealing.latest.get(&key) != Some(&number) {
                             return;

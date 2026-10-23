@@ -475,7 +475,10 @@ impl LogicState {
             // counts from it. One that fails to export is fetched whole.
             let applied = match channel.snapshot(document_id) {
                 Ok(copy) => {
-                    self.send_to_persist(document_id, PersistWrite::Snapshot(copy));
+                    self.send_to_persist(
+                        document_id,
+                        PersistWrite::Snapshot(ambre_core::SnapshotBytes::new(copy)),
+                    );
                     self.send_to_persist(document_id, PersistWrite::Hidden);
                     copies.insert(document_id, horizon);
                     horizon
@@ -2670,7 +2673,7 @@ mod tests {
         drain(&store);
 
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        let copies: HashMap<DocumentId, Vec<u8>> = drain(&store)
+        let copies: HashMap<DocumentId, ambre_core::SnapshotBytes> = drain(&store)
             .into_iter()
             .filter_map(|(id, write)| match write {
                 PersistWrite::Snapshot(copy) => Some((id, copy)),
@@ -2711,7 +2714,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: meta,
             doc_type: DocType::Murmure,
-            snapshot: Some(copies[&meta].clone().into()),
+            snapshot: Some(copies[&meta].clone()),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });

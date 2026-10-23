@@ -734,7 +734,7 @@ pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts, vault: cr
     // The payload lands as every copy does, sealed under the session's key.
     vault.seal(
         ambre_bus::RowPlace::Document(document_id),
-        payload.into_bytes(),
+        ambre_bus::SecretBytes::new(payload.into_bytes()),
         move |sealed| match sealed {
             Some(sealed) => {
                 wasm_bindgen_futures::spawn_local(store_container(
@@ -780,7 +780,7 @@ fn read_container(
 async fn store_container(
     document_id: DocumentId,
     doc_type: ambre_bus::DocType,
-    sealed: Vec<u8>,
+    sealed: ambre_core::SealedRowBytes,
     toasts: Toasts,
 ) {
     let store = match ambre_logic::persistence::PersistenceStore::open().await {

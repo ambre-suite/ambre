@@ -34,7 +34,12 @@ impl SyncState {
         };
         let key = seed.derive_store_key();
         match ambre_crypto::aead::seal_row(&plaintext, &place_bytes(&place), &key) {
-            Ok(sealed) => self.reply(id, RestEvent::LocalRowSealed { sealed }),
+            Ok(sealed) => self.reply(
+                id,
+                RestEvent::LocalRowSealed {
+                    sealed: ambre_core::SealedRowBytes::new(sealed),
+                },
+            ),
             // Past the AEAD size limit: nothing is stored, as for a seed that
             // is missing.
             Err(_) => {
@@ -55,7 +60,7 @@ impl SyncState {
         let rows = rows
             .iter()
             .map(|row| {
-                ambre_crypto::aead::open_row(&row.sealed, &place_bytes(&row.place), &key)
+                ambre_crypto::aead::open_row(row.sealed.as_bytes(), &place_bytes(&row.place), &key)
                     .ok()
                     .map(SecretBytes::from)
             })
@@ -88,7 +93,7 @@ mod tests {
         rx: &ambre_bus::conduit::Receiver<LogicEvent>,
         place: RowPlace,
         plain: &[u8],
-    ) -> Vec<u8> {
+    ) -> ambre_core::SealedRowBytes {
         state.handle_rest(
             RequestId(1),
             RestCommand::SealLocalRow {
@@ -125,7 +130,7 @@ mod tests {
             b"the whole document",
         );
         assert!(
-            !sealed.windows(5).any(|w| w == b"whole"),
+            !sealed.as_bytes().windows(5).any(|w| w == b"whole"),
             "plaintext reached the store"
         );
 
@@ -171,7 +176,7 @@ mod tests {
             },
             SealedRow {
                 place: RowPlace::Document(doc),
-                sealed: b"in the clear".to_vec(),
+                sealed: ambre_core::SealedRowBytes::new(b"in the clear".to_vec()),
             },
             SealedRow {
                 place: RowPlace::Draft(ambre_bus::DraftKey::new("u|c".into())),
