@@ -78,11 +78,11 @@ async fn a_reply_being_typed_survives_its_thread_moving() {
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?"]),
-            y_px: 100.0,
+            y: ambre_core::ViewPx::new(100.0),
         },
         PanelThread {
             thread: thread(second, &["Typo"]),
-            y_px: 300.0,
+            y: ambre_core::ViewPx::new(300.0),
         },
     ]);
     let root = mount_in_container(move || view! { <ProseCommentsPanel signals=signals /> });
@@ -98,11 +98,11 @@ async fn a_reply_being_typed_survives_its_thread_moving() {
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?", "Yes"]),
-            y_px: 40.0,
+            y: ambre_core::ViewPx::new(40.0),
         },
         PanelThread {
             thread: thread(second, &["Typo"]),
-            y_px: 240.0,
+            y: ambre_core::ViewPx::new(240.0),
         },
     ]);
     // The effects that redraw the cards run on the next tick.
@@ -259,7 +259,10 @@ async fn the_format_bar_announces_the_registry_labels() {
     signals
         .toolbar
         .set(ambre_prose::view::toolbar::ToolbarState {
-            anchor: Some((200.0, 100.0)),
+            anchor: Some(ambre_core::ViewPoint::new(
+                ambre_core::ViewPx::new(200.0),
+                ambre_core::ViewPx::new(100.0),
+            )),
             active: None,
         });
     let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });

@@ -5,6 +5,7 @@
 //! (`1-Foundations/ambre-spec-kinetic-scroll.md`): the column takes its
 //! vertical distance, and meeting an end of the column stops it.
 
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::Release;
 use ambre_draw::{WHEEL_LINE_PX, WheelDelta};
 
@@ -12,14 +13,14 @@ use crate::ui::ProseUiState;
 
 impl ProseUiState {
     /// A finger went down. It stops any motion left (`PROSE-UI-218`).
-    pub fn touch_start(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
-        self.kinetic.press(x, y, now_ms);
+    pub fn touch_start(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
+        self.kinetic.press(at.x.get(), at.y.get(), now_ms);
     }
 
     /// A finger moved: past the tap slop the column follows it. Answers
     /// whether the view moved.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
-        let Some(step) = self.kinetic.sample(x, y, now_ms) else {
+    pub fn touch_move(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) -> bool {
+        let Some(step) = self.kinetic.sample(at.x.get(), at.y.get(), now_ms) else {
             return false;
         };
         self.scroll_by(step);
@@ -29,9 +30,9 @@ impl ProseUiState {
     /// A finger lifted. A pan released with speed leaves a flick
     /// (`PROSE-UI-217`). A finger that never left the slop is a tap: its
     /// point comes back for the host to press there.
-    pub fn touch_end(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
+    pub fn touch_end(&mut self, now_ms: ambre_core::PageTime) -> Option<ViewPoint> {
         match self.kinetic.release(now_ms) {
-            Release::Tap { x, y } => Some((x, y)),
+            Release::Tap { x, y } => Some(ViewPoint::new(ViewPx::new(x), ViewPx::new(y))),
             Release::Fling | Release::Rest => None,
         }
     }

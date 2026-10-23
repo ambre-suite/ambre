@@ -9,7 +9,7 @@
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
 use ambre_commands::{ClipboardWrite, Modifiers, SelectionMode};
-use ambre_core::StepDirection;
+use ambre_core::{StepDirection, ViewPoint, ViewPx};
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
@@ -19,9 +19,8 @@ use crate::view::caret::{Direction, SelectUnit, Spot};
 /// Two presses closer than this in time, and in place, count as one gesture.
 pub const MULTI_PRESS_MS: f64 = 500.0;
 
-/// How far a second press may land from the first and still be in place, in
-/// canvas pixels.
-const MULTI_PRESS_PX: f32 = 4.0;
+/// How far a second press may land from the first and still be in place.
+const MULTI_PRESS: ViewPx = ViewPx::new(4.0);
 
 /// How many inputs the view holds while it waits on a structural command. A
 /// wait lasts one round trip, so the bound is never reached by a hand. Text
@@ -77,7 +76,8 @@ impl ProseKey {
     }
 }
 
-/// One input, as the host hands it over. Points are canvas pixels.
+/// One input, as the host hands it over. Points are pixels of the view, from
+/// the canvas's corner.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseInput {
     Key {
@@ -87,23 +87,20 @@ pub enum ProseInput {
     /// Committed text: typing, dictation, a plain paste.
     Text(String),
     Press {
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
         mods: Modifiers,
         now_ms: ambre_core::PageTime,
     },
     Drag {
-        x: f32,
-        y: f32,
+        at: ViewPoint,
     },
     Release,
     /// Text dropped into the page at a point: one insertion there
     /// (`PROSE-UI-204`).
     Drop {
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         text: String,
     },
     /// An item of the slash menu picked with the pointer, by its place in
@@ -176,8 +173,7 @@ impl Sent {
 /// The last press, to count a second and a third one in place.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
-    x: f32,
-    y: f32,
+    at: ViewPoint,
     at_ms: ambre_core::PageTime,
     count: u8,
 }
@@ -349,10 +345,10 @@ impl ProseUiState {
                 self.type_into_menu(text, send);
                 true
             }
-            ProseInput::Press { x, y, mods, now_ms } => {
+            ProseInput::Press { at, mods, now_ms } => {
                 let target = mods
                     .primary
-                    .then(|| self.link_at(*x, *y).map(|link| link.url.clone()))
+                    .then(|| self.link_at(*at).map(|link| link.url.clone()))
                     .flatten();
                 match target {
                     // The target goes to the host, and the caret and the
@@ -368,16 +364,16 @@ impl ProseUiState {
                     None => {
                         // A press on the canvas is outside the menu.
                         self.slash = None;
-                        self.press(*x, *y, SelectionMode::from_mods(*mods), *now_ms, send)
+                        self.press(*at, SelectionMode::from_mods(*mods), *now_ms, send)
                     }
                 }
             }
-            ProseInput::Drag { x, y } => {
-                self.update_drag(*x, *y);
+            ProseInput::Drag { at } => {
+                self.update_drag(*at);
                 self.dragging.is_some()
             }
             ProseInput::Release => self.end_drag(),
-            ProseInput::Drop { x, y, text } => self.drop_text(*x, *y, text, send),
+            ProseInput::Drop { at, text } => self.drop_text(*at, text, send),
             ProseInput::Copy(write) => self.copy(*write, send),
             ProseInput::Paste { text, html, rich } => {
                 self.paste(text, html.as_deref(), rich.as_deref(), send)
@@ -467,12 +463,11 @@ impl ProseUiState {
     /// text changes nothing.
     fn drop_text(
         &mut self,
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         text: &str,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
-        let Some((block_id, offset)) = self.place_at(x, y) else {
+        let Some((block_id, offset)) = self.place_at(at) else {
             return false;
         };
         self.slash = None;
@@ -812,8 +807,7 @@ impl ProseUiState {
     /// the caret stays (`PROSE-UI-156`).
     fn press(
         &mut self,
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         mode: SelectionMode,
         now_ms: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
@@ -836,29 +830,28 @@ impl ProseUiState {
             }
             return true;
         }
-        let Some(spot) = self.place_at(x, y) else {
+        let Some(spot) = self.place_at(at) else {
             return false;
         };
         let count = match self.last_press {
             Some(last)
                 if now_ms - last.at_ms <= MULTI_PRESS_MS
-                    && (x - last.x).abs() <= MULTI_PRESS_PX
-                    && (y - last.y).abs() <= MULTI_PRESS_PX =>
+                    && (at.x - last.at.x).abs() <= MULTI_PRESS
+                    && (at.y - last.at.y).abs() <= MULTI_PRESS =>
             {
                 last.count % 3 + 1
             }
             _ => 1,
         };
         self.last_press = Some(Press {
-            x,
-            y,
+            at,
             at_ms: now_ms,
             count,
         });
         // A caret in a header or a footer shows on the page it was placed
         // on, since every page draws the band (`PROSE-UI-033`).
         if self.is_band(spot.0) {
-            self.band_page = self.page_under(x, y);
+            self.band_page = self.page_under(at);
         }
         let anchor = self
             .cursor
@@ -867,7 +860,7 @@ impl ProseUiState {
         match count {
             1 if mode == SelectionMode::Extend && self.joins(anchor, spot) => {
                 self.start_drag(anchor);
-                self.update_drag(x, y);
+                self.update_drag(at);
             }
             1 => {
                 // A plain press collapses the selection (`PROSE-UI-154`).

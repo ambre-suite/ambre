@@ -6,7 +6,7 @@
 //! enters the document (`PROSE-UI-010`).
 
 use ambre_commands::SelectionMode;
-use ambre_core::StepDirection;
+use ambre_core::{StepDirection, ViewPoint, ViewPx};
 use ambre_draw::kinetic::EdgeSpeed;
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
@@ -405,7 +405,8 @@ impl ProseUiState {
                 continue;
             };
             if page == last || y0 < piece.run_top + piece.height {
-                let base = self.column.page_top_y(page) + body_top + piece.top - piece.run_top;
+                let base =
+                    self.column.page_top_y(page).get() + body_top + piece.top - piece.run_top;
                 return Some((base + y0, base + y1));
             }
         }
@@ -434,7 +435,7 @@ impl ProseUiState {
             }
         };
         let caret = self.run_of(block)?.caret_box_at(laid, self.caret_affinity);
-        let base = self.column.page_top_y(page) + top;
+        let base = self.column.page_top_y(page).get() + top;
         Some((base + caret.y0 as f32, base + caret.y1 as f32))
     }
 
@@ -517,12 +518,12 @@ impl ProseUiState {
     /// A point on a block without text resolves to the edge on the pointer's
     /// side (`PROSE-UI-032`). That is the end of the text before it, or the
     /// start of the text after it.
-    pub(crate) fn place_at(&self, x: f32, y: f32) -> Option<Spot> {
-        let (block, offset) = self.hit(x, y)?;
+    pub(crate) fn place_at(&self, at: ViewPoint) -> Option<Spot> {
+        let (block, offset) = self.hit(at)?;
         if matches!(offset, HitOffset::Drawn(_)) || self.run_of(block).is_some() {
             return Some((block, self.doc_of_hit(block, offset)));
         }
-        let x_in_page = (x - self.column.left_px(&self.viewport)) / self.viewport.scale();
+        let x_in_page = (at.x.get() - self.column.left_px(&self.viewport)) / self.viewport.scale();
         let middle = self.shaped.layout.margin_left_px + self.shaped.layout.content_width_px / 2.0;
         let (side, other) = if x_in_page >= middle {
             (StepDirection::Forward, StepDirection::Backward)
@@ -557,14 +558,15 @@ impl ProseUiState {
     /// Extend a drag to the point under the pointer. The anchor is the one
     /// the press captured (`PROSE-UI-161`), and the window does not scroll
     /// (`PROSE-UI-162`). A pointer near an edge arms the autoscroll.
-    pub fn update_drag(&mut self, x: f32, y: f32) {
+    pub fn update_drag(&mut self, at: ViewPoint) {
         let Some(anchor) = self.dragging else {
             return;
         };
-        self.drag_pointer = Some((x, y));
+        self.drag_pointer = Some(at);
         // A pointer off the text resolves on the edge line of the canvas.
-        let edge = y.clamp(0.0, (self.viewport.height_px - 1.0).max(0.0));
-        let Some(focus) = self.place_at(x, y).or_else(|| self.place_at(x, edge)) else {
+        let bottom = ViewPx::new((self.viewport.height_px - 1.0).max(0.0));
+        let edge = ViewPoint::new(at.x, at.y.clamp(ViewPx::ZERO, bottom));
+        let Some(focus) = self.place_at(at).or_else(|| self.place_at(edge)) else {
             return;
         };
         if !self.joins(anchor, focus) {
@@ -583,8 +585,8 @@ impl ProseUiState {
     /// pixels per millisecond, down for a positive one. It is the shared
     /// edge speed (`KINETIC-007`).
     fn autoscroll_speed(&self) -> Option<EdgeSpeed> {
-        let (_, y) = self.drag_pointer.filter(|_| self.dragging.is_some())?;
-        Some(EdgeSpeed::at(y, self.viewport.height_px))
+        let at = self.drag_pointer.filter(|_| self.dragging.is_some())?;
+        Some(EdgeSpeed::at(at.y.get(), self.viewport.height_px))
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near
@@ -598,8 +600,8 @@ impl ProseUiState {
         };
         let before = self.viewport.scroll_y;
         self.scroll_by(step);
-        if let Some((x, y)) = self.drag_pointer {
-            self.update_drag(x, y);
+        if let Some(at) = self.drag_pointer {
+            self.update_drag(at);
         }
         self.viewport.scroll_y != before
     }

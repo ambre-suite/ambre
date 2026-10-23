@@ -114,9 +114,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(x) | param
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(y) | param | f32	math	css position
 ambre-app | src/host/prose.rs | crate::host::prose | download(data) | param | &[u8]	generic	bytes
 ambre-app | src/host/prose.rs | crate::host::prose | download(filename) | param | &str	free-text	file name
-ambre-app | src/host/prose.rs | crate::host::prose | to_css() | ret | (f32,f32)	math	layout px
-ambre-app | src/host/prose.rs | crate::host::prose | to_css(x) | param | f32	math	layout px
-ambre-app | src/host/prose.rs | crate::host::prose | to_css(y) | param | f32	math	layout px
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | layer_click_through(takes_input) | param | bool	math	value flag to the DOM
@@ -2870,22 +2867,13 @@ ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic
 ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	text content / label / parser input
 ambre-prose | src/events.rs | crate::events | UNNAMED | const | &str	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | MULTI_PRESS_MS | const | f64	math	layout geometry local to algorithm
-ambre-prose | src/input.rs | crate::input | MULTI_PRESS_PX | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/input.rs | crate::input | Press.count | field | u8	math	count, size or local index
-ambre-prose | src/input.rs | crate::input | Press.x | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/input.rs | crate::input | Press.y | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/input.rs | crate::input | ProseInput::Drag.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Drag.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseInput::Drop.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Drop.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.html | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.rich | field | Option<Vec<u8>>	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseInput::Press.x | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseInput::Press.y | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseInput::SlashPick.0 | field | usize	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseKey::from_name(name) | param | &str	free-text	text content / label / parser input
@@ -2894,8 +2882,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	ge
 ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	generic	consumed answer
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::handle_input() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::key() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key() | ret | Option<bool>	generic	independent flag or predicate
@@ -2906,8 +2892,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::paste(text) | param | 
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::pick(index) | param | usize	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseUiState::press() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseUiState::press(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/input.rs | crate::input | ProseUiState::press(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/input.rs | crate::input | ProseUiState::replay() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::split() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::take_selection() | ret | bool	generic	independent flag or predicate
@@ -3612,7 +3596,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.band_page | field | Option<u3
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.drag_pointer | field | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.find_current | field | Option<u32>	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.layout_version | field | u64	math	count, size or local index
@@ -3634,42 +3617,17 @@ ambre-prose | src/ui.rs | crate::ui | StatusFigures::labels() | ret | [&str;5]	f
 ambre-prose | src/view/a11y.rs | crate::view::a11y | ProseUiState::caret_announcement() | ret | Option<(BlockId,String)>	free-text	text content / label / parser input
 ambre-prose | src/view/a11y.rs | crate::view::a11y | TEXT_LIMIT | const | usize	math	count, size or local index
 ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::Reply.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/view/annotate.rs | crate::view::annotate | PanelThread.y_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::fragment_at() | ret | Option<(u32,Fragment)>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::fragment_at(run_y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::link_at(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::link_at(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts() | ret | Vec<(CommentId,Option<&'static str>)>	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<CommentId,String>	free-text	text content / label / parser input
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::page_under(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under((x_px,y_px)) | param | (f32,f32)	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::span_under(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::suggestion_at(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::suggestion_at(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::to_screen() | ret | (f32,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::to_screen(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::to_screen(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::to_screen(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_DELETED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_ORPHANED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | REPLY_LOST_RESOLVED | const | &str	debt	finding: lost-reply notice as &'static str (suspected)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect.x0 | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect.x1 | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect.y0 | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect.y1 | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | THREAD_ROOM_PX | const | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ThreadAnchor.y_px | field | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/annotate.rs | crate::view::annotate | stack() | ret | Vec<f32>	math	layout geometry local to algorithm
-ambre-prose | src/view/annotate.rs | crate::view::annotate | stack(heights) | param | &[f32]	math	layout geometry local to algorithm
-ambre-prose | src/view/annotate.rs | crate::view::annotate | stack(room) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/cache.rs | crate::view::cache | Entry.used | field | u64	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RUN_CACHE_RUNS | const | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache.built | field | u64	math	count, size or local index
@@ -3688,13 +3646,9 @@ ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() 
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::flow_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::joins() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::line_step(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::place_at(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::place_at(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::reveal_span((top,bottom)) | param | (f32,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::tick_autoscroll() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::update_drag(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.page | field | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.x_in_page | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | DocPos::OnPage.y_in_page | field | f32	math	layout geometry local to algorithm
@@ -3711,10 +3665,7 @@ ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_pa
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::doc_y_to_page(doc_y) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::left_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::max_scroll() | ret | f32	math	layout geometry local to algorithm
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::page_top_y() | ret | f32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::page_top_y(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::screen_to_doc(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/column.rs | crate::view::column | PageColumn::screen_to_doc(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::stride() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/column.rs | crate::view::column | PageColumn::visible_pages() | ret | Option<RangeInclusive<u32>>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/column.rs | crate::view::column | Viewport.height_px | field | f32	math	layout geometry local to algorithm
@@ -3724,12 +3675,7 @@ ambre-prose | src/view/column.rs | crate::view::column | Viewport::scale() | ret
 ambre-prose | src/view/column.rs | crate::view::column | Viewport::visible_height() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::fling_speed() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::tick_fling() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_end() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_start(x) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_start(y) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(x) | param | f64	trait	signature fixed by foreign trait
 ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(y) | param | f64	trait	signature fixed by foreign trait
 ambre-prose | src/view/hit.rs | crate::view::hit | BandSlot.bottom | field | f32	math	layout geometry local to algorithm
@@ -3751,8 +3697,6 @@ ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_hit(y_in_p
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::band_slots(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::blocks_on() | ret | &[usize]	math	count, size or local index
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::blocks_on(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::hit(x_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::hit(y_px) | param | f32	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::is_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::note_page() | ret | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/view/hit.rs | crate::view::hit | ProseUiState::note_slots(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -3801,12 +3745,10 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_table() | ret | (TableShape,f32)	math	layout geometry local to algorithm
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.visible | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::under() | ret | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashCommand::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.selected | field | usize	math	count, size or local index
-ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.anchor | field | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | Vec<&'static str>	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | field | String	free-text	text content / label / parser input
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.selected | field | usize	math	count, size or local index
@@ -3814,8 +3756,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible()
 ambre-prose | src/view/slash.rs | crate::view::slash | TABLE_SIZE | const | u32	math	count, size or local index
 ambre-prose | src/view/slash.rs | crate::view::slash | TOC_LEVEL | const | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ProseUiState::selection_top() | ret | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
-ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState.anchor | field | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/walk.rs | crate::view::walk | BAND | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.line | field | usize	math	count, size or local index
@@ -5930,3 +5870,5 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::Multiple.0 | field | f32	math	a multiple of the font size, a bare ratio with no unit
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::from_stored(value) | param | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::stored_value() | ret | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
+ambre-app | src/host/prose.rs | crate::host::prose | view_point(x) | param | f32	newtype-inner	the bare canvas coordinate the shared host event carries, wrapped here into the ViewPoint the Prose view takes
+ambre-app | src/host/prose.rs | crate::host::prose | view_point(y) | param | f32	newtype-inner	the bare canvas coordinate the shared host event carries, wrapped here into the ViewPoint the Prose view takes

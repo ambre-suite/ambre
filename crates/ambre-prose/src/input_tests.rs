@@ -13,7 +13,7 @@ use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent
 use crate::input::{ProseInput, ProseKey};
 use crate::logic::ProseState;
 use crate::ui::{ProseUiState, SendResult};
-use crate::view::tests::{append, down};
+use crate::view::tests::{append, down, view_at};
 
 /// One peer: its Logic side, its view, and the commands the view sent that
 /// have not reached the Logic side yet.
@@ -81,8 +81,7 @@ impl Rig {
 
     fn press(&mut self, (x, y): (f32, f32), shift: bool, now_ms: ambre_core::PageTime) -> bool {
         self.input(ProseInput::Press {
-            x,
-            y,
+            at: view_at(x, y),
             mods: ambre_commands::Modifiers::from_event(false, false, shift, false),
             now_ms,
         })
@@ -131,7 +130,7 @@ impl Rig {
         let run = ui.shaped.blocks[&placed.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
         let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-        let y_doc = ui.column.page_top_y(placed.page_start)
+        let y_doc = ui.column.page_top_y(placed.page_start).get()
             + layout.body_top_px()
             + placed.y_in_page
             + (caret.y0 + caret.y1) as f32 / 2.0;
@@ -559,7 +558,7 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
         .expect("laid out");
     let placed = rig.ui.shaped.layout.blocks[index].clone();
     let layout = rig.ui.shaped.layout.clone();
-    let y_doc = rig.ui.column.page_top_y(placed.page_start)
+    let y_doc = rig.ui.column.page_top_y(placed.page_start).get()
         + layout.body_top_px()
         + placed.y_in_page
         + placed.height_px / 2.0;
@@ -690,8 +689,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     ui.apply_layout(empty);
     let mut sent = Vec::new();
     let press = ProseInput::Press {
-        x: 600.0,
-        y: 100.0,
+        at: view_at(600.0, 100.0),
         mods: ambre_commands::Modifiers::NONE,
         now_ms: ambre_core::PageTime(0.0),
     };
@@ -736,8 +734,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
     ui.set_caret((block, DocOffset::new(3)));
     let consumed = ui.handle_input(
         &ProseInput::Press {
-            x: 10.0,
-            y: 10.0,
+            at: view_at(10.0, 10.0),
             mods: ambre_commands::Modifiers::NONE,
             now_ms: ambre_core::PageTime(0.0),
         },
@@ -935,14 +932,14 @@ fn a_drag_grows_from_the_anchor_its_press_captured() {
     rig.press(rig.point_of(first, 3), false, ambre_core::PageTime(0.0));
     let scroll = rig.ui.viewport.scroll_y;
     let (x, y) = rig.point_of(second, 4);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(
         rig.ui.selection(),
         Some(((first, DocOffset::new(3)), (second, DocOffset::new(4))))
     );
     // Upward, past the anchor: the anchor holds, the ends swap order.
     let (x, y) = rig.point_of(first, 1);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().anchor, Some((first, DocOffset::new(3))));
     assert_eq!(
         rig.ui.selection(),
@@ -951,7 +948,7 @@ fn a_drag_grows_from_the_anchor_its_press_captured() {
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     rig.input(ProseInput::Release);
     let (x, y) = rig.point_of(second, 2);
-    assert!(!rig.input(ProseInput::Drag { x, y }));
+    assert!(!rig.input(ProseInput::Drag { at: view_at(x, y) }));
 }
 
 /// `PROSE-UI-152`: a collaborator's change does not move the anchor of a
@@ -963,7 +960,7 @@ fn a_remote_change_does_not_move_the_anchor_of_a_drag() {
     let mut other = a_collaborator(&rig);
     rig.press(rig.point_of(block, 6), false, ambre_core::PageTime(0.0));
     let (x, y) = rig.point_of(block, 9);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     receive(
         &mut rig,
         &mut other,
@@ -987,14 +984,14 @@ fn escape_collapses_and_cancels_the_drag() {
     let block = rig.blocks()[0];
     rig.press(rig.point_of(block, 2), false, ambre_core::PageTime(0.0));
     let (x, y) = rig.point_of(block, 7);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::Escape, false, false);
     let caret = rig.caret();
     assert_eq!((caret.offset, caret.anchor), (DocOffset::new(7), None));
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     let (x, y) = rig.point_of(block, 9);
-    assert!(!rig.input(ProseInput::Drag { x, y }));
+    assert!(!rig.input(ProseInput::Drag { at: view_at(x, y) }));
     assert!(!rig.input(ProseInput::Release));
     assert_eq!(rig.caret().offset, DocOffset::new(7));
 }
@@ -1090,8 +1087,7 @@ fn linked() -> (Rig, BlockId) {
 
 fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
-        x,
-        y,
+        at: view_at(x, y),
         mods: ambre_commands::Modifiers::from_event(follow, false, false, false),
         now_ms: ambre_core::PageTime(0.0),
     })
@@ -1104,11 +1100,14 @@ fn a_link_answers_over_its_marked_text_alone() {
     let (rig, block) = linked();
     assert_eq!(rig.ui.links.len(), 1);
     let (x, y) = rig.point_of(block, 7);
-    assert_eq!(rig.ui.link_at(x, y).map(|l| l.url.as_str()), Some(TARGET));
+    assert_eq!(
+        rig.ui.link_at(view_at(x, y)).map(|l| l.url.as_str()),
+        Some(TARGET)
+    );
     let (x, y) = rig.point_of(block, 2);
-    assert_eq!(rig.ui.link_at(x, y), None);
+    assert_eq!(rig.ui.link_at(view_at(x, y)), None);
     let (x, y) = rig.point_of(block, 12);
-    assert_eq!(rig.ui.link_at(x, y), None);
+    assert_eq!(rig.ui.link_at(view_at(x, y)), None);
 }
 
 /// `PROSE-UI-070`, `PROSE-UI-169`: a plain press inside a link places the
@@ -1211,7 +1210,7 @@ fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
     let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-    let y_doc = ui.column.page_top_y(page) + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let y_doc = ui.column.page_top_y(page).get() + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
     let scale = ui.viewport.scale();
     (
         ui.column.left_px(&ui.viewport) + x * scale,
@@ -1259,12 +1258,12 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
     let at = band_point(&rig, header, 2, 0);
     assert!(rig.press(at, false, ambre_core::PageTime(0.0)));
     let (x, y) = rig.point_of(body, 5);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, header);
     assert_eq!(rig.caret().anchor, None);
     // Within the band, a drag selects.
     let (x, y) = band_point(&rig, header, 8, 0);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().anchor, Some((header, DocOffset::new(2))));
     assert_eq!(
         rig.ui.selection(),
@@ -1312,7 +1311,7 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
     let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-    let y_doc = ui.column.page_top_y(0) + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let y_doc = ui.column.page_top_y(0).get() + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
     let scale = ui.viewport.scale();
     (
         ui.column.left_px(&ui.viewport) + x * scale,
@@ -1358,11 +1357,11 @@ fn a_selection_does_not_cross_the_edge_of_a_note() {
     let at = note_point(&rig, note, 2);
     assert!(rig.press(at, false, ambre_core::PageTime(0.0)));
     let (x, y) = rig.point_of(body, 5);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, note);
     assert_eq!(rig.caret().anchor, None);
     let (x, y) = note_point(&rig, note, 8);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(
         rig.ui.selection(),
         Some(((note, DocOffset::new(2)), (note, DocOffset::new(8))))
@@ -1602,16 +1601,20 @@ fn the_bar_follows_its_text_through_a_scroll_and_a_zoom() {
     let block = rig.blocks()[3];
     rig.select(block, 5, 9);
     let text_at = |rig: &Rig| rig.point_of(block, 5);
-    let (x0, y0) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let anchor = |rig: &Rig| {
+        let at = rig.ui.toolbar().anchor.expect("the bar shows");
+        (at.x.get(), at.y.get())
+    };
+    let (x0, y0) = anchor(&rig);
     let (_, line) = text_at(&rig);
     rig.ui.scroll_by(down(120.0));
-    let (x1, y1) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let (x1, y1) = anchor(&rig);
     let (_, moved) = text_at(&rig);
     assert!((x1 - x0).abs() < 0.01);
     assert!(((y0 - y1) - (line - moved)).abs() < 0.01);
     assert!(y1 < y0);
     rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(2.0);
-    let (_, zoomed) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let (_, zoomed) = anchor(&rig);
     let (_, line) = text_at(&rig);
     // Above the text it formats, by less than one line at this zoom.
     assert!(zoomed <= line && line - zoomed < 40.0);
@@ -2263,7 +2266,9 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height_px + 40.0;
-    rig.input(ProseInput::Drag { x, y: bottom });
+    rig.input(ProseInput::Drag {
+        at: view_at(x, bottom),
+    });
     let before = rig.ui.selection().expect("a selection").1;
     assert!(
         !rig.ui.tick_autoscroll(ambre_core::PageTime(0.0)),
@@ -2291,7 +2296,9 @@ fn a_released_drag_leaves_nothing_armed() {
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height_px + 40.0;
-    rig.input(ProseInput::Drag { x, y: bottom });
+    rig.input(ProseInput::Drag {
+        at: view_at(x, bottom),
+    });
     rig.ui.tick_autoscroll(ambre_core::PageTime(0.0));
     rig.input(ProseInput::Release);
     let scroll = rig.ui.viewport.scroll_y;
@@ -2300,14 +2307,16 @@ fn a_released_drag_leaves_nothing_armed() {
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     // Escape disarms a drag in flight the same way.
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(1000.0));
-    rig.input(ProseInput::Drag { x, y: bottom });
+    rig.input(ProseInput::Drag {
+        at: view_at(x, bottom),
+    });
     rig.ui.tick_autoscroll(ambre_core::PageTime(40.0));
     rig.key(ProseKey::Escape, false, false);
     assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime(56.0)));
     // A drag away from the edges arms nothing.
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(2000.0));
     let (x, y) = rig.point_of(first, 4);
-    rig.input(ProseInput::Drag { x, y });
+    rig.input(ProseInput::Drag { at: view_at(x, y) });
     rig.ui.tick_autoscroll(ambre_core::PageTime(80.0));
     assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime(96.0)));
 }
@@ -2321,8 +2330,7 @@ fn dropped_text_is_one_insertion_at_the_drop_point() {
     rig.press(rig.point_of(block, 0), false, ambre_core::PageTime(0.0));
     let (x, y) = rig.point_of(block, 6);
     assert!(rig.input(ProseInput::Drop {
-        x,
-        y,
+        at: view_at(x, y),
         text: "big ".to_owned()
     }));
     assert_eq!(
@@ -2352,11 +2360,11 @@ fn long_rig() -> Rig {
 
 /// Flick a finger up the canvas at 2 px/ms, and lift it.
 fn flick_up(rig: &mut Rig) {
-    rig.ui.touch_start(300.0, 600.0, ambre_core::PageTime(0.0));
+    rig.ui
+        .touch_start(view_at(300.0, 600.0), ambre_core::PageTime(0.0));
     for step in 1..=5 {
         rig.ui.touch_move(
-            300.0,
-            600.0 - 32.0 * step as f32,
+            view_at(300.0, 600.0 - 32.0 * step as f32),
             ambre_core::PageTime(16.0 * f64::from(step)),
         );
     }
@@ -2420,7 +2428,8 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
     rig.key(ProseKey::Right, false, false);
     assert_eq!(rig.ui.fling_speed(), None);
     flick_up(&mut rig);
-    rig.ui.touch_start(10.0, 10.0, ambre_core::PageTime(200.0));
+    rig.ui
+        .touch_start(view_at(10.0, 10.0), ambre_core::PageTime(200.0));
     assert_eq!(rig.ui.fling_speed(), None);
     // Panning and flicking send nothing: the sent edits are the press's.
     assert!(rig.sent.is_empty());
@@ -2503,11 +2512,15 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
 #[test]
 fn a_finger_that_barely_moves_is_a_tap() {
     let mut rig = long_rig();
-    rig.ui.touch_start(300.0, 400.0, ambre_core::PageTime(0.0));
-    assert!(!rig.ui.touch_move(303.0, 402.0, ambre_core::PageTime(10.0)));
+    rig.ui
+        .touch_start(view_at(300.0, 400.0), ambre_core::PageTime(0.0));
+    assert!(
+        !rig.ui
+            .touch_move(view_at(303.0, 402.0), ambre_core::PageTime(10.0))
+    );
     assert_eq!(
         rig.ui.touch_end(ambre_core::PageTime(20.0)),
-        Some((300.0, 400.0))
+        Some(view_at(300.0, 400.0))
     );
     assert_eq!(rig.ui.viewport.scroll_y, 0.0);
     assert_eq!(rig.ui.fling_speed(), None);

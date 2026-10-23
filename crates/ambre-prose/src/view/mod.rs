@@ -177,7 +177,7 @@ impl ProseUiState {
             self.awaited_reveal = Some(block);
             return;
         };
-        let top = self.column.page_top_y(layout.page_start)
+        let top = self.column.page_top_y(layout.page_start).get()
             + self.shaped.layout.body_top_px()
             + layout.y_in_page;
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, top);
@@ -260,6 +260,11 @@ pub(crate) mod tests {
 
     /// The step of a finger dragged up by `dy` screen pixels, which scrolls
     /// the column down by as much.
+    /// A point of the view, from the canvas's corner.
+    pub(crate) fn view_at(x: f32, y: f32) -> ambre_core::ViewPoint {
+        ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y))
+    }
+
     pub(crate) fn down(dy: f32) -> ScrollStep {
         ScrollStep::dragged((0.0, dy), (0.0, 0.0))
     }
@@ -351,7 +356,7 @@ pub(crate) mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
-        ui.scroll_by(down(ui.column.page_top_y(30) * ui.viewport.scale()));
+        ui.scroll_by(down(ui.column.page_top_y(30).get() * ui.viewport.scale()));
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let Some(ProseCommand::ShowPages { first, last }) = ui.window_request() else {
             panic!("the pages under the canvas are asked for");
@@ -621,8 +626,9 @@ pub(crate) mod tests {
             page: far.page_start,
         };
         ui.follow_toc_entry(&entry);
-        let top =
-            ui.column.page_top_y(far.page_start) + ui.shaped.layout.body_top_px() + far.y_in_page;
+        let top = ui.column.page_top_y(far.page_start).get()
+            + ui.shaped.layout.body_top_px()
+            + far.y_in_page;
         assert_eq!(
             ui.viewport.scroll_y,
             ui.column.clamp_scroll(&ui.viewport, top)

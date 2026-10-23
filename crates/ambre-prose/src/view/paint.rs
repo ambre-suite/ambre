@@ -209,7 +209,7 @@ impl ProseUiState {
         let height = f64::from(self.shaped.layout.page_height_px);
         let mut frame = Frame::default();
         for page in pages {
-            let top = f64::from(self.column.page_top_y(page));
+            let top = f64::from(self.column.page_top_y(page).get());
             self.resolve_page(&mut frame, page, top);
         }
 
@@ -1725,7 +1725,7 @@ mod tests {
         let caret = run.data().caret_box(RunOffset::new(3));
         let layout = &ui.shaped.layout;
         let x = layout.margin_left_px + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(0)
+        let y = ui.column.page_top_y(0).get()
             + layout.body_top_px()
             + at.top
             + (caret.y0 + caret.y1) as f32 / 2.0;
@@ -1735,7 +1735,7 @@ mod tests {
             (y - ui.viewport.scroll_y) * scale,
         );
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((minted, DocOffset::new(3)))
         );
         // A keystroke replayed before the next frame shapes again.
@@ -1746,7 +1746,7 @@ mod tests {
             DocOffset::new(2),
         );
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((minted, DocOffset::new(3)))
         );
     }
@@ -1780,7 +1780,7 @@ mod tests {
         let layout = &ui.shaped.layout;
         let x =
             layout.margin_left_px + frame.text_x + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(0)
+        let y = ui.column.page_top_y(0).get()
             + layout.body_top_px()
             + piece.fragment.top
             + frame.text_y
@@ -1809,7 +1809,7 @@ mod tests {
         let mut ui = view_of(&mut state);
         let point = cell_point(&ui, right, 3);
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((right, DocOffset::new(3)))
         );
 
@@ -1822,12 +1822,12 @@ mod tests {
         shape(&mut ui);
         let point = cell_point(&ui, left, 200);
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((left, DocOffset::new(200)))
         );
         let point = cell_point(&ui, right, 3);
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((right, DocOffset::new(3)))
         );
     }
@@ -1852,7 +1852,7 @@ mod tests {
         shape(&mut ui);
         let point = cell_point(&ui, cell, 1);
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((cell, DocOffset::new(1)))
         );
         // A keystroke replayed before the next frame, after the point.
@@ -1863,7 +1863,7 @@ mod tests {
             DocOffset::new(2),
         );
         assert_eq!(
-            ui.place_at(point.0, point.1),
+            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
             Some((cell, DocOffset::new(1)))
         );
     }
@@ -1998,7 +1998,7 @@ mod tests {
             ui.resize(width, height);
             ui.apply_layout(shaped);
             ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
-            let bottom = ui.column.page_top_y(1);
+            let bottom = ui.column.page_top_y(1).get();
             ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, scroll * bottom);
             let id = first_block(&ui);
             ui.cursor = Some(CursorPosition {
@@ -2017,7 +2017,7 @@ mod tests {
 
             let mut frame = super::Frame::default();
             for page in ui.column.built_pages(&ui.viewport).into_iter().flatten() {
-                let top = f64::from(ui.column.page_top_y(page));
+                let top = f64::from(ui.column.page_top_y(page).get());
                 ui.resolve_page(&mut frame, page, top);
             }
             let region = ui.walk_region(ui.camera(), &frame);

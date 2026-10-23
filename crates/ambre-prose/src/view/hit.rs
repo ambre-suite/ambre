@@ -5,6 +5,7 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::HitTest;
 use loro::TreeID;
 
@@ -151,7 +152,8 @@ impl HitTest for ProseUiState {
     type Target = (BlockId, DocOffset);
 
     fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, DocOffset)> {
-        let (block, offset) = self.hit(x as f32, y as f32)?;
+        let at = ViewPoint::new(ViewPx::new(x as f32), ViewPx::new(y as f32));
+        let (block, offset) = self.hit(at)?;
         Some((block, self.doc_of_hit(block, offset)))
     }
 }
@@ -274,12 +276,12 @@ impl ProseUiState {
     ///
     /// A point in the paragraph a split opens lands in it once the document
     /// has named it, before a layout carries it (`PROSE-UI-214`).
-    pub(crate) fn hit(&self, x_px: f32, y_px: f32) -> Option<(BlockId, HitOffset)> {
+    pub(crate) fn hit(&self, at: ViewPoint) -> Option<(BlockId, HitOffset)> {
         let DocPos::OnPage {
             page,
             x_in_page,
             y_in_page,
-        } = self.column.screen_to_doc(&self.viewport, x_px, y_px)
+        } = self.column.screen_to_doc(&self.viewport, at)
         else {
             return None;
         };
@@ -372,7 +374,7 @@ mod tests {
         let run = ui.shaped.blocks[&block.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
         let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-        let y_doc = ui.column.page_top_y(block.page_start)
+        let y_doc = ui.column.page_top_y(block.page_start).get()
             + layout.body_top_px()
             + block.y_in_page
             + (caret.y0 + caret.y1) as f32 / 2.0;
@@ -392,7 +394,7 @@ mod tests {
         // Scroll to a far block no paint ever reached.
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
-        ui.viewport.scroll_y = ui.column.page_top_y(page);
+        ui.viewport.scroll_y = ui.column.page_top_y(page).get();
         assert_eq!(ui.runs.built(), 0);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);

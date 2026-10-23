@@ -7,6 +7,8 @@
 
 use std::ops::RangeInclusive;
 
+use ambre_core::{DocPx, ViewPoint};
+
 use crate::layout::pass::PageLayout;
 
 /// The gap between two pages, in document pixels.
@@ -107,8 +109,8 @@ impl PageColumn {
 
     /// Where a page starts, from the top of the column.
     #[must_use]
-    pub fn page_top_y(&self, page: u32) -> f32 {
-        page as f32 * self.stride()
+    pub fn page_top_y(&self, page: u32) -> DocPx {
+        DocPx::new(page as f32 * self.stride())
     }
 
     /// The last offset the column scrolls to: its bottom at the canvas's.
@@ -142,12 +144,12 @@ impl PageColumn {
         }
         let index = (doc_y / stride).floor();
         if index >= last as f32 {
-            let within = (doc_y - self.page_top_y(last)).min(self.page_height_px);
+            let within = (doc_y - self.page_top_y(last).get()).min(self.page_height_px);
             return Some((last, within));
         }
         // `index` is below `last`, so it fits a page index.
         let page = index as u32;
-        let within = doc_y - self.page_top_y(page);
+        let within = doc_y - self.page_top_y(page).get();
         if within <= self.page_height_px {
             return Some((page, within));
         }
@@ -190,8 +192,9 @@ impl PageColumn {
 
     /// A canvas point as a point of the document.
     #[must_use]
-    pub fn screen_to_doc(&self, viewport: &Viewport, x: f32, y: f32) -> DocPos {
+    pub fn screen_to_doc(&self, viewport: &Viewport, at: ViewPoint) -> DocPos {
         let scale = viewport.scale();
+        let (x, y) = (at.x.get(), at.y.get());
         let doc_y = y / scale + viewport.scroll_y;
         match self.doc_y_to_page(doc_y) {
             Some((page, y_in_page)) => DocPos::OnPage {
@@ -209,6 +212,10 @@ impl PageColumn {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    fn point(x: f32, y: f32) -> ViewPoint {
+        ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y))
+    }
 
     fn column(pages: u32) -> PageColumn {
         PageColumn::of(&PageLayout {
@@ -298,7 +305,7 @@ mod tests {
         let column = column(3);
         let bottom = column.page_height_px;
         assert_eq!(column.doc_y_to_page(bottom + 5.0), Some((0, bottom)));
-        let next = column.page_top_y(1);
+        let next = column.page_top_y(1).get();
         assert_eq!(column.doc_y_to_page(next - 5.0), Some((1, 0.0)));
     }
 
@@ -308,7 +315,7 @@ mod tests {
         assert_eq!(column.total_height_px, 0.0);
         assert_eq!(column.doc_y_to_page(10.0), None);
         assert_eq!(
-            column.screen_to_doc(&viewport(0.0, 600.0, 1.0), 10.0, 10.0),
+            column.screen_to_doc(&viewport(0.0, 600.0, 1.0), point(10.0, 10.0)),
             DocPos::Empty
         );
     }
@@ -316,13 +323,13 @@ mod tests {
     #[test]
     fn a_screen_point_lands_on_the_page_drawn_under_it() {
         let column = column(3);
-        let view = viewport(column.page_top_y(1), 800.0, 2.0);
+        let view = viewport(column.page_top_y(1).get(), 800.0, 2.0);
         let left = column.left_px(&view);
         let DocPos::OnPage {
             page,
             x_in_page,
             y_in_page,
-        } = column.screen_to_doc(&view, left + 100.0, 60.0)
+        } = column.screen_to_doc(&view, point(left + 100.0, 60.0))
         else {
             panic!("a page is under the point");
         };

@@ -98,7 +98,7 @@ it (`ambre-spec-ui.md section 2`).
 
 pub struct SlashMenuState {
     /// Under the slash, in canvas space. `None` hides the menu.
-    pub anchor:   Option<(f32, f32)>,
+    pub anchor:   Option<ViewPoint>,
     pub query:    String,
     /// The labels the query keeps (`PROSE-UI-194`).
     pub items:    Vec<&'static str>,

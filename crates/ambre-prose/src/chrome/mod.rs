@@ -203,7 +203,9 @@ fn thread_card(comment_id: CommentId, signals: ProseSignals) -> impl IntoView {
             class="ambre-prose-thread"
             style=move || format!(
                 "position: absolute; top: {}px; left: 0; right: 0; pointer-events: auto;",
-                entry.with(|e| e.as_ref().map_or(0.0, |e| e.y_px))
+                entry.with(|e| e.as_ref().map_or(0.0, |e| {
+                    e.y.on_page(signals.canvas_origin.get().y).get()
+                }))
             )
         >
             <button
@@ -265,6 +267,7 @@ fn thread_card(comment_id: CommentId, signals: ProseSignals) -> impl IntoView {
 #[component]
 pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
     move || {
+        let origin = signals.canvas_origin.get();
         signals.hovered.get().map(|hovered| {
             let suggestion_id = hovered.suggestion_id;
             let what = match hovered.kind {
@@ -273,8 +276,8 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
             };
             let style = format!(
                 "position: fixed; left: {}px; top: {}px; z-index: 61;",
-                hovered.rect.x0,
-                (hovered.rect.y0 - POPOVER_LIFT_PX).max(0.0)
+                hovered.rect.x0.on_page(origin.x).get(),
+                (hovered.rect.y0.on_page(origin.y).get() - POPOVER_LIFT_PX).max(0.0)
             );
             view! {
                 <div class="ambre-prose-suggestion" style=style role="group">
@@ -313,7 +316,7 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
 pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
     move || {
         let bar = signals.toolbar.get();
-        let (x, y) = bar.anchor?;
+        let at = bar.anchor?.on_page(signals.canvas_origin.get());
         let controls = crate::commands::FORMAT_BAR
             .map(|(id, key)| {
                 let pressed = match bar.active.as_ref().map(|m| state_of(m, key)) {
@@ -324,7 +327,8 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
                 control(signals, id, pressed)
             })
             .to_vec();
-        Some(view! { <FormatBar anchor=(f64::from(x), f64::from(y)) controls=controls /> })
+        let anchor = (f64::from(at.x.get()), f64::from(at.y.get()));
+        Some(view! { <FormatBar anchor=anchor controls=controls /> })
     }
 }
 
@@ -353,10 +357,11 @@ const MENU_DROP_PX: f32 = 4.0;
 pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
     move || {
         let menu = signals.slash.get();
-        let (x, y) = menu.anchor?;
+        let at = menu.anchor?.on_page(signals.canvas_origin.get());
         let style = format!(
-            "position: fixed; left: {x}px; top: {}px; z-index: 62;",
-            y + MENU_DROP_PX
+            "position: fixed; left: {}px; top: {}px; z-index: 62;",
+            at.x.get(),
+            at.y.get() + MENU_DROP_PX
         );
         let items = menu.items.iter().enumerate().map(|(index, label)| {
             let selected = if index == menu.selected {

@@ -745,9 +745,9 @@ the host, and what the view does with each answer.
 **How input reaches the view.** Through the frame host, as a typed input event from the shared
 transparent `<textarea>` and the DOM pointer listeners. There is **no `winit`**
 (`ambre-spec-ui.md section 4`, `ambre-spec-text-input.md`, `ambre-spec-frame.md section 2`).
-Pointer coordinates are CSS pixels relative to the canvas, and a click count separates the single,
-the double and the triple click. The dispatcher answers whether the host must swallow the event. The
-Prose view is an arm of the frame host's application enum, like Trame's.
+Pointer coordinates are view pixels (`ViewPoint`), measured from the canvas corner, and a click
+count separates the single, the double and the triple click. The dispatcher answers whether the host
+must swallow the event. The Prose view is an arm of the frame host's application enum, like Trame's.
 
 | Event | What the view does |
 |---|---|

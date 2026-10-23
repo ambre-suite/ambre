@@ -269,7 +269,7 @@ impl Mm {
     }
 }
 
-/// A point of one pixel space: [`ViewPoint`] or [`CssPoint`].
+/// A point of one pixel space: [`DocPoint`], [`ViewPoint`] or [`CssPoint`].
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Point<P> {
     pub x: P,
@@ -283,6 +283,10 @@ impl<P> Point<P> {
         Self { x, y }
     }
 }
+
+/// A point of the document, before the zoom, from the origin of the layout
+/// that measures it: a page, or a run.
+pub type DocPoint = Point<DocPx>;
 
 /// A point of the zoomed view, from the canvas's top-left corner.
 pub type ViewPoint = Point<ViewPx>;

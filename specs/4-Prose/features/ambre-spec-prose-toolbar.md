@@ -97,8 +97,8 @@ the selection is. The view publishes a state and the element renders it
 // ambre-prose/src/view/toolbar.rs -- published to the chrome component, never drawn on the canvas
 
 pub struct ToolbarState {
-    /// The top-centre of the selection's first line, on the canvas. `None` hides the bar.
-    pub anchor: Option<(f32, f32)>,
+    /// The top-centre of the selection's first line, in view pixels. `None` hides the bar.
+    pub anchor: Option<ViewPoint>,
     /// `None` until the Logic thread answered for this very selection.
     pub active: Option<ActiveMarks>,
 }

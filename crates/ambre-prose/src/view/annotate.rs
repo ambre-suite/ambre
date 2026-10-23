@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{CommentId, SuggestionId};
+use ambre_core::{CommentId, DocPoint, DocPx, SuggestionId, ViewPoint, ViewPx};
 
 use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
 use crate::layout::run::RunSpan;
@@ -16,18 +16,18 @@ use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
 use crate::view::{answered, answered_span};
 
-/// A rectangle on the canvas, in CSS pixels.
+/// A rectangle on the canvas, in pixels of the view.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScreenRect {
-    pub x0: f32,
-    pub y0: f32,
-    pub x1: f32,
-    pub y1: f32,
+    pub x0: ViewPx,
+    pub y0: ViewPx,
+    pub x1: ViewPx,
+    pub y1: ViewPx,
 }
 
 impl ScreenRect {
-    fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.x0 && x < self.x1 && y >= self.y0 && y < self.y1
+    fn contains(&self, at: ViewPoint) -> bool {
+        at.x >= self.x0 && at.x < self.x1 && at.y >= self.y0 && at.y < self.y1
     }
 }
 
@@ -43,18 +43,20 @@ pub struct HoveredSuggestion {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ThreadAnchor {
     pub comment_id: CommentId,
-    pub y_px: f32,
+    /// The anchor's top on the canvas.
+    pub y: ViewPx,
 }
 
 /// The least room a thread takes in the panel, so two anchors on one line
 /// stack rather than overlap.
-pub const THREAD_ROOM_PX: f32 = 64.0;
+pub const THREAD_ROOM: ViewPx = ViewPx::new(64.0);
 
 /// One thread as the panel shows it: the thread, and the height it sits at.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PanelThread {
     pub thread: CommentThread,
-    pub y_px: f32,
+    /// The card's top, level with the canvas.
+    pub y: ViewPx,
 }
 
 /// What the comment panel or the suggestion popover asks the view to do.
@@ -90,9 +92,9 @@ pub const REPLY_LOST_ORPHANED: &str = "A collaborator deleted the text of the th
 /// Push each height down until it keeps `room` from the one above it. The
 /// heights come in anchor order, so the first thread never moves.
 #[must_use]
-pub fn stack(heights: &[f32], room: f32) -> Vec<f32> {
+pub fn stack(heights: &[ViewPx], room: ViewPx) -> Vec<ViewPx> {
     let mut out = Vec::with_capacity(heights.len());
-    let mut floor = f32::NEG_INFINITY;
+    let mut floor = ViewPx::new(f32::NEG_INFINITY);
     for &y in heights {
         let placed = y.max(floor);
         out.push(placed);
@@ -104,14 +106,14 @@ pub fn stack(heights: &[f32], room: f32) -> Vec<f32> {
 impl ProseUiState {
     /// The page and fragment of `block` that show `run_y`, a height in its
     /// run, and the top of that fragment in the page.
-    pub(crate) fn fragment_at(&self, block: BlockId, run_y: f32) -> Option<(u32, Fragment)> {
+    pub(crate) fn fragment_at(&self, block: BlockId, run_y: DocPx) -> Option<(u32, Fragment)> {
         let index = self.flow_index(&tree_id(block))?;
         let layout = self.shaped.block(index)?;
         let tops = self.shaped.blocks.get(&layout.block_id)?.data().line_tops();
         let last = layout.page_start + layout.continuation_heights.len() as u32;
         (layout.page_start..=last)
             .filter_map(|page| Some((page, fragment(layout, page, &tops)?)))
-            .take_while(|(_, piece)| piece.run_top <= run_y)
+            .take_while(|(_, piece)| piece.run_top <= run_y.get())
             .last()
     }
 
@@ -121,9 +123,8 @@ impl ProseUiState {
         block: BlockId,
         page: u32,
         piece: Fragment,
-        x: f32,
-        y: f32,
-    ) -> (f32, f32) {
+        at: DocPoint,
+    ) -> ViewPoint {
         let layout = &self.shaped.layout;
         let indent = self
             .flow_index(&tree_id(block))
@@ -131,11 +132,13 @@ impl ProseUiState {
             .and_then(|b| self.shaped.blocks.get(&b.block_id))
             .map_or(0.0, |run| run.data().indent_px());
         let scale = self.viewport.scale();
-        let page_x = layout.margin_left_px + indent + x;
-        let page_y = layout.body_top_px() + piece.top + (y - piece.run_top);
-        (
-            self.column.left_px(&self.viewport) + page_x * scale,
-            (self.column.page_top_y(page) + page_y - self.viewport.scroll_y) * scale,
+        let page_x = layout.margin_left_px + indent + at.x.get();
+        let page_y = layout.body_top_px() + piece.top + (at.y.get() - piece.run_top);
+        ViewPoint::new(
+            ViewPx::new(self.column.left_px(&self.viewport) + page_x * scale),
+            ViewPx::new(
+                (self.column.page_top_y(page).get() + page_y - self.viewport.scroll_y) * scale,
+            ),
         )
     }
 
@@ -147,7 +150,7 @@ impl ProseUiState {
         block: BlockId,
         span: RunSpan,
         page: u32,
-        (x_px, y_px): (f32, f32),
+        at: ViewPoint,
     ) -> Option<ScreenRect> {
         let index = self.flow_index(&tree_id(block))?;
         let layout = self.shaped.block(index)?;
@@ -159,21 +162,22 @@ impl ProseUiState {
             if y1 <= piece.run_top || y0 >= bottom {
                 return None;
             }
-            let (x0, top) = self.to_screen(block, page, piece, part.x0 as f32, y0);
-            let (x1, low) = self.to_screen(block, page, piece, part.x1 as f32, y1);
+            let corner = |x: f64, y: f32| DocPoint::new(DocPx::new(x as f32), DocPx::new(y));
+            let top_left = self.to_screen(block, page, piece, corner(part.x0, y0));
+            let bottom_right = self.to_screen(block, page, piece, corner(part.x1, y1));
             let rect = ScreenRect {
-                x0,
-                y0: top,
-                x1,
-                y1: low,
+                x0: top_left.x,
+                y0: top_left.y,
+                x1: bottom_right.x,
+                y1: bottom_right.y,
             };
-            rect.contains(x_px, y_px).then_some(rect)
+            rect.contains(at).then_some(rect)
         })
     }
 
     /// The page under a canvas point, if any.
-    pub(crate) fn page_under(&self, x_px: f32, y_px: f32) -> Option<u32> {
-        match self.column.screen_to_doc(&self.viewport, x_px, y_px) {
+    pub(crate) fn page_under(&self, at: ViewPoint) -> Option<u32> {
+        match self.column.screen_to_doc(&self.viewport, at) {
             DocPos::OnPage { page, .. } => Some(page),
             _ => None,
         }
@@ -181,16 +185,12 @@ impl ProseUiState {
 
     /// The suggestion drawn under a canvas point, if any (`PROSE-UI-148`).
     #[must_use]
-    pub fn suggestion_at(&self, x_px: f32, y_px: f32) -> Option<HoveredSuggestion> {
-        let page = self.page_under(x_px, y_px)?;
+    pub fn suggestion_at(&self, at: ViewPoint) -> Option<HoveredSuggestion> {
+        let page = self.page_under(at)?;
         self.suggestions.iter().find_map(|suggestion| {
             suggestion.spans.iter().find_map(|span| {
-                let rect = self.span_under(
-                    span.block_id,
-                    answered_span(span.start, span.end),
-                    page,
-                    (x_px, y_px),
-                )?;
+                let rect =
+                    self.span_under(span.block_id, answered_span(span.start, span.end), page, at)?;
                 Some(HoveredSuggestion {
                     suggestion_id: suggestion.suggestion_id,
                     kind: suggestion.kind,
@@ -203,23 +203,18 @@ impl ProseUiState {
     /// The link drawn under a canvas point, if any: over its marked text
     /// alone (`PROSE-UI-153`).
     #[must_use]
-    pub fn link_at(&self, x_px: f32, y_px: f32) -> Option<&LinkSpan> {
-        let page = self.page_under(x_px, y_px)?;
+    pub fn link_at(&self, at: ViewPoint) -> Option<&LinkSpan> {
+        let page = self.page_under(at)?;
         self.links.iter().find(|link| {
-            self.span_under(
-                link.block_id,
-                answered_span(link.start, link.end),
-                page,
-                (x_px, y_px),
-            )
-            .is_some()
+            self.span_under(link.block_id, answered_span(link.start, link.end), page, at)
+                .is_some()
         })
     }
 
     /// Track the pointer: the suggestion under it becomes the hovered one.
     /// Answers whether that changed.
-    pub fn hover(&mut self, x_px: f32, y_px: f32) -> bool {
-        let now = self.suggestion_at(x_px, y_px);
+    pub fn hover(&mut self, at: ViewPoint) -> bool {
+        let now = self.suggestion_at(at);
         let changed = now != self.hovered;
         self.hovered = now;
         changed
@@ -230,19 +225,19 @@ impl ProseUiState {
     #[must_use]
     pub fn panel_threads(&self) -> Vec<PanelThread> {
         let mut anchors = self.thread_anchors();
-        anchors.sort_by(|a, b| a.y_px.total_cmp(&b.y_px));
-        let heights: Vec<f32> = anchors.iter().map(|anchor| anchor.y_px).collect();
+        anchors.sort_by(|a, b| a.y.get().total_cmp(&b.y.get()));
+        let heights: Vec<ViewPx> = anchors.iter().map(|anchor| anchor.y).collect();
         anchors
             .iter()
-            .zip(stack(&heights, THREAD_ROOM_PX))
-            .filter_map(|(anchor, y_px)| {
+            .zip(stack(&heights, THREAD_ROOM))
+            .filter_map(|(anchor, y)| {
                 let thread = self
                     .comments
                     .iter()
                     .find(|thread| thread.comment_id == anchor.comment_id)?;
                 Some(PanelThread {
                     thread: thread.clone(),
-                    y_px,
+                    y,
                 })
             })
             .collect()
@@ -324,11 +319,12 @@ impl ProseUiState {
                     .get(&layout.block_id)?
                     .data()
                     .caret_box(answered(thread.anchor_start));
-                let (page, piece) = self.fragment_at(block, caret.y0 as f32)?;
-                let (_, y_px) = self.to_screen(block, page, piece, 0.0, caret.y0 as f32);
+                let top = DocPx::new(caret.y0 as f32);
+                let (page, piece) = self.fragment_at(block, top)?;
+                let at = self.to_screen(block, page, piece, DocPoint::new(DocPx::ZERO, top));
                 Some(ThreadAnchor {
                     comment_id: thread.comment_id,
-                    y_px,
+                    y: at.y,
                 })
             })
             .collect()
@@ -340,7 +336,11 @@ impl ProseUiState {
 mod tests {
     use crate::layout::run::{RunOffset, RunSpan};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::{CommentId, SuggestionId, UserId};
+    use ambre_core::{CommentId, DocPoint, DocPx, SuggestionId, UserId, ViewPoint, ViewPx};
+
+    fn px(value: f32) -> ViewPx {
+        ViewPx::new(value)
+    }
 
     use crate::events::{
         BlockId, CommentThread, ProseEvent, Suggestion, SuggestionKind, SuggestionSpan, block_id,
@@ -383,7 +383,7 @@ mod tests {
     }
 
     /// The middle of the characters `start..end` of `block`, on the canvas.
-    fn middle(ui: &ProseUiState, block: BlockId, start: u32, end: u32) -> (f32, f32) {
+    fn middle(ui: &ProseUiState, block: BlockId, start: u32, end: u32) -> ViewPoint {
         let index = ui
             .flow_index(&crate::events::tree_id(block))
             .expect("laid out");
@@ -396,8 +396,10 @@ mod tests {
             block,
             layout.page_start,
             piece,
-            ((part.x0 + part.x1) / 2.0) as f32,
-            ((part.y0 + part.y1) / 2.0) as f32,
+            DocPoint::new(
+                DocPx::new(((part.x0 + part.x1) / 2.0) as f32),
+                DocPx::new(((part.y0 + part.y1) / 2.0) as f32),
+            ),
         )
     }
 
@@ -411,22 +413,20 @@ mod tests {
             suggesting: false,
             suggestions: vec![first.clone(), second.clone()],
         });
-        let (x, y) = middle(&ui, a, 2, 6);
-        assert!(ui.hover(x, y));
+        let at = middle(&ui, a, 2, 6);
+        assert!(ui.hover(at));
         let hovered = ui.hovered.expect("a suggestion");
         assert_eq!(hovered.suggestion_id, first.suggestion_id);
-        assert!(hovered.rect.x0 <= x && x < hovered.rect.x1);
+        assert!(hovered.rect.x0 <= at.x && at.x < hovered.rect.x1);
         // Moving within it changes nothing; moving onto the other names it.
-        assert!(!ui.hover(x + 0.5, y));
-        let (x, y) = middle(&ui, b, 3, 8);
-        assert!(ui.hover(x, y));
+        assert!(!ui.hover(ViewPoint::new(at.x + ViewPx::new(0.5), at.y)));
+        assert!(ui.hover(middle(&ui, b, 3, 8)));
         assert_eq!(
             ui.hovered.map(|h| h.suggestion_id),
             Some(second.suggestion_id)
         );
         // Plain text beside a suggestion names none.
-        let (x, y) = middle(&ui, a, 12, 16);
-        assert!(ui.hover(x, y));
+        assert!(ui.hover(middle(&ui, a, 12, 16)));
         assert_eq!(ui.hovered, None);
     }
 
@@ -450,20 +450,20 @@ mod tests {
         let anchors = ui.thread_anchors();
         let ids: Vec<_> = anchors.iter().map(|anchor| anchor.comment_id).collect();
         assert_eq!(ids, vec![first.comment_id, last.comment_id]);
-        let (_, y) = middle(&ui, a, 4, 9);
-        assert!(anchors[0].y_px <= y && y - anchors[0].y_px < 40.0);
-        assert!(anchors[1].y_px > anchors[0].y_px);
+        let y = middle(&ui, a, 4, 9).y;
+        assert!(anchors[0].y <= y && y - anchors[0].y < ViewPx::new(40.0));
+        assert!(anchors[1].y > anchors[0].y);
         // Scrolling moves the anchors with the text.
         ui.scroll_by(down(100.0));
         let moved = ui.thread_anchors();
-        assert!((anchors[0].y_px - moved[0].y_px - 100.0 * ui.viewport.scale()).abs() < 0.5);
+        assert!(((anchors[0].y - moved[0].y).get() - 100.0 * ui.viewport.scale()).abs() < 0.5);
     }
 
     #[test]
     fn two_anchors_on_one_line_are_stacked_and_the_first_stays() {
         assert_eq!(
-            super::stack(&[10.0, 10.0, 200.0], 64.0),
-            vec![10.0, 74.0, 200.0]
+            super::stack(&[px(10.0), px(10.0), px(200.0)], px(64.0)),
+            vec![px(10.0), px(74.0), px(200.0)]
         );
     }
 
@@ -638,8 +638,7 @@ mod tests {
             suggesting: false,
             suggestions: vec![one.clone()],
         });
-        let (x, y) = middle(&ui, a, 2, 6);
-        ui.hover(x, y);
+        ui.hover(middle(&ui, a, 2, 6));
         assert!(ui.hovered.is_some());
         ui.apply_event(&ProseEvent::SuggestionsUpdated {
             suggesting: false,

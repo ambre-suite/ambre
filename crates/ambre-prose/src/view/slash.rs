@@ -11,6 +11,7 @@ use crate::layout::run::Affinity;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_core::{DocPoint, DocPx, ViewPoint};
 
 /// The rows and columns of the table the menu inserts.
 const TABLE_SIZE: u32 = 3;
@@ -165,7 +166,7 @@ impl SlashMenu {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlashMenuState {
     /// Under the slash, on the canvas. `None` hides the menu.
-    pub anchor: Option<(f32, f32)>,
+    pub anchor: Option<ViewPoint>,
     pub query: String,
     pub items: Vec<&'static str>,
     pub selected: usize,
@@ -226,11 +227,12 @@ impl ProseUiState {
     }
 
     /// The bottom of the line holding a place, on the canvas.
-    fn under(&self, (block, offset): Spot) -> Option<(f32, f32)> {
+    fn under(&self, (block, offset): Spot) -> Option<ViewPoint> {
         let run = self.run_of(block)?;
         let caret = run.caret_box_at(self.to_laid(block, offset), Affinity::Downstream);
         let (x, y0, y1) = (caret.x0 as f32, caret.y0 as f32, caret.y1 as f32);
-        let (page, piece) = self.fragment_at(block, y0)?;
-        Some(self.to_screen(block, page, piece, x, y1))
+        let (page, piece) = self.fragment_at(block, DocPx::new(y0))?;
+        let bottom = DocPoint::new(DocPx::new(x), DocPx::new(y1));
+        Some(self.to_screen(block, page, piece, bottom))
     }
 }

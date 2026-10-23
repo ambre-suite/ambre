@@ -31,14 +31,13 @@ use ambre_canvas::{
     OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
-use ambre_core::{CssPoint, CssPx};
+use ambre_core::{CssPoint, CssPx, ViewPoint, ViewPx};
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::probe::{Answer, CONFIRM_FRAMES, Dispatch, KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
-use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
 
 /// The page palette, read from the theme tokens (`PROSE-UI-014`).
@@ -73,16 +72,10 @@ fn canvas_origin() -> CssPoint {
         })
 }
 
-/// From canvas pixels to CSS pixels of the window.
-fn to_css(x: f32, y: f32) -> (f32, f32) {
-    let origin = canvas_origin();
-    (origin.x.get() + x, origin.y.get() + y)
-}
-
-fn rect_to_css(rect: ScreenRect) -> ScreenRect {
-    let (x0, y0) = to_css(rect.x0, rect.y0);
-    let (x1, y1) = to_css(rect.x1, rect.y1);
-    ScreenRect { x0, y0, x1, y1 }
+/// A canvas point as the view takes it. The canvas reports its pointer in
+/// pixels from its own corner, which are the view's pixels.
+fn view_point(x: f32, y: f32) -> ViewPoint {
+    ViewPoint::new(ViewPx::new(x), ViewPx::new(y))
 }
 
 /// One open Prose document on the canvas.
@@ -342,8 +335,7 @@ impl ProseView {
 
     /// Publish the slash menu where the view placed it.
     fn publish_slash(&self) {
-        let mut menu = self.state.slash_menu();
-        menu.anchor = menu.anchor.map(|(x, y)| to_css(x, y));
+        let menu = self.state.slash_menu();
         if self
             .annotations
             .slash
@@ -363,8 +355,7 @@ impl ProseView {
         {
             self.state.marks_sent();
         }
-        let mut bar = self.state.toolbar();
-        bar.anchor = bar.anchor.map(|(x, y)| to_css(x, y));
+        let bar = self.state.toolbar();
         if self
             .annotations
             .toolbar
@@ -379,10 +370,7 @@ impl ProseView {
 
     /// Publish the hovered suggestion, where the popover goes.
     fn publish_hover(&self) {
-        let hovered = self.state.hovered.map(|h| HoveredSuggestion {
-            rect: rect_to_css(h.rect),
-            ..h
-        });
+        let hovered = self.state.hovered;
         if self.annotations.hovered.get_untracked() != hovered {
             self.annotations.hovered.set(hovered);
         }
@@ -390,15 +378,7 @@ impl ProseView {
 
     /// Publish the threads the panel lists, lined up with their anchors.
     fn publish_threads(&self) {
-        let threads: Vec<PanelThread> = self
-            .state
-            .panel_threads()
-            .into_iter()
-            .map(|entry| PanelThread {
-                y_px: to_css(0.0, entry.y_px).1,
-                ..entry
-            })
-            .collect();
+        let threads = self.state.panel_threads();
         if self
             .annotations
             .threads
@@ -564,11 +544,11 @@ impl ProseView {
             }
             _ => {
                 if let InputEvent::PointerMove { x, y } = ev {
-                    let (x, y) = (*x as f32, *y as f32);
-                    if self.state.hover(x, y) {
+                    let at = view_point(*x as f32, *y as f32);
+                    if self.state.hover(at) {
                         self.publish_hover();
                     }
-                    let over_link = self.state.link_at(x, y).is_some();
+                    let over_link = self.state.link_at(at).is_some();
                     if self.annotations.over_link.get_untracked() != over_link {
                         self.annotations.over_link.set(over_link);
                     }
@@ -636,15 +616,13 @@ impl ProseView {
                 ctrl,
                 ..
             } => ProseInput::Press {
-                x: *x as f32,
-                y: *y as f32,
+                at: view_point(*x as f32, *y as f32),
                 // The canvas folds `Cmd` into `ctrl`.
                 mods: Modifiers::from_event(*ctrl, false, *shift, false),
                 now_ms: self.now_ms,
             },
             InputEvent::PointerMove { x, y } => ProseInput::Drag {
-                x: *x as f32,
-                y: *y as f32,
+                at: view_point(*x as f32, *y as f32),
             },
             InputEvent::PointerUp { button: 0, .. } => ProseInput::Release,
             _ => return None,
@@ -713,9 +691,9 @@ impl ProseView {
             return false;
         }
         match phase {
-            super::TouchPhase::Down => self.state.touch_start(x, y, now_ms),
+            super::TouchPhase::Down => self.state.touch_start(view_point(x, y), now_ms),
             super::TouchPhase::Move => {
-                if self.state.touch_move(x, y, now_ms) {
+                if self.state.touch_move(view_point(x, y), now_ms) {
                     self.state.hovered = None;
                     self.publish_hover();
                     self.publish_toolbar();
@@ -724,10 +702,9 @@ impl ProseView {
             }
             super::TouchPhase::Cancel => self.state.touch_cancel(),
             super::TouchPhase::Up => {
-                if let Some((x, y)) = self.state.touch_end(now_ms) {
+                if let Some(at) = self.state.touch_end(now_ms) {
                     self.feed(&ProseInput::Press {
-                        x,
-                        y,
+                        at,
                         mods: Modifiers::NONE,
                         now_ms,
                     });
@@ -741,7 +718,10 @@ impl ProseView {
     /// Text dropped on the canvas: one insertion at the drop point
     /// (`PROSE-UI-204`).
     pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
-        self.feed(&ProseInput::Drop { x, y, text })
+        self.feed(&ProseInput::Drop {
+            at: view_point(x, y),
+            text,
+        })
     }
 
     /// Another document of the same type: the state starts over, and the

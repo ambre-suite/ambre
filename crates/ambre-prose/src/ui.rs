@@ -419,7 +419,7 @@ pub struct ProseUiState {
     pub(crate) dragging: Option<(BlockId, DocOffset)>,
     /// The last pointer of the drag in flight, and its autoscroll
     /// (`PROSE-UI-038`). Both go with the drag.
-    pub(crate) drag_pointer: Option<(f32, f32)>,
+    pub(crate) drag_pointer: Option<ambre_core::ViewPoint>,
     pub(crate) autoscroll: ambre_draw::kinetic::EdgeScroll,
     /// A finger on the canvas, and the motion a flick left
     /// (`PROSE-UI-217`).

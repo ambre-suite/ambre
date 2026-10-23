@@ -151,7 +151,9 @@ pub use text_offset::{
     byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte, char_to_utf16,
     utf16_to_char,
 };
-pub use unit::{CssPoint, CssPx, DocPx, Mm, PX_PER_MM, Point, Pt, Radians, ViewPoint, ViewPx};
+pub use unit::{
+    CssPoint, CssPx, DocPoint, DocPx, Mm, PX_PER_MM, Point, Pt, Radians, ViewPoint, ViewPx,
+};
 pub use uuid::Uuid;
 pub use version::Version;
 pub use zoom::ZoomFactor;
