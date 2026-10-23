@@ -167,7 +167,8 @@ mod tests {
             .expect("an element");
         let embed = VisibleWebEmbed {
             element: ElementId("page".to_owned()),
-            url: WebAddress::new("about:blank".to_owned()),
+            // `.invalid` never resolves, so the test reaches no network.
+            url: WebAddress::parse("https://example.invalid").expect("a safe address"),
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
             layout_size: Size::new(200.0, 100.0),
             to_screen: Affine::IDENTITY,

@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-021` | `INV` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` | none | verified |
 | `TOILE-084` | `INV` | A nested document MUST carry its own permission: what a user can do on the board MUST NOT decide what they can do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `ambre_logic::dispatch::tests::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | none | verified |
 | `TOILE-088` | `INV` | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | `ambre_toile::ui::embed::address_tests::a_scheme_that_could_run_in_the_boards_stead_is_refused`; `ambre_toile::ui::embed::address_tests::a_scheme_hidden_behind_a_control_character_is_refused`; `ambre_toile::ui::embed::address_tests::plain_http_is_refused_and_not_upgraded`; `ambre_app::host::web_embed::tests::a_web_embed_runs_sandboxed_in_an_opaque_origin` -- the frame's sandbox, `allow` and referrer attributes | none | verified |
+| `TOILE-267` | `INV` | An address a peer wrote MUST pass the same check as a typed one before a frame loads it. | this spec section 4; `TOILE-088` | `ambre_toile::logic::convergence_tests::a_peers_unsafe_web_address_never_reaches_a_frame` -- a `javascript:`, `data:`, `blob:`, `http` and empty address written past the commands; `ambre_bus::app::toile::tests::a_received_address_is_checked_again`; type-level -- `WebAddress::parse` is the only constructor, and deserialisation goes through it | none | verified |
 | `TOILE-224` | `INV` | Which embed is entered MUST be this user's own view state: a peer entering an embed MUST NOT change what this user has focused. | this spec section 5 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` -- it reads the derived focus as false whatever the document holds, so no field carries it | none | verified |
 | `TOILE-UI-016` | `INV` | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; type-level -- the focus is one `Option<ElementId>`, so a second is unrepresentable | none | verified |
 | `TOILE-UI-090` | `INV` | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`; `ambre_toile::ui::embed::tests::two_embeds_of_the_same_document_share_one_session` | none | verified |
@@ -113,8 +114,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the board stores a reference and no content, so the relay sees no embedding table
   (`TOILE-021`). A child opens through the ordinary document path, with its own key, session and
   permission (`TOILE-084`). The web page is the exception (`TOILE-088`).
-* **Verification.** 44 `verified`. Host tests hold what the board decides alone: the reference,
-  the transforms, the focus, the routing, the address gate and the sessions. Browser tests hold the
+* **Verification.** 45 `verified`. Host tests hold what the board decides alone: the reference, the
+  transforms, the focus, the routing, the address gate and the sessions. Browser tests hold the
   launcher's half: the child paint, the remap, the fan-out, the dialogs and the sandbox.
 
 ---
@@ -245,6 +246,7 @@ never the gesture, exactly as a dropped file does.
 | File -> "Embed a document..." | the launcher's document list opens, this board excluded; picking one mints a `doc_embed` at the centre of the view holding that document's reference (`TOILE-086`, `TOILE-225`) |
 | File -> "Embed a web page..." | a field takes an address; only `https` survives, and a refusal is read beside the field rather than found on the board (`TOILE-087`, `TOILE-088`) |
 | a web embed on screen | a sandboxed frame is mounted over the canvas where the board paints its placeholder, laid out once at the element's world size and moved by the board's own transform (`TOILE-088`) |
+| a web embed whose stored address fails the check | the placeholder paints, and no frame mounts (`TOILE-267`) |
 | a click on a web embed | the same arbitration as a nested document: a click enters it and the frame starts taking the pointer, a drag moves it on the board (`TOILE-UI-091`, `TOILE-UI-324`) |
 
 ---

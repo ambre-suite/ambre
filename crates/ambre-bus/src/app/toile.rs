@@ -512,19 +512,108 @@ impl LinkTarget {
 
 /// The address of a web page that an embed frames (`toile-embeds`).
 ///
-/// The placement dialog makes one only through the toile address check, so a
-/// local write is an `https` address. The board also reads one back from the
-/// document, and a peer may write any text there. Nothing checks it again on
-/// that path, so a stored address is untrusted. `Debug` prints the bare text,
-/// as the `String` it replaced did.
+/// [`WebAddress::parse`] is the only way in, for a typed address and a stored
+/// one alike. Deserialisation goes through it too. A peer's `javascript:` or
+/// `data:` text therefore never becomes a `WebAddress`, and never reaches a
+/// frame (`TOILE-088`, `TOILE-267`). `Debug` prints the bare text.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
+#[serde(try_from = "String", into = "String")]
 pub struct WebAddress(String);
 
+/// Why a text is not an address a frame may load. One variant per message
+/// the user reads, so the wording lives with the rule rather than at the
+/// dialog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddressError {
+    /// The text is empty.
+    Empty,
+    /// A scheme other than `https`. This is the security-bearing refusal: a
+    /// `javascript:` or a `data:` address in a frame runs in the embedder's
+    /// stead, which is exactly what `TOILE-088` forbids.
+    NotHttps,
+    /// `https://` with nothing after it, or a host carrying a character no host
+    /// may hold.
+    NoHost,
+}
+
+impl AddressError {
+    /// What the dialog shows. Says what to do, not what went wrong.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::Empty => "Type a web address",
+            Self::NotHttps => "Only https addresses can be embedded",
+            Self::NoHost => "That address has no site in it",
+        }
+    }
+}
+
+impl std::fmt::Display for AddressError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
 impl WebAddress {
-    /// The address spelled as `text`, with no check.
-    pub fn new(text: String) -> Self {
-        Self(text)
+    /// Turn `text` into the address a frame may load, or say why it cannot
+    /// (`TOILE-088`). The text is what a user typed, or what the document
+    /// holds.
+    ///
+    /// **Only `https` survives.** A bare `example.com` reads as
+    /// `https://example.com`, and every explicit scheme other than `https`
+    /// gets a refusal, `http` included. Two reasons, and neither is taste.
+    ///
+    /// * A `javascript:`, `data:` or `blob:` frame executes with the
+    ///   embedder's own origin as its opener: the attack `TOILE-088` names.
+    /// * The browser blocks a plain-`http` frame inside a page served over TLS
+    ///   as mixed content. Accepting one would put a box on the board that
+    ///   never paints.
+    ///
+    /// This parses by hand rather than through a URL crate. The board needs
+    /// the scheme and a non-empty host and nothing else. A conforming parser
+    /// would carry the IDNA tables into the wasm bundle for the rest. A parsed
+    /// address parses again to itself, so a stored address reads back as it
+    /// was written.
+    ///
+    /// # Errors
+    ///
+    /// * [`AddressError::Empty`] on an empty text.
+    /// * [`AddressError::NotHttps`] on any scheme other than `https`.
+    /// * [`AddressError::NoHost`] on a missing host, or a host holding a
+    ///   character no host may carry.
+    pub fn parse(text: &str) -> Result<Self, AddressError> {
+        // A control character or a space inside an address is never legitimate.
+        // It is a paste accident, or an attempt to hide a scheme from a naive
+        // prefix test (`java\nscript:`). Strip the ends, and refuse the middle.
+        let trimmed = text.trim_matches(|c: char| c.is_whitespace() || c.is_control());
+        if trimmed.is_empty() {
+            return Err(AddressError::Empty);
+        }
+        if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(AddressError::NoHost);
+        }
+
+        let rest = match split_scheme(trimmed) {
+            // An explicit scheme: `https` and nothing else.
+            Some((scheme, rest)) => {
+                if !scheme.eq_ignore_ascii_case("https") {
+                    return Err(AddressError::NotHttps);
+                }
+                rest.strip_prefix("//").unwrap_or(rest)
+            }
+            // No scheme at all: the user typed a host, and https is what they get.
+            None => trimmed,
+        };
+
+        // The authority ends at the first `/`, `?` or `#`; what is left must be
+        // a host. A leading `@` would make the host the part after it
+        // (userinfo), so an empty one there is as empty as no host at all.
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        let host = authority.rsplit('@').next().unwrap_or_default();
+        if host.is_empty() || host.starts_with(':') {
+            return Err(AddressError::NoHost);
+        }
+
+        Ok(Self(format!("https://{rest}")))
     }
 
     /// The address's text, for the frame that loads it.
@@ -535,6 +624,41 @@ impl WebAddress {
     /// The address's text, for the document that stores it.
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+/// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
+/// when the text carries no scheme. A `host:port` deliberately carries none:
+/// what follows its colon is a port rather than a path.
+fn split_scheme(s: &str) -> Option<(&str, &str)> {
+    let (scheme, rest) = s.split_once(':')?;
+    // RFC 3986: a scheme starts with a letter and holds letters, digits and
+    // `+ - .`. A `host:8080` matches that shape too, so the digits after the
+    // colon are what tells the two apart.
+    let shaped = scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    let is_port = {
+        let digits = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+    };
+    (shaped && !is_port).then_some((scheme, rest))
+}
+
+/// A stored or received text read as an address, refused as
+/// [`WebAddress::parse`] refuses one.
+impl TryFrom<String> for WebAddress {
+    type Error = AddressError;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        Self::parse(&text)
+    }
+}
+
+impl From<WebAddress> for String {
+    fn from(address: WebAddress) -> Self {
+        address.0
     }
 }
 
@@ -2039,8 +2163,10 @@ pub enum DisplayGeom {
     /// Paints nothing; carried for group-selection resolution
     /// (`toile-embeds`).
     Group,
-    /// Web url (sandboxed iframe).
-    Embed(WebAddress),
+    /// Web url (sandboxed iframe). `None` when the document holds no address
+    /// that [`WebAddress::parse`] accepts: the placeholder paints, and no
+    /// frame loads (`TOILE-267`).
+    Embed(Option<WebAddress>),
     /// Nested Ambre document (`toile-embeds`).
     DocEmbed {
         document_id: DocumentId,
@@ -2064,6 +2190,31 @@ pub struct DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `TOILE-267`: an address that crosses a channel is parsed again on the
+    /// far side. A safe one keeps its bytes, and an unsafe one never decodes.
+    #[test]
+    fn a_received_address_is_checked_again() {
+        let safe = WebAddress::parse("https://example.com/a").expect("a safe address");
+        let bytes = postcard::to_allocvec(&safe).expect("encodes");
+        assert_eq!(
+            postcard::to_allocvec(&"https://example.com/a").expect("encodes"),
+            bytes,
+            "the wire carries the bare text"
+        );
+        assert_eq!(postcard::from_bytes::<WebAddress>(&bytes), Ok(safe));
+        for hostile in [
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "http://example.com",
+        ] {
+            let bytes = postcard::to_allocvec(&hostile).expect("encodes");
+            assert!(
+                postcard::from_bytes::<WebAddress>(&bytes).is_err(),
+                "{hostile}"
+            );
+        }
+    }
 
     /// A sample whose name breaks the display-name rule keeps
     /// its cursor, and loses the name alone.

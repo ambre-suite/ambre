@@ -9,7 +9,9 @@
 // ============================================================================
 
 use ambre_bus::DocType;
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementId, ElementKind, ShapeKind};
+use ambre_bus::app::toile::{
+    DisplayElement, DisplayGeom, ElementId, ElementKind, ShapeKind, WebAddress,
+};
 
 /// The longest text an announcement carries. A sticky holding a page of notes
 /// is announced by its start, not read whole on every click.
@@ -73,7 +75,7 @@ fn kind_name(element: &DisplayElement) -> &'static str {
 fn element_text(geom: &DisplayGeom) -> Option<&str> {
     match geom {
         DisplayGeom::Sticky(s) | DisplayGeom::Text(s) | DisplayGeom::Frame(s) => Some(s),
-        DisplayGeom::Embed(url) => Some(url.as_str()),
+        DisplayGeom::Embed(url) => url.as_ref().map(WebAddress::as_str),
         _ => None,
     }
 }

@@ -496,9 +496,10 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Embed,
         Point::new(40.0, 200.0),
-        InitContent::Embed(ambre_bus::app::toile::WebAddress::new(
-            "https://example.invalid".to_owned(),
-        )),
+        InitContent::Embed(
+            ambre_bus::app::toile::WebAddress::parse("https://example.invalid")
+                .expect("a safe address"),
+        ),
         4,
     );
     let _doc_embed = create(

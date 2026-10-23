@@ -4617,6 +4617,50 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
     );
 }
 
+/// `TOILE-267`: a hostile peer writes an unsafe address into an embed. The
+/// reader's board derives no address from it, so no frame ever loads it. The
+/// shell builds its frames from `visible_web_embeds` alone.
+#[test]
+fn a_peers_unsafe_web_address_never_reaches_a_frame() {
+    let hostile = [
+        "javascript:alert(document.domain)",
+        "JaVaScRiPt:alert(1)",
+        "java\nscript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "blob:https://example.com/0f0e",
+        "http://example.com",
+        "about:blank",
+        "",
+    ];
+    for value in hostile {
+        let mut peer = ToileState::new();
+        let out = peer.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Embed,
+            at: Point::ZERO,
+            size: Size::new(100.0, 100.0),
+            fill: None,
+            content: InitContent::Embed(
+                ambre_bus::app::toile::WebAddress::parse("example.com").expect("a safe address"),
+            ),
+            correlate: 0,
+        });
+        let id = created_id(&out);
+        // The peer writes the field as raw text, past every check its own
+        // commands would run.
+        peer.debug_set_element_field(&id, crate::logic::state::ElementKey::Url, value);
+
+        let mut reader = ToileState::new();
+        reader.apply_remote_snapshot(&peer.export_snapshot());
+        let cam = crate::ui::viewport::ViewportTransform::new(1000.0, 800.0);
+        let frames = crate::ui::embed::visible_web_embeds(&reader.debug_viewport(), &cam, None);
+        assert!(
+            frames.is_empty(),
+            "{value:?} reached a frame as {:?}",
+            frames.iter().map(|f| &f.url).collect::<Vec<_>>()
+        );
+    }
+}
+
 /// `TOILE-085` and `TOILE-226`: a pasted embed is a second reference to the
 /// same document. The copy and the paste ask the service plane for nothing,
 /// so no second document comes into being.

@@ -17,8 +17,9 @@ use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
 use crate::ui::deck::DeckSignals;
-use crate::ui::embed::{EmbedTarget, PlacedEmbed, normalize_web_address};
+use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 use crate::ui::link::LinkEdit;
+use ambre_bus::app::toile::WebAddress;
 
 /// A document the user may embed or link to, as the launcher's list names it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -224,7 +225,7 @@ fn place_web_embed(
     open: RwSignal<bool>,
     placed: RwSignal<Option<PlacedEmbed>>,
 ) {
-    match normalize_web_address(&typed.get_untracked()) {
+    match WebAddress::parse(&typed.get_untracked()) {
         Ok(url) => {
             placed.set(Some(PlacedEmbed {
                 target: EmbedTarget::Web(url),
@@ -244,7 +245,7 @@ fn set_web_link(
     open: RwSignal<bool>,
     edit: RwSignal<Option<LinkEdit>>,
 ) {
-    match normalize_web_address(&typed.get_untracked()) {
+    match WebAddress::parse(&typed.get_untracked()) {
         Ok(url) => {
             edit.set(Some(LinkEdit(Some(LinkTarget::Url(
                 ambre_core::LinkUrl::new(url.into_string()),

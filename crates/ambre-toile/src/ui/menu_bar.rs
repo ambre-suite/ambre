@@ -64,7 +64,7 @@ pub const DECK: CommandId = CommandId("toile.present.deck");
 pub const IMPORT_FILE: CommandId = CommandId("toile.file.import");
 /// Put a web page on the board (`TOILE-087`). A UI-only intent: the shell owns
 /// the dialog that takes the address, and the board learns of it only once the
-/// address has passed `ui::embed::normalize_web_address`.
+/// address has passed `WebAddress::parse`.
 pub const EMBED_WEB: CommandId = CommandId("toile.file.embed_web");
 /// Put another Ambre document on the board (`TOILE-086`). A UI-only intent for
 /// the same reason: only the launcher knows which documents this user may open,

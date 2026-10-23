@@ -45,9 +45,10 @@ pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 // What the board reads from the file system is pure and host-tested in
 // `ui::interop`. The shell asks the board rather than holding a format list of
 // its own (`toile-import-export`).
-pub use crate::ui::embed::{AddressError, EmbedTarget, PlacedEmbed, normalize_web_address};
+pub use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
 pub use crate::ui::link::{LinkEdit, ShellNav};
+pub use ambre_bus::app::toile::AddressError;
 pub use find::{FindPanel, FindPanelState, FindQuery};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested

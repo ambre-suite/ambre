@@ -189,7 +189,7 @@ pub const DEFAULT_EMBED_SIZE: Size = Size::new(640.0, 400.0);
 /// What a placement dialog answered with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EmbedTarget {
-    /// A web page, by an address already through [`normalize_web_address`].
+    /// A web page, by an address already through [`WebAddress::parse`].
     Web(WebAddress),
     /// Another Ambre document, by reference (`TOILE-021`): the board stores the
     /// id and never the content.
@@ -243,113 +243,6 @@ pub fn placement(placed: PlacedEmbed, cam: &ViewportTransform) -> ToileCommand {
     }
 }
 
-/// Why an address cannot go on the board. One variant per message the user
-/// reads, so the wording lives with the rule rather than at the dialog.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AddressError {
-    /// The user typed nothing.
-    Empty,
-    /// A scheme other than `https`. This is the security-bearing refusal: a
-    /// `javascript:` or a `data:` address in a frame runs in the embedder's
-    /// stead, which is exactly what `TOILE-088` forbids.
-    NotHttps,
-    /// `https://` with nothing after it, or a host carrying a character no host
-    /// may hold.
-    NoHost,
-}
-
-impl AddressError {
-    /// What the dialog shows. Says what to do, not what went wrong.
-    pub fn message(self) -> &'static str {
-        match self {
-            Self::Empty => "Type a web address",
-            Self::NotHttps => "Only https addresses can be embedded",
-            Self::NoHost => "That address has no site in it",
-        }
-    }
-}
-
-/// Turn what a user typed into the address a frame may load, or say why it
-/// cannot (`TOILE-088`).
-///
-/// **Only `https` survives.** A bare `example.com` reads as
-/// `https://example.com`, and every explicit scheme other than `https` gets a
-/// refusal, `http` included. Two reasons, and neither is taste.
-///
-/// * A `javascript:`, `data:` or `blob:` frame executes with the embedder's own
-///   origin as its opener, which is the whole of the attack `TOILE-088` names.
-/// * The browser blocks a plain-`http` frame inside a page served over TLS as
-///   mixed content. Accepting one would put a box on the board that never
-///   paints.
-///
-/// This parses by hand rather than through a URL crate. The board needs the
-/// scheme and a non-empty host and nothing else. A conforming parser would
-/// carry the IDNA tables into the wasm bundle for the rest.
-///
-/// # Errors
-///
-/// * [`AddressError::Empty`] on an empty address.
-/// * [`AddressError::NotHttps`] on any scheme other than `https`.
-/// * [`AddressError::NoHost`] on a missing host, or a host holding a character
-///   no host may carry.
-pub fn normalize_web_address(typed: &str) -> Result<WebAddress, AddressError> {
-    // A control character or a space inside an address is never legitimate. It
-    // is a paste accident, or an attempt to hide a scheme from a naive prefix
-    // test (`java\nscript:`). Strip the ends, and refuse the middle.
-    let trimmed = typed.trim_matches(|c: char| c.is_whitespace() || c.is_control());
-    if trimmed.is_empty() {
-        return Err(AddressError::Empty);
-    }
-    if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err(AddressError::NoHost);
-    }
-
-    let rest = match split_scheme(trimmed) {
-        // An explicit scheme: `https` and nothing else.
-        Some((scheme, rest)) => {
-            if !scheme.eq_ignore_ascii_case("https") {
-                return Err(AddressError::NotHttps);
-            }
-            rest.strip_prefix("//").unwrap_or(rest)
-        }
-        // No scheme at all: the user typed a host, and https is what they get.
-        None => trimmed,
-    };
-
-    // The authority ends at the first `/`, `?` or `#`; what is left must be a
-    // host. A leading `@` would make the host the part after it (userinfo), so
-    // an empty one there is as empty as no host at all.
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    let host = authority.rsplit('@').next().unwrap_or_default();
-    if host.is_empty() || host.starts_with(':') {
-        return Err(AddressError::NoHost);
-    }
-
-    Ok(WebAddress::new(format!("https://{rest}")))
-}
-
-/// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
-/// when the text carries no scheme. A `host:port` deliberately carries none:
-/// what follows its colon is a port rather than a path.
-fn split_scheme(s: &str) -> Option<(&str, &str)> {
-    let colon = s.find(':')?;
-    let (scheme, rest) = s.split_at(colon);
-    let rest = &rest[1..];
-    // RFC 3986: a scheme starts with a letter and holds letters, digits and
-    // `+ - .`. A `host:8080` matches that shape too, so the digits after the
-    // colon are what tells the two apart.
-    let shaped = !scheme.is_empty()
-        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
-        && scheme
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
-    let is_port = {
-        let digits = rest.split(['/', '?', '#']).next().unwrap_or_default();
-        !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
-    };
-    (shaped && !is_port).then_some((scheme, rest))
-}
-
 /// Whether an input event belongs to the focused embed's child rather than to
 /// the board ("Input focus").
 ///
@@ -390,8 +283,8 @@ where
 pub struct VisibleWebEmbed {
     /// The board element carrying the address: the shell's key for its frame.
     pub element: ElementId,
-    /// The address, as stored. A peer may have written it, so nothing
-    /// here checked it.
+    /// The address, as stored. A peer may have written it, so the board read
+    /// it back through [`WebAddress::parse`] (`TOILE-267`).
     pub url: WebAddress,
     /// Where the frame goes, in screen pixels: the AABB of the
     /// element's quad, like a nested document's. What the board clips to.
@@ -428,7 +321,9 @@ pub fn visible_web_embeds(
             let DisplayNode::Element(e) = node else {
                 return None;
             };
-            let DisplayGeom::Embed(url) = &e.geom else {
+            // An address the check refused derives as `None`: the placeholder
+            // paints, and no frame loads anything.
+            let DisplayGeom::Embed(Some(url)) = &e.geom else {
                 return None;
             };
             Some(VisibleWebEmbed {
@@ -1306,20 +1201,23 @@ mod tests {
 
 #[cfg(test)]
 mod address_tests {
-    use super::{AddressError, WebAddress, normalize_web_address};
+    use super::WebAddress;
+    use ambre_bus::app::toile::AddressError;
 
     /// A host typed on its own is the common case, and it is https.
     #[test]
     fn a_bare_host_becomes_an_https_address() {
         assert_eq!(
-            normalize_web_address("example.com"),
-            Ok(WebAddress::new("https://example.com".to_owned()))
+            WebAddress::parse("example.com")
+                .as_ref()
+                .map(WebAddress::as_str),
+            Ok("https://example.com")
         );
         assert_eq!(
-            normalize_web_address("  example.com/a/b?q=1#top  "),
-            Ok(WebAddress::new(
-                "https://example.com/a/b?q=1#top".to_owned()
-            ))
+            WebAddress::parse("  example.com/a/b?q=1#top  ")
+                .as_ref()
+                .map(WebAddress::as_str),
+            Ok("https://example.com/a/b?q=1#top")
         );
     }
 
@@ -1327,21 +1225,27 @@ mod address_tests {
     #[test]
     fn a_host_with_a_port_keeps_its_port() {
         assert_eq!(
-            normalize_web_address("example.com:8443/x"),
-            Ok(WebAddress::new("https://example.com:8443/x".to_owned()))
+            WebAddress::parse("example.com:8443/x")
+                .as_ref()
+                .map(WebAddress::as_str),
+            Ok("https://example.com:8443/x")
         );
     }
 
     #[test]
     fn an_https_address_survives_verbatim() {
         assert_eq!(
-            normalize_web_address("https://example.com/a"),
-            Ok(WebAddress::new("https://example.com/a".to_owned()))
+            WebAddress::parse("https://example.com/a")
+                .as_ref()
+                .map(WebAddress::as_str),
+            Ok("https://example.com/a")
         );
         // The parser compares the scheme without case, then normalizes it.
         assert_eq!(
-            normalize_web_address("HTTPS://Example.COM/A"),
-            Ok(WebAddress::new("https://Example.COM/A".to_owned()))
+            WebAddress::parse("HTTPS://Example.COM/A")
+                .as_ref()
+                .map(WebAddress::as_str),
+            Ok("https://Example.COM/A")
         );
     }
 
@@ -1359,7 +1263,7 @@ mod address_tests {
             "about:blank",
         ] {
             assert_eq!(
-                normalize_web_address(typed),
+                WebAddress::parse(typed),
                 Err(AddressError::NotHttps),
                 "{typed} must not reach a frame"
             );
@@ -1372,14 +1276,14 @@ mod address_tests {
     fn a_scheme_hidden_behind_a_control_character_is_refused() {
         for typed in ["java\nscript:alert(1)", "java\tscript:alert(1)"] {
             assert!(
-                normalize_web_address(typed).is_err(),
+                WebAddress::parse(typed).is_err(),
                 "{typed:?} must not be accepted"
             );
         }
         // The parser strips leading control characters, then reads the scheme
         // beneath them for what it is.
         assert_eq!(
-            normalize_web_address("\u{0}\njavascript:alert(1)"),
+            WebAddress::parse("\u{0}\njavascript:alert(1)"),
             Err(AddressError::NotHttps)
         );
     }
@@ -1390,32 +1294,23 @@ mod address_tests {
     #[test]
     fn plain_http_is_refused_and_not_upgraded() {
         assert_eq!(
-            normalize_web_address("http://example.com"),
+            WebAddress::parse("http://example.com"),
             Err(AddressError::NotHttps)
         );
     }
 
     #[test]
     fn an_address_with_no_site_in_it_is_refused() {
-        assert_eq!(normalize_web_address(""), Err(AddressError::Empty));
-        assert_eq!(normalize_web_address("   "), Err(AddressError::Empty));
-        assert_eq!(normalize_web_address("https://"), Err(AddressError::NoHost));
+        assert_eq!(WebAddress::parse(""), Err(AddressError::Empty));
+        assert_eq!(WebAddress::parse("   "), Err(AddressError::Empty));
+        assert_eq!(WebAddress::parse("https://"), Err(AddressError::NoHost));
+        assert_eq!(WebAddress::parse("https:///a"), Err(AddressError::NoHost));
+        assert_eq!(WebAddress::parse("https://@/a"), Err(AddressError::NoHost));
         assert_eq!(
-            normalize_web_address("https:///a"),
+            WebAddress::parse("https://:8080/a"),
             Err(AddressError::NoHost)
         );
-        assert_eq!(
-            normalize_web_address("https://@/a"),
-            Err(AddressError::NoHost)
-        );
-        assert_eq!(
-            normalize_web_address("https://:8080/a"),
-            Err(AddressError::NoHost)
-        );
-        assert_eq!(
-            normalize_web_address("example .com"),
-            Err(AddressError::NoHost)
-        );
+        assert_eq!(WebAddress::parse("example .com"), Err(AddressError::NoHost));
     }
 
     /// Every refusal has a sentence, and none of them is empty.
@@ -1444,7 +1339,7 @@ mod web_embed_tests {
     /// one helper covers both kinds.
     fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
         let mut e = doc_embed(id, DocumentId::new(), bounds, 0.0);
-        e.geom = DisplayGeom::Embed(super::WebAddress::new(url.to_owned()));
+        e.geom = DisplayGeom::Embed(super::WebAddress::parse(url).ok());
         e
     }
 
@@ -1674,7 +1569,7 @@ mod placement_tests {
     #[test]
     fn a_web_address_lands_centred_under_its_drop_point() {
         let cam = ViewportTransform::new(800.0, 600.0);
-        let url = super::WebAddress::new("https://example.com".to_owned());
+        let url = super::WebAddress::parse("https://example.com").expect("a safe address");
         let placed = PlacedEmbed {
             target: EmbedTarget::Web(url.clone()),
             at: Some(Point::new(100.0, 50.0)),

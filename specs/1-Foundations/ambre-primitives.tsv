@@ -530,7 +530,11 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_und
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress.0 | field | String	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::into_string() | ret | String	newtype-inner	WebAddress newtype
-ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::new(text) | param | String	newtype-inner	WebAddress newtype
+ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
+ambre-bus | src/app/toile.rs | crate::app::toile | AddressError::message() | ret | &'static str	free-text	AddressError message text
+ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::parse(text) | param | &str	free-text	address text the user typed or the document holds, checked into a WebAddress
+ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
+ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | ZTarget::Index.0 | field | usize	math	z-order index
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
@@ -4994,7 +4998,6 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad() | ret | f64
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::render(show_caret) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | ink_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/embed.rs | crate::ui::embed | AddressError::message() | ret | &'static str	free-text	AddressError message text
 ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EMBED_CLOSE_DEBOUNCE_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bool	generic	predicate or handled-flag result
@@ -5003,11 +5006,8 @@ ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedSessions::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleEmbed.focused | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleWebEmbed.focused | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/embed.rs | crate::ui::embed | normalize_web_address(typed) | param | &str	free-text	address text the user typed, checked into a WebAddress
 ambre-toile | src/ui/embed.rs | crate::ui::embed | references() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | routes_to_child() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/embed.rs | crate::ui::embed | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
-ambre-toile | src/ui/embed.rs | crate::ui::embed | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
 ambre-toile | src/ui/find.rs | crate::ui::find | active_index() | ret | Option<usize>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	math	local state flag or value, not a mode selector

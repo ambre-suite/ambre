@@ -1011,9 +1011,10 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     let placed = placed.get_untracked().expect("the address was placed");
     assert_eq!(
         placed.target,
-        EmbedTarget::Web(ambre_bus::app::toile::WebAddress::new(
-            "https://example.com".to_owned()
-        ))
+        EmbedTarget::Web(
+            ambre_bus::app::toile::WebAddress::parse("https://example.com")
+                .expect("a safe address")
+        )
     );
     assert!(!dialogs.embed_web_open.get_untracked());
     root.remove();

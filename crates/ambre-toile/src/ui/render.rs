@@ -2011,9 +2011,9 @@ mod tests {
             focused: false,
         };
         for geom in [
-            DisplayGeom::Embed(ambre_bus::app::toile::WebAddress::new(
-                "https://example.org".to_owned(),
-            )),
+            DisplayGeom::Embed(
+                ambre_bus::app::toile::WebAddress::parse("https://example.org").ok(),
+            ),
             doc,
         ] {
             let ops = inner(geom.clone());
