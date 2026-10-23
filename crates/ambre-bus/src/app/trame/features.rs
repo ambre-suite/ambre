@@ -11,7 +11,7 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::ColCount;
+use super::{ColCount, DateSerial};
 use ambre_core::Rgb;
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
@@ -151,9 +151,11 @@ pub enum ValidationKind {
         inclusive: bool,
     },
     NumberInteger,
+    /// Dates between two bounds, each as a serial; the view parses the
+    /// ISO text once, at input.
     DateRange {
-        min: Option<String>,
-        max: Option<String>,
+        min: Option<DateSerial>,
+        max: Option<DateSerial>,
     },
     TextLength {
         min: Option<u32>,

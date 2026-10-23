@@ -11,7 +11,7 @@
 // stands, so no pattern is refused. A mistyped pattern still renders, and the
 // result shows the mistake.
 
-use crate::formula::calendar::{CivilDate, DateSerial};
+use ambre_bus::{CivilDate, DateSerial};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [

@@ -14,12 +14,12 @@ use std::collections::{HashMap, HashSet};
 use petgraph::visit::Topo;
 
 use super::cache::BytecodeCache;
-use super::calendar::DateSerial;
 use super::compile::SheetIndices;
 use super::dag::DependencyGraph;
 use super::text::StoredFormula;
 use super::types::{CellId, CellValue, FormulaCtx};
 use super::vm::EvalContext;
+use ambre_bus::DateSerial;
 
 /// Central orchestrator for the Trame formula engine.
 pub struct FormulaEngine {

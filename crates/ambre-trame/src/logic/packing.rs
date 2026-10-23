@@ -6,7 +6,7 @@
 // `styles.rs`), so `CellStyle` is stored serde-encoded verbatim.
 
 use super::*;
-use crate::formula::calendar::DateSerial;
+use ambre_bus::DateSerial;
 
 /// Merge a [`StylePatch`] into a [`CellStyle`] in place: each `Some` field of the
 /// patch overwrites the style; `None` leaves it. Bold/italic are not part of

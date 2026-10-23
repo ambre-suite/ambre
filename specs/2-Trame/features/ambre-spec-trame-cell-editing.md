@@ -208,7 +208,7 @@ pub enum ValidationKind {
     ListRange(String),                                   // the values of a range, as an A1 reference
     NumberRange { min: f64, max: f64, inclusive: bool },
     NumberInteger,
-    DateRange { min: Option<String>, max: Option<String> },
+    DateRange { min: Option<DateSerial>, max: Option<DateSerial> },
     TextLength { min: Option<u32>, max: Option<u32> },
     Regex(String),
     Formula(String),                                     // must return TRUE

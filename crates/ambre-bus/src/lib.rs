@@ -60,12 +60,12 @@ pub use event::{
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
-    CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DefinedName, DisplayCell, EditSessionId,
-    FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, MergeSpan, Percent, Row,
-    RowCount, RowDelta, RowSpan, RowVec, SelectionKind, SheetId, SheetName, SheetNameKey,
-    SheetNameRefusal, SheetTab, SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign,
-    ValidationKind, ValidationOnInvalid,
+    CellStyle, CivilDate, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
+    ColVec, CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DateSerial, DaySerial,
+    DefinedName, DisplayCell, EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign,
+    HeaderRow, MergeSpan, Percent, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind,
+    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SortKey, SortOrder, StylePatch,
+    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};

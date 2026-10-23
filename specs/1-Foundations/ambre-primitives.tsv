@@ -535,8 +535,6 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormat
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopN.0 | field | u32	math	top/bottom N count
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondStyle.bold | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.max | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.min | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Formula.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::List.0 | field | Vec<String>	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::ListRange.0 | field | String	free-text	user-entered rule operand, pattern or formula text
@@ -5121,19 +5119,19 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPer
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent.0 | field | f32	newtype-inner	the value of a validated percentage
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::new(value) | param | f32	newtype-inner	the fallible constructor that checks the range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::value() | ret | f32	newtype-inner	enum/newtype own accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.day | field | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.month | field | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | CivilDate.year | field | i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::new(serial) | param | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::from_unix_days(unix_days) | param | f64	math	calendar arithmetic: days on the Unix clock
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DateSerial::time_of_day() | ret | f64	math	calendar arithmetic: the fraction of a day
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::new(days) | param | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | DaySerial::days_since() | ret | i64	math	calendar arithmetic: a count of days
-ambre-trame | src/formula/calendar.rs | crate::formula::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | CivilDate.day | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | CivilDate.month | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | CivilDate.year | field | i64	math	calendar arithmetic (y/m/d), local
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::new(serial) | param | f64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::from_unix_days(unix_days) | param | f64	math	calendar arithmetic: days on the Unix clock
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::time_of_day() | ret | f64	math	calendar arithmetic: the fraction of a day
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::new(days) | param | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::days_since() | ret | i64	math	calendar arithmetic: a count of days
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/logic/find.rs | crate::logic::find | FindText.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | FindText::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor

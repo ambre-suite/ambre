@@ -1,10 +1,13 @@
-// ambre-trame/src/formula/calendar.rs The spreadsheet calendar: the two
+// ambre-bus/src/app/trame/calendar.rs The spreadsheet calendar: the two
 // serials a date travels as, and the civil date between them.
 //
 // A formula reads a date as a number of days from the spreadsheet epoch,
 // 1899-12-30. A whole-day count is a `DaySerial`; a date with its time of day
 // in the fraction is a `DateSerial`. `CivilDate` names the year, the month and
 // the day, so no call can pass them in the wrong order.
+//
+// The calendar lives on the bus: a validation rule carries its date bounds
+// across the seam as serials. The view parses the text once, at input.
 
 /// Days from the spreadsheet epoch to the Unix epoch, 1970-01-01.
 const UNIX_EPOCH_SERIAL: i64 = 25_569;
