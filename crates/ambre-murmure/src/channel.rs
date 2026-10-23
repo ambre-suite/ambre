@@ -224,7 +224,7 @@ pub struct ChannelState {
     /// The messages past which the active segment asks to close.
     segment_size: usize,
     /// The snapshot bytes past which the active segment asks to close.
-    segment_bytes: usize,
+    segment_bytes: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
     close_asked: bool,
     /// Whether a rotation retired the key the active segment was opened

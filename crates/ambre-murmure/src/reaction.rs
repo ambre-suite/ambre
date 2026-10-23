@@ -8,7 +8,7 @@
 //! (`MURMURE-007`).
 
 use ambre_bus::{Emoji, Reaction};
-use ambre_core::UserId;
+use ambre_core::{ByteSize, UserId};
 use loro::{Container, ContainerID, Index, LoroDoc, ValueOrContainer};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -16,7 +16,7 @@ use crate::schema::{Fields, MessageKey, Root};
 
 /// The longest emoji a key takes, in bytes. A family or a flag sequence of
 /// Unicode stays well below it.
-const EMOJI_MAX_BYTES: usize = 64;
+const EMOJI_MAX_BYTES: ByteSize = ByteSize(64);
 
 /// The key of one reaction in the `reactions` map of a message: its member
 /// and its emoji (`MURMURE-006`).
@@ -49,7 +49,7 @@ impl ReactionKey {
 /// character, inside [`EMOJI_MAX_BYTES`].
 pub(crate) fn is_emoji(emoji: &Emoji) -> bool {
     let emoji = emoji.as_str();
-    emoji.len() <= EMOJI_MAX_BYTES
+    ByteSize::of_len(emoji.len()) <= EMOJI_MAX_BYTES
         && emoji.graphemes(true).count() == 1
         && !emoji.chars().any(|c| c.is_whitespace() || c.is_control())
 }

@@ -6,7 +6,7 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::{Millis, SegmentId};
+use ambre_core::{ByteSize, Millis, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
@@ -21,7 +21,7 @@ pub const SEGMENT_MESSAGES: usize = 5000;
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
-pub const SEGMENT_BYTES: usize = 2 * 1024 * 1024;
+pub const SEGMENT_BYTES: ByteSize = ByteSize(2 * 1024 * 1024);
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
@@ -73,7 +73,7 @@ impl ChannelState {
     /// This channel, with segments that ask to close past `bytes` of
     /// snapshot.
     #[must_use]
-    pub fn with_segment_bytes(mut self, bytes: usize) -> Self {
+    pub fn with_segment_bytes(mut self, bytes: ByteSize) -> Self {
         self.segment_bytes = bytes;
         self
     }
@@ -115,12 +115,13 @@ impl ChannelState {
         let Ok(snapshot) = self.active.doc.export(ExportMode::Snapshot) else {
             return false;
         };
-        let bytes = snapshot.len();
+        let bytes = ByteSize::of_len(snapshot.len());
         if bytes >= self.segment_bytes {
             return true;
         }
-        let per_message = (bytes / messages.max(1)).max(1);
-        let step = ((self.segment_bytes - bytes) / per_message / 2).max(1);
+        let per_message = (snapshot.len() / messages.max(1)).max(1);
+        let room = self.segment_bytes.saturating_sub(bytes).as_len();
+        let step = (room / per_message / 2).max(1);
         self.active.probe_at = messages + step;
         false
     }

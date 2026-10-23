@@ -5,7 +5,7 @@ use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
-use ambre_core::{ChannelId, SegmentId, Seq, UserId};
+use ambre_core::{ByteSize, ChannelId, SegmentId, Seq, UserId};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -126,7 +126,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
 /// snapshot past the byte bound, far below its message count.
 #[test]
 fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
-    const BYTES: usize = 16 * 1024;
+    const BYTES: ByteSize = ByteSize(16 * 1024);
     let mut alice = channel(10_000).with_segment_bytes(BYTES);
     let author = UserId::new();
     let mut sent = 0;
@@ -138,10 +138,12 @@ fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
         alice.send(&draft(&body), author, NOW).expect("send");
         sent += 1;
         let segment = alice.active_id();
-        let bytes = alice
-            .snapshot(segment.document_id())
-            .expect("snapshot")
-            .len();
+        let bytes = ByteSize::of_len(
+            alice
+                .snapshot(segment.document_id())
+                .expect("snapshot")
+                .len(),
+        );
         let asked = alice.wants_close();
         if bytes >= BYTES {
             assert_eq!(asked, Some(segment), "asked at the send that passes");

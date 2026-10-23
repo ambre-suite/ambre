@@ -1923,7 +1923,6 @@ ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	
 ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.close_asked | field | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.key_rotated | field | bool	math	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState.segment_bytes | field | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.segment_size | field | usize	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.successor_session | field | Option<(ambre_core::PeerId,Vec<u8>)>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -1968,11 +1967,9 @@ ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState:
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::owes_rotation_close() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes(messages) | param | usize	math	local count/index/counter
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::with_segment_bytes(bytes) | param | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::with_segment_size(messages) | param | usize	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | Closed.meta | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | Retry.failures | field | u32	math	local count/index/counter
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | SEGMENT_BYTES | const | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SEGMENT_MESSAGES | const | usize	math	local count/index/counter
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | SUCCESSOR_FAILURES | const | u32	math	local count/index/counter
 ambre-murmure | src/channel/confirming.rs | crate::channel::confirming | ChannelState::check_snapshot(snapshot) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2365,21 +2362,15 @@ ambre-murmure | src/paint.rs | crate::paint | spot_at(rows) | param | &[(usize,f
 ambre-murmure | src/paint.rs | crate::paint | spot_at(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | spot_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | Held::Shown.painted | field | u64	math	local count/index/counter
-ambre-murmure | src/pictures.rs | crate::pictures | PICTURES_BYTES | const | usize	debt	finding: Byte budgets held as `usize`
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures.bytes | field | usize	debt	finding: Byte budgets held as `usize`
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures.cap | field | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures.paint | field | u64	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures.screens | field | [u64;2]	math	local count/index/counter
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures::bytes() | ret | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::failed() | ret | bool	math	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::land() | ret | bool	math	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures::new(cap) | param | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::want() | ret | bool	math	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | frame_at() | ret | (usize,Option<ambre_core::PageTime>)	math	frame index local to animation
 ambre-murmure | src/pictures.rs | crate::pictures | frame_at(still) | param | bool	math	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | frame_key(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | previews() | ret | bool	math	state flag/predicate
-ambre-murmure | src/reaction.rs | crate::reaction | EMOJI_MAX_BYTES | const | usize	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
