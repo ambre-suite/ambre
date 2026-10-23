@@ -543,14 +543,20 @@ pub(crate) mod tests {
             now_ms: ambre_core::Timestamp(42),
         });
         assert!(stamped.update.is_some());
-        assert_eq!(doc::read_updated_at(state.document()), Some(42));
+        assert_eq!(
+            doc::read_updated_at(state.document()),
+            Some(ambre_core::Timestamp(42))
+        );
         let again = state.handle_command(ProseCommand::StampModified {
             now_ms: ambre_core::Timestamp(43),
         });
         assert!(again.update.is_none(), "nothing was written since");
         state.handle_command(ProseCommand::Undo);
         assert_eq!(state.text_of(&header).as_deref(), Some(""));
-        assert_eq!(doc::read_updated_at(state.document()), Some(42));
+        assert_eq!(
+            doc::read_updated_at(state.document()),
+            Some(ambre_core::Timestamp(42))
+        );
     }
 
     /// Two peers, each holding the other's opening state.

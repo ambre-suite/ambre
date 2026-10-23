@@ -139,7 +139,7 @@ fn every_committed_baseline_names_its_machine() {
 fn a_blank_machine_is_not_a_named_machine() {
     let measurements = vec![BenchMeasurement {
         id: "import_snapshot/example".to_owned(),
-        mean_ns: 1_234,
+        mean_ns: ambre_core::Nanos(1_234),
     }];
     let named = BenchBaseline {
         machine: "Ryzen 7 5800X, 32 GB, Linux 6.18".to_owned(),
@@ -172,7 +172,7 @@ fn a_baseline_round_trips_through_its_file() {
         commit: "abc1234".to_owned(),
         measurements: vec![BenchMeasurement {
             id: "toile_viewport/toile/bench_board_50k".to_owned(),
-            mean_ns: 5_062_900_000,
+            mean_ns: ambre_core::Nanos(5_062_900_000),
         }],
     };
     let dir = std::env::temp_dir().join(format!("ambre-baseline-{}", std::process::id()));

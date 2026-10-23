@@ -78,6 +78,8 @@ pub mod serde_id;
 pub mod span;
 pub mod status;
 pub mod text_offset;
+/// Lengths and angles, one type per unit and per pixel space.
+pub mod unit;
 pub mod uuid;
 pub mod version;
 pub mod zoom;
@@ -137,7 +139,7 @@ pub use schema::{
 };
 pub use seq::Seq;
 pub use span::{
-    LamportStamp, Millis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis, UnixSeconds,
+    LamportStamp, Millis, Nanos, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis, UnixSeconds,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
@@ -149,6 +151,7 @@ pub use text_offset::{
     byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte, char_to_utf16,
     utf16_to_char,
 };
+pub use unit::{CssPoint, CssPx, DocPx, Mm, PX_PER_MM, Point, Pt, Radians, ViewPoint, ViewPx};
 pub use uuid::Uuid;
 pub use version::Version;
 pub use zoom::ZoomFactor;

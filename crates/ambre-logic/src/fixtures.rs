@@ -89,7 +89,7 @@ pub struct BenchBaseline {
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct BenchMeasurement {
     pub id: String,
-    pub mean_ns: u64,
+    pub mean_ns: ambre_core::Nanos,
 }
 
 impl BenchBaseline {
@@ -172,7 +172,7 @@ fn collect_means(
         };
         out.push(BenchMeasurement {
             id,
-            mean_ns: mean.max(0.0) as u64,
+            mean_ns: ambre_core::Nanos::from_mean(mean),
         });
     }
     Ok(())

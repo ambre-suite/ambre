@@ -98,8 +98,9 @@ fn surface_config(
 /// first frames; empty ones lock the loop to 60 Hz for good.
 pub struct GpuSettled(());
 
-/// Start the requestAnimationFrame loop, invoking `frame(timestamp)` on every
-/// frame, once the GPU has settled.
+/// Start the requestAnimationFrame loop, invoking `frame(now)` on every
+/// frame, once the GPU has settled. `now` is the instant the browser hands
+/// the frame callback.
 ///
 /// The loop re-arms on every tick, whatever the frame did (`CANVAS-011`). A
 /// static document still ticks, so an inbound event drains on the next frame.
@@ -109,12 +110,12 @@ pub struct GpuSettled(());
 /// with zero per-frame allocation. The naive allocate-and-forget pattern
 /// leaks a closure per frame. At 240 Hz that grows the JS heap and makes
 /// Firefox throttle rAF down to 60 Hz as self-protection.
-pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, _settled: GpuSettled) {
+pub fn start_raf_loop(mut frame: impl FnMut(ambre_bus::PageTime) + 'static, _settled: GpuSettled) {
     let cb: Rc<FrameSlot> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
-        frame(ts);
+        frame(ambre_bus::PageTime(ts));
         request_frame(&cb_clone);
     }));
     request_frame(&cb);

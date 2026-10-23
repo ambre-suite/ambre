@@ -136,11 +136,11 @@ where
                 HIDDEN_RELAY_PERIOD_MS,
             );
             start_raf_loop(
-                move |ts| {
+                move |now| {
                     drive_frame(
                         &raf_c,
                         || (pre_frame.borrow_mut())(),
-                        || host_c.borrow_mut().render(ambre_bus::PageTime(ts)),
+                        || host_c.borrow_mut().render(now),
                     )
                 },
                 settled,

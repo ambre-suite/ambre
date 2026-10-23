@@ -312,8 +312,8 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             |tag| format!("in {:?}", tag.as_str()),
         )),
         doc::MetaKey::UpdatedAt => {
-            let (year, month, day) = crate::band::civil_date(doc::read_updated_at(document)?);
-            Some(format!("last modified {year:04}-{month:02}-{day:02} UTC"))
+            let date = crate::band::civil_date(doc::read_updated_at(document)?);
+            Some(format!("last modified {date} UTC"))
         }
         doc::MetaKey::Page => {
             let page = PageBox::from_mm(doc::read_page_format(document));

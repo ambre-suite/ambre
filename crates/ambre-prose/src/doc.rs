@@ -1315,8 +1315,10 @@ pub(crate) fn is_aside(tree: &LoroTree, id: &TreeID) -> bool {
 
 /// The last-modified stamp, or `None` before any peer wrote one.
 #[must_use]
-pub fn read_updated_at(doc: &LoroDoc) -> Option<i64> {
-    meta_read(doc).and_then(|meta| read_i64(&meta, MetaKey::UpdatedAt))
+pub fn read_updated_at(doc: &LoroDoc) -> Option<ambre_core::Timestamp> {
+    meta_read(doc)
+        .and_then(|meta| read_i64(&meta, MetaKey::UpdatedAt))
+        .map(ambre_core::Timestamp::from_i64)
 }
 
 /// The document title, empty when none was set.

@@ -125,12 +125,12 @@ pub fn format_s3_media_key(
 }
 
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
-pub const PRESIGNED_URL_MAX_TTL_SECS: u64 = 15 * 60;
+pub const PRESIGNED_URL_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds(15 * 60);
 
 /// The lifetime a presigned URL is signed for: the configured one, held under
 /// the ceiling. A misconfigured day comes out as 15 minutes.
 fn presign_lifetime(ttl: ambre_core::Seconds) -> Duration {
-    Duration::from_secs(ttl.0.min(PRESIGNED_URL_MAX_TTL_SECS))
+    ttl.min(PRESIGNED_URL_MAX_TTL).to_duration()
 }
 
 /// Generates a presigned S3 PUT URL valid for `ttl`, bound to exactly

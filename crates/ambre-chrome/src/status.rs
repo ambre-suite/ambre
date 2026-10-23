@@ -19,7 +19,14 @@ use leptos::prelude::*;
 /// Zoom presets offered by [`ZoomChip`] when the app supplies none. The canvas
 /// apps (Trame grid zoom, Toile board zoom) share the same ladder so the menu
 /// reads identically.
-pub const ZOOM_PRESETS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+pub const ZOOM_PRESETS: [ZoomFactor; 6] = [
+    ZoomFactor::positive(0.5),
+    ZoomFactor::positive(0.75),
+    ZoomFactor::ONE,
+    ZoomFactor::positive(1.25),
+    ZoomFactor::positive(1.5),
+    ZoomFactor::positive(2.0),
+];
 
 pub use ambre_core::ZoomFactor;
 
@@ -42,7 +49,7 @@ pub fn ZoomChip(
     /// Preset factors offered by the menu, low-to-high. Defaults to [`ZOOM_PRESETS`].
     /// The first and the last bound what the menu writes.
     #[prop(optional, into)]
-    presets: Option<Vec<f64>>,
+    presets: Option<Vec<ZoomFactor>>,
     /// Tooltip for the button (app-specific wording). Defaults to `"Zoom"`.
     #[prop(optional, into)]
     title: Option<String>,
@@ -52,8 +59,16 @@ pub fn ZoomChip(
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
     let presets = presets.unwrap_or_else(|| ZOOM_PRESETS.to_vec());
     // The presets may run either way, so the range is their extremes.
-    let lo = presets.iter().copied().fold(f64::INFINITY, f64::min);
-    let hi = presets.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let lo = presets
+        .iter()
+        .copied()
+        .reduce(|a, b| if b < a { b } else { a })
+        .unwrap_or(ZoomFactor::ONE);
+    let hi = presets
+        .iter()
+        .copied()
+        .reduce(|a, b| if b > a { b } else { a })
+        .unwrap_or(ZoomFactor::ONE);
     let presets = StoredValue::new(presets);
     let title = title.unwrap_or_else(|| "Zoom".to_owned());
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
@@ -91,9 +106,10 @@ pub fn ZoomChip(
                         .into_iter()
                         .rev()
                         .map(|z| {
-                            let pct = format!("{:.0} %", z * 100.0);
+                            let pct = format!("{:.0} %", z.get() * 100.0);
                             // `selected` highlights the row matching the live zoom.
-                            let selected = move || (zoom.get().get() - z).abs() < f64::EPSILON;
+                            let selected =
+                                move || (zoom.get().get() - z.get()).abs() < f64::EPSILON;
                             view! {
                                 <li role="none">
                                     <button
@@ -102,7 +118,7 @@ pub fn ZoomChip(
                                         class:selected=selected
                                         aria-checked=move || crate::menu::aria_bool(selected())
                                         on:click=move |_| {
-                                            zoom.set(ZoomFactor::within(z, lo, hi));
+                                            zoom.set(z.clamped(lo, hi));
                                             show.set(false);
                                         }
                                     >

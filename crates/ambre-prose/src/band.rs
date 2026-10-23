@@ -6,14 +6,14 @@
 //! read, so every reader resolves one date (`PROSE-FEAT-066`). Nothing here
 //! writes to the document.
 
-use ambre_core::LangTag;
+use ambre_core::{LangTag, Millis, Timestamp};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::events::DateFieldFormat;
 
-/// The milliseconds of one day.
-const DAY_MS: i64 = 86_400_000;
+/// The span of one day.
+const DAY: Millis = Millis(86_400_000);
 
 /// The text of `block` as drawn on the zero-based `page` of `page_count`.
 #[must_use]
@@ -59,20 +59,59 @@ fn field_value(document: &LoroDoc, key: &str, value: &LoroValue, page: u32, coun
                 _ => DateFieldFormat::Iso,
             };
             doc::read_updated_at(document)
-                .map(|ms| format_date(ms, format, doc::read_lang(document).as_ref()))
+                .map(|at| format_date(at, format, doc::read_lang(document).as_ref()))
                 .unwrap_or_default()
         }
         _ => String::new(),
     }
 }
 
-/// A calendar date in UTC: year, month from one, day from one.
+/// A calendar date in UTC: a year, a month from one and a day from one.
+///
+/// Only [`civil_date`] builds one, so the month is in `1 ..= 12` and the day
+/// in `1 ..= 31`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CivilDate {
+    year: i64,
+    month: u32,
+    day: u32,
+}
+
+impl CivilDate {
+    /// The year of the common era.
+    #[must_use]
+    pub const fn year(self) -> i64 {
+        self.year
+    }
+
+    /// The month, from one.
+    #[must_use]
+    pub const fn month(self) -> u32 {
+        self.month
+    }
+
+    /// The day of the month, from one.
+    #[must_use]
+    pub const fn day(self) -> u32 {
+        self.day
+    }
+}
+
+impl std::fmt::Display for CivilDate {
+    /// The ISO 8601 calendar form: `2026-03-05`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
+/// The calendar date in UTC of the instant `at`.
 ///
 /// UTC and not the reader's zone, so two readers in two zones draw one date
 /// (`PROSE-FEAT-066`). The civil-from-days algorithm of H. Hinnant.
 #[must_use]
-pub fn civil_date(ms: i64) -> (i64, u32, u32) {
-    let days = ms.div_euclid(DAY_MS) + 719_468;
+pub fn civil_date(at: Timestamp) -> CivilDate {
+    let day_ms = i64::try_from(DAY.0).unwrap_or(i64::MAX);
+    let days = at.to_i64_saturating().div_euclid(day_ms) + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days.rem_euclid(146_097);
     let year_of_era =
@@ -86,11 +125,11 @@ pub fn civil_date(ms: i64) -> (i64, u32, u32) {
         shifted_month - 9
     };
     let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (
+    CivilDate {
         year,
-        u32::try_from(month).unwrap_or(1),
-        u32::try_from(day).unwrap_or(1),
-    )
+        month: u32::try_from(month).unwrap_or(1),
+        day: u32::try_from(day).unwrap_or(1),
+    }
 }
 
 /// The twelve month names of the languages that have a long and a short form
@@ -203,9 +242,10 @@ fn months(lang: &LangTag) -> Option<[&'static str; 12]> {
 /// (`PROSE-FEAT-282`). The language is read from the tag's primary subtag; a
 /// document with no language draws the calendar form.
 #[must_use]
-pub fn format_date(ms: i64, format: DateFieldFormat, lang: Option<&LangTag>) -> String {
-    let (year, month, day) = civil_date(ms);
-    let iso = format!("{year:04}-{month:02}-{day:02}");
+pub fn format_date(at: Timestamp, format: DateFieldFormat, lang: Option<&LangTag>) -> String {
+    let date = civil_date(at);
+    let (year, month, day) = (date.year, date.month, date.day);
+    let iso = date.to_string();
     let Some((lang, names)) = lang.and_then(|lang| Some((lang, months(lang)?))) else {
         return iso;
     };
@@ -232,7 +272,12 @@ mod tests {
     use super::*;
 
     /// 2026-03-05T12:00:00Z.
-    const MARCH_FIFTH: i64 = 1_772_712_000_000;
+    const MARCH_FIFTH: Timestamp = Timestamp(1_772_712_000_000);
+
+    fn ymd(at: Timestamp) -> (i64, u32, u32) {
+        let date = civil_date(at);
+        (date.year(), date.month(), date.day())
+    }
 
     fn tag(text: &str) -> Option<LangTag> {
         LangTag::parse(text)
@@ -240,10 +285,11 @@ mod tests {
 
     #[test]
     fn a_stamp_reads_as_its_utc_calendar_date() {
-        assert_eq!(civil_date(0), (1970, 1, 1));
-        assert_eq!(civil_date(MARCH_FIFTH), (2026, 3, 5));
-        assert_eq!(civil_date(-1), (1969, 12, 31));
-        assert_eq!(civil_date(951_782_400_000), (2000, 2, 29));
+        assert_eq!(ymd(Timestamp(0)), (1970, 1, 1));
+        assert_eq!(ymd(MARCH_FIFTH), (2026, 3, 5));
+        assert_eq!(ymd(Timestamp(86_399_999)), (1970, 1, 1));
+        assert_eq!(ymd(Timestamp(951_782_400_000)), (2000, 2, 29));
+        assert_eq!(civil_date(MARCH_FIFTH).to_string(), "2026-03-05");
     }
 
     #[test]

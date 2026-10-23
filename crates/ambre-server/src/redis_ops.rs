@@ -789,7 +789,7 @@ pub async fn doc_presence_remove(
 /// session with the same key, so the count is what tells their sessions apart.
 /// An instance that dies closes none of its sessions; the expiry bounds the
 /// count that death leaves behind (`PRESENCE-015`).
-const SESSION_COUNT_TTL_SECS: u64 = 24 * 3600;
+const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
 
 /// The hash counting, per author key, the sessions watching a document.
 fn doc_sessions_key(document_id: &ambre_core::DocumentId) -> String {
@@ -814,7 +814,7 @@ return 1
 "#;
     let key = doc_sessions_key(document_id);
     let gone_key = document_gone_key(document_id);
-    let ttl = SESSION_COUNT_TTL_SECS.to_string();
+    let ttl = SESSION_COUNT_TTL.0.to_string();
     let _: i64 = redis
         .eval(
             LUA,

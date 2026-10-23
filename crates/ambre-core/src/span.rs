@@ -57,6 +57,22 @@ impl Millis {
     }
 }
 
+/// A span of time in whole nanoseconds: the unit a benchmark harness reports.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct Nanos(pub u64);
+
+impl Nanos {
+    /// The span of a measured mean, a float of nanoseconds. A negative or NaN
+    /// mean reads as zero, and a mean past `u64::MAX` saturates there.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    pub fn from_mean(mean: f64) -> Self {
+        Self(mean.max(0.0) as u64)
+    }
+}
+
 /// A span of time in whole seconds.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
@@ -284,6 +300,14 @@ mod tests {
         assert_eq!(Timestamp(10).plus(Millis(5)), Timestamp(15));
         assert_eq!(Timestamp(10).since(Timestamp(4)), Millis(6));
         assert_eq!(Timestamp(4).since(Timestamp(10)), Millis(0));
+    }
+
+    #[test]
+    fn a_measured_mean_reads_as_whole_nanoseconds() {
+        assert_eq!(super::Nanos::from_mean(12.7), super::Nanos(12));
+        assert_eq!(super::Nanos::from_mean(-3.0), super::Nanos(0));
+        assert_eq!(super::Nanos::from_mean(f64::NAN), super::Nanos(0));
+        assert_eq!(serde_json::to_string(&super::Nanos(5)).unwrap(), "5");
     }
 
     #[test]

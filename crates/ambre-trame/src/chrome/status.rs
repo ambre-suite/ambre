@@ -85,7 +85,7 @@ pub fn StatusBar(
         // sheet's virtual-scroll steps; the perf panel shows Trame's grid detail.
         <ZoomChip
             zoom=zoom
-            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.map(ambre_chrome::ZoomFactor::get).to_vec()
+            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.to_vec()
             title="Grid zoom (scales the sheet only, not the toolbar)"
         />
         <PerfChip fps=Signal::derive(move || perf.get().fps)>

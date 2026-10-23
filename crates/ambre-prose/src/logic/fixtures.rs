@@ -318,7 +318,7 @@ impl FixtureGen for ProseFixture {
 const AUTHOR_SEED: u64 = 0x5EED_9905_A117_0001;
 
 /// The comment's clock, pinned: a real one would differ run to run.
-const COMMENT_AT_MS: u64 = 1_700_000_000_000;
+const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp(1_700_000_000_000);
 
 /// Run one command, and name it if the engine refuses it.
 fn run(state: &mut ProseState, command: ProseCommand) -> Result<(), String> {
@@ -473,7 +473,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
             block_id: block_id(body),
             range: DocSpan::from_usize_range(0..7),
             text: "Is this net or gross?".to_owned(),
-            now_ms: ambre_core::Timestamp(COMMENT_AT_MS),
+            now_ms: COMMENT_AT,
         },
     )?;
     let thread = state
@@ -486,7 +486,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::ReplyToComment {
             comment_id: thread,
             text: "Net.".to_owned(),
-            now_ms: ambre_core::Timestamp(COMMENT_AT_MS + 60_000),
+            now_ms: COMMENT_AT.plus(ambre_core::Millis(60_000)),
         },
     )?;
     Ok(state)

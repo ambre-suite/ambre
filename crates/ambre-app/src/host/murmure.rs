@@ -62,9 +62,9 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
     }
 }
 
-/// How long a tab has to read the address of an image it opened, in
-/// milliseconds, before the page lets the bytes go.
-const OPENED_FOR_MS: i32 = 60_000;
+/// How long a tab has to read the address of an image it opened before the
+/// page lets the bytes go.
+const OPENED_FOR: ambre_core::Millis = ambre_core::Millis(60_000);
 
 /// Hand the browser a file a member fetched. A raster image opens in a tab of
 /// its own. Any other file saves, typed as a plain stream of bytes. So no
@@ -95,7 +95,7 @@ fn save_file(file: &Attachment, data: Vec<u8>) {
         });
         let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
             revoke.unchecked_ref(),
-            OPENED_FOR_MS,
+            OPENED_FOR.to_timer_i32(),
         );
         return;
     }

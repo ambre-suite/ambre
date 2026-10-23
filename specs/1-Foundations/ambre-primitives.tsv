@@ -77,7 +77,6 @@ ambre-app | src/host/mod.rs | crate::host | publish_item(html) | param | Option<
 ambre-app | src/host/mod.rs | crate::host | publish_item(payload_b64) | param | Option<&str>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/mod.rs | crate::host | publish_item(tsv) | param | &str	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | ret | String	free-text	formatted time text
-ambre-app | src/host/murmure.rs | crate::host::murmure | OPENED_FOR_MS | const | i32	debt	finding: Raw duration consts (confirmed)
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
@@ -908,10 +907,9 @@ ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geom
 ambre-canvas | src/frame.rs | crate::frame | text_height(size) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/frame.rs | crate::frame | text_height(width) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	debt	finding: rAF frame timestamp as a bare f64 (confirmed)
+ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
-ambre-canvas | src/host.rs | crate::host | start_raf_loop(frame) | param | impl FnMut(f64)+'static	debt	finding: rAF frame timestamp as a bare f64 (confirmed)
 ambre-canvas | src/host.rs | crate::host | surface_config(height) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/host.rs | crate::host | surface_config(width) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
@@ -1303,8 +1301,6 @@ ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseDialog(open) | 
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
 ambre-chrome | src/status.rs | crate::status | PerfChip(fps) | param | Signal<f32>	math	layout geometry in logical px
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
-ambre-chrome | src/status.rs | crate::status | ZOOM_PRESETS | const | [f64;6]	math	layout geometry in logical px
-ambre-chrome | src/status.rs | crate::status | ZoomChip(presets) | param | Option<Vec<f64>>	debt	finding: `ZoomChip(presets: Option<Vec<f64>>)`
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toast.id | field | u64	math	local count/index/counter
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
@@ -1926,7 +1922,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline.commit | field |
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline.machine | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline::names_its_machine() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchMeasurement.id | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | BenchMeasurement.mean_ns | field | u64	debt	finding: fixture and schema versions, and the bench duration
 ambre-logic | src/fixtures.rs | crate::fixtures | CORPUS_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | CURRENT_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport.frozen_held | field | usize	math	count, size, limit, index or jitter local to an algorithm
@@ -2797,15 +2792,11 @@ ambre-primitives | src/scan.rs | crate::scan | normalise() | ret | String	generi
 ambre-primitives | src/scan.rs | crate::scan | normalise(tokens) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | path_attr() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | test_only() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-prose | src/band.rs | crate::band | DAY_MS | const | i64	debt	finding: raw timestamps and durations (confirmed)
-ambre-prose | src/band.rs | crate::band | civil_date() | ret | (i64,u32,u32)	debt	finding: raw timestamps and durations (confirmed)
-ambre-prose | src/band.rs | crate::band | civil_date(ms) | param | i64	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | field_value(count) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value(key) | param | &str	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/band.rs | crate::band | field_value(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | format_date(ms) | param | i64	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve(page) | param | u32	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -2895,7 +2886,6 @@ ambre-prose | src/doc.rs | crate::doc | read_f64() | ret | Option<f64>	math	layo
 ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	count, size or local index
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | read_updated_at() | ret | Option<i64>	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/doc.rs | crate::doc | style_of() | ret | Option<String>	debt	finding: built-in style ids as &str (confirmed)
 ambre-prose | src/doc.rs | crate::doc | toc_settings() | ret | Option<(u8,bool)>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
@@ -3450,7 +3440,6 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as 
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::name() | ret | &'static str	trait	signature fixed by foreign trait
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::seed() | ret | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | AUTHOR_SEED | const | u64	generic	fixtures feature, test support
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | COMMENT_AT_MS | const | u64	debt	finding: raw timestamps and durations (confirmed)
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | ProseState::canonical_dump() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | build_styled_document() | ret | Result<ProseState,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | build_styled_document(seed) | param | u64	generic	fixtures feature, test support
@@ -3938,7 +3927,6 @@ ambre-protocol | src/ws.rs | crate::ws | decode_client_msg(data) | param | &[u8]
 ambre-protocol | src/ws.rs | crate::ws | decode_server_msg(data) | param | &[u8]	generic	wire codec
 ambre-protocol | src/ws.rs | crate::ws | encode_client_msg() | ret | Vec<u8>	generic	wire codec
 ambre-protocol | src/ws.rs | crate::ws | encode_server_msg() | ret | Vec<u8>	generic	wire codec
-ambre-server | src/auth.rs | crate::auth | ACCESS_TOKEN_MAX_TTL_SECS | const | u64	debt	finding: Raw duration consts (confirmed)
 ambre-server | src/compaction.rs | crate::compaction | CHECK_EVERY | const | u64	math	period in deltas
 ambre-server | src/compaction.rs | crate::compaction | SEGMENT_SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
 ambre-server | src/compaction.rs | crate::compaction | SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
@@ -4083,7 +4071,6 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken::as_str() | ret |
 ambre-server | src/redis_ops.rs | crate::redis_ops | REHYDRATE_CLOCK_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | ROTATION_OWED | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | SEGMENT_LOCKED | const | &str	generic	refusal word shared with the Lua script text
-ambre-server | src/redis_ops.rs | crate::redis_ops | SESSION_COUNT_TTL_SECS | const | u64	debt	finding: Raw duration consts (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | append_pending_delta::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | claim_snapshot_ask() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | clear_pending_dirty_if_empty(pending_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
@@ -4171,7 +4158,6 @@ ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_publi
 ambre-server | src/routes/sync.rs | crate::routes::sync | DeltasQuery.limit | field | Option<i64>	math	query limit
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
-ambre-server | src/s3.rs | crate::s3 | PRESIGNED_URL_MAX_TTL_SECS | const | u64	debt	finding: Raw duration consts (confirmed)
 ambre-server | src/s3.rs | crate::s3 | S3Sink.doc_prefix | field | Option<&'a str>	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
 ambre-server | src/s3.rs | crate::s3 | delete_prefix(bucket) | param | &str	debt	finding: S3 env prefix, bucket and prefix as strings (confirmed)
@@ -6002,3 +5988,12 @@ ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::pan(
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::pan(y) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::press(x) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::press(y) | param | f32	math	local geometry / pixel arithmetic
+ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
+ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
+ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
+ambre-prose | src/band.rs | crate::band | CivilDate.day | field | u32	newtype-inner	a component of the civil-date type, 1 to 31
+ambre-prose | src/band.rs | crate::band | CivilDate.month | field | u32	newtype-inner	a component of the civil-date type, 1 to 12
+ambre-prose | src/band.rs | crate::band | CivilDate.year | field | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
+ambre-prose | src/band.rs | crate::band | CivilDate::day() | ret | u32	newtype-inner	a component of the civil-date type, 1 to 31
+ambre-prose | src/band.rs | crate::band | CivilDate::month() | ret | u32	newtype-inner	a component of the civil-date type, 1 to 12
+ambre-prose | src/band.rs | crate::band | CivilDate::year() | ret | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
