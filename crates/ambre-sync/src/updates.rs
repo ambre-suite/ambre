@@ -261,7 +261,7 @@ impl SyncState {
                     document_id,
                     snapshot_id,
                     covered_seq,
-                    payload: payload.into(),
+                    payload,
                     purpose: SnapshotPurpose::Confirm,
                 });
                 self.snapshot_known(document_id, snapshot_id);
@@ -311,7 +311,7 @@ impl SyncState {
                     doc_state.current_snapshot_id = snapshot_id;
                     self.send_to_logic(LogicEvent::RemoteSnapshot {
                         document_id,
-                        payload: payload.into(),
+                        payload,
                         covered_seq: check.covered_seq,
                     });
                 }
@@ -407,7 +407,7 @@ impl SyncState {
                     document_id,
                     snapshot_id: held.snapshot_id,
                     covered_seq: held.covered_seq,
-                    payload: payload.into(),
+                    payload,
                     purpose: SnapshotPurpose::Open,
                 });
                 true

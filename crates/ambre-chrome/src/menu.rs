@@ -163,7 +163,7 @@ pub fn on_menu_keydown(
             initial(&name)
         })
         .collect();
-    match menu_key(&ev.key(), crate::command::modifiers_of(&ev), at, &initials) {
+    match menu_key(&ev.key(), crate::command::modifiers_of(ev), at, &initials) {
         MenuKey::Focus(i) => {
             ev.prevent_default();
             if let Some(item) = items.get(i) {

@@ -686,7 +686,7 @@ impl SyncState {
                         doc_state.last_seq = covered_seq;
                         self.send_to_logic(LogicEvent::RemoteSnapshot {
                             document_id,
-                            payload: payload.into(),
+                            payload,
                             covered_seq,
                         });
                     }

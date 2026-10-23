@@ -415,7 +415,7 @@ impl LogicState {
                 if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
-                        payload: payload.into(),
+                        payload,
                         covered_seq,
                     });
                 }
@@ -1365,7 +1365,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: doc_id,
             doc_type: DocType::Trame,
-            snapshot: Some(snapshot.into()),
+            snapshot: Some(snapshot),
             deltas: Vec::new(),
             sessions: Vec::new(),
         });
