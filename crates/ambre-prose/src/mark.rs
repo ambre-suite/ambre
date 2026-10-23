@@ -276,6 +276,25 @@ pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
         .ok_or_else(bad)
 }
 
+/// A mark value in the one spelling the grammar of its key allows. It is the
+/// empty string of a flag, a canonical colour, a canonical number, or the text
+/// of a key that carries text.
+///
+/// [`validate_value`] and [`canonical_value`] are the only ways in, so a value
+/// of this type has passed the grammar of the key it was checked under. A
+/// value read back from the document has not, and stays a string: a peer on
+/// another build may have written it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MarkValue(String);
+
+impl MarkValue {
+    /// The value, for the call that writes it into the text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// The value a command may write under `key`, in its canonical spelling, or the
 /// refusal the author is told about (`PROSE-FEAT-022`, `PROSE-FEAT-290`).
 ///
@@ -287,27 +306,28 @@ pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
 /// One [`MarkValueError`] per way the pair can fail. An unknown key, a value
 /// where none belongs, none where one is required, a malformed colour, and a
 /// size outside the range.
-pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<String, MarkValueError> {
+pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<MarkValue, MarkValueError> {
     let Some(root) = MarkRoot::of(key) else {
         return Err(MarkValueError::UnknownKey(key.clone()));
     };
     let arity = || MarkValueError::ArityMismatch { key: key.clone() };
     if FLAG_KEYS.contains(&root) {
         return match raw {
-            None | Some("") => Ok(String::new()),
+            None | Some("") => Ok(MarkValue(String::new())),
             Some(_) => Err(arity()),
         };
     }
     let raw = raw.ok_or_else(arity)?;
     if COLOR_KEYS.contains(&root) {
-        return Ok(canonical_color(parse_color(raw)?));
+        return Ok(MarkValue(canonical_color(parse_color(raw)?)));
     }
     if NUMERIC_KEYS.contains(&root) {
         let size = parse_font_size(raw)?;
         return canonical_number(size.points())
+            .map(MarkValue)
             .ok_or_else(|| MarkValueError::BadFontSize(raw.to_owned()));
     }
-    Ok(raw.to_owned())
+    Ok(MarkValue(raw.to_owned()))
 }
 
 /// The keys whose value is a number, and the only ones a re-spelling applies to.
@@ -326,11 +346,11 @@ const NUMERIC_KEYS: [MarkRoot; 1] = [MarkRoot::FontSize];
 /// finite number is refused. Every other key's value is its own canonical form:
 /// a URL, a family name and a `Uuid` are spelled once.
 #[must_use]
-pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<String> {
+pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<MarkValue> {
     if !MarkRoot::of(mark_key).is_some_and(|root| NUMERIC_KEYS.contains(&root)) {
-        return Some(raw.to_owned());
+        return Some(MarkValue(raw.to_owned()));
     }
-    canonical_number(raw.parse::<f32>().ok()?)
+    canonical_number(raw.parse::<f32>().ok()?).map(MarkValue)
 }
 
 #[cfg(test)]
@@ -374,10 +394,22 @@ mod tests {
 
     #[test]
     fn two_peers_spell_one_size_the_same_way() {
-        assert_eq!(canonical_value(&"fs".into(), "11.0").as_deref(), Some("11"));
-        assert_eq!(canonical_value(&"fs".into(), "11").as_deref(), Some("11"));
         assert_eq!(
-            canonical_value(&"fs".into(), "11.50").as_deref(),
+            canonical_value(&"fs".into(), "11.0")
+                .as_ref()
+                .map(MarkValue::as_str),
+            Some("11")
+        );
+        assert_eq!(
+            canonical_value(&"fs".into(), "11")
+                .as_ref()
+                .map(MarkValue::as_str),
+            Some("11")
+        );
+        assert_eq!(
+            canonical_value(&"fs".into(), "11.50")
+                .as_ref()
+                .map(MarkValue::as_str),
             Some("11.5")
         );
         assert_eq!(canonical_number(0.5).as_deref(), Some("0.5"));
@@ -388,11 +420,15 @@ mod tests {
     #[test]
     fn a_value_that_is_not_a_number_is_its_own_canonical_form() {
         assert_eq!(
-            canonical_value(&"a".into(), "https://example.org/a").as_deref(),
+            canonical_value(&"a".into(), "https://example.org/a")
+                .as_ref()
+                .map(MarkValue::as_str),
             Some("https://example.org/a")
         );
         assert_eq!(
-            canonical_value(&"fg".into(), "#ff8800").as_deref(),
+            canonical_value(&"fg".into(), "#ff8800")
+                .as_ref()
+                .map(MarkValue::as_str),
             Some("#ff8800")
         );
     }
@@ -403,14 +439,33 @@ mod tests {
     #[test]
     fn a_textual_value_that_reads_as_a_number_is_left_alone() {
         assert_eq!(
-            canonical_value(&"ref".into(), "1.10").as_deref(),
+            canonical_value(&"ref".into(), "1.10")
+                .as_ref()
+                .map(MarkValue::as_str),
             Some("1.10")
         );
-        assert_eq!(canonical_value(&"fn".into(), "007").as_deref(), Some("007"));
-        assert_eq!(canonical_value(&"cm".into(), "1e5").as_deref(), Some("1e5"));
-        assert_eq!(canonical_value(&"ff".into(), "inf").as_deref(), Some("inf"));
         assert_eq!(
-            canonical_value(&"f:pn".into(), "NaN").as_deref(),
+            canonical_value(&"fn".into(), "007")
+                .as_ref()
+                .map(MarkValue::as_str),
+            Some("007")
+        );
+        assert_eq!(
+            canonical_value(&"cm".into(), "1e5")
+                .as_ref()
+                .map(MarkValue::as_str),
+            Some("1e5")
+        );
+        assert_eq!(
+            canonical_value(&"ff".into(), "inf")
+                .as_ref()
+                .map(MarkValue::as_str),
+            Some("inf")
+        );
+        assert_eq!(
+            canonical_value(&"f:pn".into(), "NaN")
+                .as_ref()
+                .map(MarkValue::as_str),
             Some("NaN")
         );
     }

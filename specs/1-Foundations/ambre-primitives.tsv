@@ -278,7 +278,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.space_after | 
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.space_before | field | Option<f32>	math	paragraph / table geometry in points
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	mark value, grammar owned by the mark registry per key
+ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	the raw value the UI sends, checked in Logic by validate_value, which lives in ambre-prose; the bus carries the text before its check
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EnableTrackChanges.enabled | field | bool	generic	named setting or fact flag, selects no mode
@@ -313,7 +313,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SuggestionsUpdate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::TextChanged.local | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_undo | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	mark value, grammar owned by the mark registry per key
+ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::FindRefused.0 | field | &'static str	free-text	static refusal label
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
@@ -2942,19 +2942,17 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::set_code_
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (MarkRoot,Option<String>)	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (MarkRoot,Option<String>)	free-text	a candidate mark value read off pasted HTML, before validate_value checks it; the one that passes becomes a MarkValue, the one that fails is dropped
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Depth.exceeded | field | Cell<bool>	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | FAMILY_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.block | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.list | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.pre | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.restore | field | Vec<(MarkRoot,Option<String>)>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | HREF_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.keep_empty | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.touched | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.marks | field | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	free-text	text content / label / parser input
@@ -2997,7 +2995,7 @@ ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has() | ret | bool	generic	predicate result
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | list_open() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | runs(html) | param | &mut String	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	a mark value as a clipboard run carries it; the payload may come from another build or app, so no grammar is assumed and it is only escaped
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Code.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Ordered.0 | field | u8	newtype-inner	newtype inner field
@@ -3078,11 +3076,11 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem(title) | 
 ambre-prose | src/logic/interop.rs | crate::logic::interop | ir_run(notes) | param | &HashMap<FootnoteId,u32>	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | type_name() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
-ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.media_cache | field | HashMap<ambre_core::ContentHash,Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
@@ -3093,7 +3091,7 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	an owned anchor value the engine mints, a footnote Uuid or a cross reference record in hex; validate_value never sees an owned anchor, is_owned_anchor refuses it on the style path
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::is_live() | ret | bool	generic	independent flag or predicate
@@ -3111,19 +3109,19 @@ ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(text) | p
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::only_typed() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::take_structural() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret | bool	generic	independent flag or predicate
+ambre-prose | src/mark.rs | crate::mark | MarkValue.0 | field | String	newtype-inner	the inside of MarkValue; validate_value and canonical_value are the only ways in
+ambre-prose | src/mark.rs | crate::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
 ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadColor.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadFontSize.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/mark.rs | crate::mark | canonical_color() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | canonical_number(value) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/mark.rs | crate::mark | canonical_value() | ret | Option<String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/mark.rs | crate::mark | canonical_value(raw) | param | &str	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/mark.rs | crate::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic	predicate result
 ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
 ambre-prose | src/mark.rs | crate::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | validate_value() | ret | Result<String,MarkValueError>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-prose | src/note.rs | crate::note | ordinals() | ret | Vec<(FootnoteId,u32)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
@@ -3145,7 +3143,7 @@ ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f6
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MONOSPACE | const | &str	free-text	text content / label / parser input
-ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	the mark values a run carries as read back from the document, never checked: a peer on another build may have written any text, and resolve parses each one and drops what fails
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.bold | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.code_inline | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.font_family | field | Option<String>	free-text	text content / label / parser input

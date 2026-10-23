@@ -21,7 +21,7 @@ use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
 
 use super::sink::{Arena, Data, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
-use crate::mark::{self, MarkRoot};
+use crate::mark::{self, MarkRoot, MarkValue};
 use ambre_bus::app::prose::MarkKey;
 
 /// Elements whose whole subtree carries nothing a paste keeps.
@@ -200,7 +200,7 @@ struct Open {
 /// What leaving an element undoes.
 #[derive(Default)]
 struct Frame {
-    restore: Vec<(MarkRoot, Option<String>)>,
+    restore: Vec<(MarkRoot, Option<MarkValue>)>,
     block: bool,
     list: bool,
     pre: bool,
@@ -212,7 +212,7 @@ struct Reader {
     runs: Vec<ClipRun>,
     open: Vec<Open>,
     lists: Vec<ClipKind>,
-    marks: BTreeMap<MarkKey, String>,
+    marks: BTreeMap<MarkKey, MarkValue>,
     /// `marks` in the shape a run carries, rebuilt when they change.
     current: Vec<(MarkKey, ClipValue)>,
     frames: Vec<Frame>,
@@ -465,7 +465,7 @@ impl Reader {
         self.current = self
             .marks
             .iter()
-            .map(|(key, value)| (key.clone(), ClipValue::Text(value.clone())))
+            .map(|(key, value)| (key.clone(), ClipValue::Text(value.as_str().to_owned())))
             .collect();
     }
 
