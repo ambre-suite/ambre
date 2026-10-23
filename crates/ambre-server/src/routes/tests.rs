@@ -386,12 +386,12 @@ mod handler_tests {
     async fn a_provider_return_signs_the_person_in(pool: sqlx::PgPool) {
         use crate::oidc::stub::{CLIENT_ID, EMAIL, NAME, StubProvider};
         let stub = StubProvider::spawn().await;
-        let clients = crate::oidc::start_oidc_clients(
-            &stub.issuer,
-            CLIENT_ID,
-            &crate::oidc::OidcSecret::new("s".to_owned()),
-            "https://app/cb",
-        )
+        let clients = crate::oidc::start_oidc_clients(Some(&crate::oidc::OidcRegistration {
+            issuer: openidconnect::IssuerUrl::new(stub.issuer.clone()).unwrap(),
+            client_id: openidconnect::ClientId::new(CLIENT_ID.to_owned()),
+            client_secret: crate::oidc::OidcSecret::new("s".to_owned()),
+            redirect_uri: openidconnect::RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+        }))
         .await
         .unwrap();
         let app = shipped_router(test_app_state_with(pool, clients).await);
@@ -1816,7 +1816,7 @@ mod handler_tests {
         let user = crate::db::upsert_user_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
-            "sub-1",
+            &openidconnect::SubjectIdentifier::new("sub-1".to_owned()),
             &ambre_core::Email::from("new@example.com"),
             &ambre_core::DisplayName::new("New").unwrap(),
         )
@@ -1899,7 +1899,7 @@ mod handler_tests {
         let keyless = crate::db::upsert_user_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
-            "sub-2",
+            &openidconnect::SubjectIdentifier::new("sub-2".to_owned()),
             &ambre_core::Email::from("keyless@example.com"),
             &ambre_core::DisplayName::new("Keyless").unwrap(),
         )
@@ -1986,7 +1986,7 @@ mod handler_tests {
         let user = crate::db::upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-3",
+            &openidconnect::SubjectIdentifier::new("sub-3".to_owned()),
             &ambre_core::Email::from("c@example.com"),
             &ambre_core::DisplayName::new("C").unwrap(),
         )
@@ -2010,7 +2010,7 @@ mod handler_tests {
         let user = crate::db::upsert_user_from_oidc(
             &state.db,
             ambre_core::OidcProvider::Google,
-            "sub-4",
+            &openidconnect::SubjectIdentifier::new("sub-4".to_owned()),
             &ambre_core::Email::from("d@example.com"),
             &ambre_core::DisplayName::new("D").unwrap(),
         )

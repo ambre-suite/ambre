@@ -3435,9 +3435,7 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | par
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/db/users.rs | crate::db::users | UserRow.oidc_subject | field | Option<String>	debt	finding: OIDC subject as String or &str (confirmed)
 ambre-server | src/db/users.rs | crate::db::users | search_users(query) | param | &str	free-text	search text
-ambre-server | src/db/users.rs | crate::db::users | upsert_user_from_oidc(oidc_subject) | param | &str	debt	finding: OIDC subject as String or &str (confirmed)
 ambre-server | src/deletion.rs | crate::deletion | PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param | bool	math	named state or style flag, local
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
@@ -3476,18 +3474,10 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | cl
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_ip_str(x_forwarded_for) | param | Option<&str>	free-text	header text; an IpAddr parse would be a hardening, not a type rule
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateBucket::Peer.0 | field | String	free-text	peer address text as the socket or the forwarded header states it, or unknown; client_ip_str builds it from header text
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	math	named state or style flag, local
-ambre-server | src/oidc.rs | crate::oidc | GOOGLE_ISSUER | const | &str	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret::expose() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/oidc.rs | crate::oidc | exchange_code(code) | param | String	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | init_oidc_clients(google_client_id) | param | &str	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | init_oidc_clients(google_issuer) | param | &str	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | init_oidc_clients(google_redirect_uri) | param | &str	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | start_oidc_clients(google_client_id) | param | &str	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | start_oidc_clients(google_issuer) | param | &str	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/oidc.rs | crate::oidc | start_oidc_clients(google_redirect_uri) | param | &str	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -3568,8 +3558,6 @@ ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | cons
 ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
 ambre-server | src/state.rs | crate::state | Config.base_url | field | String	free-text	config URL
-ambre-server | src/state.rs | crate::state | Config.oidc_google_client_id | field | String	debt	finding: OIDC config strings (confirmed)
-ambre-server | src/state.rs | crate::state | Config.oidc_google_redirect_uri | field | String	debt	finding: OIDC config strings (confirmed)
 ambre-server | src/state.rs | crate::state | Config.ws_msg_burst | field | u32	math	config burst
 ambre-server | src/state.rs | crate::state | Config.ws_msg_rate_per_sec | field | u32	math	config rate; the burst/rate order is right at ws/handler/mod.rs:202
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs

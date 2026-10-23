@@ -8,7 +8,7 @@ use super::*;
 pub struct UserRow {
     pub id: ambre_core::UserId,
     #[allow(dead_code)]
-    pub oidc_subject: Option<String>,
+    pub oidc_subject: Option<openidconnect::SubjectIdentifier>,
     pub email: ambre_core::Email,
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
@@ -53,7 +53,9 @@ pub async fn get_user(
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_subject: r.try_get("oidc_subject")?,
+            oidc_subject: r
+                .try_get::<Option<String>, _>("oidc_subject")?
+                .map(openidconnect::SubjectIdentifier::new),
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
@@ -102,7 +104,9 @@ pub async fn get_user_by_email(
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get::<PgId, _>("id")?.into(),
-            oidc_subject: r.try_get("oidc_subject")?,
+            oidc_subject: r
+                .try_get::<Option<String>, _>("oidc_subject")?
+                .map(openidconnect::SubjectIdentifier::new),
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
@@ -149,7 +153,9 @@ pub async fn create_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row.try_get("oidc_subject")?,
+        oidc_subject: row
+            .try_get::<Option<String>, _>("oidc_subject")?
+            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
@@ -185,7 +191,7 @@ pub async fn create_user(
 pub async fn upsert_user_from_oidc(
     pool: &PgPool,
     oidc_provider: ambre_core::OidcProvider,
-    oidc_subject: &str,
+    oidc_subject: &openidconnect::SubjectIdentifier,
     email: &ambre_core::Email,
     display_name: &ambre_core::DisplayName,
 ) -> Result<UserRow, AppError> {
@@ -205,7 +211,7 @@ pub async fn upsert_user_from_oidc(
     )
     .bind(email.as_str())
     .bind(oidc_provider.as_str())
-    .bind(oidc_subject)
+    .bind(oidc_subject.as_str())
     .execute(&mut *tx)
     .await?;
 
@@ -213,7 +219,7 @@ pub async fn upsert_user_from_oidc(
         "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider.as_str())
-    .bind(oidc_subject)
+    .bind(oidc_subject.as_str())
     .bind(email.as_str())
     .bind(display_name.as_str())
     .fetch_one(&mut *tx)
@@ -223,7 +229,9 @@ pub async fn upsert_user_from_oidc(
     let inserted: bool = row.try_get("inserted")?;
     let user = UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row.try_get("oidc_subject")?,
+        oidc_subject: row
+            .try_get::<Option<String>, _>("oidc_subject")?
+            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
@@ -281,7 +289,9 @@ pub async fn dev_upsert_user(
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
-        oidc_subject: row.try_get("oidc_subject")?,
+        oidc_subject: row
+            .try_get::<Option<String>, _>("oidc_subject")?
+            .map(openidconnect::SubjectIdentifier::new),
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
@@ -412,7 +422,7 @@ mod tests {
         let oidc = upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-123",
+            &openidconnect::SubjectIdentifier::new("sub-123".to_owned()),
             &ambre_core::Email::from("Alice@example.com"),
             &ambre_core::DisplayName::new("Alice").unwrap(),
         )
@@ -448,7 +458,7 @@ mod tests {
         upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-1",
+            &openidconnect::SubjectIdentifier::new("sub-1".to_owned()),
             &ambre_core::Email::from("dave@example.com"),
             &ambre_core::DisplayName::new("Dave").unwrap(),
         )
@@ -478,7 +488,7 @@ mod tests {
         upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-a",
+            &openidconnect::SubjectIdentifier::new("sub-a".to_owned()),
             &ambre_core::Email::from("erin@example.com"),
             &ambre_core::DisplayName::new("Erin").unwrap(),
         )
@@ -488,7 +498,7 @@ mod tests {
         let err = upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-b",
+            &openidconnect::SubjectIdentifier::new("sub-b".to_owned()),
             &ambre_core::Email::from("erin@example.com"),
             &ambre_core::DisplayName::new("Erin").unwrap(),
         )
@@ -505,7 +515,7 @@ mod tests {
         let first = upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-x",
+            &openidconnect::SubjectIdentifier::new("sub-x".to_owned()),
             &ambre_core::Email::from("frank@example.com"),
             &ambre_core::DisplayName::new("Frank").unwrap(),
         )
@@ -514,7 +524,7 @@ mod tests {
         let second = upsert_user_from_oidc(
             &pool,
             ambre_core::OidcProvider::Google,
-            "sub-x",
+            &openidconnect::SubjectIdentifier::new("sub-x".to_owned()),
             &ambre_core::Email::from("frank@example.com"),
             &ambre_core::DisplayName::new("Frank").unwrap(),
         )

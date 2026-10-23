@@ -120,57 +120,71 @@ pub struct OidcAuthState {
     pub nonce: Nonce,
 }
 
-/// The issuer the `google` provider is discovered at.
-pub const GOOGLE_ISSUER: &str = "https://accounts.google.com";
+/// The registration of the relay with one provider: where the provider is
+/// discovered, the client it issued the relay, and where it sends a sign-in
+/// back. Each part is the provider crate's own type, so a client id never
+/// takes the place of a redirect.
+#[derive(Debug, Clone)]
+pub struct OidcRegistration {
+    pub issuer: IssuerUrl,
+    pub client_id: ClientId,
+    pub client_secret: OidcSecret,
+    pub redirect_uri: RedirectUrl,
+}
 
-/// The provider clients the relay starts with. An empty client id means
+impl OidcRegistration {
+    /// The registration with the `google` provider.
+    pub fn google(
+        client_id: ClientId,
+        client_secret: OidcSecret,
+        redirect_uri: RedirectUrl,
+    ) -> Result<Self, AppError> {
+        Ok(Self {
+            issuer: google_issuer()?,
+            client_id,
+            client_secret,
+            redirect_uri,
+        })
+    }
+}
+
+/// The issuer the `google` provider is discovered at.
+fn google_issuer() -> Result<IssuerUrl, AppError> {
+    IssuerUrl::new("https://accounts.google.com".to_owned())
+        .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))
+}
+
+/// The provider clients the relay starts with. No registration means
 /// provider sign-in is off, and nothing is discovered. A configured provider
 /// that does not answer is an error, so the start stops (`SRV-074`).
 pub async fn start_oidc_clients(
-    google_issuer: &str,
-    google_client_id: &str,
-    google_client_secret: &OidcSecret,
-    google_redirect_uri: &str,
+    google: Option<&OidcRegistration>,
 ) -> Result<OidcClients, AppError> {
-    if google_client_id.is_empty() {
-        return Ok(Arc::new(HashMap::new()));
+    match google {
+        None => Ok(Arc::new(HashMap::new())),
+        Some(google) => init_oidc_clients(google).await,
     }
-    init_oidc_clients(
-        google_issuer,
-        google_client_id,
-        google_client_secret,
-        google_redirect_uri,
-    )
-    .await
 }
 
-/// Discovers the `google` provider's metadata at `google_issuer` and
-/// initializes an `OidcClient`.
+/// Discovers the `google` provider's metadata at its issuer and initializes
+/// an `OidcClient`.
 ///
 /// The resulting `OidcClients` map is stored in `AppState` and used by
 /// the `/auth/{provider}/login` and `/auth/{provider}/callback` routes.
-async fn init_oidc_clients(
-    google_issuer: &str,
-    google_client_id: &str,
-    google_client_secret: &OidcSecret,
-    google_redirect_uri: &str,
-) -> Result<OidcClients, AppError> {
+async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, AppError> {
     let http_client = reqwest::Client::new();
 
-    let google_issuer = IssuerUrl::new(google_issuer.to_string())
-        .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))?;
+    let provider_metadata =
+        CoreProviderMetadata::discover_async(google.issuer.clone(), &http_client)
+            .await
+            .map_err(|e| AppError::Oidc(format!("google discovery failed: {e}")))?;
 
-    let provider_metadata = CoreProviderMetadata::discover_async(google_issuer, &http_client)
-        .await
-        .map_err(|e| AppError::Oidc(format!("google discovery failed: {e}")))?;
-
-    let redirect_uri = RedirectUrl::new(google_redirect_uri.to_string())
-        .map_err(|e| AppError::Oidc(format!("invalid redirect URI: {e}")))?;
+    let redirect_uri = google.redirect_uri.clone();
 
     let client = OidcClient::from_provider_metadata(
         provider_metadata,
-        ClientId::new(google_client_id.to_string()),
-        Some(ClientSecret::new(google_client_secret.expose().to_owned())),
+        google.client_id.clone(),
+        Some(ClientSecret::new(google.client_secret.expose().to_owned())),
     );
 
     let mut map = HashMap::new();
@@ -236,10 +250,10 @@ pub async fn login_url(
 /// to prevent code interception. The ID token is verified against the provider's JWKS keys.
 pub async fn exchange_code(
     provider: &OidcProviderState,
-    code: String,
+    code: &ambre_core::OidcCode,
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
-    let auth_code = AuthorizationCode::new(code);
+    let auth_code = AuthorizationCode::new(code.expose().to_owned());
     let pkce_verifier =
         PkceCodeVerifier::new(stored_state.pkce_verifier_secret.expose().to_owned());
 
@@ -488,9 +502,19 @@ mod tests {
 
     /// The `google` client discovered at `stub`.
     async fn client_of(stub: &StubProvider) -> OidcClients {
-        start_oidc_clients(&stub.issuer, CLIENT_ID, &secret(), "https://app/cb")
+        start_oidc_clients(Some(&registration(&stub.issuer, CLIENT_ID)))
             .await
             .unwrap()
+    }
+
+    /// A registration of `client_id` with the provider at `issuer`.
+    fn registration(issuer: &str, client_id: &str) -> OidcRegistration {
+        OidcRegistration {
+            issuer: IssuerUrl::new(issuer.to_owned()).unwrap(),
+            client_id: ClientId::new(client_id.to_owned()),
+            client_secret: secret(),
+            redirect_uri: RedirectUrl::new("https://app/cb".to_owned()).unwrap(),
+        }
     }
 
     /// `SRV-022`: the code the provider hands back is exchanged under the
@@ -503,8 +527,8 @@ mod tests {
         let (login, kept) = login_url(&clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();
-        let code = stub.authorize(&login.url);
-        let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], code, &kept)
+        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
+        let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], &code, &kept)
             .await
             .unwrap();
         assert_eq!(claims.subject().as_str(), SUBJECT);
@@ -531,9 +555,9 @@ mod tests {
             pkce_verifier_secret: kept.pkce_verifier_secret.clone(),
             nonce: Nonce::new("another".into()),
         };
-        let code = stub.authorize(&login.url);
+        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
         refused_at(
-            exchange_code(provider, code, &other_nonce).await,
+            exchange_code(provider, &code, &other_nonce).await,
             "id token verification failed",
         );
 
@@ -544,17 +568,17 @@ mod tests {
             ),
             nonce: kept.nonce.clone(),
         };
-        let code = stub.authorize(&login.url);
+        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
         refused_at(
-            exchange_code(provider, code, &other_verifier).await,
+            exchange_code(provider, &code, &other_verifier).await,
             "token exchange failed",
         );
 
         stub.forge();
         let (login, kept) = login_url(provider).await.unwrap();
-        let code = stub.authorize(&login.url);
+        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
         refused_at(
-            exchange_code(provider, code, &kept).await,
+            exchange_code(provider, &code, &kept).await,
             "id token verification failed",
         );
     }
@@ -563,12 +587,9 @@ mod tests {
     /// With no client id configured nothing is discovered, and sign-in is off.
     #[tokio::test]
     async fn a_configured_provider_that_does_not_answer_stops_the_start() {
-        let started =
-            start_oidc_clients(SILENT_ISSUER, "client", &secret(), "https://app/cb").await;
+        let started = start_oidc_clients(Some(&registration(SILENT_ISSUER, "client"))).await;
         assert!(matches!(started, Err(AppError::Oidc(_))));
-        let off = start_oidc_clients(SILENT_ISSUER, "", &OidcSecret::default(), "")
-            .await
-            .unwrap();
+        let off = start_oidc_clients(None).await.unwrap();
         assert!(off.is_empty());
     }
 
@@ -577,7 +598,7 @@ mod tests {
     #[tokio::test]
     async fn a_sign_in_is_sent_to_the_configured_provider() {
         let issuer = spawn_provider().await;
-        let clients = start_oidc_clients(&issuer, "client", &secret(), "https://app/cb")
+        let clients = start_oidc_clients(Some(&registration(&issuer, "client")))
             .await
             .unwrap();
         let (login, _) = login_url(&clients[&ambre_core::OidcProvider::Google])

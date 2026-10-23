@@ -97,10 +97,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let s3 = aws_sdk_s3::Client::from_conf(s3_config.build());
 
-    let oidc_google_client_id = std::env::var("OIDC_GOOGLE_CLIENT_ID").unwrap_or_default();
-    let oidc_google_client_secret =
-        oidc::OidcSecret::new(std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default());
-    let oidc_google_redirect_uri = std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default();
+    // An empty client id means provider sign-in is off (`SRV-074`). A
+    // redirect that is no URL stops the start, as a provider that does not
+    // answer does.
+    let oidc_google = match std::env::var("OIDC_GOOGLE_CLIENT_ID") {
+        Ok(client_id) if !client_id.is_empty() => {
+            let redirect_uri = openidconnect::RedirectUrl::new(
+                std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default(),
+            )
+            .map_err(|e| format!("OIDC initialization failed: invalid redirect URI: {e}"))?;
+            let secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
+            Some(
+                oidc::OidcRegistration::google(
+                    openidconnect::ClientId::new(client_id),
+                    oidc::OidcSecret::new(secret),
+                    redirect_uri,
+                )
+                .map_err(|e| format!("OIDC initialization failed: {e}"))?,
+            )
+        }
+        _ => None,
+    };
     let dev_mode = std::env::var("DEV_MODE")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false);
@@ -159,9 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let config = Config {
         s3_env_prefix,
-        oidc_google_client_id: oidc_google_client_id.clone(),
-        oidc_google_client_secret: oidc_google_client_secret.clone(),
-        oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
+        oidc_google,
         dev_mode: dev,
         trust_proxy_headers: if trust_proxy_headers {
             state::ProxyTrust::BehindProxy
@@ -183,14 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // login). But when credentials ARE configured, a discovery failure is a
     // misconfiguration we must not silently swallow into "login disabled". Log
     // at ERROR and fail-fast, so the operator notices at startup (M7).
-    let oidc_clients = match oidc::start_oidc_clients(
-        oidc::GOOGLE_ISSUER,
-        &oidc_google_client_id,
-        &oidc_google_client_secret,
-        &oidc_google_redirect_uri,
-    )
-    .await
-    {
+    let oidc_clients = match oidc::start_oidc_clients(config.oidc_google.as_ref()).await {
         Ok(clients) => clients,
         Err(e) => {
             tracing::error!("OIDC discovery failed with configured credentials: {e}");

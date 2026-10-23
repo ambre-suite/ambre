@@ -65,15 +65,9 @@ pub struct Config {
     pub delta_max_bytes: ambre_core::ByteSize,
     /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: crate::s3::EnvPrefix,
-    /// Google OIDC client ID.
-    #[allow(dead_code)]
-    pub oidc_google_client_id: String,
-    /// Google OIDC client secret.
-    #[allow(dead_code)]
-    pub oidc_google_client_secret: crate::oidc::OidcSecret,
-    /// Google OIDC redirect URI (for example "http://localhost:3000/api/auth/google/callback").
-    #[allow(dead_code)]
-    pub oidc_google_redirect_uri: String,
+    /// The registration with the `google` provider, `None` when provider
+    /// sign-in is off.
+    pub oidc_google: Option<crate::oidc::OidcRegistration>,
     /// Dev-only switch: when on, the `POST /api/auth/dev/login` endpoint is
     /// enabled, letting `?user=<name>` authenticate as an on-the-fly user
     /// (deterministic keys, no OIDC). MUST stay off in production.
@@ -135,9 +129,7 @@ impl Default for Config {
             snapshot_max_bytes: ambre_core::ByteSize(50 * 1024 * 1024),
             delta_max_bytes: ambre_core::ByteSize(4 * 1024 * 1024),
             s3_env_prefix: crate::s3::EnvPrefix::new("dev-ambre".to_owned()),
-            oidc_google_client_id: String::new(),
-            oidc_google_client_secret: crate::oidc::OidcSecret::default(),
-            oidc_google_redirect_uri: String::new(),
+            oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: 60,

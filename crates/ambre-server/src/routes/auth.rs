@@ -211,10 +211,9 @@ pub async fn oidc_callback(
 
     let stored_state = redis_ops::oidc_state_take(&state.redis, &req.state).await?;
 
-    let claims =
-        oidc::exchange_code(provider_state, req.code.expose().to_owned(), &stored_state).await?;
+    let claims = oidc::exchange_code(provider_state, &req.code, &stored_state).await?;
 
-    let oidc_subject = claims.subject().to_string();
+    let oidc_subject = claims.subject().clone();
     // Reject an unverified email. It is the resolution key for document sharing
     // (`get_user_by_email`). Binding an unverified address to an account would
     // let an attacker squat a victim's email, and receive documents shared to it.
@@ -232,7 +231,7 @@ pub async fn oidc_callback(
             .and_then(|l| l.get(None))
             .map(|s| s.as_str()),
         &email,
-        &oidc_subject,
+        oidc_subject.as_str(),
     )
     .ok_or_else(|| AppError::BadRequest("OIDC provider returned a blank subject".into()))?;
 
@@ -310,7 +309,7 @@ mod tests {
     fn provider_row(signing_pubkey: Option<ambre_core::PublicKey>) -> db::UserRow {
         db::UserRow {
             id: ambre_core::UserId::new(),
-            oidc_subject: Some("subject".into()),
+            oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
             email: "a@example.com".into(),
             email_verified: true,
             display_name: ambre_core::DisplayName::new("A").unwrap(),
