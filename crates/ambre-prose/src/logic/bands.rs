@@ -143,7 +143,7 @@ impl ProseState {
     pub(super) fn set_band_align(&mut self, id: &TreeID, align: Align) -> ProseOutcome {
         let Some(name) = doc::band_align_name(align) else {
             return ProseOutcome::refused(ProseRefusal::BadMarkValue {
-                key: doc::BandKey::Align.as_str().to_owned(),
+                key: doc::BandKey::Align.as_str().into(),
                 value: "justify".to_owned(),
             });
         };
@@ -283,7 +283,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: header,
             range: DocSpan::from_usize_range(0..6),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         assert_eq!(marks_of(&state, &header).len(), 1);

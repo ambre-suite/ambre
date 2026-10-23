@@ -7,8 +7,60 @@
 //! from it. A call site cannot pick a different policy for the same key,
 //! because it never states one.
 
+use ambre_bus::app::prose::MarkKey;
 use ambre_core::{Rgb, Rgba};
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
+
+use crate::doc;
+
+ambre_core::crdt_names! {
+    /// The roots the registry declares. A key is a root, or a root and an id
+    /// joined by a colon, and Loro reads it under its root. A document may
+    /// carry a mark only under one of these.
+    pub enum MarkRoot {
+        Bold = "b",
+        Italic = "i",
+        Underline = "u",
+        Strike = "s",
+        Superscript = "sup",
+        Subscript = "sub",
+        Code = "c",
+        /// A link: formatting that the style path writes, and an anchor too.
+        Link = "a",
+        Ink = "fg",
+        Highlight = "bg",
+        FontSize = "fs",
+        FontFamily = "ff",
+        /// A comment thread, under its own key `cm:{id}`.
+        Comment = doc::K_COMMENT,
+        /// The inserted text of a suggestion.
+        Insertion = "si",
+        /// The deleted text of a suggestion.
+        Deletion = "sd",
+        /// A footnote call.
+        Footnote = doc::K_FOOTNOTE,
+        /// A cross reference.
+        CrossRef = doc::K_CROSS_REF,
+        /// A header field, addressed through its children `f:pn`, `f:pc`,
+        /// `f:dt` and `f:ti`.
+        Field = "f",
+    }
+}
+
+impl MarkRoot {
+    /// The root `key` is read under, or `None` for a root this build does not
+    /// declare.
+    #[must_use]
+    pub fn of(key: &MarkKey) -> Option<Self> {
+        Self::parse(key.root())
+    }
+
+    /// The key that is this root alone.
+    #[must_use]
+    pub fn key(self) -> MarkKey {
+        MarkKey::from(self.as_str())
+    }
+}
 
 /// The formatting keys: the mark's value is the formatting itself, and an
 /// insertion at the edge of the range takes the formatting with it.
@@ -16,8 +68,19 @@ use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 /// `ClearInlineMarks` removes exactly these. A comment, a suggestion, a
 /// footnote and a cross reference are anchors rather than formatting, and each
 /// has a feature that owns its removal.
-pub const FORMATTING_KEYS: [&str; 12] = [
-    "b", "i", "u", "s", "sup", "sub", "c", "a", "fg", "bg", "fs", "ff",
+pub const FORMATTING_KEYS: [MarkRoot; 12] = [
+    MarkRoot::Bold,
+    MarkRoot::Italic,
+    MarkRoot::Underline,
+    MarkRoot::Strike,
+    MarkRoot::Superscript,
+    MarkRoot::Subscript,
+    MarkRoot::Code,
+    MarkRoot::Link,
+    MarkRoot::Ink,
+    MarkRoot::Highlight,
+    MarkRoot::FontSize,
+    MarkRoot::FontFamily,
 ];
 
 /// The keys whose value is an identifier or a record, and which therefore must
@@ -25,22 +88,33 @@ pub const FORMATTING_KEYS: [&str; 12] = [
 ///
 /// Loro reads a key of the shape `a:b` under its root `a`. The one entry `f`
 /// therefore covers `f:pn`, `f:pc`, `f:dt` and `f:ti`.
-const ANCHOR_KEYS: [&str; 6] = ["a", "cm", "si", "sd", "fn", "ref"];
-
-/// The header-field root, registered alone for the reason above.
-const FIELD_ROOT: &str = "f";
+const ANCHOR_KEYS: [MarkRoot; 7] = [
+    MarkRoot::Link,
+    MarkRoot::Comment,
+    MarkRoot::Insertion,
+    MarkRoot::Deletion,
+    MarkRoot::Footnote,
+    MarkRoot::CrossRef,
+    MarkRoot::Field,
+];
 
 /// The roots a command of their own owns: a comment, a suggestion, a
 /// footnote, a cross reference and a header field. The link is an anchor too,
 /// and the one the style path writes.
-const OWNED_ROOTS: [&str; 6] = ["cm", "si", "sd", "fn", "ref", FIELD_ROOT];
+const OWNED_ROOTS: [MarkRoot; 6] = [
+    MarkRoot::Comment,
+    MarkRoot::Insertion,
+    MarkRoot::Deletion,
+    MarkRoot::Footnote,
+    MarkRoot::CrossRef,
+    MarkRoot::Field,
+];
 
 /// Whether a key belongs to an anchor its own command writes and removes, so
 /// the style path must refuse it (`PROSE-FEAT-298`, `PROSE-FEAT-299`).
 #[must_use]
-pub fn is_owned_anchor(mark_key: &str) -> bool {
-    let root = mark_key.split(':').next().unwrap_or(mark_key);
-    OWNED_ROOTS.contains(&root)
+pub fn is_owned_anchor(mark_key: &MarkKey) -> bool {
+    MarkRoot::of(mark_key).is_some_and(|root| OWNED_ROOTS.contains(&root))
 }
 
 /// The expansion an insertion at the edge of a mark gets.
@@ -49,27 +123,19 @@ pub fn is_owned_anchor(mark_key: &str) -> bool {
 /// default, which is what a formatting mark does. A panic here would kill the
 /// worker over a document written by a newer client.
 #[must_use]
-pub fn expand_type_for(mark_key: &str) -> ExpandType {
+pub fn expand_type_for(mark_key: &MarkKey) -> ExpandType {
     // A key of the shape `a:b` belongs to the registry entry `a`, which is how
     // Loro itself resolves one.
-    let root = mark_key.split(':').next().unwrap_or(mark_key);
-    if root == FIELD_ROOT || ANCHOR_KEYS.contains(&root) {
+    MarkRoot::of(mark_key).map_or(ExpandType::After, expand_of)
+}
+
+/// The expansion of a mark under `root`.
+fn expand_of(root: MarkRoot) -> ExpandType {
+    if ANCHOR_KEYS.contains(&root) {
         ExpandType::None
     } else {
         ExpandType::After
     }
-}
-
-/// Every root the registry declares, which is every key a document may carry a
-/// mark under.
-///
-/// Loro refuses a mark whose key it holds no configuration for. This list is
-/// therefore what a command may write a mark under.
-fn registered_roots() -> impl Iterator<Item = &'static str> {
-    FORMATTING_KEYS
-        .into_iter()
-        .chain(ANCHOR_KEYS)
-        .chain([FIELD_ROOT])
 }
 
 /// Whether a command may write a mark under this key.
@@ -79,9 +145,8 @@ fn registered_roots() -> impl Iterator<Item = &'static str> {
 /// silently dropped. The check sits here, so the refusal names the registry
 /// rather than the engine.
 #[must_use]
-pub fn is_registered(mark_key: &str) -> bool {
-    let root = mark_key.split(':').next().unwrap_or(mark_key);
-    registered_roots().any(|known| known == root)
+pub fn is_registered(mark_key: &MarkKey) -> bool {
+    MarkRoot::of(mark_key).is_some()
 }
 
 /// Teach a document the expansion policy of every registered key
@@ -94,11 +159,11 @@ pub fn is_registered(mark_key: &str) -> bool {
 /// a key holding the separator and resolves `a:b` under `a` anyway.
 pub(crate) fn configure(doc: &LoroDoc) {
     let mut styles = StyleConfigMap::new();
-    for key in registered_roots() {
+    for &root in MarkRoot::ALL {
         styles.insert(
-            key.into(),
+            root.as_str().into(),
             StyleConfig {
-                expand: expand_type_for(key),
+                expand: expand_of(root),
             },
         );
     }
@@ -127,10 +192,18 @@ pub fn canonical_number(value: f32) -> Option<String> {
 
 /// The keys whose presence alone is the formatting, and which therefore take
 /// no value (`ambre-spec-prose-schema.md section 3`).
-const FLAG_KEYS: [&str; 7] = ["b", "i", "u", "s", "sup", "sub", "c"];
+const FLAG_KEYS: [MarkRoot; 7] = [
+    MarkRoot::Bold,
+    MarkRoot::Italic,
+    MarkRoot::Underline,
+    MarkRoot::Strike,
+    MarkRoot::Superscript,
+    MarkRoot::Subscript,
+    MarkRoot::Code,
+];
 
 /// The keys whose value is a colour.
-const COLOR_KEYS: [&str; 2] = ["fg", "bg"];
+const COLOR_KEYS: [MarkRoot; 2] = [MarkRoot::Ink, MarkRoot::Highlight];
 
 /// The largest font size the office formats round-trip, in points.
 const FONT_SIZE_MAX: f32 = 1638.0;
@@ -145,9 +218,9 @@ pub enum MarkValueError {
     BadFontSize(String),
     /// A value supplied for a key that takes none, or missing for a key that
     /// requires one.
-    ArityMismatch { key: String },
+    ArityMismatch { key: MarkKey },
     /// A key the registry does not declare.
-    UnknownKey(String),
+    UnknownKey(MarkKey),
 }
 
 /// Parse a colour into red, green, blue and alpha, packed in that order.
@@ -214,14 +287,11 @@ pub fn parse_font_size(raw: &str) -> Result<f32, MarkValueError> {
 /// One [`MarkValueError`] per way the pair can fail. An unknown key, a value
 /// where none belongs, none where one is required, a malformed colour, and a
 /// size outside the range.
-pub fn validate_value(key: &str, raw: Option<&str>) -> Result<String, MarkValueError> {
-    let root = key.split(':').next().unwrap_or(key);
-    if !is_registered(key) {
-        return Err(MarkValueError::UnknownKey(key.to_owned()));
-    }
-    let arity = || MarkValueError::ArityMismatch {
-        key: key.to_owned(),
+pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<String, MarkValueError> {
+    let Some(root) = MarkRoot::of(key) else {
+        return Err(MarkValueError::UnknownKey(key.clone()));
     };
+    let arity = || MarkValueError::ArityMismatch { key: key.clone() };
     if FLAG_KEYS.contains(&root) {
         return match raw {
             None | Some("") => Ok(String::new()),
@@ -245,7 +315,7 @@ pub fn validate_value(key: &str, raw: Option<&str>) -> Result<String, MarkValueE
 /// a hex record, a `#rrggbb` colour. The float parser would rewrite those. A
 /// cross reference of `"1e5"` reads as a number, and a footnote of `"007"`
 /// loses its zeroes. So the grammar is read from the key.
-const NUMERIC_KEYS: [&str; 1] = ["fs"];
+const NUMERIC_KEYS: [MarkRoot; 1] = [MarkRoot::FontSize];
 
 /// The canonical spelling of a mark value a command carried, or `None` when the
 /// value has none (`PROSE-008`, `PROSE-091`).
@@ -255,9 +325,8 @@ const NUMERIC_KEYS: [&str; 1] = ["fs"];
 /// finite number is refused. Every other key's value is its own canonical form:
 /// a URL, a family name and a `Uuid` are spelled once.
 #[must_use]
-pub fn canonical_value(mark_key: &str, raw: &str) -> Option<String> {
-    let root = mark_key.split(':').next().unwrap_or(mark_key);
-    if !NUMERIC_KEYS.contains(&root) {
+pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<String> {
+    if !MarkRoot::of(mark_key).is_some_and(|root| NUMERIC_KEYS.contains(&root)) {
         return Some(raw.to_owned());
     }
     canonical_number(raw.parse::<f32>().ok()?)
@@ -272,38 +341,44 @@ mod tests {
         for key in [
             "b", "i", "u", "s", "sup", "sub", "c", "fg", "bg", "fs", "ff",
         ] {
-            assert_eq!(expand_type_for(key), ExpandType::After, "{key}");
+            assert_eq!(expand_type_for(&key.into()), ExpandType::After, "{key}");
         }
     }
 
     #[test]
     fn an_anchor_mark_never_swallows_an_insertion() {
-        for key in ANCHOR_KEYS {
-            assert_eq!(expand_type_for(key), ExpandType::None, "{key}");
+        for root in ANCHOR_KEYS {
+            assert_eq!(expand_type_for(&root.key()), ExpandType::None, "{root:?}");
         }
     }
 
     #[test]
     fn a_header_field_is_read_under_its_own_root() {
         for key in ["f:pn", "f:pc", "f:dt", "f:ti"] {
-            assert_eq!(expand_type_for(key), ExpandType::None, "{key}");
-            assert!(is_registered(key), "{key}");
+            assert_eq!(expand_type_for(&key.into()), ExpandType::None, "{key}");
+            assert!(is_registered(&key.into()), "{key}");
         }
     }
 
     #[test]
     fn an_unknown_key_answers_the_default_and_never_panics() {
-        assert_eq!(expand_type_for("a-key-no-build-knows"), ExpandType::After);
-        assert_eq!(expand_type_for(""), ExpandType::After);
-        assert_eq!(expand_type_for(":"), ExpandType::After);
-        assert!(!is_registered("a-key-no-build-knows"));
+        assert_eq!(
+            expand_type_for(&"a-key-no-build-knows".into()),
+            ExpandType::After
+        );
+        assert_eq!(expand_type_for(&"".into()), ExpandType::After);
+        assert_eq!(expand_type_for(&":".into()), ExpandType::After);
+        assert!(!is_registered(&"a-key-no-build-knows".into()));
     }
 
     #[test]
     fn two_peers_spell_one_size_the_same_way() {
-        assert_eq!(canonical_value("fs", "11.0").as_deref(), Some("11"));
-        assert_eq!(canonical_value("fs", "11").as_deref(), Some("11"));
-        assert_eq!(canonical_value("fs", "11.50").as_deref(), Some("11.5"));
+        assert_eq!(canonical_value(&"fs".into(), "11.0").as_deref(), Some("11"));
+        assert_eq!(canonical_value(&"fs".into(), "11").as_deref(), Some("11"));
+        assert_eq!(
+            canonical_value(&"fs".into(), "11.50").as_deref(),
+            Some("11.5")
+        );
         assert_eq!(canonical_number(0.5).as_deref(), Some("0.5"));
         assert_eq!(canonical_number(f32::NAN), None);
         assert_eq!(canonical_number(f32::INFINITY), None);
@@ -312,10 +387,13 @@ mod tests {
     #[test]
     fn a_value_that_is_not_a_number_is_its_own_canonical_form() {
         assert_eq!(
-            canonical_value("a", "https://example.org/a").as_deref(),
+            canonical_value(&"a".into(), "https://example.org/a").as_deref(),
             Some("https://example.org/a")
         );
-        assert_eq!(canonical_value("fg", "#ff8800").as_deref(), Some("#ff8800"));
+        assert_eq!(
+            canonical_value(&"fg".into(), "#ff8800").as_deref(),
+            Some("#ff8800")
+        );
     }
 
     /// A value under a key the registry spells as text reaches the document as
@@ -323,11 +401,17 @@ mod tests {
     /// and re-spelling it would name another anchor or another font.
     #[test]
     fn a_textual_value_that_reads_as_a_number_is_left_alone() {
-        assert_eq!(canonical_value("ref", "1.10").as_deref(), Some("1.10"));
-        assert_eq!(canonical_value("fn", "007").as_deref(), Some("007"));
-        assert_eq!(canonical_value("cm", "1e5").as_deref(), Some("1e5"));
-        assert_eq!(canonical_value("ff", "inf").as_deref(), Some("inf"));
-        assert_eq!(canonical_value("f:pn", "NaN").as_deref(), Some("NaN"));
+        assert_eq!(
+            canonical_value(&"ref".into(), "1.10").as_deref(),
+            Some("1.10")
+        );
+        assert_eq!(canonical_value(&"fn".into(), "007").as_deref(), Some("007"));
+        assert_eq!(canonical_value(&"cm".into(), "1e5").as_deref(), Some("1e5"));
+        assert_eq!(canonical_value(&"ff".into(), "inf").as_deref(), Some("inf"));
+        assert_eq!(
+            canonical_value(&"f:pn".into(), "NaN").as_deref(),
+            Some("NaN")
+        );
     }
 
     /// The numeric key is the one that refuses. A size with no finite value
@@ -335,7 +419,7 @@ mod tests {
     /// document left holding a marker no reader can use.
     #[test]
     fn a_size_that_is_not_a_finite_number_has_no_canonical_spelling() {
-        assert_eq!(canonical_value("fs", "inf"), None);
-        assert_eq!(canonical_value("fs", "eleven"), None);
+        assert_eq!(canonical_value(&"fs".into(), "inf"), None);
+        assert_eq!(canonical_value(&"fs".into(), "eleven"), None);
     }
 }

@@ -12,7 +12,7 @@
 //! and a cross-paragraph delete are therefore one code path and one convergence
 //! case (`PROSE-039`).
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan, MarkKey};
 use loro::{LoroText, TreeID, TreeParentId};
 
 use crate::doc;
@@ -257,7 +257,7 @@ pub(super) fn body_span(body: &LoroText) -> DocSpan {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct MarkedRun {
     pub(super) text: String,
-    pub(super) marks: Vec<(String, loro::LoroValue)>,
+    pub(super) marks: Vec<(MarkKey, loro::LoroValue)>,
 }
 
 /// The marked runs a body holds between two code-point offsets.
@@ -289,7 +289,7 @@ pub(super) fn marked_runs(body: &LoroText, span: DocSpan) -> Vec<MarkedRun> {
                     .iter()
                     // A null attribute is a mark the run does not carry.
                     .filter(|(_, value)| !matches!(value, loro::LoroValue::Null))
-                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .map(|(key, value)| (MarkKey::new(key.clone()), value.clone()))
                     .collect(),
                 _ => Vec::new(),
             };
@@ -331,7 +331,7 @@ pub(super) fn write_runs(
     for run in runs {
         let len = run.text.chars().count();
         for (key, value) in &run.marks {
-            if let Err(e) = target.mark(at..at + len, key, value.clone()) {
+            if let Err(e) = target.mark(at..at + len, key.as_str(), value.clone()) {
                 tracing::warn!("Prose: the moved text lost the mark {key}: {e:?}");
             }
         }
@@ -611,7 +611,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[0],
             range: DocSpan::from_usize_range(0..11),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         let outcome = state.handle_command(ProseCommand::SplitBlock {
@@ -642,7 +642,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[0],
             range: DocSpan::from_usize_range(0..11),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         crate::logic::marks::tests::anchor(&mut state, &ids[0], 0..11);
@@ -674,7 +674,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: ids[1],
             range: DocSpan::from_usize_range(0..5),
-            key: "i".to_owned(),
+            key: "i".into(),
             value: None,
         });
         state.handle_command(ProseCommand::DeleteRange {

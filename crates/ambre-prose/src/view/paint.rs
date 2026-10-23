@@ -1462,7 +1462,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..4),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         let mut ui = ProseUiState::default();
@@ -1503,7 +1503,7 @@ mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..4),
-                key: key.to_owned(),
+                key: key.into(),
                 value: None,
             });
         }
@@ -1538,7 +1538,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..4),
-            key: "u".to_owned(),
+            key: "u".into(),
             value: None,
         });
         let mut ui = ProseUiState::default();

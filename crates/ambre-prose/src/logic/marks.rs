@@ -7,7 +7,7 @@
 //! refused here rather than left to the CRDT engine, so the refusal names the
 //! registry.
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan, MarkKey};
 
 use loro::TreeID;
 
@@ -17,7 +17,7 @@ use crate::doc;
 use crate::events::{
     ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
-use crate::mark;
+use crate::mark::{self, MarkRoot};
 use crate::style::{BlockContext, MarkSet, ResolvedStyle, resolve};
 
 use super::ProseState;
@@ -34,14 +34,14 @@ impl ProseState {
         &mut self,
         id: &TreeID,
         range: DocSpan,
-        key: &str,
+        key: &MarkKey,
         value: Option<&str>,
     ) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
         if mark::is_owned_anchor(key) {
-            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
+            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.clone()));
         }
         let span = ordered(range);
         let (start, end) = (span.start.to_usize(), span.end.to_usize());
@@ -54,7 +54,7 @@ impl ProseState {
             Ok(canonical) => canonical,
             Err(refusal) => return ProseOutcome::refused(refused_as(key, value, &refusal)),
         };
-        if let Err(e) = body.mark(start..end, key, stored.as_str()) {
+        if let Err(e) = body.mark(start..end, key.as_str(), stored.as_str()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(self.links_touched(Some(key)))
@@ -62,8 +62,8 @@ impl ProseState {
 
     /// The link list, when the command touched links: a mark under the link
     /// key, or a clear, which takes links along. Nothing otherwise.
-    fn links_touched(&self, key: Option<&str>) -> Vec<ProseEvent> {
-        if key.is_some_and(|key| key != "a") {
+    fn links_touched(&self, key: Option<&MarkKey>) -> Vec<ProseEvent> {
+        if key.is_some_and(|key| key.as_str() != MarkRoot::Link.as_str()) {
             return Vec::new();
         }
         vec![ProseEvent::LinksUpdated {
@@ -72,22 +72,27 @@ impl ProseState {
     }
 
     /// Remove one mark from a range.
-    pub(super) fn remove_mark(&mut self, id: &TreeID, range: DocSpan, key: &str) -> ProseOutcome {
+    pub(super) fn remove_mark(
+        &mut self,
+        id: &TreeID,
+        range: DocSpan,
+        key: &MarkKey,
+    ) -> ProseOutcome {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
         if !mark::is_registered(key) {
-            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
+            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.clone()));
         }
         if mark::is_owned_anchor(key) {
-            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
+            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.clone()));
         }
         let span = ordered(range);
         let (start, end) = (span.start.to_usize(), span.end.to_usize());
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
         }
-        if let Err(e) = body.unmark(start..end, key) {
+        if let Err(e) = body.unmark(start..end, key.as_str()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(self.links_touched(Some(key)))
@@ -107,7 +112,8 @@ impl ProseState {
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
         }
-        for key in mark::FORMATTING_KEYS {
+        for root in mark::FORMATTING_KEYS {
+            let key = root.as_str();
             if let Err(e) = body.unmark(start..end, key) {
                 tracing::warn!("Prose: the text refused to clear the mark {key}: {e:?}");
             }
@@ -207,11 +213,12 @@ impl ProseState {
         &mut self,
         anchor: (BlockId, DocOffset),
         focus: (BlockId, DocOffset),
-        key: &str,
+        key: &MarkKey,
         action: ambre_bus::app::prose::MarkAction,
     ) -> ProseOutcome {
-        if !BAR_KEYS.contains(&key) {
-            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
+        // The whole key, not its root: `b:x` names no control of the bar.
+        if !MarkRoot::parse(key.as_str()).is_some_and(|root| BAR_KEYS.contains(&root)) {
+            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.clone()));
         }
         let spans: Vec<_> = self
             .selected_spans(anchor, focus)
@@ -231,8 +238,8 @@ impl ProseState {
                 return Self::err_bad_range();
             }
             let written = match action {
-                ambre_bus::app::prose::MarkAction::Apply => body.mark(start..end, key, ""),
-                ambre_bus::app::prose::MarkAction::Remove => body.unmark(start..end, key),
+                ambre_bus::app::prose::MarkAction::Apply => body.mark(start..end, key.as_str(), ""),
+                ambre_bus::app::prose::MarkAction::Remove => body.unmark(start..end, key.as_str()),
             };
             if let Err(e) = written {
                 return Self::err_write(&format!("{e:?}"));
@@ -281,7 +288,13 @@ impl ProseState {
 
 /// The five on-or-off keys of the format bar, in the order of
 /// [`ActiveMarks`].
-const BAR_KEYS: [&str; 5] = ["b", "i", "u", "s", "c"];
+const BAR_KEYS: [MarkRoot; 5] = [
+    MarkRoot::Bold,
+    MarkRoot::Italic,
+    MarkRoot::Underline,
+    MarkRoot::Strike,
+    MarkRoot::Code,
+];
 
 /// What the selected runs carry, run by run.
 #[derive(Default)]
@@ -296,13 +309,16 @@ struct MarkFold {
 impl MarkFold {
     fn take(&mut self, marks: &MarkSet) {
         for (key, (on, off)) in BAR_KEYS.iter().zip(self.counts.iter_mut()) {
-            if marks.contains_key(*key) {
+            if marks.contains_key(key.as_str()) {
                 *on += 1;
             } else {
                 *off += 1;
             }
         }
-        let this = marks.get("a").cloned().map(ambre_core::LinkUrl::new);
+        let this = marks
+            .get(MarkRoot::Link.as_str())
+            .cloned()
+            .map(ambre_core::LinkUrl::new);
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),
@@ -338,11 +354,11 @@ const RUN_TEXT: &str = "insert";
 ///
 /// The engine's refusal set is what the view reads, and the value error is the
 /// reason behind one of its variants.
-fn refused_as(key: &str, value: Option<&str>, error: &mark::MarkValueError) -> ProseRefusal {
+fn refused_as(key: &MarkKey, value: Option<&str>, error: &mark::MarkValueError) -> ProseRefusal {
     match error {
         mark::MarkValueError::UnknownKey(key) => ProseRefusal::UnknownMark(key.clone()),
         _ => ProseRefusal::BadMarkValue {
-            key: key.to_owned(),
+            key: key.clone(),
             value: value.unwrap_or_default().to_owned(),
         },
     }
@@ -366,7 +382,7 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
                 LoroValue::String(text) => text.to_string(),
                 _ => String::new(),
             };
-            (key.clone(), stored)
+            (MarkKey::new(key.clone()), stored)
         })
         .collect()
 }
@@ -427,7 +443,7 @@ pub(crate) mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..4),
-                key: key.to_owned(),
+                key: key.into(),
                 value: None,
             });
             let marked = laid_width(&mut state, block);
@@ -435,7 +451,7 @@ pub(crate) mod tests {
             state.handle_command(ProseCommand::RemoveMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..4),
-                key: key.to_owned(),
+                key: key.into(),
             });
             let back = laid_width(&mut state, block);
             assert!((back - plain).abs() < 0.01, "removing {key} restores them");
@@ -448,7 +464,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "fs".to_owned(),
+            key: "fs".into(),
             value: Some("11.0".to_owned()),
         });
         let rendered = format!("{:?}", state.marks_of(&block));
@@ -461,7 +477,7 @@ pub(crate) mod tests {
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "no-such-key".to_owned(),
+            key: "no-such-key".into(),
             value: None,
         });
         assert!(outcome.update.is_none());
@@ -473,7 +489,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         anchor(&mut state, &block, 0..5);
@@ -491,7 +507,7 @@ pub(crate) mod tests {
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(2..2),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         assert!(outcome.update.is_none());
@@ -539,7 +555,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..3),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         let bolded: String = runs(&state, &block)
@@ -558,7 +574,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "fg".to_owned(),
+            key: "fg".into(),
             // The opaque eight-digit spelling of the same colour.
             value: Some("#3366CCFF".to_owned()),
         });
@@ -602,7 +618,7 @@ pub(crate) mod tests {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
-                key: key.to_owned(),
+                key: key.into(),
                 value: value.map(str::to_owned),
             });
             assert!(refused(&outcome), "{key} took {value:?}");
@@ -622,7 +638,7 @@ pub(crate) mod tests {
             let outcome = state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
-                key: key.to_owned(),
+                key: key.into(),
                 value: Some("x".to_owned()),
             });
             assert!(
@@ -637,7 +653,7 @@ pub(crate) mod tests {
         let link = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "a".to_owned(),
+            key: "a".into(),
             value: Some("https://example.org".to_owned()),
         });
         assert!(link.update.is_some(), "the link is a style command's");
@@ -657,7 +673,7 @@ pub(crate) mod tests {
         let outcome = state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..6),
-            key: "fn".to_owned(),
+            key: "fn".into(),
         });
         assert!(matches!(
             refusal(&outcome),
@@ -674,7 +690,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         state.handle_command(ProseCommand::SetParagraphStyle {
@@ -688,7 +704,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "i".to_owned(),
+            key: "i".into(),
             value: None,
         });
 
@@ -708,7 +724,7 @@ pub(crate) mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..7),
-                key: key.to_owned(),
+                key: key.into(),
                 value: None,
             });
         }
@@ -716,7 +732,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::RemoveMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..3),
-            key: "b".to_owned(),
+            key: "b".into(),
         });
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "one two");
@@ -749,7 +765,7 @@ pub(crate) mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
-                key: key.to_owned(),
+                key: key.into(),
                 value: value.map(str::to_owned),
             });
         }
@@ -779,7 +795,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         let wanted = ParagraphStyle {
@@ -834,7 +850,7 @@ pub(crate) mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..3),
-                key: key.to_owned(),
+                key: key.into(),
                 value: value.map(str::to_owned),
             });
             state.handle_command(ProseCommand::InsertText {

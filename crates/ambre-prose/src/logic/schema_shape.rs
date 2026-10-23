@@ -21,6 +21,7 @@
 
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
+use ambre_bus::app::prose::MarkKey;
 use std::collections::BTreeSet;
 
 use ambre_core::schema::{migration_peer, step_fingerprint};
@@ -46,7 +47,6 @@ const STEPS: &str = include_str!("../../schema/migrations.txt");
 /// The source the key declarations are read from, so the coverage assertion
 /// cannot drift from the module it guards.
 pub(super) const DOC_SOURCE: &str = include_str!("../doc.rs");
-pub(super) const MARK_SOURCE: &str = include_str!("../mark.rs");
 
 /// The segment a tree node, a body container or a user-named register collapses
 /// to. Their names carry a `TreeID` or a peer id, so a shape that kept them
@@ -292,8 +292,7 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
 /// Every name the schema enums of `doc.rs` declare, through their `ALL`.
 ///
 /// The attributes no command writes yet stay out ([`doc::UNWRITTEN_ATTRS`]).
-/// The text mark keys are still bare constants, so the caller reads those
-/// from the source.
+/// The text mark roots are read through [`declared_mark_roots`].
 pub(super) fn declared_keys() -> Vec<String> {
     fn names<K: Copy>(all: &[K], spell: fn(K) -> &'static str) -> Vec<String> {
         all.iter().map(|key| spell(*key).to_owned()).collect()
@@ -318,30 +317,12 @@ pub(super) fn declared_keys() -> Vec<String> {
     found
 }
 
-/// Every `&str` element of the mark registry's arrays.
-pub(super) fn declared_mark_roots(source: &str) -> Vec<String> {
-    let mut found = declared_string_consts(source);
-    for name in ["FORMATTING_KEYS", "ANCHOR_KEYS"] {
-        let Some(start) = source.find(&format!("{name}: [&str;")) else {
-            continue;
-        };
-        let Some(open) = source[start..].find('[').map(|i| start + i) else {
-            continue;
-        };
-        let Some(open) = source[open + 1..].find('[').map(|i| open + 1 + i) else {
-            continue;
-        };
-        let Some(close) = source[open..].find(']').map(|i| open + i) else {
-            continue;
-        };
-        for piece in source[open + 1..close].split(',') {
-            let key = piece.trim().trim_matches('"');
-            if !key.is_empty() {
-                found.push(key.to_owned());
-            }
-        }
-    }
-    found
+/// Every root the mark registry declares, through its `ALL`.
+pub(super) fn declared_mark_roots() -> Vec<String> {
+    crate::mark::MarkRoot::ALL
+        .iter()
+        .map(|root| root.as_str().to_owned())
+        .collect()
 }
 
 /// A document that reaches every key the schema declares.
@@ -420,8 +401,8 @@ pub(super) fn document_of_every_key() -> ProseState {
         // it lays those marks on the body directly.
         if crate::mark::is_owned_anchor(&key) {
             let body = doc::get_block_text(&state.doc, &crate::events::tree_id(root));
-            let value = mark_value_for(&key).unwrap_or_default();
-            if body.mark(0..3, &key, value.as_str()).is_err() {
+            let value = mark_value_for(key.as_str()).unwrap_or_default();
+            if body.mark(0..3, key.as_str(), value.as_str()).is_err() {
                 panic!("the scenario could not lay the {key} mark");
             }
             state.doc.commit();
@@ -431,7 +412,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             block_id: root,
             range: DocSpan::from_usize_range(0..3),
             key: key.clone(),
-            value: mark_value_for(&key),
+            value: mark_value_for(key.as_str()),
         });
     }
     state
@@ -562,10 +543,10 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
 ///
 /// The header-field root is registered alone and addressed through its four
 /// children, so it is written as one of them (`mark.rs`).
-fn mark_roots_to_apply() -> Vec<String> {
-    let mut keys: Vec<String> = declared_mark_roots(MARK_SOURCE)
+fn mark_roots_to_apply() -> Vec<MarkKey> {
+    let mut keys: Vec<MarkKey> = declared_mark_roots()
         .into_iter()
-        .map(|root| if root == "f" { "f:pn".to_owned() } else { root })
+        .map(|root| MarkKey::new(if root == "f" { "f:pn".to_owned() } else { root }))
         .collect();
     keys.sort();
     keys.dedup();
@@ -719,7 +700,7 @@ fn every_declared_key_appears_in_the_shape() {
     let state = document_of_every_key();
     let shape = shape_of(&state.doc);
     let mut declared = declared_keys();
-    declared.extend(declared_mark_roots(MARK_SOURCE));
+    declared.extend(declared_mark_roots());
     for key in declared {
         let reached = shape.keys.contains(&key)
             || shape

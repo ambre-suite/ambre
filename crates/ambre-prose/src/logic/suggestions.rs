@@ -148,7 +148,7 @@ impl ProseState {
             return Self::err_write(&e);
         }
         let key = suggest::mark_key(SuggestionKind::Insertion, &id);
-        if let Err(e) = body.mark(inserted.to_usize_range(), &key, id.to_hyphenated()) {
+        if let Err(e) = body.mark(inserted.to_usize_range(), key.as_str(), id.to_hyphenated()) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.extend_burst(id, SuggestionKind::Insertion, block, pos, end);
@@ -203,7 +203,7 @@ impl ProseState {
                 (Treatment::Remove, _) => body.delete(range.start, range.len()),
                 (Treatment::Mark, Some(id)) => body.mark(
                     range,
-                    &suggest::mark_key(SuggestionKind::Deletion, &id),
+                    suggest::mark_key(SuggestionKind::Deletion, &id).as_str(),
                     id.to_hyphenated(),
                 ),
                 _ => Ok(()),
@@ -287,7 +287,7 @@ impl ProseState {
             let written = if removes {
                 body.delete(range.start, range.len())
             } else {
-                body.unmark(range, &suggest::mark_key(*kind, id))
+                body.unmark(range, suggest::mark_key(*kind, id).as_str())
             };
             written.map_err(|e| format!("{e:?}"))?;
         }
@@ -1012,7 +1012,7 @@ mod tests {
             ProseCommand::ApplyMark {
                 block_id: ids[0],
                 range: DocSpan::from_usize_range(0..2),
-                key: "b".to_owned(),
+                key: "b".into(),
                 value: None,
             },
         ] {

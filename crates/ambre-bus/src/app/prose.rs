@@ -662,6 +662,64 @@ pub struct SuggestionSpan {
     pub end: DocOffset,
 }
 
+/// The key an inline mark is stored under in a block's text
+/// (`ambre-spec-prose-schema.md section 3`).
+///
+/// A key is a registered root, such as `b` or `fg`, or a root and an id
+/// joined by a colon, such as `cm:<id>`. A document written by a newer client
+/// may carry a key this build does not know, so the type holds any text. The
+/// prose registry reads the root and rules on it. The spelling is the one the
+/// document stores. `Debug` prints the bare text, as the `String` it replaced
+/// did.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MarkKey(String);
+
+impl MarkKey {
+    /// The key spelled as `text`.
+    #[must_use]
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The key as the document stores it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The part before the first colon, which names the registry entry. A key
+    /// with no colon is its own root.
+    #[must_use]
+    pub fn root(&self) -> &str {
+        self.0.split(':').next().unwrap_or(&self.0)
+    }
+}
+
+impl From<&str> for MarkKey {
+    fn from(text: &str) -> Self {
+        Self(text.to_owned())
+    }
+}
+
+impl std::borrow::Borrow<str> for MarkKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for MarkKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Display for MarkKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// One run of a link mark, in its block's own offsets, and the target it
 /// names (`features/ambre-spec-prose-selection.md section 2`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -788,13 +846,13 @@ pub enum ProseCommand {
     ApplyMark {
         block_id: BlockId,
         range: DocSpan,
-        key: String,
+        key: MarkKey,
         value: Option<String>,
     },
     RemoveMark {
         block_id: BlockId,
         range: DocSpan,
-        key: String,
+        key: MarkKey,
     },
     ClearInlineMarks {
         block_id: BlockId,
@@ -988,7 +1046,7 @@ pub enum ProseCommand {
     FormatSelection {
         anchor: (BlockId, DocOffset),
         focus: (BlockId, DocOffset),
-        key: String,
+        key: MarkKey,
         action: MarkAction,
     },
 
@@ -1566,14 +1624,14 @@ pub enum ProseRefusal {
     /// A mark key the registry of `ambre-spec-prose-schema.md section 3` does
     /// not declare (`PROSE-008`).
     #[error("the mark registry declares no key {0}")]
-    UnknownMark(String),
+    UnknownMark(MarkKey),
     /// A style command aimed at an anchor key, which only its own command
     /// writes (`PROSE-FEAT-298`, `PROSE-FEAT-299`).
     #[error("{0} is not a style, and only its own command writes it")]
-    AnchorKey(String),
+    AnchorKey(MarkKey),
     /// A mark value the key's own grammar refuses (`PROSE-008`).
     #[error("{value} is not a value the {key} style takes")]
-    BadMarkValue { key: String, value: String },
+    BadMarkValue { key: MarkKey, value: String },
     /// A collaborator's change this peer could not apply.
     #[error("a collaborator's change could not be applied; the document may be behind")]
     RemoteImportFailed,

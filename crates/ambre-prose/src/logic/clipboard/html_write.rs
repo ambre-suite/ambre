@@ -10,16 +10,17 @@ use std::fmt::Write as _;
 use ambre_bus::app::prose::OrderedStyle;
 
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
+use crate::mark::MarkRoot;
 
 /// The flag marks, in the order their elements nest, each with its element.
-const ELEMENTS: [(&str, &str); 7] = [
-    ("b", "strong"),
-    ("i", "em"),
-    ("u", "u"),
-    ("s", "s"),
-    ("sup", "sup"),
-    ("sub", "sub"),
-    ("c", "code"),
+const ELEMENTS: [(MarkRoot, &str); 7] = [
+    (MarkRoot::Bold, "strong"),
+    (MarkRoot::Italic, "em"),
+    (MarkRoot::Underline, "u"),
+    (MarkRoot::Strike, "s"),
+    (MarkRoot::Superscript, "sup"),
+    (MarkRoot::Subscript, "sub"),
+    (MarkRoot::Code, "code"),
 ];
 
 /// The list element a block sits in, spelled as its opening tag.
@@ -104,15 +105,15 @@ fn element(html: &mut String, tag: &str, block: &[ClipRun]) {
     let _ = write!(html, "</{tag}>");
 }
 
-fn value<'a>(run: &'a ClipRun, key: &str) -> Option<&'a str> {
+fn value(run: &ClipRun, key: MarkRoot) -> Option<&str> {
     run.marks.iter().find_map(|(k, v)| match v {
-        ClipValue::Text(text) if k == key => Some(text.as_str()),
+        ClipValue::Text(text) if k.as_str() == key.as_str() => Some(text.as_str()),
         _ => None,
     })
 }
 
-fn has(run: &ClipRun, key: &str) -> bool {
-    run.marks.iter().any(|(k, _)| k == key)
+fn has(run: &ClipRun, key: MarkRoot) -> bool {
+    run.marks.iter().any(|(k, _)| k.as_str() == key.as_str())
 }
 
 /// Each run in the elements its marks stand for. A run of no text still
@@ -123,7 +124,7 @@ fn runs(html: &mut String, block: &[ClipRun]) {
             continue;
         }
         let mut closing = Vec::new();
-        if let Some(href) = value(run, "a") {
+        if let Some(href) = value(run, MarkRoot::Link) {
             let _ = write!(html, "<a href=\"{}\">", escape(href));
             closing.push("a");
         }
@@ -134,16 +135,16 @@ fn runs(html: &mut String, block: &[ClipRun]) {
             }
         }
         let mut style = String::new();
-        if let Some(color) = value(run, "fg") {
+        if let Some(color) = value(run, MarkRoot::Ink) {
             let _ = write!(style, "color:{color};");
         }
-        if let Some(color) = value(run, "bg") {
+        if let Some(color) = value(run, MarkRoot::Highlight) {
             let _ = write!(style, "background-color:{color};");
         }
-        if let Some(size) = value(run, "fs") {
+        if let Some(size) = value(run, MarkRoot::FontSize) {
             let _ = write!(style, "font-size:{size}pt;");
         }
-        if let Some(family) = value(run, "ff") {
+        if let Some(family) = value(run, MarkRoot::FontFamily) {
             let family: String = family
                 .chars()
                 .filter(|c| !matches!(c, '\'' | '"' | ';' | '<' | '>' | '\\'))

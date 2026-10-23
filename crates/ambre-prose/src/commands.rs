@@ -8,6 +8,8 @@
 
 use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap, Locale};
 
+use crate::mark::MarkRoot;
+
 /// Taking the document out as a file.
 const FILE: CommandCategory = CommandCategory("file");
 /// Inline formatting: the format bar and its chords.
@@ -59,17 +61,17 @@ pub const CODE: CommandId = CommandId("prose.format.code");
 
 /// Each control of the format bar, in the order the bar shows them, with the
 /// mark key it applies or removes.
-pub const FORMAT_BAR: [(CommandId, &str); 5] = [
-    (BOLD, "b"),
-    (ITALIC, "i"),
-    (UNDERLINE, "u"),
-    (STRIKETHROUGH, "s"),
-    (CODE, "c"),
+pub const FORMAT_BAR: [(CommandId, MarkRoot); 5] = [
+    (BOLD, MarkRoot::Bold),
+    (ITALIC, MarkRoot::Italic),
+    (UNDERLINE, MarkRoot::Underline),
+    (STRIKETHROUGH, MarkRoot::Strike),
+    (CODE, MarkRoot::Code),
 ];
 
 /// The mark key a formatting command applies, or `None` for any other id.
 #[must_use]
-pub fn mark_key(id: CommandId) -> Option<&'static str> {
+pub fn mark_key(id: CommandId) -> Option<MarkRoot> {
     FORMAT_BAR
         .iter()
         .find(|(bar, _)| *bar == id)

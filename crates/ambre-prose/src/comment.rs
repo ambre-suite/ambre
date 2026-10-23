@@ -14,20 +14,26 @@ use loro::{Container, LoroDoc, LoroList, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc::{self, AnnotKey, Fields, ReplyKey};
 use crate::events::{CommentReply, CommentThread, block_id};
+use crate::mark::MarkRoot;
+use ambre_bus::app::prose::MarkKey;
 
 /// The kind a comment's entry declares.
 pub(crate) const KIND_COMMENT: &str = "comment";
 
 /// The mark key of thread `id`.
 #[must_use]
-pub(crate) fn mark_key(id: &CommentId) -> String {
-    format!("{}:{}", doc::K_COMMENT, id.to_hyphenated())
+pub(crate) fn mark_key(id: &CommentId) -> MarkKey {
+    MarkKey::new(format!(
+        "{}:{}",
+        MarkRoot::Comment.as_str(),
+        id.to_hyphenated()
+    ))
 }
 
 /// The thread a mark key names, when it is a comment's.
 fn thread_of_key(key: &str) -> Option<CommentId> {
     let (root, id) = key.split_once(':')?;
-    if root != doc::K_COMMENT {
+    if MarkRoot::parse(root)? != MarkRoot::Comment {
         return None;
     }
     CommentId::parse_str(id).ok()

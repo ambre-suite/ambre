@@ -15,10 +15,12 @@ use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
 use crate::events::BlockType;
-use crate::mark;
+use ambre_bus::app::prose::MarkKey;
+
+use crate::mark::{self, MarkRoot};
 
 /// The marks one run carries, key to stored value.
-pub type MarkSet = BTreeMap<String, String>;
+pub type MarkSet = BTreeMap<MarkKey, String>;
 
 /// The block a run sits in, which is the level between the mark and the
 /// document defaults.
@@ -103,34 +105,31 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 #[must_use]
 pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
     let mut resolved = block_defaults(context, defaults);
-    let has = |key: &str| marks.contains_key(key);
-    resolved.bold |= has("b");
-    resolved.italic |= has("i");
-    resolved.underline = has("u");
-    resolved.strikethrough = has("s");
-    resolved.code_inline |= has("c");
+    let has = |root: MarkRoot| marks.contains_key(root.as_str());
+    let get = |root: MarkRoot| marks.get(root.as_str());
+    resolved.bold |= has(MarkRoot::Bold);
+    resolved.italic |= has(MarkRoot::Italic);
+    resolved.underline = has(MarkRoot::Underline);
+    resolved.strikethrough = has(MarkRoot::Strike);
+    resolved.code_inline |= has(MarkRoot::Code);
     // Both marks are storable on one range, and neither write clears the other
     // (`PROSE-FEAT-173`). The raised one wins, by a priority fixed here rather
     // than by which mark arrived last (`PROSE-FEAT-174`).
-    resolved.superscript = has("sup");
-    resolved.subscript = has("sub") && !resolved.superscript;
-    if let Some(raw) = marks.get("fg") {
+    resolved.superscript = has(MarkRoot::Superscript);
+    resolved.subscript = has(MarkRoot::Subscript) && !resolved.superscript;
+    if let Some(raw) = get(MarkRoot::Ink) {
         resolved.color = mark::parse_color(raw).ok();
     }
-    if let Some(raw) = marks.get("bg") {
+    if let Some(raw) = get(MarkRoot::Highlight) {
         resolved.background = mark::parse_color(raw).ok();
     }
-    if let Some(points) = marks
-        .get("fs")
-        .and_then(|raw| mark::parse_font_size(raw).ok())
-    {
+    if let Some(points) = get(MarkRoot::FontSize).and_then(|raw| mark::parse_font_size(raw).ok()) {
         resolved.font_size = points;
     }
-    if let Some(family) = marks.get("ff").filter(|family| !family.is_empty()) {
+    if let Some(family) = get(MarkRoot::FontFamily).filter(|family| !family.is_empty()) {
         resolved.font_family = Some(family.clone());
     }
-    resolved.link = marks
-        .get("a")
+    resolved.link = get(MarkRoot::Link)
         .filter(|url| !url.is_empty())
         .cloned()
         .map(ambre_core::LinkUrl::new);
@@ -144,7 +143,7 @@ mod tests {
     fn marks(pairs: &[(&str, &str)]) -> MarkSet {
         pairs
             .iter()
-            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .map(|(key, value)| (MarkKey::from(*key), (*value).to_owned()))
             .collect()
     }
 

@@ -1429,7 +1429,7 @@ mod tests {
         let outcome = state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..4),
-            key: "fs".to_owned(),
+            key: "fs".into(),
             value: Some("huge".to_owned()),
         });
         let error = refusal(&outcome);
@@ -1437,7 +1437,7 @@ mod tests {
         assert_eq!(
             error.reason,
             ProseRefusal::BadMarkValue {
-                key: "fs".to_owned(),
+                key: "fs".into(),
                 value: "huge".to_owned(),
             }
         );

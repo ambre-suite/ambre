@@ -34,6 +34,7 @@ use crate::interop::{
     IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun, IrTableCell, IrTableRow,
     ProseIr, Warnings, markdown_read, markdown_write,
 };
+use crate::mark::MarkRoot;
 
 /// Where an operation's block goes. It sits at the root, under a block an
 /// earlier operation minted, or in a cell of a table one minted.
@@ -276,21 +277,21 @@ fn ir_list_style(style: ListStyle) -> IrListStyle {
 fn marked_of(run: &IrRun) -> MarkedRun {
     let mut marks = Vec::new();
     let flags = [
-        (run.bold, "b"),
-        (run.italic, "i"),
-        (run.underline, "u"),
-        (run.strikethrough, "s"),
-        (run.superscript, "sup"),
-        (run.subscript, "sub"),
-        (run.code, "c"),
+        (run.bold, MarkRoot::Bold),
+        (run.italic, MarkRoot::Italic),
+        (run.underline, MarkRoot::Underline),
+        (run.strikethrough, MarkRoot::Strike),
+        (run.superscript, MarkRoot::Superscript),
+        (run.subscript, MarkRoot::Subscript),
+        (run.code, MarkRoot::Code),
     ];
     for (on, key) in flags {
         if on {
-            marks.push((key.to_owned(), LoroValue::from(true)));
+            marks.push((key.key(), LoroValue::from(true)));
         }
     }
     if let Some(url) = &run.link {
-        marks.push(("a".to_owned(), LoroValue::from(url.as_str())));
+        marks.push((MarkRoot::Link.key(), LoroValue::from(url.as_str())));
     }
     MarkedRun {
         text: run.text.chars().filter(|c| !c.is_control()).collect(),
@@ -306,7 +307,7 @@ fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, u32>) -> IrRun {
         if !on {
             continue;
         }
-        match key.split(':').next().unwrap_or(&key) {
+        match key.root() {
             "b" => out.bold = true,
             "i" => out.italic = true,
             "u" => out.underline = true,

@@ -11,6 +11,7 @@ use ambre_commands::CommandId;
 
 use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};
 use crate::layout::run::RunSpan;
+use crate::mark::MarkRoot;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 
@@ -34,13 +35,13 @@ impl ToolbarState {
 
 /// The state one key of the bar holds in a set of marks.
 #[must_use]
-pub fn state_of(marks: &ActiveMarks, key: &str) -> TriState {
+pub fn state_of(marks: &ActiveMarks, key: MarkRoot) -> TriState {
     match key {
-        "b" => marks.bold,
-        "i" => marks.italic,
-        "u" => marks.underline,
-        "s" => marks.strikethrough,
-        "c" => marks.code,
+        MarkRoot::Bold => marks.bold,
+        MarkRoot::Italic => marks.italic,
+        MarkRoot::Underline => marks.underline,
+        MarkRoot::Strike => marks.strikethrough,
+        MarkRoot::Code => marks.code,
         _ => TriState::Off,
     }
 }
@@ -116,7 +117,7 @@ impl ProseUiState {
         Some(ProseCommand::FormatSelection {
             anchor,
             focus,
-            key: key.to_owned(),
+            key: key.key(),
             action: if on {
                 MarkAction::Remove
             } else {

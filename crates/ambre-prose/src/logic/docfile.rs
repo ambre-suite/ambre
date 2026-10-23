@@ -110,7 +110,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         state

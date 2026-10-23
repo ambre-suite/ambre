@@ -36,8 +36,7 @@ use ambre_core::schema::verdict;
 use loro::{LoroValue, TreeID, TreeParentId};
 
 use super::schema_shape::{
-    ANY, ANY_BODY, MARK_SOURCE, declared_keys, declared_mark_roots, document_of_every_key,
-    section_of,
+    ANY, ANY_BODY, declared_keys, declared_mark_roots, document_of_every_key, section_of,
 };
 use crate::doc;
 use crate::events::{ParagraphStyle, block_id};
@@ -740,7 +739,7 @@ fn every_declared_key_has_a_reading() {
     let state = document_of_every_key();
     let keys = readings_of(&state, &reopened(&state)).keys;
     let mut declared = declared_keys();
-    declared.extend(declared_mark_roots(MARK_SOURCE));
+    declared.extend(declared_mark_roots());
     for key in declared {
         let reached = keys.contains(&key)
             || keys

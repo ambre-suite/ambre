@@ -10,6 +10,7 @@ use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::doc;
 use crate::events::{BlockType, ProseEvent, ProseOutcome, ProseRefusal};
+use crate::mark::MarkRoot;
 use crate::note;
 
 use super::ProseState;
@@ -45,7 +46,7 @@ impl ProseState {
         if let Err(e) = self.write_note(&id, text) {
             return Self::err_write(&e);
         }
-        if let Err(e) = Self::write_carrier(&body, at, doc::K_FOOTNOTE, &id.to_hyphenated()) {
+        if let Err(e) = Self::write_carrier(&body, at, MarkRoot::Footnote, &id.to_hyphenated()) {
             return Self::err_write(&e);
         }
         self.commit_notes()
@@ -123,14 +124,14 @@ impl ProseState {
     pub(super) fn write_carrier(
         body: &LoroText,
         at: DocOffset,
-        key: &str,
+        key: MarkRoot,
         value: &str,
     ) -> Result<(), String> {
         let at = at.to_usize();
         let mut buffer = [0_u8; 4];
         body.insert(at, doc::CARRIER.encode_utf8(&mut buffer))
             .map_err(|e| format!("{e:?}"))?;
-        body.mark(at..at + 1, key, value)
+        body.mark(at..at + 1, key.as_str(), value)
             .map_err(|e| format!("{e:?}"))
     }
 

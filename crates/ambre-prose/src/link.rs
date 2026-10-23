@@ -11,9 +11,7 @@ use loro::{LoroDoc, LoroValue, TextDelta};
 use crate::comment::text_blocks;
 use crate::doc;
 use crate::events::{LinkSpan, block_id};
-
-/// The mark key a link is written under.
-const LINK_KEY: &str = "a";
+use crate::mark::MarkRoot;
 
 /// Every run of a link mark, in document order. Two runs side by side with
 /// one target read as one link.
@@ -31,7 +29,7 @@ pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
             let end = offset + length;
             let url = attributes
                 .as_ref()
-                .and_then(|attributes| attributes.get(LINK_KEY))
+                .and_then(|attributes| attributes.get(MarkRoot::Link.as_str()))
                 .and_then(|value| match value {
                     LoroValue::String(url) if !url.is_empty() => {
                         Some(ambre_core::LinkUrl::new(url.to_string()))
@@ -102,7 +100,7 @@ mod tests {
             .handle_command(ProseCommand::ApplyMark {
                 block_id: block,
                 range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
-                key: key.to_owned(),
+                key: key.into(),
                 value: Some(value.to_owned()),
             })
             .display

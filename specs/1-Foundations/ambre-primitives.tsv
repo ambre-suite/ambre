@@ -268,6 +268,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::as_str() | ret | &
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Topic::new(text) | param | impl Into<String>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount.0 | field | u32	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount::is_zero() | ret | bool	newtype-inner	newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
+ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -307,6 +309,10 @@ ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight.value | field | f3
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | ListStyle::Todo.0 | field | bool	generic	todo checkbox ticked, a fact inside the enum variant
+ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::as_str() | ret | &str	newtype-inner	MarkKey newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::new(text) | param | String	newtype-inner	MarkKey newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.indent_first | field | Option<f32>	math	paragraph / table geometry in points
@@ -320,13 +326,11 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | 
 ambre-bus | src/app/prose.rs | crate::app::prose | PresencePayload.anchor | field | Option<(BlockId,Vec<u8>)>	debt	finding: Prose presence cursor as Vec<u8> (low, suspected)
 ambre-bus | src/app/prose.rs | crate::app::prose | PresencePayload.cursor | field | Vec<u8>	debt	finding: Prose presence cursor as Vec<u8> (low, suspected)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	mark value, grammar owned by the mark registry per key
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::DeleteTableCol.col_index | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EnableTrackChanges.enabled | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::FormatSelection.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ImportDocument.data | field | Vec<u8>	generic	imported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertTable.cols | field | u32	debt	finding: Prose table row/col as u32 (medium, confirmed)
@@ -341,7 +345,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::MergeTableCells
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.html | field | Option<String>	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.payload | field | Option<Vec<u8>>	generic	opaque app clipboard bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::RemoveMark.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceAll.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplyToComment.text | field | String	free-text	user content
@@ -375,12 +378,9 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SuggestionsUpdate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::TextChanged.local | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_undo | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::AnchorKey.0 | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.key | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	mark value, grammar owned by the mark registry per key
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadTableValue.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::FindRefused.0 | field | &'static str	free-text	static refusal label
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::UnknownMark.0 | field | String	debt	planned: lot C bis 8: MarkKey (bus carriers of the mark key)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | String	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
@@ -2884,7 +2884,6 @@ ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.over_link | field
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.slash_pick | field | RwSignal<Option<usize>>	math	count, size or local index
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals::drop_lost_drafts() | ret | Vec<&'static str>	debt	finding: lost-reply notice as &'static str (suspected)
 ambre-prose | src/chrome/mod.rs | crate::chrome | RULER_HEIGHT_PX | const | f32	math	layout geometry local to algorithm
-ambre-prose | src/commands.rs | crate::commands | FORMAT_BAR | const | [(CommandId,&str);5]	debt	planned: lot C8 MarkKey
 ambre-prose | src/commands.rs | crate::commands | bold_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | code_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | copy_title() | ret | String	free-text	text content / label / parser input
@@ -2892,7 +2891,6 @@ ambre-prose | src/commands.rs | crate::commands | cut_title() | ret | String	fre
 ambre-prose | src/commands.rs | crate::commands | export_markdown_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | import_markdown_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | italic_title() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/commands.rs | crate::commands | mark_key() | ret | Option<&'static str>	debt	planned: lot C8 MarkKey
 ambre-prose | src/commands.rs | crate::commands | palette_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | paste_plain_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | paste_title() | ret | String	free-text	text content / label / parser input
@@ -2902,9 +2900,8 @@ ambre-prose | src/commands.rs | crate::commands | strikethrough_title() | ret | 
 ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/comment.rs | crate::comment | KIND_COMMENT | const | &str	debt	finding: annotation kind strings (confirmed)
-ambre-prose | src/comment.rs | crate::comment | mark_key() | ret | String	debt	planned: lot C8 MarkKey
 ambre-prose | src/comment.rs | crate::comment | reply_at(index) | param | usize	math	count, size or local index
-ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | saturate() | ret | u32	math	count, size or local index
 ambre-prose | src/count.rs | crate::count | saturate(n) | param | usize	math	count, size or local index
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
@@ -3379,7 +3376,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | Window.order | field | Ar
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.pages | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | order_of() | ret | HashMap<TreeID,usize>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | shifted(shift) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/link.rs | crate::link | LINK_KEY | const | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/link.rs | crate::link | OPENABLE | const | [&str;3]	debt	finding: openable URL schemes as a &str list (confirmed)
 ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predicate result
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
@@ -3403,20 +3399,19 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | clamp_level(level) | 
 ambre-prose | src/logic/catchup.rs | crate::logic::catchup | CatchUp::stamp() | ret | (bool,ambre_bus::app::prose::TextChangeSeq,ambre_bus::app::prose::TextAck,Vec<TextEdit>,)	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (&'static str,Option<String>)	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (MarkRoot,Option<String>)	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Depth.exceeded | field | Cell<bool>	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | FAMILY_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.block | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.list | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.pre | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.restore | field | Vec<(&'static str,Option<String>)>	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.restore | field | Vec<(MarkRoot,Option<String>)>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | HREF_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.keep_empty | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.touched | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.current | field | Vec<(String,ClipValue)>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.marks | field | BTreeMap<&'static str,String>	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.marks | field | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	free-text	text content / label / parser input
@@ -3442,7 +3437,6 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | hidden(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	predicate result
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | language() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | on(key) | param | &'static str	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link() | ret | bool	generic	predicate result
@@ -3451,25 +3445,22 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(&str,&str);7]	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | close_list(html) | param | &mut String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | close_list(open) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(html) | param | &mut String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has() | ret | bool	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has(key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has() | ret | bool	generic	predicate result
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | list_open() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | runs(html) | param | &mut String	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&'a str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value(key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Code.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Heading.0 | field | u8	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Ordered.0 | field | u8	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipKind::Todo.0 | field | bool	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.marks | field | Vec<(String,ClipValue)>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Bool.0 | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	newtype-inner	newtype inner field
@@ -3566,18 +3557,12 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | op_type(index) | pa
 ambre-prose | src/logic/interop.rs | crate::logic::interop | push() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | type_name() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/logic/lists.rs | crate::logic::lists | ProseState::write_list_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/marks.rs | crate::logic::marks | BAR_KEYS | const | [&str;5]	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::format_selection(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::links_touched(key) | param | Option<&str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::remove_mark(key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
-ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/mod.rs | crate::logic | LOAD_ORIGIN | const | &str	debt	finding: commit origins as a closed set of &str (confirmed, no collision)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.entry_end | field | Option<i32>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,(u32,u32))>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -3602,8 +3587,7 @@ ambre-prose | src/logic/mod.rs | crate::logic | WINDOW_PAGES | const | u32	math	
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block() | ret | Result<TreeID,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -3653,7 +3637,6 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | Rect::spanning(b) | p
 ambre-prose | src/logic/tables.rs | crate::logic::tables | holds_text() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | usable(value) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.marks | field | Vec<(String,loro::LoroValue)>	debt	planned: lot C8 MarkKey
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::text_of() | ret | Option<String>	free-text	text content / label / parser input
@@ -3662,36 +3645,21 @@ ambre-prose | src/logic/text.rs | crate::logic::text | write_runs() | ret | Resu
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::only_typed() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::take_structural() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/mark.rs | crate::mark | ANCHOR_KEYS | const | [&str;6]	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | COLOR_KEYS | const | [&str;2]	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | FIELD_ROOT | const | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | FLAG_KEYS | const | [&str;7]	debt	planned: lot C8 MarkKey
 ambre-prose | src/mark.rs | crate::mark | FONT_SIZE_MAX | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/mark.rs | crate::mark | FORMATTING_KEYS | const | [&str;12]	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | MarkValueError::ArityMismatch.key | field | String	debt	planned: lot C8 MarkKey
 ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadColor.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadFontSize.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/mark.rs | crate::mark | MarkValueError::UnknownKey.0 | field | String	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | NUMERIC_KEYS | const | [&str;1]	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | OWNED_ROOTS | const | [&str;6]	debt	planned: lot C8 MarkKey
 ambre-prose | src/mark.rs | crate::mark | canonical_color() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | canonical_number(value) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/mark.rs | crate::mark | canonical_value() | ret | Option<String>	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | canonical_value(mark_key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | canonical_value(raw) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | expand_type_for(mark_key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | is_owned_anchor(mark_key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | is_registered(mark_key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/mark.rs | crate::mark | canonical_value() | ret | Option<String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/mark.rs | crate::mark | canonical_value(raw) | param | &str	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic	predicate result
+ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
 ambre-prose | src/mark.rs | crate::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | parse_font_size() | ret | Result<f32,MarkValueError>	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
 ambre-prose | src/mark.rs | crate::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | registered_roots() | ret | impl Iterator<Item=&'static str>	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | validate_value() | ret | Result<String,MarkValueError>	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | validate_value(key) | param | &str	debt	planned: lot C8 MarkKey
-ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	debt	planned: lot C8 MarkKey
+ambre-prose | src/mark.rs | crate::mark | validate_value() | ret | Result<String,MarkValueError>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
+ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/note.rs | crate::note | KIND_FOOTNOTE | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/note.rs | crate::note | ordinals() | ret | Vec<(FootnoteId,u32)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
@@ -3732,7 +3700,7 @@ ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),Str
 ambre-prose | src/style.rs | crate::style | BlockContext.heading_level | field | Option<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MONOSPACE | const | &str	free-text	text content / label / parser input
-ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<String,String>	debt	planned: lot C8 MarkKey
+ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.bold | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.code_inline | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.font_family | field | Option<String>	free-text	text content / label / parser input
@@ -3743,10 +3711,7 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.subscript | field | bo
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.superscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.underline | field | bool	generic	independent flag or predicate
 ambre-prose | src/suggest.rs | crate::suggest | KIND_SUGGESTION | const | &str	debt	finding: annotation kind strings (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | ROOT_DELETE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | ROOT_INSERT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/suggest.rs | crate::suggest | mark_key() | ret | String	debt	planned: lot C8 MarkKey
-ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	debt	planned: lot C8 MarkKey
+ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/toc.rs | crate::toc | MAX_LEVELS | const | std::ops::RangeInclusive<u8>	debt	finding: heading level as u8/u32/usize (confirmed)
 ambre-prose | src/toc.rs | crate::toc | build(pages) | param | &HashMap<TreeID,u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
@@ -3991,7 +3956,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ProseUiState::selection_top() | ret | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState.anchor | field | Option<(f32,f32)>	debt	finding: canvas px and CSS px in the same f32/f64 structs across the host boundary (confirmed)
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/toolbar.rs | crate::view::toolbar | state_of(key) | param | &str	debt	planned: lot C8 MarkKey
 ambre-prose | src/view/walk.rs | crate::view::walk | BAND | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.line | field | usize	math	count, size or local index
 ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.width | field | f64	math	layout geometry local to algorithm

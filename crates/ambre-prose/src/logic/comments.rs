@@ -66,7 +66,11 @@ impl ProseState {
             return Self::err_write(&e);
         }
         let key = comment::mark_key(&id);
-        if let Err(e) = body.mark(start.to_usize()..end.to_usize(), &key, id.to_hyphenated()) {
+        if let Err(e) = body.mark(
+            start.to_usize()..end.to_usize(),
+            key.as_str(),
+            id.to_hyphenated(),
+        ) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_comments()
@@ -342,7 +346,7 @@ impl ProseState {
         let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
             doc::get_block_text(&self.doc, &span.block)
-                .unmark(span.start.to_usize()..span.end.to_usize(), &key)
+                .unmark(span.start.to_usize()..span.end.to_usize(), key.as_str())
                 .map_err(|e| format!("{e:?}"))?;
         }
         doc::annots(&self.doc)

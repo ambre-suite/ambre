@@ -392,7 +392,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::ApplyMark {
             block_id: block_id(body),
             range: DocSpan::from_usize_range(0..7),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         },
     )?;
@@ -401,7 +401,7 @@ fn build_styled_document(seed: u64) -> Result<ProseState, String> {
         ProseCommand::ApplyMark {
             block_id: block_id(body),
             range: DocSpan::from_usize_range(16..30),
-            key: "i".to_owned(),
+            key: "i".into(),
             value: None,
         },
     )?;

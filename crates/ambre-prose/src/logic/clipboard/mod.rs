@@ -21,8 +21,8 @@ use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
 use crate::doc;
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
-use crate::mark::FORMATTING_KEYS;
-use ambre_bus::app::prose::BlockType;
+use crate::mark::{FORMATTING_KEYS, MarkRoot};
+use ambre_bus::app::prose::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
 /// the same clipboard type never decodes as this one.
@@ -59,7 +59,7 @@ enum ClipKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct ClipRun {
     text: String,
-    marks: Vec<(String, ClipValue)>,
+    marks: Vec<(MarkKey, ClipValue)>,
 }
 
 /// A mark's value, in the shapes the registry writes.
@@ -118,7 +118,9 @@ impl ClipRun {
         let marks = run
             .marks
             .iter()
-            .filter(|(key, _)| FORMATTING_KEYS.contains(&key.as_str()))
+            .filter(|(key, _)| {
+                MarkRoot::parse(key.as_str()).is_some_and(|root| FORMATTING_KEYS.contains(&root))
+            })
             .filter_map(|(key, value)| Some((key.clone(), ClipValue::of(value)?)))
             .collect();
         Self {
@@ -431,7 +433,7 @@ mod tests {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: bold,
             range: DocSpan::from_usize_range(0..4),
-            key: "b".to_owned(),
+            key: "b".into(),
             value: None,
         });
         let item = append(
@@ -544,7 +546,7 @@ mod tests {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: body,
                 range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
-                key: key.to_owned(),
+                key: key.into(),
                 value: value.map(str::to_owned),
             });
         }

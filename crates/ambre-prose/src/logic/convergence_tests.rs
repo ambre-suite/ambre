@@ -128,7 +128,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "fs".to_owned(),
+            key: "fs".into(),
             value: Some("11.0".to_owned()),
         })
         .update
@@ -137,7 +137,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
-            key: "fs".to_owned(),
+            key: "fs".into(),
             value: Some("11".to_owned()),
         })
         .update
@@ -577,7 +577,7 @@ fn mark(
         .handle_command(ProseCommand::ApplyMark {
             block_id: block,
             range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
-            key: key.to_owned(),
+            key: key.into(),
             value: value.map(str::to_owned),
         })
         .update

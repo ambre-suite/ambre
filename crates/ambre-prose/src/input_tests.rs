@@ -285,7 +285,7 @@ fn typing_leaves_the_structure_the_settings_and_the_marks_alone() {
     rig.logic.handle_command(ProseCommand::ApplyMark {
         block_id: block,
         range: DocSpan::from_usize_range(0..3),
-        key: "b".to_owned(),
+        key: "b".into(),
         value: None,
     });
     rig.lay();
@@ -1080,7 +1080,7 @@ fn linked() -> (Rig, BlockId) {
     rig.outbox.push(ProseCommand::ApplyMark {
         block_id: block,
         range: DocSpan::from_usize_range(6..10),
-        key: "a".to_owned(),
+        key: "a".into(),
         value: Some(TARGET.to_owned()),
     });
     rig.deliver();
@@ -1164,7 +1164,7 @@ fn a_target_that_could_run_code_is_held_back() {
     rig.outbox.push(ProseCommand::ApplyMark {
         block_id: block,
         range: DocSpan::from_usize_range(6..10),
-        key: "a".to_owned(),
+        key: "a".into(),
         value: Some("javascript:alert(1)".to_owned()),
     });
     rig.deliver();
@@ -1416,7 +1416,7 @@ fn marked(rig: &mut Rig, block: BlockId, range: (u32, u32), key: &str) {
     let outcome = rig.logic.handle_command(ProseCommand::ApplyMark {
         block_id: block,
         range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
-        key: key.to_owned(),
+        key: key.into(),
         value: None,
     });
     assert!(outcome.update.is_some(), "the mark is written");
@@ -1538,7 +1538,7 @@ fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
         Some(ProseCommand::FormatSelection {
             anchor: (first, DocOffset::ZERO),
             focus: (second, DocOffset::new(6)),
-            key: "b".to_owned(),
+            key: "b".into(),
             action: ambre_bus::app::prose::MarkAction::Apply,
         })
     );

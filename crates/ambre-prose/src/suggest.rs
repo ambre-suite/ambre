@@ -13,33 +13,29 @@ use loro::{Container, LoroDoc, LoroText, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::{Suggestion, SuggestionKind, SuggestionSpan, block_id};
+use crate::mark::MarkRoot;
+use ambre_bus::app::prose::MarkKey;
 
 /// The kind a suggestion's entry declares (`PROSE-031`).
 pub(crate) const KIND_SUGGESTION: &str = "suggestion";
 
-/// The root of a suggested insertion's key.
-const ROOT_INSERT: &str = "si";
-
-/// The root of a suggested deletion's key.
-const ROOT_DELETE: &str = "sd";
-
 /// The mark key of suggestion `id`.
 #[must_use]
-pub(crate) fn mark_key(kind: SuggestionKind, id: &SuggestionId) -> String {
+pub(crate) fn mark_key(kind: SuggestionKind, id: &SuggestionId) -> MarkKey {
     let root = match kind {
-        SuggestionKind::Insertion => ROOT_INSERT,
-        SuggestionKind::Deletion => ROOT_DELETE,
+        SuggestionKind::Insertion => MarkRoot::Insertion,
+        SuggestionKind::Deletion => MarkRoot::Deletion,
     };
-    format!("{root}:{}", id.to_hyphenated())
+    MarkKey::new(format!("{}:{}", root.as_str(), id.to_hyphenated()))
 }
 
 /// The suggestion a mark key names, when it is one.
 #[must_use]
 pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, SuggestionId)> {
     let (root, id) = key.split_once(':')?;
-    let kind = match root {
-        ROOT_INSERT => SuggestionKind::Insertion,
-        ROOT_DELETE => SuggestionKind::Deletion,
+    let kind = match MarkRoot::parse(root)? {
+        MarkRoot::Insertion => SuggestionKind::Insertion,
+        MarkRoot::Deletion => SuggestionKind::Deletion,
         _ => return None,
     };
     Some((kind, SuggestionId::parse_str(id).ok()?))

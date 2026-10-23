@@ -21,7 +21,8 @@ use ambre_bus::app::prose::OrderedStyle;
 
 use super::sink::{Arena, Data, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
-use crate::mark;
+use crate::mark::{self, MarkRoot};
+use ambre_bus::app::prose::MarkKey;
 
 /// Elements whose whole subtree carries nothing a paste keeps.
 const SKIPPED: [&str; 14] = [
@@ -199,7 +200,7 @@ struct Open {
 /// What leaving an element undoes.
 #[derive(Default)]
 struct Frame {
-    restore: Vec<(&'static str, Option<String>)>,
+    restore: Vec<(MarkRoot, Option<String>)>,
     block: bool,
     list: bool,
     pre: bool,
@@ -211,9 +212,9 @@ struct Reader {
     runs: Vec<ClipRun>,
     open: Vec<Open>,
     lists: Vec<ClipKind>,
-    marks: BTreeMap<&'static str, String>,
+    marks: BTreeMap<MarkKey, String>,
     /// `marks` in the shape a run carries, rebuilt when they change.
-    current: Vec<(String, ClipValue)>,
+    current: Vec<(MarkKey, ClipValue)>,
     frames: Vec<Frame>,
     pre: usize,
 }
@@ -409,15 +410,15 @@ impl Reader {
         }
         for (key, value) in changes {
             let value = match value {
-                Some(raw) => match mark::validate_value(key, Some(&raw)) {
+                Some(raw) => match mark::validate_value(&key.key(), Some(&raw)) {
                     Ok(canonical) => Some(canonical),
                     Err(_) => continue,
                 },
                 None => None,
             };
             let previous = match value {
-                Some(value) => self.marks.insert(key, value),
-                None => self.marks.remove(key),
+                Some(value) => self.marks.insert(key.key(), value),
+                None => self.marks.remove(key.as_str()),
             };
             frame.restore.push((key, previous));
         }
@@ -434,8 +435,8 @@ impl Reader {
         if !frame.restore.is_empty() {
             for (key, previous) in frame.restore.into_iter().rev() {
                 match previous {
-                    Some(value) => self.marks.insert(key, value),
-                    None => self.marks.remove(key),
+                    Some(value) => self.marks.insert(key.key(), value),
+                    None => self.marks.remove(key.as_str()),
                 };
             }
             self.rebuild();
@@ -464,7 +465,7 @@ impl Reader {
         self.current = self
             .marks
             .iter()
-            .map(|(key, value)| ((*key).to_owned(), ClipValue::Text(value.clone())))
+            .map(|(key, value)| (key.clone(), ClipValue::Text(value.clone())))
             .collect();
     }
 
@@ -573,26 +574,26 @@ fn ordered_style(kind: Option<&str>) -> OrderedStyle {
     }
 }
 
-type Change = (&'static str, Option<String>);
+type Change = (MarkRoot, Option<String>);
 
-fn on(key: &'static str) -> Change {
+fn on(key: MarkRoot) -> Change {
     (key, Some(String::new()))
 }
 
 /// The marks an element's name stands for.
 fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
     match tag {
-        "b" | "strong" => vec![on("b")],
-        "i" | "em" | "cite" | "dfn" | "var" => vec![on("i")],
-        "u" | "ins" => vec![on("u")],
-        "s" | "strike" | "del" => vec![on("s")],
-        "sup" => vec![on("sup")],
-        "sub" => vec![on("sub")],
-        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => vec![on("c")],
+        "b" | "strong" => vec![on(MarkRoot::Bold)],
+        "i" | "em" | "cite" | "dfn" | "var" => vec![on(MarkRoot::Italic)],
+        "u" | "ins" => vec![on(MarkRoot::Underline)],
+        "s" | "strike" | "del" => vec![on(MarkRoot::Strike)],
+        "sup" => vec![on(MarkRoot::Superscript)],
+        "sub" => vec![on(MarkRoot::Subscript)],
+        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => vec![on(MarkRoot::Code)],
         "a" => attr(attrs, "href")
             .map(str::trim)
             .filter(|href| safe_link(href))
-            .map(|href| vec![("a", Some(href.to_owned()))])
+            .map(|href| vec![(MarkRoot::Link, Some(href.to_owned()))])
             .unwrap_or_default(),
         _ => Vec::new(),
     }
@@ -623,52 +624,64 @@ fn style_marks(style: &str) -> Vec<Change> {
                     weight => weight.parse::<u16>().ok().map(|w| w >= 600),
                 };
                 if let Some(bold) = bold {
-                    changes.push(if bold { on("b") } else { ("b", None) });
+                    changes.push(if bold {
+                        on(MarkRoot::Bold)
+                    } else {
+                        (MarkRoot::Bold, None)
+                    });
                 }
             }
             "font-style" => match lower.as_str() {
-                "italic" | "oblique" => changes.push(on("i")),
-                "normal" => changes.push(("i", None)),
+                "italic" | "oblique" => changes.push(on(MarkRoot::Italic)),
+                "normal" => changes.push((MarkRoot::Italic, None)),
                 _ => {}
             },
             "text-decoration" | "text-decoration-line" => {
                 if lower.contains("none") {
-                    changes.extend([("u", None), ("s", None)]);
+                    changes.extend([(MarkRoot::Underline, None), (MarkRoot::Strike, None)]);
                 }
                 if lower.contains("underline") {
-                    changes.push(on("u"));
+                    changes.push(on(MarkRoot::Underline));
                 }
                 if lower.contains("line-through") {
-                    changes.push(on("s"));
+                    changes.push(on(MarkRoot::Strike));
                 }
             }
             "vertical-align" => match lower.as_str() {
-                "super" => changes.push(on("sup")),
-                "sub" => changes.push(on("sub")),
-                "baseline" => changes.extend([("sup", None), ("sub", None)]),
+                "super" => changes.push(on(MarkRoot::Superscript)),
+                "sub" => changes.push(on(MarkRoot::Subscript)),
+                "baseline" => {
+                    changes.extend([(MarkRoot::Superscript, None), (MarkRoot::Subscript, None)])
+                }
                 _ => {}
             },
             "color" => {
                 if let Some(color) = css_color(&lower) {
-                    changes.push(("fg", (!ink(color)).then(|| mark::canonical_color(color))));
+                    changes.push((
+                        MarkRoot::Ink,
+                        (!ink(color)).then(|| mark::canonical_color(color)),
+                    ));
                 }
             }
             "background-color" | "background" => {
                 if lower == "transparent" {
-                    changes.push(("bg", None));
+                    changes.push((MarkRoot::Highlight, None));
                 } else if let Some(color) = css_color(&lower) {
                     let white = color == Rgba::from_bits(0xffff_ffff);
-                    changes.push(("bg", (!white).then(|| mark::canonical_color(color))));
+                    changes.push((
+                        MarkRoot::Highlight,
+                        (!white).then(|| mark::canonical_color(color)),
+                    ));
                 }
             }
             "font-size" => {
                 if let Some(points) = font_size(&lower) {
-                    changes.push(("fs", Some(points)));
+                    changes.push((MarkRoot::FontSize, Some(points)));
                 }
             }
             "font-family" => {
                 if let Some(family) = font_family(value) {
-                    changes.push(("ff", Some(family)));
+                    changes.push((MarkRoot::FontFamily, Some(family)));
                 }
             }
             _ => {}
@@ -919,15 +932,15 @@ mod tests {
         assert_eq!(
             run(0),
             &vec![
-                ("bg".to_owned(), text("#00ff00")),
-                ("fg".to_owned(), text("#ff0000"))
+                (MarkKey::from("bg"), text("#00ff00")),
+                (MarkKey::from("fg"), text("#ff0000"))
             ]
         );
         assert_eq!(
             run(1),
             &vec![
-                ("ff".to_owned(), text("Georgia")),
-                ("fs".to_owned(), text("12"))
+                (MarkKey::from("ff"), text("Georgia")),
+                (MarkKey::from("fs"), text("12"))
             ]
         );
         assert!(run(2).is_empty());
