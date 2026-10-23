@@ -3467,7 +3467,8 @@ mod tests {
             )
             .expect("send");
         let mut update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("json");
-        update["schema_version"] = serde_json::Value::from(ambre_murmure::JSON_SCHEMA_VERSION + 1);
+        update["schema_version"] =
+            serde_json::Value::from(ambre_murmure::JSON_SCHEMA_VERSION.get() + 1);
         let document_id = sent.segment.document_id();
         m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id,
