@@ -160,6 +160,7 @@ dependencies = [
  "hex",
  "postcard",
  "serde",
+ "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
@@ -304,7 +305,6 @@ dependencies = [
  "hex",
  "postcard",
  "serde",
- "serde_bytes",
  "thiserror 2.0.18",
 ]
 

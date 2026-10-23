@@ -8,7 +8,7 @@
 //! Assembly into `ambre_protocol::{Update,Snapshot,Ephemeral}` and the
 //! compression version byte live in the Sync thread, not here.
 
-use ambre_core::PublicKey;
+use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, Signature};
 use ed25519_dalek::SigningKey;
 
 use crate::aead;
@@ -24,13 +24,13 @@ use crate::signature;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Sealed {
     /// XChaCha20 nonce.
-    pub nonce: [u8; aead::NONCE_LEN],
+    pub nonce: Nonce,
     /// AEAD ciphertext (Poly1305 tag appended).
-    pub ciphertext: Vec<u8>,
+    pub ciphertext: Ciphertext,
     /// HMAC-SHA256 key-commitment tag.
-    pub commitment_tag: [u8; commitment::TAG_LEN],
+    pub commitment_tag: CommitmentTag,
     /// Ed25519 signature over `nonce || ciphertext || aad || commitment_tag`.
-    pub signature: [u8; signature::SIGNATURE_LEN],
+    pub signature: Signature,
 }
 
 impl core::fmt::Debug for Sealed {
@@ -58,10 +58,10 @@ pub fn seal(
     let commitment_tag = commitment::commitment_tag(doc_key, &nonce, &ciphertext, aad);
     let signature = signature::sign(signing_key, &nonce, &ciphertext, aad, &commitment_tag);
     Ok(Sealed {
-        nonce,
-        ciphertext,
-        commitment_tag,
-        signature,
+        nonce: Nonce(nonce),
+        ciphertext: Ciphertext(ciphertext),
+        commitment_tag: CommitmentTag(commitment_tag),
+        signature: Signature(signature),
     })
 }
 
@@ -85,18 +85,18 @@ pub fn open(
 ) -> Result<Vec<u8>, CryptoError> {
     signature::verify(
         author_pub,
-        &sealed.nonce,
-        &sealed.ciphertext,
+        &sealed.nonce.0,
+        &sealed.ciphertext.0,
         aad,
-        &sealed.commitment_tag,
-        &sealed.signature,
+        &sealed.commitment_tag.0,
+        &sealed.signature.0,
     )?;
     commitment::verify_commitment(
         doc_key,
-        &sealed.nonce,
-        &sealed.ciphertext,
+        &sealed.nonce.0,
+        &sealed.ciphertext.0,
         aad,
-        &sealed.commitment_tag,
+        &sealed.commitment_tag.0,
     )?;
-    aead::open(&sealed.nonce, &sealed.ciphertext, aad, doc_key)
+    aead::open(&sealed.nonce.0, &sealed.ciphertext.0, aad, doc_key)
 }

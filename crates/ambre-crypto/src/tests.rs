@@ -4,6 +4,7 @@ use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
+use ambre_core::{Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
@@ -35,8 +36,8 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
     let signing = fixed_seed().derive_signing_key();
     let mut sealed = envelope::seal(b"payload", b"aad", &fixed_doc_key(), &signing).unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
-    sealed.ciphertext = vec![0xAB; 7];
-    sealed.nonce = [0xCD; aead::NONCE_LEN];
+    sealed.ciphertext = Ciphertext(vec![0xAB; 7]);
+    sealed.nonce = Nonce([0xCD; aead::NONCE_LEN]);
     let shown = format!("{sealed:?}");
     assert_eq!(shown, "Sealed { ciphertext_len: 7, .. }");
 }
@@ -49,7 +50,7 @@ fn tampered_ciphertext_fails() {
     let aad = b"aad";
 
     let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
-    sealed.ciphertext[0] ^= 0xFF;
+    sealed.ciphertext.0[0] ^= 0xFF;
     // Signature covers the ciphertext, so this trips the signature check first.
     assert_eq!(
         envelope::open(&sealed, aad, &doc_key, &author),
@@ -69,13 +70,13 @@ fn commitment_tag_wrong_aad_rejected() {
     let forged_aad = b"document-B";
     let signature = crate::signature::sign(
         &signing,
-        &sealed.nonce,
-        &sealed.ciphertext,
+        &sealed.nonce.0,
+        &sealed.ciphertext.0,
         forged_aad,
-        &sealed.commitment_tag,
+        &sealed.commitment_tag.0,
     );
     let forged = envelope::Sealed {
-        signature,
+        signature: Signature(signature),
         ..sealed
     };
     assert_eq!(
@@ -93,9 +94,9 @@ fn every_seal_draws_a_fresh_nonce() {
     let sealed: Vec<_> = (0..64)
         .map(|_| envelope::seal(b"same payload", b"aad", &doc_key, &signing).unwrap())
         .collect();
-    let nonces: std::collections::HashSet<[u8; 24]> = sealed.iter().map(|s| s.nonce).collect();
+    let nonces: std::collections::HashSet<Nonce> = sealed.iter().map(|s| s.nonce).collect();
     let ciphertexts: std::collections::HashSet<&[u8]> =
-        sealed.iter().map(|s| s.ciphertext.as_slice()).collect();
+        sealed.iter().map(|s| s.ciphertext.0.as_slice()).collect();
     assert_eq!(nonces.len(), sealed.len());
     assert_eq!(ciphertexts.len(), sealed.len());
 }
@@ -113,15 +114,15 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = b"aad";
     let mut forged = envelope::seal(b"payload", aad, &other_key, &signing).unwrap();
-    forged.ciphertext[0] ^= 0xFF;
+    forged.ciphertext.0[0] ^= 0xFF;
     let resign = |sealed: &mut envelope::Sealed| {
-        sealed.signature = signature::sign(
+        sealed.signature = Signature(signature::sign(
             &signing,
-            &sealed.nonce,
-            &sealed.ciphertext,
+            &sealed.nonce.0,
+            &sealed.ciphertext.0,
             aad,
-            &sealed.commitment_tag,
-        );
+            &sealed.commitment_tag.0,
+        ));
     };
 
     assert_eq!(
@@ -133,8 +134,12 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
         envelope::open(&forged, aad, &doc_key, &author),
         Err(CryptoError::CommitmentMismatch)
     );
-    forged.commitment_tag =
-        commitment::commitment_tag(&doc_key, &forged.nonce, &forged.ciphertext, aad);
+    forged.commitment_tag = CommitmentTag(commitment::commitment_tag(
+        &doc_key,
+        &forged.nonce.0,
+        &forged.ciphertext.0,
+        aad,
+    ));
     resign(&mut forged);
     assert_eq!(
         envelope::open(&forged, aad, &doc_key, &author),
@@ -307,10 +312,11 @@ fn the_log_anchor_travels_sealed_with_the_key() {
         ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
     let doc_key = DocumentKey::from_array([0x55; 32]);
 
-    let anchored = ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&[0x66; 32])).unwrap();
+    let anchored =
+        ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&EntryDigest([0x66; 32]))).unwrap();
     let (key, anchor) = ecdh::unwrap_anchored(&bob, &alice_pub, &anchored).unwrap();
     assert_eq!(key.as_bytes(), doc_key.as_bytes());
-    assert_eq!(anchor, Some([0x66; 32]));
+    assert_eq!(anchor, Some(EntryDigest([0x66; 32])));
     let key = ecdh::unwrap_document_key(&bob, &alice_pub, &anchored).unwrap();
     assert_eq!(key.as_bytes(), doc_key.as_bytes());
 
@@ -320,7 +326,7 @@ fn the_log_anchor_travels_sealed_with_the_key() {
 
     // A flipped byte of the sealed anchor fails the tag: nobody swaps it.
     let mut tampered = anchored;
-    if let Some(byte) = tampered.ciphertext.get_mut(40) {
+    if let Some(byte) = tampered.ciphertext.0.get_mut(40) {
         *byte ^= 1;
     }
     assert!(ecdh::unwrap_anchored(&bob, &alice_pub, &tampered).is_err());
@@ -337,10 +343,11 @@ fn a_wrap_has_a_length_the_wire_reads() {
             .to_bytes(),
     );
     let doc_key = DocumentKey::from_array([0x55; 32]);
-    let length = |wrapped: ecdh::WrappedKey| wrapped.nonce.len() + wrapped.ciphertext.len();
+    let length = |wrapped: ecdh::WrappedKey| wrapped.nonce.0.len() + wrapped.ciphertext.len();
     let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
-    let anchored =
-        length(ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&[0x66; 32])).unwrap());
+    let anchored = length(
+        ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&EntryDigest([0x66; 32]))).unwrap(),
+    );
     assert_eq!(ambre_core::WrappedDocKey::LENGTHS, [bare, anchored]);
 
     let seed = MasterSeed::from_array([0x03; 32]);
@@ -515,9 +522,9 @@ proptest! {
         let mut sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
-            0 => sealed.ciphertext[0] ^= mask,
-            1 => sealed.commitment_tag[0] ^= mask,
-            _ => sealed.signature[0] ^= mask,
+            0 => sealed.ciphertext.0[0] ^= mask,
+            1 => sealed.commitment_tag.0[0] ^= mask,
+            _ => sealed.signature.0[0] ^= mask,
         }
         prop_assert!(envelope::open(&sealed, aad, &doc_key, &author).is_err());
     }
@@ -677,10 +684,11 @@ fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
 fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
     let (nonce, sealed) =
-        aead::seal_anchored_key(&inner, b"channel-1", &outer, Some(&[0x33; 32])).unwrap();
+        aead::seal_anchored_key(&inner, b"channel-1", &outer, Some(&EntryDigest([0x33; 32])))
+            .unwrap();
     let (key, anchor) = aead::open_anchored_key(&nonce, &sealed, b"channel-1", &outer).unwrap();
     assert_eq!(key.as_bytes(), inner.as_bytes());
-    assert_eq!(anchor, Some([0x33; 32]));
+    assert_eq!(anchor, Some(EntryDigest([0x33; 32])));
 
     let (nonce, bare) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
     let (_, anchor) = aead::open_anchored_key(&nonce, &bare, b"channel-1", &outer).unwrap();

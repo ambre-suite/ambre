@@ -33,7 +33,7 @@ fn entry(user: UserId) -> Vec<u8> {
     PeerEntry {
         user,
         nonce: SessionNonce([7; 16]),
-        signature: [9; 64],
+        signature: ambre_core::Signature([9; 64]),
     }
     .to_bytes()
 }

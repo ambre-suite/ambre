@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::UserId;
+use crate::envelope::Signature;
 
 /// Length of a session nonce, in bytes.
 pub const SESSION_NONCE_LEN: usize = 16;
@@ -59,7 +60,7 @@ pub struct PeerEntry {
     /// The nonce the PeerID derives from.
     pub nonce: SessionNonce,
     /// The signature of `user` over the document, the PeerID and the nonce.
-    pub signature: [u8; ENTRY_SIGNATURE_LEN],
+    pub signature: Signature,
 }
 
 impl PeerEntry {
@@ -70,7 +71,7 @@ impl PeerEntry {
         let mut out = Vec::with_capacity(PEER_ENTRY_LEN);
         out.extend_from_slice(self.user.as_bytes());
         out.extend_from_slice(&self.nonce.0);
-        out.extend_from_slice(&self.signature);
+        out.extend_from_slice(&self.signature.0);
         out
     }
 
@@ -84,7 +85,7 @@ impl PeerEntry {
         Some(Self {
             user: UserId::from_bytes(*user),
             nonce: SessionNonce(*nonce),
-            signature,
+            signature: Signature(signature),
         })
     }
 }
@@ -119,7 +120,7 @@ mod tests {
         let entry = PeerEntry {
             user: UserId::from_bytes([3; 16]),
             nonce: SessionNonce([5; SESSION_NONCE_LEN]),
-            signature: [7; ENTRY_SIGNATURE_LEN],
+            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
         };
         let bytes = entry.to_bytes();
         assert_eq!(bytes.len(), PEER_ENTRY_LEN);

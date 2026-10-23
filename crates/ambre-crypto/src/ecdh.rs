@@ -6,7 +6,7 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
-use ambre_core::ExchangePublicKey;
+use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, Nonce};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -25,9 +25,9 @@ const KEK_DOMAIN: &[u8] = b"ambre-kek-v2";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrappedKey {
     /// AEAD nonce used to wrap the key.
-    pub nonce: [u8; aead::NONCE_LEN],
+    pub nonce: Nonce,
     /// Sealed document key (32 bytes + Poly1305 tag).
-    pub ciphertext: Vec<u8>,
+    pub ciphertext: Ciphertext,
 }
 
 /// Computes the raw X25519 shared secret between `own_secret` and `peer_public`.
@@ -101,17 +101,20 @@ pub fn wrap_anchored(
     own_secret: &StaticSecret,
     peer_public: &ExchangePublicKey,
     doc_key: &DocumentKey,
-    anchor: Option<&[u8; 32]>,
+    anchor: Option<&EntryDigest>,
 ) -> Result<WrappedKey, CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
     let kek = derive_kek(&shared, &own_pub, peer_public.as_array());
     let mut plaintext = Zeroizing::new(doc_key.as_bytes().to_vec());
     if let Some(anchor) = anchor {
-        plaintext.extend_from_slice(anchor);
+        plaintext.extend_from_slice(&anchor.0);
     }
     let (nonce, ciphertext) = aead::seal(&plaintext, KEK_DOMAIN, &kek)?;
-    Ok(WrappedKey { nonce, ciphertext })
+    Ok(WrappedKey {
+        nonce: Nonce(nonce),
+        ciphertext: Ciphertext(ciphertext),
+    })
 }
 
 /// Unwraps a [`WrappedKey`] sent by the holder of `peer_public`, using
@@ -143,13 +146,13 @@ pub fn unwrap_anchored(
     own_secret: &StaticSecret,
     peer_public: &ExchangePublicKey,
     wrapped: &WrappedKey,
-) -> Result<(DocumentKey, Option<[u8; 32]>), CryptoError> {
+) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
     let kek = derive_kek(&shared, peer_public.as_array(), &own_pub);
     let bytes = Zeroizing::new(aead::open(
-        &wrapped.nonce,
-        &wrapped.ciphertext,
+        &wrapped.nonce.0,
+        &wrapped.ciphertext.0,
         KEK_DOMAIN,
         &kek,
     )?);
@@ -161,6 +164,8 @@ pub fn unwrap_anchored(
     let key: [u8; 32] = key
         .and_then(|k| k.try_into().ok())
         .ok_or(CryptoError::InvalidKeyLength)?;
-    let anchor = anchor.and_then(|a| <[u8; 32]>::try_from(a).ok());
+    let anchor = anchor
+        .and_then(|a| <[u8; 32]>::try_from(a).ok())
+        .map(EntryDigest);
     Ok((DocumentKey::from_array(key), anchor))
 }

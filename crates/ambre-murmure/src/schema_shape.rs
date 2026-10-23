@@ -74,7 +74,7 @@ pub(crate) fn entry() -> Vec<u8> {
     PeerEntry {
         user: AUTHOR,
         nonce: SessionNonce([0x5a; SESSION_NONCE_LEN]),
-        signature: [0xc3; ENTRY_SIGNATURE_LEN],
+        signature: ambre_core::Signature([0xc3; ENTRY_SIGNATURE_LEN]),
     }
     .to_bytes()
 }

@@ -970,7 +970,7 @@ pub(crate) fn seal_channel_key(
         channel_key,
         &channel_key_aad(channel_id),
         space_key,
-        Some(&meta_anchor.0),
+        Some(&meta_anchor),
     )
     .map_err(|e| format!("seal the channel key: {e}"))?;
     let mut sealed = space_key.id().as_array().to_vec();
@@ -1013,7 +1013,7 @@ pub(crate) fn unseal_channel_key(
         space_key,
     )
     .map_err(|e| format!("unseal the channel key: {e}"))?;
-    Ok((key, anchor.map(ambre_protocol::EntryDigest)))
+    Ok((key, anchor))
 }
 
 /// The self-join key: the catalogue's key, unsealed and wrapped for this
@@ -1303,13 +1303,13 @@ pub(crate) mod tests {
         let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce: *nonce,
-            ciphertext: ciphertext.to_vec(),
+            nonce: ambre_core::Nonce(*nonce),
+            ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
         };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
             ambre_crypto::ecdh::unwrap_anchored(exchange_key, &own_pub, &wrapped).ok()?;
-        assert_eq!(anchor, Some(ANCHOR.0), "every wrap carries meta's anchor");
+        assert_eq!(anchor, Some(ANCHOR), "every wrap carries meta's anchor");
         Some(key)
     }
 
@@ -1726,7 +1726,7 @@ pub(crate) mod tests {
         let key = DocumentKey::generate();
         let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
         let doc_key_enc = ambre_core::WrappedDocKey::new(
-            [wrapped.nonce.as_slice(), &wrapped.ciphertext].concat(),
+            [wrapped.nonce.0.as_slice(), &wrapped.ciphertext.0].concat(),
         );
         let entry =
             |meta: MetaId, name_enc: Option<ambre_core::SealedName>| http::MemberChannelEntry {
@@ -1899,13 +1899,13 @@ pub(crate) mod tests {
         let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce: *nonce,
-            ciphertext: ciphertext.to_vec(),
+            nonce: ambre_core::Nonce(*nonce),
+            ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
         };
         let sender_pub = crate::sharing::own_exchange_key(sender);
         let (key, root) =
             ambre_crypto::ecdh::unwrap_anchored(holder, &sender_pub, &wrapped).ok()?;
-        Some((key, root.map(ambre_protocol::EntryDigest)))
+        Some((key, root))
     }
 
     fn member_of(exchange_key: &StaticSecret) -> DirectMember {

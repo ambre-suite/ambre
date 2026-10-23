@@ -50,10 +50,9 @@ pub(crate) fn wrap_anchored_b64(
 ) -> Result<ambre_core::WrappedDocKey, ambre_crypto::CryptoError> {
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
-    let anchor = anchor.map(|EntryDigest(bytes)| bytes);
     let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
-    let mut enc = wrapped.nonce.to_vec();
-    enc.extend_from_slice(&wrapped.ciphertext);
+    let mut enc = wrapped.nonce.0.to_vec();
+    enc.extend_from_slice(&wrapped.ciphertext.0);
     Ok(ambre_core::WrappedDocKey::new(enc.to_vec()))
 }
 
@@ -82,13 +81,17 @@ pub(crate) fn unwrap_own<'a>(
     let encrypted = enc.as_bytes();
     let (nonce, ciphertext) = encrypted
         .split_first_chunk::<24>()
-        .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
+        .map(|(nonce, ciphertext)| {
+            (
+                ambre_core::Nonce(*nonce),
+                ambre_core::Ciphertext(ciphertext.to_vec()),
+            )
+        })
         .ok_or("wrapped key too short")?;
     let wrapper = if wrapper.is_empty() { own } else { wrapper };
     let peer = decode_exchange_pubkey(wrapper)?;
     let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
     ambre_crypto::ecdh::unwrap_anchored(exchange_key, &peer, &wrapped)
-        .map(|(key, anchor)| (key, anchor.map(EntryDigest)))
         .map_err(|e| format!("ECDH unwrap: {e}"))
 }
 

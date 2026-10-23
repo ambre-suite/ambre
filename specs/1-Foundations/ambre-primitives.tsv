@@ -1421,7 +1421,6 @@ ambre-core | src/activity.rs | crate::activity | SummaryError::UnknownKind.0 | f
 ambre-core | src/authorship.rs | crate::authorship | ENTRY_SIGNATURE_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PEERS_ORIGIN | const | &str	debt	finding: Loro root and key names as &str / String (low, suspected)
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
-ambre-core | src/authorship.rs | crate::authorship | PeerEntry.signature | field | [u8;ENTRY_SIGNATURE_LEN]	debt	planned: lot A bis 2: Signature moves into ambre-core; PeerEntry.signature takes it
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::to_bytes() | ret | Vec<u8>	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerId.0 | field | u64	newtype-inner	PeerId/SessionNonce newtype
@@ -1525,6 +1524,13 @@ ambre-core | src/encoded.rs | crate::encoded | SealedName::MAX_CHARS | const | u
 ambre-core | src/encoded.rs | crate::encoded | SealedName::OVERHEAD | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | TAG_LEN | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | UTF8_MAX_LEN | const | usize	generic	length constant
+ambre-core | src/envelope.rs | crate::envelope | Ciphertext.0 | field | Vec<u8>	newtype-inner	envelope byte newtype
+ambre-core | src/envelope.rs | crate::envelope | Ciphertext::is_empty() | ret | bool	newtype-inner	envelope byte newtype
+ambre-core | src/envelope.rs | crate::envelope | Ciphertext::len() | ret | usize	newtype-inner	envelope byte newtype
+ambre-core | src/envelope.rs | crate::envelope | CommitmentTag.0 | field | [u8;32]	newtype-inner	envelope byte newtype
+ambre-core | src/envelope.rs | crate::envelope | EntryDigest.0 | field | [u8;32]	newtype-inner	EntryDigest newtype
+ambre-core | src/envelope.rs | crate::envelope | Nonce.0 | field | [u8;24]	newtype-inner	envelope byte newtype
+ambre-core | src/envelope.rs | crate::envelope | Signature.0 | field | [u8;64]	newtype-inner	envelope byte newtype
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidDiscriminant.0 | field | u8	newtype-inner	error carries the refused raw input
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidString.0 | field | String	newtype-inner	error carries the refused raw input
 ambre-core | src/error.rs | crate::error | PublicKeyError::InvalidLength.0 | field | usize	newtype-inner	error carries the refused raw input
@@ -1705,7 +1711,6 @@ ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoE
 ambre-crypto | src/aead.rs | crate::aead | open(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
-ambre-crypto | src/aead.rs | crate::aead | open_anchored_key() | ret | Result<(DocumentKey,Option<[u8;32]>),CryptoError>	debt	planned: lot A bis 3 (anchor becomes EntryDigest)
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(nonce) | param | &[u8;NONCE_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
@@ -1729,7 +1734,6 @@ ambre-crypto | src/aead.rs | crate::aead | seal(aad) | param | &[u8]	generic	gen
 ambre-crypto | src/aead.rs | crate::aead | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_anchored_key(anchor) | param | Option<&[u8;32]>	debt	planned: lot A bis 3 (anchor becomes EntryDigest)
 ambre-crypto | src/aead.rs | crate::aead | seal_document_key() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/aead.rs | crate::aead | seal_document_key(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_file() | ret | Result<([u8;NONCE_LEN],Vec<u8>),CryptoError>	debt	finding: crypto signatures take nonce, tag and signature as raw slices
@@ -1761,18 +1765,10 @@ ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(ciphert
 ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(nonce) | param | &[u8]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/commitment.rs | crate::commitment | verify_commitment(tag) | param | &[u8;TAG_LEN]	debt	finding: crypto signatures take nonce, tag and signature as raw slices
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | WrappedKey.ciphertext | field | Vec<u8>	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
-ambre-crypto | src/ecdh.rs | crate::ecdh | WrappedKey.nonce | field | [u8;aead::NONCE_LEN]	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(recipient_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(sender_pk) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | derive_kek(shared) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | shared_secret() | ret | Result<[u8;32],CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/ecdh.rs | crate::ecdh | unwrap_anchored() | ret | Result<(DocumentKey,Option<[u8;32]>),CryptoError>	debt	planned: lot A bis 3 (anchor becomes EntryDigest)
-ambre-crypto | src/ecdh.rs | crate::ecdh | wrap_anchored(anchor) | param | Option<&[u8;32]>	debt	planned: lot A bis 3 (anchor becomes EntryDigest)
-ambre-crypto | src/envelope.rs | crate::envelope | Sealed.ciphertext | field | Vec<u8>	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
-ambre-crypto | src/envelope.rs | crate::envelope | Sealed.commitment_tag | field | [u8;commitment::TAG_LEN]	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
-ambre-crypto | src/envelope.rs | crate::envelope | Sealed.nonce | field | [u8;aead::NONCE_LEN]	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
-ambre-crypto | src/envelope.rs | crate::envelope | Sealed.signature | field | [u8;signature::SIGNATURE_LEN]	debt	planned: lot A bis 2 (Nonce/Signature/CommitmentTag into core)
 ambre-crypto | src/envelope.rs | crate::envelope | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | open(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(aad) | param | &[u8]	generic	generic byte/text API or codec
@@ -4128,7 +4124,6 @@ ambre-protocol | src/key_link.rs | crate::key_link | KeyLink::encode() | ret | R
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_SIGNATURE_LEN | const | usize	generic	domain-separation tag or length constant
-ambre-protocol | src/membership.rs | crate::membership | EntryDigest.0 | field | [u8;32]	newtype-inner	EntryDigest newtype
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry.position | field | u64	debt	finding: Membership log position as u64 (low-medium, suspected)
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::decode(bytes) | param | &[u8]	generic	wire codec
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::encode() | ret | Result<Vec<u8>,SerializationError>	generic	wire codec
@@ -4136,15 +4131,9 @@ ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::signed
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::well_formed() | ret | bool	generic	predicate
 ambre-protocol | src/membership.rs | crate::membership | Signed.position | field | u64	debt	finding: Membership log position as u64 (low-medium, suspected)
 ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
-ambre-protocol | src/messages.rs | crate::messages | Ciphertext.0 | field | Vec<u8>	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Ciphertext::is_empty() | ret | bool	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Ciphertext::len() | ret | usize	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | CommitmentTag.0 | field | [u8;32]	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Counter.0 | field | u64	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Nonce.0 | field | [u8;24]	newtype-inner	protocol newtype accessor
-ambre-protocol | src/messages.rs | crate::messages | Signature.0 | field | [u8;64]	newtype-inner	protocol newtype accessor
 ambre-protocol | src/public_data.rs | crate::public_data | SnapshotPublicData.parent_snapshot_proof | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingClientMsg::Answer.sdp | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingClientMsg::Ice.candidate | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards

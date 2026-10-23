@@ -147,7 +147,7 @@ mod tests {
         let entry = PeerEntry {
             user: BOB,
             nonce: SessionNonce([9; 16]),
-            signature: [0; 64],
+            signature: ambre_core::Signature([0; 64]),
         };
         assert!(bob.adopt_session(ambre_core::PeerId(22), entry.to_bytes()));
         let first = bob.root_blocks()[0];

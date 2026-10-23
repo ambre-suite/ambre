@@ -36,9 +36,9 @@ pub enum MembershipAct {
     SelfJoin,
 }
 
-/// The digest of one entry, which the next entry names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EntryDigest(pub [u8; 32]);
+/// The digest of one entry, which the next entry names. `ambre-crypto` seals
+/// it beside a wrapped key, so it lives in `ambre-core`.
+pub use ambre_core::envelope::EntryDigest;
 
 /// The acts of a log that leaves every member an editor and no owner, in
 /// order. `creator` creates the document as its owner, invites each of

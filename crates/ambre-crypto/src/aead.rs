@@ -5,6 +5,7 @@
 //! The associated data (`aad`) binds the ciphertext to the message's public
 //! metadata without encrypting it.
 
+use ambre_core::EntryDigest;
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
@@ -150,11 +151,11 @@ pub fn seal_anchored_key(
     inner: &DocumentKey,
     aad: &[u8],
     outer: &DocumentKey,
-    anchor: Option<&[u8; 32]>,
+    anchor: Option<&EntryDigest>,
 ) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
     let mut plain = zeroize::Zeroizing::new(inner.as_bytes().to_vec());
     if let Some(anchor) = anchor {
-        plain.extend_from_slice(anchor);
+        plain.extend_from_slice(&anchor.0);
     }
     seal_under(&plain, aad, outer.as_bytes())
 }
@@ -186,7 +187,7 @@ pub fn open_anchored_key(
     ciphertext: &[u8],
     aad: &[u8],
     outer: &DocumentKey,
-) -> Result<(DocumentKey, Option<[u8; 32]>), CryptoError> {
+) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
     let plain = zeroize::Zeroizing::new(open_under(nonce, ciphertext, aad, outer.as_bytes())?);
     let (key, anchor) = match plain.len() {
         32 => (plain.get(..32), None),
@@ -196,7 +197,9 @@ pub fn open_anchored_key(
     let key: [u8; 32] = key
         .and_then(|k| k.try_into().ok())
         .ok_or(CryptoError::InvalidKeyLength)?;
-    let anchor = anchor.and_then(|a| <[u8; 32]>::try_from(a).ok());
+    let anchor = anchor
+        .and_then(|a| <[u8; 32]>::try_from(a).ok())
+        .map(EntryDigest);
     Ok((DocumentKey::from_array(key), anchor))
 }
 

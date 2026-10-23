@@ -269,19 +269,19 @@ fn sealed_from(
     signature: &Signature,
 ) -> Sealed {
     Sealed {
-        nonce: nonce.0,
-        ciphertext: ciphertext.0.clone(),
-        commitment_tag: commitment_tag.0,
-        signature: signature.0,
+        nonce: *nonce,
+        ciphertext: ciphertext.clone(),
+        commitment_tag: *commitment_tag,
+        signature: *signature,
     }
 }
 
 fn message_parts(sealed: Sealed) -> (Ciphertext, Nonce, CommitmentTag, Signature) {
     (
-        Ciphertext(sealed.ciphertext),
-        Nonce(sealed.nonce),
-        CommitmentTag(sealed.commitment_tag),
-        Signature(sealed.signature),
+        sealed.ciphertext,
+        sealed.nonce,
+        sealed.commitment_tag,
+        sealed.signature,
     )
 }
 
@@ -633,10 +633,10 @@ fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Vec
     out.push(OBJECT_LAYOUT);
     out.extend_from_slice(key_id.as_array());
     out.extend_from_slice(signing_key.verifying_key().as_bytes());
-    out.extend_from_slice(&sealed.signature);
-    out.extend_from_slice(&sealed.commitment_tag);
-    out.extend_from_slice(&sealed.nonce);
-    out.extend_from_slice(&sealed.ciphertext);
+    out.extend_from_slice(&sealed.signature.0);
+    out.extend_from_slice(&sealed.commitment_tag.0);
+    out.extend_from_slice(&sealed.nonce.0);
+    out.extend_from_slice(&sealed.ciphertext.0);
     out
 }
 
@@ -660,12 +660,14 @@ fn object_parts(
     let (tag, rest) = rest.split_at(ambre_crypto::commitment::TAG_LEN);
     let (nonce, ciphertext) = rest.split_at(ambre_crypto::aead::NONCE_LEN);
     let sealed = Sealed {
-        nonce: nonce.try_into().map_err(|_| PipelineError::ShortObject)?,
-        ciphertext: ciphertext.to_vec(),
-        commitment_tag: tag.try_into().map_err(|_| PipelineError::ShortObject)?,
-        signature: signature
-            .try_into()
-            .map_err(|_| PipelineError::ShortObject)?,
+        nonce: Nonce(nonce.try_into().map_err(|_| PipelineError::ShortObject)?),
+        ciphertext: Ciphertext(ciphertext.to_vec()),
+        commitment_tag: CommitmentTag(tag.try_into().map_err(|_| PipelineError::ShortObject)?),
+        signature: Signature(
+            signature
+                .try_into()
+                .map_err(|_| PipelineError::ShortObject)?,
+        ),
     };
     let author = PublicKey::from_slice(author).map_err(|_| PipelineError::ShortObject)?;
     Ok((key_id, author, sealed))

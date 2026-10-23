@@ -72,7 +72,7 @@ pub fn session_identity(
     let entry = PeerEntry {
         user,
         nonce,
-        signature,
+        signature: ambre_core::Signature(signature),
     };
     (peer, entry)
 }
@@ -95,7 +95,7 @@ pub fn entry_resolves(
     let Ok(verifying_key) = VerifyingKey::from_bytes(user_key.as_array()) else {
         return false;
     };
-    let signature: &[u8; ENTRY_SIGNATURE_LEN] = &entry.signature;
+    let signature: &[u8; ENTRY_SIGNATURE_LEN] = &entry.signature.0;
     verifying_key
         .verify_strict(
             &entry_transcript(document, peer, &entry.nonce),

@@ -35,6 +35,7 @@ pub mod doc_type;
 pub mod docfile;
 pub mod email;
 pub mod encoded;
+pub mod envelope;
 pub mod error;
 pub mod fingerprint;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
@@ -91,6 +92,7 @@ pub use encoded::{
     EncodedKeyLink, EncodedLogEntry, EscrowedKey, MasterKeySalt, SealedName, SealedShare,
     WrappedDocKey, WrappedMasterKey,
 };
+pub use envelope::{Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 pub use fingerprint::KeyFingerprint;
 #[cfg(feature = "fixtures")]
