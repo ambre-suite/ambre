@@ -12,7 +12,7 @@ use ambre_protocol::public_data::UpdatePublicData;
 use ambre_protocol::{Snapshot, Update};
 
 pub use crate::pipeline::PipelineError;
-use crate::pipeline::{FetchedBlob, decode_snapshot_blob, open_snapshot, open_update};
+use crate::pipeline::{FetchedBlob, UpdateFrame, decode_snapshot_blob, open_snapshot, open_update};
 
 /// The document key every entry point opens under.
 fn doc_key() -> DocumentKey {
@@ -27,7 +27,7 @@ fn doc_key() -> DocumentKey {
 /// error of the open path for one that is.
 pub fn open_relayed_update(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let update: Update = postcard::from_bytes(bytes).map_err(|_| PipelineError::Postcard)?;
-    open_update(&update, &doc_key())
+    open_update(&update, &doc_key()).map(UpdateFrame::into_bytes)
 }
 
 /// Opens `bytes` as a snapshot blob read from object storage.
@@ -71,5 +71,5 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
         commitment_tag: sealed.commitment_tag,
         signature: sealed.signature,
     };
-    open_update(&update, &key)
+    open_update(&update, &key).map(UpdateFrame::into_bytes)
 }

@@ -655,7 +655,7 @@ struct SyncDocumentState {
     /// Outbound update bodies, each carrying its session nonce, buffered while
     /// the document is being lazily created server-side. Flushed in order once
     /// it is materialized.
-    pending_updates: Vec<Vec<u8>>,
+    pending_updates: Vec<pipeline::UpdateFrame>,
     /// Uploads asked for while the document is local-only. The relay signs no
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
@@ -964,7 +964,7 @@ impl SyncDocumentState {
     fn open_update_named(
         &self,
         update: &ambre_protocol::Update,
-    ) -> Result<Vec<u8>, pipeline::PipelineError> {
+    ) -> Result<pipeline::UpdateFrame, pipeline::PipelineError> {
         let key = self
             .key_named(update.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;

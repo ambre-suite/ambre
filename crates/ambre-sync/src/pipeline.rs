@@ -145,6 +145,49 @@ pub struct UpdateBody {
     pub delta: ambre_core::DeltaBytes,
 }
 
+/// The plaintext an update seals: the session nonce of its author, the summary
+/// marker, the summary when there is one, then the delta (`SYNC-113`). A delta
+/// alone is a [`ambre_core::DeltaBytes`] and never one of these, so a delta
+/// cannot leave unframed. Only [`update_body`] frames one, and only
+/// [`open_update`] yields one from the relay, for [`split_update_body`] to
+/// check. It holds document plaintext, so `Debug` prints the length alone.
+#[derive(Clone, PartialEq, Eq)]
+pub struct UpdateFrame(Vec<u8>);
+
+impl UpdateFrame {
+    /// The framed bytes, as the seal compresses them.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The framed bytes, owned, for a fuzz target that reads them back.
+    #[cfg(any(test, feature = "fuzz"))]
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    /// How many bytes it holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Bytes taken as a frame without the framing, for a test that seals a
+    /// malformed body.
+    #[cfg(test)]
+    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl std::fmt::Debug for UpdateFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "UpdateFrame({} bytes)", self.0.len())
+    }
+}
+
 /// The body of an update: the nonce, the summary marker, the summary when there
 /// is one, then the delta. It is the payload the seal compresses and encrypts,
 /// so the nonce and the summary stay inside (`SYNC-113`).
@@ -156,7 +199,7 @@ pub fn update_body(
     nonce: &SessionNonce,
     summary: Option<&ActivitySummary>,
     delta: &ambre_core::DeltaBytes,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<UpdateFrame, PipelineError> {
     let summary = summary.map(ActivitySummary::encode).transpose()?;
     let summary_len = summary.as_ref().map_or(0, Vec::len);
     let mut body = Vec::with_capacity(SESSION_NONCE_LEN + 1 + summary_len + delta.len());
@@ -169,7 +212,7 @@ pub fn update_body(
         None => body.push(SummaryMarker::Absent.byte()),
     }
     body.extend_from_slice(delta.as_bytes());
-    Ok(body)
+    Ok(UpdateFrame(body))
 }
 
 /// Splits an opened update into its nonce, its summary and its delta, the last
@@ -180,8 +223,9 @@ pub fn update_body(
 ///
 /// [`PipelineError::ShortBody`], [`PipelineError::UnknownSummary`] and
 /// [`PipelineError::Summary`].
-pub fn split_update_body(body: Vec<u8>) -> Result<UpdateBody, PipelineError> {
+pub fn split_update_body(body: UpdateFrame) -> Result<UpdateBody, PipelineError> {
     let (nonce, rest) = body
+        .0
         .split_first_chunk::<SESSION_NONCE_LEN>()
         .ok_or(PipelineError::ShortBody)?;
     let nonce = SessionNonce(*nonce);
@@ -324,14 +368,14 @@ fn message_parts(sealed: Sealed) -> (Ciphertext, Nonce, CommitmentTag, Signature
 
 /// Compresses, encrypts and signs `payload` into an [`Update`].
 pub fn seal_update(
-    payload: &[u8],
+    payload: &UpdateFrame,
     public_data: UpdatePublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Update, PipelineError> {
     check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
+    let sealed = seal_payload(payload.as_bytes(), &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     tracing::debug!(
         "[Pipeline] seal_update: {} bytes plaintext -> {} bytes ciphertext",
@@ -349,7 +393,7 @@ pub fn seal_update(
 
 /// Verifies, decrypts and decompresses an [`Update`] back to its CRDT payload.
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
+pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame, PipelineError> {
     check_key(update.public_data.key_id, doc_key)?;
     let aad = aad_of(&update.public_data)?;
     let sealed = sealed_from(
@@ -364,7 +408,7 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, Pi
         update.ciphertext.0.len(),
         plaintext.len(),
     );
-    Ok(plaintext)
+    Ok(UpdateFrame(plaintext))
 }
 
 // -- Snapshot ------------------------------------------------------------------
@@ -543,7 +587,7 @@ impl SealedBlob {
 ///
 /// Every error [`seal_update`] raises.
 pub fn update_frame(
-    payload: &[u8],
+    payload: &UpdateFrame,
     public_data: UpdatePublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -868,6 +912,11 @@ mod tests {
     use ambre_crypto::MasterSeed;
     use ambre_protocol::messages::{Clock, Counter};
 
+    /// Bytes sealed as a frame as they stand, framed or not.
+    fn frame(bytes: &[u8]) -> UpdateFrame {
+        UpdateFrame::from_bytes(bytes.to_vec())
+    }
+
     fn keys() -> (DocumentKey, SigningKey, PublicKey) {
         let doc_key = DocumentKey::from_array([0x11; 32]);
         let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
@@ -894,8 +943,8 @@ mod tests {
     fn roundtrip_update_small() {
         let (doc_key, signing, author) = keys();
         let payload = b"small crdt delta";
-        let update = seal_update(payload, update_pd(author), &doc_key, &signing).unwrap();
-        assert_eq!(open_update(&update, &doc_key).unwrap(), payload);
+        let update = seal_update(&frame(payload), update_pd(author), &doc_key, &signing).unwrap();
+        assert_eq!(open_update(&update, &doc_key).unwrap().as_bytes(), payload);
     }
 
     #[test]
@@ -970,8 +1019,8 @@ mod tests {
     fn the_compression_version_is_sealed_inside_the_ciphertext() {
         let (doc_key, signing, author) = keys();
         let pd = update_pd(author);
-        let raw = seal_update(b"short", pd.clone(), &doc_key, &signing).unwrap();
-        let packed = seal_update(&[0x7Au8; 4096], pd, &doc_key, &signing).unwrap();
+        let raw = seal_update(&frame(b"short"), pd.clone(), &doc_key, &signing).unwrap();
+        let packed = seal_update(&frame(&[0x7Au8; 4096]), pd, &doc_key, &signing).unwrap();
         assert_eq!(readable_part(&raw), readable_part(&packed));
 
         for (update, version) in [
@@ -1066,7 +1115,7 @@ mod tests {
     #[test]
     fn an_update_body_short_of_its_parts_is_refused() {
         assert!(matches!(
-            split_update_body(vec![0; SESSION_NONCE_LEN]),
+            split_update_body(frame(&[0; SESSION_NONCE_LEN])),
             Err(PipelineError::ShortBody)
         ));
         let mut body = update_body(
@@ -1074,18 +1123,19 @@ mod tests {
             None,
             &b"d".to_vec().into(),
         )
-        .unwrap();
+        .unwrap()
+        .into_bytes();
         if let Some(marker) = body.get_mut(SESSION_NONCE_LEN) {
             *marker = 2;
         }
         assert!(matches!(
-            split_update_body(body),
+            split_update_body(UpdateFrame::from_bytes(body)),
             Err(PipelineError::UnknownSummary)
         ));
         let mut cut = vec![1; SESSION_NONCE_LEN];
         cut.extend_from_slice(&[SummaryMarker::Present.byte(), 0, 0]);
         assert!(matches!(
-            split_update_body(cut),
+            split_update_body(UpdateFrame::from_bytes(cut)),
             Err(PipelineError::Summary(SummaryError::Short))
         ));
         let empty = split_update_body(
@@ -1164,12 +1214,18 @@ mod tests {
     #[test]
     fn a_frame_names_the_key_that_sealed_it() {
         let (doc_key, signing, author) = keys();
-        let update = seal_update(b"delta", update_pd(author.clone()), &doc_key, &signing).unwrap();
+        let update = seal_update(
+            &frame(b"delta"),
+            update_pd(author.clone()),
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert_eq!(update.public_data.key_id, doc_key.id());
 
         let other = DocumentKey::from_array([0x44; 32]);
         assert!(matches!(
-            seal_update(b"delta", update_pd(author), &other, &signing),
+            seal_update(&frame(b"delta"), update_pd(author), &other, &signing),
             Err(PipelineError::WrongKey)
         ));
         assert!(matches!(
@@ -1273,7 +1329,7 @@ mod tests {
     #[test]
     fn wrong_document_key_rejected() {
         let (doc_key, signing, author) = keys();
-        let update = seal_update(b"secret", update_pd(author), &doc_key, &signing).unwrap();
+        let update = seal_update(&frame(b"secret"), update_pd(author), &doc_key, &signing).unwrap();
         let other = DocumentKey::from_array([0x44; 32]);
         assert!(open_update(&update, &other).is_err());
     }
@@ -1281,7 +1337,8 @@ mod tests {
     #[test]
     fn tampered_document_id_rejected() {
         let (doc_key, signing, author) = keys();
-        let mut update = seal_update(b"secret", update_pd(author), &doc_key, &signing).unwrap();
+        let mut update =
+            seal_update(&frame(b"secret"), update_pd(author), &doc_key, &signing).unwrap();
         // Forge the routing metadata: signature still passes (attacker re-signs is
         // not modeled here), but the aad-bound commitment/AEAD no longer match.
         update.public_data.document_id = DocumentId::new();

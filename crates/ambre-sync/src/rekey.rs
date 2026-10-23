@@ -24,6 +24,7 @@ use ambre_core::KeyId;
 use ambre_protocol::messages::{Clock, Signature};
 
 use crate::generation::ResendTicket;
+use crate::pipeline::UpdateFrame;
 
 /// Updates kept per document until the relay echoes them back. Past the cap the
 /// oldest is forgotten, and a refusal of it can no longer be answered
@@ -40,11 +41,11 @@ pub(crate) struct SentFrame {
     pub signature: Signature,
     /// The plaintext body, its session nonce ahead of the delta, kept to seal
     /// it again under another key.
-    pub payload: Vec<u8>,
+    pub payload: UpdateFrame,
 }
 
 /// Refused frames to seal again, as (clock, plaintext), in clock order.
-pub(crate) type RefusedFrames = Vec<(Clock, Vec<u8>)>;
+pub(crate) type RefusedFrames = Vec<(Clock, UpdateFrame)>;
 
 /// What a refusal asks of the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +72,7 @@ pub(crate) struct Rekey {
     /// Lowest refused clock not yet sent again. Every frame from it on is free.
     refused_from: Option<Clock>,
     /// Edits made while the rotation is owed, sealed once it lands.
-    waiting: Vec<Vec<u8>>,
+    waiting: Vec<UpdateFrame>,
     /// The relay refused a delta by name. It holds an edit this client made,
     /// so no later delta leaves until the document reopens (`SYNC-156`).
     refused: bool,
@@ -112,7 +113,7 @@ impl Rekey {
     /// seal again at the next clocks. The relay dropped those later deltas
     /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no delta here
     /// carries that signature: a refusal of a delta already sent again.
-    pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+    pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<UpdateFrame>> {
         self.take_from(signature).map(|(_, bodies)| bodies)
     }
 
@@ -133,7 +134,7 @@ impl Rekey {
     pub(crate) fn resend_failed(
         &mut self,
         ticket: ResendTicket,
-    ) -> Option<(Signature, Clock, Vec<Vec<u8>>)> {
+    ) -> Option<(Signature, Clock, Vec<UpdateFrame>)> {
         let (signature, armed) = self.failed?;
         if armed != ticket {
             return None;
@@ -145,7 +146,7 @@ impl Rekey {
 
     /// Takes the delta signed `signature` and every later one out of the log.
     /// Returns its clock and their bodies, in order.
-    fn take_from(&mut self, signature: &Signature) -> Option<(Clock, Vec<Vec<u8>>)> {
+    fn take_from(&mut self, signature: &Signature) -> Option<(Clock, Vec<UpdateFrame>)> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
@@ -171,7 +172,7 @@ impl Rekey {
     /// their bodies return in order. Nothing is held: the lock refuses them
     /// all, and the caller moves what they wrote. `None` for a delta the log
     /// no longer holds, so a later refusal of the same batch returns nothing.
-    pub(crate) fn delta_locked(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+    pub(crate) fn delta_locked(&mut self, signature: &Signature) -> Option<Vec<UpdateFrame>> {
         let (_, bodies) = self.take_from(signature)?;
         if self
             .failed
@@ -249,7 +250,7 @@ impl Rekey {
 
     /// Holds an edit made while the rotation is owed. Returns whether the
     /// caller starts a payment.
-    pub(crate) fn hold(&mut self, payload: Vec<u8>) -> bool {
+    pub(crate) fn hold(&mut self, payload: UpdateFrame) -> bool {
         self.waiting.push(payload);
         self.begin_payment() == Refusal::Settle
     }
@@ -277,7 +278,7 @@ impl Rekey {
     /// A key was installed: the debt is paid, by us or by someone else.
     /// Returns the refused frames to seal again under `current`, at their own
     /// clocks and in order, then the edits that waited.
-    pub(crate) fn key_installed(&mut self, current: KeyId) -> (RefusedFrames, Vec<Vec<u8>>) {
+    pub(crate) fn key_installed(&mut self, current: KeyId) -> (RefusedFrames, Vec<UpdateFrame>) {
         self.owed = false;
         self.in_flight = false;
         (
@@ -320,12 +321,17 @@ mod tests {
         Signature([n; 64])
     }
 
+    /// A frame of one byte, which no seal reads here.
+    fn body(n: u8) -> UpdateFrame {
+        UpdateFrame::from_bytes(vec![n])
+    }
+
     fn frame(clock: u64, signature: u8) -> SentFrame {
         SentFrame {
             clock: Clock(clock),
             key_id: key(1),
             signature: sig(signature),
-            payload: vec![clock as u8],
+            payload: body(clock as u8),
         }
     }
 
@@ -348,11 +354,11 @@ mod tests {
         assert_eq!(r.refused(key(1), Clock(2), key(1)), Refusal::Settle);
         assert_eq!(r.refused(key(1), Clock(3), key(1)), Refusal::Wait);
         assert!(r.owes());
-        assert!(!r.hold(vec![9]), "a payment already runs");
+        assert!(!r.hold(body(9)), "a payment already runs");
 
         let (resend, waiting) = r.key_installed(key(2));
-        assert_eq!(resend, vec![(Clock(2), vec![2]), (Clock(3), vec![3])]);
-        assert_eq!(waiting, vec![vec![9]]);
+        assert_eq!(resend, vec![(Clock(2), body(2)), (Clock(3), body(3))]);
+        assert_eq!(waiting, vec![body(9)]);
         assert!(!r.owes());
         // A late copy of a refusal names the key the frame no longer carries.
         assert_eq!(r.refused(key(1), Clock(3), key(2)), Refusal::Stale);
@@ -367,7 +373,7 @@ mod tests {
         assert!(!r.owes());
         assert_eq!(
             r.take_refused(key(2)),
-            vec![(Clock(2), vec![2]), (Clock(3), vec![3])]
+            vec![(Clock(2), body(2)), (Clock(3), body(3))]
         );
         assert_eq!(r.take_refused(key(2)), Vec::new(), "sent again once");
     }
@@ -378,12 +384,12 @@ mod tests {
     fn a_debt_found_holds_the_next_edit_until_the_key_lands() {
         let mut r = Rekey::default();
         r.found_debt();
-        assert!(r.hold(vec![1]));
+        assert!(r.hold(body(1)));
         r.payment_failed();
-        assert!(r.hold(vec![2]), "the next edit tries again");
+        assert!(r.hold(body(2)), "the next edit tries again");
         let (resend, waiting) = r.key_installed(key(2));
         assert!(resend.is_empty());
-        assert_eq!(waiting, vec![vec![1], vec![2]]);
+        assert_eq!(waiting, vec![body(1), body(2)]);
     }
 
     /// A debt paid at once starts one payment, and none without a debt.
@@ -394,7 +400,7 @@ mod tests {
         r.found_debt();
         assert!(r.pay_now());
         assert!(!r.pay_now(), "the payment is running");
-        assert!(!r.hold(vec![1]), "an edit waits for it");
+        assert!(!r.hold(body(1)), "an edit waits for it");
     }
 
     /// The echo of an update clears it and every earlier one, and the log never
@@ -432,7 +438,7 @@ mod tests {
     #[test]
     fn a_clock_refusal_returns_the_delta_and_every_later_one() {
         let mut r = three_sent();
-        assert_eq!(r.clock_refused(&sig(2)), Some(vec![vec![2], vec![3]]));
+        assert_eq!(r.clock_refused(&sig(2)), Some(vec![body(2), body(3)]));
         assert_eq!(r.sent_len(), 1, "the delta before it stays unconfirmed");
         assert_eq!(r.clock_refused(&sig(3)), None, "already taken back");
     }

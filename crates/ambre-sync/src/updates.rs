@@ -1,5 +1,6 @@
 use super::*;
-use crate::rekey::SentFrame;
+use crate::pipeline::UpdateFrame;
+use crate::rekey::{RefusedFrames, SentFrame};
 use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
@@ -1008,7 +1009,7 @@ impl SyncState {
     /// Seals an update body and sends it, or holds it while the document is
     /// created or owes a rotation. The body carries its nonce, so a frame
     /// sent again later keeps the PeerID it was written under.
-    pub(crate) fn send_body(&mut self, document_id: DocumentId, body: Vec<u8>) {
+    pub(crate) fn send_body(&mut self, document_id: DocumentId, body: UpdateFrame) {
         let (Some(signing_key), Some(pub_key)) = (self.signing_key.clone(), self.author_pub_key())
         else {
             return;
@@ -1075,7 +1076,7 @@ impl SyncState {
         &self,
         document_id: DocumentId,
         clock: Clock,
-        body: &[u8],
+        body: &UpdateFrame,
         signing_key: &SigningKey,
         pub_key: PublicKey,
     ) -> Option<(KeyId, Signature)> {
@@ -1112,8 +1113,8 @@ impl SyncState {
     pub(crate) fn resend_refused(
         &mut self,
         document_id: DocumentId,
-        refused: Vec<(Clock, Vec<u8>)>,
-        waiting: Vec<Vec<u8>>,
+        refused: RefusedFrames,
+        waiting: Vec<UpdateFrame>,
     ) {
         if let (Some(signing_key), Some(pub_key)) =
             (self.signing_key.clone(), self.author_pub_key())
@@ -2135,7 +2136,8 @@ mod tests {
             snapshot_id: snap,
             clock: Clock(1),
         };
-        let short = pipeline::seal_update(&[6; 16], public_data, &key, &sk).unwrap();
+        let short = UpdateFrame::from_bytes(vec![6; 16]);
+        let short = pipeline::seal_update(&short, public_data, &key, &sk).unwrap();
         state.receive_update(Seq(1), short);
         let events = drain(&rx);
         assert!(matches!(

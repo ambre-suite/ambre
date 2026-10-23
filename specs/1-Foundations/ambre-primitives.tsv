@@ -3660,12 +3660,10 @@ ambre-sync | src/lib.rs | crate | QUARANTINE_LIMIT | const | usize	math	count, s
 ambre-sync | src/lib.rs | crate | SyncDocumentState.awaiting_initial_hydration | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.creating | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.gap_requested | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncDocumentState.pending_updates | field | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState.server_created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::new(server_created) | param | bool	generic	initial value of the server_created fact field
-ambre-sync | src/lib.rs | crate | SyncDocumentState::open_update_named() | ret | Result<Vec<u8>,pipeline::PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3769,43 +3767,33 @@ ambre-sync | src/pipeline.rs | crate::pipeline | open_object(aad) | param | &[u8
 ambre-sync | src/pipeline.rs | crate::pipeline | open_object(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | open_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_update() | ret | Result<Vec<u8>,PipelineError>	generic	bytes of a codec or a transport
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(aad) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_update(payload) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/pipeline.rs | crate::pipeline | split_update_body(body) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/pipeline.rs | crate::pipeline | update_body() | ret | Result<Vec<u8>,PipelineError>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/pipeline.rs | crate::pipeline | update_frame(payload) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (CompressionVersion,Vec<u8>)	generic	bytes of a codec: the plaintext body after its scheme
-ambre-sync | src/rekey.rs | crate::rekey | RefusedFrames | alias | Vec<(Clock,Vec<u8>)>	debt	finding: update body vs delta, both `Vec<u8>`
+ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame.0 | field | Vec<u8>	newtype-inner	UpdateFrame newtype: the framed update plaintext
+ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::as_bytes() | ret | &[u8]	newtype-inner	UpdateFrame newtype, read by the seal
+ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::into_bytes() | ret | Vec<u8>	newtype-inner	UpdateFrame newtype, handed back to a fuzz target
+ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::len() | ret | usize	math	byte length, for a log line
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.failures | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.in_flight | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.refused | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey.waiting | field | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::clock_refused() | ret | Option<Vec<Vec<u8>>>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_locked() | ret | Option<Vec<Vec<u8>>>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::failed() | ret | Option<u32>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold(payload) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::holds_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::key_installed() | ret | (RefusedFrames,Vec<Vec<u8>>)	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::owes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::pay_now() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Clock)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::resend_failed() | ret | Option<(Signature,Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::take_from() | ret | Option<(Clock,Vec<Vec<u8>>)>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/rekey.rs | crate::rekey | SentFrame.payload | field | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
@@ -3827,10 +3815,6 @@ ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
-ambre-sync | src/updates.rs | crate::updates | SyncState::resend_refused(refused) | param | Vec<(Clock,Vec<u8>)>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/updates.rs | crate::updates | SyncState::resend_refused(waiting) | param | Vec<Vec<u8>>	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/updates.rs | crate::updates | SyncState::seal_and_send(body) | param | &[u8]	debt	finding: update body vs delta, both `Vec<u8>`
-ambre-sync | src/updates.rs | crate::updates | SyncState::send_body(body) | param | Vec<u8>	debt	finding: update body vs delta, both `Vec<u8>`
 ambre-sync | src/updates.rs | crate::updates | SyncState::snapshot_upload() | ret | Result<SnapshotUpload,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | SyncState::unwrap_anchored() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/updates.rs | crate::updates | SyncState::unwrap_document_key() | ret | Result<DocumentKey,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix

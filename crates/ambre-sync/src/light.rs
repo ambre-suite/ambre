@@ -532,7 +532,7 @@ mod tests {
                 clock: ambre_protocol::messages::Clock(1),
                 key_id: doc_key.id(),
                 signature: echo.signature,
-                payload: b"edit".to_vec(),
+                payload: crate::pipeline::UpdateFrame::from_bytes(b"edit".to_vec()),
             });
         }
         state.handle_command(SyncCommand::ReleaseDocument {
