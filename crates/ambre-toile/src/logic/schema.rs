@@ -348,7 +348,12 @@ pub fn gate(
             // steps mint one container, not rivals (`SCHEMA-020`). The live
             // board keeps its own identity: only the scratch takes this one.
             let heads = scratch.oplog_frontiers();
-            let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
+            let peer = migration_peer(heads.iter().map(|id| {
+                (
+                    ambre_core::PeerId(id.peer),
+                    ambre_core::OpCounter(id.counter),
+                )
+            }));
             scratch
                 .set_peer_id(peer.0)
                 .map_err(|e| SchemaError::MigrationFailed {

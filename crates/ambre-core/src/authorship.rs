@@ -42,6 +42,16 @@ impl std::fmt::LowerHex for PeerId {
     }
 }
 
+/// The counter of one operation under a PeerID: a Loro `ID` is the pair of
+/// the two. A distinct type, so a PeerID, a sequence number or a length never
+/// takes its place. `#[serde(transparent)]`, so it reads and writes the bare
+/// integer.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct OpCounter(pub i32);
+
 /// 128 random bits drawn when a client opens a document (`AUTHOR-002`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);

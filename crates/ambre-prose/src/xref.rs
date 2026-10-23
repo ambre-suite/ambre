@@ -20,7 +20,7 @@ use crate::numbering;
 #[derive(Serialize, Deserialize)]
 struct Record {
     peer: ambre_core::PeerId,
-    counter: i32,
+    counter: ambre_core::OpCounter,
     /// 0 a page number, 1 a section number, 2 a label.
     kind: u8,
     label: String,
@@ -36,7 +36,7 @@ pub fn encode(target: TreeID, kind: &CrossRefKind) -> String {
     };
     let record = Record {
         peer: ambre_core::PeerId(target.peer),
-        counter: target.counter,
+        counter: ambre_core::OpCounter(target.counter),
         kind: code,
         label,
     };
@@ -67,7 +67,7 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)> {
         2 => CrossRefKind::CustomText(record.label),
         _ => return None,
     };
-    Some((TreeID::new(record.peer.0, record.counter), kind))
+    Some((TreeID::new(record.peer.0, record.counter.0), kind))
 }
 
 /// What a reference to `target` shows, or `None` for the broken mark

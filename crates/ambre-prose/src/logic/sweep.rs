@@ -36,12 +36,12 @@ impl ProseState {
             .filter(|id| !tree.is_node_deleted(id).unwrap_or(true))
             .filter(|id| {
                 self.marker_of(id)
-                    .is_some_and(|peer| !self.session_runs(ambre_core::PeerId(peer)))
+                    .is_some_and(|peer| !self.session_runs(peer))
             })
             .filter(|id| {
                 Self::subtree(&tree, *id).iter().all(|node| {
                     self.marker_of(node)
-                        .is_none_or(|peer| !self.session_runs(ambre_core::PeerId(peer)))
+                        .is_none_or(|peer| !self.session_runs(peer))
                 })
             })
             .collect();
@@ -87,10 +87,12 @@ impl ProseState {
 
     /// The PeerID a block's own hiding marker names, or `None` when the block
     /// carries no marker or one that reads as no PeerID.
-    fn marker_of(&self, id: &TreeID) -> Option<u64> {
+    fn marker_of(&self, id: &TreeID) -> Option<ambre_core::PeerId> {
         let node = doc::Fields::of(doc::blocks(&self.doc).get_meta(*id).ok()?);
         match node.get(doc::NodeKey::Hidden)? {
-            ValueOrContainer::Value(LoroValue::String(peer)) => peer.parse().ok(),
+            ValueOrContainer::Value(LoroValue::String(peer)) => {
+                peer.parse().ok().map(ambre_core::PeerId)
+            }
             _ => None,
         }
     }

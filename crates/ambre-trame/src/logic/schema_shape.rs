@@ -511,7 +511,15 @@ fn steps_written() -> Vec<String> {
             scratch.import(&stored).expect("the snapshot imports");
             let heads = scratch.oplog_frontiers();
             scratch
-                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
+                .set_peer_id(
+                    migration_peer(heads.iter().map(|id| {
+                        (
+                            ambre_core::PeerId(id.peer),
+                            ambre_core::OpCounter(id.counter),
+                        )
+                    }))
+                    .0,
+                )
                 .expect("the migration identity");
             let before = scratch.oplog_vv();
             (step.apply)(&scratch).expect("the step runs on its canonical workbook");

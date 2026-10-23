@@ -1357,6 +1357,7 @@ ambre-core | src/activity.rs | crate::activity | MAX_ANCHOR_LEN | const | usize	
 ambre-core | src/activity.rs | crate::activity | MAX_MENTIONS | const | usize	generic	bound / bit constant
 ambre-core | src/activity.rs | crate::activity | SummaryError::UnknownKind.0 | field | u8	newtype-inner	error carries the unknown byte
 ambre-core | src/authorship.rs | crate::authorship | ENTRY_SIGNATURE_LEN | const | usize	generic	length constant
+ambre-core | src/authorship.rs | crate::authorship | OpCounter.0 | field | i32	newtype-inner	OpCounter newtype accessor, the Loro ID counter it wraps
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::to_bytes() | ret | Vec<u8>	generic	PeerEntry byte codec
@@ -1584,7 +1585,6 @@ ambre-core | src/schema.rs | crate::schema | SchemaMigration.apply | field | fn(
 ambre-core | src/schema.rs | crate::schema | SchemaVersion.0 | field | u32	newtype-inner	SchemaVersion newtype accessor
 ambre-core | src/schema.rs | crate::schema | SchemaVersion::get() | ret | u32	newtype-inner	SchemaVersion newtype accessor
 ambre-core | src/schema.rs | crate::schema | SchemaVersion::new(version) | param | u32	newtype-inner	SchemaVersion newtype accessor
-ambre-core | src/schema.rs | crate::schema | migration_peer(frontiers) | param | impl IntoIterator<Item=(u64,i32)>	debt	finding: migration_peer frontiers as (u64, i32) (low, confirmed)
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint() | ret | u64	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes
@@ -3492,12 +3492,10 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_ru
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.entry_end | field | Option<i32>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,(u32,u32))>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed_version | field | u64	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.media_cache | field | HashMap<ambre_core::ContentHash,Vec<u8>>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.stamped_counter | field | i32	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.window | field | (u32,u32)	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
@@ -3526,7 +3524,6 @@ ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState:
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::suggest_insert(text) | param | &str	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState::write_entry() | ret | Result<SuggestionId,String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::marker_of() | ret | Option<u64>	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::session_runs() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Grid::cell(col) | param | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
 ambre-prose | src/logic/tables.rs | crate::logic::tables | Grid::cell(row) | param | usize	debt	finding: table (row, col) pairs as bare u32 (confirmed)
@@ -3896,7 +3893,6 @@ ambre-prose | src/view/walk.rs | crate::view::walk | draw_lines(x) | param | f64
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_lines(y) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_shape(x) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | draw_shape(y) | param | f64	math	layout geometry local to algorithm
-ambre-prose | src/xref.rs | crate::xref | Record.counter | field | i32	debt	finding: peer ids and op counters as bare integers (confirmed for peer)
 ambre-prose | src/xref.rs | crate::xref | Record.kind | field | u8	debt	finding: cross-ref kind as u8 code (confirmed)
 ambre-prose | src/xref.rs | crate::xref | Record.label | field | String	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	free-text	text content / label / parser input

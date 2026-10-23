@@ -650,8 +650,16 @@ fn steps_written() -> Vec<String> {
             let doc = LoroDoc::new();
             doc.import(&stored).expect("the snapshot imports");
             let heads = doc.oplog_frontiers();
-            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))).0)
-                .expect("the migration identity");
+            doc.set_peer_id(
+                migration_peer(heads.iter().map(|id| {
+                    (
+                        ambre_core::PeerId(id.peer),
+                        ambre_core::OpCounter(id.counter),
+                    )
+                }))
+                .0,
+            )
+            .expect("the migration identity");
             let before = doc.oplog_vv();
             (step.apply)(&doc).expect("the step runs on its canonical document");
             let written = doc

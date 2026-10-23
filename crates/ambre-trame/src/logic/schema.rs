@@ -551,7 +551,12 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             // steps write the same operations, not rivals (`SCHEMA-020`). The
             // live workbook keeps its own identity: only the scratch takes it.
             let heads = scratch.oplog_frontiers();
-            let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
+            let peer = migration_peer(heads.iter().map(|id| {
+                (
+                    ambre_core::PeerId(id.peer),
+                    ambre_core::OpCounter(id.counter),
+                )
+            }));
             scratch
                 .set_peer_id(peer.0)
                 .map_err(|e| SchemaError::MigrationFailed {

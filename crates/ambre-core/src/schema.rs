@@ -234,13 +234,15 @@ pub fn migrate_schema<D>(
 /// moves with a library or a toolchain. It never returns `u64::MAX`, the one
 /// identity the CRDT engine reserves.
 #[must_use]
-pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> crate::PeerId {
-    let mut heads: Vec<(u64, i32)> = frontiers.into_iter().collect();
+pub fn migration_peer(
+    frontiers: impl IntoIterator<Item = (crate::PeerId, crate::OpCounter)>,
+) -> crate::PeerId {
+    let mut heads: Vec<(crate::PeerId, crate::OpCounter)> = frontiers.into_iter().collect();
     heads.sort_unstable();
     let mut hash = Fnv::new(b"ambre-schema-migration");
     for (peer, counter) in heads {
-        hash.feed(&peer.to_le_bytes());
-        hash.feed(&counter.to_le_bytes());
+        hash.feed(&peer.0.to_le_bytes());
+        hash.feed(&counter.0.to_le_bytes());
     }
     hash.peer()
 }
@@ -408,20 +410,28 @@ mod tests {
         );
     }
 
+    /// The heads of a history, as a document reports them.
+    fn heads<const N: usize>(ids: [(u64, i32); N]) -> [(crate::PeerId, crate::OpCounter); N] {
+        ids.map(|(peer, counter)| (crate::PeerId(peer), crate::OpCounter(counter)))
+    }
+
     #[test]
     fn one_history_derives_one_migration_peer() {
-        let heads = [(7, 41), (3, 9)];
+        let ours = heads([(7, 41), (3, 9)]);
         assert_eq!(
-            migration_peer(heads),
-            migration_peer([(3, 9), (7, 41)]),
+            migration_peer(ours),
+            migration_peer(heads([(3, 9), (7, 41)])),
             "the order the heads arrive in does not count"
         );
-        assert_ne!(migration_peer(heads), migration_peer([(7, 42), (3, 9)]));
-        assert_ne!(migration_peer(heads), migration_peer([(7, 41)]));
+        assert_ne!(
+            migration_peer(ours),
+            migration_peer(heads([(7, 42), (3, 9)]))
+        );
+        assert_ne!(migration_peer(ours), migration_peer(heads([(7, 41)])));
         // Pinned: a peer on another build must derive the same identity.
         assert_eq!(migration_peer([]), migration_peer(Vec::new()));
         assert_eq!(
-            migration_peer([(1, 0)]),
+            migration_peer(heads([(1, 0)])),
             crate::PeerId(0xe0f9_c7c0_c2dd_425e)
         );
     }

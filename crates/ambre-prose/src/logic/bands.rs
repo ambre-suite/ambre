@@ -162,7 +162,7 @@ impl ProseState {
     /// resolves the same date, whatever its own clock says. A collaborator's
     /// change is dated by the collaborator, so nothing here stamps it.
     pub(super) fn stamp_modified(&mut self, now_ms: ambre_core::Timestamp) -> ProseOutcome {
-        let ours = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
+        let ours = self.own_counter();
         if ours <= self.stamped_counter {
             return ProseOutcome::nothing();
         }
@@ -173,8 +173,13 @@ impl ProseState {
         self.doc
             .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Stamp.as_str());
         let outcome = self.commit_with(Vec::new());
-        self.stamped_counter = self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
+        self.stamped_counter = self.own_counter();
         outcome
+    }
+
+    /// This session's own operation counter: how far its PeerID has written.
+    fn own_counter(&self) -> ambre_core::OpCounter {
+        ambre_core::OpCounter(self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0))
     }
 
     /// The side's two blocks, minted on first use. Each is a root paragraph

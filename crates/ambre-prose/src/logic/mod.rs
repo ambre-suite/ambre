@@ -180,7 +180,7 @@ pub struct ProseState {
     find: Option<find::FindSession>,
     /// This peer's own operation counter when the last-modified stamp was
     /// last written. A stamp is owed only past it (`PROSE-FEAT-066`).
-    stamped_counter: i32,
+    stamped_counter: ambre_core::OpCounter,
     /// The blocks written to since the last layout, whoever wrote them.
     touched: touched::Touched,
     /// The changes the view has not drawn yet, and what it drew for the
@@ -189,7 +189,7 @@ pub struct ProseState {
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
-    entry_end: Option<i32>,
+    entry_end: Option<ambre_core::OpCounter>,
 }
 
 /// The document scaffolding, which every peer writes on open, before any edit.
@@ -279,7 +279,8 @@ impl ProseState {
         // The registry entry is bookkeeping, not prose: an undo never
         // retracts it (`AUTHOR-009`).
         undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
-        let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
+        let stamped_counter =
+            ambre_core::OpCounter(doc.oplog_vv().get(&peer).copied().unwrap_or(0));
         // After the scaffolding: a document never laid out measures whole.
         let touched = touched::Touched::watch(&doc);
         Some(Self {
@@ -496,14 +497,18 @@ impl ProseState {
                     loro::CommitOptions::new()
                         .origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
                 );
-                self.doc.oplog_vv().get(&peer.0).copied()
+                self.doc
+                    .oplog_vv()
+                    .get(&peer.0)
+                    .copied()
+                    .map(ambre_core::OpCounter)
             }
             Err(e) => {
                 tracing::error!("Prose: the registry entry was refused: {e:?}");
                 None
             }
         };
-        self.stamped_counter = self.entry_end.unwrap_or(0);
+        self.stamped_counter = self.entry_end.unwrap_or_default();
         true
     }
 
@@ -1266,7 +1271,7 @@ impl ProseState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.peer.0) == Some(&end) {
+            if current.get(&self.peer.0) == Some(&end.0) {
                 return None;
             }
             self.entry_end = None;
