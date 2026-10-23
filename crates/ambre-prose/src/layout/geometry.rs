@@ -9,9 +9,6 @@ use loro::LoroDoc;
 
 use crate::doc;
 
-/// Pixels per millimetre at 96 DPI, the one scale the layout converts at.
-const PX_PER_MM: f32 = 96.0 / 25.4;
-
 /// The share of the content height either band may take (`PROSE-016`).
 pub(crate) const BAND_SHARE: f32 = 0.25;
 
@@ -53,17 +50,17 @@ impl PageBox {
     /// The pixel box a millimetre format converts to at 96 DPI.
     #[must_use]
     pub fn from_mm(format: doc::PageFormat) -> Self {
-        let page_width_px = format.width_mm * PX_PER_MM;
-        let page_height_px = format.height_mm * PX_PER_MM;
-        let horizontal = (format.margin_left_mm + format.margin_right_mm) * PX_PER_MM;
-        let vertical = (format.margin_top_mm + format.margin_bottom_mm) * PX_PER_MM;
+        let page_width_px = format.width.to_doc_px().get();
+        let page_height_px = format.height.to_doc_px().get();
+        let horizontal = (format.margin_left + format.margin_right).to_doc_px().get();
+        let vertical = (format.margin_top + format.margin_bottom).to_doc_px().get();
         Self {
             page_width_px,
             page_height_px,
             content_width_px: (page_width_px - horizontal).max(0.0),
             content_height_px: (page_height_px - vertical).max(0.0),
-            margin_left_px: format.margin_left_mm * PX_PER_MM,
-            margin_top_px: format.margin_top_mm * PX_PER_MM,
+            margin_left_px: format.margin_left.to_doc_px().get(),
+            margin_top_px: format.margin_top.to_doc_px().get(),
         }
     }
 
@@ -101,7 +98,7 @@ mod tests {
     #[test]
     fn the_content_box_is_what_the_four_margins_leave() {
         let page = a4();
-        let margins_px = 40.0 * PX_PER_MM;
+        let margins_px = ambre_core::Mm::new(40.0).to_doc_px().get();
         assert!((page.content_width_px - (page.page_width_px - margins_px)).abs() < 0.01);
         assert!((page.content_height_px - (page.page_height_px - margins_px)).abs() < 0.01);
     }
@@ -119,8 +116,8 @@ mod tests {
     #[test]
     fn a_margin_wider_than_the_sheet_leaves_a_content_box_of_zero() {
         let page = PageBox::from_mm(doc::PageFormat {
-            margin_left_mm: 500.0,
-            margin_top_mm: 500.0,
+            margin_left: ambre_core::Mm::new(500.0),
+            margin_top: ambre_core::Mm::new(500.0),
             ..doc::PageFormat::default()
         });
         assert_eq!(page.content_width_px, 0.0);

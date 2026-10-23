@@ -5962,17 +5962,3 @@ ambre-prose | src/band.rs | crate::band | CivilDate::month() | ret | u32	newtype
 ambre-prose | src/band.rs | crate::band | CivilDate::year() | ret | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,ambre_core::Radians)>	math	geometry, layout, count or size local to the algorithm
-ambre-prose | src/doc.rs | crate::doc | A4_HEIGHT_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | A4_WIDTH_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | DEFAULT_MARGIN_MM | const | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.height_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_bottom_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_left_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_right_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.margin_top_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | PageFormat.width_mm | field | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | write_page_format(height_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/doc.rs | crate::doc | write_page_format(width_mm) | param | f32	debt	finding: points and millimetres as bare f32/f64 in stored page and style values (confirmed)
-ambre-prose | src/layout/geometry.rs | crate::layout::geometry | PX_PER_MM | const | f32	math	layout geometry local to algorithm

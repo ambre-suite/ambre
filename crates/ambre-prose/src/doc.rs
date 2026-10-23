@@ -12,8 +12,8 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
-use ambre_core::LangTag;
 use ambre_core::crdt::FieldKey;
+use ambre_core::{LangTag, Mm};
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
@@ -895,19 +895,19 @@ impl Orientation {
     /// Whether the two dimensions agree with the orientation. A square page
     /// agrees with both, because neither dimension is the greater one.
     #[must_use]
-    pub fn agrees_with(self, width_mm: f32, height_mm: f32) -> bool {
+    pub fn agrees_with(self, width: Mm, height: Mm) -> bool {
         match self {
-            Self::Portrait => width_mm <= height_mm,
-            Self::Landscape => width_mm >= height_mm,
+            Self::Portrait => width <= height,
+            Self::Landscape => width >= height,
         }
     }
 }
 
-/// A4 portrait, in millimetres: the page a fresh document opens on.
-const A4_WIDTH_MM: f32 = 210.0;
-const A4_HEIGHT_MM: f32 = 297.0;
-/// The four margins of a fresh document, in millimetres.
-const DEFAULT_MARGIN_MM: f32 = 20.0;
+/// A4 portrait: the page a fresh document opens on.
+const A4_WIDTH: Mm = Mm::new(210.0);
+const A4_HEIGHT: Mm = Mm::new(297.0);
+/// The four margins of a fresh document.
+const DEFAULT_MARGIN: Mm = Mm::new(20.0);
 
 /// The two text defaults of a fresh document that carry a number.
 ///
@@ -923,24 +923,24 @@ const DEFAULT_LINE_HEIGHT: f32 = 1.5;
 /// one place a page number or a measured height exists (`PROSE-065`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PageFormat {
-    pub width_mm: f32,
-    pub height_mm: f32,
-    pub margin_top_mm: f32,
-    pub margin_bottom_mm: f32,
-    pub margin_left_mm: f32,
-    pub margin_right_mm: f32,
+    pub width: Mm,
+    pub height: Mm,
+    pub margin_top: Mm,
+    pub margin_bottom: Mm,
+    pub margin_left: Mm,
+    pub margin_right: Mm,
 }
 
 impl Default for PageFormat {
     /// A4 portrait with the four default margins: what `seed` writes.
     fn default() -> Self {
         Self {
-            width_mm: A4_WIDTH_MM,
-            height_mm: A4_HEIGHT_MM,
-            margin_top_mm: DEFAULT_MARGIN_MM,
-            margin_bottom_mm: DEFAULT_MARGIN_MM,
-            margin_left_mm: DEFAULT_MARGIN_MM,
-            margin_right_mm: DEFAULT_MARGIN_MM,
+            width: A4_WIDTH,
+            height: A4_HEIGHT,
+            margin_top: DEFAULT_MARGIN,
+            margin_bottom: DEFAULT_MARGIN,
+            margin_left: DEFAULT_MARGIN,
+            margin_right: DEFAULT_MARGIN,
         }
     }
 }
@@ -1012,28 +1012,28 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
     else {
         return fallback;
     };
-    let read = |key: PageKey, default: f32| -> f32 {
+    let read = |key: PageKey, default: Mm| -> Mm {
         read_f32(&page, key)
             .filter(|number| number.is_finite() && *number >= 0.0)
-            .unwrap_or(default)
+            .map_or(default, Mm::new)
     };
-    let width_mm = read(PageKey::WidthMm, fallback.width_mm);
-    let height_mm = read(PageKey::HeightMm, fallback.height_mm);
+    let width = read(PageKey::WidthMm, fallback.width);
+    let height = read(PageKey::HeightMm, fallback.height);
     PageFormat {
-        width_mm: if width_mm > 0.0 {
-            width_mm
+        width: if width > Mm::ZERO {
+            width
         } else {
-            fallback.width_mm
+            fallback.width
         },
-        height_mm: if height_mm > 0.0 {
-            height_mm
+        height: if height > Mm::ZERO {
+            height
         } else {
-            fallback.height_mm
+            fallback.height
         },
-        margin_top_mm: read(PageKey::MarginTopMm, fallback.margin_top_mm),
-        margin_bottom_mm: read(PageKey::MarginBottomMm, fallback.margin_bottom_mm),
-        margin_left_mm: read(PageKey::MarginLeftMm, fallback.margin_left_mm),
-        margin_right_mm: read(PageKey::MarginRightMm, fallback.margin_right_mm),
+        margin_top: read(PageKey::MarginTopMm, fallback.margin_top),
+        margin_bottom: read(PageKey::MarginBottomMm, fallback.margin_bottom),
+        margin_left: read(PageKey::MarginLeftMm, fallback.margin_left),
+        margin_right: read(PageKey::MarginRightMm, fallback.margin_right),
     }
 }
 
@@ -1049,13 +1049,13 @@ pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
 pub(crate) fn write_page_format(
     doc: &LoroDoc,
     orientation: Orientation,
-    width_mm: f32,
-    height_mm: f32,
+    width: Mm,
+    height: Mm,
 ) -> bool {
-    if !width_mm.is_finite() || !height_mm.is_finite() || width_mm <= 0.0 || height_mm <= 0.0 {
+    if !width.is_finite() || !height.is_finite() || width <= Mm::ZERO || height <= Mm::ZERO {
         return false;
     }
-    if !orientation.agrees_with(width_mm, height_mm) {
+    if !orientation.agrees_with(width, height) {
         return false;
     }
     // The register the document already holds: minting a fresh one would drop
@@ -1065,8 +1065,12 @@ pub(crate) fn write_page_format(
     };
     page.insert(PageKey::Orientation, orientation.as_str())
         .is_ok()
-        && page.insert(PageKey::WidthMm, f64::from(width_mm)).is_ok()
-        && page.insert(PageKey::HeightMm, f64::from(height_mm)).is_ok()
+        && page
+            .insert(PageKey::WidthMm, f64::from(width.get()))
+            .is_ok()
+        && page
+            .insert(PageKey::HeightMm, f64::from(height.get()))
+            .is_ok()
 }
 
 // -----------------------------------------------------------------------------
@@ -1086,7 +1090,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     meta.insert(MetaKey::Title, "").ok()?;
     meta.insert(MetaKey::Lang, "en").ok()?;
     meta.insert(MetaKey::Pageless, false).ok()?;
-    if !write_page_format(doc, Orientation::Portrait, A4_WIDTH_MM, A4_HEIGHT_MM) {
+    if !write_page_format(doc, Orientation::Portrait, A4_WIDTH, A4_HEIGHT) {
         return None;
     }
     let page = Fields::of(map_at(&meta, MetaKey::Page)?);
@@ -1096,7 +1100,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
         PageKey::MarginLeftMm,
         PageKey::MarginRightMm,
     ] {
-        page.insert(key, f64::from(DEFAULT_MARGIN_MM)).ok()?;
+        page.insert(key, f64::from(DEFAULT_MARGIN.get())).ok()?;
     }
     let defaults = Fields::of(map_at(&meta, MetaKey::Defaults)?);
     let text = DocDefaults::default();
@@ -1486,8 +1490,8 @@ mod tests {
         page.insert(PageKey::MarginLeftMm, 5.0)
             .expect("the register takes a double");
         let format = read_page_format(&doc);
-        assert_eq!(format.width_mm, PageFormat::default().width_mm);
-        assert_eq!(format.margin_left_mm, 5.0);
+        assert_eq!(format.width, PageFormat::default().width);
+        assert_eq!(format.margin_left, Mm::new(5.0));
     }
 
     #[test]
@@ -1529,14 +1533,14 @@ mod tests {
         assert!(!write_page_format(
             &doc,
             Orientation::Portrait,
-            297.0,
-            210.0
+            Mm::new(297.0),
+            Mm::new(210.0)
         ));
         assert!(write_page_format(
             &doc,
             Orientation::Landscape,
-            297.0,
-            210.0
+            Mm::new(297.0),
+            Mm::new(210.0)
         ));
     }
 
@@ -1584,8 +1588,8 @@ mod tests {
         assert!(write_page_format(
             &doc,
             Orientation::Landscape,
-            297.0,
-            210.0
+            Mm::new(297.0),
+            Mm::new(210.0)
         ));
         doc.commit();
         let page = map_at(&meta(&doc), MetaKey::Page)
