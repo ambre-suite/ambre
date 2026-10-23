@@ -1620,14 +1620,6 @@ impl ToileCommand {
 // history.
 // =============================================================================
 
-/// One ephemeral presence sample the local peer broadcasts
-/// (`toile-presence`): pointer position, current selection, an in-flight
-/// stroke, and/or a laser point. All fields are optional so a bare cursor move
-/// need not resend the selection. Postcard-encoded into the `SendEphemeral`
-/// payload. This payload deliberately carries NO identity. The receiver keys
-/// presence off the sender's canonical `UserId`, which `ambre-sync` resolves
-/// from the authenticated `pub_key`, so a peer cannot spoof another user's
-/// cursor.
 /// A sample's name, `None` when it carried none or one that breaks the
 /// display-name rule. A forged name never drops the cursor it labels.
 fn lenient_name<'de, D: serde::Deserializer<'de>>(
@@ -1637,13 +1629,21 @@ fn lenient_name<'de, D: serde::Deserializer<'de>>(
     Ok(name.and_then(|text| ambre_core::DisplayName::new(&text).ok()))
 }
 
+/// One ephemeral presence sample the local peer broadcasts
+/// (`toile-presence`): pointer position, current selection, an in-flight
+/// stroke, and/or a laser point. All fields are optional so a bare cursor move
+/// need not resend the selection. Postcard-encoded into the `SendEphemeral`
+/// payload. This payload deliberately carries NO identity. The receiver keys
+/// presence off the sender's canonical `UserId`, which `ambre-sync` resolves
+/// from the authenticated `pub_key`, so a peer cannot spoof another user's
+/// cursor.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
     /// The sender's display name, cosmetic and forgeable
     /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`). It labels a
     /// cursor and decides neither identity, nor colour, nor permission. Both
     /// come from the `UserId` the transport resolved. `None` falls back to a
-    /// short handle derived from that id, and so does a name that breaks the
+    /// short handle derived from that id. So does a name that breaks the
     /// display-name rule: the sample stays, the name is dropped.
     #[serde(deserialize_with = "lenient_name")]
     pub name: Option<ambre_core::DisplayName>,
