@@ -36,7 +36,7 @@ use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
-use ambre_prose::probe::{Answer, CONFIRM_FRAMES, Dispatch, KeyProbe, Measure, SHAPE};
+use ambre_prose::probe::{Answer, Dispatch, KeyProbe, Measure, ProbeName};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::paint::PagePalette;
 
@@ -191,7 +191,7 @@ impl ProseView {
                             .answered(super::probe::now_ms(), &self.state.draft, answer);
                     self.timeline.record(answered);
                     self.timeline
-                        .count(CONFIRM_FRAMES, self.probe.take_counts());
+                        .count(ProbeName::ConfirmFrames, self.probe.take_counts());
                     if let Some((filename, media_type, data)) = self.state.take_export() {
                         download(&filename, &media_type, &data);
                     }
@@ -480,7 +480,7 @@ impl ProseView {
         self.state.shape_draft(font_cx, &mut self.layout_cx);
         if !self.state.draft.is_empty() {
             self.timeline.record(vec![Measure {
-                name: SHAPE,
+                name: ProbeName::Shape,
                 start,
                 end: super::probe::now_ms(),
             }]);

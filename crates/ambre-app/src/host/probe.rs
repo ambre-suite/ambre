@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 
 use wasm_bindgen::{JsCast, JsValue};
 
-use ambre_prose::probe::{Measure, percentiles};
+use ambre_prose::probe::{Measure, ProbeName, percentiles};
 
 /// How often the summary is printed, in milliseconds.
 const SUMMARY_EVERY_MS: f64 = 5_000.0;
@@ -41,9 +41,9 @@ impl ambre_draw::Clock for PageClock {
 /// Where the probes' measures go.
 pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
-    samples: Option<BTreeMap<&'static str, Vec<f64>>>,
+    samples: Option<BTreeMap<ProbeName, Vec<f64>>>,
     /// The samples per count, kept only under `?probes`.
-    counts: Option<BTreeMap<&'static str, Vec<f64>>>,
+    counts: Option<BTreeMap<ProbeName, Vec<f64>>>,
     last_summary: ambre_core::PageTime,
     /// A sample landed since the last summary.
     fresh: bool,
@@ -83,9 +83,9 @@ impl Timeline {
 
     /// Stamp each count as a mark carrying it in its detail, and keep it
     /// under `?probes`.
-    pub(crate) fn count(&mut self, name: &'static str, values: Vec<u32>) {
+    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<u32>) {
         for value in values {
-            mark_count(name, value);
+            mark_count(name.as_str(), value);
             if let Some(counts) = self.counts.as_mut() {
                 counts.entry(name).or_default().push(f64::from(value));
                 self.fresh = true;
@@ -106,7 +106,8 @@ impl Timeline {
         for (name, values) in samples {
             if let Some((p50, p95)) = percentiles(values) {
                 web_sys::console::log_1(&JsValue::from_str(&format!(
-                    "{name}: n={} p50={p50:.2} ms p95={p95:.2} ms",
+                    "{}: n={} p50={p50:.2} ms p95={p95:.2} ms",
+                    name.as_str(),
                     values.len()
                 )));
             }
@@ -114,7 +115,8 @@ impl Timeline {
         for (name, values) in self.counts.iter().flatten() {
             if let Some((p50, p95)) = percentiles(values) {
                 web_sys::console::log_1(&JsValue::from_str(&format!(
-                    "{name}: n={} p50={p50} frames p95={p95} frames",
+                    "{}: n={} p50={p50} frames p95={p95} frames",
+                    name.as_str(),
                     values.len()
                 )));
             }
@@ -166,5 +168,5 @@ fn stamp(measure: &Measure) {
     let Ok(function) = function.dyn_into::<js_sys::Function>() else {
         return;
     };
-    let _ = function.call2(&performance, &measure.name.into(), &options);
+    let _ = function.call2(&performance, &measure.name.as_str().into(), &options);
 }

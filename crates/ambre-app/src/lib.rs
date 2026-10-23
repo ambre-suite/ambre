@@ -1278,7 +1278,7 @@ pub fn main() {
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             if !relayed {
                 relayed = true;
-                host::mark(ambre_prose::probe::RELAY);
+                host::mark(ambre_prose::probe::ProbeName::Relay.as_str());
             }
             // Fan a nested child's stream out to its own view queues, and skip
             // every top-level chrome mirror below. A child's events must not

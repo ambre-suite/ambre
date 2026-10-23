@@ -35,36 +35,54 @@ pub enum Answer {
     Layout,
 }
 
-/// The name of the echo measure: input to draft updated.
-pub const ECHO: &str = "ambre:echo";
-/// The name of the confirmation measure: input to the Logic thread's
-/// acknowledgement reaching the view.
-pub const CONFIRM: &str = "ambre:confirm";
-/// The name of the confirmation count: the animation frames that began
-/// between the input and its acknowledgement reaching the view. A count,
-/// not a duration, so it holds at any refresh rate.
-pub const CONFIRM_FRAMES: &str = "ambre:confirm-frames";
-/// The name of the caret measure: input to the first frame that shows it.
-pub const CARET: &str = "ambre:caret";
+/// A name the probes stamp on the browser's timeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ProbeName {
+    /// The echo measure: input to draft updated.
+    Echo,
+    /// The confirmation measure: input to the Logic thread's acknowledgement
+    /// reaching the view.
+    Confirm,
+    /// The confirmation count: the animation frames that began between the
+    /// input and its acknowledgement reaching the view. A count, not a
+    /// duration, so it holds at any refresh rate.
+    ConfirmFrames,
+    /// The caret measure: input to the first frame that shows it.
+    Caret,
+    /// The relay mark: the main thread took Logic's answers off their
+    /// channel. A mark, not a measure: it splits a confirmation in two, the
+    /// wait for the relay and the wait for the view.
+    Relay,
+    /// The draft shaping measure: the paragraphs an edit in flight changes,
+    /// shaped on the UI thread for one frame (`PROSE-UI-215`).
+    Shape,
+}
 
-/// The name of the relay mark: the main thread took Logic's answers off
-/// their channel. A mark, not a measure: it splits a confirmation in two,
-/// the wait for the relay and the wait for the view.
-pub const RELAY: &str = "ambre:relay";
-
-/// The name of the draft shaping measure: the paragraphs an edit in flight
-/// changes, shaped on the UI thread for one frame (`PROSE-UI-215`).
-pub const SHAPE: &str = "ambre:shape-draft";
+impl ProbeName {
+    /// The name as the profiler shows it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Echo => "ambre:echo",
+            Self::Confirm => "ambre:confirm",
+            Self::ConfirmFrames => "ambre:confirm-frames",
+            Self::Caret => "ambre:caret",
+            Self::Relay => "ambre:relay",
+            Self::Shape => "ambre:shape-draft",
+        }
+    }
+}
 
 /// One span on the timeline, in milliseconds of the host's clock.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Measure {
-    pub name: &'static str,
+    pub name: ProbeName,
     pub start: ambre_core::PageTime,
     pub end: ambre_core::PageTime,
 }
 
 impl Measure {
+    /// The milliseconds from the start to the end.
     #[must_use]
     pub fn duration(&self) -> f64 {
         self.end - self.start
@@ -138,7 +156,7 @@ impl KeyProbe {
             return Vec::new();
         }
         vec![Measure {
-            name: ECHO,
+            name: ProbeName::Echo,
             start,
             end: now,
         }]
@@ -166,7 +184,7 @@ impl KeyProbe {
             }
             counts.push(u32::try_from(frame - at).unwrap_or(u32::MAX));
             measures.push(Measure {
-                name: CONFIRM,
+                name: ProbeName::Confirm,
                 start,
                 end: now,
             });
@@ -189,7 +207,7 @@ impl KeyProbe {
                 return true;
             }
             measures.push(Measure {
-                name: CARET,
+                name: ProbeName::Caret,
                 start: input.start,
                 end: now,
             });
@@ -246,12 +264,12 @@ mod tests {
             Dispatch::Sent,
         );
         assert_eq!(echo.len(), 1);
-        assert_eq!(echo[0].name, ECHO);
+        assert_eq!(echo[0].name, ProbeName::Echo);
         assert!((echo[0].duration() - 0.5).abs() < 1e-9);
 
         let caret = probe.painted(ambre_core::PageTime(14.0));
         assert_eq!(caret.len(), 1, "the draft shows the key on the next frame");
-        assert_eq!(caret[0].name, CARET);
+        assert_eq!(caret[0].name, ProbeName::Caret);
 
         assert!(
             probe
@@ -262,7 +280,7 @@ mod tests {
         draft.confirm(ambre_bus::app::prose::TextAck(7));
         let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
-        assert_eq!(confirm[0].name, CONFIRM);
+        assert_eq!(confirm[0].name, ProbeName::Confirm);
         assert!((confirm[0].duration() - 10.0).abs() < 1e-9);
     }
 

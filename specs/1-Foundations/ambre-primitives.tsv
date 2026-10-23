@@ -86,10 +86,7 @@ ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::hand
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	math	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | SUMMARY_EVERY_MS | const | f64	math	probe period, local
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<&'static str,Vec<f64>>>	free-text	metric names and samples
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	math	flag
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline.samples | field | Option<BTreeMap<&'static str,Vec<f64>>>	free-text	metric names and samples
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline::count(name) | param | &'static str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline::count(values) | param | Vec<u32>	math	counts
 ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
@@ -3339,18 +3336,10 @@ ambre-prose | src/numbering.rs | crate::numbering | section_numbers() | ret | Ve
 ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	tree walk callback: continue or stop
-ambre-prose | src/probe.rs | crate::probe | CARET | const | &str	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | CONFIRM | const | &str	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | CONFIRM_FRAMES | const | &str	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | ECHO | const | &str	debt	finding: probe names and spans as primitives (suspected)
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.counts | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.frame | field | u64	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.unconfirmed | field | Vec<(ambre_bus::app::prose::TextAck,ambre_core::PageTime,u64)>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe::take_counts() | ret | Vec<u32>	math	count, size or local index
-ambre-prose | src/probe.rs | crate::probe | Measure.name | field | &'static str	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | Measure::duration() | ret | f64	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | RELAY | const | &str	debt	finding: probe names and spans as primitives (suspected)
-ambre-prose | src/probe.rs | crate::probe | SHAPE | const | &str	debt	finding: probe names and spans as primitives (suspected)
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f64)>	math	layout geometry local to algorithm
@@ -5565,6 +5554,7 @@ ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	tim
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_mark() | ret | (&'static str,&'static str)	foreign-api	the mark key and value LoroText::mark stores for a HeaderField; field_of is the one reader, so the codec lives in this file alone
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of field_mark
+ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	foreign-api	the name performance.measure and performance.mark take, which the profiler shows
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
 ambre-prose | src/band.rs | crate::band | CivilDate.day | field | u32	newtype-inner	a component of the civil-date type, 1 to 31
 ambre-prose | src/band.rs | crate::band | CivilDate.month | field | u32	newtype-inner	a component of the civil-date type, 1 to 12
@@ -5606,6 +5596,9 @@ ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(RunLine,usize,f32)>	math	the item index within a line and the line top, layout geometry
+ambre-prose | src/probe.rs | crate::probe | Measure::duration() | ret | f64	math	the difference of two PageTime instants, which PageTime's Sub answers in f64 milliseconds by design (ambre-core span.rs); the value only feeds percentiles
+ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the frame counts kept per probe, as the f64 samples percentiles takes
+ambre-app | src/host/probe.rs | crate::host::probe | Timeline.samples | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the durations kept per probe, in milliseconds, as the f64 samples percentiles takes
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | ret | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
