@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MediaRef, MediaType, Picture};
+use ambre_core::KnownMediaType;
 use ambre_draw::ImageKey;
 
 use crate::Region;
@@ -20,12 +21,15 @@ pub const PICTURES_BYTES: usize = 16 * 1024 * 1024;
 
 /// The types the Logic thread decodes for a preview. Any other file shows
 /// as its chip alone.
-const PREVIEWS: [&str; 3] = ["image/png", "image/jpeg", "image/gif"];
+const PREVIEWS: [KnownMediaType; 3] = [
+    KnownMediaType::Png,
+    KnownMediaType::Jpeg,
+    KnownMediaType::Gif,
+];
 
 /// Whether a file of `media_type` shows a preview.
 pub fn previews(media_type: &MediaType) -> bool {
-    let named = media_type.0.trim().to_ascii_lowercase();
-    PREVIEWS.contains(&named.as_str())
+    KnownMediaType::of(media_type).is_some_and(|known| PREVIEWS.contains(&known))
 }
 
 enum Held {

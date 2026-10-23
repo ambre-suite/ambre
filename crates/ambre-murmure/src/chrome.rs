@@ -35,7 +35,7 @@ use ambre_chrome::{
     ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
-use ambre_core::{ChannelId, CssPoint, CssPx, SpaceId, StepDirection, UserId};
+use ambre_core::{ChannelId, CssPoint, CssPx, Name, SpaceId, StepDirection, UserId};
 use leptos::prelude::*;
 
 /// What the user reads when the root of a copy could not be reached. Replying
@@ -119,7 +119,7 @@ pub fn ChannelHeader(
     pane: RwSignal<MurmurePane>,
     /// The name of the current channel, once its engine has read it.
     #[prop(into)]
-    name: Signal<Option<String>>,
+    name: Signal<Option<Name>>,
     /// Whether the current channel shows the members of its space.
     #[prop(into)]
     has_members: Signal<bool>,
@@ -147,7 +147,7 @@ pub fn ChannelHeader(
                     "\u{2039}"
                 </button>
             </Show>
-            <span class="murmure-channel-name">{move || name.get().unwrap_or_default()}</span>
+            <span class="murmure-channel-name">{move || name.get().map(Name::into_string).unwrap_or_default()}</span>
             <Show when=move || has_members.get()>
                 <button
                     class="murmure-members-toggle"
@@ -678,7 +678,7 @@ impl MurmureRelay {
                         channel_id: c.channel_id,
                         name: sidebar
                             .with(|side| side.name_of(c.channel_id))
-                            .unwrap_or_else(|| "Unnamed channel".to_owned()),
+                            .map_or_else(|| "Unnamed channel".to_owned(), Name::into_string),
                         matches: c
                             .matches
                             .iter()
@@ -829,7 +829,7 @@ impl MurmureRelay {
     }
 
     /// The name of the channel the pane shows, once known.
-    pub fn channel_name(&self) -> Signal<Option<String>> {
+    pub fn channel_name(&self) -> Signal<Option<Name>> {
         let (sidebar, pane) = (self.sidebar, self.pane);
         Signal::derive(move || {
             let channel = pane.get().shown_channel()?;
@@ -1085,7 +1085,9 @@ impl MurmureRelay {
                         let words = GroupWords::of(section.group);
                         section.entries.into_iter().map(move |entry| PaletteEntry {
                             key: *entry.channel.as_bytes(),
-                            label: entry.name.unwrap_or_else(|| words.unnamed.to_owned()),
+                            label: entry
+                                .name
+                                .map_or_else(|| words.unnamed.to_owned(), Name::into_string),
                             hint: Some(words.hint),
                         })
                     })
@@ -1683,8 +1685,8 @@ pub fn EmojiPicker(
         }
         open.set(picking);
     });
-    let pick = move |emoji: &str| {
-        if let Some(command) = relay.pick_emoji(ambre_bus::Emoji::from(emoji), now.run(())) {
+    let pick = move |emoji: &ambre_bus::Emoji| {
+        if let Some(command) = relay.pick_emoji(emoji.clone(), now.run(())) {
             send.run(command);
         }
     };
@@ -1711,7 +1713,7 @@ pub fn EmojiPicker(
                     if ev.key() == "Enter" {
                         ev.prevent_default();
                         if let Some(first) = emoji::search(&query.get_untracked()).first() {
-                            pick(first);
+                            pick(&first.emoji);
                         }
                     }
                 }
@@ -1721,16 +1723,16 @@ pub fn EmojiPicker(
                     emoji::search(&query.get())
                         .into_iter()
                         .map(|e| {
-                            let name = emoji::name_of(e).unwrap_or(e);
+                            let glyph = e.emoji.as_str().to_owned();
                             view! {
                                 <button
                                     r#type="button"
                                     class="murmure-emoji-pick"
-                                    aria-label=name
-                                    title=name
-                                    on:click=move |_| pick(e)
+                                    aria-label=e.name
+                                    title=e.name
+                                    on:click=move |_| pick(&e.emoji)
                                 >
-                                    {e}
+                                    {glyph}
                                 </button>
                             }
                         })
@@ -1878,7 +1880,9 @@ fn section_view(
         unnamed,
         ..
     } = GroupWords::of(section.group);
-    let title = section.title.unwrap_or_else(|| fallback.to_owned());
+    let title = section
+        .title
+        .map_or_else(|| fallback.to_owned(), Name::into_string);
     view! {
         <section class="murmure-section" data-group=word>
             <h3 class="murmure-section-title">{title}</h3>
@@ -1930,7 +1934,7 @@ fn entry_view(
                 }
             >
                 <span class="murmure-entry-name">
-                    {entry.name.unwrap_or_else(|| unnamed.to_owned())}
+                    {entry.name.map_or_else(|| unnamed.to_owned(), Name::into_string)}
                 </span>
                 {badge}
             </button>

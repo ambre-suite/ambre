@@ -195,8 +195,7 @@ impl SyncState {
         } else {
             tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
             let document_id = DocumentId::new();
-            self.doc_metadata
-                .insert(document_id, (doc_type, name.into_string()));
+            self.doc_metadata.insert(document_id, (doc_type, name));
             self.reply(
                 id,
                 RestEvent::DocumentCreated {
@@ -334,7 +333,7 @@ impl SyncState {
         } else {
             tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
             if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
-                *old_name = name.into_string();
+                *old_name = name;
             }
             self.reply(id, RestEvent::DocumentRenamed { document_id });
         }
@@ -362,7 +361,7 @@ impl ListedName<'_> {
         url_scheme: crate::http::UrlScheme,
         api_base: &crate::http::RelayHost,
         auth: &http::AuthContext,
-    ) -> Option<String> {
+    ) -> Option<ambre_core::Name> {
         let current = self.unwrap_key(exchange_key)?;
         // One request more, and only for a name older than the current key.
         let links = if pipeline::object_key(self.name_enc.as_bytes()).ok()? == current.id() {
@@ -410,19 +409,20 @@ pub(crate) fn unwrap_listed_key(
 
 /// Opens a sealed name with the key it names: `current`, or one the chain
 /// `links` reach from it. `None` on any failure: a name sealed for another
-/// document, a forged author, a key out of reach.
+/// document, a forged author, a key out of reach, a name past the cap.
 pub(crate) fn open_name(
     document_id: DocumentId,
     current: &DocumentKey,
     sealed: &ambre_core::SealedName,
     links: Vec<ambre_protocol::KeyLink>,
-) -> Option<String> {
+) -> Option<ambre_core::Name> {
     let bytes = sealed.as_bytes();
     let chain = crate::chain::Chain::new(document_id, links);
     let wanted = pipeline::object_key(bytes).ok()?;
     let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
     let plaintext = pipeline::open_object(bytes, &pipeline::name_aad(document_id), &key).ok()?;
-    String::from_utf8(plaintext).ok()
+    let text = String::from_utf8(plaintext).ok()?;
+    ambre_core::Name::new(text).ok()
 }
 
 #[cfg(test)]
@@ -450,7 +450,9 @@ mod tests {
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
         assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
         assert_eq!(
-            open_name(document_id, &doc_key, &sent, Vec::new()).as_deref(),
+            open_name(document_id, &doc_key, &sent, Vec::new())
+                .as_ref()
+                .map(ambre_core::Name::as_str),
             Some(name)
         );
         let other = DocumentKey::generate();
@@ -504,7 +506,9 @@ mod tests {
         .unwrap();
         let current = &keys[3];
         assert_eq!(
-            open_name(document_id, current, &name, links.clone()).as_deref(),
+            open_name(document_id, current, &name, links.clone())
+                .as_ref()
+                .map(ambre_core::Name::as_str),
             Some("Budget")
         );
         assert_eq!(open_name(document_id, current, &name, Vec::new()), None);

@@ -38,10 +38,12 @@ pub async fn auth_config(
 /// Request body for the dev-only `POST /api/auth/dev/login`.
 ///
 /// The pubkeys are hex-encoded and derived deterministically client-side from
-/// the username; the server stores them so it can verify signatures.
+/// the username; the server stores them so it can verify signatures. The name
+/// is the account's display name, so a body whose name breaks that rule does
+/// not decode (`SRV-234`).
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
-    pub username: String,
+    pub username: ambre_core::DisplayName,
     pub signing_pub_key: ambre_core::SigningKeyHex,
     pub exchange_pub_key: ambre_core::ExchangeKeyHex,
 }
@@ -74,11 +76,6 @@ pub async fn dev_login(
     if state.config.dev_mode == crate::state::DevMode::Off {
         return Err(AppError::Unauthorized);
     }
-    // The name is the account's display name, so it obeys the same bound
-    // (`SRV-234`).
-    let username = ambre_core::DisplayName::new(&req.username)
-        .map_err(|e| AppError::BadRequest(format!("invalid username: {e}")))?;
-
     // A key of the wrong length is refused before any row is written
     // (`SRV-232`).
     let signing_pubkey = hex::decode(req.signing_pub_key.as_str())
@@ -92,7 +89,8 @@ pub async fn dev_login(
         })
         .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
 
-    let user = db::dev_upsert_user(&state.db, &username, &signing_pubkey, &exchange_pubkey).await?;
+    let user =
+        db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
 
     let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.

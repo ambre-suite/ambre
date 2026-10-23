@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
+use ambre_core::KnownMediaType;
 
 use crate::composer::DraftOf;
 
@@ -33,13 +34,13 @@ pub fn size_label(size: ByteSize) -> String {
 }
 
 /// The type a file falls back to when the browser names none.
-const UNKNOWN_TYPE: &str = "application/octet-stream";
+const UNKNOWN_TYPE: KnownMediaType = KnownMediaType::OctetStream;
 
 impl PickedFile {
     /// The type the attachment records.
     pub fn media_type(&self) -> MediaType {
         match self.media_type.as_str().trim() {
-            "" => MediaType(UNKNOWN_TYPE.to_owned()),
+            "" => UNKNOWN_TYPE.media_type(),
             named => MediaType(named.to_owned()),
         }
     }
@@ -48,19 +49,18 @@ impl PickedFile {
 /// The types a click opens in a tab of their own. Every other file saves.
 /// A blob address runs in the page's origin. So a type that carries script,
 /// such as SVG or HTML, never opens: it would run in another's session.
-const OPENS: [&str; 5] = [
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "image/avif",
+const OPENS: [KnownMediaType; 5] = [
+    KnownMediaType::Png,
+    KnownMediaType::Jpeg,
+    KnownMediaType::Gif,
+    KnownMediaType::Webp,
+    KnownMediaType::Avif,
 ];
 
 /// The type a file of `media_type` opens under in a tab, `None` when it
 /// saves as a plain stream of bytes.
-pub fn opens_as(media_type: &MediaType) -> Option<&'static str> {
-    let named = media_type.0.trim().to_ascii_lowercase();
-    OPENS.into_iter().find(|&opens| opens == named)
+pub fn opens_as(media_type: &MediaType) -> Option<KnownMediaType> {
+    KnownMediaType::of(media_type).filter(|known| OPENS.contains(known))
 }
 
 /// A file whose upload the relay has not answered yet.
@@ -265,8 +265,8 @@ mod tests {
     #[test]
     fn only_a_raster_image_opens_in_a_tab() {
         let opens = |named: &str| opens_as(&MediaType(named.to_owned()));
-        assert_eq!(opens("image/png"), Some("image/png"));
-        assert_eq!(opens(" IMAGE/JPEG "), Some("image/jpeg"));
+        assert_eq!(opens("image/png"), Some(KnownMediaType::Png));
+        assert_eq!(opens(" IMAGE/JPEG "), Some(KnownMediaType::Jpeg));
         for saves in ["image/svg+xml", "text/html", "application/pdf", ""] {
             assert_eq!(opens(saves), None, "{saves} saves");
         }

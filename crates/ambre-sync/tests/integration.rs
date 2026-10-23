@@ -173,7 +173,10 @@ fn list_documents_includes_created() {
         RestEvent::DocumentList { documents } => {
             assert_eq!(documents.len(), 1);
             assert_eq!(documents[0].document_id, created_doc_id);
-            assert_eq!(documents[0].name.as_deref(), Some("My Sheet"));
+            assert_eq!(
+                documents[0].name.as_ref().map(ambre_core::Name::as_str),
+                Some("My Sheet")
+            );
         }
         other => panic!("expected DocumentList, got {other:?}"),
     }
@@ -263,7 +266,10 @@ fn rename_document_updates_name() {
     match drain_rest(&rx, list_id) {
         RestEvent::DocumentList { documents } => {
             assert_eq!(documents.len(), 1);
-            assert_eq!(documents[0].name.as_deref(), Some("New"));
+            assert_eq!(
+                documents[0].name.as_ref().map(ambre_core::Name::as_str),
+                Some("New")
+            );
         }
         other => panic!("expected DocumentList, got {other:?}"),
     }

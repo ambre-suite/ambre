@@ -191,19 +191,18 @@ ambre-app | src/vault.rs | crate::vault | Vault::answer() | ret | bool	generic	p
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/activity.rs | crate::activity | ActivitySummary.mentions_all | field | bool	generic	fact flag mirrored from ambre-core ActivitySummary
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogueEntry.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogueEntry.position | field | u32	math	catalogue rank, lower first
-ambre-bus | src/app/murmure.rs | crate::app::murmure | CategoryView.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CategoryView.position | field | u32	math	catalogue rank, lower first
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelActivity.active | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelMatches.listed | field | usize	math	count
-ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelName.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DocumentActivity.active | field | bool	generic	fact flag
-ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | String	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::as_str() | ret | &str	newtype-inner	newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::from_static(glyph) | param | &'static str	newtype-inner	Emoji newtype, its const constructor for a static table
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef.0 | field | String	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::parse(word) | param | &str	newtype-inner	newtype
@@ -214,27 +213,21 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.edited | fiel
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.text | field | String	free-text	message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown() | ret | String	free-text	rendered message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,CharVec<ByteOffset>)	free-text	the text shown, beside its typed byte offsets
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Name.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::Reply.confirmed | field | bool	generic	confirmation flag of a two-step send, a fact of the gesture
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::SendMessage.confirmed | field | bool	generic	confirmation flag of a two-step send, a fact of the gesture
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::UploadFile.data | field | Vec<u8>	generic	uploaded file bytes
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureEvent::ConfirmChannelMention.members | field | usize	math	count
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureEvent::Named.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture.height | field | u32	math	picture size
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture.width | field | u32	math	picture size
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Picture::bytes() | ret | usize	math	picture size
 ambre-bus | src/app/murmure.rs | crate::app::murmure | PictureFrame.pixels | field | Vec<u8>	generic	decoded RGBA8 pixels
-ambre-bus | src/app/murmure.rs | crate::app::murmure | PrivateChannelDraft.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
-ambre-bus | src/app/murmure.rs | crate::app::murmure | PublicChannelDraft.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | PublicChannelDraft.position | field | u32	math	catalogue rank, lower first
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceCommand::AddCategory.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceCommand::AddCategory.position | field | u32	math	catalogue rank, lower first
-ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::Catalogue.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ThreadHead.replies | field | u32	math	count
@@ -644,7 +637,6 @@ ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML co
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ViewportVersion.0 | field | u64	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/logic.rs | crate::logic | LogicCommand::CreateSpace.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/logic.rs | crate::logic | LogicCommand::LocalStoreFull.full | field | bool	generic	fact flag on an event
 ambre-bus | src/logic.rs | crate::logic | LogicCommand::SearchMessages.query | field | String	free-text	search query
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
@@ -660,12 +652,10 @@ ambre-bus | src/rest.rs | crate::rest | <SecretBytes as From<Vec<u8>>>::from(byt
 ambre-bus | src/rest.rs | crate::rest | <SecretString as Deref>::deref() | ret | &str	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | <SecretString as From<String>>::from(s) | param | String	trait	signature fixed by the trait
 ambre-bus | src/rest.rs | crate::rest | DocumentSummary.member_count | field | u32	math	member count
-ambre-bus | src/rest.rs | crate::rest | DocumentSummary.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
-ambre-bus | src/rest.rs | crate::rest | RestCommand::CreateMeeting.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
@@ -1445,6 +1435,7 @@ ambre-core | src/media.rs | crate::media | ByteSize::of_len(len) | param | usize
 ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
+ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
 ambre-core | src/media.rs | crate::media | MediaAddress.0 | field | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
 ambre-core | src/media.rs | crate::media | MediaAddress::as_bytes() | ret | &[u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
@@ -1456,6 +1447,10 @@ ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq(ot
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq(other) | param | &str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq() | ret | bool	trait	signature fixed by the trait
+ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq(other) | param | &&str	trait	signature fixed by the trait
+ambre-core | src/name.rs | crate::name | <Name as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
+ambre-core | src/name.rs | crate::name | <Name as PartialEq<str>>::eq(other) | param | &str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | DisplayName.0 | field | String	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | DisplayName::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | DisplayName::cut_to_fit(text) | param | &str	newtype-inner	DisplayName constructor input
@@ -1465,6 +1460,7 @@ ambre-core | src/name.rs | crate::name | NAME_MAX_CHARS | const | usize	generic	
 ambre-core | src/name.rs | crate::name | NAME_TOO_LONG | const | &str	free-text	user-facing message
 ambre-core | src/name.rs | crate::name | Name.0 | field | String	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | Name::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
+ambre-core | src/name.rs | crate::name | Name::cut_to_fit(text) | param | &str	newtype-inner	Name constructor, the text it cuts to the cap
 ambre-core | src/name.rs | crate::name | Name::into_string() | ret | String	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | Name::is_empty() | ret | bool	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | Name::new(text) | param | impl Into<String>	newtype-inner	Name/DisplayName newtype
@@ -1924,10 +1920,8 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() 
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_request_failed(message) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::create_space(name) | param | &str	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::hand_off_before_leave() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::handed_off() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::refuse_long_name(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1974,7 +1968,6 @@ ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | r
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::is_pending() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::lacks_closing() | ret | bool	math	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::load_older(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::name() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(meta_bytes) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::open(segments) | param | &HashMap<SegmentId,Vec<u8>>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::reacted(delta) | param | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2030,7 +2023,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ThreadLin
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	math	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(name) | param | Signal<Option<String>>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.hint | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
@@ -2039,7 +2031,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::choose(key) | pa
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.picked | field | RwSignal<Option<(Region,usize)>>	debt	finding: the region is typed; the picked entry is still a bare usize index
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::channel_name() | ret | Signal<Option<String>>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::choose(key) | param | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	math	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	math	state flag/predicate
@@ -2200,13 +2191,12 @@ ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since() | ret
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since(seen) | param | usize	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::version() | ret | u64	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
-ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.style | field | String	debt	finding: `RowStyle.style` stores a `TextStyle` name as a String
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/drafts.rs | crate::drafts | Shelf.version | field | u64	math	local count/index/counter
-ambre-murmure | src/emoji.rs | crate::emoji | EMOJI | const | &[(&str,&str)]	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
+ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
+ambre-murmure | src/emoji.rs | crate::emoji | entry(glyph) | param | &'static str	newtype-inner	the glyph a static Emoji is built from
+ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
-ambre-murmure | src/emoji.rs | crate::emoji | name_of(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
-ambre-murmure | src/emoji.rs | crate::emoji | search() | ret | Vec<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
 ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.expected | field | &'static str	debt	finding: `WrongKind.expected` is `&'static str`
@@ -2403,7 +2393,6 @@ ambre-murmure | src/paint.rs | crate::paint | spot_at(width) | param | f32	math	
 ambre-murmure | src/paint.rs | crate::paint | spot_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | Held::Shown.painted | field | u64	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | PICTURES_BYTES | const | usize	debt	finding: Byte budgets held as `usize`
-ambre-murmure | src/pictures.rs | crate::pictures | PREVIEWS | const | [&str;3]	debt	finding: Media types as `&str`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures.bytes | field | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures.cap | field | usize	debt	finding: Byte budgets held as `usize`
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures.paint | field | u64	math	local count/index/counter
@@ -2421,7 +2410,7 @@ ambre-murmure | src/reaction.rs | crate::reaction | EMOJI_MAX_BYTES | const | us
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
-ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
+ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	generic	predicate result: the Murmure one-emoji rule over the shared Emoji, which Toile keeps free-form
 ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	math	state flag/predicate
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | TEXT_LIMIT | const | usize	math	local count/index/counter
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
@@ -2491,17 +2480,8 @@ ambre-murmure | src/session.rs | crate::session | Session::adopt(entry) | param 
 ambre-murmure | src/session.rs | crate::session | Session::export() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/session.rs | crate::session | Session::export_json() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/session.rs | crate::session | Session::rewind(counter) | param | i32	trait	Loro Counter is i32
-ambre-murmure | src/sidebar.rs | crate::sidebar | Catalogue.name | field | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar.hints | field | HashMap<ChannelId,String>	free-text	text, label or user content
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar.names | field | HashMap<ChannelId,Option<String>>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	math	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	math	state flag/predicate
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::name_of() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::set_catalogue(name) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::set_name(name) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | SidebarEntry.name | field | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | SidebarSection.title | field | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
-ambre-murmure | src/sidebar.rs | crate::sidebar | push(title) | param | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/sidebar.rs | crate::sidebar | rank() | ret | (u32,[u8;16])	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | Listing.position | field | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
 ambre-murmure | src/space.rs | crate::space | SpaceState::adopt_session() | ret | Result<Option<Vec<u8>>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2511,7 +2491,6 @@ ambre-murmure | src/space.rs | crate::space | SpaceState::export() | ret | Resul
 ambre-murmure | src/space.rs | crate::space | SpaceState::export_all() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	math	state flag/predicate
 ambre-murmure | src/space.rs | crate::space | SpaceState::list_channel() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/space.rs | crate::space | SpaceState::name() | ret | Option<String>	debt	finding: Channel and space names are bare `String`; the `Name` cap is checked by hand and skipped on read
 ambre-murmure | src/space.rs | crate::space | SpaceState::open(payloads) | param | &[&[u8]]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::put_category() | ret | Result<Vec<u8>,MurmureError>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
 ambre-murmure | src/space.rs | crate::space | SpaceState::put_category(position) | param | u32	debt	finding: Catalogue sentinels: `""` for an unnamed channel, and `u32::MAX` for unlisted
@@ -2522,18 +2501,15 @@ ambre-murmure | src/space.rs | crate::space | position_of() | ret | u32	debt	fin
 ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	math	state flag/predicate
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result
-ambre-murmure | src/uploads.rs | crate::uploads | OPENS | const | [&str;5]	debt	finding: Media types as `&str`
 ambre-murmure | src/uploads.rs | crate::uploads | Pending.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.data | field | Vec<u8>	generic	opaque file content bytes
 ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.name | field | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | UNKNOWN_TYPE | const | &str	debt	finding: Media types as `&str`
 ambre-murmure | src/uploads.rs | crate::uploads | Uploaded::Failed.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin() | ret | bool	math	state flag/predicate
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin(name) | param | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::busy() | ret | bool	math	state flag/predicate
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::remove(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | opens_as() | ret | Option<&'static str>	debt	finding: Media types as `&str`
 ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::KB | const | u64	math	byte multiples for a size label
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::MB | const | u64	math	byte multiples for a size label
@@ -3080,7 +3056,8 @@ ambre-prose | src/layout/run.rs | crate::layout::run | Window.first_index | fiel
 ambre-prose | src/layout/run.rs | crate::layout::run | Window.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | order_of() | ret | HashMap<TreeID,usize>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | shifted(shift) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/link.rs | crate::link | OPENABLE | const | [&str;3]	debt	finding: openable URL schemes as a &str list (confirmed)
+ambre-prose | src/link.rs | crate::link | OpenableScheme::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
+ambre-prose | src/link.rs | crate::link | OpenableScheme::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predicate result
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
@@ -3697,7 +3674,6 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock() | 
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock(lock_key) | param | &str	debt	finding: Stringly Redis keys (confirmed)
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/routes/auth.rs | crate::routes::auth | AuthConfigResponse.dev_mode | field | bool	math	named state or style flag, local
-ambre-server | src/routes/auth.rs | crate::routes::auth | DevLoginRequest.username | field | String	debt	bug: The display-name rule is enforced on one write path only (BUG, confirmed)
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_client(word) | param | &str	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
@@ -3714,10 +3690,8 @@ ambre-server | src/routes/documents.rs | crate::routes::documents | CreateDocume
 ambre-server | src/routes/documents.rs | crate::routes::documents | DocumentSummaryJson.member_count | field | u32	math	count
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	math	named state or style flag, local
-ambre-server | src/routes/documents.rs | crate::routes::documents | SetupAccountRequest.display_name | field | String	debt	finding: Display names held as String (confirmed)
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | search_users(Query(params)) | param | Query<HashMap<String,String>>	debt	finding: search_users takes an untyped query (confirmed)
-ambre-server | src/routes/documents.rs | crate::routes::documents | validate_identity(display_name) | param | &str	newtype-inner	the DisplayName constructor seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.shamir_threshold | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.shamir_total | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
@@ -3803,9 +3777,7 @@ ambre-sync | src/channels.rs | crate::channels | no_relay() | ret | String	free-
 ambre-sync | src/channels.rs | crate::channels | seal_channel_key() | ret | Result<SealedChannelKey,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | self_join_entry() | ret | Result<Option<ambre_core::EncodedLogEntry>,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
 ambre-sync | src/channels.rs | crate::channels | unseal_channel_key() | ret | Result<(DocumentKey,Option<ambre_protocol::EntryDigest>),String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/documents.rs | crate::documents | ListedName<'_>::open() | ret | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/documents.rs | crate::documents | SyncState::created_document() | ret | Result<DocumentId,String>	debt	finding: relay errors are `String`, and their codes are parsed back by suffix
-ambre-sync | src/documents.rs | crate::documents | open_name() | ret | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(withdrawn) | param | bool	generic	the fact LogicEvent::SegmentFinalizeFailed.withdrawn carries
 ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -3897,7 +3869,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::ResendRetry.ticket | field | u64	de
 ambre-sync | src/lib.rs | crate | SyncEvent::SegmentClosed.result | field | Result<(ambre_bus::SegmentId,bool),http::HttpError>	generic	fact flag on an event
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncState.doc_metadata | field | HashMap<DocumentId,(DocType,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.held_outbox | field | RefCell<Vec<Vec<u8>>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.member_channels_asked | field | u32	debt	finding: request generation counters ("asked")
@@ -4516,7 +4487,6 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.has_group | field | bo
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.multi | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.over_selection | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | DUPLICATE_NUDGE | const | f64	math	nudge world units; duplicated in view.rs and menu.rs, values agree (10.0)
-ambre-toile | src/ui/menu.rs | crate::ui::menu | REACTION_EMOJI | const | &[(CommandId,&str)]	debt	finding: The reaction storage key and the emoji are strings (confirmed): reaction storage key built by format!, emoji as String
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner

@@ -187,7 +187,7 @@ pub struct DocumentSummary {
     pub document_id: DocumentId,
     pub doc_type: DocType,
     /// Decrypted from `name_enc` by the Sync thread.
-    pub name: Option<String>,
+    pub name: Option<ambre_core::Name>,
     pub role: Role,
     /// Epoch milliseconds.
     pub updated_at: crate::Timestamp,
@@ -457,7 +457,7 @@ pub enum RestCommand {
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
-    CreateMeeting { name: String },
+    CreateMeeting { name: ambre_core::Name },
     /// Join a meeting. -> `MeetingJoined`.
     JoinMeeting { meeting_id: MeetingId },
     /// Leave a meeting. -> `MeetingLeft`.

@@ -1114,7 +1114,7 @@ pub struct SyncState {
     documents: HashMap<DocumentId, SyncDocumentState>,
 
     // -- Document metadata (in-memory mirror for mock mode) --------------------
-    doc_metadata: HashMap<DocumentId, (DocType, String)>,
+    doc_metadata: HashMap<DocumentId, (DocType, ambre_core::Name)>,
 
     /// Opens received before the session keys were ready (for example a deep-link
     /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands). Held

@@ -57,13 +57,41 @@ pub fn links(document: &LoroDoc) -> Vec<LinkSpan> {
     out
 }
 
-/// The schemes a link may hand to the host to open.
-const OPENABLE: [&str; 3] = ["http", "https", "mailto"];
+/// A scheme a link may hand to the host to open. The set is closed: any
+/// other scheme, `javascript:` or `data:` among them, never reaches the host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum OpenableScheme {
+    Http,
+    Https,
+    Mailto,
+}
+
+impl OpenableScheme {
+    /// Every scheme of the set.
+    const ALL: [Self; 3] = [Self::Http, Self::Https, Self::Mailto];
+
+    /// The scheme as a target spells it, before its colon.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Mailto => "mailto",
+        }
+    }
+
+    /// The scheme `word` names, case folded. `None` for a scheme outside
+    /// the set.
+    fn parse(word: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|scheme| word.eq_ignore_ascii_case(scheme.as_str()))
+    }
+}
 
 /// Whether a link's target may be handed to the host (`PROSE-UI-186`).
 ///
 /// Nothing rules on a target when a peer writes it, so a hostile one may
-/// carry `javascript:` or `data:`. Only a scheme from [`OPENABLE`] passes.
+/// carry `javascript:` or `data:`. Only an [`OpenableScheme`] passes.
 /// The scheme is read the way a browser reads it: leading spaces and control
 /// characters skipped, tabs and newlines inside dropped, case folded.
 #[must_use]
@@ -74,12 +102,10 @@ pub fn openable(url: &ambre_core::LinkUrl) -> bool {
         .chars()
         .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
         .collect();
-    let Some((scheme, _)) = cleaned.split_once(':') else {
-        return false;
-    };
-    OPENABLE
-        .iter()
-        .any(|allowed| scheme.eq_ignore_ascii_case(allowed))
+    cleaned
+        .split_once(':')
+        .and_then(|(scheme, _)| OpenableScheme::parse(scheme))
+        .is_some()
 }
 
 #[cfg(test)]

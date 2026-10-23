@@ -22,6 +22,7 @@ use ambre_core::{CharOffset, CharSpan};
 use serde::{Deserialize, Serialize};
 
 use crate::composer::DraftOf;
+use crate::schema::Mark;
 
 /// What the shelf asks the local store to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,13 +246,34 @@ struct RowMention {
     end: CharOffset,
 }
 
-/// A style of a row, by name, with the address of a link.
+/// A style of a row, by its mark name, with the address of a link. A name
+/// this build does not know reads as `None`.
 #[derive(Serialize, Deserialize)]
 struct RowStyle {
-    style: String,
+    #[serde(with = "mark_name")]
+    style: Option<Mark>,
     link: Option<ambre_core::LinkUrl>,
     start: CharOffset,
     end: CharOffset,
+}
+
+/// A style name kept as the word of its mark. An older or a newer build may
+/// write a word this one does not know. That word must not refuse the row.
+mod mark_name {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    use crate::schema::Mark;
+
+    pub(super) fn serialize<S: Serializer>(mark: &Option<Mark>, out: S) -> Result<S::Ok, S::Error> {
+        out.serialize_str(mark.map_or("", Mark::as_str))
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        input: D,
+    ) -> Result<Option<Mark>, D::Error> {
+        let word = std::borrow::Cow::<str>::deserialize(input)?;
+        Ok(Mark::parse(&word))
+    }
 }
 
 /// The row that keeps `draft`.
@@ -273,16 +295,16 @@ fn encode(draft: &MessageDraft) -> DraftRow {
         .iter()
         .map(|mark| {
             let (style, link) = match &mark.style {
-                TextStyle::Bold => ("bold", None),
-                TextStyle::Italic => ("italic", None),
-                TextStyle::Code => ("code", None),
-                TextStyle::Link(address) => ("link", Some(address.clone())),
-                TextStyle::CodeBlock => ("code_block", None),
-                TextStyle::Quote => ("quote", None),
-                TextStyle::List => ("list", None),
+                TextStyle::Bold => (Mark::Bold, None),
+                TextStyle::Italic => (Mark::Italic, None),
+                TextStyle::Code => (Mark::Code, None),
+                TextStyle::Link(address) => (Mark::Link, Some(address.clone())),
+                TextStyle::CodeBlock => (Mark::CodeBlock, None),
+                TextStyle::Quote => (Mark::Quote, None),
+                TextStyle::List => (Mark::List, None),
             };
             RowStyle {
-                style: style.to_owned(),
+                style: Some(style),
                 link,
                 start: mark.range.start,
                 end: mark.range.end,
@@ -315,17 +337,17 @@ fn decode(row: &DraftRow) -> Option<MessageDraft> {
         .styles
         .into_iter()
         .filter_map(|mark| {
-            let style = match (mark.style.as_str(), mark.link) {
-                ("bold", _) => TextStyle::Bold,
-                ("italic", _) => TextStyle::Italic,
-                ("code", _) => TextStyle::Code,
-                ("link", Some(address)) if crate::style::linkable(&address) => {
+            let style = match (mark.style?, mark.link) {
+                (Mark::Bold, _) => TextStyle::Bold,
+                (Mark::Italic, _) => TextStyle::Italic,
+                (Mark::Code, _) => TextStyle::Code,
+                (Mark::Link, Some(address)) if crate::style::linkable(&address) => {
                     TextStyle::Link(address)
                 }
-                ("code_block", _) => TextStyle::CodeBlock,
-                ("quote", _) => TextStyle::Quote,
-                ("list", _) => TextStyle::List,
-                _ => return None,
+                (Mark::CodeBlock, _) => TextStyle::CodeBlock,
+                (Mark::Quote, _) => TextStyle::Quote,
+                (Mark::List, _) => TextStyle::List,
+                (Mark::Link | Mark::Mention, _) => return None,
             };
             Some(StyleMark {
                 style,

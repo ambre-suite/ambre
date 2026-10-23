@@ -69,7 +69,7 @@ impl Activity {
 pub struct SidebarEntry {
     pub channel: ChannelId,
     /// Absent until a catalogue or the open channel names it.
-    pub name: Option<String>,
+    pub name: Option<ambre_core::Name>,
     pub activity: Activity,
 }
 
@@ -79,14 +79,14 @@ pub struct SidebarSection {
     pub group: SidebarGroup,
     /// The category name, or the space name for the channels outside every
     /// category. Absent for the other groups, which the view titles itself.
-    pub title: Option<String>,
+    pub title: Option<ambre_core::Name>,
     pub entries: Vec<SidebarEntry>,
 }
 
 /// The catalogue of one open space.
 #[derive(Debug, Clone, Default)]
 struct Catalogue {
-    name: Option<String>,
+    name: Option<ambre_core::Name>,
     categories: Vec<CategoryView>,
     channels: Vec<CatalogueEntry>,
 }
@@ -100,10 +100,10 @@ pub struct Sidebar {
     catalogues: HashMap<SpaceId, Catalogue>,
     activity: HashMap<ChannelId, Activity>,
     /// What each open channel read in its meta, none when it holds no name.
-    names: HashMap<ChannelId, Option<String>>,
+    names: HashMap<ChannelId, Option<ambre_core::Name>>,
     /// The names the relay's listing carried sealed, for channels not open
     /// (`MURMURE-490`). What meta reads always wins over them.
-    hints: HashMap<ChannelId, String>,
+    hints: HashMap<ChannelId, ambre_core::Name>,
     /// The other members of each direct message, by display name, which a
     /// direct message nobody named shows (`MURMURE-492`).
     peers: HashMap<ChannelId, Vec<ambre_core::DisplayName>>,
@@ -152,7 +152,7 @@ impl Sidebar {
     pub fn set_catalogue(
         &mut self,
         space: SpaceId,
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     ) {
@@ -178,7 +178,7 @@ impl Sidebar {
     }
 
     /// Take the name an open channel read.
-    pub fn set_name(&mut self, channel: ChannelId, name: Option<String>) {
+    pub fn set_name(&mut self, channel: ChannelId, name: Option<ambre_core::Name>) {
         self.names.insert(channel, name);
     }
 
@@ -249,7 +249,7 @@ impl Sidebar {
     /// catalogue entry. A channel whose meta reads no name drops its hint.
     /// A direct message with no name shows its other members, composed here
     /// and never stored (`MURMURE-492`).
-    pub fn name_of(&self, channel: ChannelId) -> Option<String> {
+    pub fn name_of(&self, channel: ChannelId) -> Option<ambre_core::Name> {
         let read = match self.names.get(&channel) {
             Some(read) => read.clone(),
             None => self.hints.get(&channel).cloned(),
@@ -264,11 +264,12 @@ impl Sidebar {
         .or_else(|| {
             let peers = self.peers.get(&channel)?;
             (!peers.is_empty()).then(|| {
-                peers
+                let joined = peers
                     .iter()
                     .map(ambre_core::DisplayName::as_str)
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", ");
+                ambre_core::Name::cut_to_fit(&joined)
             })
         })
     }
@@ -432,7 +433,7 @@ fn rank(entry: Option<&CatalogueEntry>, id: ChannelId) -> (u32, [u8; 16]) {
 fn push(
     sections: &mut Vec<SidebarSection>,
     group: SidebarGroup,
-    title: Option<String>,
+    title: Option<ambre_core::Name>,
     entries: Vec<SidebarEntry>,
 ) {
     if !entries.is_empty() {
@@ -462,7 +463,7 @@ mod tests {
     ) -> CatalogueEntry {
         CatalogueEntry {
             channel_id,
-            name: name.to_owned(),
+            name: ambre_core::Name::new(name).unwrap(),
             topic: None,
             category,
             position,
@@ -473,7 +474,7 @@ mod tests {
         section
             .entries
             .iter()
-            .map(|e| e.name.as_deref().unwrap_or("?"))
+            .map(|e| e.name.as_ref().map(ambre_core::Name::as_str).unwrap_or("?"))
             .collect()
     }
 
@@ -548,10 +549,10 @@ mod tests {
         let team = CategoryId::new();
         sidebar.set_catalogue(
             space,
-            Some("Acme".to_owned()),
+            Some(ambre_core::Name::new("Acme").unwrap()),
             vec![CategoryView {
                 id: team,
-                name: "Team".to_owned(),
+                name: ambre_core::Name::new("Team").unwrap(),
                 position: 0,
             }],
             vec![
@@ -560,7 +561,7 @@ mod tests {
                 listed(general, "general", None, 0),
             ],
         );
-        sidebar.set_name(private, Some("board".to_owned()));
+        sidebar.set_name(private, Some(ambre_core::Name::new("board").unwrap()));
 
         let sections = sidebar.sections();
         let groups: Vec<SidebarGroup> = sections.iter().map(|s| s.group).collect();
@@ -579,9 +580,15 @@ mod tests {
                 SidebarGroup::Direct,
             ]
         );
-        assert_eq!(sections[0].title.as_deref(), Some("Acme"));
+        assert_eq!(
+            sections[0].title.as_ref().map(ambre_core::Name::as_str),
+            Some("Acme")
+        );
         assert_eq!(names(&sections[0]), ["general"]);
-        assert_eq!(sections[1].title.as_deref(), Some("Team"));
+        assert_eq!(
+            sections[1].title.as_ref().map(ambre_core::Name::as_str),
+            Some("Team")
+        );
         assert_eq!(names(&sections[1]), ["sales", "leads"]);
         assert_eq!(names(&sections[2]), ["board"]);
         assert_eq!(sections[3].entries[0].channel, direct);
@@ -728,14 +735,14 @@ mod tests {
         );
         sidebar.set_catalogue(
             space,
-            Some("Acme".to_owned()),
+            Some(ambre_core::Name::new("Acme").unwrap()),
             Vec::new(),
             vec![
                 listed(general, "general", None, 0),
                 listed(random, "random", None, 1),
             ],
         );
-        sidebar.set_name(private, Some("board".to_owned()));
+        sidebar.set_name(private, Some(ambre_core::Name::new("board").unwrap()));
 
         let mut dropped = sidebar.forget_space(space);
         dropped.sort_unstable_by_key(|c| *c.as_bytes());
@@ -762,7 +769,7 @@ mod tests {
         let (board, other) = (ChannelId::new(), ChannelId::new());
         let hint = |channel_id, name: &str| ChannelName {
             channel_id,
-            name: name.to_owned(),
+            name: ambre_core::Name::new(name).unwrap(),
         };
         let mut sidebar = Sidebar::default();
         let place = |channel_id, place| MemberChannel { channel_id, place };
@@ -774,13 +781,31 @@ mod tests {
             &[space],
         );
         sidebar.set_hints(&[hint(board, "board"), hint(other, "trip")]);
-        assert_eq!(sidebar.name_of(board).as_deref(), Some("board"));
+        assert_eq!(
+            sidebar
+                .name_of(board)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("board")
+        );
         sidebar.set_hints(&[hint(board, "plans")]);
-        assert_eq!(sidebar.name_of(board).as_deref(), Some("plans"));
+        assert_eq!(
+            sidebar
+                .name_of(board)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("plans")
+        );
         assert_eq!(sidebar.name_of(other), None, "replaced whole");
 
-        sidebar.set_name(board, Some("roadmap".to_owned()));
-        assert_eq!(sidebar.name_of(board).as_deref(), Some("roadmap"));
+        sidebar.set_name(board, Some(ambre_core::Name::new("roadmap").unwrap()));
+        assert_eq!(
+            sidebar
+                .name_of(board)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("roadmap")
+        );
         sidebar.set_name(board, None);
         assert_eq!(sidebar.name_of(board), None, "meta reads no name");
 
@@ -810,18 +835,42 @@ mod tests {
                 .collect(),
         };
         sidebar.set_peers(&[peers(direct, &["Bob", "Carol"]), peers(lonely, &[])]);
-        assert_eq!(sidebar.name_of(direct).as_deref(), Some("Bob, Carol"));
+        assert_eq!(
+            sidebar
+                .name_of(direct)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("Bob, Carol")
+        );
         assert_eq!(sidebar.name_of(lonely), None, "no other member");
 
         sidebar.set_hints(&[ChannelName {
             channel_id: direct,
-            name: "trip".into(),
+            name: ambre_core::Name::new("trip").unwrap(),
         }]);
-        assert_eq!(sidebar.name_of(direct).as_deref(), Some("trip"));
+        assert_eq!(
+            sidebar
+                .name_of(direct)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("trip")
+        );
         sidebar.set_name(direct, None);
-        assert_eq!(sidebar.name_of(direct).as_deref(), Some("Bob, Carol"));
-        sidebar.set_name(direct, Some("plans".into()));
-        assert_eq!(sidebar.name_of(direct).as_deref(), Some("plans"));
+        assert_eq!(
+            sidebar
+                .name_of(direct)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("Bob, Carol")
+        );
+        sidebar.set_name(direct, Some(ambre_core::Name::new("plans").unwrap()));
+        assert_eq!(
+            sidebar
+                .name_of(direct)
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("plans")
+        );
 
         sidebar.forget(direct);
         assert_eq!(sidebar.name_of(direct), None);

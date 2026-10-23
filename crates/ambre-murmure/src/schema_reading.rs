@@ -332,7 +332,7 @@ fn root_reading(
     match (root, kind) {
         (Root::Header, _) => header_reading(reader, stored, HeaderKey::parse(key?)?),
         (Root::Channel, DocumentKind::Meta) => match ChannelKey::parse(key?)? {
-            ChannelKey::Name => Some(format!("named {:?}", reader.channel.name()?)),
+            ChannelKey::Name => Some(format!("named {:?}", reader.channel.name()?.as_str())),
             ChannelKey::Type => Some(format!("{:?}", reader.channel.channel_type()?)),
         },
         (Root::Segments, DocumentKind::Meta) => segment_reading(reader, stored),
@@ -344,7 +344,7 @@ fn root_reading(
         (Root::Space, DocumentKind::Space)
             if key.and_then(SpaceKey::parse) == Some(SpaceKey::Name) =>
         {
-            Some(format!("named {:?}", reader.space.name()?))
+            Some(format!("named {:?}", reader.space.name()?.as_str()))
         }
         (Root::Categories, DocumentKind::Space) => category_reading(reader, stored),
         (Root::Catalogue, DocumentKind::Space) => catalogue_reading(reader, stored),
@@ -599,7 +599,7 @@ fn category_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let category = &categories[rank];
     let n = rank + 1;
     match CategoryKey::parse(stored.key(1)?)? {
-        CategoryKey::Name => Some(format!("category {n} named {:?}", category.name)),
+        CategoryKey::Name => Some(format!("category {n} named {:?}", category.name.as_str())),
         CategoryKey::Position => Some(format!("category {n} at position {}", category.position)),
     }
 }
@@ -612,7 +612,7 @@ fn catalogue_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let entry = &catalogue[rank];
     let n = rank + 1;
     match EntryKey::parse(stored.key(1)?)? {
-        EntryKey::Name => Some(format!("entry {n} named {:?}", entry.name)),
+        EntryKey::Name => Some(format!("entry {n} named {:?}", entry.name.as_str())),
         EntryKey::Topic => Some(format!(
             "entry {n} about {:?}",
             entry.topic.as_ref()?.as_str()

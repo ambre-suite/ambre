@@ -341,11 +341,18 @@ fn a_channel_named_shows_its_name_in_the_header() {
     let named = UiEvent::Channel {
         channel_id: direct,
         event: MurmureEvent::Named {
-            name: Some("Ada".to_owned()),
+            name: Some(ambre_core::Name::new("Ada").unwrap()),
         },
     };
     assert!(relay.absorb(&named).is_empty());
-    assert_eq!(relay.channel_name().get_untracked().as_deref(), Some("Ada"));
+    assert_eq!(
+        relay
+            .channel_name()
+            .get_untracked()
+            .as_ref()
+            .map(ambre_core::Name::as_str),
+        Some("Ada")
+    );
 }
 
 /// A relay with two private channels and a direct message, each named by
@@ -360,7 +367,7 @@ fn three_named() -> (Owner, MurmureRelay, [ChannelId; 3]) {
     let member = |channel_id, place| MemberChannel { channel_id, place };
     let name = |channel_id, name: &str| ChannelName {
         channel_id,
-        name: name.to_owned(),
+        name: ambre_core::Name::new(name).unwrap(),
     };
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![
@@ -451,11 +458,11 @@ fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
     relay.absorb(&UiEvent::Space {
         space_id: space,
         event: SpaceEvent::Catalogue {
-            name: Some("Acme".to_owned()),
+            name: Some(ambre_core::Name::new("Acme").unwrap()),
             categories: Vec::new(),
             channels: vec![CatalogueEntry {
                 channel_id: general,
-                name: "general".to_owned(),
+                name: ambre_core::Name::new("general").unwrap(),
                 topic: None,
                 category: None,
                 position: 0,

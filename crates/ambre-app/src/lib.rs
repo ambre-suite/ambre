@@ -1422,7 +1422,7 @@ pub fn main() {
                             .map(|d| DocItem {
                                 document_id: d.document_id,
                                 doc_type: d.doc_type,
-                                name: d.name.clone(),
+                                name: d.name.clone().map(ambre_core::Name::into_string),
                                 updated_at: d.updated_at,
                                 member_count: d.member_count,
                             })

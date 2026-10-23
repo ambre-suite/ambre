@@ -1612,7 +1612,7 @@ mod handler_tests {
     }
 
     /// `SRV-234`: a development sign-in stores its name trimmed, and one past
-    /// the cap is refused before any row is written.
+    /// the cap does not decode, so no row is written.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_dev_sign_in_stores_a_display_name_that_fits(pool: sqlx::PgPool) {
@@ -1633,7 +1633,7 @@ mod handler_tests {
         assert_eq!(stored, "ada");
         let long = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
         let resp = app.oneshot(login(long)).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
         let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
             .fetch_one(&pool)
             .await

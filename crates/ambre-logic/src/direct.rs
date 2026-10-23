@@ -603,39 +603,24 @@ mod tests {
             state.handle_logic_command(LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Name {
-                    name: name.map(str::to_owned),
+                    name: name.map(|n| ambre_core::Name::new(n).unwrap()),
                 },
             });
-            let shown = shown.map(str::to_owned);
             assert!(matches!(
                 drain(&sync_rx).as_slice(),
                 [
                     SyncCommand::SendUpdate { document_id, summary: None, .. },
                     SyncCommand::NameChannel { meta: sealed, name: sealed_name },
                 ] if *document_id == meta.document_id() && *sealed == meta
-                    && sealed_name.as_ref().map(ambre_core::Name::as_str) == shown.as_deref()
+                    && sealed_name.as_ref().map(ambre_core::Name::as_str) == shown
             ));
             assert!(matches!(
                 drain(&ui_rx).as_slice(),
                 [UiEvent::Channel {
                     channel_id: id,
                     event: MurmureEvent::Named { name },
-                }] if *id == channel_id && *name == shown
+                }] if *id == channel_id && name.as_ref().map(ambre_core::Name::as_str) == shown
             ));
         }
-
-        // A name past its cap writes nothing and says why (the Murmure
-        // channels spec).
-        state.handle_logic_command(LogicCommand::Channel {
-            channel_id,
-            command: MurmureCommand::Name {
-                name: Some("a".repeat(ambre_core::NAME_MAX_CHARS + 1)),
-            },
-        });
-        assert!(drain(&sync_rx).is_empty());
-        assert!(matches!(
-            drain(&ui_rx).as_slice(),
-            [UiEvent::ApiError { message, .. }] if message == ambre_core::NAME_TOO_LONG
-        ));
     }
 }

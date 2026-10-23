@@ -111,7 +111,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 fn one(emoji: &str, mut users: Vec<UserId>) -> Reaction {
     users.sort_by_key(ToString::to_string);
     Reaction {
-        emoji: ambre_bus::Emoji(emoji.to_owned()),
+        emoji: ambre_bus::Emoji::from(emoji),
         users,
     }
 }

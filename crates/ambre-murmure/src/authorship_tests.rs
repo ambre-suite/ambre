@@ -620,5 +620,8 @@ fn a_meta_delta_under_another_peer_is_refused() {
     bob.state
         .apply_signed(meta, Seq(2), &named.delta, by)
         .expect("accepted");
-    assert_eq!(bob.state.name().as_deref(), Some("us"));
+    assert_eq!(
+        bob.state.name().as_ref().map(ambre_core::Name::as_str),
+        Some("us")
+    );
 }

@@ -106,6 +106,61 @@ impl From<String> for MediaType {
     }
 }
 
+/// A media type a client rules on by name. It is a picture the client decodes
+/// or opens, or the plain stream of bytes a file falls back to. Every other
+/// type is only a [`MediaType`] the client carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum KnownMediaType {
+    Png,
+    Jpeg,
+    Gif,
+    Webp,
+    Avif,
+    /// The type of a file the browser names no type for.
+    OctetStream,
+}
+
+impl KnownMediaType {
+    /// Every known type.
+    pub const ALL: [Self; 6] = [
+        Self::Png,
+        Self::Jpeg,
+        Self::Gif,
+        Self::Webp,
+        Self::Avif,
+        Self::OctetStream,
+    ];
+
+    /// The type, as a browser spells it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::Gif => "image/gif",
+            Self::Webp => "image/webp",
+            Self::Avif => "image/avif",
+            Self::OctetStream => "application/octet-stream",
+        }
+    }
+
+    /// The known type `media_type` names, blanks around it dropped and case
+    /// folded. `None` for any other type.
+    #[must_use]
+    pub fn of(media_type: &MediaType) -> Option<Self> {
+        let named = media_type.as_str().trim();
+        Self::ALL
+            .into_iter()
+            .find(|known| named.eq_ignore_ascii_case(known.as_str()))
+    }
+
+    /// The type as a [`MediaType`] carries it.
+    #[must_use]
+    pub fn media_type(self) -> MediaType {
+        MediaType::from(self.as_str())
+    }
+}
+
 /// A size in bytes.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,

@@ -130,7 +130,7 @@ pub struct ChannelMeta {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelName {
     pub channel_id: ChannelId,
-    pub name: String,
+    pub name: ambre_core::Name,
 }
 
 /// The display names of a direct message's other members, as the relay
@@ -226,12 +226,18 @@ pub struct MessageDraft {
 
 /// One emoji a member reacts with, as the view picked it. The engine
 /// refuses a value that is not one emoji, and this type keeps the value
-/// apart from free text.
+/// apart from free text. A table compiled into the client borrows its text,
+/// so the table needs no allocation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Emoji(pub String);
+pub struct Emoji(std::borrow::Cow<'static, str>);
 
 impl Emoji {
+    /// The emoji `glyph` spells, for a table compiled into the client.
+    pub const fn from_static(glyph: &'static str) -> Self {
+        Self(std::borrow::Cow::Borrowed(glyph))
+    }
+
     /// The emoji, as its characters spell it.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -240,7 +246,13 @@ impl Emoji {
 
 impl From<&str> for Emoji {
     fn from(text: &str) -> Self {
-        Self(text.to_owned())
+        Self(std::borrow::Cow::Owned(text.to_owned()))
+    }
+}
+
+impl From<String> for Emoji {
+    fn from(text: String) -> Self {
+        Self(std::borrow::Cow::Owned(text))
     }
 }
 
@@ -373,7 +385,7 @@ pub enum MurmureCommand {
     /// Name a direct message, or clear its name with `None` (`MURMURE-054`,
     /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
     /// and every member reads it.
-    Name { name: Option<String> },
+    Name { name: Option<ambre_core::Name> },
     /// React to `message` with `emoji`, under this session's user
     /// (`MURMURE-092`). A reaction already there writes nothing. A reply
     /// takes it in its thread (`MURMURE-485`).
@@ -660,7 +672,7 @@ pub enum MurmureEvent {
     /// The name the channel's `meta` holds, at the open and after any change
     /// to it. `None` for an unnamed channel: the view composes what it shows
     /// from the members, and stores nothing (`MURMURE-016`).
-    Named { name: Option<String> },
+    Named { name: Option<ambre_core::Name> },
     /// This user is no member of the channel any more. They left it from
     /// another client, or the relay refused its open. Nothing of it is held
     /// any more (`MURMURE-468`, `MURMURE-469`).
@@ -785,7 +797,7 @@ impl From<Topic> for String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryView {
     pub id: CategoryId,
-    pub name: String,
+    pub name: ambre_core::Name,
     /// The rank among the categories: lower first, ties by identifier.
     pub position: u32,
 }
@@ -797,7 +809,7 @@ pub struct CategoryView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogueEntry {
     pub channel_id: ChannelId,
-    pub name: String,
+    pub name: ambre_core::Name,
     pub topic: Option<Topic>,
     /// Absent for a channel outside every category.
     pub category: Option<CategoryId>,
@@ -810,7 +822,7 @@ pub struct CatalogueEntry {
 pub struct PublicChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: ChannelId,
-    pub name: String,
+    pub name: ambre_core::Name,
     pub topic: Option<Topic>,
     /// Absent for a channel outside every category.
     pub category: Option<CategoryId>,
@@ -843,7 +855,7 @@ pub struct MemberView {
 pub struct PrivateChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: ChannelId,
-    pub name: String,
+    pub name: ambre_core::Name,
 }
 
 /// A member of a direct message, other than this user, with the exchange key
@@ -890,7 +902,7 @@ pub enum SpaceCommand {
     /// Add a category to the catalogue.
     AddCategory {
         category_id: CategoryId,
-        name: String,
+        name: ambre_core::Name,
         /// The rank among the categories: lower first, ties by identifier.
         position: u32,
     },
@@ -939,7 +951,7 @@ pub enum SpaceEvent {
     /// The space and its catalogue, whole, after an open or any change.
     Catalogue {
         /// Absent when the space has no name.
-        name: Option<String>,
+        name: Option<ambre_core::Name>,
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     },

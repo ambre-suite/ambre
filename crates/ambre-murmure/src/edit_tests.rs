@@ -216,7 +216,7 @@ fn an_edit_and_a_concurrent_reaction_both_hold() {
     bob.receive(&alice, &edited, 3);
 
     let reaction = Reaction {
-        emoji: ambre_bus::Emoji(THUMB.to_owned()),
+        emoji: ambre_bus::Emoji::from(THUMB),
         users: vec![bob.user],
     };
     for member in [&alice, &bob] {

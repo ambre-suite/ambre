@@ -110,11 +110,14 @@ pub const REACT_PARTY: CommandId = CommandId("toile.react.party");
 pub const REACT_CLEAR: CommandId = CommandId("toile.react.clear");
 
 /// The fixed emoji entries of the reaction picker, id + glyph, in display order.
-pub const REACTION_EMOJI: &[(CommandId, &str)] = &[
-    (REACT_THUMBSUP, "\u{1F44D}"),     // thumbs up
-    (REACT_HEART, "\u{2764}\u{FE0F}"), // red heart
-    (REACT_CHECK, "\u{2705}"),         // check mark button
-    (REACT_PARTY, "\u{1F389}"),        // party popper
+pub const REACTION_EMOJI: &[(CommandId, ambre_bus::Emoji)] = &[
+    (REACT_THUMBSUP, ambre_bus::Emoji::from_static("\u{1F44D}")), // thumbs up
+    (
+        REACT_HEART,
+        ambre_bus::Emoji::from_static("\u{2764}\u{FE0F}"),
+    ), // red heart
+    (REACT_CHECK, ambre_bus::Emoji::from_static("\u{2705}")),     // check mark button
+    (REACT_PARTY, ambre_bus::Emoji::from_static("\u{1F389}")),    // party popper
 ];
 
 /// Every command the Toile context menu contributes to the registry.
@@ -465,13 +468,8 @@ pub fn resolve_menu_command(
         // from the fixed picker set.
         REACT_CLEAR => react_each(selection, None),
         REACT_THUMBSUP | REACT_HEART | REACT_CHECK | REACT_PARTY => {
-            let emoji = REACTION_EMOJI
-                .iter()
-                .find(|(cid, _)| *cid == id)
-                .map_or_else(
-                    || ambre_bus::Emoji::from(""),
-                    |(_, e)| ambre_bus::Emoji::from(*e),
-                );
+            let (_, emoji) = REACTION_EMOJI.iter().find(|(cid, _)| *cid == id)?;
+            let emoji = emoji.clone();
             react_each(
                 selection,
                 Some(Reaction {

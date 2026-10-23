@@ -1415,18 +1415,7 @@ impl LogicState {
             }
             MurmureCommand::Name { name } => {
                 // Trimmed once, so the sealed name is the name `meta` holds.
-                let name = name
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|n| !n.is_empty())
-                    .map(str::to_owned);
-                let name = match name.map(|text| Name::new(text.as_str()).map_err(|_| text)) {
-                    Some(Ok(name)) => Some(name),
-                    Some(Err(long)) => {
-                        return self.refuse_long_name(&long, ambre_bus::ApiRequest::NameChannel);
-                    }
-                    None => None,
-                };
+                let name = name.as_ref().map(Name::trimmed).filter(|n| !n.is_empty());
                 match channel.name_direct(name.as_ref()) {
                     Ok(named) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
@@ -3145,7 +3134,7 @@ mod tests {
         let spaces = vec![ambre_bus::SpaceId::new()];
         let names = vec![ambre_bus::ChannelName {
             channel_id: channels[0].channel_id,
-            name: "board".into(),
+            name: ambre_core::Name::new("board").unwrap(),
         }];
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: channels[1].channel_id,

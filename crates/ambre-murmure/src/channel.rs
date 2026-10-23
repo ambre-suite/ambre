@@ -541,9 +541,10 @@ impl ChannelState {
             .and_then(|word| ChannelType::parse(&word))
     }
 
-    /// The name of the channel, absent when it has none (`MURMURE-018`).
-    pub fn name(&self) -> Option<String> {
-        schema::string(&crate::schema::channel(&self.meta.doc), ChannelKey::Name)
+    /// The name of the channel, absent when it has none (`MURMURE-018`) or
+    /// one past the cap.
+    pub fn name(&self) -> Option<ambre_core::Name> {
+        schema::name(&crate::schema::channel(&self.meta.doc), ChannelKey::Name)
     }
 
     /// Name a direct message in its `meta`, or clear its name with `None`
@@ -563,22 +564,19 @@ impl ChannelState {
         }
         let meta = self.meta_id();
         let name = name
-            .map(ambre_core::Name::as_str)
-            .map(str::trim)
+            .map(ambre_core::Name::trimmed)
             .filter(|n| !n.is_empty());
         let (doc, session) = self.meta.session()?;
         let channel = crate::schema::channel(doc);
-        match name {
-            Some(name) => channel.insert(ChannelKey::Name, name)?,
+        match &name {
+            Some(name) => channel.insert(ChannelKey::Name, name.as_str())?,
             None if channel.get(ChannelKey::Name).is_some() => channel.delete(ChannelKey::Name)?,
             None => {}
         }
         Ok(Named {
             meta,
             delta: session.export(doc)?,
-            event: MurmureEvent::Named {
-                name: name.map(str::to_owned),
-            },
+            event: MurmureEvent::Named { name },
         })
     }
 

@@ -786,7 +786,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             spaces: vec![space],
             names: vec![ChannelName {
                 channel_id: chan,
-                name: "board".into(),
+                name: ambre_core::Name::new("board").unwrap(),
             }],
             peers: vec![DirectPeers {
                 channel_id: direct,

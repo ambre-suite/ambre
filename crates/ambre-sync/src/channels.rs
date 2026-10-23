@@ -1653,7 +1653,7 @@ pub(crate) mod tests {
         assert_eq!(lasts, [None, Some(ambre_core::Seq(6)), None]);
         let named = vec![ChannelName {
             channel_id: private,
-            name: "Design".into(),
+            name: ambre_core::Name::new("Design").unwrap(),
         }];
         let listed = ambre_bus::ChannelMeta {
             channel_id: private,
@@ -1778,7 +1778,7 @@ pub(crate) mod tests {
             names,
             vec![ChannelName {
                 channel_id: answer.channels[0].channel_id,
-                name: "Design".into(),
+                name: ambre_core::Name::new("Design").unwrap(),
             }]
         );
         // Each key opens, and one that does not is left out.
@@ -1817,7 +1817,12 @@ pub(crate) mod tests {
         assert!(!bytes.windows(6).any(|w| w == b"Design"));
         let open =
             |document_id| crate::documents::open_name(document_id, &key, &sealed, Vec::new());
-        assert_eq!(open(meta.document_id()).as_deref(), Some("Design"));
+        assert_eq!(
+            open(meta.document_id())
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("Design")
+        );
         assert_eq!(open(DocumentId::new()), None);
     }
 

@@ -58,7 +58,7 @@ impl Frame {
         if let Some(channel) = pane.shown_channel() {
             relay
                 .sidebar
-                .update(|s| s.set_name(channel, Some("general".to_owned())));
+                .update(|s| s.set_name(channel, Some(ambre_core::Name::new("general").unwrap())));
         }
         Self::with(width, relay).await
     }
@@ -200,7 +200,7 @@ impl Acme {
         let team = CategoryId::new();
         let entry = |channel_id, name: &str, category, position| CatalogueEntry {
             channel_id,
-            name: name.to_owned(),
+            name: ambre_core::Name::new(name).unwrap(),
             topic: None,
             category,
             position,
@@ -208,10 +208,10 @@ impl Acme {
         UiEvent::Space {
             space_id: self.space,
             event: SpaceEvent::Catalogue {
-                name: Some("Acme".to_owned()),
+                name: Some(ambre_core::Name::new("Acme").unwrap()),
                 categories: vec![CategoryView {
                     id: team,
-                    name: "Team".to_owned(),
+                    name: ambre_core::Name::new("Team").unwrap(),
                     position: 0,
                 }],
                 channels: vec![
@@ -537,7 +537,7 @@ async fn a_named_channel_not_open_shows_its_name() {
     if let UiEvent::MemberChannels { names, .. } = &mut listing {
         let named = |channel_id, name: &str| ChannelName {
             channel_id,
-            name: name.to_owned(),
+            name: ambre_core::Name::new(name).unwrap(),
         };
         *names = vec![named(acme.board, "board"), named(acme.direct, "trip")];
     }

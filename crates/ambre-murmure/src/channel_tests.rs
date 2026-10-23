@@ -813,7 +813,7 @@ fn a_name_one_member_sets_reaches_every_member() {
     assert_eq!(
         named.event,
         MurmureEvent::Named {
-            name: Some("trip".into())
+            name: Some(ambre_core::Name::new("trip").unwrap())
         }
     );
     let events = bob
@@ -822,10 +822,13 @@ fn a_name_one_member_sets_reaches_every_member() {
     assert_eq!(
         events,
         [MurmureEvent::Named {
-            name: Some("trip".into())
+            name: Some(ambre_core::Name::new("trip").unwrap())
         }]
     );
-    assert_eq!(bob.name().as_deref(), Some("trip"));
+    assert_eq!(
+        bob.name().as_ref().map(ambre_core::Name::as_str),
+        Some("trip")
+    );
 
     let renamed = bob
         .name_direct(Some(&crate::fit_name("holiday")))
@@ -833,7 +836,10 @@ fn a_name_one_member_sets_reaches_every_member() {
     alice
         .apply_remote(renamed.meta.document_id(), &renamed.delta)
         .expect("apply");
-    assert_eq!(alice.name().as_deref(), Some("holiday"));
+    assert_eq!(
+        alice.name().as_ref().map(ambre_core::Name::as_str),
+        Some("holiday")
+    );
 }
 
 #[test]
@@ -925,7 +931,10 @@ fn only_a_direct_message_takes_a_name_from_a_member() {
                 .map(|n| n.event),
             Err(MurmureError::NotDirect(state.channel_id()))
         );
-        assert_eq!(state.name().as_deref(), Some("team"));
+        assert_eq!(
+            state.name().as_ref().map(ambre_core::Name::as_str),
+            Some("team")
+        );
     }
 }
 

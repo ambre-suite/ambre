@@ -452,6 +452,15 @@ pub(crate) fn string<K: ambre_core::crdt::FieldKey>(map: &Fields<K>, key: K) -> 
     string_value(map.get(key))
 }
 
+/// The name under `key`, or `None` when it is absent, not a string, or past
+/// the cap. A peer may write a name past the cap, and no view shows one.
+pub(crate) fn name<K: ambre_core::crdt::FieldKey>(
+    map: &Fields<K>,
+    key: K,
+) -> Option<ambre_core::Name> {
+    string(map, key).and_then(|text| ambre_core::Name::new(text).ok())
+}
+
 /// The string a read found, or `None` when it found nothing or no string.
 /// A root keyed by identifiers is read so: its key is an identifier, not a
 /// name of the schema.

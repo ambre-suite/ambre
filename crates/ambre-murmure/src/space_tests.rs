@@ -56,7 +56,10 @@ fn a_new_space_is_one_document_that_holds_no_member() {
     let space_id = SpaceId::new();
     let space = SpaceState::create(space_id, &crate::fit_name("Acme"), NOW).expect("create");
     assert_eq!(space.document_id(), space_id.document_id());
-    assert_eq!(space.name().as_deref(), Some("Acme"));
+    assert_eq!(
+        space.name().as_ref().map(ambre_core::Name::as_str),
+        Some("Acme")
+    );
     let header = crate::schema::header(space.doc());
     assert_eq!(
         crate::schema::string(&header, HeaderKey::Kind).as_deref(),
@@ -83,7 +86,10 @@ fn a_space_reopens_from_its_payloads() {
         .list_channel(&public, &listing(sealed(1)))
         .expect("list");
     let reopened = SpaceState::open(space_id, &[&first, &delta]).expect("open");
-    assert_eq!(reopened.name().as_deref(), Some("Acme"));
+    assert_eq!(
+        reopened.name().as_ref().map(ambre_core::Name::as_str),
+        Some("Acme")
+    );
     assert_eq!(reopened.catalogue(), space.catalogue());
 }
 

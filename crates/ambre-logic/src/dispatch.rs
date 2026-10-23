@@ -2047,7 +2047,7 @@ mod tests {
                 }],
             },
             RestCommand::CreateMeeting {
-                name: "m".to_owned(),
+                name: ambre_core::Name::new("m").unwrap(),
             },
             RestCommand::JoinMeeting {
                 meeting_id: meeting,

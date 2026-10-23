@@ -169,7 +169,7 @@ pub enum LogicCommand {
     /// only member (the Murmure spaces spec). The space opens at once.
     CreateSpace {
         space_id: SpaceId,
-        name: String,
+        name: ambre_core::Name,
         /// The instant of the creation, stamped by the view.
         now: Timestamp,
     },

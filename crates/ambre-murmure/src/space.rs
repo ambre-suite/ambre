@@ -140,9 +140,9 @@ impl SpaceState {
         self.space_id.document_id()
     }
 
-    /// The name of the space, absent when it has none.
-    pub fn name(&self) -> Option<String> {
-        schema::string(&crate::schema::space(&self.doc), SpaceKey::Name)
+    /// The name of the space, absent when it has none or one past the cap.
+    pub fn name(&self) -> Option<ambre_core::Name> {
+        schema::name(&crate::schema::space(&self.doc), SpaceKey::Name)
     }
 
     /// Every operation of the document, as one Loro update: the first
@@ -222,7 +222,7 @@ impl SpaceState {
                 .ensure_mergeable_map(&channel_id.to_string())?,
         );
         match channel.name() {
-            Some(name) => entry.insert(EntryKey::Name, name)?,
+            Some(name) => entry.insert(EntryKey::Name, name.as_str())?,
             None => clear(&entry, EntryKey::Name)?,
         }
         match listing.topic {
@@ -318,7 +318,7 @@ impl SpaceState {
             };
             found.push(CategoryView {
                 id,
-                name: schema::string(&entry, CategoryKey::Name).unwrap_or_default(),
+                name: schema::name(&entry, CategoryKey::Name).unwrap_or_default(),
                 position: position_of(&entry, CategoryKey::Position),
             });
         });
@@ -339,7 +339,7 @@ impl SpaceState {
             };
             found.push(CatalogueEntry {
                 channel_id,
-                name: schema::string(&entry, EntryKey::Name).unwrap_or_default(),
+                name: schema::name(&entry, EntryKey::Name).unwrap_or_default(),
                 topic: schema::string(&entry, EntryKey::Topic).and_then(Topic::new),
                 category: schema::string(&entry, EntryKey::Category)
                     .and_then(|s| CategoryId::parse_str(&s).ok()),

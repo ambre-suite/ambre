@@ -55,8 +55,35 @@ impl Name {
         self.0.is_empty()
     }
 
+    /// The name `text` gives once cut to its first [`NAME_MAX_CHARS`]
+    /// characters. It serves a name composed from other names, which no
+    /// member typed and which may run past the cap.
+    #[must_use]
+    pub fn cut_to_fit(text: &str) -> Self {
+        Self(text.chars().take(NAME_MAX_CHARS).collect())
+    }
+
+    /// The name without its leading and trailing blanks. A trimmed name is
+    /// never longer, so it always fits the cap.
+    #[must_use]
+    pub fn trimmed(&self) -> Self {
+        Self(self.0.trim().to_owned())
+    }
+
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+impl PartialEq<str> for Name {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Name {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
     }
 }
 

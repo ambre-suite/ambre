@@ -41,7 +41,7 @@ impl ReactionKey {
     /// build writes.
     pub(crate) fn read(stored: &str) -> Option<(UserId, Emoji)> {
         let (user, emoji) = stored.split_once(' ')?;
-        Some((UserId::parse_str(user).ok()?, Emoji(emoji.to_owned())))
+        Some((UserId::parse_str(user).ok()?, Emoji::from(emoji)))
     }
 }
 

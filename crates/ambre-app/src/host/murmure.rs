@@ -75,7 +75,11 @@ fn save_file(file: &Attachment, data: Vec<u8>) {
     let parts = js_sys::Array::new();
     parts.push(&js_sys::Uint8Array::from(data.as_slice()).buffer());
     let options = web_sys::BlobPropertyBag::new();
-    options.set_type(opens.unwrap_or("application/octet-stream"));
+    options.set_type(
+        opens
+            .unwrap_or(ambre_core::KnownMediaType::OctetStream)
+            .as_str(),
+    );
     let url = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
         .and_then(|blob| web_sys::Url::create_object_url_with_blob(&blob));
     let url = match url {

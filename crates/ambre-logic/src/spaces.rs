@@ -62,14 +62,11 @@ impl LogicState {
     /// owner on the first upload. It is written again under its PeerID once
     /// its identity lands, and its whole content leaves once the Sync worker
     /// holds the document.
-    pub(crate) fn create_space(&mut self, space_id: SpaceId, name: &str, now: Timestamp) {
+    pub(crate) fn create_space(&mut self, space_id: SpaceId, name: &Name, now: Timestamp) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
-        let Ok(name) = Name::new(name) else {
-            return self.refuse_long_name(name, ambre_bus::ApiRequest::CreateSpace);
-        };
-        let state = match SpaceState::create(space_id, &name, now) {
+        let state = match SpaceState::create(space_id, name, now) {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
         };
@@ -318,21 +315,6 @@ impl LogicState {
         }
     }
 
-    /// Tell the user why a name no [`Name`] holds was refused, before
-    /// anything is written (the Murmure channels spec).
-    pub(crate) fn refuse_long_name(&self, name: &str, request: ambre_bus::ApiRequest) {
-        tracing::warn!(
-            "Logic: {request} refused a name of {} characters",
-            name.chars().count()
-        );
-        self.send_to_ui(UiEvent::ApiError {
-            id: None,
-            request,
-            failure: ambre_bus::ApiFailure::Local,
-            message: ambre_core::NAME_TOO_LONG.to_owned(),
-        });
-    }
-
     fn channel_failed(&self, space_id: SpaceId, channel_id: ChannelId, message: String) {
         tracing::warn!("Logic: channel {channel_id} of space {space_id}: {message}");
         self.send_to_ui(UiEvent::Space {
@@ -388,9 +370,6 @@ impl LogicState {
                     tracing::warn!("Logic: a viewer adds no category to space {space_id}");
                     return;
                 }
-                let Ok(name) = Name::new(name.as_str()) else {
-                    return self.refuse_long_name(&name, ambre_bus::ApiRequest::AddCategory);
-                };
                 match space.state.put_category(category_id, &name, position) {
                     Ok(delta) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
@@ -412,26 +391,22 @@ impl LogicState {
                         "a viewer of the space creates no channel".into(),
                     );
                 }
-                let Ok(name) = Name::new(draft.name.as_str()) else {
-                    return self
-                        .refuse_long_name(&draft.name, ambre_bus::ApiRequest::CreatePublicChannel);
+                let channel = match ChannelState::create(
+                    channel_id,
+                    ChannelType::Public,
+                    Some(&draft.name),
+                    now,
+                ) {
+                    Ok(channel) => channel,
+                    Err(error) => {
+                        return self.channel_failed(space_id, channel_id, error.to_string());
+                    }
                 };
-                let channel =
-                    match ChannelState::create(channel_id, ChannelType::Public, Some(&name), now) {
-                        Ok(channel) => channel,
-                        Err(error) => {
-                            return self.channel_failed(space_id, channel_id, error.to_string());
-                        }
-                    };
                 self.create_channel(space_id, channel, NewChannel::Public(draft));
             }
             SpaceCommand::CreatePrivateChannel { draft, now } => {
                 // Any member of the space may: the channel is listed nowhere.
                 let PrivateChannelDraft { channel_id, name } = draft;
-                let Ok(name) = Name::new(name.as_str()) else {
-                    return self
-                        .refuse_long_name(&name, ambre_bus::ApiRequest::CreatePrivateChannel);
-                };
                 match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
                     Ok(channel) => {
                         self.create_channel(space_id, channel, NewChannel::Private(name));
@@ -981,10 +956,14 @@ mod tests {
         SealedChannelKey::from_bytes(vec![byte; 72])
     }
 
+    fn named(text: &str) -> Name {
+        Name::new(text).unwrap()
+    }
+
     fn draft(name: &str) -> PublicChannelDraft {
         PublicChannelDraft {
             channel_id: ChannelId::new(),
-            name: name.to_owned(),
+            name: named(name),
             topic: Topic::new("the weekly figures"),
             category: None,
             position: 1,
@@ -992,9 +971,7 @@ mod tests {
     }
 
     /// The catalogue of the last catalogue event the view got.
-    fn last_catalogue(
-        shown: &[UiEvent],
-    ) -> Option<(Option<String>, Vec<ambre_bus::CatalogueEntry>)> {
+    fn last_catalogue(shown: &[UiEvent]) -> Option<(Option<Name>, Vec<ambre_bus::CatalogueEntry>)> {
         shown.iter().rev().find_map(|e| match e {
             UiEvent::Space {
                 event: SpaceEvent::Catalogue { name, channels, .. },
@@ -1019,7 +996,7 @@ mod tests {
         let space_id = SpaceId::new();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
-            name: "Acme".to_owned(),
+            name: Name::new("Acme").unwrap(),
             now: NOW,
         });
         state.grant_identity(space_id.document_id());
@@ -1062,29 +1039,6 @@ mod tests {
 
     // --- The client side of a new space ---
 
-    /// A space named past the cap writes nothing, and the user reads why (the
-    /// Murmure channels spec).
-    #[test]
-    fn a_name_past_its_cap_writes_nothing() {
-        let (mut state, ui, sync) = harness();
-        let long = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
-        let refused = |ui: &_| {
-            matches!(
-                drain(ui).as_slice(),
-                [UiEvent::ApiError { message, .. }] if message == ambre_core::NAME_TOO_LONG
-            )
-        };
-        let space_id = SpaceId::new();
-        state.handle_logic_command(LogicCommand::CreateSpace {
-            space_id,
-            name: long.clone(),
-            now: NOW,
-        });
-        assert!(drain(&sync).is_empty());
-        assert!(refused(&ui));
-        assert!(!state.spaces.contains_key(&space_id));
-    }
-
     /// A new space shows at once. Its whole document is its first update,
     /// sent once the Sync worker holds the session. That upload makes its
     /// creator the owner on the relay, and marks the document a space.
@@ -1094,7 +1048,7 @@ mod tests {
         let space_id = SpaceId::new();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
-            name: "Acme".to_owned(),
+            name: Name::new("Acme").unwrap(),
             now: NOW,
         });
         let sent = drain(&sync);
@@ -1104,7 +1058,7 @@ mod tests {
         ));
         assert_eq!(
             last_catalogue(&drain(&ui)),
-            Some((Some("Acme".to_owned()), Vec::new()))
+            Some((Some(named("Acme")), Vec::new()))
         );
 
         let peer = state.grant_identity(space_id.document_id());
@@ -1135,7 +1089,10 @@ mod tests {
         );
         let reopened =
             SpaceState::open(space_id, &[payload.as_bytes()]).expect("the upload is the space");
-        assert_eq!(reopened.name().as_deref(), Some("Acme"));
+        assert_eq!(
+            reopened.name().as_ref().map(ambre_core::Name::as_str),
+            Some("Acme")
+        );
         assert!(
             drain(&ui).is_empty(),
             "the space document is no document of the view"
@@ -1163,7 +1120,7 @@ mod tests {
         ready(&mut state, space_id.document_id(), Role::Editor);
         assert_eq!(
             last_catalogue(&drain(&ui)),
-            Some((Some("Acme".to_owned()), Vec::new()))
+            Some((Some(named("Acme")), Vec::new()))
         );
         assert_eq!(
             updates_of(&drain(&sync), space_id.document_id()),
@@ -1297,7 +1254,7 @@ mod tests {
             space_id,
             command: SpaceCommand::AddCategory {
                 category_id: CategoryId::new(),
-                name: "Teams".to_owned(),
+                name: Name::new("Teams").unwrap(),
                 position: 0,
             },
         });
@@ -1360,7 +1317,7 @@ mod tests {
             command: SpaceCommand::CreatePrivateChannel {
                 draft: PrivateChannelDraft {
                     channel_id,
-                    name: "board".to_owned(),
+                    name: Name::new("board").unwrap(),
                 },
                 now: NOW,
             },
@@ -1405,7 +1362,10 @@ mod tests {
         );
         let channel = &state.channels[&channel_id];
         assert_eq!(channel.channel_type(), Some(ChannelType::Private));
-        assert_eq!(channel.name().as_deref(), Some("board"));
+        assert_eq!(
+            channel.name().as_ref().map(ambre_core::Name::as_str),
+            Some("board")
+        );
         assert!(state.spaces[&space_id].state.catalogue().is_empty());
         assert!(drain(&ui).iter().any(|e| matches!(
             e,

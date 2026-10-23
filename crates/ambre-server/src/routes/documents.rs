@@ -25,32 +25,30 @@ pub struct SetupAccountRequest {
     /// User-supplied login handle. Recorded verbatim (N3) and resolved by other
     /// members when sharing a document (`get_user_by_email`).
     pub email: ambre_core::Email,
-    /// User-supplied display name (N3).
-    pub display_name: String,
+    /// User-supplied display name (N3). A body whose name breaks the rule
+    /// does not decode (`SRV-234`).
+    pub display_name: ambre_core::DisplayName,
     pub master_key_enc: ambre_core::WrappedMasterKey,
     pub master_key_salt: ambre_core::MasterKeySalt,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
 
-/// Bounds the client-supplied identity: a syntactically plausible, length-bounded
-/// email and a [`ambre_core::DisplayName`], the trimmed name it answers. Full
-/// email verification is out of scope; this only rejects obvious garbage and
-/// unbounded input.
-fn validate_identity(
-    email: &ambre_core::Email,
-    display_name: &str,
-) -> Result<ambre_core::DisplayName, AppError> {
+/// Bounds the client-supplied email: syntactically plausible and
+/// length-bounded. Full email verification is out of scope; this only rejects
+/// obvious garbage and unbounded input. The display name needs no check here:
+/// a [`ambre_core::DisplayName`] holds its rule.
+fn validate_email(email: &ambre_core::Email) -> Result<(), AppError> {
     let email = email.as_str().trim();
     let email_ok = (3..=254).contains(&email.len())
         && email.contains('@')
         && !email.starts_with('@')
         && !email.ends_with('@');
-    if !email_ok {
-        return Err(AppError::BadRequest("invalid email".into()));
+    if email_ok {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest("invalid email".into()))
     }
-    ambre_core::DisplayName::new(display_name)
-        .map_err(|_| AppError::BadRequest("invalid display_name".into()))
 }
 /// Response after successful account setup. Carries the freshly minted token
 /// pair (kept in client memory) and the newly assigned user ID.
@@ -67,7 +65,8 @@ pub async fn setup_account(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let display_name = validate_identity(&req.email, &req.display_name)?;
+    validate_email(&req.email)?;
+    let display_name = req.display_name;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
     let (spk, epk) = super::keys::account_keys(&req.signing_pubkey, &req.exchange_pubkey)?;
@@ -639,28 +638,40 @@ mod tests {
     // -- Identity validation (N3) -------------------------------------------
 
     #[test]
-    fn validate_identity_accepts_plausible_input() {
-        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "Alice").is_ok());
-        assert!(
-            validate_identity(&ambre_core::Email::from("  bob@ambre.app  "), "  Bob  ").is_ok()
-        );
+    fn validate_email_accepts_plausible_input() {
+        assert!(validate_email(&ambre_core::Email::from("alice@example.com")).is_ok());
+        assert!(validate_email(&ambre_core::Email::from("  bob@ambre.app  ")).is_ok());
     }
 
     #[test]
-    fn validate_identity_rejects_bad_email() {
-        assert!(validate_identity(&ambre_core::Email::from("no-at-sign"), "Alice").is_err());
-        assert!(validate_identity(&ambre_core::Email::from("@example.com"), "Alice").is_err());
-        assert!(validate_identity(&ambre_core::Email::from("alice@"), "Alice").is_err());
-        assert!(validate_identity(&ambre_core::Email::from(""), "Alice").is_err());
+    fn validate_email_rejects_bad_email() {
+        assert!(validate_email(&ambre_core::Email::from("no-at-sign")).is_err());
+        assert!(validate_email(&ambre_core::Email::from("@example.com")).is_err());
+        assert!(validate_email(&ambre_core::Email::from("alice@")).is_err());
+        assert!(validate_email(&ambre_core::Email::from("")).is_err());
         let long = format!("{}@x.com", "a".repeat(300));
-        assert!(validate_identity(&ambre_core::Email::from(long.as_str()), "Alice").is_err());
+        assert!(validate_email(&ambre_core::Email::from(long.as_str())).is_err());
     }
 
+    /// A setup body whose display name is blank or past the cap does not
+    /// decode, so no route reads it (`SRV-234`).
     #[test]
-    fn validate_identity_rejects_bad_display_name() {
-        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "").is_err());
-        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), "   ").is_err());
-        let long = "x".repeat(129);
-        assert!(validate_identity(&ambre_core::Email::from("alice@example.com"), &long).is_err());
+    fn a_setup_body_with_a_bad_display_name_does_not_decode() {
+        let body = |name: &str| {
+            serde_json::json!({
+                "email": "alice@example.com",
+                "display_name": name,
+                "master_key_enc": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+                "master_key_salt": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+                "signing_pubkey": hex::encode([3u8; 32]),
+                "exchange_pubkey": hex::encode([4u8; 32]),
+            })
+        };
+        let decode = |name: &str| serde_json::from_value::<SetupAccountRequest>(body(name));
+        let padded = decode("  Bob  ").expect("a padded name decodes");
+        assert_eq!(padded.display_name.as_str(), "Bob");
+        assert!(decode("").is_err());
+        assert!(decode("   ").is_err());
+        assert!(decode(&"x".repeat(129)).is_err());
     }
 }
