@@ -2733,7 +2733,6 @@ ambre-prose | src/commands.rs | crate::commands | save_file_title() | ret | Stri
 ambre-prose | src/commands.rs | crate::commands | strikethrough_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/comment.rs | crate::comment | KIND_COMMENT | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/comment.rs | crate::comment | reply_at(index) | param | usize	math	count, size or local index
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | saturate() | ret | u32	math	count, size or local index
@@ -2752,12 +2751,8 @@ ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text co
 ambre-prose | src/doc.rs | crate::doc | DEFAULT_LINE_HEIGHT | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_family | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.line_height | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/doc.rs | crate::doc | K_COMMENT | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_CROSS_REF | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
-ambre-prose | src/doc.rs | crate::doc | K_FOOTNOTE | const | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | anchors(key) | param | &str	debt	finding: Loro schema keys as &str consts and key-taking helpers (confirmed)
 ambre-prose | src/doc.rs | crate::doc | band_align_name() | ret | Option<&'static str>	debt	finding: band alignment as a name string (confirmed)
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | hide_block() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
@@ -3334,7 +3329,6 @@ ambre-prose | src/mark.rs | crate::mark | parse_color(raw) | param | &str	free-t
 ambre-prose | src/mark.rs | crate::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | validate_value() | ret | Result<String,MarkValueError>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
 ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	mark value text: its grammar is set by the key, and validate_value checks it
-ambre-prose | src/note.rs | crate::note | KIND_FOOTNOTE | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/note.rs | crate::note | ordinals() | ret | Vec<(FootnoteId,u32)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
@@ -3377,7 +3371,6 @@ ambre-prose | src/style.rs | crate::style | ResolvedStyle.strikethrough | field 
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.subscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.superscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.underline | field | bool	generic	independent flag or predicate
-ambre-prose | src/suggest.rs | crate::suggest | KIND_SUGGESTION | const | &str	debt	finding: annotation kind strings (confirmed)
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/suggest.rs | crate::suggest | strip_inherited() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input

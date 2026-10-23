@@ -132,7 +132,8 @@ impl ProseState {
                 else {
                     continue;
                 };
-                if let Some(LoroValue::String(note)) = attributes.get(doc::K_FOOTNOTE)
+                if let Some(LoroValue::String(note)) =
+                    attributes.get(crate::mark::MarkRoot::Footnote.as_str())
                     && let Some(uuid) = ambre_core::FootnoteId::parse_str(note.as_str()).ok()
                     && let Some(block) = crate::note::block(&self.doc, &uuid)
                 {

@@ -11,8 +11,6 @@ use ambre_bus::app::prose::MarkKey;
 use ambre_core::{FontSize, Rgb, Rgba};
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
-use crate::doc;
-
 ambre_core::crdt_names! {
     /// The roots the registry declares. A key is a root, or a root and an id
     /// joined by a colon, and Loro reads it under its root. A document may
@@ -31,16 +29,17 @@ ambre_core::crdt_names! {
         Highlight = "bg",
         FontSize = "fs",
         FontFamily = "ff",
-        /// A comment thread, under its own key `cm:{id}`.
-        Comment = doc::K_COMMENT,
+        /// A comment thread. Each thread writes its own key under it,
+        /// `cm:{id}`, so two threads over one character never share a value.
+        Comment = "cm",
         /// The inserted text of a suggestion.
         Insertion = "si",
         /// The deleted text of a suggestion.
         Deletion = "sd",
-        /// A footnote call.
-        Footnote = doc::K_FOOTNOTE,
-        /// A cross reference.
-        CrossRef = doc::K_CROSS_REF,
+        /// A footnote call: the note's identity in `annots`.
+        Footnote = "fn",
+        /// A cross reference: its record, in hex (`PROSE-FEAT-072`).
+        CrossRef = "ref",
         /// A header field, addressed through its children `f:pn`, `f:pc`,
         /// `f:dt` and `f:ti`.
         Field = "f",

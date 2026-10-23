@@ -263,6 +263,22 @@ ambre_core::crdt_names! {
 }
 
 ambre_core::crdt_names! {
+    /// The kinds an annotation entry declares under [`AnnotKey::Kind`], in one
+    /// field of one type (`PROSE-031`).
+    pub(crate) enum AnnotKind {
+        Comment = "comment",
+        Footnote = "footnote",
+        Suggestion = "suggestion",
+    }
+}
+
+/// The kind `entry` declares, or `None` for a word this build does not know.
+#[must_use]
+pub(crate) fn kind_of(entry: &Fields<AnnotKey>) -> Option<AnnotKind> {
+    AnnotKind::parse(&read_string(entry, AnnotKey::Kind)?)
+}
+
+ambre_core::crdt_names! {
     /// The keys of one reply of a comment.
     pub(crate) enum ReplyKey: FieldKey {
         Id = "id",
@@ -1476,16 +1492,6 @@ pub(crate) fn read_string<K: FieldKey>(map: &Fields<K>, key: K) -> Option<String
 /// it whole.
 pub const CARRIER: char = '\u{fffc}';
 
-/// The mark a footnote call carries: the note's identity in `annots`.
-pub(crate) const K_FOOTNOTE: &str = "fn";
-
-/// The mark a cross reference carries: its record, in hex (`PROSE-FEAT-072`).
-pub(crate) const K_CROSS_REF: &str = "ref";
-
-/// The root of a comment's mark. Each thread writes its own key under it,
-/// `cm:{id}`, so two threads over one character never share a value.
-pub(crate) const K_COMMENT: &str = "cm";
-
 /// Every live block, in document order: the depth-first pre-order walk of the
 /// tree, which is the document flow. The bands are left out.
 #[must_use]
@@ -1511,9 +1517,11 @@ pub(crate) struct Anchor {
     pub value: String,
 }
 
-/// Every character carrying `key`, in document order.
+/// Every character carrying the mark `root`, in document order: a footnote
+/// call or a cross reference, whose key is its root alone.
 #[must_use]
-pub(crate) fn anchors(document: &LoroDoc, key: &str) -> Vec<Anchor> {
+pub(crate) fn anchors(document: &LoroDoc, root: crate::mark::MarkRoot) -> Vec<Anchor> {
+    let key = root.as_str();
     let tree = blocks(document);
     let mut out = Vec::new();
     for id in flow(&tree) {

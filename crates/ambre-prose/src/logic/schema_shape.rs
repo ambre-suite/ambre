@@ -626,7 +626,7 @@ fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
                 .map(doc::Fields::<doc::AnnotKey>::of)
                 .expect("an entry");
             entry
-                .insert(doc::AnnotKey::Kind, crate::note::KIND_FOOTNOTE)
+                .insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())
                 .expect("a kind");
             let text = entry
                 .insert_container(doc::AnnotKey::Text, LoroText::new())

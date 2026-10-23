@@ -244,7 +244,7 @@ impl ProseState {
             .map(doc::Fields::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::AnnotKey::Kind, comment::KIND_COMMENT)
+            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Comment.as_str())
             .map_err(|e| format!("{e:?}"))?;
         entry
             .insert(doc::AnnotKey::Resolved, false)

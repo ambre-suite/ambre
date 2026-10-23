@@ -591,7 +591,7 @@ fn mark_reading(
             "band shows {:?} on page 1",
             crate::band::resolve(&reader.doc, block, crate::events::PageIndex::ZERO, pages)
         )
-    } else if mark == doc::K_FOOTNOTE {
+    } else if mark == crate::mark::MarkRoot::Footnote.as_str() {
         let id = ambre_core::FootnoteId::parse_str(stored.string()?).ok();
         match reader
             .footnotes()
@@ -601,7 +601,7 @@ fn mark_reading(
             Some(note) => format!("calls note {:?}", note.ordinal),
             None => "calls no note".to_owned(),
         }
-    } else if mark == doc::K_CROSS_REF {
+    } else if mark == crate::mark::MarkRoot::CrossRef.as_str() {
         let resolved = crate::xref::resolve_all(&reader.doc, reader.full_layout());
         match resolved.into_iter().find(|r| {
             crate::events::tree_id(r.block_id) == *block && r.offset == DocOffset::new(at)

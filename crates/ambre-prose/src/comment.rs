@@ -10,15 +10,12 @@ use std::collections::HashMap;
 
 use ambre_bus::app::prose::{DocCount, DocOffset};
 use ambre_core::{CommentId, ReplyId, UserId};
-use loro::{Container, LoroDoc, LoroList, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
 use crate::doc::{self, AnnotKey, Fields, ReplyKey};
 use crate::events::{CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
 use ambre_bus::app::prose::MarkKey;
-
-/// The kind a comment's entry declares.
-pub(crate) const KIND_COMMENT: &str = "comment";
 
 /// The mark key of thread `id`.
 #[must_use]
@@ -56,11 +53,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &CommentId) -> Option<Fields<AnnotKe
         return None;
     };
     let map = Fields::of(map);
-    let is_comment = matches!(
-        map.get(AnnotKey::Kind),
-        Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_COMMENT
-    );
-    is_comment.then_some(map)
+    (doc::kind_of(&map) == Some(doc::AnnotKind::Comment)).then_some(map)
 }
 
 /// The reply list of an entry.

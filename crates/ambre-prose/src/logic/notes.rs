@@ -73,7 +73,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
         let key = id.to_hyphenated();
-        let calls: Vec<doc::Anchor> = doc::anchors(&self.doc, doc::K_FOOTNOTE)
+        let calls: Vec<doc::Anchor> = doc::anchors(&self.doc, crate::mark::MarkRoot::Footnote)
             .into_iter()
             .filter(|anchor| anchor.value == key)
             .collect();
@@ -111,7 +111,7 @@ impl ProseState {
             .map(doc::Fields::<doc::AnnotKey>::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::AnnotKey::Kind, crate::note::KIND_FOOTNOTE)
+            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())
             .map_err(|e| format!("{e:?}"))?;
         entry
             .insert(doc::AnnotKey::NoteBlock, block.to_string())
@@ -238,7 +238,7 @@ mod tests {
             Some("Hello\u{fffc} world"),
             "the block holds the call and none of the note's text"
         );
-        let calls = doc::anchors(state.document(), doc::K_FOOTNOTE);
+        let calls = doc::anchors(state.document(), crate::mark::MarkRoot::Footnote);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].offset, DocOffset::new(5));
         assert_eq!(calls[0].value, id.to_hyphenated());

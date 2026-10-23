@@ -9,14 +9,10 @@
 use std::collections::HashSet;
 
 use ambre_core::FootnoteId;
-use loro::{Container, LoroDoc, LoroText, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::FootnoteEntry;
-
-/// The kind a footnote's entry declares. A value of `kind`, not a key, so it
-/// stays out of `doc.rs`, whose string constants are the key vocabulary.
-pub(crate) const KIND_FOOTNOTE: &str = "footnote";
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
@@ -27,12 +23,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &FootnoteId) -> Option<doc::Fields<d
         return None;
     };
     let map = doc::Fields::of(map);
-    let kind = map.get(doc::AnnotKey::Kind);
-    let is_note = matches!(
-        kind,
-        Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_FOOTNOTE
-    );
-    is_note.then_some(map)
+    (doc::kind_of(&map) == Some(doc::AnnotKind::Footnote)).then_some(map)
 }
 
 /// The block holding the text of footnote `id`, when its entry names a live
@@ -74,7 +65,7 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<FootnoteId> {
 pub fn ordinals(document: &LoroDoc) -> Vec<(FootnoteId, u32)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    for anchor in doc::anchors(document, doc::K_FOOTNOTE) {
+    for anchor in doc::anchors(document, crate::mark::MarkRoot::Footnote) {
         let Ok(id) = FootnoteId::parse_str(&anchor.value) else {
             continue;
         };

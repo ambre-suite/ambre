@@ -9,15 +9,12 @@
 
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{SuggestionId, UserId};
-use loro::{Container, LoroDoc, LoroText, LoroValue, TreeID, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::{Suggestion, SuggestionKind, SuggestionSpan, block_id};
 use crate::mark::MarkRoot;
 use ambre_bus::app::prose::MarkKey;
-
-/// The kind a suggestion's entry declares (`PROSE-031`).
-pub(crate) const KIND_SUGGESTION: &str = "suggestion";
 
 /// The mark key of suggestion `id`.
 #[must_use]
@@ -50,11 +47,7 @@ pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<doc::Fields
         return None;
     };
     let map = doc::Fields::of(map);
-    let is_suggestion = matches!(
-        map.get(doc::AnnotKey::Kind),
-        Some(ValueOrContainer::Value(LoroValue::String(kind))) if kind.as_str() == KIND_SUGGESTION
-    );
-    is_suggestion.then_some(map)
+    (doc::kind_of(&map) == Some(doc::AnnotKind::Suggestion)).then_some(map)
 }
 
 /// The user an entry names as its author (`PROSE-FEAT-260`).

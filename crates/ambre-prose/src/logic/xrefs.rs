@@ -47,7 +47,7 @@ impl ProseState {
     /// Bring the target of the reference at `pos` in `block` into view
     /// (`PROSE-UI-085`). A broken reference has nowhere to go and says so.
     pub(super) fn follow_cross_ref(&mut self, block: &TreeID, pos: DocOffset) -> ProseOutcome {
-        let found = doc::anchors(&self.doc, doc::K_CROSS_REF)
+        let found = doc::anchors(&self.doc, crate::mark::MarkRoot::CrossRef)
             .into_iter()
             .find(|anchor| anchor.block == *block && anchor.offset == pos)
             .and_then(|anchor| xref::decode(&anchor.value));
@@ -141,7 +141,7 @@ mod tests {
         let heading_text = state.text_of(&ids[2]);
         let heading_marks = doc::get_block_text(state.document(), &tree_id(ids[2])).to_delta();
         refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);
-        let anchors = doc::anchors(state.document(), doc::K_CROSS_REF);
+        let anchors = doc::anchors(state.document(), crate::mark::MarkRoot::CrossRef);
         assert_eq!(anchors.len(), 1);
         let (named, _) = xref::decode(&anchors[0].value).expect("a record");
         assert_eq!(named, tree_id(ids[2]));
@@ -248,7 +248,7 @@ mod tests {
             "the label survives, the number breaks and resolves to no neighbour"
         );
         assert_eq!(
-            doc::anchors(state.document(), doc::K_CROSS_REF).len(),
+            doc::anchors(state.document(), crate::mark::MarkRoot::CrossRef).len(),
             2,
             "both references stay in the document"
         );
@@ -268,7 +268,7 @@ mod tests {
             block_id: ids[1],
             range: DocSpan::from_usize_range(4..5),
         });
-        assert!(doc::anchors(state.document(), doc::K_CROSS_REF).is_empty());
+        assert!(doc::anchors(state.document(), crate::mark::MarkRoot::CrossRef).is_empty());
     }
 
     #[test]

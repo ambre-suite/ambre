@@ -150,7 +150,7 @@ fn plain_text(change: &ContainerDiff<'_>) -> bool {
         TextDelta::Retain { attributes, .. } => attributes.as_ref().is_none_or(|a| a.is_empty()),
         TextDelta::Insert { attributes, .. } => attributes
             .as_ref()
-            .is_none_or(|a| !a.contains_key(doc::K_FOOTNOTE)),
+            .is_none_or(|a| !a.contains_key(crate::mark::MarkRoot::Footnote.as_str())),
         TextDelta::Delete { .. } => true,
     })
 }

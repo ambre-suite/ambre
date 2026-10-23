@@ -100,7 +100,7 @@ pub fn resolve(
 /// `layout`.
 #[must_use]
 pub fn resolve_all(document: &LoroDoc, layout: Option<&PageLayout>) -> Vec<ResolvedCrossRef> {
-    doc::anchors(document, doc::K_CROSS_REF)
+    doc::anchors(document, crate::mark::MarkRoot::CrossRef)
         .into_iter()
         .filter_map(|anchor| {
             let (target, kind) = decode(&anchor.value)?;

@@ -181,7 +181,7 @@ fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
             continue;
         };
         let entry = d::Fields::<d::AnnotKey>::of(entry);
-        if d::read_string(&entry, d::AnnotKey::Kind).as_deref() != Some(crate::note::KIND_FOOTNOTE)
+        if d::kind_of(&entry) != Some(d::AnnotKind::Footnote)
             || d::read_string(&entry, d::AnnotKey::NoteBlock).is_some()
         {
             continue;

@@ -476,7 +476,7 @@ impl ProseState {
             .map(doc::Fields::<doc::AnnotKey>::of)
             .map_err(|e| format!("{e:?}"))?;
         entry
-            .insert(doc::AnnotKey::Kind, suggest::KIND_SUGGESTION)
+            .insert(doc::AnnotKey::Kind, doc::AnnotKind::Suggestion.as_str())
             .map_err(|e| format!("{e:?}"))?;
         entry
             .insert(
