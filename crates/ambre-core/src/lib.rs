@@ -120,7 +120,9 @@ pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
-pub use payload::{DeltaBytes, EphemeralBytes, FontBytes, MediaBytes, SnapshotBytes};
+pub use payload::{
+    DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes, SnapshotBytes,
+};
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::Role;

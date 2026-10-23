@@ -123,9 +123,66 @@ define_payload! {
     FontBytes
 }
 
+/// What a CRDT document imports: one delta, or a whole snapshot. The engine
+/// imports both alike. The holder knows which it is, and a local store, a
+/// ledger or a test may treat the two apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LoroPayload {
+    /// One change.
+    Delta(DeltaBytes),
+    /// A full state.
+    Snapshot(SnapshotBytes),
+}
+
+impl LoroPayload {
+    /// The payload, borrowed.
+    #[must_use]
+    pub fn borrowed(&self) -> LoroPayloadRef<'_> {
+        match self {
+            Self::Delta(delta) => LoroPayloadRef::Delta(delta),
+            Self::Snapshot(snapshot) => LoroPayloadRef::Snapshot(snapshot),
+        }
+    }
+
+    /// The bytes, for the engine that imports either form.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.borrowed().as_bytes()
+    }
+}
+
+/// A [`LoroPayload`] borrowed from its holder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoroPayloadRef<'a> {
+    /// One change.
+    Delta(&'a DeltaBytes),
+    /// A full state.
+    Snapshot(&'a SnapshotBytes),
+}
+
+impl<'a> LoroPayloadRef<'a> {
+    /// The bytes, for the engine that imports either form.
+    #[must_use]
+    pub fn as_bytes(self) -> &'a [u8] {
+        match self {
+            Self::Delta(delta) => delta.as_bytes(),
+            Self::Snapshot(snapshot) => snapshot.as_bytes(),
+        }
+    }
+
+    /// The payload, owned.
+    #[must_use]
+    pub fn to_payload(self) -> LoroPayload {
+        match self {
+            Self::Delta(delta) => LoroPayload::Delta(delta.clone()),
+            Self::Snapshot(snapshot) => LoroPayload::Snapshot(snapshot.clone()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DeltaBytes, EphemeralBytes, SnapshotBytes};
+    use super::{DeltaBytes, EphemeralBytes, LoroPayload, SnapshotBytes};
 
     #[test]
     fn debug_prints_the_length_alone() {
@@ -141,6 +198,15 @@ mod tests {
             format!("{:?}", EphemeralBytes::default()),
             "EphemeralBytes(0 bytes)"
         );
+    }
+
+    #[test]
+    fn a_payload_keeps_its_kind_and_its_bytes() {
+        let delta = LoroPayload::Delta(DeltaBytes::new(vec![1, 2]));
+        assert_eq!(delta.as_bytes(), [1, 2]);
+        assert_eq!(delta.borrowed().to_payload(), delta);
+        let snapshot = LoroPayload::Snapshot(SnapshotBytes::new(vec![1, 2]));
+        assert_ne!(snapshot, delta);
     }
 
     #[test]

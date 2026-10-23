@@ -1044,7 +1044,9 @@ mod tests {
             DocOffset::ZERO,
         );
         // A change alone keeps the draft: the text is not laid out yet.
-        state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
+        state.apply_event(&ProseEvent::DocUpdated {
+            payload: ambre_core::LoroPayload::Delta(ambre_core::DeltaBytes::new(vec![1])),
+        });
         assert_eq!(state.draft.text_of(block, ""), "hel");
         let typed = TextEdit {
             block_id: block,
@@ -1132,7 +1134,9 @@ mod tests {
         // milliseconds: no recount while the run lasts.
         let mut now = 0.0;
         while now < 1000.0 {
-            state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
+            state.apply_event(&ProseEvent::DocUpdated {
+                payload: ambre_core::LoroPayload::Delta(ambre_core::DeltaBytes::new(vec![1])),
+            });
             recounts += usize::from(state.tick(ambre_core::PageTime(now)).is_some());
             now += 16.0;
         }

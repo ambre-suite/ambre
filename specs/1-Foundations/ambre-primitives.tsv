@@ -359,7 +359,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseError::new(refused) | pa
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.payload | field | Vec<u8>	generic	opaque app clipboard bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocUpdated.delta | field | Vec<u8>	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which (a snapshot import emits it, PROSE-048)
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.filename | field | String	free-text	export filename
@@ -1576,6 +1575,8 @@ ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	trait	signature fixed by the trait
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::as_str() | ret | &str	newtype-inner	ObjectKey newtype
+ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
+ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Held.immutable | field | bool	generic	residency fact flag or its setter; named field, no mode switch
@@ -1913,7 +1914,6 @@ ambre-logic | src/bin/ambre-fixtures.rs | crate | head_commit() | ret | String	f
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::holds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote(payloads) | param | &[(Option<Order>,&[u8])]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -1937,7 +1937,6 @@ ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | r
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::route_service_error(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/data.rs | crate::data | PDF_FILENAME | const | &str	free-text	free text: message, label, name or report
-ambre-logic | src/data.rs | crate::data | Remote<'_>::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
 ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
 ambre-logic | src/direct.rs | crate::direct | LogicState::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2009,7 +2008,6 @@ ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, 
 ambre-logic | src/lib.rs | crate | LiveDoc.logged | field | Option<usize>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | LiveDoc::relay_saw(payload) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-logic | src/lib.rs | crate | LogicState.pending_seals | field | HashMap<RequestId,(DocumentId,String)>	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.snapshot | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2083,7 +2081,6 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | fi
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote(payloads) | param | &[&[u8]]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_request_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::create_space(name) | param | &str	generic	generic byte/text API or codec
@@ -2098,7 +2095,6 @@ ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_open_failed(mess
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard(payload) | param | &[u8]	debt	finding: ephemeral payloads unwrapped from `EphemeralBytes`
-ambre-logic | src/spaces.rs | crate::spaces | Opening.payloads | field | Vec<Vec<u8>>	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.immutable | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta.unsent | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
@@ -3566,7 +3562,6 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | re
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::cached_media() | ret | Option<&[u8]>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::err_write(reason) | param | &str	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::import_remote(payload) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::on_media_downloaded(data) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::schema_version() | ret | u32	debt	finding: schema version as a bare integer (confirmed)
@@ -5777,10 +5772,8 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::import_and_reseed(origin) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::import_and_reseed(payload) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(origin) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload(payload) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::schema_version() | ret | u32	debt	finding: (FINDING, confirmed): schema version u32 with a 0 sentinel

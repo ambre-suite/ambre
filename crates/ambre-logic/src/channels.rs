@@ -1889,7 +1889,7 @@ impl LogicState {
     pub(crate) fn apply_channel_remote(
         &mut self,
         document_id: DocumentId,
-        payloads: &[(Option<Order>, &[u8])],
+        payloads: &[(Option<Order>, ambre_core::LoroPayloadRef<'_>)],
     ) -> bool {
         // A channel still opening keeps the bytes until the document is ready.
         if let Some(opening) = self
@@ -1899,7 +1899,7 @@ impl LogicState {
             .find(|o| o.expects(document_id))
         {
             for &(order, payload) in payloads {
-                opening.receive_at(document_id, order, payload);
+                opening.receive_at(document_id, order, payload.as_bytes());
             }
             return true;
         }
@@ -1912,7 +1912,7 @@ impl LogicState {
         };
         let mut events = Vec::new();
         for &(order, payload) in payloads {
-            match channel.apply_remote_at(document_id, order, payload) {
+            match channel.apply_remote_at(document_id, order, payload.as_bytes()) {
                 Ok(produced) => events.extend(produced),
                 Err(error) => {
                     tracing::warn!("Logic: delta for {document_id} refused: {error}");
@@ -2454,7 +2454,11 @@ mod tests {
         drain(&sync);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         assert!(!state.channels.contains_key(&channel_id));
-        assert!(!state.apply_channel_remote(active.document_id(), &[(None, &[])]));
+        let empty = ambre_core::DeltaBytes::default();
+        assert!(!state.apply_channel_remote(
+            active.document_id(),
+            &[(None, ambre_core::LoroPayloadRef::Delta(&empty))]
+        ));
         let sent = sent(&sync);
         assert_eq!(
             sent,
@@ -5499,14 +5503,21 @@ mod tests {
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
+        let closed_meta = ambre_core::DeltaBytes::new(closed.meta);
         drain(&sync);
 
-        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        assert!(state.apply_channel_remote(
+            meta.document_id(),
+            &[(None, ambre_core::LoroPayloadRef::Delta(&closed_meta))]
+        ));
         assert!(
             sent(&sync).contains(&Sent::Open(successor.document_id())),
             "the successor is fetched"
         );
-        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        assert!(state.apply_channel_remote(
+            meta.document_id(),
+            &[(None, ambre_core::LoroPayloadRef::Delta(&closed_meta))]
+        ));
         assert!(
             !sent(&sync).contains(&Sent::Open(successor.document_id())),
             "fetched once"
@@ -5530,7 +5541,11 @@ mod tests {
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
-        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        let closed_meta = ambre_core::DeltaBytes::new(closed.meta);
+        assert!(state.apply_channel_remote(
+            meta.document_id(),
+            &[(None, ambre_core::LoroPayloadRef::Delta(&closed_meta))]
+        ));
         drain(&sync);
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {

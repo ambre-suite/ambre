@@ -846,7 +846,7 @@ impl ProseState {
     /// edit is a different set of operations from the one that came in. Nothing
     /// is re-broadcast (`SYNC-101`): the method answers display events alone.
     pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<ProseEvent> {
-        self.import_remote(payload.as_bytes())
+        self.import_remote(ambre_core::LoroPayloadRef::Delta(payload))
     }
 
     /// Apply a snapshot whose contents are trusted the way a remote delta is
@@ -855,15 +855,15 @@ impl ProseState {
         &mut self,
         payload: &ambre_core::SnapshotBytes,
     ) -> Vec<ProseEvent> {
-        self.import_remote(payload.as_bytes())
+        self.import_remote(ambre_core::LoroPayloadRef::Snapshot(payload))
     }
 
     /// The path [`apply_remote`](Self::apply_remote) and
     /// [`apply_remote_snapshot`](Self::apply_remote_snapshot) share: the CRDT
     /// engine imports a delta and a snapshot alike.
-    fn import_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
+    fn import_remote(&mut self, payload: ambre_core::LoroPayloadRef<'_>) -> Vec<ProseEvent> {
         let known = self.doc.oplog_vv();
-        if let Err(e) = self.doc.import(payload) {
+        if let Err(e) = self.doc.import(payload.as_bytes()) {
             tracing::warn!("Prose: a remote change could not be applied: {e:?}");
             return vec![Self::err_remote()];
         }
@@ -875,7 +875,7 @@ impl ProseState {
         }
         self.absorb_imported();
         let mut events = vec![ProseEvent::DocUpdated {
-            delta: payload.to_vec(),
+            payload: payload.to_payload(),
         }];
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());
@@ -902,7 +902,7 @@ impl ProseState {
         for payload in payloads {
             match self.doc.import(payload.as_bytes()) {
                 Ok(_) => events.push(ProseEvent::DocUpdated {
-                    delta: payload.as_bytes().to_vec(),
+                    payload: ambre_core::LoroPayload::Delta(payload.clone()),
                 }),
                 Err(e) => {
                     tracing::warn!("Prose: a remote change in a batch failed: {e:?}");
@@ -992,7 +992,9 @@ impl ProseState {
         // content.
         Self::prepare(&self.doc);
         let mut events = vec![ProseEvent::DocUpdated {
-            delta: payload.into_owned(),
+            payload: ambre_core::LoroPayload::Snapshot(ambre_core::SnapshotBytes::new(
+                payload.into_owned(),
+            )),
         }];
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());
@@ -1102,7 +1104,7 @@ impl ProseState {
             events.insert(
                 0,
                 ProseEvent::DocUpdated {
-                    delta: delta.into_bytes(),
+                    payload: ambre_core::LoroPayload::Delta(delta),
                 },
             );
         }
@@ -1184,7 +1186,7 @@ impl ProseState {
             display.insert(
                 0,
                 ProseEvent::DocUpdated {
-                    delta: delta.into_bytes(),
+                    payload: ambre_core::LoroPayload::Delta(delta),
                 },
             );
         }

@@ -36,7 +36,7 @@ pub(crate) struct OpenSpace {
 /// ready.
 #[derive(Default)]
 pub(crate) struct Opening {
-    payloads: Vec<Vec<u8>>,
+    payloads: Vec<ambre_core::LoroPayload>,
     /// The last member rows Sync handed on, applied once the space is open.
     members: Option<Vec<MemberInfo>>,
 }
@@ -160,7 +160,11 @@ impl LogicState {
         let Some(opening) = self.space_opening.remove(&space_id) else {
             return false;
         };
-        let borrowed: Vec<&[u8]> = opening.payloads.iter().map(Vec::as_slice).collect();
+        let borrowed: Vec<&[u8]> = opening
+            .payloads
+            .iter()
+            .map(ambre_core::LoroPayload::as_bytes)
+            .collect();
         match SpaceState::open(space_id, &borrowed) {
             Ok(state) => {
                 let roster = Roster::new(self.my_user_id);
@@ -216,18 +220,20 @@ impl LogicState {
     pub(crate) fn apply_space_remote(
         &mut self,
         document_id: DocumentId,
-        payloads: &[&[u8]],
+        payloads: &[ambre_core::LoroPayloadRef<'_>],
     ) -> bool {
         let space_id = SpaceId::from_document(document_id);
         if let Some(opening) = self.space_opening.get_mut(&space_id) {
-            opening.payloads.extend(payloads.iter().map(|p| p.to_vec()));
+            opening
+                .payloads
+                .extend(payloads.iter().map(|p| p.to_payload()));
             return true;
         }
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return false;
         };
         for payload in payloads {
-            if let Err(error) = space.state.apply_remote(payload) {
+            if let Err(error) = space.state.apply_remote(payload.as_bytes()) {
                 tracing::warn!("Logic: delta for space {space_id} refused: {error}");
             }
         }
@@ -2055,7 +2061,11 @@ mod tests {
             [SyncCommand::CloseDocument { .. }]
         ));
         assert!(state.spaces.is_empty());
-        assert!(!state.apply_space_remote(space_id.document_id(), &[&[]]));
+        let empty = ambre_core::DeltaBytes::default();
+        assert!(!state.apply_space_remote(
+            space_id.document_id(),
+            &[ambre_core::LoroPayloadRef::Delta(&empty)]
+        ));
     }
 
     // --- The members of a space, and their presence ---

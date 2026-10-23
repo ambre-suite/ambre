@@ -1451,8 +1451,9 @@ pub enum ProseEvent {
     /// and never lays text out itself (`PROSE-UI-006`).
     LayoutShaped { layout: SharedLayout },
     /// The confirmed change, local or imported. The bytes are the ones applied,
-    /// never a re-export (`PROSE-023`, `PROSE-048`).
-    DocUpdated { delta: Vec<u8> },
+    /// never a re-export (`PROSE-023`, `PROSE-048`). A delta, or the snapshot
+    /// an import adopted whole.
+    DocUpdated { payload: ambre_core::LoroPayload },
     /// What that change did to the text, in code points, for a view that
     /// holds no document (`PROSE-UI-001`). The draft and the caret follow it
     /// (`PROSE-UI-005`, `PROSE-UI-028`, `PROSE-UI-143`).

@@ -5,6 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use ambre_core::LoroPayloadRef;
 use ambre_core::schema::SchemaError;
 
 use super::*;
@@ -99,7 +100,7 @@ impl TrameState {
     /// path merges the ops, reseeds the formula engine, and tells the UI to
     /// re-fetch.
     pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<TrameEvent> {
-        self.import_and_reseed(payload.as_bytes(), "apply_remote")
+        self.import_and_reseed(LoroPayloadRef::Delta(payload), "apply_remote")
     }
 
     /// Apply a snapshot whose contents are trusted the way a remote delta is
@@ -109,7 +110,7 @@ impl TrameState {
         &mut self,
         payload: &ambre_core::SnapshotBytes,
     ) -> Vec<TrameEvent> {
-        self.import_and_reseed(payload.as_bytes(), "apply_remote_snapshot")
+        self.import_and_reseed(LoroPayloadRef::Snapshot(payload), "apply_remote_snapshot")
     }
 
     /// Apply a remote ephemeral (presence) payload and return presence events.
@@ -162,8 +163,13 @@ impl TrameState {
     ) -> Result<Vec<TrameEvent>, SchemaError> {
         // Before a single container is used (`SCHEMA-006`). What comes back is
         // the payload itself at the current version, or a migrated snapshot.
-        let payload = schema::gate(payload.as_bytes())?;
-        Ok(self.import_and_reseed(&payload, "import_snapshot"))
+        // A gate that keeps the bytes hands back the payload itself.
+        let migrated = match schema::gate(payload.as_bytes())? {
+            std::borrow::Cow::Borrowed(_) => None,
+            std::borrow::Cow::Owned(bytes) => Some(ambre_core::SnapshotBytes::new(bytes)),
+        };
+        let snapshot = migrated.as_ref().unwrap_or(payload);
+        Ok(self.import_and_reseed(LoroPayloadRef::Snapshot(snapshot), "import_snapshot"))
     }
 
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
@@ -181,7 +187,11 @@ impl TrameState {
     /// from the resulting cell values and emits a `DataReset` so the UI
     /// re-fetches its viewport. The original request may predate this import and
     /// show an empty grid.
-    pub(super) fn import_and_reseed(&mut self, payload: &[u8], origin: &str) -> Vec<TrameEvent> {
+    pub(super) fn import_and_reseed(
+        &mut self,
+        payload: LoroPayloadRef<'_>,
+        origin: &str,
+    ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
         if !self.merge_payload(payload, origin) {
             return Vec::new();
@@ -200,7 +210,7 @@ impl TrameState {
         let order = self.sheet_order_ids();
         let mut merged_any = false;
         for payload in payloads {
-            merged_any |= self.merge_payload(payload.as_bytes(), "apply_remote_batch");
+            merged_any |= self.merge_payload(LoroPayloadRef::Delta(payload), "apply_remote_batch");
         }
         if !merged_any {
             return Vec::new();
@@ -211,7 +221,8 @@ impl TrameState {
     /// Merge one decrypted Loro payload into the live document, returning whether
     /// it actually imported (non-empty and accepted). Does NOT reseed: callers
     /// batch the reseed over one or many merges via [`reseed_after_merge`].
-    fn merge_payload(&mut self, payload: &[u8], origin: &str) -> bool {
+    fn merge_payload(&mut self, payload: LoroPayloadRef<'_>, origin: &str) -> bool {
+        let payload = payload.as_bytes();
         if payload.is_empty() {
             return false;
         }

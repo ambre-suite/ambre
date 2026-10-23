@@ -325,22 +325,22 @@ fn the_confirmed_change_carries_the_bytes_that_were_applied() {
         .display
         .iter()
         .find_map(|e| match e {
-            ProseEvent::DocUpdated { delta } => Some(delta.clone()),
+            ProseEvent::DocUpdated { payload } => Some(payload.clone()),
             _ => None,
         })
         .expect("the confirmed change");
     // The event carries the exported bytes, never a re-export (`PROSE-023`).
-    assert_eq!(update, confirmed);
+    assert_eq!(ambre_core::LoroPayload::Delta(update.clone()), confirmed);
     let echoed = bob.apply_remote(&update);
     let remote_confirmed = echoed
         .iter()
         .find_map(|e| match e {
-            ProseEvent::DocUpdated { delta } => Some(delta.clone()),
+            ProseEvent::DocUpdated { payload } => Some(payload.clone()),
             _ => None,
         })
         .expect("the confirmed change");
     // And on the remote path, the payload that arrived (`PROSE-048`).
-    assert_eq!(update, remote_confirmed);
+    assert_eq!(ambre_core::LoroPayload::Delta(update), remote_confirmed);
 }
 
 #[test]

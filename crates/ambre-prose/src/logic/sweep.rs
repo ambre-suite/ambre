@@ -77,7 +77,7 @@ impl ProseState {
             .clone()
             .map(|delta| {
                 vec![ProseEvent::DocUpdated {
-                    delta: delta.into_bytes(),
+                    payload: ambre_core::LoroPayload::Delta(delta),
                 }]
             })
             .unwrap_or_default();

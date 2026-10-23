@@ -874,9 +874,10 @@ mod tests {
         let confirmed = std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
                 UiEvent::Viewport {
-                    event: AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { delta }),
+                    event:
+                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { payload }),
                     document_id: id,
-                } if id == document_id => Some(delta),
+                } if id == document_id => Some(payload),
                 _ => None,
             })
             .expect("the confirmed change reached the UI thread");
@@ -892,7 +893,7 @@ mod tests {
             .expect("the delta reached the Sync worker");
         // One outcome, and the two halves carry the same bytes: the event is
         // not a re-export (`PROSE-023`).
-        assert_eq!(broadcast, confirmed);
+        assert_eq!(ambre_core::LoroPayload::Delta(broadcast), confirmed);
     }
 
     /// `PROSE-UI-006`: the layout reaches the view computed and shaped. The

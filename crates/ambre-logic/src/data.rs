@@ -13,25 +13,7 @@ use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 
-/// What a remote import carries: one delta, or a snapshot whose contents are
-/// trusted. The CRDT engine imports both alike; the local store does not.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Remote<'a> {
-    /// One delta, as the relay delivered it.
-    Delta(&'a ambre_core::DeltaBytes),
-    /// A snapshot adopted whole.
-    Snapshot(&'a ambre_core::SnapshotBytes),
-}
-
-impl Remote<'_> {
-    /// The bytes, for an engine that imports either form.
-    fn as_bytes(&self) -> &[u8] {
-        match self {
-            Remote::Delta(delta) => delta.as_bytes(),
-            Remote::Snapshot(snapshot) => snapshot.as_bytes(),
-        }
-    }
-}
+use ambre_core::LoroPayloadRef;
 
 impl LogicState {
     /// Render a Toile deck to a PDF and answer with the bytes
@@ -726,7 +708,7 @@ impl LogicState {
         self.apply_remote(
             document_id,
             Order::Update(delta.seq),
-            Remote::Delta(&delta.payload),
+            LoroPayloadRef::Delta(&delta.payload),
         );
         self.track_waiting(document_id, &[(delta.seq, &delta.payload)]);
     }
@@ -781,7 +763,7 @@ impl LogicState {
         if let Some(doc) = self.docs.get_mut(&document_id) {
             doc.ledger.record(seq, payload);
             if let Some(payload) = payload {
-                doc.relay_saw(payload.as_bytes());
+                doc.relay_saw(LoroPayloadRef::Delta(payload));
             }
         } else {
             self.record_channel_seq(document_id, seq, payload);
@@ -818,7 +800,10 @@ impl LogicState {
         // A replay queues on an open document only. A space document takes
         // the whole batch now. A channel's never reaches here.
         if !self.docs.contains_key(&document_id) {
-            let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_bytes()).collect();
+            let borrowed: Vec<LoroPayloadRef<'_>> = accepted
+                .iter()
+                .map(|(_, p)| LoroPayloadRef::Delta(p))
+                .collect();
             if !self.apply_space_remote(document_id, &borrowed) {
                 tracing::warn!(
                     "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
@@ -838,13 +823,13 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         order: Order,
-        payload: Remote<'_>,
+        payload: LoroPayloadRef<'_>,
     ) {
         self.settle_import(document_id);
         // A document no entry of `docs` names may belong to an open channel.
         if !self.docs.contains_key(&document_id)
-            && (self.apply_channel_remote(document_id, &[(Some(order), payload.as_bytes())])
-                || self.apply_space_remote(document_id, &[payload.as_bytes()]))
+            && (self.apply_channel_remote(document_id, &[(Some(order), payload)])
+                || self.apply_space_remote(document_id, &[payload]))
         {
             return;
         }
@@ -858,8 +843,8 @@ impl LogicState {
         let (events, persist): (Vec<AppEvent>, bool) = match doc {
             DocState::Trame(state) => {
                 let events = match payload {
-                    Remote::Delta(delta) => state.apply_remote(delta),
-                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                    LoroPayloadRef::Delta(delta) => state.apply_remote(delta),
+                    LoroPayloadRef::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
                 };
                 // Persist the merged state locally whenever the remote delta
                 // actually changed the document (it emitted display events). A
@@ -871,16 +856,16 @@ impl LogicState {
             }
             DocState::Toile(state) => {
                 let events = match payload {
-                    Remote::Delta(delta) => state.apply_remote(delta),
-                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                    LoroPayloadRef::Delta(delta) => state.apply_remote(delta),
+                    LoroPayloadRef::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
                 };
                 let persist = !events.is_empty();
                 (events.into_iter().map(AppEvent::Toile).collect(), persist)
             }
             DocState::Prose(state) => {
                 let events = match payload {
-                    Remote::Delta(delta) => state.apply_remote(delta),
-                    Remote::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
+                    LoroPayloadRef::Delta(delta) => state.apply_remote(delta),
+                    LoroPayloadRef::Snapshot(snapshot) => state.apply_remote_snapshot(snapshot),
                 };
                 let persist = !events.is_empty();
                 (events.into_iter().map(AppEvent::Prose).collect(), persist)
@@ -893,8 +878,8 @@ impl LogicState {
             // A delta joins the local log. A snapshot holds the whole document,
             // so the store takes one of its own.
             match payload {
-                Remote::Delta(delta) => self.owe_delta(document_id, delta.clone()),
-                Remote::Snapshot(_) => self.owe_snapshot(document_id),
+                LoroPayloadRef::Delta(delta) => self.owe_delta(document_id, delta.clone()),
+                LoroPayloadRef::Snapshot(_) => self.owe_snapshot(document_id),
             }
             self.owe_layout(document_id);
         }
@@ -1074,12 +1059,12 @@ impl LogicState {
         self.apply_remote(
             document_id,
             Order::Snapshot(covered),
-            Remote::Snapshot(payload),
+            LoroPayloadRef::Snapshot(payload),
         );
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
-            doc.relay_saw(payload.as_bytes());
+            doc.relay_saw(LoroPayloadRef::Snapshot(payload));
         } else {
             self.note_murmure_snapshot(document_id, covered);
         }

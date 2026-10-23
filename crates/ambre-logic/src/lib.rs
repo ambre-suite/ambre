@@ -565,8 +565,8 @@ impl LiveDoc {
     /// PeerID's bound grows only when the blob starts at or below it, so a gap
     /// the relay never received is not counted as held. A blob the engine
     /// cannot read adds nothing, which keeps the bound low.
-    fn relay_saw(&mut self, payload: &[u8]) {
-        let Ok(meta) = loro::LoroDoc::decode_import_blob_meta(payload, false) else {
+    fn relay_saw(&mut self, payload: ambre_core::LoroPayloadRef<'_>) {
+        let Ok(meta) = loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) else {
             return;
         };
         for (peer, end) in meta.partial_end_vv.iter() {
@@ -1574,7 +1574,7 @@ mod pass_tests {
         reopened.state.apply_remote(
             reopened.document_id,
             Order::Snapshot(Seq::ZERO),
-            crate::data::Remote::Snapshot(&snapshot),
+            ambre_core::LoroPayloadRef::Snapshot(&snapshot),
         );
         assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
     }
@@ -1608,7 +1608,7 @@ mod pass_tests {
         state.apply_remote(
             document_id,
             Order::Update(Seq(1)),
-            crate::data::Remote::Delta(&delta),
+            ambre_core::LoroPayloadRef::Delta(&delta),
         );
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(elements(&state, document_id), 1_001);
