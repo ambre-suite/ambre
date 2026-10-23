@@ -2876,11 +2876,11 @@ fn a_dropped_media_request_is_offered_again() {
     rig.view.update();
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;
-    picture.geom = ambre_bus::app::toile::DisplayGeom::Image("h".to_owned());
+    picture.geom = ambre_bus::app::toile::DisplayGeom::Image("h".into());
     rig.show(vec![DisplayNode::Element(picture)]);
     let asks = |sent: &[ToileCommand]| {
         sent.iter()
-            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes == &["h"]))
+            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes.len() == 1 && hashes[0].as_str() == "h"))
             .count()
     };
     assert_eq!(asks(&rig.drain()), 0, "the full queue took the request");

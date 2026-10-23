@@ -676,13 +676,13 @@ pub struct ClipboardPayload {
 pub enum InitContent {
     None,
     Path(BezPath),
-    Image(String), // blake2b plaintext hash, key into `media`
-    Embed(String), // web url (sandboxed iframe)
+    Image(ambre_core::ContentHash), // blake2b plaintext hash, key into `media`
+    Embed(String),                  // web url (sandboxed iframe)
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
     }, // nested Ambre document (`toile-embeds`)
-    Text(String),  // initial plain body (sticky / text)
+    Text(String),                   // initial plain body (sticky / text)
 }
 
 /// Z-order target for `Reorder` (`toile-z-order`).
@@ -1165,7 +1165,7 @@ pub enum ToileCommand {
     /// `MediaDecoded`. It answers an address the document does not carry with
     /// nothing, and the element keeps the placeholder it already paints.
     RequestMedia {
-        hashes: Vec<String>,
+        hashes: Vec<ambre_core::ContentHash>,
     },
     RestyleElements {
         ids: Vec<ElementId>,
@@ -1750,7 +1750,7 @@ pub enum ToileEvent {
     /// picture reaches the screen at thumbnail resolution -- readable, not
     /// printable (`TOILE-IO-100`).
     MediaDecoded {
-        hash: String,
+        hash: ambre_core::ContentHash,
         width: u32,
         height: u32,
         pixels: Vec<u8>,
@@ -1994,7 +1994,7 @@ pub enum DisplayGeom {
     /// Parley-ready runs.
     Text(String),
     /// Media blob hash (`toile-media` resolves the pixels).
-    Image(String),
+    Image(ambre_core::ContentHash),
     /// Logic-smoothed polyline (`toile-freehand`).
     Stroke(Vec<Point>),
     /// Background + border, and the frame's title (`TOILE-253`). Children are

@@ -211,9 +211,9 @@ impl ToileState {
                 DisplayGeom::Path(path_of(em).unwrap_or_default())
             }
             // An image or an embed that names no source paints its placeholder.
-            ElementKind::Image => {
-                DisplayGeom::Image(str_of(em, ElementKey::Hash).unwrap_or_default())
-            }
+            ElementKind::Image => DisplayGeom::Image(ambre_core::ContentHash(
+                str_of(em, ElementKey::Hash).unwrap_or_default(),
+            )),
             ElementKind::Embed => {
                 DisplayGeom::Embed(str_of(em, ElementKey::Url).unwrap_or_default())
             }

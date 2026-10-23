@@ -48,9 +48,9 @@ pub(crate) use super::walk::{paint_label_plate, rotate_about};
 pub fn missing_media(
     nodes: &[DisplayNode],
     images: &ImageStore,
-    requested: &std::collections::HashSet<String>,
-) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+    requested: &std::collections::HashSet<ambre_core::ContentHash>,
+) -> Vec<ambre_core::ContentHash> {
+    let mut out: Vec<ambre_core::ContentHash> = Vec::new();
     for node in nodes {
         let DisplayNode::Element(de) = node else {
             continue;
@@ -1082,7 +1082,7 @@ mod tests {
             },
         );
         let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
-        assert_eq!(asked, vec!["h2".to_owned()]);
+        assert_eq!(asked, vec![ambre_core::ContentHash::from("h2")]);
     }
 
     /// A picture already asked for is not asked for again. That stops a
@@ -1093,7 +1093,7 @@ mod tests {
         let b = Rect::new(0.0, 0.0, 10.0, 10.0);
         let nodes = vec![elem("a", DisplayGeom::Image("h1".into()), b)];
         let mut pending = std::collections::HashSet::new();
-        pending.insert("h1".to_owned());
+        pending.insert(ambre_core::ContentHash::from("h1"));
         assert!(missing_media(&nodes, &ImageStore::new(), &pending).is_empty());
         // With nothing pending, the same list does ask.
         assert_eq!(
@@ -1102,7 +1102,7 @@ mod tests {
                 &ImageStore::new(),
                 &std::collections::HashSet::new()
             ),
-            vec!["h1".to_owned()]
+            vec![ambre_core::ContentHash::from("h1")]
         );
     }
 

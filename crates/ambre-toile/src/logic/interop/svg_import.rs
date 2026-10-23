@@ -334,7 +334,7 @@ fn import_image(
         batch,
         ElementKind::Image,
         rect,
-        InitContent::Image(hash.0),
+        InitContent::Image(hash),
         None,
     );
     batch.media.push(blob);

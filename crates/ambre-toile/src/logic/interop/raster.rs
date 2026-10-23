@@ -46,7 +46,7 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
         kind: ElementKind::Image,
         at: Point::ZERO,
         size,
-        content: InitContent::Image(hash.0.clone()),
+        content: InitContent::Image(hash.clone()),
         fill: None,
         correlate: 0,
     });
@@ -167,7 +167,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(*size, Size::new(64.0, 48.0));
-                assert_eq!(h, &blob.hash.0, "element references its blob token");
+                assert_eq!(h, &blob.hash, "element references its blob token");
             }
             other => panic!("expected an image CreateElement, got {other:?}"),
         }

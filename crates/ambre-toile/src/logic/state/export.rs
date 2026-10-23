@@ -29,12 +29,15 @@ impl ToileState {
     /// The thumbnail is every pixel this thread holds. The full blob is
     /// ciphertext on the relay, and no path here fetches it. Both the screen and
     /// an exported page therefore get this resolution (`TOILE-IO-100`).
-    pub(super) fn decoded_thumbnail(&self, hash: &str) -> Option<(u32, u32, Vec<u8>)> {
+    pub(super) fn decoded_thumbnail(
+        &self,
+        hash: &ambre_core::ContentHash,
+    ) -> Option<(u32, u32, Vec<u8>)> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return None;
         };
-        let loro::LoroValue::Map(fields) = entries.get(hash)? else {
+        let loro::LoroValue::Map(fields) = entries.get(hash.as_str())? else {
             return None;
         };
         let loro::LoroValue::Binary(thumb) =
@@ -49,12 +52,12 @@ impl ToileState {
     /// The PNG bytes stored as one media address's thumbnail, if the document
     /// carries one (`toile-media`). Handed to the SVG export, which writes them
     /// inline (`TOILE-IO-087`).
-    fn thumbnail_png(&self, hash: &str) -> Option<Vec<u8>> {
+    fn thumbnail_png(&self, hash: &ambre_core::ContentHash) -> Option<Vec<u8>> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return None;
         };
-        let loro::LoroValue::Map(fields) = entries.get(hash)? else {
+        let loro::LoroValue::Map(fields) = entries.get(hash.as_str())? else {
             return None;
         };
         let loro::LoroValue::Binary(thumb) =
@@ -140,9 +143,8 @@ impl ToileState {
             // The plaintext thumbnail, re-encoded as the PNG the export writes
             // inline (`TOILE-IO-087`).
             image_png: match kind {
-                ElementKind::Image => {
-                    str_of(&em, ElementKey::Hash).and_then(|hash| self.thumbnail_png(&hash))
-                }
+                ElementKind::Image => str_of(&em, ElementKey::Hash)
+                    .and_then(|hash| self.thumbnail_png(&ambre_core::ContentHash(hash))),
                 _ => None,
             },
         })
@@ -212,7 +214,7 @@ impl ToileState {
             };
             let rgba = img.to_rgba8();
             out.insert(
-                hash.to_string(),
+                ambre_core::ContentHash::from(hash.as_str()),
                 crate::ui::render::DecodedImage {
                     width: rgba.width(),
                     height: rgba.height(),
@@ -439,7 +441,7 @@ mod media_request_tests {
     fn a_media_request_answers_with_decoded_pixels() {
         let mut st = board_with_media("img", 4, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec!["img".to_owned()],
+            hashes: vec!["img".into()],
         });
         let answer = out
             .display
@@ -454,7 +456,7 @@ mod media_request_tests {
                 _ => None,
             })
             .expect("the request is answered");
-        assert_eq!(answer.0, "img");
+        assert_eq!(answer.0.as_str(), "img");
         assert_eq!((answer.1, answer.2), (4, 2));
         // RGBA8, row-major, no padding: exactly four bytes a texel.
         assert_eq!(answer.3, 4 * 2 * 4);
@@ -467,7 +469,7 @@ mod media_request_tests {
     fn an_unknown_address_is_answered_with_nothing() {
         let mut st = board_with_media("img", 2, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec!["absent".to_owned()],
+            hashes: vec!["absent".into()],
         });
         assert!(out.display.is_empty());
     }
@@ -478,7 +480,7 @@ mod media_request_tests {
     fn a_media_request_writes_nothing() {
         let mut st = board_with_media("img", 2, 2);
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec!["img".to_owned()],
+            hashes: vec!["img".into()],
         });
         assert!(out.update.is_none(), "a read-only command exports no delta");
         assert!(!ToileCommand::RequestMedia { hashes: Vec::new() }.is_mutating());
@@ -492,7 +494,7 @@ mod media_request_tests {
         let mut st = board_with_media("img", 4, 2);
         let before = st.export_snapshot();
         let out = st.handle_command(ToileCommand::RequestMedia {
-            hashes: vec!["img".to_owned()],
+            hashes: vec!["img".into()],
         });
         assert!(
             out.display

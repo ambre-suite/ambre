@@ -445,7 +445,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | DisplayElement.locked | field
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::DocEmbed.focused | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Embed.0 | field | String	debt	planned: lot C bis 5: WebAddress (EmbedTarget::Web)
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Frame.0 | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Image.0 | field | String	debt	planned: lot B bis 8: ContentHash (RequestMedia.hashes and DisplayGeom::Image are the same hash)
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayViewport.grid_unit | field | f64	math	board geometry, style metric, opacity or pressure
@@ -474,7 +473,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.strikethrough | fiel
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.underline | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.weight | field | u16	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Embed.0 | field | String	debt	planned: lot C bis 5: WebAddress (EmbedTarget::Web)
-ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Image.0 | field | String	debt	planned: lot B bis 8: ContentHash (RequestMedia.hashes and DisplayGeom::Image are the same hash)
 ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Text.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::Url.0 | field | String	debt	finding: Addresses not listed in lot C bis 5 (low, confirmed)
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
@@ -526,7 +524,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportSvg.bytes
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::LockElements.locked | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RenameFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ReplyComment.body | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RequestMedia.hashes | field | Vec<String>	debt	planned: lot B bis 8: ContentHash (RequestMedia.hashes and DisplayGeom::Image are the same hash)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ResolveThread.resolved | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RotateElement.radians | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
@@ -548,7 +545,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportFailed.0 | 
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportReport.imported | field | usize	math	count
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportReport.skipped | field | Vec<String>	free-text	file name / skipped item labels
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.hash | field | String	debt	planned: lot B bis 8: ContentHash (RequestMedia.hashes and DisplayGeom::Image are the same hash)
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.height | field | u32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.pixels | field | Vec<u8>	generic	imported file bytes / decoded pixels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.width | field | u32	math	board geometry, style metric, opacity or pressure
@@ -4974,10 +4970,8 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_FILENAME | const | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::decoded_thumbnail() | ret | Option<(u32,u32,Vec<u8>)>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::decoded_thumbnail(hash) | param | &str	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::export_pdf_document() | ret | Result<Vec<u8>,crate::logic::interop::PdfExportError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png(hash) | param | &str	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find(query) | param | &str	free-text	label, message or user text
@@ -5025,7 +5019,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::run_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::seed_media() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(hash) | param | &str	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | rewrite_hash(slot) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | COMMENT_ORIGIN | const | &str	generic	named key constant, the single source of its spelling (inline literals are G5)
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
@@ -5328,8 +5321,6 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_bands() | ret | impl 
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_box(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret | (&str,bool)	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/render.rs | crate::ui::render | missing_media() | ret | Vec<String>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
-ambre-toile | src/ui/render.rs | crate::ui::render | missing_media(requested) | param | &std::collections::HashSet<String>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/ui/render.rs | crate::ui::render | selection_rotation() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.h | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.w | field | f64	math	geometry, layout, count or size local to the algorithm
@@ -5403,7 +5394,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.fatal | field | bool	
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.finger_pans | field | Option<bool>	debt	finding: Bool parameters that select a mode (confirmed, moderate): bool parameter selects a mode
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.gesture_commit_pending | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.initial_viewport_sent | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.media_requested | field | HashSet<String>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.media_retry | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.needs_full | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.next_create_token | field | u64	debt	finding: The create correlation token is a u64 where 0 means none (confirmed): create correlation token u64 with 0 = none sentinel
@@ -5508,7 +5498,6 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | DecodedImage.height | field | u
 ambre-toile | src/ui/walk.rs | crate::ui::walk | DecodedImage.pixels | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/ui/walk.rs | crate::ui::walk | DecodedImage.width | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | ImageStore | alias | HashMap<String,DecodedImage>	debt	planned: lot B item 8 ContentHash ripple (DisplayContent::Image hash)
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | STICKY_SHADOW_OFFSET | const | f64	math	geometry, layout, count or size local to the algorithm

@@ -324,7 +324,8 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             ))
         }
         Root::Media if MediaKey::parse(stored.key(1)?) == Some(MediaKey::Thumb) => {
-            let (w, h, _) = reader.decoded_thumbnail(stored.key(0)?)?;
+            let (w, h, _) =
+                reader.decoded_thumbnail(&ambre_core::ContentHash::from(stored.key(0)?))?;
             Some(format!("thumbnail {w}x{h} px"))
         }
         _ => None,
@@ -357,7 +358,9 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             Some(format!("shows {body:?}"))
         }
         (ElementKey::Name, DisplayGeom::Frame(name)) => Some(format!("titled {name:?}")),
-        (ElementKey::Hash, DisplayGeom::Image(hash)) => Some(format!("draws media {hash:?}")),
+        (ElementKey::Hash, DisplayGeom::Image(hash)) => {
+            Some(format!("draws media {:?}", hash.as_str()))
+        }
         (ElementKey::Url, DisplayGeom::Embed(url)) => Some(format!("embeds {url:?}")),
         (
             ElementKey::DocId | ElementKey::DocType,

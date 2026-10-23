@@ -54,7 +54,7 @@ pub struct DecodedImage {
 
 /// Resolved image pixels for this frame, keyed by media hash. Empty when no
 /// image element is present (or its media has not been decoded yet).
-pub type ImageStore = HashMap<String, DecodedImage>;
+pub type ImageStore = HashMap<ambre_core::ContentHash, DecodedImage>;
 
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the
@@ -520,7 +520,7 @@ fn paint_element<S: DrawSurface>(
                     // The media address already identifies these pixels, so the
                     // back end recognises the texture it uploaded on an earlier
                     // frame without hashing the buffer again.
-                    key: ImageKey::from_address(hash),
+                    key: ImageKey::from_address(hash.as_str()),
                     pixels: &img.pixels,
                     width: img.width,
                     height: img.height,

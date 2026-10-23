@@ -30,19 +30,19 @@ use super::names::{Fields, MediaKey, Root};
 /// the `media` blob at `slot` and every `image` element that referenced it
 /// (`toile-media`). Called as each upload confirmation lands, so by the time
 /// the batch is applied no placeholder survives.
-fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &str) {
+fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &ContentHash) {
     let placeholder = format!("pending:{slot}");
     if let Some(blob) = batch.media.get_mut(slot) {
-        blob.hash = ContentHash(hash.to_owned());
+        blob.hash = hash.clone();
     }
     for cmd in &mut batch.commands {
         if let ToileCommand::CreateElement {
             content: InitContent::Image(h),
             ..
         } = cmd
-            && *h == placeholder
+            && h.as_str() == placeholder
         {
-            *h = hash.to_owned();
+            *h = hash.clone();
         }
     }
 }
@@ -308,7 +308,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         if let Some(slot) = pending.outstanding.remove(&id) {
-            rewrite_hash(&mut pending.batch, slot, content_hash.as_str());
+            rewrite_hash(&mut pending.batch, slot, &content_hash);
         }
         let ready = pending.outstanding.is_empty();
         if !ready {

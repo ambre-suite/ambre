@@ -489,7 +489,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Image,
         Point::new(0.0, 200.0),
-        InitContent::Image("h".to_owned()),
+        InitContent::Image("h".into()),
         3,
     );
     let _embed = create(
