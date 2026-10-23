@@ -11,7 +11,7 @@
 use ambre_core::Rgba;
 use ambre_draw::{Affine, Brush, Color, DocumentWalk, DrawSurface, PositionedLayoutItem, Rect};
 
-use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun};
+use crate::layout::run::{CellStyle, ParleyRunData, RunLine, ShapedRun};
 use crate::view::cache::{RunCache, RunKey};
 use crate::view::{Highlight, HighlightKind};
 
@@ -70,7 +70,7 @@ pub(crate) fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
 /// The glyphs after its point move right by its width.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Insertion {
-    pub line: usize,
+    pub line: RunLine,
     pub x: f64,
     pub width: f64,
 }

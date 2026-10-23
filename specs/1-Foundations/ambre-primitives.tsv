@@ -3080,7 +3080,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | CellShape.rows | field | 
 ambre-prose | src/layout/run.rs | crate::layout::run | CellShape.width_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | CellShape.x_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | CellStyle.padding_px | field | f32	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.local | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.segment | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.shift | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.top | field | f32	math	layout geometry local to algorithm
@@ -3088,7 +3087,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.height | fi
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.indent_px | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.width_px | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(line) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::at_line(x) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor() | ret | (usize,Cursor)	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::full_width() | ret | f32	math	layout geometry local to algorithm
@@ -3096,18 +3094,12 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::height() |
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::indent_px() | ret | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::is_empty() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line() | ret | Option<(parley::Line<'_,ParleyBrush>,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line(index) | param | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_at_byte() | ret | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_of() | ret | usize	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_start(line) | param | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_tops() | ret | Vec<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_under(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::lines() | ret | impl Iterator<Item=(parley::Line<'_,ParleyBrush>,f32)>+'_	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(indent_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line() | ret | Option<(&Segment,f32)>	math	layout geometry local to algorithm
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::on_line(y) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_count() | ret | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_end(index) | param | usize	math	count, size or local index
@@ -3115,12 +3107,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::shaped_in(
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::text() | ret | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::width_px() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::with_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::with_window(cut) | param | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Resume.kept | field | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Resume.line | field | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment.first_line | field | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment.lines | field | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | Segment.skip | field | usize	debt	finding: byte offsets as usize next to code-point offsets (confirmed)
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.first_index | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.order | field | Arc<HashMap<TreeID,usize>>	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout.page_blocks | field | Vec<Vec<usize>>	math	count, size or local index
@@ -3457,7 +3443,6 @@ ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::holds() | ret |
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::len() | ret | usize	math	count, size or local index
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::with_capacity(capacity) | param | usize	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(usize,usize,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::apply_caret(x_goal) | param | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::band_caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::caret_span() | ret | Option<(f32,f32)>	math	layout geometry local to algorithm
@@ -3521,7 +3506,6 @@ ambre-prose | src/view/paint.rs | crate::view::paint | LABEL_TAB_PX | const | f6
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::block_paint((local,remote_carets)) | param | (bool,bool)	generic	independent flag or predicate
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::block_paint(top) | param | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::composition() | ret | Option<(f64,ShapedRun)>	math	layout geometry local to algorithm
-ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::local_caret() | ret | Option<(usize,ambre_draw::BoundingBox)>	math	count, size or local index
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::local_caret(local) | param | bool	generic	independent flag or predicate
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape() | ret | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/view/paint.rs | crate::view::paint | ProseUiState::reshape(kept) | param | Option<(String,ShapedRun)>	free-text	text content / label / parser input
@@ -3559,7 +3543,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible()
 ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/walk.rs | crate::view::walk | BAND | const | f64	math	layout geometry local to algorithm
-ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.line | field | usize	math	count, size or local index
 ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.width | field | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | Insertion.x | field | f64	math	layout geometry local to algorithm
 ambre-prose | src/view/walk.rs | crate::view::walk | PageItem::Rule.x0 | field | f64	math	layout geometry local to algorithm
@@ -5647,3 +5630,4 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regi
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(RunLine,usize,f32)>	math	the item index within a line and the line top, layout geometry

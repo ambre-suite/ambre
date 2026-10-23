@@ -14,7 +14,9 @@ use ambre_draw::{Affine, DocumentWalk, DrawSurface, Rect};
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR_PX;
-use crate::layout::run::{ParleyRunData, RunCount, RunOffset, RunSpan, ShapedRun, TableShape};
+use crate::layout::run::{
+    ParleyRunData, RunCount, RunLine, RunOffset, RunSpan, ShapedRun, TableShape,
+};
 use crate::ui::ProseUiState;
 use crate::view::cache::RunKey;
 use crate::view::caret::Spot;
@@ -540,7 +542,7 @@ impl ProseUiState {
         id: BlockId,
         data: &ParleyRunData,
         local: bool,
-    ) -> Option<(usize, ambre_draw::BoundingBox)> {
+    ) -> Option<(RunLine, ambre_draw::BoundingBox)> {
         self.cursor
             .as_ref()
             .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
@@ -1372,7 +1374,10 @@ mod tests {
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
         let text_px = laid.cells[0].width_px - 2.0 * laid.cells[0].style.padding_px;
-        assert!(run.data().line_count() > 1, "the draft wraps in its column");
+        assert!(
+            run.data().line_count().get() > 1,
+            "the draft wraps in its column"
+        );
         let widest = (0..=run.data().len().get())
             .map(|at| run.data().caret_box(RunOffset::new(at)).x0)
             .fold(0.0, f64::max);
@@ -1608,12 +1613,12 @@ mod tests {
         });
         let answered = state.shaped_layout();
         let laid = answered.blocks[&tree_id(block)].data();
-        assert!(drawn.data().line_count() > 1, "the draft wraps");
+        assert!(drawn.data().line_count().get() > 1, "the draft wraps");
         assert_eq!(drawn.data().text(), laid.text());
         assert_eq!(drawn.data().line_tops(), laid.line_tops());
         let starts = |run: &crate::layout::run::ParleyRunData| {
-            (0..run.line_count())
-                .map(|line| run.at_line(line, 0.0).0)
+            (0..run.line_count().get())
+                .map(|line| run.at_line(crate::layout::run::RunLine::new(line), 0.0).0)
                 .collect::<Vec<_>>()
         };
         assert_eq!(starts(drawn.data()), starts(laid), "the lines break alike");

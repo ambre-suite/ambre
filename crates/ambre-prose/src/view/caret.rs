@@ -12,7 +12,7 @@ use ambre_draw::kinetic::EdgeSpeed;
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use ambre_bus::app::prose::{DocCount, DocOffset};
 
-use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunCount, RunOffset};
+use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunCount, RunLine, RunOffset};
 use crate::ui::ProseUiState;
 use crate::view::hit::HitOffset;
 
@@ -292,9 +292,9 @@ impl ProseUiState {
         let x = x_goal.unwrap_or(0.0);
         let line = run.line_of(laid, affinity);
         let inside = if down {
-            (line + 1 < run.line_count()).then_some(line + 1)
+            (line.next() < run.line_count().as_end()).then_some(line.next())
         } else {
-            line.checked_sub(1)
+            line.prev()
         };
         if let Some(target) = inside {
             let (offset, up) = run.at_line(target, x - run.indent_px());
@@ -305,7 +305,15 @@ impl ProseUiState {
                 let Some(next_run) = self.run_of(next) else {
                     return (block, laid, affinity);
                 };
-                let target = if down { 0 } else { next_run.line_count() - 1 };
+                let target = if down {
+                    RunLine::ZERO
+                } else {
+                    next_run
+                        .line_count()
+                        .as_end()
+                        .prev()
+                        .unwrap_or(RunLine::ZERO)
+                };
                 let (offset, up) = next_run.at_line(target, x - next_run.indent_px());
                 (next, offset, up)
             }

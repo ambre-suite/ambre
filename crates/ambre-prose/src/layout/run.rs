@@ -87,6 +87,34 @@ ambre_core::define_index! {
     pub struct LocalByteVec;
 }
 
+ambre_core::define_index! {
+    /// A line of one run, counted across its segments, the first being zero.
+    pub struct RunLine(usize);
+    /// A number of lines of one run.
+    pub struct RunLineCount;
+    /// The signed gap between two lines of one run.
+    pub struct RunLineDelta(isize);
+    /// A run of lines of one run.
+    pub struct RunLineSpan;
+    /// A list indexed by line of one run.
+    pub struct RunLineVec;
+}
+
+ambre_core::define_index! {
+    /// A line of one segment's layout, as the shaper numbers it. A segment
+    /// may keep its layout's lines from a later one on, so it is no line of
+    /// the run. `ParleyRunData::lines` maps one to the other.
+    pub struct LocalLine(usize);
+    /// A number of lines of one segment's layout.
+    pub struct LocalLineCount;
+    /// The signed gap between two lines of one segment's layout.
+    pub struct LocalLineDelta(isize);
+    /// A run of lines of one segment's layout.
+    pub struct LocalLineSpan;
+    /// A list indexed by line of one segment's layout.
+    pub struct LocalLineVec;
+}
+
 /// One stretch of a run's lines, shaped on its own (`PROSE-128`).
 ///
 /// A run shaped whole is one segment. An edit re-shapes a window from the
@@ -102,12 +130,12 @@ struct Segment {
     local_start: LocalByte,
     /// The layout's first kept line. The lines above it were shaped before
     /// an edit, and an earlier segment holds what replaced them.
-    skip: usize,
+    skip: LocalLine,
     /// How many of the layout's lines the run keeps from `skip` on. The
     /// lines after them were replaced the same way.
-    lines: usize,
-    /// The index of its first kept line among the run's lines.
-    first_line: usize,
+    lines: LocalLineCount,
+    /// Its first kept line, among the run's lines.
+    first_line: RunLine,
 }
 
 impl Segment {
@@ -120,6 +148,16 @@ impl Segment {
     fn to_local(&self, byte: ByteOffset) -> LocalByte {
         self.local_start + LocalByteCount::new(byte.count_from(self.start).get())
     }
+
+    /// The line of the layout's text, `parley` numbering it.
+    fn layout_line(&self, line: LocalLine) -> Option<parley::Line<'_, ParleyBrush>> {
+        self.layout.get(line.to_usize())
+    }
+
+    /// The lines of the layout the run keeps.
+    fn kept(&self) -> LocalLineSpan {
+        LocalLineSpan::from_count(self.skip, self.lines)
+    }
 }
 
 /// Where a window shaped after an edit meets the lines shaped before it
@@ -127,9 +165,9 @@ impl Segment {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Resume {
     /// How many of the window's lines the run keeps.
-    pub kept: usize,
+    pub kept: LocalLineCount,
     /// The first line of the previous run kept after them.
-    pub line: usize,
+    pub line: RunLine,
     /// How many bytes the edit added to the text, negative when it removed.
     pub delta: ByteDelta,
 }
@@ -139,7 +177,7 @@ pub(crate) struct Resume {
 #[derive(Clone, Copy, Debug)]
 struct LineAt {
     segment: usize,
-    local: usize,
+    local: LocalLine,
     top: f32,
     shift: f32,
 }
@@ -150,7 +188,7 @@ pub struct ParleyRunData {
     /// The shaped stretches of the text, in order. Never empty.
     segments: Vec<Segment>,
     /// Every line of the run, in order, across the segments.
-    lines: Vec<LineAt>,
+    lines: RunLineVec<LineAt>,
     /// The height every line takes, summed as the shaper sums it.
     height: f32,
     /// The byte offset each code point starts at, the text's length last. An
@@ -183,17 +221,17 @@ impl ParleyRunData {
             .map(|(at, _)| ByteOffset::from_usize(at))
             .collect();
         char_starts.push(ByteCount::from_len(text.len()).as_end());
-        let lines = layout.len();
+        let lines = LocalLineCount::from_len(layout.len());
         let mut data = Self {
             segments: vec![Segment {
                 layout: Arc::new(layout),
                 start: ByteOffset::ZERO,
                 local_start: LocalByte::ZERO,
-                skip: 0,
+                skip: LocalLine::ZERO,
                 lines,
-                first_line: 0,
+                first_line: RunLine::ZERO,
             }],
-            lines: Vec::new(),
+            lines: RunLineVec::new(),
             height: 0.0,
             char_starts,
             indent_px,
@@ -218,7 +256,7 @@ impl ParleyRunData {
     /// and from `line` on, in text and in marks.
     pub(crate) fn with_window(
         previous: &Self,
-        cut: usize,
+        cut: RunLine,
         (text, marks): (&str, &[MarkedSpan]),
         window: Layout<ParleyBrush>,
         resume: Option<Resume>,
@@ -230,15 +268,16 @@ impl ParleyRunData {
                 break;
             }
             let mut kept = segment.clone();
-            kept.lines = kept.lines.min(cut - segment.first_line);
+            let above = LocalLineCount::new(cut.count_from(segment.first_line).get());
+            kept.lines = kept.lines.min(above);
             segments.push(kept);
         }
-        let lines = resume.map_or(window.len(), |resume| resume.kept);
+        let lines = resume.map_or(LocalLineCount::from_len(window.len()), |resume| resume.kept);
         segments.push(Segment {
             layout: Arc::new(window),
             start,
             local_start: LocalByte::ZERO,
-            skip: 0,
+            skip: LocalLine::ZERO,
             lines,
             first_line: cut,
         });
@@ -247,11 +286,17 @@ impl ParleyRunData {
             for (index, segment) in previous.segments.iter().enumerate().skip(at.segment) {
                 let mut kept = segment.clone();
                 if index == at.segment {
-                    let dropped = at.local.checked_sub(segment.skip)?;
+                    if at.local < segment.skip {
+                        return None;
+                    }
+                    let dropped = at.local.count_from(segment.skip);
+                    if dropped > segment.lines {
+                        return None;
+                    }
                     kept.skip = at.local;
-                    kept.lines = segment.lines.checked_sub(dropped)?;
+                    kept.lines = segment.lines.saturating_sub(dropped);
                     kept.local_start =
-                        LocalByte::from_usize(segment.layout.get(at.local)?.text_range().start);
+                        LocalByte::from_usize(segment.layout_line(at.local)?.text_range().start);
                     kept.start = segment.to_run(kept.local_start);
                 }
                 kept.start = kept.start.checked_offset(resume.delta)?;
@@ -303,7 +348,7 @@ impl ParleyRunData {
                     .iter()
                     .any(|old| Arc::ptr_eq(&old.layout, &segment.layout))
             })
-            .map(|segment| segment.lines)
+            .map(|segment| segment.lines.to_usize())
             .sum()
     }
 
@@ -313,23 +358,22 @@ impl ParleyRunData {
     /// line keeps its pixel only when its shift is rounded the same way. It
     /// is the rounded top in the run less the rounded top in its segment.
     fn index_lines(&mut self) {
-        let mut lines = Vec::new();
+        let mut lines = RunLineVec::new();
         let mut top = 0.0_f32;
         let mut y = 0.0_f64;
         for (index, segment) in self.segments.iter_mut().enumerate() {
-            segment.first_line = lines.len();
+            segment.first_line = lines.len().as_end();
             let mut local_y: f64 = segment
                 .layout
                 .lines()
-                .take(segment.skip)
+                .take(segment.skip.to_usize())
                 .map(|line| f64::from(line.metrics().line_height))
                 .sum();
             let kept = segment
-                .layout
-                .lines()
-                .skip(segment.skip)
-                .take(segment.lines);
-            for (local, line) in (segment.skip..).zip(kept) {
+                .kept()
+                .into_iter()
+                .filter_map(|local| segment.layout_line(local).map(|line| (local, line)));
+            for (local, line) in kept {
                 let height = line.metrics().line_height;
                 lines.push(LineAt {
                     segment: index,
@@ -347,28 +391,33 @@ impl ParleyRunData {
     }
 
     /// The byte line `line` starts at, in the run's text.
-    pub(crate) fn line_start(&self, line: usize) -> Option<ByteOffset> {
+    pub(crate) fn line_start(&self, line: RunLine) -> Option<ByteOffset> {
         let at = self.lines.get(line)?;
         let segment = self.segments.get(at.segment)?;
-        let start = segment.layout.get(at.local)?.text_range().start;
+        let start = segment.layout_line(at.local)?.text_range().start;
         Some(segment.to_run(LocalByte::from_usize(start)))
     }
 
     /// The line a byte of the text falls on, the last one past the text.
-    pub(crate) fn line_at_byte(&self, byte: ByteOffset) -> usize {
-        let last = self.lines.len().saturating_sub(1);
+    pub(crate) fn line_at_byte(&self, byte: ByteOffset) -> RunLine {
+        let last = self.last_line();
         self.lines
             .iter()
             .position(|at| {
                 self.segments.get(at.segment).is_some_and(|segment| {
-                    segment.layout.get(at.local).is_some_and(|line| {
+                    segment.layout_line(at.local).is_some_and(|line| {
                         let range = LocalByteSpan::from_usize_range(line.text_range());
                         ByteSpan::new(segment.to_run(range.start), segment.to_run(range.end))
                             .contains(byte)
                     })
                 })
             })
-            .unwrap_or(last)
+            .map_or(last, RunLine::from_usize)
+    }
+
+    /// The last line of the run, the first when it holds none.
+    fn last_line(&self) -> RunLine {
+        self.lines.len().as_end().prev().unwrap_or(RunLine::ZERO)
     }
 
     /// The marks of the code point before `offset`, its range aside. Text
@@ -428,14 +477,17 @@ impl ParleyRunData {
     /// Every line, in order, with the vertical shift that moves its glyphs
     /// from where its segment put them to where the run draws them.
     pub fn lines(&self) -> impl Iterator<Item = (parley::Line<'_, ParleyBrush>, f32)> + '_ {
-        (0..self.lines.len()).filter_map(|index| self.line(index))
+        self.lines
+            .positions()
+            .into_iter()
+            .filter_map(|index| self.line(index))
     }
 
     /// Line `index`, with its vertical shift.
     #[must_use]
-    pub fn line(&self, index: usize) -> Option<(parley::Line<'_, ParleyBrush>, f32)> {
+    pub fn line(&self, index: RunLine) -> Option<(parley::Line<'_, ParleyBrush>, f32)> {
         let at = self.lines.get(index)?;
-        let line = self.segments.get(at.segment)?.layout.get(at.local)?;
+        let line = self.segments.get(at.segment)?.layout_line(at.local)?;
         Some((line, at.shift))
     }
 
@@ -467,9 +519,10 @@ impl ParleyRunData {
         let (x, y) = (at.x.get(), at.y.get());
         let index = self
             .lines
+            .as_slice()
             .partition_point(|at| at.top <= y)
             .saturating_sub(1);
-        let Some((segment, local_y)) = self.on_line(index, y) else {
+        let Some((segment, local_y)) = self.on_line(RunLine::from_usize(index), y) else {
             return RunOffset::ZERO;
         };
         let cursor = Cursor::from_point(&segment.layout, x, local_y);
@@ -539,7 +592,7 @@ impl ParleyRunData {
             return caret;
         }
         let indent = self
-            .line(0)
+            .line(RunLine::ZERO)
             .and_then(|(line, _)| {
                 line.items().find_map(|item| match item {
                     ambre_draw::PositionedLayoutItem::InlineBox(b) => Some(b.x + b.width),
@@ -557,32 +610,34 @@ impl ParleyRunData {
 
     /// The line a caret sits on, the first one being zero.
     #[must_use]
-    pub fn line_of(&self, offset: RunOffset, affinity: Affinity) -> usize {
+    pub fn line_of(&self, offset: RunOffset, affinity: Affinity) -> RunLine {
         let caret = self.caret_box_at(offset, affinity);
         let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
-        self.lines
+        let under = self
+            .lines
+            .as_slice()
             .partition_point(|at| at.top <= middle)
-            .saturating_sub(1)
-            .min(self.line_count() - 1)
+            .saturating_sub(1);
+        RunLine::from_usize(under).min(self.last_line())
     }
 
     /// How many lines the run is broken into, never fewer than one.
     #[must_use]
-    pub fn line_count(&self) -> usize {
-        self.lines.len().max(1)
+    pub fn line_count(&self) -> RunLineCount {
+        self.lines.len().max(RunLineCount::ONE)
     }
 
     /// The caret on line `line` nearest to `x`, and its affinity.
     #[must_use]
-    pub fn at_line(&self, line: usize, x: f32) -> (RunOffset, Affinity) {
-        let index = line.min(self.lines.len().saturating_sub(1));
+    pub fn at_line(&self, line: RunLine, x: f32) -> (RunOffset, Affinity) {
+        let index = line.min(self.last_line());
         let Some(at) = self.lines.get(index) else {
             return (RunOffset::ZERO, Affinity::Downstream);
         };
         let Some(segment) = self.segments.get(at.segment) else {
             return (RunOffset::ZERO, Affinity::Downstream);
         };
-        let Some(local) = segment.layout.get(at.local) else {
+        let Some(local) = segment.layout_line(at.local) else {
             return (RunOffset::ZERO, Affinity::Downstream);
         };
         let metrics = local.metrics();
@@ -728,28 +783,26 @@ impl ParleyRunData {
     fn line_under(&self, index: usize, rect: &BoundingBox) -> Option<LineAt> {
         let segment = self.segments.get(index)?;
         let middle = ((rect.y0 + rect.y1) / 2.0) as f32;
-        let kept = segment.lines.max(1);
-        let local = (segment.skip..segment.skip + kept)
+        let kept = LocalLineSpan::from_count(segment.skip, segment.lines.max(LocalLineCount::ONE));
+        let local = kept
+            .into_iter()
             .find(|&local| {
                 segment
-                    .layout
-                    .get(local)
+                    .layout_line(local)
                     .is_some_and(|line| middle < line.metrics().block_max_coord)
             })
-            .unwrap_or(segment.skip + kept - 1);
-        self.lines
-            .get(segment.first_line + local - segment.skip)
-            .copied()
+            .or(kept.last())?;
+        let below = RunLineCount::new(local.count_from(segment.skip).get());
+        self.lines.get(segment.first_line + below).copied()
     }
 
     /// Segment of line `index`, and `y` moved into its coordinates and held
     /// inside that line.
-    fn on_line(&self, index: usize, y: f32) -> Option<(&Segment, f32)> {
-        let at = self
-            .lines
-            .get(index.min(self.lines.len().checked_sub(1)?))?;
+    fn on_line(&self, index: RunLine, y: f32) -> Option<(&Segment, f32)> {
+        let last = self.lines.len().as_end().prev()?;
+        let at = self.lines.get(index.min(last))?;
         let segment = self.segments.get(at.segment)?;
-        let metrics = *segment.layout.get(at.local)?.metrics();
+        let metrics = *segment.layout_line(at.local)?.metrics();
         let local = y - at.shift;
         let low = metrics.block_min_coord;
         let high = (metrics.block_max_coord - 0.01).max(low);

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use ambre_core::FootnoteId;
 use loro::TreeID;
 
-use crate::layout::run::{ParleyRunData, ShapedRun};
+use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 
 /// How many runs the cache keeps drawing state for, about fifty pages
 /// (`ambre-spec-budgets.md section 6`).
@@ -30,7 +30,7 @@ pub enum RunKey {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RunDrawState {
     /// The line and the item of each glyph run, with the top of its line.
-    pub glyph_runs: Vec<(usize, usize, f32)>,
+    pub glyph_runs: Vec<(RunLine, usize, f32)>,
 }
 
 impl RunDrawState {
@@ -42,7 +42,7 @@ impl RunDrawState {
             let top = tops.get(line_index).copied().unwrap_or(0.0);
             for (item_index, item) in line.items().enumerate() {
                 if matches!(item, ambre_draw::PositionedLayoutItem::GlyphRun(_)) {
-                    glyph_runs.push((line_index, item_index, top));
+                    glyph_runs.push((RunLine::from_usize(line_index), item_index, top));
                 }
             }
         }

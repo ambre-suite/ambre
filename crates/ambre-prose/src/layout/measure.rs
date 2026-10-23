@@ -17,7 +17,9 @@ use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::layout::fonts;
-use crate::layout::run::{ParleyRunData, Resume, ShapedRun};
+use crate::layout::run::{
+    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, ShapedRun,
+};
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
@@ -398,7 +400,7 @@ impl Measurer {
             .iter()
             .map(|offset| {
                 let byte = char_to_byte(text, offset.as_char());
-                u32::try_from(run.data().line_at_byte(byte)).unwrap_or(u32::MAX)
+                u32::try_from(run.data().line_at_byte(byte).to_usize()).unwrap_or(u32::MAX)
             })
             .collect();
         (run_metrics(run.data()), lines, run)
@@ -589,7 +591,7 @@ pub(crate) fn reshape_window(
     let (old_suffix, new_suffix) = (old.len() - suffix, text.len() - suffix);
     let cut = previous
         .line_at_byte(ByteOffset::from_usize(prefix.saturating_sub(1)))
-        .saturating_sub(1);
+        .saturating_sub(RunLineCount::ONE);
     let start = previous.line_start(cut)?.to_usize();
     if start > prefix || !text.is_char_boundary(start) {
         return None;
@@ -605,8 +607,9 @@ pub(crate) fn reshape_window(
         previous.marks(),
         ByteSpan::from_usize_range(old_suffix..old.len()),
     ) == clip(marks, ByteSpan::from_usize_range(new_suffix..text.len()));
-    let meets: Vec<(usize, usize)> = if same_after {
-        (cut + 1..previous.line_count())
+    let meets: Vec<(RunLine, usize)> = if same_after {
+        RunLineSpan::new(cut.next(), previous.line_count().as_end())
+            .into_iter()
             .filter_map(|line| {
                 let at = previous
                     .line_start(line)
@@ -620,7 +623,7 @@ pub(crate) fn reshape_window(
     // Only the paragraph's first line is indented, and it is kept unless
     // the window starts there.
     let mut window_style = style.clone();
-    if cut > 0 {
+    if cut > RunLine::ZERO {
         window_style.indent_first_px = 0.0;
     }
     if let Some(&(_, end)) = meets
@@ -639,7 +642,7 @@ pub(crate) fn reshape_window(
             let found = meets.binary_search_by_key(&at, |&(_, now)| now).ok()?;
             let &(line, _) = meets.get(found)?;
             Some(Resume {
-                kept: local,
+                kept: LocalLineCount::from_len(local),
                 line,
                 delta,
             })
@@ -836,8 +839,8 @@ mod tests {
         Vec<[i64; 4]>,
     ) {
         let data = run.data();
-        let starts = (0..data.line_count())
-            .filter_map(|line| data.line_start(line))
+        let starts = (0..data.line_count().get())
+            .filter_map(|line| data.line_start(crate::layout::run::RunLine::new(line)))
             .map(ByteOffset::to_usize)
             .collect();
         let baselines = data
@@ -971,7 +974,7 @@ mod tests {
         };
         let (_, _, run) =
             measurer.measure_with_lines((&base, &bold(&base)), &style, width, &[], None);
-        assert!(run.data().line_count() > 20);
+        assert!(run.data().line_count().get() > 20);
         // A letter, one in the first line, and two accented ones. A key
         // moves a word or two, and a few lines take it back. An erased
         // word and a pasted phrase can move every break after them, and the

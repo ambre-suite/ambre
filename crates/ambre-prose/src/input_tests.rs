@@ -863,8 +863,8 @@ fn home_and_end_honour_the_wrapped_line() {
     let run_len = rig.ui.run_of(block).expect("a run").len().as_end();
     let second_line = {
         let run = rig.ui.run_of(block).expect("a run");
-        assert!(run.line_count() > 2);
-        run.at_line(1, 5.0).0
+        assert!(run.line_count().get() > 2);
+        run.at_line(crate::layout::run::RunLine::new(1), 5.0).0
     };
     rig.ui
         .set_caret((block, DocOffset::new(second_line.get() + 2)));
@@ -877,12 +877,18 @@ fn home_and_end_honour_the_wrapped_line() {
         "the caret stays on the line it ends"
     );
     let run = rig.ui.run_of(block).expect("a run");
-    assert_eq!(run.line_of(end, Affinity::Upstream), 1);
+    assert_eq!(
+        run.line_of(end, Affinity::Upstream),
+        crate::layout::run::RunLine::new(1)
+    );
     rig.key(ProseKey::Home, false, false);
     let start = RunOffset::new(rig.caret().offset.get());
     assert!(start > RunOffset::ZERO && start <= second_line);
     let run = rig.ui.run_of(block).expect("a run");
-    assert_eq!(run.line_of(start, Affinity::Downstream), 1);
+    assert_eq!(
+        run.line_of(start, Affinity::Downstream),
+        crate::layout::run::RunLine::new(1)
+    );
 }
 
 /// `PROSE-UI-035`, `PROSE-UI-158`: every move leaves the caret on screen,
