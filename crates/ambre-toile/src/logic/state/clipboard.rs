@@ -79,7 +79,11 @@ impl ToileState {
             let fields = match self.element_map(id) {
                 Some(em) => match em.map().get_deep_value() {
                     LoroValue::Map(f) => {
-                        capture_scalars(FieldValues::<ElementKey>::of(&f), &[ElementKey::Notes])
+                        let f = FieldValues::<ElementKey>::of(&f);
+                        capture_scalars(f, ElementKey::ALL, &[ElementKey::Notes])
+                            .into_iter()
+                            .map(|(key, value)| (key.as_str().to_owned(), value))
+                            .collect()
                     }
                     _ => Vec::new(),
                 },
@@ -121,7 +125,14 @@ impl ToileState {
                         connectors.push(ClipConnector {
                             from_slot,
                             to_slot,
-                            fields: capture_scalars(f, &[ConnectorKey::From, ConnectorKey::To]),
+                            fields: capture_scalars(
+                                f,
+                                ConnectorKey::ALL,
+                                &[ConnectorKey::From, ConnectorKey::To],
+                            )
+                            .into_iter()
+                            .map(|(key, value)| (key.as_str().to_owned(), value))
+                            .collect(),
                         });
                     }
                 }
@@ -163,7 +174,11 @@ impl ToileState {
             else {
                 continue;
             };
-            write_clip_fields(em.map(), &clip.fields, offset);
+            // A key the schema does not name is a malformed paste, and it is
+            // skipped like a dangling slot.
+            let fields = clip.fields.iter();
+            let fields = fields.filter_map(|(key, value)| Some((ElementKey::parse(key)?, value)));
+            write_clip_fields(&em, fields, offset);
             // A frame is born with its two containers, here as at every other
             // birth. The membership list makes the copy a frame an element can
             // be added to (`TOILE-138`). The notes text is the container every
@@ -203,7 +218,9 @@ impl ToileState {
             else {
                 continue;
             };
-            write_clip_fields(cm.map(), &c.fields, Vec2::ZERO);
+            let fields = c.fields.iter();
+            let fields = fields.filter_map(|(key, value)| Some((ConnectorKey::parse(key)?, value)));
+            write_clip_fields(&cm, fields, Vec2::ZERO);
             let _ = cm.insert(ConnectorKey::From, from.as_str());
             let _ = cm.insert(ConnectorKey::To, to.as_str());
             let _ = layers.push(NodeId::Connector(conn_id.clone()).encode().as_str());
@@ -221,5 +238,65 @@ impl ToileState {
         display.push(self.viewport_event());
         display.push(self.undo_state_event());
         self.emit_with_update(display)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{ClipValue, InitContent, ToileCommand, ToileEvent};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::logic::state::ToileState;
+
+    /// A pasted payload is read through the schema of the map it lands in. A
+    /// field the schema does not name is skipped, so a paste never writes a
+    /// key the board does not read.
+    #[test]
+    fn a_paste_writes_only_the_keys_the_schema_names() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::new(10.0, 10.0),
+            size: Size::new(20.0, 20.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: None,
+        });
+        let Some(id) = out.display.into_iter().find_map(|e| match e {
+            ToileEvent::ElementCreated { id, .. } => Some(id),
+            _ => None,
+        }) else {
+            panic!("no ElementCreated");
+        };
+        let copy = st.handle_command(ToileCommand::CopyElements { ids: vec![id] });
+        let Some(mut payload) = copy.display.into_iter().find_map(|e| match e {
+            ToileEvent::Clipboard(p) => Some(p),
+            _ => None,
+        }) else {
+            panic!("no Clipboard");
+        };
+        payload.elements[0]
+            .fields
+            .push(("stray".to_owned(), ClipValue::Bool(true)));
+        let paste = st.handle_command(ToileCommand::PasteElements {
+            payload,
+            at: Point::new(100.0, 100.0),
+        });
+        let Some(pasted) = paste.display.into_iter().find_map(|e| match e {
+            ToileEvent::ElementCreated { id, .. } => Some(id),
+            _ => None,
+        }) else {
+            panic!("the paste created nothing");
+        };
+        let Some(em) = st.element_map(&pasted) else {
+            panic!("no pasted map");
+        };
+        assert!(em.map().get("stray").is_none(), "the stray key is skipped");
+        assert_eq!(
+            st.bounds_of(&pasted),
+            Some(kurbo::Rect::new(100.0, 100.0, 120.0, 120.0)),
+            "the schema keys land, offset to the cursor"
+        );
     }
 }

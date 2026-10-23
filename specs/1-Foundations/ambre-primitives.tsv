@@ -3942,8 +3942,7 @@ ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | WiresTou
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | body_of() | ret | String	generic	generic parser/reader/formatter over text
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | bool	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | capture_scalars() | ret | Vec<(String,ClipValue)>	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | bool	generic	untyped CRDT flag read by key: absent or not a bool reads false, and the key the caller passes gives it its meaning
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | connector_label() | ret | String	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | content_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_anchor(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
@@ -3957,7 +3956,6 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() 
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | write_clip_fields(fields) | param | &[(String,ClipValue)]	debt	finding: "group G5 rest: readers default to 0.0/"""" sentinel, clip fields keep the raw keys of the captured map"
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | PREVIEW_CHARS | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::create_comment(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::edit_comment(message) | param | usize	math	geometry, layout, count or size local to the algorithm

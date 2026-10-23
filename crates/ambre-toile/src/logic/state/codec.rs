@@ -7,7 +7,7 @@
 
 use ambre_core::crdt::FieldKey;
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
-use loro::{Container, LoroMap, LoroText, LoroValue, ValueOrContainer};
+use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
 use crate::logic::command::{ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
@@ -81,27 +81,26 @@ pub(super) fn em_seed_group(em: &Fields<ElementKey>) {
 }
 
 /// Capture the scalar (non-container) fields of a map deep-value into an id-free
-/// clipboard field list. Container fields (a group's `children` list)
-/// are naturally skipped -- they arrive as `LoroValue::List` / `Map`, which do
-/// not match a leaf kind. `skip` drops named fields the caller remaps itself
-/// (connector endpoints).
-pub(super) fn capture_scalars<K: FieldKey>(
+/// clipboard field list, one entry per key of `keys` the map holds. Container
+/// fields (a group's `children` list) are naturally skipped -- they arrive as
+/// `LoroValue::List` / `Map`, which do not match a leaf kind. `skip` drops named
+/// fields the caller remaps itself (connector endpoints). A key outside the
+/// schema is never captured, so a paste writes only keys the schema names.
+pub(super) fn capture_scalars<K: FieldKey + PartialEq>(
     fields: FieldValues<'_, K>,
+    keys: &[K],
     skip: &[K],
-) -> Vec<(String, ClipValue)> {
+) -> Vec<(K, ClipValue)> {
     let mut out = Vec::new();
-    for (k, v) in fields.map().iter() {
-        if skip.iter().any(|key| key.as_str() == k.as_str()) {
-            continue;
-        }
-        let cv = match v {
-            LoroValue::Double(d) => ClipValue::F64(*d),
-            LoroValue::Bool(b) => ClipValue::Bool(*b),
-            LoroValue::String(s) => ClipValue::Str(s.to_string()),
-            LoroValue::Binary(b) => ClipValue::Bin(b.to_vec()),
+    for &key in keys.iter().filter(|key| !skip.contains(key)) {
+        let cv = match fields.get(key) {
+            Some(LoroValue::Double(d)) => ClipValue::F64(*d),
+            Some(LoroValue::Bool(b)) => ClipValue::Bool(*b),
+            Some(LoroValue::String(s)) => ClipValue::Str(s.to_string()),
+            Some(LoroValue::Binary(b)) => ClipValue::Bin(b.to_vec()),
             _ => continue,
         };
-        out.push((k.to_string(), cv));
+        out.push((key, cv));
     }
     out
 }
@@ -109,37 +108,42 @@ pub(super) fn capture_scalars<K: FieldKey>(
 /// Write captured clipboard fields into a fresh element / connector map.
 /// `offset` is added to the `x` / `y` coordinates so the paste lands at the
 /// cursor.
-pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], offset: Vec2) {
+pub(super) fn write_clip_fields<'a, K: FieldKey>(
+    m: &Fields<K>,
+    fields: impl IntoIterator<Item = (K, &'a ClipValue)>,
+    offset: Vec2,
+) {
     for (k, v) in fields {
         match v {
             ClipValue::F64(d) => {
-                let d = match ElementKey::parse(k) {
+                let d = match ElementKey::parse(k.as_str()) {
                     Some(ElementKey::X) => d + offset.x,
                     Some(ElementKey::Y) => d + offset.y,
                     _ => *d,
                 };
-                let _ = m.insert(k.as_str(), d);
+                let _ = m.insert(k, d);
             }
             ClipValue::Bool(b) => {
-                let _ = m.insert(k.as_str(), *b);
+                let _ = m.insert(k, *b);
             }
             // A body and a caption are text containers on the board, which
             // the capture read as their string. Written back as a string they
             // would race whole (`TOILE-030`, `TOILE-047`).
             ClipValue::Str(s)
-                if k == ElementKey::Body.as_str() || k == ConnectorKey::Label.as_str() =>
+                if k.as_str() == ElementKey::Body.as_str()
+                    || k.as_str() == ConnectorKey::Label.as_str() =>
             {
-                if let Ok(text) = m.insert_container(k.as_str(), LoroText::new())
+                if let Ok(text) = m.insert_container(k, LoroText::new())
                     && !s.is_empty()
                 {
                     let _ = text.insert(0, s);
                 }
             }
             ClipValue::Str(s) => {
-                let _ = m.insert(k.as_str(), s.as_str());
+                let _ = m.insert(k, s.as_str());
             }
             ClipValue::Bin(b) => {
-                let _ = m.insert(k.as_str(), LoroValue::Binary(b.clone().into()));
+                let _ = m.insert(k, LoroValue::Binary(b.clone().into()));
             }
         }
     }
