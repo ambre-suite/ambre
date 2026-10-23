@@ -556,7 +556,6 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormat
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::LessThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopN.0 | field | u32	math	top/bottom N count
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::TopNPercent.0 | field | f32	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondStyle.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.max | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::DateRange.min | field | Option<String>	debt	finding: Raw date and percentage in Trame rules (low, suspected)
@@ -5515,3 +5514,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidCsvDelimiter.0 | field | u8	newtype-inner	CsvDelimiter field, constructor or accessor: the refused byte, echoed in the refusal
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPercent.0 | field | f32	newtype-inner	Percent field, constructor or accessor: the refused value, echoed in the refusal
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent.0 | field | f32	newtype-inner	the value of a validated percentage
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::new(value) | param | f32	newtype-inner	the fallible constructor that checks the range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::value() | ret | f32	newtype-inner	enum/newtype own accessor or constructor

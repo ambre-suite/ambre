@@ -164,7 +164,7 @@ pub enum CondFormatKind {
     ColorScale2 { min_color: u32, max_color: u32 },
     ColorScale3 { min_color: u32, mid_color: u32, max_color: u32 },
     DataBar { color: u32 },
-    TopN(u32), BottomN(u32), TopNPercent(f32),
+    TopN(u32), BottomN(u32), TopNPercent(Percent), // 0 to 100
 }
 ```
 

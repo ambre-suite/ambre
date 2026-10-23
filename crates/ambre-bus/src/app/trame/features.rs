@@ -59,6 +59,36 @@ pub enum HeaderRow {
     Present,
 }
 
+/// A number refused as a percentage: outside `0..=100`, or not a number.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("{0} is not a percentage between 0 and 100")]
+pub struct InvalidPercent(pub f32);
+
+/// A share of a whole, in percent, from 0 to 100 inclusive. A top-N rule
+/// ranks the cells it covers by it (`trame-cell-styles`).
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct Percent(f32);
+
+impl Percent {
+    /// The percentage `value` is.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidPercent`] when `value` is below 0, above 100, or NaN.
+    pub fn new(value: f32) -> Result<Self, InvalidPercent> {
+        if (0.0..=100.0).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(InvalidPercent(value))
+        }
+    }
+
+    /// The percentage, from 0 to 100.
+    pub const fn value(self) -> f32 {
+        self.0
+    }
+}
+
 /// A conditional-formatting rule predicate (`trame-cell-styles`).
 /// `String` operands are either a literal value or a cell reference, resolved at
 /// evaluation. MVP+ kinds (value/text/formula/presets) land in Phase 2; the
@@ -91,7 +121,7 @@ pub enum CondFormatKind {
     },
     TopN(u32),
     BottomN(u32),
-    TopNPercent(f32),
+    TopNPercent(Percent),
 }
 
 /// Style applied when a conditional-formatting rule matches
@@ -143,4 +173,19 @@ pub enum ValidationOnInvalid {
     Warn,
     /// Visual indicator only.
     Info,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Percent;
+
+    #[test]
+    fn a_percentage_runs_from_zero_to_a_hundred() {
+        for value in [0.0, 12.5, 100.0] {
+            assert_eq!(Percent::new(value).map(Percent::value), Ok(value));
+        }
+        for value in [-0.5, 100.5, f32::NAN, f32::INFINITY] {
+            assert!(Percent::new(value).is_err(), "{value} is refused");
+        }
+    }
 }
