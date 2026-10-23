@@ -516,10 +516,10 @@ fn merge_marks_master_span_and_blanks_covered() {
 
     // Merge A1:B2 (2 cols x 2 rows), master = A1.
     let evts = state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
     });
     assert!(
         evts.display
@@ -561,10 +561,10 @@ fn merge_rejected_when_covered_cell_non_empty() {
     });
 
     let evts = state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+        ),
     });
     assert!(
         matches!(&evts.display[0], TrameEvent::MergeRejected { .. }),
@@ -580,10 +580,10 @@ fn merge_rejected_when_covered_cell_non_empty() {
 fn unmerge_restores_covered_cells() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(0),
-        col_end: Col::new(2),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(2)),
+        ),
     });
     assert_eq!(read_display(&mut state, 0, 0).merge_span, Some(span(1, 3)));
 

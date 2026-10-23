@@ -13,16 +13,16 @@ fn unmerge_active_splits_every_merge_in_selection() {
     let mut state = TrameState::new();
     // Build two separate merges: A1:B1 and A3:B3.
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+        ),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(2),
-        col: Col::new(0),
-        row_end: Row::new(2),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(1)),
+        ),
     });
     assert_eq!(read_display(&mut state, 0, 0).merge_span, Some(span(1, 2)));
     assert_eq!(read_display(&mut state, 2, 0).merge_span, Some(span(1, 2)));
@@ -70,10 +70,10 @@ fn unmerge_selection_grows_to_cover_straddling_merge() {
     let mut state = TrameState::new();
     // A merge B2:C3 (rows 1..2, cols 1..2).
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(1),
-        col: Col::new(1),
-        row_end: Row::new(2),
-        col_end: Col::new(2),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Row::new(2), Col::new(2)),
+        ),
     });
     // Select only A1:B2 -- it clips the merge's top-left corner.
     state.handle_command(TrameCommand::SetActiveCell {
@@ -107,17 +107,17 @@ fn unmerge_two_vertical_merges_selected_by_masters() {
     let mut state = TrameState::new();
     // A1:A2 (rows 0..1, col 0).
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
     // B1:B2 (rows 0..1, col 1).
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(1),
-        row_end: Row::new(1),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
     });
     // Selection spans the two masters only: A1:B1 (row 0).
     state.handle_command(TrameCommand::SetActiveCell {
@@ -186,10 +186,10 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
 
     // Peer A merges A1:A2 (both empty on its side).
     a.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
     let merge_delta = a.export_snapshot();
 
@@ -252,16 +252,16 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
 
     // A merges A1:B2, B merges B2:C3 concurrently: they overlap at B2.
     a.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
     });
     b.handle_command(TrameCommand::MergeCells {
-        row: Row::new(1),
-        col: Col::new(1),
-        row_end: Row::new(2),
-        col_end: Col::new(2),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Row::new(2), Col::new(2)),
+        ),
     });
     let (delta_a, delta_b) = (a.export_snapshot(), b.export_snapshot());
     a.apply_remote(delta_b.as_bytes());
@@ -308,10 +308,10 @@ fn merge_follows_structural_insert() {
         text: "x".to_owned(),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(1),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
     });
     assert_eq!(read_display(&mut state, 1, 0).merge_span, Some(span(1, 2)));
 
@@ -673,10 +673,10 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
         sheet_id: SheetId(s2.clone()),
     });
     a.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
     let merge_delta = a.export_snapshot();
 
@@ -826,10 +826,10 @@ fn sort_range_ascending_moves_whole_rows() {
     }
     let evts = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(1)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -861,10 +861,10 @@ fn sort_range_descending_keeps_header() {
     }
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(3),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(0)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Descending,
         header: HeaderRow::Present,

@@ -29,8 +29,8 @@ use proptest::prelude::*;
 
 use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, CellStyle, ClipboardCell,
-    ClipboardPayload, FillMode, FilterKind, FilterOp, GridRange, HAlign, HeaderRow, SortOrder,
-    StylePatch, VAlign,
+    ClipboardPayload, FillMode, FilterKind, FilterOp, HAlign, HeaderRow, SortOrder, StylePatch,
+    VAlign,
 };
 
 use super::TrameState;
@@ -143,10 +143,10 @@ impl Op {
             },
             Op::Sort { ascending } => TrameCommand::SortRange {
                 sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
-                row_start: Row::new(0),
-                row_end: Row::new(ROWS - 1),
-                col_start: Col::new(0),
-                col_end: Col::new(COLS - 1),
+                rect: crate::CellRect::spanning(
+                    crate::CellPos::new(Row::new(0), Col::new(0)),
+                    crate::CellPos::new(Row::new(ROWS - 1), Col::new(COLS - 1)),
+                ),
                 sort_col: ColCount::new(0),
                 order: if ascending {
                     SortOrder::Ascending
@@ -161,10 +161,10 @@ impl Op {
                 row_end,
                 col_end,
             } => TrameCommand::MergeCells {
-                row: Row::new(row),
-                col: Col::new(col),
-                row_end: Row::new(row_end),
-                col_end: Col::new(col_end),
+                rect: crate::CellRect::spanning(
+                    crate::CellPos::new(Row::new(row), Col::new(col)),
+                    crate::CellPos::new(Row::new(row_end), Col::new(col_end)),
+                ),
             },
             Op::Unmerge { row, col } => TrameCommand::UnmergeCells {
                 row: Row::new(row),
@@ -183,18 +183,14 @@ impl Op {
             },
             Op::Fill => TrameCommand::FillRange {
                 sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
-                src: GridRange {
-                    row: Row::new(0),
-                    col: Col::new(0),
-                    row_end: Row::new(0),
-                    col_end: Col::new(0),
-                },
-                dest: GridRange {
-                    row: Row::new(0),
-                    col: Col::new(0),
-                    row_end: Row::new(ROWS - 1),
-                    col_end: Col::new(0),
-                },
+                src: crate::CellRect::spanning(
+                    crate::CellPos::new(Row::new(0), Col::new(0)),
+                    crate::CellPos::new(Row::new(0), Col::new(0)),
+                ),
+                dest: crate::CellRect::spanning(
+                    crate::CellPos::new(Row::new(0), Col::new(0)),
+                    crate::CellPos::new(Row::new(ROWS - 1), Col::new(0)),
+                ),
                 mode: FillMode::Auto,
             },
             Op::Paste { row, col, texts } => TrameCommand::PasteRange {

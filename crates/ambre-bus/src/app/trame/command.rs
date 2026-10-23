@@ -67,7 +67,7 @@ pub enum TrameCommand {
         /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
         /// rectangle (`anchor..=active`) is not here; the full selection is these
         /// plus that rectangle.
-        extra: Vec<GridRange>,
+        extra: Vec<CellRect>,
         /// Band shape: `Cells`, `Cols` or `Rows`. A `Cols`/`Rows` band carries no
         /// extent across its axis; the Logic thread resolves it to the used range.
         kind: SelectionKind,
@@ -169,19 +169,13 @@ pub enum TrameCommand {
     /// `cols_{sheet}`.
     MoveColumn { from: Col, to: Col },
 
-    /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
-    /// single cell, the top-left corner becoming the master
-    /// (`trame-cell-merges`). The corners may be given in any order.
+    /// Merge the rectangle `rect` into a single cell, its top-left corner
+    /// becoming the master (`trame-cell-merges`).
     /// Rejected locally with [`TrameEvent::MergeRejected`] if any covered cell
     /// (other than the master) is non-empty -- Excel/Sheets behavior. Stored in
     /// the per-sheet `merges_{sheet}` LWW map keyed by stable id pairs, so the
     /// merge follows its cells across structural ops.
-    MergeCells {
-        row: Row,
-        col: Col,
-        row_end: Row,
-        col_end: Col,
-    },
+    MergeCells { rect: CellRect },
 
     /// Split the merge whose rectangle contains grid cell `(row, col)`, restoring
     /// the covered cells. Any value masked by the merge (a concurrent-edit
@@ -382,8 +376,8 @@ pub enum TrameCommand {
     /// `dest == src`.
     FillRange {
         sheet_id: SheetId,
-        src: GridRange,
-        dest: GridRange,
+        src: CellRect,
+        dest: CellRect,
         mode: FillMode,
     },
 
@@ -479,10 +473,10 @@ pub enum TrameCommand {
     /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
     MoveSheet { sheet_id: SheetId, to_index: u32 },
 
-    /// Sort the rows of the rectangular range `[row_start..=row_end] x
-    /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
+    /// Sort the rows of the rectangle `rect` by the values in its column
+    /// `sort_col`, counted from its left edge
     /// (`trame-sort`, single-column sort). Whole rows are reordered, so cells outside
-    /// `[col_start..=col_end]` move with their row -- matching Google Sheets "sort range".
+    /// `rect`'s columns move with their row -- matching Google Sheets "sort range".
     /// A header row (`HeaderRow::Present`) stays pinned in place.
     ///
     /// Realized as `LoroMovableList` move ops on `rows_{sheet_id}`. Cells keyed by stable
@@ -494,11 +488,8 @@ pub enum TrameCommand {
     /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortRange {
         sheet_id: SheetId,
-        row_start: Row,
-        row_end: Row,
-        col_start: Col,
-        col_end: Col,
-        /// Column to sort on, as an index within the range (`0` = `col_start`).
+        rect: CellRect,
+        /// Column to sort on, as an index within the range (`0` = its left column).
         sort_col: ColCount,
         order: SortOrder,
         /// A first range row that is a header is not sorted.
@@ -582,7 +573,7 @@ pub enum TrameCommand {
     ExportCsv {
         sheet_id: SheetId,
         delimiter: Option<u8>,
-        range: Option<GridRange>,
+        range: Option<CellRect>,
     },
 
     /// Write the whole workbook to a native `.ambre` file and hand the bytes back
@@ -650,12 +641,9 @@ pub enum TrameCommand {
     /// `rows_{sheet}`; references follow the data (`trame-formula-engine`).
     SortRangeMulti {
         sheet_id: SheetId,
-        row_start: Row,
-        row_end: Row,
-        col_start: Col,
-        col_end: Col,
+        rect: CellRect,
         /// Decreasing priority: `[primary, secondary, ...]`. Each `col` is an
-        /// index within the range (`0` = `col_start`).
+        /// index within the range (`0` = its left column).
         sort_keys: Vec<SortKey>,
         header: HeaderRow,
     },
@@ -669,7 +657,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::CondFormatsUpdated`](super::TrameEvent::CondFormatsUpdated).
     AddCondFormat {
         sheet_id: SheetId,
-        range: GridRange,
+        range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
         priority: i64,
@@ -681,7 +669,7 @@ pub enum TrameCommand {
     UpdateCondFormat {
         sheet_id: SheetId,
         id: CondFormatId,
-        range: GridRange,
+        range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
         priority: i64,
@@ -698,7 +686,7 @@ pub enum TrameCommand {
     /// delta can still violate them).
     AddValidation {
         sheet_id: SheetId,
-        range: GridRange,
+        range: CellRect,
         kind: ValidationKind,
         on_invalid: ValidationOnInvalid,
         message: String,
@@ -707,7 +695,7 @@ pub enum TrameCommand {
     /// Remove the validation rule covering `range` on `sheet_id`
     /// (`trame-cell-editing`). A no-op
     /// if none is attached there.
-    RemoveValidation { sheet_id: SheetId, range: GridRange },
+    RemoveValidation { sheet_id: SheetId, range: CellRect },
 
     /// Protect `range` of `sheet_id` so only `allowed_user_ids` (plus the owner)
     /// may edit it (`trame-cell-editing`, Post-MVP). Soft
@@ -716,7 +704,7 @@ pub enum TrameCommand {
     /// [`UserId`](crate::UserId), not `pub_key` (survives key rotation).
     SetProtection {
         sheet_id: SheetId,
-        range: GridRange,
+        range: CellRect,
         allowed_user_ids: Vec<UserId>,
         description: String,
     },
@@ -724,7 +712,7 @@ pub enum TrameCommand {
     /// Remove the protection covering `range` on `sheet_id`
     /// (`trame-cell-editing`). A no-op if
     /// none is set there.
-    RemoveProtection { sheet_id: SheetId, range: GridRange },
+    RemoveProtection { sheet_id: SheetId, range: CellRect },
 }
 
 impl TrameCommand {

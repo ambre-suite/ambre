@@ -60,7 +60,7 @@ fn csv_export_evaluates_formulas() {
 /// reopened peer must see the full filled series, not just the seed cell.
 #[test]
 fn autofill_series_survives_incremental_delta_replay() {
-    use ambre_bus::{FillMode, GridRange};
+    use ambre_bus::FillMode;
 
     let mut author = TrameState::new();
 
@@ -78,18 +78,14 @@ fn autofill_series_survives_incremental_delta_replay() {
     let u2 = author
         .handle_command(TrameCommand::FillRange {
             sheet_id: SheetId("s0".to_owned()),
-            src: GridRange {
-                row: Row::new(0),
-                col: Col::new(0),
-                row_end: Row::new(0),
-                col_end: Col::new(0),
-            },
-            dest: GridRange {
-                row: Row::new(0),
-                col: Col::new(0),
-                row_end: Row::new(3),
-                col_end: Col::new(0),
-            },
+            src: crate::CellRect::spanning(
+                crate::CellPos::new(Row::new(0), Col::new(0)),
+                crate::CellPos::new(Row::new(0), Col::new(0)),
+            ),
+            dest: crate::CellRect::spanning(
+                crate::CellPos::new(Row::new(0), Col::new(0)),
+                crate::CellPos::new(Row::new(3), Col::new(0)),
+            ),
             mode: FillMode::Series,
         })
         .update

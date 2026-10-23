@@ -60,10 +60,10 @@ const DEFAULT: &str = crate::logic::DEFAULT_SHEET;
 fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> TrameOutcome {
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId(DEFAULT.to_owned()),
-        row_start: Row::new(rows.0),
-        row_end: Row::new(rows.1),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(rows.0), Col::new(0)),
+            crate::CellPos::new(Row::new(rows.1), Col::new(1)),
+        ),
         sort_col: ColCount::new(col),
         order: if ascending {
             SortOrder::Ascending
@@ -198,10 +198,10 @@ fn a_border_preset_reaches_only_its_edges() {
 fn a_covered_cell_takes_no_style() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
     });
     select(&mut state, 0, 0, 2, 2);
     style(
@@ -479,10 +479,10 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
     for (row_end, header) in [(0, HeaderRow::Absent), (1, HeaderRow::Present)] {
         let out = state.handle_command(TrameCommand::SortRange {
             sheet_id: SheetId(DEFAULT.to_owned()),
-            row_start: Row::new(0),
-            row_end: Row::new(row_end),
-            col_start: Col::new(0),
-            col_end: Col::new(0),
+            rect: crate::CellRect::spanning(
+                crate::CellPos::new(Row::new(0), Col::new(0)),
+                crate::CellPos::new(Row::new(row_end), Col::new(0)),
+            ),
             sort_col: ColCount::new(0),
             order: SortOrder::Ascending,
             header,

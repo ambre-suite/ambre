@@ -326,10 +326,10 @@ fn build_grid_literals(state: &mut TrameState) {
     state.handle_command(TrameCommand::SetCellsBatch { cells });
     // A merged title band over the header, then a row inserted under it.
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::ZERO,
-        col: Col::new(1),
-        row_end: Row::ZERO,
-        col_end: Col::new(4),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::ZERO, Col::new(1)),
+            crate::CellPos::new(Row::ZERO, Col::new(4)),
+        ),
     });
     state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
 }

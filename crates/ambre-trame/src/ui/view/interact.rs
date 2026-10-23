@@ -247,8 +247,8 @@ impl TrameView {
         };
         let cmd = TrameCommand::FillRange {
             sheet_id: self.state.active_sheet.clone(),
-            src: GridRange::from(src),
-            dest: GridRange::from(dest),
+            src,
+            dest,
             mode,
         };
         if self.send_command_lossless(cmd).is_err() {

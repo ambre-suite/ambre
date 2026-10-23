@@ -10,7 +10,7 @@
 
 use super::*;
 use crate::formula::shift::shift_formula;
-use ambre_bus::{FillMode, GridRange};
+use ambre_bus::FillMode;
 
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
@@ -50,15 +50,14 @@ impl TrameState {
     pub(super) fn fill_range(
         &mut self,
         sheet_id: &str,
-        src: GridRange,
-        dest: GridRange,
+        src: CellRect,
+        dest: CellRect,
         mode: FillMode,
     ) -> TrameOutcome {
         // Range ops only ever target the active sheet (the UI activates it first).
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let (src, dest) = (src.rect(), dest.rect());
         // `dest` must contain `src`; otherwise the drag is malformed -> no-op.
         if !dest.contains(src.top_left) || !dest.contains(src.bottom_right) {
             return TrameOutcome::display_only(vec![]);

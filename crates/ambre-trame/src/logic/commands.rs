@@ -50,15 +50,7 @@ impl TrameState {
                 // live rectangle and the used range from these.
                 self.selection = TrackedSelection {
                     anchor: CellPos::new(anchor_row, anchor_col),
-                    extra: extra
-                        .into_iter()
-                        .map(|r| {
-                            CellRect::spanning(
-                                CellPos::new(r.row, r.col),
-                                CellPos::new(r.row_end, r.col_end),
-                            )
-                        })
-                        .collect(),
+                    extra,
                     kind,
                 };
                 // Report the new active cell's formatting so the chrome toggle
@@ -179,15 +171,7 @@ impl TrameState {
             TrameCommand::DeleteColumn { at } => self.delete_axis(at),
             TrameCommand::MoveRow { from, to } => self.move_axis(from, to),
             TrameCommand::MoveColumn { from, to } => self.move_axis(from, to),
-            TrameCommand::MergeCells {
-                row,
-                col,
-                row_end,
-                col_end,
-            } => self.merge_cells(CellRect::spanning(
-                CellPos::new(row, col),
-                CellPos::new(row_end, col_end),
-            )),
+            TrameCommand::MergeCells { rect } => self.merge_cells(rect),
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(CellPos::new(row, col)),
             TrameCommand::ResizeCol {
                 version: _,
@@ -240,29 +224,17 @@ impl TrameState {
             TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id.0),
             TrameCommand::SortRange {
                 sheet_id,
-                row_start,
-                row_end,
-                col_start,
-                col_end,
+                rect,
                 sort_col,
                 order,
                 header,
-            } => match ordered_rect(row_start, row_end, col_start, col_end) {
-                Some(rect) => self.sort_range(&sheet_id.0, rect, sort_col, order, header),
-                None => TrameOutcome::display_only(vec![]),
-            },
+            } => self.sort_range(&sheet_id.0, rect, sort_col, order, header),
             TrameCommand::SortRangeMulti {
                 sheet_id,
-                row_start,
-                row_end,
-                col_start,
-                col_end,
+                rect,
                 sort_keys,
                 header,
-            } => match ordered_rect(row_start, row_end, col_start, col_end) {
-                Some(rect) => self.sort_range_multi(&sheet_id.0, rect, &sort_keys, header),
-                None => TrameOutcome::display_only(vec![]),
-            },
+            } => self.sort_range_multi(&sheet_id.0, rect, &sort_keys, header),
             TrameCommand::ApplyFilter {
                 sheet_id,
                 col,
@@ -413,17 +385,6 @@ impl TrameState {
             can_redo: self.undo_manager.can_redo(),
         }
     }
-}
-
-/// The rectangle a range command names, `None` when an end comes before its
-/// start: such a command is a no-op.
-fn ordered_rect(row_start: Row, row_end: Row, col_start: Col, col_end: Col) -> Option<CellRect> {
-    (row_start <= row_end && col_start <= col_end).then(|| {
-        CellRect::spanning(
-            CellPos::new(row_start, col_start),
-            CellPos::new(row_end, col_end),
-        )
-    })
 }
 
 impl TrameState {

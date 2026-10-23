@@ -139,7 +139,7 @@ impl TrameState {
         &self,
         sheet_id: &str,
         delimiter: Option<u8>,
-        range: Option<ambre_bus::GridRange>,
+        range: Option<CellRect>,
     ) -> TrameOutcome {
         // An export that writes no file says why (`TRAME-IO-041`).
         let nothing = |message: &str| {
@@ -156,10 +156,7 @@ impl TrameState {
             self.build_sheet_index(sheet_id)
         };
         let rect = match range {
-            Some(r) => CellRect {
-                top_left: CellPos::new(r.row, r.col),
-                bottom_right: CellPos::new(r.row_end, r.col_end),
-            },
+            Some(rect) => rect,
             None => match self.used_extent(sheet_id, &index) {
                 None => return nothing("the sheet is empty: there is nothing to export"),
                 Some(last) => CellRect::spanning(CellPos::ORIGIN, last),

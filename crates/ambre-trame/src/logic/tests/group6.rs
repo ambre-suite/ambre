@@ -10,7 +10,7 @@ use super::*;
 /// covered cells stay blank and unmerged.
 #[test]
 fn fill_merged_source_tiles_and_remerges_blocks() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -19,27 +19,23 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1.
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
 
     // Drag the handle down: source is the whole merge, dest snapped to A6.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(1),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(5),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(5), Col::new(0)),
+        ),
         mode: FillMode::Auto,
     });
 
@@ -62,7 +58,7 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
 /// Ctrl path the UI resolves to `FillMode::Series` for a one-block source.
 #[test]
 fn fill_merged_series_increments_per_block() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -71,27 +67,23 @@ fn fill_merged_series_increments_per_block() {
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1 holding the number 1.
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
 
     // Ctrl-drag down to A6: Series, so each block master grows by +1.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(1),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(5),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(5), Col::new(0)),
+        ),
         mode: FillMode::Series,
     });
 
@@ -108,7 +100,7 @@ fn fill_merged_series_increments_per_block() {
 /// masters form a series that keeps progressing across the new blocks.
 #[test]
 fn fill_multi_merged_source_continues_pattern() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     // A1 = 1, A3 = 2; merge A1:A2 and A3:A4 into two 2x1 blocks.
     state.handle_command(TrameCommand::SetCellText {
@@ -122,33 +114,29 @@ fn fill_multi_merged_source_continues_pattern() {
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(0),
-        col: Col::new(0),
-        row_end: Row::new(1),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(2),
-        col: Col::new(0),
-        row_end: Row::new(3),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(0)),
+        ),
     });
 
     // Drag the two-block source (A1:A4) down to A8 -> two more blocks.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(3),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(7),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(7), Col::new(0)),
+        ),
         mode: FillMode::Auto,
     });
 

@@ -97,8 +97,8 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::SortRange { sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header }` | UI to Logic | the explicit range and one key |
-| `TrameCommand::SortRangeMulti { sheet_id, row_start, row_end, col_start, col_end, sort_keys, has_header }` | UI to Logic | the explicit range and the ordered keys |
+| `TrameCommand::SortRange { sheet_id, rect, sort_col, order, header }` | UI to Logic | the explicit range and one key |
+| `TrameCommand::SortRangeMulti { sheet_id, rect, sort_keys, header }` | UI to Logic | the explicit range and the ordered keys |
 | `TrameCommand::SortSelectionAsc` / `SortSelectionDesc` | UI to Logic | nothing: the range is the tracked selection, the key its first column |
 | `TrameCommand::SortSheetAsc` / `SortSheetDesc` | UI to Logic | nothing: the range is the used one, the key the active column |
 | `TrameCommand::SortSelectionMulti { sort_keys, has_header }` | UI to Logic | the keys alone, resolved against the tracked selection |

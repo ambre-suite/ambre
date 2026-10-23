@@ -1,5 +1,5 @@
 //! Deferred feature payloads (Phase 2+): typed value types carried by the
-//! deferred `TrameCommand` variants (grid ranges, fill/sort keys, conditional
+//! deferred `TrameCommand` variants (fill/sort keys, conditional
 //! formatting and data-validation predicates). Travel by move, no `serde`.
 
 // ----------------------------------------------------------------------------- Deferred
@@ -7,43 +7,12 @@
 //
 // Typed value types carried by the deferred `TrameCommand` variants above. They live in
 // `ambre-bus` (re-exported by `ambre-trame`) and travel by move inside `AppCommand::Trame`
-// -- no `serde`. Ranges are expressed in **grid coordinates** here, because the
+// -- no `serde`. Ranges are `CellRect`s in **grid coordinates**, because the
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellPos, CellRect, Col, ColCount, Row};
+use super::ColCount;
 use ambre_core::Rgb;
-
-/// A rectangular grid range `[row..=row_end] x [col..=col_end]` (0-based,
-/// inclusive). Corners may be given in any order; the handler normalizes them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GridRange {
-    pub row: Row,
-    pub col: Col,
-    pub row_end: Row,
-    pub col_end: Col,
-}
-
-impl GridRange {
-    /// The rectangle the range covers, its corners ordered.
-    pub fn rect(self) -> CellRect {
-        CellRect::spanning(
-            CellPos::new(self.row, self.col),
-            CellPos::new(self.row_end, self.col_end),
-        )
-    }
-}
-
-impl From<CellRect> for GridRange {
-    fn from(rect: CellRect) -> Self {
-        Self {
-            row: rect.top_left.row,
-            col: rect.top_left.col,
-            row_end: rect.bottom_right.row,
-            col_end: rect.bottom_right.col,
-        }
-    }
-}
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

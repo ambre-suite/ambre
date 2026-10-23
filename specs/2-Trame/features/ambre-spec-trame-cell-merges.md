@@ -133,7 +133,7 @@ persisted -- no covered-cell list, no hidden flag.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::MergeCells { row, col, row_end, col_end }` | UI to Logic | the selection bounds |
+| `TrameCommand::MergeCells { rect }` | UI to Logic | the selection bounds |
 | `TrameCommand::UnmergeCells { row, col }` | UI to Logic | one cell inside the block |
 | `CommandId::MergeSelection` / `UnmergeActive` | chrome to Logic | no geometry: the Logic thread resolves it against the selection it tracks |
 | `TrameEvent::MergeRejected` | Logic to UI | the local refusal, surfaced as a toast |

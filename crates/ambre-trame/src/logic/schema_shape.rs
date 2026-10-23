@@ -372,10 +372,10 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         height_px: 33.0,
     });
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(3),
-        col: Col::new(0),
-        row_end: Row::new(4),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(3), Col::new(0)),
+            crate::CellPos::new(Row::new(4), Col::new(1)),
+        ),
     });
     state.handle_command(TrameCommand::DefineName {
         name: "N".to_owned(),

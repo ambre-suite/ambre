@@ -18,9 +18,8 @@ use ambre_draw::Color;
 
 use crate::render::BODY_SIZE;
 use crate::{
-    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, GridRange, LAST_COL, LAST_ROW, MergeSpan,
-    Row, RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand,
-    TrameEvent,
+    CellPos, CellRect, Col, ColCount, ColDelta, ColSpan, LAST_COL, LAST_ROW, MergeSpan, Row,
+    RowCount, RowDelta, RowSpan, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent,
 };
 
 // Cell layout.
@@ -395,7 +394,7 @@ impl Selection {
     /// extent across the other axis. The Logic thread resolves that extent from
     /// the used range, never from the UI cache.
     pub fn report(&self) -> TrameCommand {
-        let extra = self.extra.iter().copied().map(GridRange::from).collect();
+        let extra = self.extra.clone();
         TrameCommand::SetActiveCell {
             row: self.active.row,
             col: self.active.col,

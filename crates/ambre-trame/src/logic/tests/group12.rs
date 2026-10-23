@@ -119,18 +119,14 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
     });
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
-        src: crate::GridRange {
-            row: Row::new(0),
-            col: Col::new(2),
-            row_end: Row::new(0),
-            col_end: Col::new(2),
-        },
-        dest: crate::GridRange {
-            row: Row::new(0),
-            col: Col::new(2),
-            row_end: Row::new(1),
-            col_end: Col::new(2),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(2)),
+            crate::CellPos::new(Row::new(0), Col::new(2)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(2)),
+            crate::CellPos::new(Row::new(1), Col::new(2)),
+        ),
         mode: crate::FillMode::Auto,
     });
     assert_eq!(read_raw(&mut state, 1, 2), "=SUM(TOTAL)*A2");

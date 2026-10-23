@@ -84,10 +84,10 @@ fn shared_filter_hidden_follows_sort() {
     // to the top and its hidden flag must travel with it.
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -577,7 +577,7 @@ fn paste_reindexes_relative_formula() {
 /// column (`trame-autofill`): A1=1, A2=2 dragged to A5 yields 3, 4, 5.
 #[test]
 fn fill_auto_extrapolates_numeric_series() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -592,18 +592,14 @@ fn fill_auto_extrapolates_numeric_series() {
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(1),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(4),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(4), Col::new(0)),
+        ),
         mode: FillMode::Auto,
     });
 
@@ -632,7 +628,7 @@ fn fill_auto_extrapolates_numeric_series() {
 /// a copied formula's relative references by its fill offset.
 #[test]
 fn fill_auto_copies_text_and_reindexes_formula() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     // B1 = A1*2; A column holds the multiplicands so the reindex is visible.
     state.handle_command(TrameCommand::SetCellText {
@@ -654,18 +650,14 @@ fn fill_auto_copies_text_and_reindexes_formula() {
     // Fill B1 down to B2: the single source is not a series -> Copy + reindex.
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(1),
-            row_end: Row::new(0),
-            col_end: Col::new(1),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(1),
-            row_end: Row::new(1),
-            col_end: Col::new(1),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(1)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
         mode: FillMode::Auto,
     });
 
@@ -691,7 +683,7 @@ fn fill_auto_copies_text_and_reindexes_formula() {
 /// of one number): A1=5 filled to A4 yields 6, 7, 8.
 #[test]
 fn fill_series_single_cell_increments_by_one() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -701,18 +693,14 @@ fn fill_series_single_cell_increments_by_one() {
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(0),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(3),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(0)),
+        ),
         mode: FillMode::Series,
     });
 
@@ -742,7 +730,7 @@ fn fill_series_single_cell_increments_by_one() {
 /// -- no series.
 #[test]
 fn fill_copy_multi_cell_tiles_verbatim() {
-    use crate::{FillMode, GridRange};
+    use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -757,18 +745,14 @@ fn fill_copy_multi_cell_tiles_verbatim() {
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: SheetId(state.active_sheet.clone()),
-        src: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(1),
-            col_end: Col::new(0),
-        },
-        dest: GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(5),
-            col_end: Col::new(0),
-        },
+        src: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
+        dest: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(5), Col::new(0)),
+        ),
         mode: FillMode::Copy,
     });
 

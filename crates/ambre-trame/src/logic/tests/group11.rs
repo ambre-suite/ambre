@@ -7,7 +7,7 @@ use crate::logic::schema::{
     DEFAULT_SHEET, MATERIALIZE_CAP, MIN_COL_WIDTH, SheetContainer, SheetRoot,
 };
 use crate::model::CellKey;
-use crate::{FillMode, GridRange, SelectionKind};
+use crate::{FillMode, SelectionKind};
 use ambre_core::Rgb;
 use loro::LoroValue;
 
@@ -33,23 +33,21 @@ fn select(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32
 
 fn merge(state: &mut TrameState, row: u32, col: u32, row_end: u32, col_end: u32) -> TrameOutcome {
     state.handle_command(TrameCommand::MergeCells {
-        row: Row::new(row),
-        col: Col::new(col),
-        row_end: Row::new(row_end),
-        col_end: Col::new(col_end),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(row), Col::new(col)),
+            crate::CellPos::new(Row::new(row_end), Col::new(col_end)),
+        ),
     })
 }
 
-fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> GridRange {
-    GridRange {
-        row: Row::new(row),
-        col: Col::new(col),
-        row_end: Row::new(row_end),
-        col_end: Col::new(col_end),
-    }
+fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> crate::CellRect {
+    crate::CellRect::spanning(
+        crate::CellPos::new(Row::new(row), Col::new(col)),
+        crate::CellPos::new(Row::new(row_end), Col::new(col_end)),
+    )
 }
 
-fn fill(state: &mut TrameState, src: GridRange, dest: GridRange) {
+fn fill(state: &mut TrameState, src: crate::CellRect, dest: crate::CellRect) {
     let sheet_id = SheetId(state.active_sheet.clone());
     state.handle_command(TrameCommand::FillRange {
         sheet_id,

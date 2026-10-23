@@ -35,10 +35,10 @@ fn sort_range_formulas_follow_data() {
     }
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(1),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(1)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -84,10 +84,10 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
 
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -115,10 +115,10 @@ fn sort_range_noops() {
     // Wrong sheet: ignored.
     let other = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s9".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(1),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -128,10 +128,10 @@ fn sort_range_noops() {
     // Already ascending: acknowledged but no delta.
     let sorted = state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(1),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(1), Col::new(0)),
+        ),
         sort_col: ColCount::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
@@ -340,10 +340,10 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(3),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(1)),
+        ),
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
@@ -441,10 +441,10 @@ fn sort_range_multi_pins_header_row() {
     }
     state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(3),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(3), Col::new(1)),
+        ),
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
@@ -476,10 +476,10 @@ fn sort_range_multi_no_keys_is_noop() {
     // No keys at all.
     let empty = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+        ),
         sort_keys: vec![],
         header: HeaderRow::Absent,
     });
@@ -494,10 +494,10 @@ fn sort_range_multi_no_keys_is_noop() {
     // usable key -- same no-op.
     let out = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(0)),
+        ),
         sort_keys: vec![SortKey {
             col: ColCount::new(5),
             order: SortOrder::Ascending,
@@ -528,10 +528,10 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
         sheet_id: SheetId("s0".to_owned()),
-        row_start: Row::new(0),
-        row_end: Row::new(2),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        rect: crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(2), Col::new(1)),
+        ),
         sort_keys: vec![
             SortKey {
                 col: ColCount::new(0),
@@ -642,12 +642,10 @@ fn disjoint_selection_styles_every_rectangle() {
         col: Col::new(2),
         anchor_row: Row::new(2),
         anchor_col: Col::new(2),
-        extra: vec![crate::GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(0),
-            col_end: Col::new(0),
-        }],
+        extra: vec![crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+        )],
         kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
@@ -720,12 +718,10 @@ fn selection_stats_totals_a_disjoint_selection() {
         col: Col::new(2),
         anchor_row: Row::new(2),
         anchor_col: Col::new(2),
-        extra: vec![crate::GridRange {
-            row: Row::new(0),
-            col: Col::new(0),
-            row_end: Row::new(0),
-            col_end: Col::new(0),
-        }],
+        extra: vec![crate::CellRect::spanning(
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Row::new(0), Col::new(0)),
+        )],
         kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::RequestSelectionStats);
@@ -857,12 +853,10 @@ fn a_selection_reaches_no_peer() {
             3,
             1,
             1,
-            vec![crate::GridRange {
-                row: Row::new(5),
-                col: Col::new(5),
-                row_end: Row::new(6),
-                col_end: Col::new(6),
-            }],
+            vec![crate::CellRect::spanning(
+                crate::CellPos::new(Row::new(5), Col::new(5)),
+                crate::CellPos::new(Row::new(6), Col::new(6)),
+            )],
         ),
     ];
     for (row, col, anchor_row, anchor_col, extra) in selections {
