@@ -1480,13 +1480,13 @@ fn the_outbound_sample_carries_the_session_display_name() {
     // so a collaborator reads a name and not a hex prefix. It is cosmetic
     // (`PRESENCE-004`): it travels beside the sample and decides nothing.
     let mut sender = ToileState::new();
-    sender.set_display_name("Ada".to_owned());
+    sender.set_display_name(ambre_core::DisplayName::new("Ada").unwrap());
     let frame = presence_frame(&mut sender, sample_at(1.0, 2.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
     let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
     assert_eq!(peers.len(), 1);
-    assert_eq!(peers[0].presence.name.as_deref(), Some("Ada"));
+    assert_eq!(peers[0].presence.name.as_ref().unwrap(), "Ada");
 
     // A session with no name yet sends none, and the receiver falls back to the
     // short handle rather than paint an empty chip.

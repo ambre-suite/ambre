@@ -931,7 +931,7 @@ pub(crate) struct DevLoginRequest {
 pub(crate) struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     pub access_expires_in: ambre_core::Seconds,
@@ -957,7 +957,7 @@ pub(crate) struct ProviderCallbackResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     pub access_expires_in: ambre_core::Seconds,
@@ -999,7 +999,7 @@ pub(crate) struct StoreMasterKeysResponse {
 pub(crate) struct AuthMeResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
 }
 
@@ -1086,7 +1086,7 @@ pub(crate) struct MemberChannelEntry {
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// The display names of a direct message's other members (`SRV-220`).
     #[serde(default)]
-    pub peers: Vec<String>,
+    pub peers: Vec<ambre_core::DisplayName>,
     /// The last number the relay gave in the meta (`SRV-223`), none from a
     /// relay that lists none.
     #[serde(default)]
@@ -1568,7 +1568,7 @@ pub(crate) struct UserInfoEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub id: ambre_core::UserId,
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
@@ -1623,7 +1623,7 @@ pub(crate) struct RoleChangeRequest {
 pub(crate) struct InviteResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
 }
 
 #[derive(Serialize)]
@@ -1748,7 +1748,7 @@ pub(crate) struct DocumentMembersResponse {
 pub(crate) struct DocumentMemberEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: ambre_core::SigningKeyHex,

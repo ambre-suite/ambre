@@ -366,7 +366,7 @@ mod tests {
         state.my_user_id = Some(UserId::new());
         let member = |_| ambre_bus::MemberInfo {
             user_id: UserId::new(),
-            display_name: "M".to_owned(),
+            display_name: ambre_core::DisplayName::new("M").unwrap(),
             email: ambre_core::Email::from("m@test.local"),
             role: ambre_bus::Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

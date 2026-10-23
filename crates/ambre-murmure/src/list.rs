@@ -301,14 +301,18 @@ impl<'a> Row<'a> {
     /// time in the reader's language and zone (`MURMURE-418`).
     pub fn words(
         &self,
-        name_of: impl Fn(UserId) -> Option<String>,
+        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
         time_of: impl Fn(Timestamp) -> String,
     ) -> RowWords {
         let (message, header) = match *self {
             Self::Message { message, header } => (message, header),
             Self::Band(band) => return band_words(band, time_of),
         };
-        let name = |user| name_of(user).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
+        let name = |user| {
+            name_of(user)
+                .map(ambre_core::DisplayName::into_string)
+                .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned())
+        };
         let header = header.then(|| (name(message.author), time_of(message.ts)));
         let (body, muted, marks) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
@@ -359,13 +363,15 @@ impl<'a> Row<'a> {
     /// its words.
     pub fn announcement(
         &self,
-        name_of: impl Fn(UserId) -> Option<String>,
+        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
         time_of: impl Fn(Timestamp) -> String,
     ) -> String {
         let Some(message) = self.message() else {
             return self.words(name_of, time_of).body;
         };
-        let author = name_of(message.author).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
+        let author = name_of(message.author)
+            .map(ambre_core::DisplayName::into_string)
+            .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
         let time = time_of(message.ts);
         let words = self.words(&name_of, &time_of);
         let mut heard = match words.replies {
@@ -797,7 +803,10 @@ pub(crate) mod tests {
 
     fn words(message: &MessageView, header: bool) -> RowWords {
         let row = Row::Message { message, header };
-        row.words(|_| Some("Ada".to_owned()), |ts| format!("t{}", ts.0))
+        row.words(
+            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |ts| format!("t{}", ts.0),
+        )
     }
 
     fn band(cause: Unreadable, from: u64, to: Option<u64>) -> Band {
@@ -1000,7 +1009,7 @@ pub(crate) mod tests {
     /// (`MURMURE-207`).
     #[test]
     fn a_message_is_announced_with_its_author_its_time_and_its_text() {
-        let name_of = |_| Some("Ada".to_owned());
+        let name_of = |_| ambre_core::DisplayName::new("Ada").ok();
         let time_of = |ts: Timestamp| format!("t{}", ts.0);
         let mut grouped = message(UserId::new(), ambre_bus::Timestamp(7), "hello");
         let row = Row::Message {
@@ -1084,7 +1093,10 @@ pub(crate) mod tests {
             message: &copy,
             header: false,
         };
-        let heard = row.announcement(|_| Some("Ada".to_owned()), |_| "t".to_owned());
+        let heard = row.announcement(
+            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |_| "t".to_owned(),
+        );
         assert_eq!(heard, format!("Ada, t: ok. {FROM_THREAD}"));
     }
 

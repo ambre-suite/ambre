@@ -106,7 +106,7 @@ pub struct Sidebar {
     hints: HashMap<ChannelId, String>,
     /// The other members of each direct message, by display name, which a
     /// direct message nobody named shows (`MURMURE-492`).
-    peers: HashMap<ChannelId, Vec<String>>,
+    peers: HashMap<ChannelId, Vec<ambre_core::DisplayName>>,
     /// The spaces whose open failed. The next listing naming one opens it
     /// anew (`MURMURE-550`).
     unopened: Vec<SpaceId>,
@@ -263,7 +263,13 @@ impl Sidebar {
         })
         .or_else(|| {
             let peers = self.peers.get(&channel)?;
-            (!peers.is_empty()).then(|| peers.join(", "))
+            (!peers.is_empty()).then(|| {
+                peers
+                    .iter()
+                    .map(ambre_core::DisplayName::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
         })
     }
 
@@ -798,7 +804,10 @@ mod tests {
         sidebar.set_member_channels(vec![place(direct), place(lonely)], &[]);
         let peers = |channel_id, names: &[&str]| DirectPeers {
             channel_id,
-            names: names.iter().map(|n| (*n).to_owned()).collect(),
+            names: names
+                .iter()
+                .map(|n| ambre_core::DisplayName::new(n).unwrap())
+                .collect(),
         };
         sidebar.set_peers(&[peers(direct, &["Bob", "Carol"]), peers(lonely, &[])]);
         assert_eq!(sidebar.name_of(direct).as_deref(), Some("Bob, Carol"));

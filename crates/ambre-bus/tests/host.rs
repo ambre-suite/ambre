@@ -602,7 +602,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             members: vec![MemberInfo {
                 user_id: user,
-                display_name: "Ada".into(),
+                display_name: ambre_core::DisplayName::new("Ada").unwrap(),
                 email: "ada@example.org".into(),
                 role: Role::Editor,
                 standing: MemberStanding::Verified,
@@ -787,7 +787,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             }],
             peers: vec![DirectPeers {
                 channel_id: direct,
-                names: vec!["Bob".into()],
+                names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
             }],
             metas: vec![ChannelMeta {
                 channel_id: chan,

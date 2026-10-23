@@ -347,7 +347,9 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, String> {
 fn build_styled_document(seed: u64) -> Result<ProseState, String> {
     let mut state = ProseState::with_peer(ambre_core::PeerId(seed)).ok_or("no document")?;
     state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
-    state.set_display_name("Fixture Author".to_owned());
+    state.set_display_name(
+        ambre_core::DisplayName::new("Fixture Author").map_err(|e| e.to_string())?,
+    );
 
     let title = tree_id(*state.root_blocks().first().ok_or("no root block")?);
     run(

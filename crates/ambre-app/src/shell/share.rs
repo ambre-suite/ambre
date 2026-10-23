@@ -77,7 +77,7 @@ pub(crate) fn ShareMembers(
                     view! {
                         <li>
                             <span class="ambre-share-member-name">
-                                {member.display_name.clone()}
+                                {member.display_name.as_str().to_owned()}
                                 {standing_badge(member.standing)}
                             </span>
                             <span class="ambre-share-member-email">{member.email.0.clone()}</span>
@@ -158,7 +158,7 @@ mod tests {
     fn member(byte: u8, role: Role) -> MemberInfo {
         MemberInfo {
             user_id: UserId::from_bytes([byte; 16]),
-            display_name: format!("member {byte}"),
+            display_name: ambre_core::DisplayName::new(&format!("member {byte}")).unwrap(),
             email: ambre_bus::Email(format!("m{byte}@example.com")),
             role,
             standing: MemberStanding::Verified,

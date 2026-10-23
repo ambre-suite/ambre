@@ -83,7 +83,8 @@ fn read_reply(map: &Fields<ReplyKey>) -> Option<CommentReply> {
     };
     Some(CommentReply {
         reply_id: ReplyId::parse_str(&doc::read_string(map, ReplyKey::Id)?).ok()?,
-        author: doc::read_string(map, ReplyKey::Author).unwrap_or_default(),
+        author: doc::read_string(map, ReplyKey::Author)
+            .and_then(|name| ambre_core::DisplayName::new(&name).ok()),
         user_id: UserId::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
         created_at: ambre_bus::Timestamp::from_i64(
             doc::read_i64(map, ReplyKey::Created).unwrap_or(0),

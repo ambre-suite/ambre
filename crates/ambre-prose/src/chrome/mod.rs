@@ -207,7 +207,7 @@ fn thread_card(comment_id: CommentId, signals: ProseSignals) -> impl IntoView {
                 {move || entry.with(|e| {
                     e.iter().flat_map(|e| &e.thread.replies).map(|r| view! {
                         <div class="ambre-prose-reply">
-                            <span class="ambre-prose-reply-author">{r.author.clone()}</span>
+                            <span class="ambre-prose-reply-author">{r.author.as_ref().map(|name| name.as_str().to_owned()).unwrap_or_default()}</span>
                             <p class="ambre-prose-reply-text">{r.text.clone()}</p>
                         </div>
                     }).collect_view()

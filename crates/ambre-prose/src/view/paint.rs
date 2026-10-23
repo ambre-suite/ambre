@@ -864,7 +864,7 @@ mod tests {
             id,
             vec![RemoteCursor {
                 user_id: user,
-                display_name: "Bob".to_owned(),
+                display_name: ambre_core::DisplayName::new("Bob").ok(),
                 position: CursorPosition {
                     block_id: id,
                     offset: DocOffset::new(3),
@@ -894,7 +894,7 @@ mod tests {
             id,
             vec![RemoteCursor {
                 user_id: user,
-                display_name: "Eve".to_owned(),
+                display_name: ambre_core::DisplayName::new("Eve").ok(),
                 position: CursorPosition {
                     block_id: id,
                     offset: DocOffset::new(8),

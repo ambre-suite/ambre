@@ -43,6 +43,19 @@ fn decode_doc_type(word: &str) -> Result<ambre_core::DocType, sqlx::Error> {
         .map_err(|e: ambre_core::error::DocTypeError| sqlx::Error::Decode(Box::new(e)))
 }
 
+/// A stored display name. One that breaks the rule is a decode error: every
+/// write path builds a [`DisplayName`](ambre_core::DisplayName) first
+/// (`SRV-234`).
+fn decode_display_name(text: String) -> Result<ambre_core::DisplayName, sqlx::Error> {
+    ambre_core::DisplayName::try_from(text).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
+/// A stored list of display names, each read as [`decode_display_name`]
+/// reads one.
+fn decode_display_names(texts: Vec<String>) -> Result<Vec<ambre_core::DisplayName>, sqlx::Error> {
+    texts.into_iter().map(decode_display_name).collect()
+}
+
 /// A stored sequence number column, as a [`Seq`](ambre_core::Seq). A
 /// negative value is a decode error: the relay numbers from zero up.
 fn decode_seq(value: i64) -> Result<ambre_core::Seq, sqlx::Error> {

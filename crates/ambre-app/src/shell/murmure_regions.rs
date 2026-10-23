@@ -558,7 +558,10 @@ async fn an_unnamed_direct_message_shows_its_other_members() {
     if let UiEvent::MemberChannels { peers, .. } = &mut listing {
         *peers = vec![DirectPeers {
             channel_id: acme.direct,
-            names: vec!["Bob".into(), "Carol".into()],
+            names: vec![
+                ambre_core::DisplayName::new("Bob").unwrap(),
+                ambre_core::DisplayName::new("Carol").unwrap(),
+            ],
         }];
     }
     assert!(frame.absorb(listing).await.is_empty());
@@ -780,7 +783,7 @@ fn alice_and_bob(acme: &Acme) -> (UserId, UiEvent) {
     let alice = UserId::new();
     let member = |user_id, name: &str, presence| MemberView {
         user_id,
-        display_name: name.to_owned(),
+        display_name: ambre_core::DisplayName::new(name).unwrap(),
         presence,
     };
     let event = UiEvent::Space {
@@ -911,7 +914,7 @@ async fn a_click_on_another_member_fetches_their_key() {
         id: ambre_bus::RequestId::next(),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: "Alice Martin".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -948,7 +951,7 @@ async fn the_invite_control_offers_the_other_members_and_fetches_a_key() {
         id: ambre_bus::RequestId::next(),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: "Alice Martin".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -1029,14 +1032,14 @@ async fn the_member_list_marks_who_watches_the_channel() {
     let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
     let member = |user_id, name: &str| MemberView {
         user_id,
-        display_name: name.to_owned(),
+        display_name: ambre_core::DisplayName::new(name).unwrap(),
         presence: Presence::Offline,
     };
     let session = UiEvent::Rest {
         id: ambre_bus::RequestId::next(),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
-            display_name: "Alice".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
             email: ambre_core::Email::from("alice@test.local"),
         },
     };
@@ -1120,7 +1123,7 @@ async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
     let mut rows = rows.clone();
     rows.push(MemberView {
         user_id: carol,
-        display_name: "Carol".to_owned(),
+        display_name: ambre_core::DisplayName::new("Carol").unwrap(),
         presence: Presence::Online,
     });
     let members = UiEvent::Space {

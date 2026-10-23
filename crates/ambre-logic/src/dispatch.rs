@@ -1328,7 +1328,7 @@ mod tests {
             id: RequestId::next(),
             evt: RestEvent::SessionReady {
                 user_id: me,
-                display_name: "Ada".into(),
+                display_name: ambre_core::DisplayName::new("Ada").unwrap(),
                 email: "ada@example.com".into(),
             },
         });

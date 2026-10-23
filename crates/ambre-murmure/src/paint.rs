@@ -142,7 +142,7 @@ pub fn paint_list<S: DrawSurface>(
     shown: Shown<'_>,
     size: (f32, f32),
     palette: &Palette,
-    name_of: &dyn Fn(UserId) -> Option<String>,
+    name_of: &dyn Fn(UserId) -> Option<ambre_core::DisplayName>,
     time_of: &dyn Fn(Timestamp) -> String,
 ) -> Painted {
     let (width, height) = size;
@@ -943,7 +943,7 @@ pub(crate) mod tests {
             shown,
             (400.0, height),
             &LIGHT,
-            &|_| Some("Ada".to_owned()),
+            &|_| ambre_core::DisplayName::new("Ada").ok(),
             &|_| "t".to_owned(),
         );
         (surface, painted)
@@ -1350,7 +1350,7 @@ pub(crate) mod tests {
                 shown,
                 (400.0, 600.0),
                 palette,
-                &|_| Some("Ada".to_owned()),
+                &|_| ambre_core::DisplayName::new("Ada").ok(),
                 &|_| "t".to_owned(),
             );
             cache.lazy_fonts_requested()
@@ -1401,7 +1401,10 @@ pub(crate) mod tests {
         list.absorb(SegmentId::new(), vec![sent]);
         let rows = list.rows();
         let first = rows.first().expect("one row");
-        let row = first.words(|_| Some("Ada".to_owned()), |_| "t".to_owned());
+        let row = first.words(
+            |_| ambre_core::DisplayName::new("Ada").ok(),
+            |_| "t".to_owned(),
+        );
         assert_eq!(row.body, "@Ada hi bold c d");
         let mut marks: Vec<(usize, usize)> = row
             .marks

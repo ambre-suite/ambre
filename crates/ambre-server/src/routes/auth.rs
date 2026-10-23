@@ -49,7 +49,7 @@ pub struct DevLoginRequest {
 pub struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: ambre_protocol::ws::AccessToken,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
@@ -243,7 +243,7 @@ pub async fn oidc_callback(
     Ok(axum::Json(CallbackResponse {
         user_id,
         email,
-        display_name: display_name.into_string(),
+        display_name,
         is_new_user: user.master_key_enc.is_none(),
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -309,7 +309,7 @@ mod tests {
             oidc_subject: Some("subject".into()),
             email: "a@example.com".into(),
             email_verified: true,
-            display_name: "A".into(),
+            display_name: ambre_core::DisplayName::new("A").unwrap(),
             master_key_enc: signing_pubkey
                 .as_ref()
                 .map(|_| ambre_core::WrappedMasterKey::new(vec![1u8; 56])),

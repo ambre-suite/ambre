@@ -1628,14 +1628,25 @@ impl ToileCommand {
 /// presence off the sender's canonical `UserId`, which `ambre-sync` resolves
 /// from the authenticated `pub_key`, so a peer cannot spoof another user's
 /// cursor.
+/// A sample's name, `None` when it carried none or one that breaks the
+/// display-name rule. A forged name never drops the cursor it labels.
+fn lenient_name<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ambre_core::DisplayName>, D::Error> {
+    let name = Option::<String>::deserialize(deserializer)?;
+    Ok(name.and_then(|text| ambre_core::DisplayName::new(&text).ok()))
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
     /// The sender's display name, cosmetic and forgeable
     /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`). It labels a
     /// cursor and decides neither identity, nor colour, nor permission. Both
     /// come from the `UserId` the transport resolved. `None` falls back to a
-    /// short handle derived from that id.
-    pub name: Option<String>,
+    /// short handle derived from that id, and so does a name that breaks the
+    /// display-name rule: the sample stays, the name is dropped.
+    #[serde(deserialize_with = "lenient_name")]
+    pub name: Option<ambre_core::DisplayName>,
     /// World-space pointer; `None` means the pointer left the board.
     pub cursor: Option<Point>,
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
@@ -2018,6 +2029,31 @@ pub struct DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A sample whose name breaks the display-name rule keeps
+    /// its cursor, and loses the name alone.
+    #[test]
+    fn a_blank_sample_name_decodes_as_no_name() {
+        let plain = PresencePayload {
+            cursor: Some(Point { x: 1.0, y: 2.0 }),
+            ..PresencePayload::default()
+        };
+        let bytes = postcard::to_allocvec(&plain).unwrap();
+        // The name leads the sample: swap its `None` for a blank text.
+        let mut forged = postcard::to_allocvec(&Some("   ")).unwrap();
+        forged.extend_from_slice(&bytes[1..]);
+        let read: PresencePayload = postcard::from_bytes(&forged).unwrap();
+        assert_eq!(read, plain);
+        let named = PresencePayload {
+            name: ambre_core::DisplayName::new("Ada").ok(),
+            ..plain
+        };
+        let bytes = postcard::to_allocvec(&named).unwrap();
+        assert_eq!(
+            postcard::from_bytes::<PresencePayload>(&bytes).unwrap(),
+            named
+        );
+    }
 
     #[test]
     fn every_spelling_of_a_family_reads_as_it_and_stores_one() {

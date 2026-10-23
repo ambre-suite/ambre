@@ -2123,7 +2123,7 @@ mod tests {
             id: RequestId(0),
             evt: RestEvent::SessionReady {
                 user_id: user,
-                display_name: "alice".to_owned(),
+                display_name: ambre_core::DisplayName::new("alice").unwrap(),
                 email: ambre_core::Email::from("alice@example.com"),
             },
         });
@@ -3138,7 +3138,7 @@ mod tests {
         }];
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: channels[1].channel_id,
-            names: vec!["Bob".into()],
+            names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
         }];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
@@ -4212,7 +4212,7 @@ mod tests {
     fn member(user_id: UserId) -> MemberInfo {
         MemberInfo {
             user_id,
-            display_name: "bob".to_owned(),
+            display_name: ambre_core::DisplayName::new("bob").unwrap(),
             email: ambre_core::Email::from("bob@example.org"),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

@@ -104,7 +104,7 @@ pub struct MeResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
 }
 
 pub async fn me(
@@ -430,7 +430,7 @@ pub struct UserInfoJson {
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
     /// the TOFU out-of-band key check. Additive field; older clients ignore it.
     pub email_verified: bool,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
 }
@@ -512,7 +512,7 @@ pub struct MemberInfoJson {
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
     pub email_verified: bool,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     /// Serialized as its lowercase word.
     pub role: Role,
     pub signing_pub_key: ambre_core::SigningKeyHex,

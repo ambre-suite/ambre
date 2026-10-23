@@ -103,7 +103,9 @@ impl SyncState {
                 RestEvent::InviteSent {
                     document_id,
                     user_id: UserId::new(),
-                    display_name: invitee_email.map(|email| email.0).unwrap_or_default(),
+                    display_name: invitee_email
+                        .and_then(|email| ambre_core::DisplayName::cut_to_fit(&email.0))
+                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&invitee)),
                 },
             );
             return;

@@ -254,7 +254,7 @@ enum SyncEvent {
     SessionReady {
         id: RequestId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         master_seed: MasterSeed,
         signing_key: SigningKey,
@@ -266,7 +266,7 @@ enum SyncEvent {
     ProviderSignedIn {
         id: RequestId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         keys_stored: bool,
         tokens: http::TokenPair,
@@ -488,7 +488,7 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
@@ -507,7 +507,7 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
     },
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.

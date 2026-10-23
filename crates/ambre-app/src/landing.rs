@@ -73,7 +73,7 @@ pub struct LandingSignals {
     /// Documents to list (only meaningful once signed in).
     pub docs: RwSignal<Vec<DocItem>>,
     /// Current user's display name once `SessionReady` arrives; `None` = signed out.
-    pub username: RwSignal<Option<String>>,
+    pub username: RwSignal<Option<ambre_core::DisplayName>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     pub dev_mode: RwSignal<Option<SignInMode>>,
     /// The app kind this page booted with (`lib.rs`, fixed per page load): drives
@@ -175,7 +175,7 @@ pub fn landing_view(
                 <Show when=move || username.get().is_some()>
                     <div class="ambre-landing-actions">
                         <span class="ambre-landing-user">
-                            {move || username.get().unwrap_or_default()}
+                            {move || username.get().map(ambre_core::DisplayName::into_string).unwrap_or_default()}
                         </span>
                         {sign_out_control(to_logic_signout.clone())}
                         <NewDocPicker on_pick=on_pick />

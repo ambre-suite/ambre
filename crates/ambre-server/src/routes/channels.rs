@@ -98,7 +98,7 @@ pub struct MemberChannelJson {
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
-    pub peers: Vec<String>,
+    pub peers: Vec<ambre_core::DisplayName>,
     /// The last number the relay gave in the channel's `meta`, zero for a
     /// `meta` that holds nothing (`SRV-223`).
     pub meta_last: ambre_core::Seq,

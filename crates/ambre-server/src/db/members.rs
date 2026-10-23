@@ -56,7 +56,7 @@ pub struct MemberWithUserRow {
     /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
     /// TOFU out-of-band key check.
     pub email_verified: bool,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub role: ambre_core::Role,
     pub signing_pubkey: ambre_core::PublicKey,
     pub exchange_pubkey: ambre_core::ExchangePublicKey,
@@ -364,7 +364,7 @@ pub async fn list_document_members(
                 user_id: r.try_get::<PgId, _>("user_id")?.into(),
                 email: ambre_core::Email(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
-                display_name: r.try_get("display_name")?,
+                display_name: decode_display_name(r.try_get("display_name")?)?,
                 role: decode_role(r.try_get("role")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
                 exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,

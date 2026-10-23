@@ -114,12 +114,47 @@ impl DisplayName {
         Self::new(&cut).ok()
     }
 
+    /// The short handle a member who carries no usable name shows: the first
+    /// four bytes of `user` in hex. It always fits the rule.
+    #[must_use]
+    pub fn handle_of(user: &crate::UserId) -> Self {
+        let handle: String = user
+            .as_bytes()
+            .iter()
+            .take(4)
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        Self(handle)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+/// A stored or received text read as a display name, refused as
+/// [`DisplayName::new`] refuses one. The relay's row reads go through it.
+impl TryFrom<String> for DisplayName {
+    type Error = InvalidDisplayName;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        Self::new(&text)
+    }
+}
+
+impl PartialEq<str> for DisplayName {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for DisplayName {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
     }
 }
 

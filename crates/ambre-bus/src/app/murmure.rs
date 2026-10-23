@@ -139,7 +139,7 @@ pub struct ChannelName {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectPeers {
     pub channel_id: ChannelId,
-    pub names: Vec<String>,
+    pub names: Vec<ambre_core::DisplayName>,
 }
 
 /// How many messages of a channel are past the reader's cursor. A distinct
@@ -550,7 +550,7 @@ impl MessageView {
     /// The body as the view shows it: each mention of a member reads as
     /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
     /// does not know keeps the text the author typed.
-    pub fn shown(&self, name_of: impl Fn(UserId) -> Option<String>) -> String {
+    pub fn shown(&self, name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>) -> String {
         self.shown_at(name_of).0
     }
 
@@ -559,7 +559,7 @@ impl MessageView {
     /// char a name took the place of starts past that name (`MURMURE-565`).
     pub fn shown_at(
         &self,
-        name_of: impl Fn(UserId) -> Option<String>,
+        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
     ) -> (String, CharVec<ByteOffset>) {
         let mut shown = String::with_capacity(self.text.len());
         let mut bytes = CharVec::new();
@@ -579,7 +579,7 @@ impl MessageView {
             match named {
                 Some((m, name)) => {
                     shown.push('@');
-                    shown.push_str(&name);
+                    shown.push_str(name.as_str());
                     at = m.range.end;
                 }
                 None => shown.push(c),
@@ -833,7 +833,7 @@ pub enum Presence {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberView {
     pub user_id: UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub presence: Presence,
 }
 

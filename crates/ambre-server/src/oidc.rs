@@ -73,7 +73,7 @@ pub struct CallbackResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     /// True when the user row was just created (no master key yet).
     /// The client should prompt the user to set up their master key.
     pub is_new_user: bool,

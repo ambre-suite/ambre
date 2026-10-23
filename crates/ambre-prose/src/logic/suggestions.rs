@@ -481,7 +481,10 @@ impl ProseState {
         entry
             .insert(
                 doc::AnnotKey::Author,
-                self.my_name.clone().unwrap_or_default(),
+                self.my_name
+                    .clone()
+                    .map(ambre_core::DisplayName::into_string)
+                    .unwrap_or_default(),
             )
             .map_err(|e| format!("{e:?}"))?;
         entry
@@ -517,7 +520,7 @@ mod tests {
     ) -> (ProseState, Vec<BlockId>) {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
-        state.set_display_name(format!("user {peer}"));
+        state.set_display_name(ambre_core::DisplayName::new(&format!("user {peer}")).unwrap());
         let first = state.root_blocks()[0];
         let mut ids = vec![first];
         for _ in texts.iter().skip(1) {
@@ -617,7 +620,7 @@ mod tests {
         let s = only(&state);
         assert_eq!(s.kind, SuggestionKind::Insertion);
         assert_eq!(s.user_id, ALICE);
-        assert_eq!(s.author, "user 1");
+        assert_eq!(s.author.clone().unwrap(), "user 1");
         assert_eq!(spans(&s), vec![(5, 11)]);
     }
 

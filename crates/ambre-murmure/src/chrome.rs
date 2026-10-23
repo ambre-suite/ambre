@@ -305,7 +305,7 @@ fn member_view(
         Presence::Offline => ("offline", "Offline"),
     };
     let color = ambre_draw::peer_css(&member.user_id);
-    let name = member.display_name;
+    let name = member.display_name.into_string();
     let who = view! {
         <ambre_chrome::Avatar name=name.clone() color=color />
         <span class="murmure-member-name">{name.clone()}</span>
@@ -357,7 +357,7 @@ pub struct MurmureRelay {
     /// The members of each open channel by name, as the Logic thread last
     /// listed them. The invite control offers none of them, and the `@`
     /// list offers them all (`MURMURE-551`).
-    channel_members: RwSignal<HashMap<ChannelId, HashMap<UserId, String>>>,
+    channel_members: RwSignal<HashMap<ChannelId, HashMap<UserId, ambre_core::DisplayName>>>,
     /// The `@` list a region of the page shows, `None` while none is open
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
@@ -1099,7 +1099,7 @@ impl MurmureRelay {
                         .filter(|member| Some(member.user_id) != me)
                         .map(|member| PaletteEntry {
                             key: *member.user_id.as_bytes(),
-                            label: member.display_name.clone(),
+                            label: member.display_name.as_str().to_owned(),
                             hint: Some("Member"),
                         }),
                 );
@@ -1125,7 +1125,7 @@ impl MurmureRelay {
     }
 
     /// The display name of `user` in an open space, if they are a member.
-    pub fn member_name(&self, user: UserId) -> Option<String> {
+    pub fn member_name(&self, user: UserId) -> Option<ambre_core::DisplayName> {
         self.members.with_untracked(|spaces| {
             spaces
                 .values()
@@ -1192,7 +1192,7 @@ impl MurmureRelay {
 
     /// The members of `channel` by name, as the Logic thread last listed
     /// them. The `@` list offers them (`MURMURE-551`).
-    pub fn members_of(&self, channel: ChannelId) -> Vec<(UserId, String)> {
+    pub fn members_of(&self, channel: ChannelId) -> Vec<(UserId, ambre_core::DisplayName)> {
         self.channel_members.with_untracked(|m| {
             m.get(&channel)
                 .map(|listed| listed.iter().map(|(u, n)| (*u, n.clone())).collect())

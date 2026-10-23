@@ -52,7 +52,9 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
     let query = query.trim().to_lowercase();
     members
         .iter()
-        .filter(|member| query.is_empty() || member.display_name.to_lowercase().contains(&query))
+        .filter(|member| {
+            query.is_empty() || member.display_name.as_str().to_lowercase().contains(&query)
+        })
         .collect()
 }
 
@@ -60,7 +62,7 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
 #[derive(Debug, Default)]
 pub struct Roster {
     /// The relay's member rows: each member and their display name.
-    members: Vec<(UserId, String)>,
+    members: Vec<(UserId, ambre_core::DisplayName)>,
     /// The members heard from, with the tick that dates their last sample.
     /// `None` for a sample heard before the first tick: the next tick dates
     /// it.
@@ -82,7 +84,10 @@ impl Roster {
 
     /// Replace the member rows with the relay's answer. A member outside it
     /// shows nowhere, whatever sample came from them (`MURMURE-440`).
-    pub fn set_members(&mut self, members: impl IntoIterator<Item = (UserId, String)>) {
+    pub fn set_members(
+        &mut self,
+        members: impl IntoIterator<Item = (UserId, ambre_core::DisplayName)>,
+    ) {
         self.members = members.into_iter().collect();
     }
 
@@ -144,7 +149,7 @@ impl Roster {
         members.sort_by_cached_key(|member| {
             (
                 member.presence != Presence::Online,
-                member.display_name.to_lowercase(),
+                member.display_name.as_str().to_lowercase(),
                 *member.user_id.as_bytes(),
             )
         });
@@ -168,7 +173,11 @@ mod tests {
 
     fn roster(members: &[(UserId, &str)]) -> Roster {
         let mut roster = Roster::new(None);
-        roster.set_members(members.iter().map(|(id, name)| (*id, (*name).to_owned())));
+        roster.set_members(
+            members
+                .iter()
+                .map(|(id, name)| (*id, ambre_core::DisplayName::new(name).unwrap())),
+        );
         roster.tick(T0);
         roster
     }
@@ -222,7 +231,7 @@ mod tests {
     fn a_sample_before_the_first_tick_is_dated_by_it() {
         let bob = UserId::new();
         let mut roster = Roster::new(None);
-        roster.set_members([(bob, "Bob".to_owned())]);
+        roster.set_members([(bob, ambre_core::DisplayName::new("Bob").unwrap())]);
         roster.heard(bob);
         assert!(!roster.tick(T0));
         assert_eq!(roster.presence(bob), Presence::Online);

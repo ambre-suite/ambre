@@ -67,12 +67,16 @@ fn matches(name: &str, query: &str) -> bool {
 
 /// The entries `query` keeps: `@channel` first, then each member in name
 /// order. `me` is never offered.
-pub fn offers(query: &str, members: &[(UserId, String)], me: Option<UserId>) -> Vec<Offer> {
-    let mut kept: Vec<&(UserId, String)> = members
+pub fn offers(
+    query: &str,
+    members: &[(UserId, ambre_core::DisplayName)],
+    me: Option<UserId>,
+) -> Vec<Offer> {
+    let mut kept: Vec<&(UserId, ambre_core::DisplayName)> = members
         .iter()
-        .filter(|(user, name)| Some(*user) != me && matches(name, query))
+        .filter(|(user, name)| Some(*user) != me && matches(name.as_str(), query))
         .collect();
-    kept.sort_by_cached_key(|(_, name)| name.to_lowercase());
+    kept.sort_by_cached_key(|(_, name)| name.as_str().to_lowercase());
     let channel = AT_CHANNEL
         .starts_with(&query.to_lowercase())
         .then(|| Offer {
@@ -83,7 +87,7 @@ pub fn offers(query: &str, members: &[(UserId, String)], me: Option<UserId>) -> 
         .into_iter()
         .chain(kept.into_iter().map(|(user, name)| Offer {
             target: MentionTarget::User(*user),
-            name: name.clone(),
+            name: name.as_str().to_owned(),
         }))
         .collect()
 }
@@ -136,9 +140,9 @@ mod tests {
     fn the_channel_leads_and_members_follow_by_name() {
         let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
         let members = vec![
-            (carol, "carol Chen".to_owned()),
-            (bob, "Bob".to_owned()),
-            (alice, "Alice".to_owned()),
+            (carol, ambre_core::DisplayName::new("carol Chen").unwrap()),
+            (bob, ambre_core::DisplayName::new("Bob").unwrap()),
+            (alice, ambre_core::DisplayName::new("Alice").unwrap()),
         ];
         let names = |query, me| -> Vec<String> {
             offers(query, &members, me)

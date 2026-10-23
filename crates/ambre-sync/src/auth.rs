@@ -148,7 +148,8 @@ impl SyncState {
                 id,
                 RestEvent::SessionReady {
                     user_id,
-                    display_name: "offline".into(),
+                    display_name: ambre_core::DisplayName::cut_to_fit("offline")
+                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&user_id)),
                     email: "offline@localhost".into(),
                 },
             );
@@ -225,11 +226,13 @@ impl SyncState {
             self.exchange_key = Some(exchange_key);
             self.master_seed = Some(master_seed);
             self.open_websocket();
+            let user_id = UserId::new();
             self.reply(
                 id,
                 RestEvent::SessionReady {
-                    user_id: UserId::new(),
-                    display_name: username,
+                    user_id,
+                    display_name: ambre_core::DisplayName::cut_to_fit(&username)
+                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&user_id)),
                     email: ambre_core::Email(String::new()),
                 },
             );
@@ -558,7 +561,7 @@ mod provider_tests {
         SyncEvent::ProviderSignedIn {
             id: RequestId::next(),
             user_id: UserId::new(),
-            display_name: "Ada".into(),
+            display_name: ambre_core::DisplayName::new("Ada").unwrap(),
             email: "ada@example.org".into(),
             keys_stored,
             tokens: TokenPair {

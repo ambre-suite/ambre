@@ -289,7 +289,10 @@ impl ProseState {
         reply
             .insert(
                 doc::ReplyKey::Author,
-                self.my_name.clone().unwrap_or_default(),
+                self.my_name
+                    .clone()
+                    .map(ambre_core::DisplayName::into_string)
+                    .unwrap_or_default(),
             )
             .map_err(|e| format!("{e:?}"))?;
         reply
@@ -378,7 +381,7 @@ mod tests {
     fn document(peer: ambre_core::PeerId, user: UserId, text: &str) -> (ProseState, BlockId) {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
-        state.set_display_name(format!("user {peer}"));
+        state.set_display_name(ambre_core::DisplayName::new(&format!("user {peer}")).unwrap());
         let id = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: id,
@@ -545,7 +548,7 @@ mod tests {
         let id = open(&mut state, block, (0, 5), "Mine.");
         let head = thread(&state, id).replies.remove(0);
         assert_eq!(head.user_id, ALICE);
-        assert_eq!(head.author, "user 1");
+        assert_eq!(head.author.unwrap(), "user 1");
         assert_eq!(head.created_at, ambre_bus::Timestamp(10));
     }
 

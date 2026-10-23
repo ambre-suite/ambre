@@ -121,7 +121,7 @@ pub struct ProseState {
     my_user_id: Option<UserId>,
     /// This session's display name, stamped on every outbound presence sample.
     /// Cosmetic: it decides neither identity nor colour (`PRESENCE-004`).
-    my_name: Option<String>,
+    my_name: Option<ambre_core::DisplayName>,
     /// The threads the last whole-text walk found with no mark. A keystroke
     /// does not walk the text again for them (`comments::refresh_anchors`).
     orphans: std::collections::HashSet<ambre_core::CommentId>,
@@ -134,7 +134,13 @@ pub struct ProseState {
     /// Sync-resolved `UserId`. Ephemeral: never in the CRDT, never persisted
     /// (`PROSE-058`). The name is cosmetic and decides nothing
     /// (`PRESENCE-004`).
-    presence: HashMap<UserId, (crate::events::CursorPosition, String)>,
+    presence: HashMap<
+        UserId,
+        (
+            crate::events::CursorPosition,
+            Option<ambre_core::DisplayName>,
+        ),
+    >,
     /// Every user with a session open on this document, as far as this peer
     /// knows. A user joins on any frame that decodes and leaves on the relay's
     /// word alone (`PRESENCE-014`). Apart from `presence`, which drops a caret
@@ -514,7 +520,7 @@ impl ProseState {
     }
 
     /// Seed this session's display name, from the same `SessionReady`.
-    pub fn set_display_name(&mut self, name: String) {
+    pub fn set_display_name(&mut self, name: ambre_core::DisplayName) {
         self.my_name = Some(name);
     }
 

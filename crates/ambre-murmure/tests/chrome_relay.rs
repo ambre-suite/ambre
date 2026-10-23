@@ -435,7 +435,7 @@ fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
         id: RequestId::next(),
         evt: RestEvent::SessionReady {
             user_id: users[0],
-            display_name: "Alice".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -464,7 +464,7 @@ fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
     });
     let member = |user_id, name: &str| MemberView {
         user_id,
-        display_name: name.to_owned(),
+        display_name: ambre_core::DisplayName::new(name).unwrap(),
         presence: Presence::Offline,
     };
     relay.absorb(&UiEvent::Space {
@@ -550,7 +550,7 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
         "{fetched:?}"
     );
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(general));
-    assert_eq!(relay.member_name(bob).as_deref(), Some("Bob"));
+    assert_eq!(relay.member_name(bob).unwrap(), "Bob");
 
     let direct = ChannelId::new();
     let after = relay.absorb(&UiEvent::DirectMessage {
@@ -603,7 +603,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
     });
     let view = |user_id, name: &str| MemberView {
         user_id,
-        display_name: name.to_owned(),
+        display_name: ambre_core::DisplayName::new(name).unwrap(),
         presence: Presence::Offline,
     };
     relay.absorb(&UiEvent::Space {
@@ -681,7 +681,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
 
     let info = |user_id| MemberInfo {
         user_id,
-        display_name: String::new(),
+        display_name: ambre_core::DisplayName::new("Member").unwrap(),
         email: ambre_bus::Email(String::new()),
         role: Role::Editor,
         standing: MemberStanding::Verified,
@@ -898,7 +898,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         id: RequestId::next(),
         evt: RestEvent::SessionReady {
             user_id: me,
-            display_name: "Alice".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -965,7 +965,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         id: RequestId::next(),
         evt: RestEvent::SessionReady {
             user_id: me,
-            display_name: "Alice".to_owned(),
+            display_name: ambre_core::DisplayName::new("Alice").unwrap(),
             email: ambre_bus::Email::from("alice@test.local"),
         },
     });
@@ -1434,7 +1434,7 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
         names: Vec::new(),
         peers: vec![ambre_bus::DirectPeers {
             channel_id: direct,
-            names: vec!["Bob".to_owned()],
+            names: vec![ambre_core::DisplayName::new("Bob").unwrap()],
         }],
     });
     relay.pane.set(MurmurePane::ChannelList);

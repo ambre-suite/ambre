@@ -69,7 +69,7 @@ pub struct OrgMemberResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     pub email: ambre_core::Email,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     /// Serialized as its lowercase word.
     pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -547,7 +547,7 @@ mod tests {
         let member = db::OrgMemberRow {
             user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             email: "user@test.com".into(),
-            display_name: "Test User".into(),
+            display_name: ambre_core::DisplayName::new("Test User").unwrap(),
             role: Role::Admin,
             shamir_share_enc: Some(ambre_core::SealedShare::new(vec![1, 2, 3])),
             created_at: chrono::Utc::now(),
@@ -568,7 +568,7 @@ mod tests {
         let member = db::OrgMemberRow {
             user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
             email: "other@test.com".into(),
-            display_name: "Other User".into(),
+            display_name: ambre_core::DisplayName::new("Other User").unwrap(),
             role: Role::Member,
             shamir_share_enc: None,
             created_at: chrono::Utc::now(),

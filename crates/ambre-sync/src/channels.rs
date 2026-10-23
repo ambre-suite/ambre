@@ -1701,7 +1701,10 @@ pub(crate) mod tests {
         // A channel of a space composes no name, whatever the relay lists.
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: direct,
-            names: vec!["Bob".into(), "Carol".into()],
+            names: vec![
+                ambre_core::DisplayName::new("Bob").unwrap(),
+                ambre_core::DisplayName::new("Carol").unwrap(),
+            ],
         }];
         let expected = vec![
             MemberChannel {

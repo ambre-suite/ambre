@@ -100,7 +100,7 @@ fn ShellHeader(
     current_doc: RwSignal<Option<DocumentId>>,
     share_open: RwSignal<bool>,
     about_open: RwSignal<bool>,
-    username: RwSignal<Option<String>>,
+    username: RwSignal<Option<ambre_core::DisplayName>>,
     me: RwSignal<Option<UserId>>,
 ) -> impl IntoView {
     view! {
@@ -157,10 +157,10 @@ fn ShellHeader(
         // session names them (`PROFILE-002`).
         <span
             class="ambre-avatar"
-            title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
+            title=move || username.get().map(ambre_core::DisplayName::into_string).unwrap_or_else(|| "Signed out".to_owned())
             style:background=move || me.get().map(|user| ambre_draw::peer_css(&user))
         >
-            {move || ambre_chrome::avatar_initials(username.get().as_deref().unwrap_or_default())}
+            {move || ambre_chrome::avatar_initials(username.get().as_ref().map_or("", ambre_core::DisplayName::as_str))}
         </span>
     }
 }

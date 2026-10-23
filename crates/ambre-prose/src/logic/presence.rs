@@ -48,7 +48,7 @@ impl ProseState {
             block_id: pos.block_id,
             cursor: cursor.encode(),
             anchor,
-            display_name: self.my_name.clone().unwrap_or_default(),
+            display_name: self.my_name.clone(),
         };
         match postcard::to_allocvec(&payload) {
             Ok(bytes) => {

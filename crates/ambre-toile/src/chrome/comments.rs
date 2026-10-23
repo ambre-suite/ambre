@@ -20,7 +20,6 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::ui::comments::{CommentDraft, CommentIntent, ThreadFilter};
-use crate::ui::presence::short_handle;
 
 /// The comments panel. `state` is the open flag; the View menu, a pin click and
 /// a fresh thread all set it. `list` and `open` are what the view read back
@@ -121,7 +120,7 @@ pub fn CommentsPanel(
                                 <div class="ambre-comments-messages">
                                     {thread.messages.iter().map(|m| view! {
                                         <div class="ambre-comments-message">
-                                            <span class="ambre-comments-author">{short_handle(&m.author)}</span>
+                                            <span class="ambre-comments-author">{ambre_core::DisplayName::handle_of(&m.author).into_string()}</span>
                                             <span class="ambre-comments-time">{clock_label(m.ts)}</span>
                                             <p class="ambre-comments-body">{m.body.clone()}</p>
                                         </div>

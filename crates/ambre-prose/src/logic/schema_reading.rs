@@ -251,6 +251,12 @@ fn colour(rgba: Rgba) -> String {
 
 /// What `reader` reads a stored value as, or `None` when no reader of this
 /// build resolves it.
+/// An author as it was stored: its text, or empty when the annotation carries
+/// none, so the frozen reading of an author stays the stored text.
+fn author_text(author: Option<&ambre_core::DisplayName>) -> &str {
+    author.map_or("", ambre_core::DisplayName::as_str)
+}
+
 fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     if UNREAD.contains(&frozen_path(stored).as_str()) {
         return Some("read by no reader of this build".to_owned());
@@ -490,7 +496,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                 let reply = thread.replies.get(at)?;
                 let what = match doc::ReplyKey::parse(stored.key(3)?)? {
                     doc::ReplyKey::Id => format!("is {}", reply.reply_id.to_hyphenated()),
-                    doc::ReplyKey::Author => format!("by {:?}", reply.author),
+                    doc::ReplyKey::Author => format!("by {:?}", author_text(reply.author.as_ref())),
                     doc::ReplyKey::User => format!("by user {}", reply.user_id),
                     doc::ReplyKey::Created => format!("at {} ms", reply.created_at.0),
                     doc::ReplyKey::Text => format!("reads {:?}", reply.text),
@@ -517,7 +523,9 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         .find(|s| *s.suggestion_id.as_uuid() == id)?;
     Some(match field {
         doc::AnnotKey::Kind => format!("a suggested {:?}", suggestion.kind),
-        doc::AnnotKey::Author => format!("suggested by {:?}", suggestion.author),
+        doc::AnnotKey::Author => {
+            format!("suggested by {:?}", author_text(suggestion.author.as_ref()))
+        }
         doc::AnnotKey::User => format!("suggested by user {}", suggestion.user_id),
         doc::AnnotKey::NoteBlock => {
             let span = suggestion.spans.first()?;
@@ -621,7 +629,10 @@ fn mark_reading(
             .into_iter()
             .find(|s| s.suggestion_id == id)
         {
-            Some(found) => format!("suggests {kind:?} by {:?}", found.author),
+            Some(found) => format!(
+                "suggests {kind:?} by {:?}",
+                author_text(found.author.as_ref())
+            ),
             None => "suggests nothing".to_owned(),
         }
     } else if matches!(mark, "cm" | "si" | "sd") {

@@ -249,7 +249,7 @@ pub(crate) fn rotate_entries_for(
     new_doc_key: &DocumentKey,
     anchor: Option<EntryDigest>,
     members: &[http::DocumentMemberEntry],
-) -> (Vec<http::RotateKeyEntry>, Vec<String>) {
+) -> (Vec<http::RotateKeyEntry>, Vec<ambre_core::DisplayName>) {
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
@@ -864,7 +864,11 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             ApiFailure::Local,
             format!(
                 "the new key could not be shared with {}: their key is unreadable",
-                unwrapped.join(", ")
+                unwrapped
+                    .iter()
+                    .map(ambre_core::DisplayName::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         );
     }
@@ -1512,7 +1516,7 @@ mod tests {
     fn member(uid: &str, pub_hex: &str) -> http::DocumentMemberEntry {
         http::DocumentMemberEntry {
             user_id: UserId::parse_str(uid).expect("a test id"),
-            display_name: "Member".into(),
+            display_name: ambre_core::DisplayName::new("Member").unwrap(),
             email: "m@test.local".into(),
             signing_pub_key: ambre_core::SigningKeyHex(String::new()),
             exchange_pub_key: ambre_core::ExchangeKeyHex(pub_hex.to_string()),

@@ -2085,7 +2085,7 @@ mod tests {
     fn member(user_id: UserId, name: &str) -> MemberInfo {
         MemberInfo {
             user_id,
-            display_name: name.to_owned(),
+            display_name: ambre_core::DisplayName::new(name).unwrap(),
             email: ambre_core::Email(format!("{name}@example.org")),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,

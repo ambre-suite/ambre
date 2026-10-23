@@ -85,7 +85,7 @@ impl TextSelection {
     pub fn copied(
         &self,
         list: &MessageList,
-        name_of: &dyn Fn(UserId) -> Option<String>,
+        name_of: &dyn Fn(UserId) -> Option<ambre_core::DisplayName>,
         time_of: &dyn Fn(Timestamp) -> String,
     ) -> Option<String> {
         let keys = list.keys();
@@ -107,7 +107,9 @@ impl TextSelection {
             let Some(words) = body.get(start..end.min(text)).filter(|w| !w.is_empty()) else {
                 continue;
             };
-            let author = name_of(message.author).unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
+            let author = name_of(message.author)
+                .map(ambre_core::DisplayName::into_string)
+                .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned());
             parts.push(format!("{author}, {}\n{words}", time_of(message.ts)));
         }
         (!parts.is_empty()).then(|| parts.join("\n\n"))
@@ -141,7 +143,7 @@ mod tests {
     }
 
     fn copy(list: &MessageList, selection: TextSelection) -> Option<String> {
-        selection.copied(list, &|_| Some("Ada".to_owned()), &|ts| {
+        selection.copied(list, &|_| ambre_core::DisplayName::new("Ada").ok(), &|ts| {
             format!("t{}", ts.0)
         })
     }

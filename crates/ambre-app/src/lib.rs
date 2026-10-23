@@ -234,7 +234,7 @@ struct Wiring {
     /// Transient notifications (ARIA live region).
     toasts: Toasts,
     /// Signed-in user's display name; `None` = signed out.
-    username: RwSignal<Option<String>>,
+    username: RwSignal<Option<ambre_core::DisplayName>>,
     /// The user's documents (landing list).
     docs: RwSignal<Vec<DocItem>>,
     /// Members of the active document (share dialog). Populated by the per-frame
@@ -854,7 +854,7 @@ pub fn main() {
     let commands_slot: Slot<shell::CommandPath> = Rc::new(RefCell::new(None));
     let anchor_slot: Slot<RwSignal<Option<(f64, f64)>>> = Rc::new(RefCell::new(None));
     let toasts_slot: Slot<Toasts> = Rc::new(RefCell::new(None));
-    let user_slot: Slot<RwSignal<Option<String>>> = Rc::new(RefCell::new(None));
+    let user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>> = Rc::new(RefCell::new(None));
     let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
     let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
@@ -1523,7 +1523,7 @@ pub fn main() {
                             email: email.clone(),
                         },
                         user_id: *user_id,
-                        display_name: display_name.clone(),
+                        display_name: Some(display_name.clone()),
                         exchange_pub_key: exchange_pub_key.clone(),
                         fingerprint: fingerprint.clone(),
                         changed: false,
@@ -1542,9 +1542,7 @@ pub fn main() {
                         },
                     ..
                 } => {
-                    let display_name = murmure_relay
-                        .member_name(*user_id)
-                        .unwrap_or_else(|| "This member".to_owned());
+                    let display_name = murmure_relay.member_name(*user_id);
                     let purpose = match murmure_relay.take_invite(*user_id) {
                         Some(channel_id) => tofu::Purpose::Channel { channel_id },
                         None => tofu::Purpose::Direct {

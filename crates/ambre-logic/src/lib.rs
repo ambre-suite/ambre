@@ -404,10 +404,10 @@ impl DocState {
     /// `SessionReady`. Toile stamps it on every outbound presence sample, so a
     /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`). It
     /// is cosmetic and decides nothing (`PRESENCE-004`).
-    fn set_display_name(&mut self, name: &str) {
+    fn set_display_name(&mut self, name: &ambre_core::DisplayName) {
         match self {
-            DocState::Toile(state) => state.set_display_name(name.to_owned()),
-            DocState::Prose(state) => state.set_display_name(name.to_owned()),
+            DocState::Toile(state) => state.set_display_name(name.clone()),
+            DocState::Prose(state) => state.set_display_name(name.clone()),
             DocState::Trame(_) => {}
         }
     }
@@ -807,7 +807,7 @@ struct LogicState {
     /// The session's display name, from the same `SessionReady`. Seeded into a
     /// document opened afterwards, so a board opened later still labels this
     /// peer's cursor (`TOILE-UI-076`).
-    my_display_name: Option<String>,
+    my_display_name: Option<ambre_core::DisplayName>,
     /// P3 responses this Logic thread issued on behalf of a document
     /// (`toile-media`). A `RequestId` present here routes its answering
     /// `RestEvent` (or correlated `ApiError`) back into the owning engine,

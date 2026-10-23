@@ -43,7 +43,8 @@ pub struct OrgMemberRow {
     pub user_id: ambre_core::UserId,
     #[sqlx(try_from = "String")]
     pub email: ambre_core::Email,
-    pub display_name: String,
+    #[sqlx(try_from = "String")]
+    pub display_name: ambre_core::DisplayName,
     #[sqlx(try_from = "String")]
     pub role: ambre_core::Role,
     #[sqlx(try_from = "PgOptBytes")]

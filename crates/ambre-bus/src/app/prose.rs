@@ -436,7 +436,7 @@ pub struct PresencePayload {
     pub block_id: BlockId,
     pub cursor: Vec<u8>,
     pub anchor: Option<(BlockId, Vec<u8>)>,
-    pub display_name: String,
+    pub display_name: Option<ambre_core::DisplayName>,
 }
 
 /// One live collaborator's caret, as the view is handed it.
@@ -447,7 +447,7 @@ pub struct PresencePayload {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
     pub user_id: UserId,
-    pub display_name: String,
+    pub display_name: Option<ambre_core::DisplayName>,
     pub position: CursorPosition,
 }
 
@@ -624,7 +624,7 @@ pub struct FootnoteEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentReply {
     pub reply_id: ReplyId,
-    pub author: String,
+    pub author: Option<ambre_core::DisplayName>,
     pub user_id: UserId,
     pub created_at: crate::Timestamp,
     pub text: String,
@@ -679,7 +679,7 @@ pub struct LinkSpan {
 pub struct Suggestion {
     pub suggestion_id: SuggestionId,
     pub kind: SuggestionKind,
-    pub author: String,
+    pub author: Option<ambre_core::DisplayName>,
     pub user_id: UserId,
     pub spans: Vec<SuggestionSpan>,
 }

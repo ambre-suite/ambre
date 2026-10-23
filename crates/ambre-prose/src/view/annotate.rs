@@ -376,7 +376,7 @@ mod tests {
         Suggestion {
             suggestion_id: SuggestionId::new(),
             kind,
-            author: "Ann".to_owned(),
+            author: ambre_core::DisplayName::new("Ann").ok(),
             user_id: UserId::from_bytes([3; 16]),
             spans: vec![SuggestionSpan {
                 block_id: block,

@@ -31,6 +31,7 @@ use ambre_bus::app::toile::{
     DisplayNode, DisplayViewport, ElementId, PresencePayload, PresenceUpdate,
 };
 use ambre_canvas::TextCache;
+use ambre_core::DisplayName;
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
     PositionedLayoutItem, Rect, Stroke, peer_color,
@@ -226,8 +227,8 @@ fn paint_peer<S: DrawSurface>(
     // 4. Cursor + name chip at the peer's pointer, if the pointer is on-board.
     if let Some(cursor) = p.cursor {
         let screen = *w2s * cursor;
-        let label = peer_label(user_id, p.name.as_deref());
-        paint_cursor(surface, screen, &label, color, font_cx, text_cache);
+        let label = peer_label(user_id, p.name.as_ref());
+        paint_cursor(surface, screen, label.as_str(), color, font_cx, text_cache);
     }
 }
 
@@ -272,12 +273,11 @@ pub fn laser_alpha(sample_ms: ambre_core::PageTime, now_ms: ambre_core::PageTime
 
 /// What a peer's chip reads: the display name their sample carried, or a short
 /// handle derived from the id when it carried none (`TOILE-UI-076`). A blank
-/// name is no name: it would paint an empty chip.
-pub fn peer_label(user_id: &UserId, name: Option<&str>) -> String {
-    match name.map(str::trim) {
-        Some(n) if !n.is_empty() => n.to_string(),
-        _ => short_handle(user_id),
-    }
+/// name is no name: the sample's decode drops it, as it would paint an empty
+/// chip.
+pub fn peer_label(user_id: &UserId, name: Option<&DisplayName>) -> DisplayName {
+    name.cloned()
+        .unwrap_or_else(|| DisplayName::handle_of(user_id))
 }
 
 /// Draw the pointer arrow and a name chip next to it, both in the peer colour.
@@ -336,18 +336,6 @@ fn paint_cursor<S: DrawSurface>(
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
         }
     }
-}
-
-/// A short, human-distinguishable handle for a peer: the first 8 hex chars of
-/// the canonical `UserId`. Placeholder until the display-name directory lands.
-/// The comment panel names a message's author with the same handle, so one peer
-/// reads the same on the board and in a thread.
-pub fn short_handle(user_id: &UserId) -> String {
-    let bytes = user_id.as_bytes();
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3]
-    )
 }
 
 /// The world-space AABB of a displayed element, or `None` when the id is not in
@@ -703,9 +691,10 @@ mod tests {
     #[test]
     fn the_label_is_the_name_the_sample_carried() {
         let id = user(42);
-        assert_eq!(peer_label(&id, Some("Ada")), "Ada");
-        assert_eq!(peer_label(&id, None), short_handle(&id));
-        assert_eq!(peer_label(&id, Some("   ")), short_handle(&id));
+        let ada = DisplayName::new("Ada").unwrap();
+        assert_eq!(peer_label(&id, Some(&ada)), "Ada");
+        assert_eq!(peer_label(&id, None), DisplayName::handle_of(&id));
+        assert_eq!(DisplayName::handle_of(&id).as_str().len(), 8);
     }
 
     /// TOILE-UI-073: a sample goes out when it changed, and otherwise only on
@@ -753,7 +742,7 @@ mod tests {
         let sample = |seed: u8, name: &str| PresenceUpdate {
             user_id: user(seed),
             presence: PresencePayload {
-                name: Some(name.to_owned()),
+                name: ambre_core::DisplayName::new(name).ok(),
                 cursor: Some(Point::new(f64::from(seed), 0.0)),
                 ..Default::default()
             },

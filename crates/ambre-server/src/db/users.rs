@@ -16,7 +16,7 @@ pub struct UserRow {
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
     /// an OIDC login reclaims an unverified holder's email.
     pub email_verified: bool,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
     pub master_key_salt: Option<ambre_core::MasterKeySalt>,
     /// `None` until the account registers its keys: a provider login creates
@@ -34,7 +34,7 @@ pub struct UserInfoRow {
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
     pub email_verified: bool,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub signing_pubkey: ambre_core::PublicKey,
     pub exchange_pubkey: ambre_core::ExchangePublicKey,
 }
@@ -59,7 +59,7 @@ pub async fn get_user(
             oidc_subject: r.try_get("oidc_subject")?,
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
-            display_name: r.try_get("display_name")?,
+            display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
                 .map(ambre_core::WrappedMasterKey::new),
@@ -109,7 +109,7 @@ pub async fn get_user_by_email(
             oidc_subject: r.try_get("oidc_subject")?,
             email: ambre_core::Email(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
-            display_name: r.try_get("display_name")?,
+            display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
                 .map(ambre_core::WrappedMasterKey::new),
@@ -157,7 +157,7 @@ pub async fn create_user(
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
-        display_name: row.try_get("display_name")?,
+        display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
             .map(ambre_core::WrappedMasterKey::new),
@@ -232,7 +232,7 @@ pub async fn upsert_user_from_oidc(
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
-        display_name: row.try_get("display_name")?,
+        display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
             .map(ambre_core::WrappedMasterKey::new),
@@ -291,7 +291,7 @@ pub async fn dev_upsert_user(
         oidc_subject: row.try_get("oidc_subject")?,
         email: ambre_core::Email(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
-        display_name: row.try_get("display_name")?,
+        display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
             .map(ambre_core::WrappedMasterKey::new),
@@ -330,7 +330,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
                 id: r.try_get::<PgId, _>("id")?.into(),
                 email: ambre_core::Email(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
-                display_name: r.try_get("display_name")?,
+                display_name: decode_display_name(r.try_get("display_name")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
                 exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,
             })

@@ -199,7 +199,7 @@ pub struct DocumentSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberInfo {
     pub user_id: UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
     pub role: Role,
     /// What the signed membership log says of this row
@@ -241,7 +241,7 @@ pub struct SealedRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
     pub user_id: UserId,
-    pub display_name: String,
+    pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
 }
 
@@ -465,7 +465,7 @@ pub enum RestEvent {
     // -- Session -----------------------------------------------------------------
     SessionReady {
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
     },
     /// First connection: no keys on the server -- the UI must show onboarding.
@@ -503,7 +503,7 @@ pub enum RestEvent {
     InviteeKey {
         document_id: DocumentId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
@@ -518,7 +518,7 @@ pub enum RestEvent {
     InviteSent {
         document_id: DocumentId,
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
     },
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {
@@ -617,7 +617,7 @@ pub enum RestEvent {
     /// `keys_stored` says whether the next step is an unlock or a setup.
     ProviderSignedIn {
         user_id: UserId,
-        display_name: String,
+        display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         keys_stored: bool,
     },
