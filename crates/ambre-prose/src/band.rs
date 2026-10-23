@@ -10,7 +10,7 @@ use ambre_core::{LangTag, Millis, Timestamp};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
-use crate::events::{DateFieldFormat, PageCount, PageIndex};
+use crate::events::{DateFieldFormat, HeaderField, PageCount, PageIndex};
 
 /// The span of one day.
 const DAY: Millis = Millis(86_400_000);
@@ -33,13 +33,16 @@ pub fn resolve(
             attributes
                 .iter()
                 .find(|(key, _)| key.starts_with("f:"))
-                .map(|(key, value)| (key.to_string(), value.clone()))
+                .map(|(key, value)| field_of(key, value))
         });
-        let Some((key, value)) = field else {
+        let Some(field) = field else {
             out.push_str(&insert);
             continue;
         };
-        let shown = field_value(document, &key, &value, page, page_count);
+        // A field of a kind this build does not know shows nothing.
+        let shown = field
+            .map(|field| field_value(document, field, page, page_count))
+            .unwrap_or_default();
         // One value per field character: a span may carry several fields that
         // share a key and a value.
         for _ in insert.chars() {
@@ -49,31 +52,52 @@ pub fn resolve(
     out
 }
 
+/// The mark key and the stored value of a field. The date stores its format
+/// and nothing else (`PROSE-FEAT-162`). [`field_of`] reads them back.
+#[must_use]
+pub const fn field_mark(field: HeaderField) -> (&'static str, &'static str) {
+    match field {
+        HeaderField::PageNumber => ("f:pn", ""),
+        HeaderField::PageCount => ("f:pc", ""),
+        HeaderField::Title => ("f:ti", ""),
+        HeaderField::Date(DateFieldFormat::Short) => ("f:dt", "short"),
+        HeaderField::Date(DateFieldFormat::Long) => ("f:dt", "long"),
+        HeaderField::Date(DateFieldFormat::Iso) => ("f:dt", "iso"),
+    }
+}
+
+/// The field a mark carries, or `None` for a mark that is not a field. A date
+/// whose stored format is not one [`field_mark`] writes draws the ISO date,
+/// as an unknown format always has.
+#[must_use]
+pub fn field_of(key: &str, value: &LoroValue) -> Option<HeaderField> {
+    match key {
+        "f:pn" => Some(HeaderField::PageNumber),
+        "f:pc" => Some(HeaderField::PageCount),
+        "f:ti" => Some(HeaderField::Title),
+        "f:dt" => Some(HeaderField::Date(match value {
+            LoroValue::String(word) if word.as_str() == "short" => DateFieldFormat::Short,
+            LoroValue::String(word) if word.as_str() == "long" => DateFieldFormat::Long,
+            _ => DateFieldFormat::Iso,
+        })),
+        _ => None,
+    }
+}
+
 /// What one field shows on one page.
 fn field_value(
     document: &LoroDoc,
-    key: &str,
-    value: &LoroValue,
+    field: HeaderField,
     page: PageIndex,
     count: PageCount,
 ) -> String {
-    match key {
-        "f:pn" => page.number().to_string(),
-        "f:pc" => count.to_string(),
-        "f:ti" => doc::read_title(document),
-        "f:dt" => {
-            // The word `field_mark` stores. Any other value draws the ISO
-            // date, as an unknown format always has.
-            let format = match value {
-                LoroValue::String(word) if word.as_str() == "short" => DateFieldFormat::Short,
-                LoroValue::String(word) if word.as_str() == "long" => DateFieldFormat::Long,
-                _ => DateFieldFormat::Iso,
-            };
-            doc::read_updated_at(document)
-                .map(|at| format_date(at, format, doc::read_lang(document).as_ref()))
-                .unwrap_or_default()
-        }
-        _ => String::new(),
+    match field {
+        HeaderField::PageNumber => page.number().to_string(),
+        HeaderField::PageCount => count.to_string(),
+        HeaderField::Title => doc::read_title(document),
+        HeaderField::Date(format) => doc::read_updated_at(document)
+            .map(|at| format_date(at, format, doc::read_lang(document).as_ref()))
+            .unwrap_or_default(),
     }
 }
 
@@ -288,6 +312,23 @@ mod tests {
     fn ymd(at: Timestamp) -> (i64, u32, u32) {
         let date = civil_date(at);
         (date.year(), date.month(), date.day())
+    }
+
+    #[test]
+    fn every_field_reads_back_from_the_mark_it_writes() {
+        let fields = [
+            HeaderField::PageNumber,
+            HeaderField::PageCount,
+            HeaderField::Title,
+            HeaderField::Date(DateFieldFormat::Short),
+            HeaderField::Date(DateFieldFormat::Long),
+            HeaderField::Date(DateFieldFormat::Iso),
+        ];
+        for field in fields {
+            let (key, value) = field_mark(field);
+            assert_eq!(field_of(key, &LoroValue::from(value)), Some(field));
+        }
+        assert_eq!(field_of("b", &LoroValue::from("")), None);
     }
 
     fn tag(text: &str) -> Option<LangTag> {

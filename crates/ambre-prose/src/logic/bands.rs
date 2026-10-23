@@ -16,8 +16,8 @@ use loro::TreeID;
 
 use crate::doc;
 use crate::events::{
-    Align, BandSet, BlockType, DateFieldFormat, HeaderField, HfTarget, ProseEvent, ProseOutcome,
-    ProseRefusal, block_id,
+    Align, BandSet, BlockType, HeaderField, HfTarget, ProseEvent, ProseOutcome, ProseRefusal,
+    block_id,
 };
 
 use super::ProseState;
@@ -39,20 +39,6 @@ impl Side {
             Self::Header => (doc::MetaKey::Header, doc::MetaKey::HeaderFirst),
             Self::Footer => (doc::MetaKey::Footer, doc::MetaKey::FooterFirst),
         }
-    }
-}
-
-/// The mark key and the stored value of a field. The date stores its format
-/// and nothing else (`PROSE-FEAT-162`).
-#[must_use]
-pub fn field_mark(field: HeaderField) -> (&'static str, &'static str) {
-    match field {
-        HeaderField::PageNumber => ("f:pn", ""),
-        HeaderField::PageCount => ("f:pc", ""),
-        HeaderField::Title => ("f:ti", ""),
-        HeaderField::Date(DateFieldFormat::Short) => ("f:dt", "short"),
-        HeaderField::Date(DateFieldFormat::Long) => ("f:dt", "long"),
-        HeaderField::Date(DateFieldFormat::Iso) => ("f:dt", "iso"),
     }
 }
 
@@ -123,7 +109,7 @@ impl ProseState {
             return Self::err_no_block(&block);
         };
         let at = pos.to_usize().min(body.len_unicode());
-        let (key, value) = field_mark(field);
+        let (key, value) = crate::band::field_mark(field);
         let mut buffer = [0_u8; 4];
         if let Err(e) = body.insert(at, FIELD_CHAR.encode_utf8(&mut buffer)) {
             return Self::err_write(&format!("{e:?}"));
@@ -234,7 +220,7 @@ impl ProseState {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::events::{BlockId, PageCount, PageIndex, ProseCommand};
+    use crate::events::{BlockId, DateFieldFormat, PageCount, PageIndex, ProseCommand};
     use ambre_bus::app::prose::DocSpan;
 
     pub(crate) fn with_header() -> (ProseState, BlockId) {

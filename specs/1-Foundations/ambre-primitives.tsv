@@ -2705,7 +2705,6 @@ ambre-primitives | src/scan.rs | crate::scan | normalise(tokens) | param | &str	
 ambre-primitives | src/scan.rs | crate::scan | path_attr() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | test_only() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-prose | src/band.rs | crate::band | field_value() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/band.rs | crate::band | field_value(key) | param | &str	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
@@ -3127,7 +3126,6 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predic
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_different_first_page(enabled) | param | bool	generic	independent flag or predicate
 ambre-prose | src/logic/bands.rs | crate::logic::bands | ProseState::set_side_enabled(enabled) | param | bool	generic	independent flag or predicate
-ambre-prose | src/logic/bands.rs | crate::logic::bands | field_mark() | ret | (&'static str,&'static str)	debt	finding: header-field codec duplicated as string literals (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::carry_style() | ret | Result<(),String>	debt	finding: Result<_, String> wrapping Loro errors (confirmed)
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
@@ -5579,6 +5577,8 @@ ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::pres
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::press(y) | param | f32	math	local geometry / pixel arithmetic
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
+ambre-prose | src/band.rs | crate::band | field_mark() | ret | (&'static str,&'static str)	foreign-api	the mark key and value LoroText::mark stores for a HeaderField; field_of is the one reader, so the codec lives in this file alone
+ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of field_mark
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
 ambre-prose | src/band.rs | crate::band | CivilDate.day | field | u32	newtype-inner	a component of the civil-date type, 1 to 31
 ambre-prose | src/band.rs | crate::band | CivilDate.month | field | u32	newtype-inner	a component of the civil-date type, 1 to 12
