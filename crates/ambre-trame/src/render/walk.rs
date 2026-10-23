@@ -11,7 +11,7 @@ use ambre_core::DocPx;
 use ambre_draw::DocumentWalk;
 
 use super::*;
-use crate::{LAST_COL, LAST_ROW, TOTAL_COLS, TOTAL_ROWS};
+use crate::{ColSpan, LAST_COL, LAST_ROW, RowSpan, TOTAL_COLS, TOTAL_ROWS};
 
 /// One cell as the walk reads it.
 #[derive(Clone, Copy)]
@@ -82,29 +82,17 @@ impl SheetAxes<'_> {
 
     /// The column whose band holds `x`, clamped to the grid.
     pub fn col_at(&self, x: f64) -> Col {
-        let past = first(TOTAL_COLS.get(), |c| self.col_x(Col::new(c).next()) > x);
-        Col::new(past).min(LAST_COL)
+        ColSpan::from_count(Col::ZERO, TOTAL_COLS)
+            .first_where(|c| self.col_x(c.next()) > x)
+            .min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
     pub fn row_at(&self, y: f64) -> Row {
-        let past = first(TOTAL_ROWS.get(), |r| self.row_y(Row::new(r).next()) > y);
-        Row::new(past).min(LAST_ROW)
+        RowSpan::from_count(Row::ZERO, TOTAL_ROWS)
+            .first_where(|r| self.row_y(r.next()) > y)
+            .min(LAST_ROW)
     }
-}
-
-/// The first index in `0..n` where the monotone `pred` holds, or `n`.
-fn first(n: u32, pred: impl Fn(u32) -> bool) -> u32 {
-    let (mut lo, mut hi) = (0u32, n);
-    while lo < hi {
-        let mid = lo + (hi - lo) / 2;
-        if pred(mid) {
-            hi = mid;
-        } else {
-            lo = mid + 1;
-        }
-    }
-    lo
 }
 
 /// A sheet as the walk reads it.

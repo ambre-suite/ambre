@@ -343,6 +343,24 @@ macro_rules! define_index {
             pub const fn last(self) -> Option<$pos> {
                 if self.is_empty() { None } else { self.end.prev() }
             }
+
+            /// The first position of the span where `pred` holds, or `end`
+            /// when it holds at none. `pred` is monotone over the span: once
+            /// it holds, it holds at every later position. The search halves
+            /// the span at each step, so it reads `pred` a logarithmic number
+            /// of times.
+            pub fn first_where(self, pred: impl Fn($pos) -> bool) -> $pos {
+                let (mut low, mut high) = (self.start.0, self.end.0.max(self.start.0));
+                while low < high {
+                    let mid = low + (high - low) / 2;
+                    if pred($pos(mid)) {
+                        high = mid;
+                    } else {
+                        low = mid + 1;
+                    }
+                }
+                $pos(low)
+            }
         }
 
         impl IntoIterator for $span {
@@ -627,6 +645,16 @@ mod tests {
         assert_eq!(span.len(), LineCount::new(3));
         assert!(span.contains(Line::new(3)) && !span.contains(Line::new(4)));
         assert!(LineSpan::new(Line::new(4), Line::new(2)).is_empty());
+    }
+
+    #[test]
+    fn a_span_finds_the_first_position_a_monotone_test_holds_at() {
+        let span = LineSpan::new(Line::new(2), Line::new(9));
+        assert_eq!(span.first_where(|at| at >= Line::new(5)), Line::new(5));
+        assert_eq!(span.first_where(|_| true), Line::new(2));
+        assert_eq!(span.first_where(|_| false), Line::new(9));
+        let empty = LineSpan::new(Line::new(4), Line::new(2));
+        assert_eq!(empty.first_where(|_| true), Line::new(4));
     }
 
     #[test]

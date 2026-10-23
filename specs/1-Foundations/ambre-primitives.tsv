@@ -4691,11 +4691,11 @@ ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_activ
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_active() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_in_other() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
+ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	free-text	the displayed text of a cell; the query is the typed FoldedNeedle and the extent a MatchExtent
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
+ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	free-text	the raw text of a matched cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	debt	finding: (FINDING, confirmed): find/replace option bools and three adjacent &str
+ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only FindText::fold hands it, or a cell's displayed text
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::build() | ret | Vec<u8>	trait	fixture trait from the shared fixtures harness
@@ -4877,9 +4877,6 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidde
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_at(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_y() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/render/walk.rs | crate::render::walk | first() | ret | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | first(n) | param | u32	debt	finding: (FINDING, confirmed): grid row and column as bare u32
-ambre-trame | src/render/walk.rs | crate::render::walk | first(pred) | param | impl Fn(u32)->bool	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
