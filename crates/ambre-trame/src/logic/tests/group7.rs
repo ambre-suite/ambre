@@ -441,8 +441,10 @@ fn find_matches_the_formatted_value() {
     let hits = |state: &mut TrameState, query: &str| {
         let out = state.handle_command(TrameCommand::FindNext {
             query: query.to_owned(),
-            match_case: false,
-            whole_cell: true,
+            options: crate::FindOptions {
+                extent: crate::MatchExtent::WholeCell,
+                ..Default::default()
+            },
         });
         match &out.display[..] {
             [TrameEvent::FindResult { matches, .. }] => matches.len(),

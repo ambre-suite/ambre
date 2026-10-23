@@ -390,48 +390,43 @@ pub enum TrameCommand {
     /// Find the next cell whose displayed value matches `query`, starting from the tracked
     /// active cell and wrapping around the active sheet (`trame-find-replace`). Read-only:
     /// the Logic thread scans the materialized extent, comparing each cell's *displayed*
-    /// value (formula results included). The comparison is case-folded unless `match_case`,
-    /// by exact equality when `whole_cell`, else by substring. Produces a
-    /// [`FindResult`](crate::TrameEvent::FindResult) with every match on the sheet plus the
-    /// index of the one to focus; no CRDT delta is emitted. The UI moves the active cell
-    /// onto the focused match, so a repeated `FindNext` advances.
+    /// value (formula results included). The scan reads only the case and the extent of
+    /// `options`: it is case-folded unless [`CaseMatch::Sensitive`](super::CaseMatch), by
+    /// exact equality for [`MatchExtent::WholeCell`](super::MatchExtent), else by substring.
+    /// Produces a [`FindResult`](crate::TrameEvent::FindResult) with every match on the
+    /// sheet plus the index of the one to focus; no CRDT delta is emitted. The UI moves the
+    /// active cell onto the focused match, so a repeated `FindNext` advances.
     FindNext {
         query: String,
-        match_case: bool,
-        whole_cell: bool,
+        options: super::FindOptions,
     },
 
-    /// Replace every match of `query` with `replacement` across the active sheet
-    /// (or all sheets when `all_sheets`) in a single undo group
-    /// (`trame-find-replace`). Matching tests the *displayed* value
-    /// (case-folded unless `match_case`, exact when `whole_cell` else substring),
-    /// but the rewrite edits the *raw* cell text. Cells whose raw text is a
-    /// formula (`=...`) are skipped unless `in_formulas`. Replies with
+    /// Replace every match of `query` with `replacement` across the active sheet (or all
+    /// sheets for [`SheetScope::All`](super::SheetScope)) in a single undo group
+    /// (`trame-find-replace`). Matching tests the *displayed* value, by the case and the
+    /// extent of `options`, but the rewrite edits the *raw* cell text. Cells whose raw text
+    /// is a formula (`=...`) are skipped unless the scope is
+    /// [`SearchScope::Formulas`](super::SearchScope). Replies with
     /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) and a
     /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches.
     ReplaceAll {
         query: String,
         replacement: String,
-        match_case: bool,
-        whole_cell: bool,
-        in_formulas: bool,
-        all_sheets: bool,
+        options: super::FindOptions,
     },
 
     /// Replace the single match at the tracked active cell, then advance to the next match
     /// (`trame-find-replace`). If the active cell matches `query` it is rewritten in one
     /// undo group, under the same raw-text rules as
-    /// [`ReplaceAll`](TrameCommand::ReplaceAll), `in_formulas` gating included. Whether or
-    /// not it matched, the reply carries a fresh
+    /// [`ReplaceAll`](TrameCommand::ReplaceAll), the scope gating included. The sheet
+    /// scope is not read. Whether or not it matched, the reply carries a fresh
     /// [`FindResult`](crate::TrameEvent::FindResult), so the UI moves to and highlights the
     /// following match. Replies with [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0`
     /// or `1`).
     ReplaceOne {
         query: String,
         replacement: String,
-        match_case: bool,
-        whole_cell: bool,
-        in_formulas: bool,
+        options: super::FindOptions,
     },
 
     /// Undo the last local edit (`trame-undo`). Backed by Loro's `UndoManager`. It replays

@@ -69,29 +69,30 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::FindNext { query, match_case, whole_cell }` | UI to Logic | the query and its two options; the origin is the active cell the Logic thread already tracks |
+| `TrameCommand::FindNext { query, options }` | UI to Logic | the query and the options, read for case and extent; the origin is the tracked active cell |
 | `TrameEvent::FindResult { matches, active }` | Logic to UI | every hit in row-major order, and the index to move to |
-| `TrameCommand::ReplaceAll { query, replacement, match_case, whole_cell, in_formulas, all_sheets }` | UI to Logic | the query, its replacement and the four options |
-| `TrameCommand::ReplaceOne { query, replacement, match_case, whole_cell, in_formulas }` | UI to Logic | the same, for the active match alone |
+| `TrameCommand::ReplaceAll { query, replacement, options }` | UI to Logic | the query, its replacement and the four options |
+| `TrameCommand::ReplaceOne { query, replacement, options }` | UI to Logic | the same, for the active match alone; the sheet scope is not read |
 | `TrameEvent::ReplaceDone { replaced }` | Logic to UI | how many cells were rewritten |
 
 **What a Trame match is** (the shared walk is `ambre-spec-find.md section 3`):
 
 * a plain cell matches on its displayed value, number format included, so a search for `50.0%`
   finds the percentage the user reads (`TRAME-UI-078`);
-* a formula cell matches on its source text, and only when the `in_formulas` option is set
+* a formula cell matches on its source text, and only when the scope is `SearchScope::Formulas`
   (`TRAME-UI-079`);
 * a case-insensitive replace rewrites the match alone and leaves the rest of the cell byte for byte
   (`TRAME-UI-080`);
 * the row-major order is Trame's, and the origin is the active cell the Logic thread tracks.
 
-Trame widens the shared option set by one, which is what `whole_cell` means here:
+Trame widens the shared option set to four, one enum per panel checkbox:
 
 ```rust
-pub struct FindQuery {
-    pub query: String,
-    pub match_case: bool,
-    pub whole_cell: bool,
+pub struct FindOptions {
+    pub case: CaseMatch,      // Insensitive | Sensitive
+    pub extent: MatchExtent,  // Substring | WholeCell
+    pub scope: SearchScope,   // Values | Formulas
+    pub sheets: SheetScope,   // Active | All
 }
 ```
 
@@ -106,10 +107,10 @@ The shared chords and the reveal are `ambre-spec-find.md section 4`. Trame's own
 
 | Option | Applies to | Effect |
 |---|---|---|
-| `match_case` | both modes | stops the case folding (`TRAME-UI-077`) |
-| `whole_cell` | both modes | demands an exact cell, not a substring (`TRAME-UI-077`) |
-| `in_formulas` | replace only | admits formula cells, matched on their source text (`TRAME-UI-079`) |
-| `all_sheets` | replace only | widens the scope from the active sheet to the workbook (`TRAME-UI-083`) |
+| `case` | both modes | `Sensitive` stops the case folding (`TRAME-UI-077`) |
+| `extent` | both modes | `WholeCell` demands an exact cell, not a substring (`TRAME-UI-077`) |
+| `scope` | replace only | `Formulas` admits formula cells, matched on their source text (`TRAME-UI-079`) |
+| `sheets` | replace-all only | `All` widens the walk from the active sheet to the workbook (`TRAME-UI-083`) |
 
 * **Rendering** -- the panel is a DOM component pinned to the top-right of the grid. It is the same
   chrome pattern as the filter popover and the format bar. It shows the position of the active match in the
@@ -134,10 +135,10 @@ clear, the one-undo replace-all -- are `ambre-spec-find.md section 5`. Trame's o
 The shared gaps -- the live shared session, the stale highlight, the undebounced walk -- are in
 `ambre-spec-find.md section 6`. Trame's own:
 
-* **A find cannot reach into formulas.** `in_formulas` is a replace option. `FindNext` does not
-  carry it, so `Ctrl+F` matches a formula cell on its result. There is no way to look for the text a
-  user typed. Nothing rules whether the find panel should offer the toggle the replace panel
-  already has.
+* **A find cannot reach into formulas.** The scope is a replace option. `FindNext` carries it but
+  the scan does not read it, so `Ctrl+F` matches a formula cell on its result. There is no way to
+  look for the text a user typed. Nothing rules whether the find panel should offer the toggle the
+  replace panel already has.
 * **No test drives the panel.** The rules are held in the Logic thread and none of them covers the
   fields above it. The option toggles, the mode switch and the `Escape` clear are asserted nowhere.
 * **A replace inside a filtered sheet.** The scan walks the used range, so it rewrites rows the

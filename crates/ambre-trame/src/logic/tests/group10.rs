@@ -262,10 +262,10 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "foo".to_owned(),
         replacement: "bar".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
-        all_sheets: true,
+        options: crate::FindOptions {
+            sheets: crate::SheetScope::All,
+            ..Default::default()
+        },
     });
     assert_eq!(state.active_sheet, "s0");
     assert!(

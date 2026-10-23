@@ -6,9 +6,9 @@
 //! - `event` -- the `TrameEvent` family + `DisplayCell` (Logic -> UI), carried by
 //!   [`AppEvent::Trame`](crate::ui::AppEvent).
 //! - `grid` -- the row, column and cell coordinates both directions carry.
-//! - `style` / `clipboard` / `features` -- the shared value types both directions
-//!   reference (cell styles, filters, clipboard payloads, deferred feature
-//!   payloads).
+//! - `style` / `clipboard` / `features` / `find` -- the shared value types both
+//!   directions reference (cell styles, filters, clipboard payloads, deferred
+//!   feature payloads, find options).
 //!
 //! Re-globbed so every `crate::app::trame::*` path (and the crate-root
 //! re-export) resolves flat, and so a submodule's `super::CellStyle` reaches its
@@ -18,6 +18,7 @@ mod clipboard;
 mod command;
 mod event;
 mod features;
+mod find;
 mod grid;
 mod style;
 
@@ -25,5 +26,6 @@ pub use clipboard::*;
 pub use command::*;
 pub use event::*;
 pub use features::*;
+pub use find::*;
 pub use grid::*;
 pub use style::*;

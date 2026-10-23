@@ -583,25 +583,16 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DeleteName.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::EndCellEdit.session | field | u64	debt	finding: Trame edit `session: u64` (medium-low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ExportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.match_case | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.whole_cell | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.delimiter | field | Option<u8>	debt	finding: CSV delimiter as Option<u8> (low, confirmed)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::RenameSheet.name | field | String	debt	finding: Trame sheet and defined names as String (low, suspected)
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.all_sheets | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.in_formulas | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.match_case | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.whole_cell | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.in_formulas | field | bool	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.match_case | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.whole_cell | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeCol.width_px | field | f32	math	column width / row height in px
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ResizeRow.height_px | field | f32	math	column width / row height in px
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
@@ -5908,10 +5899,6 @@ ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_sou
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::formula_source(stored) | param | &str	debt	finding: (FINDING, confirmed): three formula text forms in one String type
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::write_cell(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(all_sheets) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
-ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(in_formulas) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
-ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(match_case) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
-ambre-trame | src/logic/commands.rs | crate::logic::commands | find_options(whole_cell) | param | bool	generic	bus boundary: the TrameCommand find and replace fields stay bools on the wire
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | TrameState::import_ambre_plaintext(data) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/docfile.rs | crate::logic::docfile | export_ambre_plaintext() | ret | Option<Vec<u8>>	generic	parser, renderer, lexer or freeze tooling over text or bytes

@@ -184,8 +184,7 @@ fn find_next_matches_and_wraps() {
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
-        match_case: false,
-        whole_cell: false,
+        options: crate::FindOptions::default(),
     });
     let (matches, active) = find_result(&out);
     assert_eq!(matches, vec![(0, 0), (1, 0), (3, 0)]);
@@ -204,13 +203,12 @@ fn find_next_matches_and_wraps() {
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
-        match_case: false,
-        whole_cell: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(find_result(&out).1, Some(0), "wraps to the first match");
 }
 
-/// match_case and whole_cell narrow the match set.
+/// The case and the extent narrow the match set.
 #[test]
 fn find_next_honors_case_and_whole_cell() {
     let mut state = TrameState::new();
@@ -227,8 +225,10 @@ fn find_next_honors_case_and_whole_cell() {
     // Case-sensitive "apple": only the exact-case A1 substring matches.
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
-        match_case: true,
-        whole_cell: false,
+        options: crate::FindOptions {
+            case: crate::CaseMatch::Sensitive,
+            ..Default::default()
+        },
     });
     assert_eq!(find_result(&out).0, vec![(0, 0)]);
 
@@ -236,8 +236,10 @@ fn find_next_honors_case_and_whole_cell() {
     // (folded); "Apple pie" is not.
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
-        match_case: false,
-        whole_cell: true,
+        options: crate::FindOptions {
+            extent: crate::MatchExtent::WholeCell,
+            ..Default::default()
+        },
     });
     assert_eq!(find_result(&out).0, vec![(0, 0), (3, 0)]);
 }
@@ -263,8 +265,7 @@ fn a_search_reads_past_the_requested_window() {
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "needle".to_owned(),
-        match_case: false,
-        whole_cell: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(find_result(&out), (vec![(0, 0), (900, 60)], Some(1)));
 }
@@ -300,10 +301,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "apple".to_owned(),
         replacement: "fig".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
-        all_sheets: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 3);
     assert_eq!(read_cell(&mut state, 1, 0), "fig pie");
@@ -326,10 +324,7 @@ fn replace_all_rewrites_and_undoes_as_one_group() {
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "apple".to_owned(),
         replacement: "cherry".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
-        all_sheets: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 3);
     assert_eq!(read_cell(&mut state, 0, 0), "cherry");
@@ -344,7 +339,7 @@ fn replace_all_rewrites_and_undoes_as_one_group() {
     assert_eq!(read_cell(&mut state, 3, 0), "APPLE");
 }
 
-/// A formula-source cell is rewritten only when `in_formulas` is set; matching
+/// A formula-source cell is rewritten only when the scope is `Formulas`; matching
 /// still tests the displayed value.
 #[test]
 fn replace_all_gates_formula_cells() {
@@ -361,14 +356,11 @@ fn replace_all_gates_formula_cells() {
         text: "=A1".to_owned(),
     });
 
-    // Without in_formulas: the literal A1 is rewritten, the formula A2 is left.
+    // Values scope: the literal A1 is rewritten, the formula A2 is left.
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "2".to_owned(),
         replacement: "9".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
-        all_sheets: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_raw(&mut state, 0, 0), "9");
@@ -378,15 +370,15 @@ fn replace_all_gates_formula_cells() {
         "formula source untouched"
     );
 
-    // With in_formulas: a formula cell matches on its raw text. "=A1"
+    // Formulas scope: a formula cell matches on its raw text. "=A1"
     // contains "A1" -> rewrite the formula source to "=B2".
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "A1".to_owned(),
         replacement: "B2".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: true,
-        all_sheets: false,
+        options: crate::FindOptions {
+            scope: crate::SearchScope::Formulas,
+            ..Default::default()
+        },
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_raw(&mut state, 1, 0), "=B2");
@@ -411,9 +403,7 @@ fn replace_one_replaces_active_and_advances() {
     let out = state.handle_command(TrameCommand::ReplaceOne {
         query: "apple".to_owned(),
         replacement: "cherry".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_cell(&mut state, 0, 0), "cherry");
@@ -436,15 +426,13 @@ fn replace_one_replaces_active_and_advances() {
     let out = state.handle_command(TrameCommand::ReplaceOne {
         query: "apple".to_owned(),
         replacement: "cherry".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
+        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 0);
     assert_eq!(find_result(&out).1, Some(1), "advances to A4 after A3");
 }
 
-/// `all_sheets` widens the rewrite to every sheet; a single Undo reverts both.
+/// `SheetScope::All` widens the rewrite to every sheet; a single Undo reverts both.
 #[test]
 fn replace_all_spans_sheets() {
     let mut state = TrameState::new();
@@ -474,10 +462,10 @@ fn replace_all_spans_sheets() {
     let out = state.handle_command(TrameCommand::ReplaceAll {
         query: "foo".to_owned(),
         replacement: "bar".to_owned(),
-        match_case: false,
-        whole_cell: false,
-        in_formulas: false,
-        all_sheets: true,
+        options: crate::FindOptions {
+            sheets: crate::SheetScope::All,
+            ..Default::default()
+        },
     });
     assert_eq!(replaced_count(&out), 2);
     assert_eq!(read_cell(&mut state, 0, 0), "bar");
