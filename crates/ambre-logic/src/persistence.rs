@@ -21,6 +21,7 @@ use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_bus::DraftKey;
 use ambre_core::{DocumentId, SessionNonce, UserId};
 use futures_channel::oneshot;
 
@@ -752,18 +753,18 @@ impl PersistenceStore {
     /// Keep a draft's sealed `row` under `key`, in place of the row there
     /// (fire-and-forget). A lost write leaves the draft as it was at the
     /// write before.
-    pub fn save_draft(&self, key: &str, row: &[u8]) {
+    pub fn save_draft(&self, key: &DraftKey, row: &[u8]) {
         if let Some(store) = self.drafts_store()
-            && let Err(e) = store.put_with_key(&bytes_to_js(row), &JsValue::from_str(key))
+            && let Err(e) = store.put_with_key(&bytes_to_js(row), &JsValue::from_str(key.as_str()))
         {
             tracing::warn!("Persistence: draft put failed: {e:?}");
         }
     }
 
     /// Delete the draft under `key` (fire-and-forget).
-    pub fn delete_draft(&self, key: &str) {
+    pub fn delete_draft(&self, key: &DraftKey) {
         if let Some(store) = self.drafts_store()
-            && let Err(e) = store.delete(&JsValue::from_str(key))
+            && let Err(e) = store.delete(&JsValue::from_str(key.as_str()))
         {
             tracing::warn!("Persistence: draft delete failed: {e:?}");
         }
@@ -771,9 +772,11 @@ impl PersistenceStore {
 
     /// Delete every draft whose key falls in `lower..=upper`
     /// (fire-and-forget).
-    pub fn delete_drafts(&self, lower: &str, upper: &str) {
-        let range =
-            web_sys::IdbKeyRange::bound(&JsValue::from_str(lower), &JsValue::from_str(upper));
+    pub fn delete_drafts(&self, lower: &DraftKey, upper: &DraftKey) {
+        let range = web_sys::IdbKeyRange::bound(
+            &JsValue::from_str(lower.as_str()),
+            &JsValue::from_str(upper.as_str()),
+        );
         if let (Some(store), Ok(range)) = (self.drafts_store(), range)
             && let Err(e) = store.delete(&range)
         {
@@ -811,12 +814,14 @@ impl PersistenceStore {
     /// to open like any row that is not sealed.
     pub fn load_drafts(
         &self,
-        lower: &str,
-        upper: &str,
-    ) -> oneshot::Receiver<Vec<(String, Vec<u8>)>> {
+        lower: &DraftKey,
+        upper: &DraftKey,
+    ) -> oneshot::Receiver<Vec<(DraftKey, Vec<u8>)>> {
         let (tx, rx) = answer();
-        let range =
-            web_sys::IdbKeyRange::bound(&JsValue::from_str(lower), &JsValue::from_str(upper));
+        let range = web_sys::IdbKeyRange::bound(
+            &JsValue::from_str(lower.as_str()),
+            &JsValue::from_str(upper.as_str()),
+        );
         let Ok(txn) = self.db.transaction_with_str(STORE_DRAFTS) else {
             tx.send(Vec::new());
             return rx;
@@ -854,7 +859,7 @@ impl PersistenceStore {
                             Some(text) => text.into_bytes(),
                             None => row.dyn_into::<Uint8Array>().ok()?.to_vec(),
                         };
-                        Some((key.as_string()?, row))
+                        Some((DraftKey::new(key.as_string()?), row))
                     })
                     .collect();
                 tx_ok.send(drafts);
@@ -1166,13 +1171,17 @@ mod wasm_tests {
             .expect("store opens");
         let doc = DocumentId::from_bytes([8; 16]);
         let hex = id_to_hex(doc.as_bytes());
-        let (mine, theirs) = (format!("{hex}:a"), "z/b".to_owned());
+        let (mine, theirs) = (
+            DraftKey::new(format!("{hex}:a")),
+            DraftKey::new("z/b".to_owned()),
+        );
         assert_eq!(store.save_snapshot(doc, &[1]).await, Ok(Stored::Done));
         store.save_delta(doc, &[2]);
         store.save_draft(&mine, b"one");
         store.save_draft(&theirs, b"two");
         store.delete_snapshot(doc);
-        let every = || store.load_drafts("", "\u{10FFFF}");
+        let (first, last) = DraftKey::every();
+        let every = || store.load_drafts(&first, &last);
         let rows = every().await.unwrap();
         assert_eq!(
             rows,
@@ -1183,7 +1192,10 @@ mod wasm_tests {
         );
 
         store.save_draft(&mine, b"one again");
-        store.delete_drafts("z/", "z/\u{10FFFF}");
+        store.delete_drafts(
+            &DraftKey::new("z/".to_owned()),
+            &DraftKey::new("z/\u{10FFFF}".to_owned()),
+        );
         assert_eq!(
             every().await.unwrap(),
             [(mine.clone(), b"one again".to_vec())]

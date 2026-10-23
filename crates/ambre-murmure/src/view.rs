@@ -5448,7 +5448,8 @@ mod tests {
     }
 
     /// The rows a page's shelf keeps in the store, by key.
-    type Rows = Rc<RefCell<std::collections::BTreeMap<String, String>>>;
+    type Rows =
+        Rc<RefCell<std::collections::BTreeMap<ambre_bus::DraftKey, crate::drafts::DraftRow>>>;
 
     /// Give the page's shelf `me` and a store of `rows`, as the launcher does
     /// once the session and the store are ready.
@@ -5465,9 +5466,7 @@ mod tests {
                     store.remove(&key);
                 }
                 DraftWrite::DeleteRange { lower, upper } => {
-                    store.retain(|key, _| {
-                        !(lower.as_str()..=upper.as_str()).contains(&key.as_str())
-                    });
+                    store.retain(|key, _| !(&lower..=&upper).contains(&key));
                 }
                 DraftWrite::DeleteAll => store.clear(),
             }
@@ -5554,7 +5553,12 @@ mod tests {
         page.view.reads.drafts.forget_channel(lost);
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(lost), None);
-        let left: Vec<String> = rows.borrow().values().cloned().collect();
+        let left: Vec<String> = rows
+            .borrow()
+            .values()
+            .cloned()
+            .filter_map(|row| String::from_utf8(row.into_bytes()).ok())
+            .collect();
         assert_eq!(left.len(), 1, "one draft left: {left:?}");
         assert!(left[0].contains("stays"));
         assert_eq!(page.view.composer().draft(kept).as_deref(), Some("stays"));

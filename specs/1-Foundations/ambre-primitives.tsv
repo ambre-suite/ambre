@@ -85,7 +85,7 @@ ambre-app | src/host/mod.rs | crate::host | publish_item(payload_b64) | param | 
 ambre-app | src/host/mod.rs | crate::host | publish_item(tsv) | param | &str	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | ret | String	free-text	formatted time text
 ambre-app | src/host/murmure.rs | crate::host::murmure | OPENED_FOR_MS | const | i32	debt	finding: Raw duration consts (confirmed)
-ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<String,u64>	debt	planned: lot C bis 7 DraftKey (key of the sealing map)
+ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
 ambre-app | src/host/murmure.rs | crate::host::murmure | save_file(data) | param | Vec<u8>	generic	file bytes
@@ -750,6 +750,9 @@ ambre-bus | src/rest.rs | crate::rest | <SecretString as Deref>::deref() | ret |
 ambre-bus | src/rest.rs | crate::rest | <SecretString as From<String>>::from(s) | param | String	trait	signature fixed by the trait
 ambre-bus | src/rest.rs | crate::rest | DocumentSummary.member_count | field | u32	math	member count
 ambre-bus | src/rest.rs | crate::rest | DocumentSummary.name | field | Option<String>	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
+ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
+ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
+ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
 ambre-bus | src/rest.rs | crate::rest | RestCommand::CreateMeeting.name | field | String	debt	finding: Member-typed names as String while ambre_core::Name exists (medium, confirmed)
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
@@ -759,7 +762,6 @@ ambre-bus | src/rest.rs | crate::rest | RestEvent::DocFileSealed.data | field | 
 ambre-bus | src/rest.rs | crate::rest | RestEvent::LocalRowSealed.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderAddress.url | field | String	debt	planned: lot C bis 5: ProviderAddress url
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
-ambre-bus | src/rest.rs | crate::rest | RowPlace::Draft.0 | field | String	debt	planned: lot C bis 7: DraftKey
 ambre-bus | src/rest.rs | crate::rest | SealedRow.sealed | field | Vec<u8>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-bus | src/rest.rs | crate::rest | SecretBytes.0 | field | Zeroizing<Vec<u8>>	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype
@@ -2033,19 +2035,13 @@ ambre-logic | src/lib.rs | crate | stamp_pass(_start) | param | Option<f64>	math
 ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/persistence.rs | crate::persistence | DB_NAME | const | &str	debt	finding: IndexedDB keys and store names as strings
 ambre-logic | src/persistence.rs | crate::persistence | DB_VERSION | const | u32	debt	finding: IndexedDB keys and store names as strings
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::delete_draft(key) | param | &str	debt	planned: lot C bis 7 (DraftKey)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::delete_drafts(lower) | param | &str	debt	planned: lot C bis 7 (DraftKey)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::delete_drafts(upper) | param | &str	debt	planned: lot C bis 7 (DraftKey)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_deltas() | ret | oneshot::Receiver<Vec<Vec<u8>>>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_drafts() | ret | oneshot::Receiver<Vec<(String,Vec<u8>)>>	debt	planned: lot C bis 7 (DraftKey)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_drafts(lower) | param | &str	debt	planned: lot C bis 7 (DraftKey)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_drafts(upper) | param | &str	debt	planned: lot C bis 7 (DraftKey)
+ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_drafts() | ret | oneshot::Receiver<Vec<(DraftKey,Vec<u8>)>>	debt	finding: Opaque sealed byte blobs as Vec<u8> (low, suspected)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::load_snapshot() | ret | oneshot::Receiver<Option<Vec<u8>>>	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named(db_name) | param | &str	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_delta(delta) | param | &[u8]	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_draft(key) | param | &str	debt	planned: lot C bis 7 (DraftKey)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_draft(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot(snapshot) | param | &[u8]	debt	bug: one `Vec<u8>` holds plaintext, then the sealed row (persistence)
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed() | ret | oneshot::Receiver<bool>	generic	yes/no fact or predicate answer, selects no mode
@@ -2378,25 +2374,17 @@ ambre-murmure | src/delta.rs | crate::delta | thread_field() | ret | Option<Opti
 ambre-murmure | src/delta.rs | crate::delta | thread_in() | ret | Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set(current) | param | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
-ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::load(rows) | param | Vec<(String,String)>	debt	planned: lot C7 DraftKey
+ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
+ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
+ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since() | ret | (Vec<Loss>,usize)	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since(seen) | param | usize	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::version() | ret | u64	math	local count/index/counter
-ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::Delete.key | field | String	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::DeleteRange.lower | field | String	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::DeleteRange.upper | field | String	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::Put.key | field | String	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | DraftWrite::Put.row | field | String	debt	planned: lot C7 DraftKey
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.link | field | Option<String>	debt	finding: Link addresses as `String`
 ambre-murmure | src/drafts.rs | crate::drafts | RowStyle.style | field | String	debt	finding: `RowStyle.style` stores a `TextStyle` name as a String
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/drafts.rs | crate::drafts | Shelf.version | field | u64	math	local count/index/counter
-ambre-murmure | src/drafts.rs | crate::drafts | decode(row) | param | &str	generic	draft row encoder/decoder over &str
-ambre-murmure | src/drafts.rs | crate::drafts | encode() | ret | String	generic	draft row encoder/decoder over &str
-ambre-murmure | src/drafts.rs | crate::drafts | parse_key(key) | param | &str	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | row_key() | ret | String	debt	planned: lot C7 DraftKey
-ambre-murmure | src/drafts.rs | crate::drafts | user_range() | ret | (String,String)	debt	planned: lot C7 DraftKey
 ambre-murmure | src/emoji.rs | crate::emoji | EMOJI | const | &[(&str,&str)]	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`
 ambre-murmure | src/emoji.rs | crate::emoji | name_of(emoji) | param | &str	debt	finding: The emoji path carries `&str`/`String` although `Emoji` exists; the reaction key is a stringly `"user emoji"`

@@ -220,6 +220,36 @@ pub enum MemberStanding {
     Revoked,
 }
 
+/// The key of a draft row in the local store, or a bound of a range of
+/// such keys. The Murmure shelf spells it; the store and the seal only carry
+/// it. It orders as its text, which is the order the store ranges keys in.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DraftKey(String);
+
+impl DraftKey {
+    /// The key spelled as `text`.
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The two bounds that hold every key of the store.
+    pub fn every() -> (Self, Self) {
+        (Self(String::new()), Self("\u{10FFFF}".to_owned()))
+    }
+
+    /// The key's text, for the store call and the seal's associated data.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for DraftKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Where a row sits in the local store. Its seal is bound to it, so a row
 /// moved to another place stops opening (`ambre-spec-residency.md` section 3).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,7 +257,7 @@ pub enum RowPlace {
     /// A snapshot or a delta of this document.
     Document(DocumentId),
     /// The draft the store keeps under this key.
-    Draft(String),
+    Draft(DraftKey),
 }
 
 /// One row of the local store, as the store holds it.

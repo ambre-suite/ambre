@@ -7,11 +7,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{Attachment, RowPlace, SealedRow, Timestamp, UserId};
+use ambre_bus::{Attachment, DraftKey, RowPlace, SealedRow, Timestamp, UserId};
 use ambre_canvas::TextInput;
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
-use ambre_murmure::drafts::{DraftShelf, DraftWrite, user_range};
+use ambre_murmure::drafts::{DraftRow, DraftShelf, DraftWrite, user_range};
 use ambre_murmure::uploads::opens_as;
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
@@ -135,7 +135,7 @@ struct Keeper {
 #[derive(Default)]
 struct Sealing {
     next: u64,
-    latest: HashMap<String, u64>,
+    latest: HashMap<DraftKey, u64>,
 }
 
 impl DraftKeeper {
@@ -185,9 +185,10 @@ impl DraftKeeper {
                     sink.delete_draft(&key);
                 }
                 DraftWrite::DeleteRange { lower, upper } => {
-                    sealing.borrow_mut().latest.retain(|key, _| {
-                        !(lower.as_str()..=upper.as_str()).contains(&key.as_str())
-                    });
+                    sealing
+                        .borrow_mut()
+                        .latest
+                        .retain(|key, _| !(&lower..=&upper).contains(&key));
                     sink.delete_drafts(&lower, &upper);
                 }
                 DraftWrite::DeleteAll => {
@@ -211,7 +212,8 @@ impl DraftKeeper {
     pub async fn written(&self) {
         let store = self.0.borrow().store.clone();
         if let Some(store) = store {
-            let _ = store.load_drafts("", "\u{10FFFF}").await;
+            let (first, last) = DraftKey::every();
+            let _ = store.load_drafts(&first, &last).await;
         }
     }
 
@@ -231,7 +233,7 @@ impl DraftKeeper {
         wasm_bindgen_futures::spawn_local(async move {
             let (lower, upper) = user_range(user);
             let rows = store.load_drafts(&lower, &upper).await.unwrap_or_default();
-            let keys: Vec<String> = rows.iter().map(|(key, _)| key.clone()).collect();
+            let keys: Vec<DraftKey> = rows.iter().map(|(key, _)| key.clone()).collect();
             let sealed = rows
                 .into_iter()
                 .map(|(key, sealed)| SealedRow {
@@ -244,7 +246,7 @@ impl DraftKeeper {
                 let opened = opened.unwrap_or_default();
                 let mut drafts = Vec::new();
                 for (key, row) in keys.into_iter().zip(opened) {
-                    match row.and_then(|row| String::from_utf8(row.to_vec()).ok()) {
+                    match row.and_then(|row| DraftRow::from_bytes(row.to_vec())) {
                         Some(row) => drafts.push((key, row)),
                         None => store.delete_draft(&key),
                     }

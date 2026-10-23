@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_bus::{
-    ChannelId, Mention, MentionTarget, MessageDraft, MessageId, StyleMark, TextStyle, UserId,
+    ChannelId, DraftKey, Mention, MentionTarget, MessageDraft, MessageId, StyleMark, TextStyle,
+    UserId,
 };
 use ambre_core::{CharOffset, CharSpan};
 use serde::{Deserialize, Serialize};
@@ -26,14 +27,31 @@ use crate::composer::DraftOf;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DraftWrite {
     /// Keep `row` under `key`, in place of the row there.
-    Put { key: String, row: String },
+    Put { key: DraftKey, row: DraftRow },
     /// Delete the row under `key`.
-    Delete { key: String },
+    Delete { key: DraftKey },
     /// Delete every row whose key falls in `lower..=upper`: a channel's
     /// draft and its threads' (`MURMURE-215`).
-    DeleteRange { lower: String, upper: String },
+    DeleteRange { lower: DraftKey, upper: DraftKey },
     /// Delete every row of every user (`MURMURE-216`).
     DeleteAll,
+}
+
+/// A draft as a row of the store keeps it: the JSON text the shelf encodes.
+/// The store seals its bytes, and hands them back to be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftRow(String);
+
+impl DraftRow {
+    /// The bytes the store seals.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0.into_bytes()
+    }
+
+    /// The row an opened seal holds, `None` for bytes that are not text.
+    pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
+        String::from_utf8(bytes).ok().map(Self)
+    }
 }
 
 /// Where the shelf's writes go: the local store on the page, nowhere in a
@@ -98,7 +116,7 @@ impl DraftShelf {
 
     /// Take the rows the store keeps for `user`, read back after a reload.
     /// A draft typed before they landed keeps its text, and is saved now.
-    pub fn load(&self, user: UserId, rows: Vec<(String, String)>) {
+    pub fn load(&self, user: UserId, rows: Vec<(DraftKey, DraftRow)>) {
         let mut shelf = self.0.borrow_mut();
         shelf.user = Some(user);
         shelf.version += 1;
@@ -144,7 +162,7 @@ impl DraftShelf {
         shelf.version += 1;
         if let Some(user) = shelf.user {
             let lower = row_key(user, DraftOf::Channel(channel));
-            let upper = format!("{lower}{SEPARATOR}\u{10FFFF}");
+            let upper = DraftKey::new(format!("{lower}{SEPARATOR}\u{10FFFF}"));
             shelf.write(DraftWrite::DeleteRange { lower, upper });
         }
     }
@@ -179,27 +197,27 @@ const SEPARATOR: char = '/';
 
 /// The first key of `user`'s rows, and the last: every row of theirs falls
 /// between the two.
-pub fn user_range(user: UserId) -> (String, String) {
+pub fn user_range(user: UserId) -> (DraftKey, DraftKey) {
     (
-        format!("{user}{SEPARATOR}"),
-        format!("{user}{SEPARATOR}\u{10FFFF}"),
+        DraftKey::new(format!("{user}{SEPARATOR}")),
+        DraftKey::new(format!("{user}{SEPARATOR}\u{10FFFF}")),
     )
 }
 
 /// The key of the row that keeps the draft `of`, among `user`'s.
-fn row_key(user: UserId, of: DraftOf) -> String {
-    match of {
+fn row_key(user: UserId, of: DraftOf) -> DraftKey {
+    DraftKey::new(match of {
         DraftOf::Channel(channel) => format!("{user}{SEPARATOR}{channel}"),
         DraftOf::Thread(channel, root) => {
             format!("{user}{SEPARATOR}{channel}{SEPARATOR}{root}")
         }
-    }
+    })
 }
 
 /// The draft a row key of `user` names, `None` for another user's key or one
 /// that does not parse.
-fn parse_key(user: UserId, key: &str) -> Option<DraftOf> {
-    let mut parts = key.split(SEPARATOR);
+fn parse_key(user: UserId, key: &DraftKey) -> Option<DraftOf> {
+    let mut parts = key.as_str().split(SEPARATOR);
     if UserId::parse_str(parts.next()?).ok()? != user {
         return None;
     }
@@ -237,7 +255,7 @@ struct RowStyle {
 }
 
 /// The row that keeps `draft`.
-fn encode(draft: &MessageDraft) -> String {
+fn encode(draft: &MessageDraft) -> DraftRow {
     let mentions = draft
         .mentions
         .iter()
@@ -276,13 +294,13 @@ fn encode(draft: &MessageDraft) -> String {
         mentions,
         styles,
     };
-    serde_json::to_string(&row).unwrap_or_default()
+    DraftRow(serde_json::to_string(&row).unwrap_or_default())
 }
 
 /// The draft `row` keeps, `None` for a row that does not parse. A style of a
 /// name this build does not know is dropped, and the text stays.
-fn decode(row: &str) -> Option<MessageDraft> {
-    let row: Row = serde_json::from_str(row).ok()?;
+fn decode(row: &DraftRow) -> Option<MessageDraft> {
+    let row: Row = serde_json::from_str(&row.0).ok()?;
     let mentions = row
         .mentions
         .into_iter()
@@ -378,7 +396,7 @@ mod tests {
             .collect(),
         };
         assert_eq!(decode(&encode(&full)), Some(full));
-        assert_eq!(decode("not a row"), None);
+        assert_eq!(decode(&DraftRow("not a row".to_owned())), None);
     }
 
     /// A row read back from a reload is the draft of its channel or thread,
@@ -406,7 +424,7 @@ mod tests {
                 encode(&draft("theirs")),
             ),
             (row_key(me, typed), encode(&draft("older"))),
-            ("junk".to_owned(), encode(&draft("junk"))),
+            (DraftKey::new("junk".to_owned()), encode(&draft("junk"))),
         ];
         shelf.load(me, rows);
         assert_eq!(shelf.get(DraftOf::Channel(channel)), Some(draft("one")));
@@ -469,7 +487,7 @@ mod tests {
         let Some(DraftWrite::DeleteRange { lower, upper }) = log.borrow().first().cloned() else {
             panic!("no range deleted");
         };
-        let covered = |key: &str| (lower.as_str()..=upper.as_str()).contains(&key);
+        let covered = |key: &DraftKey| (&lower..=&upper).contains(&key);
         assert!(covered(&row_key(me, DraftOf::Channel(lost))));
         assert!(covered(&row_key(
             me,
@@ -503,7 +521,7 @@ mod tests {
     fn a_users_range_holds_their_keys_alone() {
         let (me, other) = (UserId::new(), UserId::new());
         let (lower, upper) = user_range(me);
-        let covered = |key: &str| (lower.as_str()..=upper.as_str()).contains(&key);
+        let covered = |key: &DraftKey| (&lower..=&upper).contains(&key);
         let of = DraftOf::Thread(ChannelId::new(), MessageId::new());
         assert!(covered(&row_key(me, of)));
         assert!(!covered(&row_key(other, of)));

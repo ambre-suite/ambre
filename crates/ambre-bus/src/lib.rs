@@ -69,8 +69,8 @@ pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Outbox, SendOutcome};
 pub use rest::{
-    DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, RowPlace,
-    SealedRow, SecretBytes, SecretString, UserInfo,
+    DocumentSummary, DraftKey, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent,
+    RowPlace, SealedRow, SecretBytes, SecretString, UserInfo,
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, UiEvent};

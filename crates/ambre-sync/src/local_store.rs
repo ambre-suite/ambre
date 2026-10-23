@@ -16,7 +16,7 @@ use super::*;
 fn place_bytes(place: &RowPlace) -> Vec<u8> {
     match place {
         RowPlace::Document(id) => [b"doc:".as_slice(), id.as_bytes()].concat(),
-        RowPlace::Draft(key) => [b"draft:".as_slice(), key.as_bytes()].concat(),
+        RowPlace::Draft(key) => [b"draft:".as_slice(), key.as_str().as_bytes()].concat(),
     }
 }
 
@@ -153,7 +153,12 @@ mod tests {
         let (mut stranger, rx) = worker(Some([3; 32]));
         let foreign = seal(&mut stranger, &rx, RowPlace::Document(doc), b"theirs");
         let (mut state, rx) = worker(Some([9; 32]));
-        let mine = seal(&mut state, &rx, RowPlace::Draft("u|c".into()), b"a draft");
+        let mine = seal(
+            &mut state,
+            &rx,
+            RowPlace::Draft(ambre_bus::DraftKey::new("u|c".into())),
+            b"a draft",
+        );
         let moved = seal(&mut state, &rx, RowPlace::Document(other), b"elsewhere");
         let rows = vec![
             SealedRow {
@@ -169,7 +174,7 @@ mod tests {
                 sealed: b"in the clear".to_vec(),
             },
             SealedRow {
-                place: RowPlace::Draft("u|c".into()),
+                place: RowPlace::Draft(ambre_bus::DraftKey::new("u|c".into())),
                 sealed: mine,
             },
         ];

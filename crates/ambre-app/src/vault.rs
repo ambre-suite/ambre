@@ -188,12 +188,16 @@ mod tests {
         let vault = Vault::new(tx);
         let sealed = Rc::new(Cell::new(false));
         let opened = Rc::new(Cell::new(false));
-        vault.seal(RowPlace::Draft("k".into()), b"x".to_vec(), {
-            let sealed = Rc::clone(&sealed);
-            move |row| sealed.set(row.is_none())
-        });
+        vault.seal(
+            RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
+            b"x".to_vec(),
+            {
+                let sealed = Rc::clone(&sealed);
+                move |row| sealed.set(row.is_none())
+            },
+        );
         let row = SealedRow {
-            place: RowPlace::Draft("k".into()),
+            place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
             sealed: vec![1],
         };
         vault.open(vec![row], {
@@ -214,16 +218,26 @@ mod tests {
         let (tx, rx) = conduit::local(1);
         let vault = Vault::new(tx);
         for key in ["a", "b"] {
-            vault.seal(RowPlace::Draft(key.into()), Vec::new(), |_| {});
+            vault.seal(
+                RowPlace::Draft(ambre_bus::DraftKey::new(key.into())),
+                Vec::new(),
+                |_| {},
+            );
         }
         let place = |rx: &Receiver<LogicCommand>| match request(rx).1 {
             RestCommand::SealLocalRow { place, .. } => place,
             other => panic!("expected a seal, got {other:?}"),
         };
-        assert_eq!(place(&rx), RowPlace::Draft("a".into()));
+        assert_eq!(
+            place(&rx),
+            RowPlace::Draft(ambre_bus::DraftKey::new("a".into()))
+        );
         assert!(rx.try_recv().is_err(), "the second waits for room");
         vault.flush();
-        assert_eq!(place(&rx), RowPlace::Draft("b".into()));
+        assert_eq!(
+            place(&rx),
+            RowPlace::Draft(ambre_bus::DraftKey::new("b".into()))
+        );
     }
 
     /// No rows to open answers at once, with no request.
