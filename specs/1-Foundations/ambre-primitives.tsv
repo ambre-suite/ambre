@@ -1373,7 +1373,6 @@ ambre-chrome | src/menu.rs | crate::menu | initial(label) | param | &str	free-te
 ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | menu_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | menu_key(key) | param | &str	debt	finding: DOM key names passed as `&str`
-ambre-chrome | src/menu.rs | crate::menu | menu_key(shift) | param | bool	debt	finding: DOM key names passed as `&str`
 ambre-chrome | src/palette.rs | crate::palette | Chosen::Entry.0 | field | [u8;16]	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-chrome | src/palette.rs | crate::palette | CommandPalette(on_entry) | param | Option<Callback<[u8;16]>>	debt	finding: The palette key `[u8; 16]` is an untagged union of `UserId` and `ChannelId`
 ambre-chrome | src/palette.rs | crate::palette | CommandPalette(open) | param | RwSignal<bool>	math	state flag/predicate
@@ -5415,7 +5414,6 @@ ambre-toile | src/ui/link.rs | crate::ui::link | LinkAction::OpenUrl.0 | field |
 ambre-toile | src/ui/link.rs | crate::ui::link | ShellNav::Url.0 | field | String	debt	finding: Link URLs are strings; lot C item 5 should cover them too (confirmed): link URL as String; extends lot C item 5 (WebAddress) to LinkTarget::Url
 ambre-toile | src/ui/link.rs | crate::ui::link | link_at(pick) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow(modified) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_locked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_unlocked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.count | field | usize	math	geometry, layout, count or size local to the algorithm

@@ -4,6 +4,7 @@
 // value, false included. And one key map drives every menu in the suite, so
 // no menu is operable by mouse alone.
 
+use ambre_commands::Modifiers;
 use wasm_bindgen::JsCast;
 
 /// The value of a two-state ARIA attribute: `"true"` or `"false"`, never
@@ -32,7 +33,7 @@ pub enum MenuKey {
 /// The arrows and Tab move and wrap, Home and End jump to an end, and a letter
 /// jumps to the next item it starts. Enter and Space choose, and Escape
 /// dismisses (`CHROME-026`).
-pub fn menu_key(key: &str, shift: bool, at: usize, initials: &[char]) -> MenuKey {
+pub fn menu_key(key: &str, mods: Modifiers, at: usize, initials: &[char]) -> MenuKey {
     let len = initials.len();
     if len == 0 {
         return if key == "Escape" {
@@ -49,7 +50,7 @@ pub fn menu_key(key: &str, shift: bool, at: usize, initials: &[char]) -> MenuKey
         "ArrowUp" => MenuKey::Focus(prev),
         // A menu is a transient popup: Tab cycles inside it rather than
         // letting focus escape to the page behind.
-        "Tab" => MenuKey::Focus(if shift { prev } else { next }),
+        "Tab" => MenuKey::Focus(if mods.shift { prev } else { next }),
         "Home" => MenuKey::Focus(0),
         "End" => MenuKey::Focus(len - 1),
         "Escape" => MenuKey::Dismiss,
@@ -162,7 +163,7 @@ pub fn on_menu_keydown(
             initial(&name)
         })
         .collect();
-    match menu_key(&ev.key(), ev.shift_key(), at, &initials) {
+    match menu_key(&ev.key(), crate::command::modifiers_of(&ev), at, &initials) {
         MenuKey::Focus(i) => {
             ev.prevent_default();
             if let Some(item) = items.get(i) {
@@ -196,43 +197,82 @@ mod tests {
     /// The arrows and Tab move and wrap at both ends.
     #[test]
     fn the_arrows_and_tab_move_and_wrap() {
-        assert_eq!(menu_key("ArrowDown", false, 0, &ITEMS), MenuKey::Focus(1));
-        assert_eq!(menu_key("ArrowDown", false, 3, &ITEMS), MenuKey::Focus(0));
-        assert_eq!(menu_key("ArrowUp", false, 0, &ITEMS), MenuKey::Focus(3));
-        assert_eq!(menu_key("Tab", false, 1, &ITEMS), MenuKey::Focus(2));
-        assert_eq!(menu_key("Tab", true, 0, &ITEMS), MenuKey::Focus(3));
+        assert_eq!(
+            menu_key("ArrowDown", Modifiers::NONE, 0, &ITEMS),
+            MenuKey::Focus(1)
+        );
+        assert_eq!(
+            menu_key("ArrowDown", Modifiers::NONE, 3, &ITEMS),
+            MenuKey::Focus(0)
+        );
+        assert_eq!(
+            menu_key("ArrowUp", Modifiers::NONE, 0, &ITEMS),
+            MenuKey::Focus(3)
+        );
+        assert_eq!(
+            menu_key("Tab", Modifiers::NONE, 1, &ITEMS),
+            MenuKey::Focus(2)
+        );
+        assert_eq!(
+            menu_key("Tab", Modifiers::SHIFT, 0, &ITEMS),
+            MenuKey::Focus(3)
+        );
     }
 
     /// Home and End jump to an end.
     #[test]
     fn home_and_end_jump_to_an_end() {
-        assert_eq!(menu_key("Home", false, 2, &ITEMS), MenuKey::Focus(0));
-        assert_eq!(menu_key("End", false, 0, &ITEMS), MenuKey::Focus(3));
+        assert_eq!(
+            menu_key("Home", Modifiers::NONE, 2, &ITEMS),
+            MenuKey::Focus(0)
+        );
+        assert_eq!(
+            menu_key("End", Modifiers::NONE, 0, &ITEMS),
+            MenuKey::Focus(3)
+        );
     }
 
     /// A letter jumps to the next item it starts, wrapping, and in either case.
     #[test]
     fn a_letter_jumps_to_the_next_item_it_starts() {
-        assert_eq!(menu_key("c", false, 0, &ITEMS), MenuKey::Focus(2));
-        assert_eq!(menu_key("C", false, 2, &ITEMS), MenuKey::Focus(0));
-        assert_eq!(menu_key("d", false, 0, &ITEMS), MenuKey::Focus(3));
-        assert_eq!(menu_key("z", false, 0, &ITEMS), MenuKey::Pass);
+        assert_eq!(menu_key("c", Modifiers::NONE, 0, &ITEMS), MenuKey::Focus(2));
+        assert_eq!(menu_key("C", Modifiers::NONE, 2, &ITEMS), MenuKey::Focus(0));
+        assert_eq!(menu_key("d", Modifiers::NONE, 0, &ITEMS), MenuKey::Focus(3));
+        assert_eq!(menu_key("z", Modifiers::NONE, 0, &ITEMS), MenuKey::Pass);
     }
 
     /// Enter and Space choose the focused item, and Escape dismisses.
     #[test]
     fn enter_and_space_choose_and_escape_dismisses() {
-        assert_eq!(menu_key("Enter", false, 1, &ITEMS), MenuKey::Choose(1));
-        assert_eq!(menu_key(" ", false, 2, &ITEMS), MenuKey::Choose(2));
-        assert_eq!(menu_key("Escape", false, 1, &ITEMS), MenuKey::Dismiss);
-        assert_eq!(menu_key("Shift", true, 1, &ITEMS), MenuKey::Pass);
+        assert_eq!(
+            menu_key("Enter", Modifiers::NONE, 1, &ITEMS),
+            MenuKey::Choose(1)
+        );
+        assert_eq!(
+            menu_key(" ", Modifiers::NONE, 2, &ITEMS),
+            MenuKey::Choose(2)
+        );
+        assert_eq!(
+            menu_key("Escape", Modifiers::NONE, 1, &ITEMS),
+            MenuKey::Dismiss
+        );
+        assert_eq!(
+            menu_key("Shift", Modifiers::SHIFT, 1, &ITEMS),
+            MenuKey::Pass
+        );
     }
 
     /// An empty menu can still be dismissed, and moves nowhere.
     #[test]
     fn an_empty_menu_can_only_be_dismissed() {
-        assert_eq!(menu_key("Escape", false, 0, &[]), MenuKey::Dismiss);
-        assert_eq!(menu_key("ArrowDown", false, 0, &[]), MenuKey::Pass);
+        assert_eq!(
+            menu_key("Escape", Modifiers::NONE, 0, &[]),
+            MenuKey::Dismiss
+        );
+        assert_eq!(
+            menu_key("ArrowDown", Modifiers::NONE, 0, &[]),
+            MenuKey::Pass
+        );
     }
 
     /// A two-state attribute says false rather than vanishing.

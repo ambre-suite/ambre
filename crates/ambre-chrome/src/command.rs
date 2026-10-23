@@ -99,8 +99,13 @@ impl CommandStates {
 /// Returns `None` for keys not modelled by [`Key`] (dead keys, IME, unknown
 /// named keys), which the caller treats as "no command chord".
 pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> {
-    let mods = Modifiers::from_event(ev.ctrl_key(), ev.alt_key(), ev.shift_key(), ev.meta_key());
-    Some(KeyBinding::new(mods, key_from_dom(&ev.key())?))
+    Some(KeyBinding::new(modifiers_of(ev), key_from_dom(&ev.key())?))
+}
+
+/// The modifier set of a DOM keyboard event, the control and the command keys
+/// folded into the primary accelerator (`UI-THREAD-028`).
+pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Modifiers {
+    Modifiers::from_event(ev.ctrl_key(), ev.alt_key(), ev.shift_key(), ev.meta_key())
 }
 
 /// Map a DOM `KeyboardEvent.key` string to a logical [`Key`].

@@ -1745,7 +1745,7 @@ impl ToileView {
     fn follow_link_under(&mut self, screen: Point, mods: Modifiers) -> bool {
         let world = self.cam.screen_to_world() * screen;
         let target = self.badge_at(screen).or_else(|| {
-            link::wants_follow(mods.primary, self.present)
+            link::wants_follow(mods, self.present)
                 .then(|| link::link_at(&self.display, world, self.pick()).map(|(_, l)| l))
                 .flatten()
         });

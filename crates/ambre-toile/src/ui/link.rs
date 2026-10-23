@@ -12,6 +12,7 @@
 use ambre_bus::app::toile::{
     DisplayElement, DisplayNode, DisplayViewport, ElementId, LinkTarget, PresentMode,
 };
+use ambre_commands::Modifiers;
 use ambre_core::{DocType, DocumentId};
 use ambre_draw::{Point, Rect};
 
@@ -98,8 +99,8 @@ impl LinkAction {
 /// would make a linked element uneditable, with no refusal to observe. It
 /// follows on a modifier, or on any click in presentation mode, where editing
 /// is off.
-pub fn wants_follow(modified: bool, mode: PresentMode) -> bool {
-    modified || mode.is_presenting()
+pub fn wants_follow(mods: Modifiers, mode: PresentMode) -> bool {
+    mods.primary || mode.is_presenting()
 }
 
 /// The badge of a linked element, in screen space: a small square just outside
@@ -176,15 +177,15 @@ mod tests {
     #[test]
     fn a_plain_click_never_follows_while_editing() {
         assert!(
-            !wants_follow(false, PresentMode::Editing),
+            !wants_follow(Modifiers::NONE, PresentMode::Editing),
             "a plain click selects"
         );
         assert!(
-            wants_follow(true, PresentMode::Editing),
+            wants_follow(Modifiers::PRIMARY, PresentMode::Editing),
             "a modified click follows"
         );
         assert!(
-            wants_follow(false, PresentMode::Presenting),
+            wants_follow(Modifiers::NONE, PresentMode::Presenting),
             "presentation mode follows"
         );
     }
