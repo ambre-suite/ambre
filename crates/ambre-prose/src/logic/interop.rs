@@ -657,7 +657,7 @@ mod tests {
         else {
             panic!("an export answers with a file");
         };
-        assert_eq!(media_type, "text/markdown; charset=utf-8");
+        assert_eq!(media_type.as_str(), "text/markdown; charset=utf-8");
         (String::from_utf8(data).expect("UTF-8"), report.warnings)
     }
 

@@ -205,9 +205,9 @@ fn read_file_into(
 ) {
     // The browser leaves the type empty for a format it does not know. Fall
     // back to the extension, all an `.svg` drop carries on some platforms.
-    let mut mime = file.type_();
-    if mime.is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
-        mime = "image/svg+xml".to_owned();
+    let mut mime = ambre_core::MediaType(file.type_());
+    if mime.as_str().is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
+        mime = ambre_core::MediaType::from("image/svg+xml");
     }
     if !accepts(&mime) {
         toasts.warning(format!(
@@ -220,11 +220,7 @@ fn read_file_into(
         match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
             Ok(buf) => {
                 let bytes = js_sys::Uint8Array::new(&buf).to_vec();
-                dropped.set(Some(DroppedFile {
-                    bytes,
-                    mime: ambre_core::MediaType::from(mime),
-                    at,
-                }));
+                dropped.set(Some(DroppedFile { bytes, mime, at }));
             }
             Err(_) => toasts.warning("Could not read the file"),
         }
@@ -233,8 +229,8 @@ fn read_file_into(
 
 /// A media type as a user reads it: the subtype alone (`png`). Failing that, a
 /// word for a file whose type the browser could not name.
-fn label(mime: &str) -> String {
-    match mime.rsplit('/').next() {
+fn label(mime: &ambre_core::MediaType) -> String {
+    match mime.as_str().rsplit('/').next() {
         Some(sub) if !sub.is_empty() => sub.to_owned(),
         _ => "file of that kind".to_owned(),
     }

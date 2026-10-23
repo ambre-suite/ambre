@@ -372,7 +372,7 @@ pub struct ProseUiState {
     pub shaped: Arc<ShapedLayout>,
     /// A file the Logic thread wrote, waiting for the host to hand it to the
     /// browser: filename, media type and bytes (`PROSE-IO-056`).
-    pub pending_export: Option<(String, &'static str, Vec<u8>)>,
+    pub pending_export: Option<(String, ambre_core::MediaType, Vec<u8>)>,
 
     // Local, and never sent.
     pub viewport: Viewport,
@@ -559,7 +559,7 @@ pub fn send_edit(
 
 impl ProseUiState {
     /// Hand the file the Logic thread wrote to the host, once.
-    pub fn take_export(&mut self) -> Option<(String, &'static str, Vec<u8>)> {
+    pub fn take_export(&mut self) -> Option<(String, ambre_core::MediaType, Vec<u8>)> {
         self.pending_export.take()
     }
 
@@ -593,7 +593,7 @@ impl ProseUiState {
                 data,
                 ..
             } => {
-                self.pending_export = Some((filename.clone(), media_type, data.clone()));
+                self.pending_export = Some((filename.clone(), media_type.clone(), data.clone()));
             }
             // Whole and already shaped: the view adopts it and lays nothing
             // out (`PROSE-UI-006`), by its pointer (`PROSE-UI-205`). A handle
@@ -909,7 +909,7 @@ mod tests {
         let mut state = ProseUiState::default();
         state.apply_event(&ProseEvent::ExportReady {
             filename: "document.ambre".to_owned(),
-            media_type: "application/octet-stream",
+            media_type: ambre_core::MediaType::from("application/octet-stream"),
             data: vec![1, 2, 3],
             report: ambre_bus::app::prose::ConversionReport::clean(
                 ambre_bus::app::prose::ConversionFormat::Ambre,
@@ -919,7 +919,7 @@ mod tests {
             state.take_export(),
             Some((
                 "document.ambre".to_owned(),
-                "application/octet-stream",
+                ambre_core::MediaType::from("application/octet-stream"),
                 vec![1, 2, 3]
             ))
         );

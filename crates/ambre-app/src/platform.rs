@@ -130,27 +130,35 @@ pub(crate) async fn read_clipboard_blob(
             continue;
         };
         let types = item.types();
-        let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
-        if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
-            && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
+        let has = |t: &ambre_bus::MediaType| {
+            types
+                .iter()
+                .any(|v| v.as_string().as_deref() == Some(t.as_str()))
+        };
+        let ambre_type = ambre_bus::MediaType::from(host::AMBRE_CLIPBOARD_WEB_TYPE);
+        if has(&ambre_type)
+            && let Some(b64) = read_clipboard_item(&item, &ambre_type).await
         {
             blob.ambre = host::base64_decode(&b64);
             found = true;
         }
-        if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
-            && let Some(t) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
+        let token_type = ambre_bus::MediaType::from(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE);
+        if has(&token_type)
+            && let Some(t) = read_clipboard_item(&item, &token_type).await
         {
             token = Some(t);
             found = true;
         }
-        if has("text/html")
-            && let Some(html) = read_clipboard_item(&item, "text/html").await
+        let html_type = ambre_bus::MediaType::from("text/html");
+        if has(&html_type)
+            && let Some(html) = read_clipboard_item(&item, &html_type).await
         {
             blob.html = Some(html).filter(|h| !h.is_empty());
             found = true;
         }
-        if has("text/plain")
-            && let Some(text) = read_clipboard_item(&item, "text/plain").await
+        let text_type = ambre_bus::MediaType::from("text/plain");
+        if has(&text_type)
+            && let Some(text) = read_clipboard_item(&item, &text_type).await
         {
             blob.text = text;
             found = true;
@@ -171,9 +179,9 @@ pub(crate) async fn read_clipboard_blob(
 /// decoded as UTF-8). `None` on any failure.
 pub(crate) async fn read_clipboard_item(
     item: &web_sys::ClipboardItem,
-    mime: &str,
+    mime: &ambre_bus::MediaType,
 ) -> Option<String> {
-    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime))
+    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime.as_str()))
         .await
         .ok()?;
     let blob = blob_val.dyn_into::<web_sys::Blob>().ok()?;

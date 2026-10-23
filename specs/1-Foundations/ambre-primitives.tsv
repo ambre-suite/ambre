@@ -122,7 +122,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(x) | param
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch(y) | param | f32	math	css position
 ambre-app | src/host/prose.rs | crate::host::prose | download(data) | param | &[u8]	generic	bytes
 ambre-app | src/host/prose.rs | crate::host::prose | download(filename) | param | &str	free-text	file name
-ambre-app | src/host/prose.rs | crate::host::prose | download(media_type) | param | &str	debt	planned: lot B bis 10 MediaType
 ambre-app | src/host/prose.rs | crate::host::prose | ruler_in_css(to_css) | param | impl Fn(f32,f32)->(f32,f32)	math	layout px closure
 ambre-app | src/host/prose.rs | crate::host::prose | to_css() | ret | (f32,f32)	math	layout px
 ambre-app | src/host/prose.rs | crate::host::prose | to_css(x) | param | f32	math	layout px
@@ -177,7 +176,6 @@ ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | 
 ambre-app | src/platform.rs | crate::platform | read_ambre_file(on_sealed) | param | Callback<Vec<u8>>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_blob() | ret | Option<(ambre_bus::ClipboardBlob,Option<String>)>	debt	finding: Clipboard payload strings (confirmed)
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | read_clipboard_item(mime) | param | &str	debt	planned: lot B bis 10 MediaType
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | remember_dev_user(username) | param | &str	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | store_container(sealed) | param | Vec<u8>	debt	finding: Sealed and plaintext bytes share Vec<u8> (confirmed)
@@ -306,7 +304,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNot
 ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNotSupported.feature | field | &'static str	free-text	static diagnostic label
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | DocCount::of(text) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose.rs | crate::app::prose | ExportFormat::media_type() | ret | &'static str	debt	planned: lot B bis 10: MediaType
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.case_sensitive | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.use_regex | field | bool	generic	named setting or fact flag, selects no mode
@@ -381,7 +378,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocUpdated.delta 
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.filename | field | String	free-text	export filename
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.media_type | field | &'static str	debt	planned: lot B bis 10: MediaType
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindResults.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindUpdated.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::RevealBlock.page | field | u32	debt	finding: Prose page index: zero-based and one-based in one u32 (medium, confirmed)
@@ -3853,12 +3849,12 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.followed | field | Option<Str
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.layout_version | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.marks_asked | field | Option<((crate::view::caret::Spot,crate::view::caret::Spot),u64)>	debt	finding: code-point offsets as bare u32 or usize, in two spaces (confirmed)
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.pending_export | field | Option<(String,&'static str,Vec<u8>)>	debt	planned: lot B10 MediaType
+ambre-prose | src/ui.rs | crate::ui | ProseUiState.pending_export | field | Option<(String,ambre_core::MediaType,Vec<u8>)>	generic	export file name and bytes beside the typed MediaType
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.reveal_page | field | Option<u32>	debt	finding: page indices zero-based and one-based in one u32, with a 0 sentinel (confirmed)
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.syncs | field | VecDeque<bool>	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.x_goal | field | Option<f32>	math	layout geometry local to algorithm
-ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_export() | ret | Option<(String,&'static str,Vec<u8>)>	debt	planned: lot B10 MediaType
+ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_export() | ret | Option<(String,ambre_core::MediaType,Vec<u8>)>	generic	export file name and bytes beside the typed MediaType
 ambre-prose | src/ui.rs | crate::ui | RECOUNT_DELAY_MS | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/ui.rs | crate::ui | SendResult::accepted() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.characters | field | String	free-text	text content / label / parser input
@@ -4795,8 +4791,7 @@ ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embe
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_open | field | RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_text | field | RwSignal<String>	free-text	text the user is typing
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | String	debt	planned: lot B item 10 MediaType
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label(mime) | param | &str	debt	planned: lot B item 10 MediaType
+ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | String	free-text	user-facing label of a media type
 ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
@@ -4891,7 +4886,6 @@ ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_expor
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUMB_MAX_EDGE | const | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | import_raster(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | mime_of() | ret | &'static str	debt	planned: lot B item 10 MediaType
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | pending_hash(index) | param | usize	debt	finding: "group G6: media address sentinel: 'pending:N' and """" inside ContentHash, slot counter redundant"
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	generic	SVG serialisation text
@@ -5252,8 +5246,7 @@ ambre-toile | src/ui/hit.rs | crate::ui::hit | stroke_reach(stroke_w) | param | 
 ambre-toile | src/ui/interop.rs | crate::ui::interop | DroppedFile.bytes | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &str	generic	HTML accept attribute text
 ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	debt	planned: lot B item 10 MediaType
-ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts(mime) | param | &str	debt	planned: lot B item 10 MediaType
+ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(imported) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(skipped) | param | &[String]	free-text	label, message or user text

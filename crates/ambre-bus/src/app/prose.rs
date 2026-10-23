@@ -1261,11 +1261,11 @@ pub enum InteropError {
 impl ExportFormat {
     /// The media type of the bytes this format writes (`PROSE-IO-020`).
     #[must_use]
-    pub const fn media_type(self) -> &'static str {
-        match self {
+    pub fn media_type(self) -> ambre_core::MediaType {
+        ambre_core::MediaType::from(match self {
             Self::Ambre => "application/octet-stream",
             Self::Markdown(_) => "text/markdown; charset=utf-8",
-        }
+        })
     }
 }
 
@@ -1437,7 +1437,7 @@ pub enum ProseEvent {
     /// The view hands them to the browser (`PROSE-IO-056`).
     ExportReady {
         filename: String,
-        media_type: &'static str,
+        media_type: ambre_core::MediaType,
         data: Vec<u8>,
         /// What the format could not carry (`PROSE-IO-018`).
         report: ConversionReport,

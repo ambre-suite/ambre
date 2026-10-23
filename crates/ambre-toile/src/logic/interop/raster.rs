@@ -107,7 +107,7 @@ pub(super) fn decode_media(
     Ok(MediaBlob {
         hash,
         plaintext: bytes.to_vec(),
-        mime: ambre_core::MediaType::from(mime_of(format)),
+        mime: mime_of(format),
         width,
         height,
         thumb,
@@ -115,8 +115,8 @@ pub(super) fn decode_media(
 }
 
 /// Map a decoded [`ImageFormat`] to its MIME string for the media entry.
-fn mime_of(format: ImageFormat) -> &'static str {
-    match format {
+fn mime_of(format: ImageFormat) -> ambre_core::MediaType {
+    ambre_core::MediaType::from(match format {
         ImageFormat::Png => "image/png",
         ImageFormat::Jpeg => "image/jpeg",
         ImageFormat::Gif => "image/gif",
@@ -124,7 +124,7 @@ fn mime_of(format: ImageFormat) -> &'static str {
         // Only png/jpeg are compiled in (Cargo feature set); anything else that
         // slips through guess_format is labeled generically.
         _ => "application/octet-stream",
-    }
+    })
 }
 
 #[cfg(test)]

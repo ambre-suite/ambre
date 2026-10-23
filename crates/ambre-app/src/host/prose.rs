@@ -212,7 +212,7 @@ impl ProseView {
                     self.timeline
                         .count(CONFIRM_FRAMES, self.probe.take_counts());
                     if let Some((filename, media_type, data)) = self.state.take_export() {
-                        download(&filename, media_type, &data);
+                        download(&filename, &media_type, &data);
                     }
                     self.dirty = true;
                 }
@@ -759,12 +759,12 @@ impl ProseView {
 /// Hand a file the Logic thread wrote to the browser as a download, typed with
 /// its media type (`PROSE-IO-056`). A browser that refuses is logged: the
 /// document itself is untouched either way.
-fn download(filename: &str, media_type: &str, data: &[u8]) {
+fn download(filename: &str, media_type: &ambre_bus::MediaType, data: &[u8]) {
     use wasm_bindgen::JsCast;
     let parts = js_sys::Array::new();
     parts.push(&js_sys::Uint8Array::from(data).buffer());
     let options = web_sys::BlobPropertyBag::new();
-    options.set_type(media_type);
+    options.set_type(media_type.as_str());
     let url = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
         .and_then(|blob| web_sys::Url::create_object_url_with_blob(&blob));
     let url = match url {

@@ -15,7 +15,8 @@ pub const IMPORT_ACCEPT: &str = ".svg,image/svg+xml,image/png,image/jpeg,image/w
 
 /// Whether a converter reads this media type. A drop carries whatever type the
 /// browser guessed, so this is the one gate before a file is read into memory.
-pub fn accepts(mime: &str) -> bool {
+pub fn accepts(mime: &ambre_core::MediaType) -> bool {
+    let mime = mime.as_str();
     mime == "image/svg+xml" || mime.starts_with("image/")
 }
 
@@ -71,14 +72,14 @@ mod tests {
             "image/webp",
             "image/gif",
         ] {
-            assert!(accepts(mime), "{mime}");
+            assert!(accepts(&mime.into()), "{mime}");
         }
     }
 
     #[test]
     fn a_format_no_converter_reads_is_refused() {
         for mime in ["application/pdf", "text/csv", "", "application/json"] {
-            assert!(!accepts(mime), "{mime}");
+            assert!(!accepts(&mime.into()), "{mime}");
         }
     }
 
@@ -88,7 +89,7 @@ mod tests {
     fn the_picker_offers_only_what_the_gate_accepts() {
         for entry in IMPORT_ACCEPT.split(',') {
             if !entry.starts_with('.') {
-                assert!(accepts(entry), "{entry} is offered but refused");
+                assert!(accepts(&entry.into()), "{entry} is offered but refused");
             }
         }
     }
