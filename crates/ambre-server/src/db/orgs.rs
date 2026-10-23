@@ -21,6 +21,72 @@ impl OrgName {
     }
 }
 
+/// The k-of-n split an organization declares for its recovery key: `k`
+/// shares of `n` reconstruct it. [`ShamirParams::new`] holds
+/// `1 <= threshold <= total`, so no stored or decoded split breaks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "ShamirWire", into = "ShamirWire")]
+pub struct ShamirParams(ShamirWire);
+
+/// The two fields of a split as the request body, the answer and the
+/// `organizations` row spell them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ShamirWire {
+    shamir_threshold: i16,
+    shamir_total: i16,
+}
+
+impl ShamirParams {
+    /// The split of `total` shares that `threshold` of them reconstruct.
+    /// Refuses a threshold below 1 or above the total.
+    pub fn new(threshold: i16, total: i16) -> Result<Self, AppError> {
+        if total < 1 || threshold < 1 || threshold > total {
+            return Err(AppError::Conflict {
+                detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
+                    .into(),
+            });
+        }
+        Ok(Self(ShamirWire {
+            shamir_threshold: threshold,
+            shamir_total: total,
+        }))
+    }
+
+    /// How many shares reconstruct the key.
+    pub fn threshold(self) -> i16 {
+        self.0.shamir_threshold
+    }
+
+    /// How many shares the key is split into.
+    pub fn total(self) -> i16 {
+        self.0.shamir_total
+    }
+}
+
+impl TryFrom<ShamirWire> for ShamirParams {
+    type Error = AppError;
+
+    fn try_from(wire: ShamirWire) -> Result<Self, AppError> {
+        Self::new(wire.shamir_threshold, wire.shamir_total)
+    }
+}
+
+impl From<ShamirParams> for ShamirWire {
+    fn from(params: ShamirParams) -> Self {
+        params.0
+    }
+}
+
+impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for ShamirParams {
+    fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        Self::new(
+            row.try_get("shamir_threshold")?,
+            row.try_get("shamir_total")?,
+        )
+        .map_err(|e| sqlx::Error::Decode(e.to_string().into()))
+    }
+}
+
 /// Row from the `organizations` table.
 #[derive(Debug, sqlx::FromRow)]
 #[allow(dead_code)]
@@ -30,8 +96,8 @@ pub struct OrganizationRow {
     pub name: String,
     #[sqlx(try_from = "PgKey")]
     pub org_pubkey: ambre_core::PublicKey,
-    pub shamir_threshold: i16,
-    pub shamir_total: i16,
+    #[sqlx(flatten)]
+    pub shamir: ShamirParams,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -57,8 +123,7 @@ pub async fn create_organization(
     pool: &PgPool,
     name: &OrgName,
     org_pubkey: &ambre_core::PublicKey,
-    shamir_threshold: i16,
-    shamir_total: i16,
+    shamir: ShamirParams,
     owner_id: &ambre_core::UserId,
 ) -> Result<OrganizationRow, AppError> {
     let org_id = &ambre_core::OrgId::new();
@@ -74,8 +139,8 @@ pub async fn create_organization(
     .bind(id_to_uuid(*org_id))
     .bind(name.as_str())
     .bind(org_pubkey.as_slice())
-    .bind(shamir_threshold)
-    .bind(shamir_total)
+    .bind(shamir.threshold())
+    .bind(shamir.total())
     .fetch_one(&mut *tx)
     .await?;
 

@@ -18,8 +18,9 @@ pub struct CreateOrgRequest {
     pub name: String,
     /// X25519 organization public key (hex encoded).
     pub org_pubkey: ambre_core::ExchangeKeyHex,
-    pub shamir_threshold: i16,
-    pub shamir_total: i16,
+    /// A split out of range does not decode (`SRV-062`).
+    #[serde(flatten)]
+    pub shamir: db::ShamirParams,
     /// No client computes a share yet, so one that arrives is refused
     /// (`SRV-229`). `null` reads as none.
     pub owner_shamir_share_enc: Option<serde::de::IgnoredAny>,
@@ -30,8 +31,8 @@ pub struct CreateOrgResponse {
     pub id: ambre_core::OrgId,
     pub name: String,
     pub org_pubkey: ambre_core::ExchangeKeyHex,
-    pub shamir_threshold: i16,
-    pub shamir_total: i16,
+    #[serde(flatten)]
+    pub shamir: db::ShamirParams,
 }
 
 fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
@@ -39,8 +40,7 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
         id: org.id,
         name: org.name.clone(),
         org_pubkey: ambre_core::ExchangeKeyHex::encode(&org.org_pubkey),
-        shamir_threshold: org.shamir_threshold,
-        shamir_total: org.shamir_total,
+        shamir: org.shamir,
     }
 }
 
@@ -121,16 +121,10 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
 /// Shamir k-of-n threshold reconstruction is not yet implemented (see
 /// `recover_master_key`, N1). Until it lands, recovery is single-authority
 /// (owner-only), so the schema must not advertise a quorum guarantee the server
-/// cannot keep: reject any threshold above 1. Basic bounds also keep
-/// `1 <= threshold <= total` coherent.
-fn validate_shamir_params(threshold: i16, total: i16) -> Result<(), AppError> {
-    if total < 1 || threshold < 1 || threshold > total {
-        return Err(AppError::Conflict {
-            detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
-                .into(),
-        });
-    }
-    if threshold > 1 {
+/// cannot keep: reject any threshold above 1. [`db::ShamirParams`] already
+/// holds `1 <= threshold <= total`.
+fn validate_shamir_params(shamir: db::ShamirParams) -> Result<(), AppError> {
+    if shamir.threshold() > 1 {
         return Err(AppError::Conflict {
             detail: "shamir_threshold > 1 is not yet supported: threshold reconstruction is \
                      unimplemented and recovery is single-authority (owner-only)"
@@ -167,7 +161,7 @@ pub async fn create_org(
     let owner_id = session.user_id;
 
     let name = org_name(&req.name)?;
-    validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
+    validate_shamir_params(req.shamir)?;
     refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
     // A key that is not 32 bytes of hex is refused here, not stored to fail
@@ -178,15 +172,7 @@ pub async fn create_org(
         }
     })?;
 
-    let org = db::create_organization(
-        &state.db,
-        &name,
-        &org_pubkey,
-        req.shamir_threshold,
-        req.shamir_total,
-        &owner_id,
-    )
-    .await?;
+    let org = db::create_organization(&state.db, &name, &org_pubkey, req.shamir, &owner_id).await?;
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -498,25 +484,42 @@ mod tests {
 
     // -- Shamir validation (N1) ---------------------------------------------
 
+    /// Whether a request declaring `threshold` of `total` passes: the range
+    /// the split holds, then the quorum the relay enforces.
+    fn accepted(threshold: i16, total: i16) -> bool {
+        db::ShamirParams::new(threshold, total)
+            .and_then(validate_shamir_params)
+            .is_ok()
+    }
+
     #[test]
     fn shamir_threshold_1_accepted() {
-        assert!(validate_shamir_params(1, 1).is_ok());
-        assert!(validate_shamir_params(1, 5).is_ok());
+        assert!(accepted(1, 1));
+        assert!(accepted(1, 5));
     }
 
     #[test]
     fn shamir_threshold_above_1_rejected_until_reconstruction_lands() {
         // The data model must not advertise a k-of-n quorum the server does not
         // enforce; recovery is single-authority (owner-only) for now.
-        assert!(validate_shamir_params(2, 3).is_err());
-        assert!(validate_shamir_params(3, 5).is_err());
+        assert!(!accepted(2, 3));
+        assert!(!accepted(3, 5));
     }
 
     #[test]
     fn shamir_out_of_range_rejected() {
-        assert!(validate_shamir_params(0, 5).is_err()); // threshold < 1
-        assert!(validate_shamir_params(1, 0).is_err()); // total < 1
-        assert!(validate_shamir_params(2, 1).is_err()); // threshold > total
+        assert!(!accepted(0, 5)); // threshold < 1
+        assert!(!accepted(1, 0)); // total < 1
+        assert!(!accepted(2, 1)); // threshold > total
+        // A body out of range does not decode, so no handler sees it.
+        let body = r#"{"shamir_threshold": 2, "shamir_total": 1}"#;
+        assert!(serde_json::from_str::<db::ShamirParams>(body).is_err());
+        let body = r#"{"shamir_threshold": 1, "shamir_total": 3}"#;
+        let decoded: db::ShamirParams = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            serde_json::to_string(&decoded).unwrap(),
+            body.replace(' ', "")
+        );
     }
 
     // -- Response formatting ------------------------------------------------
@@ -527,15 +530,13 @@ mod tests {
             id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
             org_pubkey: ambre_core::PublicKey::from_array([0u8; 32]),
-            shamir_threshold: 3,
-            shamir_total: 5,
+            shamir: db::ShamirParams::new(3, 5).unwrap(),
             created_at: chrono::Utc::now(),
         };
         let resp = org_to_response(&org);
         assert_eq!(resp.id.to_string(), "00000000-0000-0000-0000-000000000001");
         assert_eq!(resp.name, "Test Org");
-        assert_eq!(resp.shamir_threshold, 3);
-        assert_eq!(resp.shamir_total, 5);
+        assert_eq!(resp.shamir, db::ShamirParams::new(3, 5).unwrap());
         assert_eq!(
             resp.org_pubkey,
             ambre_core::ExchangeKeyHex::encode(vec![0u8; 32])

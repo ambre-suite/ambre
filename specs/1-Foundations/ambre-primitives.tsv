@@ -3426,13 +3426,15 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName.0 | field | String	new
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::new(text) | param | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field | String	free-text	row keeps legacy name text by design; OrgName validates at the request seam (SRV-233)
-ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.shamir_threshold | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.shamir_total | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/db/orgs.rs | crate::db::orgs | create_organization(shamir_threshold) | param | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/db/orgs.rs | crate::db::orgs | create_organization(shamir_total) | param | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::new(threshold) | param | i16	newtype-inner	the fallible constructor of ShamirParams; the smallint column width
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::new(total) | param | i16	newtype-inner	the fallible constructor of ShamirParams; the smallint column width
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::threshold() | ret | i16	newtype-inner	a part of ShamirParams, bound to the smallint column
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::total() | ret | i16	newtype-inner	a part of ShamirParams, bound to the smallint column
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_threshold | field | i16	newtype-inner	the wire form ShamirParams decodes through and validates
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_total | field | i16	newtype-inner	the wire form ShamirParams decodes through and validates
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | search_users(query) | param | &str	free-text	search text
@@ -3533,17 +3535,11 @@ ambre-server | src/routes/documents.rs | crate::routes::documents | MembersRespo
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | search_users(Query(params)) | param | Query<HashMap<String,String>>	debt	finding: search_users takes an untyped query (confirmed)
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.shamir_threshold | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.shamir_total | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	echo of a validated OrgName
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.shamir_threshold | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.shamir_total | field | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | OrgMemberResponse.has_shamir_share | field | Option<bool>	math	named state or style flag, local
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | UpdateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | org_name(name) | param | &str	newtype-inner	constructor seam into OrgName
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | org_role_rank() | ret | Option<u8>	math	role rank for comparison, local
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | validate_shamir_params(threshold) | param | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | validate_shamir_params(total) | param | i16	debt	finding: Shamir threshold and total as an i16 pair (confirmed)
 ambre-server | src/routes/read_cursors.rs | crate::routes::read_cursors | ActivityJson.active | field | bool	math	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | doc_role_rank() | ret | Option<u8>	math	role rank for comparison, local
