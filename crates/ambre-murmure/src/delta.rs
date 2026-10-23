@@ -21,9 +21,36 @@ use crate::reaction;
 use crate::schema::{self, AmendmentKey, DeletedBy, Fields, MessageKey, Root};
 use ambre_core::crdt::{ContainerName, FoundationRoot};
 
-/// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
-/// change of it is a bump of `SCHEMA_VERSION` (`MURMURE-020`).
-pub const JSON_SCHEMA_VERSION: u8 = 1;
+/// The version of Loro's JSON update form, the number a segment delta
+/// carries in its `schema_version` field. A space of its own, apart from the
+/// document's `SCHEMA_VERSION`: a change of it is a bump of that one
+/// (`MURMURE-020`), never the same number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(transparent)]
+pub struct JsonSchemaVersion(u8);
+
+impl JsonSchemaVersion {
+    /// The version a JSON update carries, as its field holds it.
+    #[must_use]
+    pub const fn new(version: u8) -> Self {
+        Self(version)
+    }
+
+    /// The number, as the `schema_version` field writes it.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for JsonSchemaVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The Loro JSON schema version a segment delta carries (`MURMURE-227`).
+pub const JSON_SCHEMA_VERSION: JsonSchemaVersion = JsonSchemaVersion::new(1);
 
 /// Who signed a delta, as the Sync worker verified it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,7 +72,7 @@ pub enum Refusal {
     /// A JSON update of a schema version this build does not compile
     /// (`MURMURE-228`).
     #[error("a JSON update of schema version {0}, where this build reads {JSON_SCHEMA_VERSION}")]
-    Version(u8),
+    Version(JsonSchemaVersion),
     /// Bytes that read as no JSON update of the pinned form.
     #[error("bytes that read as no JSON update")]
     Malformed,
@@ -108,9 +135,9 @@ pub(crate) fn encode(update: &JsonSchema) -> Result<Vec<u8>, MurmureError> {
 pub(crate) fn read(payload: &[u8]) -> Result<JsonSchema, Refusal> {
     #[derive(Deserialize)]
     struct Version {
-        schema_version: u8,
+        schema_version: JsonSchemaVersion,
     }
-    if payload.starts_with(b"loro") || payload.starts_with(b"amsq") {
+    if payload.starts_with(b"loro") || payload.starts_with(crate::sequence::FRAME_MAGIC) {
         return Err(Refusal::Binary);
     }
     let version = serde_json::from_slice::<Version>(payload)

@@ -224,7 +224,7 @@ fn an_edit_creates_no_message_and_never_counts() {
 fn a_truncated_table_is_refused_before_any_import() {
     let (alice, mut bob) = pair();
     let segment = alice.active_id().document_id();
-    let mut payload = b"amsq".to_vec();
+    let mut payload = crate::sequence::FRAME_MAGIC.to_vec();
     payload.extend_from_slice(&3u32.to_le_bytes());
     payload.extend_from_slice(&[0; 10]);
     assert!(matches!(

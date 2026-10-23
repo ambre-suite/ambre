@@ -13,8 +13,8 @@ use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer,
 
 use crate::schema::{MessageKey, Root};
 use crate::{
-    ChannelState, ChannelType, JSON_SCHEMA_VERSION, MurmureError, Opening, OpeningChannel, Refusal,
-    Signer,
+    ChannelState, ChannelType, JSON_SCHEMA_VERSION, JsonSchemaVersion, MurmureError, Opening,
+    OpeningChannel, Refusal, Signer,
 };
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -152,7 +152,7 @@ fn a_segment_delta_travels_as_a_json_update_of_the_pinned_version() {
         .send(&draft("hello"), alice.user, NOW)
         .expect("send");
     let update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("a JSON update");
-    assert_eq!(update["schema_version"], JSON_SCHEMA_VERSION);
+    assert_eq!(update["schema_version"], JSON_SCHEMA_VERSION.get());
     // The peers stay uncompressed, so each operation names its PeerID.
     assert!(update["peers"].is_null());
 
@@ -165,7 +165,7 @@ fn a_segment_delta_travels_as_a_json_update_of_the_pinned_version() {
         .expect("adopt")
         .expect("the first update");
     let first: serde_json::Value = serde_json::from_slice(&first).expect("a JSON update");
-    assert_eq!(first["schema_version"], JSON_SCHEMA_VERSION);
+    assert_eq!(first["schema_version"], JSON_SCHEMA_VERSION.get());
 }
 
 // --- MURMURE-224 ---
@@ -208,7 +208,7 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
         .send(&draft("from a newer build"), alice.user, NOW)
         .expect("send");
     let mut update: serde_json::Value = serde_json::from_slice(&sent.delta).expect("json");
-    update["schema_version"] = serde_json::Value::from(JSON_SCHEMA_VERSION + 1);
+    update["schema_version"] = serde_json::Value::from(JSON_SCHEMA_VERSION.get() + 1);
     let newer = serde_json::to_vec(&update).expect("bytes");
     let was = bob.everything();
     let segment = bob.segment();
@@ -217,7 +217,10 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
             .apply_signed(segment, Seq(1), &newer, alice.signer()),
     )
     .expect("refused");
-    assert_eq!(refused, Refusal::Version(JSON_SCHEMA_VERSION + 1));
+    assert_eq!(
+        refused,
+        Refusal::Version(JsonSchemaVersion::new(JSON_SCHEMA_VERSION.get() + 1))
+    );
     assert!(refused.asks_update());
     assert!(!Refusal::ForeignAuthor.asks_update());
     assert_eq!(bob.everything(), was);

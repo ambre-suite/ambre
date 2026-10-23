@@ -95,7 +95,7 @@ pub use channel::{
     FoldSnapshot, Linked, Named, Relocated, Replay, Replied, SEGMENT_BYTES, SEGMENT_MESSAGES,
     SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, Successor, ThreadLinked, ThreadTarget,
 };
-pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
+pub use delta::{JSON_SCHEMA_VERSION, JsonSchemaVersion, Refusal, Signer};
 pub use error::MurmureError;
 pub use layout::{MessageRef, MurmurePane, Region};
 pub use members::{

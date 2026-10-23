@@ -2292,8 +2292,9 @@ ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param |
 ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	debt	finding: Byte and char offsets share bare `usize`
 ambre-murmure | src/composer.rs | crate::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/delta.rs | crate::delta | Arrival::Bytes.0 | field | Vec<u8>	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/delta.rs | crate::delta | JSON_SCHEMA_VERSION | const | u8	debt	finding: Two schema-version spaces, and a duplicated frame magic
-ambre-murmure | src/delta.rs | crate::delta | Refusal::Version.0 | field | u8	debt	finding: Two schema-version spaces, and a duplicated frame magic
+ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion.0 | field | u8	newtype-inner	JsonSchemaVersion newtype accessor
+ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::get() | ret | u8	newtype-inner	JsonSchemaVersion newtype accessor
+ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::new(version) | param | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
@@ -2305,7 +2306,6 @@ ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	math	state 
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	math	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | read(payload) | param | &[u8]	debt	finding: Murmure's delta, snapshot and session-entry bytes are bare `Vec<u8>` / `&[u8]`
-ambre-murmure | src/delta.rs | crate::delta | read::Version.schema_version | field | u8	debt	schema version as a bare integer
 ambre-murmure | src/delta.rs | crate::delta | thread_field() | ret | Option<Option<String>>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_in() | ret | Option<String>	debt	finding: The delta validator passes message keys and thread ids as strings
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	debt	finding: The delta validator passes message keys and thread ids as strings

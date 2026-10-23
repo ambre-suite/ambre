@@ -17,7 +17,7 @@ use crate::schema::{self, MessageKey, Root};
 
 /// The four bytes a framed snapshot opens with. A Loro blob opens with
 /// `loro`, so the two never read as each other.
-const FRAME_MAGIC: &[u8; 4] = b"amsq";
+pub(crate) const FRAME_MAGIC: &[u8; 4] = b"amsq";
 /// One table row: a message identifier, then its number.
 const ROW_LEN: usize = 16 + 8;
 
