@@ -855,7 +855,7 @@ mod tests {
             .collect();
         let baselines = data
             .lines()
-            .map(|(line, shift)| line.metrics().baseline + shift)
+            .map(|(line, shift)| line.metrics().baseline + shift.get())
             .collect();
         let carets = (0..=data.len().get())
             .map(|offset| {

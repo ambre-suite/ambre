@@ -9,7 +9,7 @@
 //! writes nothing to the document (`PROSE-UI-120`).
 
 use ambre_core::{ByteCount, ByteOffset, SurfacePx};
-use ambre_draw::{Affine, DocumentWalk, DrawSurface, Rect};
+use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
@@ -43,9 +43,34 @@ struct ScreenBlock {
     /// The top of its page down the column.
     top: SurfacePx,
     /// Whether the local caret and selection show in it.
-    local: bool,
+    local: LocalCaret,
     /// Whether the other peers' carets show in it: body text only.
-    remote_carets: bool,
+    remote_carets: RemoteCarets,
+}
+
+/// Whether a block shows the local caret and selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocalCaret {
+    Hidden,
+    Shown,
+}
+
+/// Whether a block shows the other peers' carets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RemoteCarets {
+    Hidden,
+    Shown,
+}
+
+/// The content box of a page, on the surface: where its runs are placed.
+#[derive(Clone, Copy, Debug)]
+struct ContentBox {
+    /// The left edge of the content, from the sheet's.
+    left: SurfacePx,
+    /// The top of the body, under the header band.
+    body_top: SurfacePx,
+    /// The width the text wraps at.
+    width: SurfacePx,
 }
 
 /// What one frame resolves before it paints.
@@ -60,15 +85,18 @@ struct Frame {
 
 /// Where a run is drawn: from the left of the content box, at the top of
 /// its fragment, clipped to it.
-fn place(left: f64, body_top: f64, content_width: f64, run: &ShapedRun, piece: Fragment) -> Placed {
-    let clip_top = body_top + f64::from(piece.top.get());
+fn place(content: ContentBox, run: &ShapedRun, piece: Fragment) -> Placed {
+    let left = content.left.get();
+    let clip_top = content.body_top.get() + f64::from(piece.top.get());
     Placed {
-        origin_x: left + f64::from(run.data().indent_px().get()),
-        origin_y: clip_top - f64::from(piece.run_top.get()),
+        origin: Point::new(
+            left + f64::from(run.data().indent_px().get()),
+            clip_top - f64::from(piece.run_top.get()),
+        ),
         clip: Rect::new(
             left,
             clip_top,
-            left + content_width,
+            left + content.width.get(),
             clip_top + f64::from(piece.height.get()),
         ),
     }
@@ -261,7 +289,7 @@ impl ProseUiState {
                 Some((camera * Affine::translate((0.0, top.get()))).transform_rect_bbox(bar));
         }
         // Last, so a collaborator's caret never hides the text under it.
-        for block in frame.blocks.iter().filter(|block| block.remote_carets) {
+        for block in frame.blocks.iter().filter(|block| block.remote_carets == RemoteCarets::Shown) {
             surface.push_transform(Affine::translate((0.0, block.top.get())));
             self.paint_carets(surface, block.id, block.run.data(), &block.placed);
             surface.pop_transform();
@@ -305,9 +333,16 @@ impl ProseUiState {
     /// blocks the screen draws around.
     fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: SurfacePx) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
-        let left = f64::from(layout.margin_left_px.get());
-        let body_top = f64::from(layout.body_top_px().get());
-        let content_width = f64::from(layout.content_width_px.get());
+        let content = ContentBox {
+            left: SurfacePx::new(f64::from(layout.margin_left_px.get())),
+            body_top: SurfacePx::new(f64::from(layout.body_top_px().get())),
+            width: SurfacePx::new(f64::from(layout.content_width_px.get())),
+        };
+        let (left, body_top, content_width) = (
+            content.left.get(),
+            content.body_top.get(),
+            content.width.get(),
+        );
         let right = left + content_width;
         let mut items = Vec::new();
         let (pieces, ghost_at) = self.pieces(page);
@@ -331,7 +366,7 @@ impl ProseUiState {
                     left + table_right + 1.0,
                     clip_top + f64::from(fragment.height.get()) + 1.0,
                 );
-                let origin = (left, clip_top - f64::from(fragment.run_top.get()));
+                let origin = Point::new(left, clip_top - f64::from(fragment.run_top.get()));
                 let cells = self.table_cells(frame, &table, origin, clip, top);
                 items.push(PageItem::Table { clip, cells });
                 continue;
@@ -340,20 +375,20 @@ impl ProseUiState {
                 continue;
             };
             let id = block_id(block.block_id);
-            let placed = place(left, body_top, content_width, &run, fragment);
+            let placed = place(content, &run, fragment);
             items.push(PageItem::Block(self.block_paint(
                 frame,
                 id,
                 run,
                 placed,
                 top,
-                (true, true),
+                (LocalCaret::Shown, RemoteCarets::Shown),
             )));
         }
         // The paragraph a split opens, below the block it parts
         // (`PROSE-UI-203`).
         if let (Some(at), Some(ghost)) = (ghost_at, self.ghost().cloned()) {
-            let placed = place(left, body_top, content_width, &ghost.run, at);
+            let placed = place(content, &ghost.run, at);
             match self.splitting.and_then(|split| split.new_block) {
                 Some(new_block) => items.push(PageItem::Block(self.block_paint(
                     frame,
@@ -361,7 +396,7 @@ impl ProseUiState {
                     ghost.run,
                     placed,
                     top,
-                    (true, false),
+                    (LocalCaret::Shown, RemoteCarets::Hidden),
                 ))),
                 None => {
                     if let Some(caret) = ghost.caret {
@@ -380,15 +415,18 @@ impl ProseUiState {
         // The header and the footer, from their own runs. They draw like body
         // text: the local caret and selection show on the page the caret was
         // placed on (`PROSE-UI-033`).
-        let local = self.band_page == Some(page);
+        let local = if self.band_page == Some(page) {
+            LocalCaret::Shown
+        } else {
+            LocalCaret::Hidden
+        };
         for slot in self.band_slots(page) {
             let Some(run) = self.drawn_of(slot.block).cloned() else {
                 continue;
             };
             let (from, to) = (f64::from(slot.top.get()), f64::from(slot.bottom.get()));
             let placed = Placed {
-                origin_x: left + f64::from(run.data().indent_px().get()),
-                origin_y: from,
+                origin: Point::new(left + f64::from(run.data().indent_px().get()), from),
                 clip: Rect::new(left, from, right, to),
             };
             let id = block_id(slot.block);
@@ -398,7 +436,7 @@ impl ProseUiState {
                 run,
                 placed,
                 top,
-                (local, false),
+                (local, RemoteCarets::Hidden),
             )));
         }
         // The footnote band at the foot of the body: a separator, then each
@@ -419,8 +457,7 @@ impl ProseUiState {
                     key: RunKey::Note(slot.footnote_id),
                     run: number,
                     placed: Placed {
-                        origin_x: left,
-                        origin_y: from,
+                        origin: Point::new(left, from),
                         clip,
                     },
                     insertion: None,
@@ -429,8 +466,7 @@ impl ProseUiState {
             }
             if let Some(text) = self.drawn_of(slot.block).cloned() {
                 let placed = Placed {
-                    origin_x: left + f64::from(text.data().indent_px().get()),
-                    origin_y: from,
+                    origin: Point::new(left + f64::from(text.data().indent_px().get()), from),
                     clip,
                 };
                 let id = block_id(slot.block);
@@ -440,7 +476,7 @@ impl ProseUiState {
                     text,
                     placed,
                     top,
-                    (true, false),
+                    (LocalCaret::Shown, RemoteCarets::Hidden),
                 )));
             }
         }
@@ -456,7 +492,7 @@ impl ProseUiState {
         &self,
         frame: &mut Frame,
         table: &TableShape,
-        (left, top_y): (f64, f64),
+        origin: Point,
         clip: Rect,
         page_top: SurfacePx,
     ) -> Vec<CellPaint> {
@@ -465,6 +501,7 @@ impl ProseUiState {
             let Some(cell_box) = cell_frame(table, cell) else {
                 continue;
             };
+            let (left, top_y) = (origin.x, origin.y);
             let bounds = Rect::new(
                 left + f64::from(cell_box.x0.get()),
                 top_y + f64::from(cell_box.y0.get()),
@@ -474,8 +511,10 @@ impl ProseUiState {
             let mut blocks = Vec::with_capacity(cell.blocks.len());
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
-                    origin_x: left + f64::from((cell_box.text_x + run.data().indent_px()).get()),
-                    origin_y: top_y + f64::from((cell_box.text_y + *y).get()),
+                    origin: Point::new(
+                        left + f64::from((cell_box.text_x + run.data().indent_px()).get()),
+                        top_y + f64::from((cell_box.text_y + *y).get()),
+                    ),
                     clip: bounds.intersect(clip),
                 };
                 let id = block_id(*block);
@@ -485,7 +524,7 @@ impl ProseUiState {
                     run.clone(),
                     placed,
                     page_top,
-                    (true, false),
+                    (LocalCaret::Shown, RemoteCarets::Hidden),
                 ));
             }
             cells.push(CellPaint {
@@ -507,7 +546,7 @@ impl ProseUiState {
         run: ShapedRun,
         placed: Placed,
         top: SurfacePx,
-        (local, remote_carets): (bool, bool),
+        (local, remote_carets): (LocalCaret, RemoteCarets),
     ) -> BlockPaint {
         // The composition, placed before the run is drawn: the text after it
         // moves right by its width (`PROSE-UI-199`).
@@ -517,7 +556,7 @@ impl ProseUiState {
             .map(|((line, caret), (width, _))| Insertion {
                 line,
                 x: SurfacePx::new(caret.x0),
-                width: SurfacePx::new(width),
+                width,
             });
         frame.blocks.push(ScreenBlock {
             id,
@@ -542,11 +581,11 @@ impl ProseUiState {
         &self,
         id: BlockId,
         data: &ParleyRunData,
-        local: bool,
+        local: LocalCaret,
     ) -> Option<(RunLine, ambre_draw::BoundingBox)> {
         self.cursor
             .as_ref()
-            .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
+            .filter(|cursor| local == LocalCaret::Shown && cursor.block_id == id && cursor.anchor.is_none())
             // Parted and not yet answered, the block leaves its caret to the
             // paragraph drawn below it (`PROSE-UI-203`).
             .filter(|_| {
@@ -566,10 +605,12 @@ impl ProseUiState {
 
     /// The composition in progress, shaped for the text composed now, and
     /// its width.
-    fn composition(&self) -> Option<(f64, ShapedRun)> {
+    fn composition(&self) -> Option<(SurfacePx, ShapedRun)> {
         let (shaped_text, shape) = self.compose_shape.as_ref()?;
-        (*shaped_text == self.composing)
-            .then(|| (f64::from(shape.data().full_width().get()), shape.clone()))
+        (*shaped_text == self.composing).then(|| {
+            let width = SurfacePx::new(f64::from(shape.data().full_width().get()));
+            (width, shape.clone())
+        })
     }
 
     /// Under the glyphs: the local selection, then each peer's.
@@ -584,7 +625,7 @@ impl ProseUiState {
         // local caret does. A peer's counts what the Logic thread answered.
         let laid = |(at, offset): Spot| (at, self.to_laid(at, offset));
         let answered = |(at, offset): Spot| (at, crate::view::answered(offset));
-        if block.local
+        if block.local == LocalCaret::Shown
             && let Some((first, last)) = self
                 .cursor
                 .as_ref()
@@ -620,14 +661,14 @@ impl ProseUiState {
         };
         let mut rect = to_rect(&block.placed, &caret);
         if let Some((width, shape)) = self.composition() {
-            draw_shape(surface, &shape, rect.x0, rect.y0, palette.text);
+            draw_shape(surface, &shape, rect.origin(), palette.text);
             let base = rect.y1 - 1.0;
             surface.stroke_line(
-                ambre_draw::Line::new((rect.x0, base), (rect.x0 + width, base)),
+                ambre_draw::Line::new((rect.x0, base), (rect.x0 + width.get(), base)),
                 palette.text,
                 1.0,
             );
-            rect.x0 += width;
+            rect.x0 += width.get();
         }
         let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
         surface.fill_rect(bar, palette.accent);

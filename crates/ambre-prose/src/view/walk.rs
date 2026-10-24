@@ -9,7 +9,9 @@
 //! composition after it.
 
 use ambre_core::{Rgba, SurfacePx};
-use ambre_draw::{Affine, Brush, Color, DocumentWalk, DrawSurface, PositionedLayoutItem, Rect};
+use ambre_draw::{
+    Affine, Brush, Color, DocumentWalk, DrawSurface, Point, PositionedLayoutItem, Rect,
+};
 
 use crate::layout::run::{CellStyle, ParleyRunData, RunLine, ShapedRun};
 use crate::view::cache::{RunCache, RunKey};
@@ -47,22 +49,21 @@ impl PagePalette {
     }
 }
 
-/// Where a run is drawn on its page: its origin, and the clip of the part
-/// the page shows.
+/// Where a run is drawn on its page: its origin on the surface, and the clip
+/// of the part the page shows.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Placed {
-    pub origin_x: f64,
-    pub origin_y: f64,
+    pub origin: Point,
     pub clip: Rect,
 }
 
 /// A box of a run, moved to where the run is drawn.
 pub(crate) fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
     Rect::new(
-        placed.origin_x + rect.x0,
-        placed.origin_y + rect.y0,
-        placed.origin_x + rect.x1,
-        placed.origin_y + rect.y1,
+        placed.origin.x + rect.x0,
+        placed.origin.y + rect.y0,
+        placed.origin.x + rect.x1,
+        placed.origin.y + rect.y1,
     )
 }
 
@@ -184,7 +185,7 @@ impl PageWalk<'_> {
             }
             PageItem::Shape { run, placed } => {
                 surface.push_clip(placed.clip);
-                draw_shape(surface, run, placed.origin_x, placed.origin_y, palette.text);
+                draw_shape(surface, run, placed.origin, palette.text);
                 surface.pop_clip();
             }
             PageItem::Rule { x0, x1, y } => {
@@ -272,8 +273,8 @@ fn draw_run<S: DrawSurface>(
         };
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
-        let origin_y = placed.origin_y + f64::from(shift);
-        let transform = Affine::translate((placed.origin_x, origin_y));
+        let origin = placed.origin + (0.0, f64::from(shift.get()));
+        let transform = Affine::translate(origin.to_vec2());
         let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
             continue;
         };
@@ -283,18 +284,18 @@ fn draw_run<S: DrawSurface>(
             .peekable();
         if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);
-            draw_lines(surface, &glyphs, placed.origin_x, origin_y, color);
+            draw_lines(surface, &glyphs, origin, color);
             continue;
         }
         let band = BAND.get();
         let (mut from, mut shift) = (-band, 0.0);
         let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
-            let left = placed.origin_x + from + shift;
-            let right = placed.origin_x + to + shift;
+            let left = origin.x + from + shift;
+            let right = origin.x + to + shift;
             surface.push_clip(Rect::new(left, -band, right, band));
-            let moved = Affine::translate((placed.origin_x + shift, origin_y));
-            surface.draw_glyphs(&glyphs, &brush, moved);
-            draw_lines(surface, &glyphs, placed.origin_x + shift, origin_y, color);
+            let moved = origin + (shift, 0.0);
+            surface.draw_glyphs(&glyphs, &brush, Affine::translate(moved.to_vec2()));
+            draw_lines(surface, &glyphs, moved, color);
             surface.pop_clip();
         };
         for cut in cuts {
@@ -310,12 +311,12 @@ fn draw_run<S: DrawSurface>(
 }
 
 /// Draw the underline and the strike-through a glyph run carries, at the
-/// offsets and thicknesses its font gives (`PROSE-UI-209`).
+/// offsets and thicknesses its font gives (`PROSE-UI-209`). The run's line
+/// is drawn from `origin`.
 fn draw_lines<S: DrawSurface>(
     surface: &mut S,
     glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>,
-    x: f64,
-    y: f64,
+    origin: Point,
     color: Color,
 ) {
     let style = glyphs.style();
@@ -332,7 +333,7 @@ fn draw_lines<S: DrawSurface>(
             metrics.strikethrough_size,
         ),
     ];
-    let left = x + f64::from(glyphs.offset());
+    let left = origin.x + f64::from(glyphs.offset());
     let right = left + f64::from(glyphs.advance());
     for (line, offset, size) in lines {
         let Some(line) = line else {
@@ -340,7 +341,7 @@ fn draw_lines<S: DrawSurface>(
         };
         let size = line.size.unwrap_or(size);
         let offset = line.offset.unwrap_or(offset);
-        let at = y + f64::from(glyphs.baseline() - offset + size / 2.0);
+        let at = origin.y + f64::from(glyphs.baseline() - offset + size / 2.0);
         surface.stroke_line(
             ambre_draw::Line::new((left, at), (right, at)),
             color,
@@ -349,22 +350,21 @@ fn draw_lines<S: DrawSurface>(
     }
 }
 
-/// Draw every glyph of a shaped text at `(x, y)`.
+/// Draw every glyph of a shaped text from `at`, its top-left corner.
 pub(crate) fn draw_shape<S: DrawSurface>(
     surface: &mut S,
     shape: &ShapedRun,
-    x: f64,
-    y: f64,
+    at: Point,
     color: Color,
 ) {
     let brush = Brush::Solid(color);
     for (line, shift) in shape.data().lines() {
-        let y = y + f64::from(shift);
-        let transform = Affine::translate((x, y));
+        let origin = at + (0.0, f64::from(shift.get()));
+        let transform = Affine::translate(origin.to_vec2());
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
                 surface.draw_glyphs(&glyphs, &brush, transform);
-                draw_lines(surface, &glyphs, x, y, color);
+                draw_lines(surface, &glyphs, origin, color);
             }
         }
     }

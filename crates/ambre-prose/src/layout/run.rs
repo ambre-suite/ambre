@@ -219,7 +219,7 @@ struct LineAt {
     segment: usize,
     local: LocalLine,
     top: DocPx,
-    shift: f32,
+    shift: DocPx,
 }
 
 /// One block's text, shaped and broken into lines: enough to draw and to
@@ -419,7 +419,7 @@ impl ParleyRunData {
                     segment: index,
                     local,
                     top,
-                    shift: (y.round() - local_y.round()) as f32,
+                    shift: DocPx::new((y.round() - local_y.round()) as f32),
                 });
                 top += DocPx::new(height);
                 y += f64::from(height);
@@ -518,7 +518,7 @@ impl ParleyRunData {
 
     /// Every line, in order, with the vertical shift that moves its glyphs
     /// from where its segment put them to where the run draws them.
-    pub fn lines(&self) -> impl Iterator<Item = (parley::Line<'_, ParleyBrush>, f32)> + '_ {
+    pub fn lines(&self) -> impl Iterator<Item = (parley::Line<'_, ParleyBrush>, DocPx)> + '_ {
         self.lines
             .positions()
             .into_iter()
@@ -527,7 +527,7 @@ impl ParleyRunData {
 
     /// Line `index`, with its vertical shift.
     #[must_use]
-    pub fn line(&self, index: RunLine) -> Option<(parley::Line<'_, ParleyBrush>, f32)> {
+    pub fn line(&self, index: RunLine) -> Option<(parley::Line<'_, ParleyBrush>, DocPx)> {
         let at = self.lines.get(index)?;
         let line = self.segments.get(at.segment)?.layout_line(at.local)?;
         Some((line, at.shift))
@@ -559,16 +559,15 @@ impl ParleyRunData {
     /// run's top-left corner.
     #[must_use]
     pub fn offset_at(&self, at: DocPoint) -> RunOffset {
-        let (x, y) = (at.x.get(), at.y.get());
         let index = self
             .lines
             .as_slice()
             .partition_point(|line| line.top <= at.y)
             .saturating_sub(1);
-        let Some((segment, local_y)) = self.on_line(RunLine::from_usize(index), y) else {
+        let Some((segment, local_y)) = self.on_line(RunLine::from_usize(index), at.y) else {
             return RunOffset::ZERO;
         };
-        let cursor = Cursor::from_point(&segment.layout, x, local_y);
+        let cursor = Cursor::from_point(&segment.layout, at.x.get(), local_y.get());
         self.offset_of_byte(segment.to_run(LocalByte::from_usize(cursor.index())))
     }
 
@@ -624,7 +623,7 @@ impl ParleyRunData {
         let caret = cursor.geometry(&segment.layout, 1.0);
         let shift = self
             .line_under(index, &caret)
-            .map_or(0.0, |line| line.shift);
+            .map_or(DocPx::ZERO, |line| line.shift);
         self.past_indent(shifted(caret, shift))
     }
 
@@ -841,14 +840,14 @@ impl ParleyRunData {
 
     /// Segment of line `index`, and `y` moved into its coordinates and held
     /// inside that line.
-    fn on_line(&self, index: RunLine, y: f32) -> Option<(&Segment, f32)> {
+    fn on_line(&self, index: RunLine, y: DocPx) -> Option<(&Segment, DocPx)> {
         let last = self.lines.len().as_end().prev()?;
         let at = self.lines.get(index.min(last))?;
         let segment = self.segments.get(at.segment)?;
         let metrics = *segment.layout_line(at.local)?.metrics();
         let local = y - at.shift;
-        let low = metrics.block_min_coord;
-        let high = (metrics.block_max_coord - 0.01).max(low);
+        let low = DocPx::new(metrics.block_min_coord);
+        let high = DocPx::new((metrics.block_max_coord - 0.01).max(metrics.block_min_coord));
         Some((segment, local.clamp(low, high)))
     }
 
@@ -870,9 +869,9 @@ impl ParleyRunData {
 }
 
 /// A box moved down by `shift`.
-fn shifted(mut rect: BoundingBox, shift: f32) -> BoundingBox {
-    rect.y0 += f64::from(shift);
-    rect.y1 += f64::from(shift);
+fn shifted(mut rect: BoundingBox, shift: DocPx) -> BoundingBox {
+    rect.y0 += f64::from(shift.get());
+    rect.y1 += f64::from(shift.get());
     rect
 }
 
