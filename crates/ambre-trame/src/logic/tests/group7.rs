@@ -471,7 +471,7 @@ fn csv_export_writes_the_formatted_value() {
 fn import_reports_unreadable_records() {
     let mut state = TrameState::new();
     let out = state.handle_command(TrameCommand::ImportCsv {
-        data: b"a,b\n\xff\xfe,c\nd,e\n".to_vec(),
+        data: ambre_core::FileBytes::new(b"a,b\n\xff\xfe,c\nd,e\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: Some(SheetId("s0".to_owned())),

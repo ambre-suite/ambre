@@ -777,7 +777,7 @@ pub enum TrameCommand {
     /// [`DataReset`](super::TrameEvent::DataReset); the whole import is a single undo
     /// group.
     ImportCsv {
-        data: Vec<u8>,
+        data: ambre_core::FileBytes,
         /// Field separator; `None` auto-detects it.
         delimiter: Option<CsvDelimiter>,
         /// A first record that is a header row is skipped.

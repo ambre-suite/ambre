@@ -2020,23 +2020,23 @@ pub enum ToileCommand {
     /// where the user put it and never at a fixed point of the world
     /// (`TOILE-IO-023`).
     ImportSvg {
-        bytes: Vec<u8>,
+        bytes: ambre_core::FileBytes,
         at: Point,
     },
     /// Import a raster image (PNG / JPG) dropped onto the board. `at` as above.
     ImportImage {
-        bytes: Vec<u8>,
+        bytes: ambre_core::FileBytes,
         mime: ambre_core::MediaType,
         at: Point,
     },
     /// Import a Figma document (a `.fig` JSON export). `at` as above.
     ImportFigma {
-        bytes: Vec<u8>,
+        bytes: ambre_core::FileBytes,
         at: Point,
     },
     /// Import a Miro board (a JSON export). `at` as above.
     ImportMiro {
-        bytes: Vec<u8>,
+        bytes: ambre_core::FileBytes,
         at: Point,
     },
     /// Serialize the board to an SVG document and hand the bytes back
@@ -2426,8 +2426,8 @@ pub enum ToileEvent {
     /// triggers the download (`TOILE-IO-085`). `filename` already carries the
     /// right extension.
     ExportComplete {
-        filename: String,
-        data: Vec<u8>,
+        filename: ambre_core::ExportFilename,
+        data: ambre_core::FileBytes,
         /// What the file could not express, one line per element, in board
         /// order (`TOILE-IO-025`). Empty when the board left whole.
         skipped: Vec<String>,

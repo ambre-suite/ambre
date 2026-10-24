@@ -333,11 +333,11 @@ impl DraftBuffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportFile {
     /// The name the download carries.
-    pub filename: String,
+    pub filename: ambre_core::ExportFilename,
     /// The media type the Logic thread named for the bytes.
     pub media_type: ambre_core::MediaType,
     /// The file itself.
-    pub bytes: Vec<u8>,
+    pub bytes: ambre_core::FileBytes,
 }
 
 /// The UI thread's whole state for one open Prose document.
@@ -921,10 +921,11 @@ mod tests {
     #[test]
     fn a_written_file_is_handed_to_the_host_once() {
         let mut state = ProseUiState::default();
+        let filename = ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Ambre);
         state.apply_event(&ProseEvent::ExportReady {
-            filename: "document.ambre".to_owned(),
+            filename: filename.clone(),
             media_type: ambre_core::MediaType::from("application/octet-stream"),
-            data: vec![1, 2, 3],
+            data: ambre_core::FileBytes::new(vec![1, 2, 3]),
             report: ambre_bus::app::prose::ConversionReport::clean(
                 ambre_bus::app::prose::ConversionFormat::Ambre,
             ),
@@ -932,9 +933,9 @@ mod tests {
         assert_eq!(
             state.take_export(),
             Some(ExportFile {
-                filename: "document.ambre".to_owned(),
+                filename,
                 media_type: ambre_core::MediaType::from("application/octet-stream"),
-                bytes: vec![1, 2, 3],
+                bytes: ambre_core::FileBytes::new(vec![1, 2, 3]),
             })
         );
         assert_eq!(state.take_export(), None);

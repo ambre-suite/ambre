@@ -473,18 +473,18 @@ impl ProseState {
             return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic));
         };
         let ir = self.walk();
-        let stem = ir
-            .meta
-            .title
-            .clone()
-            .map(|title| file_stem(&title))
-            .filter(|stem| !stem.is_empty())
-            .unwrap_or_else(|| "document".to_owned());
+        // The title is user text, so the name is cleaned of what a host
+        // refuses and bounded (`DOCFILE-019`).
+        let filename = ambre_core::ExportFilename::from_title(
+            ir.meta.title.as_deref().unwrap_or_default(),
+            "document",
+            ambre_core::ExportExtension::Markdown,
+        );
         let (text, report) = markdown_write::write(&ir, flavor);
         ProseOutcome::display_only(vec![ProseEvent::ExportReady {
-            filename: format!("{stem}.md"),
+            filename,
             media_type: format.media_type(),
-            data: text.into_bytes(),
+            data: ambre_core::FileBytes::new(text.into_bytes()),
             report,
         }])
     }
@@ -492,9 +492,13 @@ impl ProseState {
     /// Bring a file in after the last block, in one commit
     /// (`PROSE-IO-027`, `PROSE-IO-051`). A file that does not read changes
     /// nothing (`PROSE-IO-011`).
-    pub(super) fn import_document(&mut self, format: ImportFormat, data: &[u8]) -> ProseOutcome {
+    pub(super) fn import_document(
+        &mut self,
+        format: ImportFormat,
+        data: &ambre_core::FileBytes,
+    ) -> ProseOutcome {
         let ImportFormat::Markdown = format;
-        let (ir, report) = match markdown_read::read(data) {
+        let (ir, report) = match markdown_read::read(data.as_bytes()) {
             Ok(read) => read,
             Err(e) => return ProseOutcome::refused(ProseRefusal::Interop(e)),
         };
@@ -632,18 +636,6 @@ impl ProseState {
     }
 }
 
-/// A title as a file name: the characters a file system refuses dropped.
-fn file_stem(title: &str) -> String {
-    title
-        .chars()
-        .filter(|c| {
-            !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
-        })
-        .collect::<String>()
-        .trim()
-        .to_owned()
-}
-
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
@@ -661,7 +653,7 @@ mod tests {
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
         state.handle_command(ProseCommand::ImportDocument {
             format: ImportFormat::Markdown,
-            data: markdown.as_bytes().to_vec(),
+            data: ambre_core::FileBytes::new(markdown.as_bytes().to_vec()),
         })
     }
 
@@ -679,7 +671,10 @@ mod tests {
             panic!("an export answers with a file");
         };
         assert_eq!(media_type.as_str(), "text/markdown; charset=utf-8");
-        (String::from_utf8(data).expect("UTF-8"), report.warnings)
+        (
+            String::from_utf8(data.into_bytes()).expect("UTF-8"),
+            report.warnings,
+        )
     }
 
     fn texts(state: &ProseState) -> Vec<String> {
@@ -777,7 +772,7 @@ mod tests {
         let before = state.doc.oplog_vv();
         let outcome = state.handle_command(ProseCommand::ImportDocument {
             format: ImportFormat::Markdown,
-            data: vec![0xff, 0xfe, 0xfd],
+            data: ambre_core::FileBytes::new(vec![0xff, 0xfe, 0xfd]),
         });
         assert!(outcome.update.is_none());
         assert!(matches!(

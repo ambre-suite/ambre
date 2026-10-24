@@ -35,8 +35,11 @@ impl LogicState {
         };
         let answer = match export_pdf_of(state, export_cx.as_mut()) {
             Ok(data) => ToileEvent::ExportComplete {
-                filename: PDF_FILENAME.to_owned(),
-                data,
+                filename: ambre_core::ExportFilename::named(
+                    PDF_STEM,
+                    ambre_core::ExportExtension::Pdf,
+                ),
+                data: ambre_core::FileBytes::new(data),
                 // The deck walk draws every element through the shared surface,
                 // so a page holds what the slide holds.
                 skipped: Vec::new(),
@@ -132,7 +135,9 @@ impl LogicState {
     /// Nothing remains to download into, and the bytes go out of scope sealed.
     pub(crate) fn resolve_pending_seal(&mut self, id: RequestId, evt: &RestEvent) -> bool {
         let answer = match evt {
-            RestEvent::DocFileSealed { data } => Ok(data.clone().into_bytes()),
+            RestEvent::DocFileSealed { data } => {
+                Ok(ambre_core::FileBytes::new(data.clone().into_bytes()))
+            }
             RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
             _ => return false,
         };
@@ -1121,9 +1126,9 @@ impl LogicState {
     }
 }
 
-/// The name a deck export carries. The board's title is a launcher concern, so
-/// the file is named for what it holds, like the SVG export.
-const PDF_FILENAME: &str = "deck.pdf";
+/// The stem of the name a deck export carries. The board's title is a launcher
+/// concern, so the file is named for what it holds, like the SVG export.
+const PDF_STEM: &str = "deck";
 
 /// The deck as PDF bytes, or the reason there are none. Split out of the
 /// handler. The build with the export compiled in and the build without differ

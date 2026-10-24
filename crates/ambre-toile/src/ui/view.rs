@@ -235,9 +235,9 @@ const CLICK_SLOP: f64 = 4.0;
 /// anchor: the same path Trame's CSV export takes, because the browser offers no
 /// other. Best effort -- the view logs a blob the browser refuses, never fails.
 #[cfg(target_arch = "wasm32")]
-fn trigger_download(filename: &str, data: &[u8]) {
+fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
     use wasm_bindgen::JsCast;
-    let array = js_sys::Uint8Array::from(data);
+    let array = js_sys::Uint8Array::from(data.as_bytes());
     let parts = js_sys::Array::new();
     parts.push(&array.buffer());
     let blob = match web_sys::Blob::new_with_u8_array_sequence(&parts) {
@@ -260,7 +260,7 @@ fn trigger_download(filename: &str, data: &[u8]) {
         .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
     if let Some(anchor) = anchor {
         anchor.set_href(&url);
-        anchor.set_download(filename);
+        anchor.set_download(filename.as_str());
         anchor.click();
     }
     let _ = web_sys::Url::revoke_object_url(&url);
@@ -270,9 +270,9 @@ fn trigger_download(filename: &str, data: &[u8]) {
 /// exhaustive event dispatch compiles in the headless tests. A host test reads
 /// back each file the view handed over (`PDF-014`).
 #[cfg(not(target_arch = "wasm32"))]
-fn trigger_download(filename: &str, data: &[u8]) {
+fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
     #[cfg(test)]
-    DOWNLOADS.with(|d| d.borrow_mut().push((filename.to_owned(), data.to_vec())));
+    DOWNLOADS.with(|d| d.borrow_mut().push((filename.to_string(), data.as_bytes().to_vec())));
     #[cfg(not(test))]
     let _ = (filename, data);
 }

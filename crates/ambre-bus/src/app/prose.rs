@@ -1681,7 +1681,7 @@ pub enum ProseCommand {
     /// [`InteropError`] when the file produced nothing (`PROSE-IO-047`).
     ImportDocument {
         format: ImportFormat,
-        data: Vec<u8>,
+        data: ambre_core::FileBytes,
     },
 }
 
@@ -2119,9 +2119,9 @@ pub enum ProseEvent {
     /// media type, so one download path serves every format (`PROSE-IO-020`).
     /// The view hands them to the browser (`PROSE-IO-056`).
     ExportReady {
-        filename: String,
+        filename: ambre_core::ExportFilename,
         media_type: ambre_core::MediaType,
-        data: Vec<u8>,
+        data: ambre_core::FileBytes,
         /// What the format could not carry (`PROSE-IO-018`).
         report: ConversionReport,
     },

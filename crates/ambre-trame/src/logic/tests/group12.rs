@@ -21,7 +21,7 @@ fn with_one_edit() -> TrameState {
 
 fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<SheetId>) -> TrameOutcome {
     state.handle_command(TrameCommand::ImportCsv {
-        data: data.to_vec(),
+        data: ambre_core::FileBytes::new(data.to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id,
@@ -176,7 +176,7 @@ fn a_file_with_no_record_leaves_the_document_alone() {
         let mut state = with_one_edit();
         let before = state.doc.len_ops();
         let out = state.handle_command(TrameCommand::ImportCsv {
-            data: data.to_vec(),
+            data: ambre_core::FileBytes::new(data.to_vec()),
             delimiter: None,
             header: HeaderRow::Present,
             target_sheet_id: None,
@@ -223,7 +223,7 @@ fn a_separator_outside_the_three_is_named_by_the_caller() {
     import_result(&import(&mut state, b"a|b\n", None));
     assert_eq!(read_cell(&mut state, 0, 0), "a|b");
     let out = state.handle_command(TrameCommand::ImportCsv {
-        data: b"a|b\n".to_vec(),
+        data: ambre_core::FileBytes::new(b"a|b\n".to_vec()),
         delimiter: crate::CsvDelimiter::new(b'|').ok(),
         header: HeaderRow::Absent,
         target_sheet_id: None,

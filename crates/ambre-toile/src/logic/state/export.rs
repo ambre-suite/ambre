@@ -17,10 +17,10 @@ use super::ToileState;
 use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, str_of};
 use super::names::{ElementKey, FieldValues, MediaKey, Root};
 
-/// The name an SVG export carries. The board's own title is a launcher concern:
-/// the Logic thread holds a document, not its listing entry. The name therefore
-/// says what the file holds.
-const SVG_FILENAME: &str = "board.svg";
+/// The stem of the name an SVG export carries. The board's own title is a
+/// launcher concern: the Logic thread holds a document, not its listing entry.
+/// The name therefore says what the file holds.
+const SVG_STEM: &str = "board";
 
 impl ToileState {
     /// Decode the thumbnail stored for one media address, if the document
@@ -92,8 +92,8 @@ impl ToileState {
                 .map(str::to_owned),
         );
         ToileOutcome::display_only(vec![ToileEvent::ExportComplete {
-            filename: SVG_FILENAME.to_owned(),
-            data: export.document.into_bytes(),
+            filename: ambre_core::ExportFilename::named(SVG_STEM, ambre_core::ExportExtension::Svg),
+            data: ambre_core::FileBytes::new(export.document.into_bytes()),
             // What no SVG shape expresses, named rather than dropped in
             // silence (`TOILE-IO-025`).
             skipped: export.skipped,
@@ -263,7 +263,7 @@ mod tests {
             .iter()
             .find_map(|e| match e {
                 ToileEvent::ExportComplete { filename, data, .. } => {
-                    Some((filename.clone(), data.clone()))
+                    Some((filename.to_string(), data.as_bytes().to_vec()))
                 }
                 _ => None,
             })
@@ -330,7 +330,7 @@ mod tests {
         };
         assert_eq!(skipped.len(), 1, "{skipped:?}");
         assert!(skipped[0].contains("connector"), "{skipped:?}");
-        let svg = String::from_utf8(data.clone()).expect("the document is text");
+        let svg = String::from_utf8(data.as_bytes().to_vec()).expect("the document is text");
         assert_eq!(svg.matches("<rect").count(), 2, "{svg}");
     }
 

@@ -63,8 +63,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::feed() | ret | b
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(message) | param | &str	free-text	message
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch() | ret | bool	generic	consumed answer
-ambre-app | src/host/prose.rs | crate::host::prose | download(data) | param | &[u8]	generic	bytes
-ambre-app | src/host/prose.rs | crate::host::prose | download(filename) | param | &str	free-text	file name
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/landing.rs | crate::landing | DocItem.name | field | Option<String>	free-text	document name for display
@@ -95,7 +93,6 @@ ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Opti
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
-ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
@@ -209,7 +206,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	the raw value the UI sends, checked in Logic by validate_value, which lives in ambre-prose; the bus carries the text before its check
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ImportDocument.data | field | Vec<u8>	generic	imported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertText.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::Paste.html | field | Option<String>	free-text	user content
@@ -224,8 +220,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseError::new(refused) | pa
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.data | field | Vec<u8>	generic	exported file bytes
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.filename | field | String	free-text	export filename
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_undo | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseRefusal::BadMarkValue.value | field | String	free-text	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
@@ -296,10 +290,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | St
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.query | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportFigma.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportImage.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportMiro.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportSvg.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RenameFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ReplyComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
@@ -309,8 +299,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetText.text | 
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileError::WriteFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.filename | field | String	free-text	file name / skipped item labels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportFailed.0 | field | String	free-text	error message
@@ -344,7 +332,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	the A1 reference text the user typed; only the Trame engine parses it, against the live sheets, so no type holds its parse on the bus
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
@@ -373,8 +360,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::as_str(
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.filename | field | String	free-text	export filename
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
@@ -853,7 +838,6 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	generic	state flag/predicate
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
-ambre-chrome | src/handler.rs | crate::handler | FilePick.read | field | Box<dyn Fn(Vec<u8>)->C>	generic	opaque file content bytes
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
@@ -1373,7 +1357,6 @@ ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret |
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::route_service_error(reason) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/data.rs | crate::data | PDF_FILENAME | const | &str	free-text	free text: message, label, name or report
 ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
 ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
 ambre-logic | src/direct.rs | crate::direct | LogicState::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1428,8 +1411,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | manifest_for(bytes) | param | 
 ambre-logic | src/fixtures.rs | crate::fixtures | manifest_path(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | DocState::export_complete_event(data) | param | Vec<u8>	generic	generic byte/text API or codec
-ambre-logic | src/lib.rs | crate | DocState::export_complete_event(filename) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2245,11 +2226,8 @@ ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | u128	generic
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack(counter) | param | u64	math	count, size or local index
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VARIANT | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VERSION | const | u128	generic	UUID bit layout constants
-ambre-prose | src/logic/interop.rs | crate::logic::interop | ProseState::import_document(data) | param | &[u8]	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/interop.rs | crate::logic::interop | cell_styled() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem(title) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	text content / label / parser input
@@ -2945,7 +2923,6 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_merge_inner() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_FILENAME | const | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::export_pdf_document() | ret | Result<Vec<u8>,crate::logic::interop::PdfExportError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
@@ -2985,8 +2962,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJo
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob::total() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_image_bytes(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_bytes(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::media_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::pending_import_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::run_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
@@ -3134,7 +3109,6 @@ ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	gene
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | point_segment_distance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/hit.rs | crate::ui::hit | polyline_hit() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/interop.rs | crate::ui::interop | DroppedFile.bytes | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &str	generic	HTML accept attribute text
 ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3282,10 +3256,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move() | ret |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data)#2 | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(filename)#2 | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -3535,7 +3505,6 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | 
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
@@ -3759,10 +3728,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_input_focused() | r
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_mark(name) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(start) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(_data) | param | &[u8]	generic	file bytes or CSV delimiter
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(_filename) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(data) | param | &[u8]	generic	file bytes or CSV delimiter
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(filename) | param | &str	free-text	free text: user content, label, message or display string
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_mark() | ret | (&'static str,&'static str)	foreign-api	the mark key and value LoroText::mark stores for a HeaderField; field_of is the one reader, so the codec lives in this file alone
@@ -3900,7 +3865,6 @@ ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
-ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(String,ambre_core::PlaintextContainer)>	generic	generic byte/text API or codec
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit.0 | field | u16	newtype-inner	the row count QueryLimit wraps, held in 1..=1000
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_i64() | ret | i64	newtype-inner	the count as the sqlx LIMIT bind takes it
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_usize() | ret | usize	newtype-inner	the count compared against a page length
@@ -3985,14 +3949,29 @@ ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::as_str() | ret | &
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::new(text) | param | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
-ambre-logic | src/lib.rs | crate | PendingSeal.filename | field | String	free-text	the file name the user typed, carried to the sealed export; no rule validates it
 ambre-murmure | src/paint.rs | crate::paint | chip_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
 ambre-murmure | src/paint.rs | crate::paint | file_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
 ambre-murmure | src/paint.rs | crate::paint | link_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
 ambre-murmure | src/paint.rs | crate::paint | spot_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(BlockIndex,&Cursor)->bool	generic	the stop predicate over a block and the cursor
-ambre-prose | src/ui.rs | crate::ui | ExportFile.bytes | field | Vec<u8>	generic	the exported file bytes, ExportReady.data as the Main thread saves it
-ambre-prose | src/ui.rs | crate::ui | ExportFile.filename | field | String	free-text	the file name the user typed; no rule validates it
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | SlashChoiceVec<&'static str>	free-text	the labels of the slash menu entries
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | InstanceId.0 | field | uuid::Uuid	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | OrgMemberResponse.has_shamir_share | field | bool	generic	a fact of the store, whether it holds a recovery share for the member, sent as the JSON bool
+ambre-core | src/export_file.rs | crate::export_file | ExportExtension::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename.0 | field | String	newtype-inner	the validated name the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::as_str() | ret | &str	newtype-inner	the validated name the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::new(text) | param | &str	newtype-inner	the text the constructor validates
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::named(stem) | param | &'static str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(title) | param | &str	free-text	the user title the name is cleaned from
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(fallback) | param | &'static str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
+ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
+ambre-core | src/export_file.rs | crate::export_file | clean_stem(room) | param | usize	math	byte budget of the stem
+ambre-core | src/export_file.rs | crate::export_file | FileBytes.0 | field | Vec<u8>	newtype-inner	the file bytes the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | FileBytes::as_bytes() | ret | &[u8]	newtype-inner	the file bytes the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | FileBytes::into_bytes() | ret | Vec<u8>	newtype-inner	the file bytes the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | FileBytes::new(bytes) | param | Vec<u8>	newtype-inner	the file bytes the newtype wraps
+ambre-core | src/export_file.rs | crate::export_file | FileBytes::is_empty() | ret | bool	generic	predicate
+ambre-logic | src/data.rs | crate::data | PDF_STEM | const | &str	free-text	a stem the suite names itself
+ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_STEM | const | &str	free-text	a stem the suite names itself

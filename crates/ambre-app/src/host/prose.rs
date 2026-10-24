@@ -744,10 +744,14 @@ impl ProseView {
 /// Hand a file the Logic thread wrote to the browser as a download, typed with
 /// its media type (`PROSE-IO-056`). A browser that refuses is logged: the
 /// document itself is untouched either way.
-fn download(filename: &str, media_type: &ambre_bus::MediaType, data: &[u8]) {
+fn download(
+    filename: &ambre_core::ExportFilename,
+    media_type: &ambre_bus::MediaType,
+    data: &ambre_core::FileBytes,
+) {
     use wasm_bindgen::JsCast;
     let parts = js_sys::Array::new();
-    parts.push(&js_sys::Uint8Array::from(data).buffer());
+    parts.push(&js_sys::Uint8Array::from(data.as_bytes()).buffer());
     let options = web_sys::BlobPropertyBag::new();
     options.set_type(media_type.as_str());
     let url = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
@@ -765,7 +769,7 @@ fn download(filename: &str, media_type: &ambre_bus::MediaType, data: &[u8]) {
         .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
     if let Some(anchor) = anchor {
         anchor.set_href(&url);
-        anchor.set_download(filename);
+        anchor.set_download(filename.as_str());
         anchor.click();
     }
     let _ = web_sys::Url::revoke_object_url(&url);

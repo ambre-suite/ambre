@@ -305,7 +305,10 @@ pub enum TrameEvent {
     /// holds the document, so it serializes the bytes; the UI Thread receives them
     /// and triggers the browser download. `filename` already carries the right
     /// extension.
-    ExportComplete { filename: String, data: Vec<u8> },
+    ExportComplete {
+        filename: ambre_core::ExportFilename,
+        data: ambre_core::FileBytes,
+    },
 
     /// A remote delta edited a protected range its author was not allowed to
     /// (`trame-cell-editing`). The delta IS applied (CRDT convergence is

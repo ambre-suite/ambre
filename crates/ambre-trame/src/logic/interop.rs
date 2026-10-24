@@ -16,20 +16,20 @@ impl TrameState {
     /// undo group.
     pub(super) fn import_csv(
         &mut self,
-        data: Vec<u8>,
+        data: ambre_core::FileBytes,
         delimiter: Option<CsvDelimiter>,
         header: HeaderRow,
         target_sheet_id: Option<SheetId>,
         start: CellPos,
     ) -> TrameOutcome {
-        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
+        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(data.as_bytes()));
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(delim.byte())
             // We skip the header ourselves so every record is read uniformly.
             .has_headers(false)
             // CSV rows of varying field counts are common in real exports.
             .flexible(true)
-            .from_reader(data.as_slice());
+            .from_reader(data.as_bytes());
         // An unreadable record is counted and reported, never dropped in
         // silence (`TRAME-IO-039`).
         let mut unreadable = 0u32;
@@ -191,9 +191,15 @@ impl TrameState {
             Some(LoroValue::String(s)) => s.to_string(),
             _ => sheet_id.to_string(),
         };
+        // A sheet name is user text, so the file name is cleaned of what a
+        // host refuses and bounded (`DOCFILE-019`).
         TrameOutcome::display_only(vec![TrameEvent::ExportComplete {
-            filename: format!("{name}.csv"),
-            data,
+            filename: ambre_core::ExportFilename::from_title(
+                &name,
+                "sheet",
+                ambre_core::ExportExtension::Csv,
+            ),
+            data: ambre_core::FileBytes::new(data),
         }])
     }
 

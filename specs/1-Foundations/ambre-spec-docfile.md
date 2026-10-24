@@ -31,6 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | `ambre_toile::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`; `ambre_trame::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted` -- asserted on the command's label, the one string a user reads before clicking, rather than on a tooltip or a dialog, so a surface that drops the warning cannot compile green | none | verified |
 | `DOCFILE-014` | `INV` | Sealing and opening a file MUST run in the Sync worker. | this spec section 5; `ARCH-004` | `ambre_logic::dispatch::tests::a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui`; `ambre_sync::integration::a_sealed_file_round_trips_through_the_service_plane` -- the worker's own half; cargo-deny -- `ambre-core`, `ambre-logic`, `ambre-toile` and `ambre-trame` declare no crypto dependency, so neither an application nor the container layer can seal anything | none | verified |
 | `DOCFILE-017` | `INV` | A sealed export MUST reach the user through the event its plaintext export already uses. | this spec section 5; `ARCH-004` | `ambre_logic::dispatch::tests::the_sealed_bytes_come_back_as_the_application_s_own_export_event`; `::a_failed_seal_answers_a_failure_and_no_file`; `::a_document_closed_mid_seal_drops_the_answer` -- the one event on all three outcomes | none | verified |
+| `DOCFILE-019` | `INV` | An export file name MUST NOT hold a path separator or a control character, and MUST NOT be `.` or `..`. It MUST fit 255 bytes, its extension whole. | this spec section 4 | `ambre_core::export_file::tests::a_path_separator_is_refused`; `::a_control_character_is_refused`; `::a_folder_reference_is_refused`; `::an_empty_name_is_refused`; `::a_name_past_the_bound_is_refused` -- the checked constructor; `::a_title_loses_what_a_host_refuses`; `::a_title_of_dots_takes_the_fallback`; `::a_long_title_is_cut_and_keeps_its_extension` -- a name derived from a title passes the same check; type-level -- every export event carries an `ExportFilename`, which only these two paths build | none | verified |
 
 ### 1.2 Read a `.ambre` file
 
@@ -61,7 +62,7 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 * **Boundary.** the container holds no key (`DOCFILE-006`), and it keeps the bytes it produces on a
   local disk (`DOCFILE-011`). The seal is the one place a key appears, in the Sync worker for one
   call, and no application links against a cipher (`DOCFILE-014`, `ARCH-004`).
-* **Verification.** 18 `verified`. This is pure byte handling on the host tier, so a test reaches
+* **Verification.** 19 `verified`. This is pure byte handling on the host tier, so a test reaches
   every rule the container makes about bytes. What the wire must not carry is held one crate away,
   at the single seam that hands a snapshot to Sync. The fixtures gate refuses a superseded version
   with no frozen artifact, and a history gate reads the commit that froze it.
@@ -364,6 +365,7 @@ seal and in `src/landing.rs` for an open.
 | Trigger | Behaviour |
 |---|---|
 | save a document to a file | the current state is written at the current version, whatever version it was opened from |
+| export a document whose title holds a separator or a control character | the file is named from the title without them, and a title of dots alone takes the application's own stem (`DOCFILE-019`) |
 | open a file | the header decides the application, then that application fills an empty state |
 | open a file another application wrote | the bytes are routed to that application, with no prompt and no conversion |
 | open a file no application claims | one error naming the type byte, and no partial document |

@@ -20,7 +20,7 @@ pub(crate) fn open_file_picker(
     accept: ambre_chrome::FileAccept,
     unreadable: &'static str,
     toasts: Toasts,
-    on_bytes: impl Fn(Vec<u8>) + Clone + 'static,
+    on_bytes: impl Fn(ambre_core::FileBytes) + Clone + 'static,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -43,7 +43,9 @@ pub(crate) fn open_file_picker(
         let on_bytes = on_bytes.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => on_bytes(js_sys::Uint8Array::new(&buf).to_vec()),
+                Ok(buf) => on_bytes(ambre_core::FileBytes::new(
+                    js_sys::Uint8Array::new(&buf).to_vec(),
+                )),
                 Err(_) => toasts.warning(unreadable),
             }
         });

@@ -38,6 +38,8 @@ pub mod email;
 pub mod encoded;
 pub mod envelope;
 pub mod error;
+/// The name and the bytes of a file an import reads or an export writes.
+pub mod export_file;
 pub mod fingerprint;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
 /// `fixtures` feature so no client build can reach it (I4).
@@ -111,6 +113,7 @@ pub use encoded::{
 };
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
+pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
 pub use fingerprint::KeyFingerprint;
 #[cfg(feature = "fixtures")]
 pub use fixtures::{

@@ -1041,8 +1041,8 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
     DOWNLOADS.with(|d| d.borrow_mut().clear());
 
     rig.answer(ToileEvent::ExportComplete {
-        filename: "deck.pdf".to_owned(),
-        data: b"%PDF-1.7".to_vec(),
+        filename: ambre_core::ExportFilename::named("deck", ambre_core::ExportExtension::Pdf),
+        data: ambre_core::FileBytes::new(b"%PDF-1.7".to_vec()),
         skipped: Vec::new(),
     });
     rig.frame();

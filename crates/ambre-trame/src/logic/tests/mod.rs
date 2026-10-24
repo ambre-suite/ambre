@@ -203,7 +203,7 @@ fn export_bytes(out: &TrameOutcome) -> Vec<u8> {
     out.display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::ExportComplete { data, .. } => Some(data.clone()),
+            TrameEvent::ExportComplete { data, .. } => Some(data.as_bytes().to_vec()),
             _ => None,
         })
         .expect("expected ExportComplete")

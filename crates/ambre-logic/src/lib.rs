@@ -258,7 +258,9 @@ impl DocState {
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
-            Some((filename, data)) => self.export_complete_event(filename, data.into_bytes()),
+            Some((filename, data)) => {
+                self.export_complete_event(filename, ambre_core::FileBytes::new(data.into_bytes()))
+            }
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
             None => self.export_failed_event("the document could not be read".to_owned()),
@@ -276,28 +278,25 @@ impl DocState {
     fn ambre_file_bytes(
         &self,
         document_id: DocumentId,
-    ) -> Option<(String, ambre_core::PlaintextContainer)> {
-        match self {
-            DocState::Trame(state) => Some((
-                "workbook.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id)?,
-            )),
-            DocState::Toile(state) => Some((
-                "board.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id)?,
-            )),
-            DocState::Prose(state) => Some((
-                "document.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id)?,
-            )),
-        }
+    ) -> Option<(ambre_core::ExportFilename, ambre_core::PlaintextContainer)> {
+        let (stem, plaintext) = match self {
+            DocState::Trame(state) => ("workbook", state.export_ambre_plaintext(document_id)?),
+            DocState::Toile(state) => ("board", state.export_ambre_plaintext(document_id)?),
+            DocState::Prose(state) => ("document", state.export_ambre_plaintext(document_id)?),
+        };
+        let filename = ambre_core::ExportFilename::named(stem, ambre_core::ExportExtension::Ambre);
+        Some((filename, plaintext))
     }
 
     /// A finished export, as the display event the owning application surfaces.
     /// The bytes are whatever the caller has: a plaintext container, or the
     /// sealed one the Sync worker returned. The surface downloads either the
     /// same way, and never tells them apart.
-    fn export_complete_event(&self, filename: String, data: Vec<u8>) -> AppEvent {
+    fn export_complete_event(
+        &self,
+        filename: ambre_core::ExportFilename,
+        data: ambre_core::FileBytes,
+    ) -> AppEvent {
         match self {
             DocState::Trame(_) => {
                 AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { filename, data })
@@ -900,7 +899,7 @@ struct LogicState {
 /// belongs to, and the name of the file the download will carry.
 struct PendingSeal {
     document_id: DocumentId,
-    filename: String,
+    filename: ambre_core::ExportFilename,
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).
@@ -1536,7 +1535,7 @@ mod pass_tests {
         LogicCommand::App {
             document_id,
             command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::ImportSvg {
-                bytes: drawing(n),
+                bytes: ambre_core::FileBytes::new(drawing(n)),
                 at: kurbo::Point::ZERO,
             }),
         }
@@ -1638,7 +1637,7 @@ mod pass_tests {
         let mut peer = ambre_toile::ToileState::new();
         let delta = peer
             .handle_command(ambre_bus::app::toile::ToileCommand::ImportSvg {
-                bytes: drawing(1),
+                bytes: ambre_core::FileBytes::new(drawing(1)),
                 at: kurbo::Point::new(-50.0, 0.0),
             })
             .update

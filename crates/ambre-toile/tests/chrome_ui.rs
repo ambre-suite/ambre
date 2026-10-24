@@ -900,8 +900,8 @@ fn a_finished_export_names_its_file() {
     owner.set();
     let root = mount_notified(ToileEvent::ExportComplete {
         skipped: Vec::new(),
-        filename: "board.svg".to_owned(),
-        data: Vec::new(),
+        filename: ambre_core::ExportFilename::named("board", ambre_core::ExportExtension::Svg),
+        data: ambre_core::FileBytes::default(),
     });
     let text = root
         .query_selector(".ambre-toast")

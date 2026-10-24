@@ -813,7 +813,7 @@ mod tests {
                             data, ..
                         }),
                     ..
-                } => Some(data),
+                } => Some(data.into_bytes()),
                 _ => None,
             })
             .expect("the export answered with bytes")
@@ -827,7 +827,9 @@ mod tests {
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
             | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
-            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => data,
+            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => {
+                data.into_bytes()
+            }
             other => panic!("the export answered with {other:?}"),
         }
     }
@@ -1121,7 +1123,7 @@ mod tests {
                 event:
                     AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }),
                 ..
-            } => Some(data),
+            } => Some(data.into_bytes()),
             _ => None,
         })
     }
@@ -1541,7 +1543,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Trame(TrameCommand::ImportCsv {
-                data: file.clone(),
+                data: ambre_core::FileBytes::new(file.clone()),
                 delimiter: None,
                 header: ambre_bus::HeaderRow::Absent,
                 target_sheet_id: None,
@@ -1782,7 +1784,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ImportImage {
-                bytes: solid_png(8, 8),
+                bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
                 mime: "image/png".into(),
                 at: kurbo::Point::ZERO,
             }),
@@ -2314,8 +2316,8 @@ mod tests {
         let doc_id = board_with_content(&mut state);
         match export_pdf_answer(&mut state, &ui_rx, doc_id) {
             ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data, .. } => {
-                assert_eq!(filename, "deck.pdf");
-                assert!(data.starts_with(b"%PDF-"), "a PDF header");
+                assert_eq!(filename.as_str(), "deck.pdf");
+                assert!(data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
             }
             other => panic!("expected the file, got {other:?}"),
         }

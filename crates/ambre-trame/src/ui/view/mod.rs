@@ -210,9 +210,9 @@ fn formula_input_focused() -> bool {
 /// does not leak. Best-effort: any missing DOM handle is logged and skipped
 /// (the export bytes are already computed, only the download is lost).
 #[cfg(target_arch = "wasm32")]
-fn trigger_download(filename: &str, data: &[u8]) {
+fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
     use wasm_bindgen::JsCast;
-    let array = js_sys::Uint8Array::from(data);
+    let array = js_sys::Uint8Array::from(data.as_bytes());
     let parts = js_sys::Array::new();
     parts.push(&array.buffer());
     let blob = match web_sys::Blob::new_with_u8_array_sequence(&parts) {
@@ -235,7 +235,7 @@ fn trigger_download(filename: &str, data: &[u8]) {
         .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
     if let Some(anchor) = anchor {
         anchor.set_href(&url);
-        anchor.set_download(filename);
+        anchor.set_download(filename.as_str());
         anchor.click();
     }
     let _ = web_sys::Url::revoke_object_url(&url);
@@ -244,7 +244,7 @@ fn trigger_download(filename: &str, data: &[u8]) {
 /// Host-build stub: there is no DOM to download into outside the browser. Kept
 /// so the exhaustive `dispatch_trame` compiles in headless tests.
 #[cfg(not(target_arch = "wasm32"))]
-fn trigger_download(_filename: &str, _data: &[u8]) {}
+fn trigger_download(_filename: &ambre_core::ExportFilename, _data: &ambre_core::FileBytes) {}
 
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
 /// A deferred cell-edit commit (applied at the next paint, after the editor
