@@ -243,6 +243,154 @@ pub struct IrRun {
 }
 ```
 
+**The fields the Word, HTML and PDF filters add.** Not built: they join the intermediate form with
+the reader or the writer that reads them, under their Stories (`ambre-roadmap.md` E5). The
+Markdown writer has no syntax for any of them, which is why the form above keeps a flag where
+these keep the construct. Each struct below lists only what it gains, and a flag gives way to the
+field that carries its construct:
+
+```rust
+// ambre-prose/src/interop/mod.rs -- not built
+pub struct ProseIr {
+    // ...
+    pub styles:   Vec<IrStyle>,
+    /// Comment threads, out of band from the blocks: a run carries the thread id.
+    pub comments: Vec<IrComment>,
+}
+
+pub struct IrMeta {
+    // ...
+    /// BCP 47, as the document's `meta.locale` stores it.
+    pub lang:         Option<LangTag>,
+    /// Replaces `paged`.
+    pub page:         Option<IrPage>,
+    /// Replace `bands`. The `first` pair is set only when the document uses a distinct first
+    /// page.
+    pub header:       Option<IrHeaderFooter>,
+    pub header_first: Option<IrHeaderFooter>,
+    pub footer:       Option<IrHeaderFooter>,
+    pub footer_first: Option<IrHeaderFooter>,
+}
+
+pub struct IrPage {
+    pub width:         Mm,
+    pub height:        Mm,
+    pub margin_top:    Mm,
+    pub margin_bottom: Mm,
+    pub margin_left:   Mm,
+    pub margin_right:  Mm,
+    pub orientation:   Orientation,
+}
+
+/// One paragraph of runs plus its alignment. A dynamic field is a run, not a marker.
+pub struct IrHeaderFooter { pub align: Align, pub runs: Vec<IrRun> }
+
+pub enum IrBlock {
+    /// `style_id` and `para_style` replace `styled`.
+    Paragraph { style_id: Option<StyleId>, para_style: IrParaStyle, runs: Vec<IrRun> },
+    Heading   { level: StoredLevel, numbered: bool, runs: Vec<IrRun> },
+    /// `col_widths` and `style` join `rows`; a cell's spans replace `merged`.
+    Table     { col_widths: Vec<Pt>, style: IrTableStyle, rows: Vec<IrTableRow> },
+    Image     { content_hash: Option<ContentHash>, src_url: Option<LinkUrl>, alt: String,
+                width: Option<ImagePx>, height: Option<ImagePx>,
+                align: Option<IrImageAlign>, caption: Option<String> },
+    Toc       { max_level: HeadingLevel, numbered: bool },
+    // ...
+}
+
+pub struct IrTableStyle {
+    /// Promotes the first row to a header row.
+    pub header_row:  bool,
+    pub banded_rows: bool,
+}
+
+/// The fields below replace `styled`.
+pub struct IrTableCell {
+    pub rowspan:      RowCount,
+    pub colspan:      ColCount,
+    pub bg:           Option<Rgb>,
+    pub borders:      bool,
+    pub border_color: Option<Rgb>,
+    pub padding:      Option<Pt>,
+    pub valign:       VAlign,
+    // ...
+}
+
+pub struct IrRun {
+    // ...
+    /// Foreground: a run is always opaque. These four replace `styled`.
+    pub color:          Option<Rgb>,
+    pub background:     Option<Rgb>,
+    pub font_size:      Option<FontSize>,
+    pub font_family:    Option<FontFamily>,
+    /// Replaces `comment`.
+    pub comment_id:     Option<Uuid>,
+    /// The suggested insertion and the suggested deletion, mirroring the marks `si` and `sd`.
+    /// These four replace `suggestion`.
+    pub suggest_ins:    Option<Uuid>,
+    pub suggest_del:    Option<Uuid>,
+    pub suggest_author: Option<DisplayName>,
+    pub suggest_date:   Option<Timestamp>,
+    /// Set inside a header or a footer alone.
+    pub field:          Option<HeaderField>,
+    /// Replaces `cross_ref`.
+    pub cross_ref:      Option<(Uuid, CrossRefKind)>,
+}
+
+pub struct IrParaStyle {
+    pub align:          Option<Align>,
+    pub indent_first:   Option<Pt>,
+    pub indent_left:    Option<Pt>,
+    pub indent_right:   Option<Pt>,
+    pub space_before:   Option<Pt>,
+    pub space_after:    Option<Pt>,
+    /// The three modes the document stores (`features/ambre-spec-prose-inline-styles.md`).
+    pub line_height:    Option<LineHeight>,
+    pub keep_together:  bool,
+    pub keep_with_next: bool,
+}
+
+/// The character defaults a named style carries: formatting alone, and none of the
+/// content-bearing fields of a run.
+pub struct IrRunStyle {
+    pub bold:          Option<bool>,
+    pub italic:        Option<bool>,
+    pub underline:     Option<bool>,
+    pub strikethrough: Option<bool>,
+    pub superscript:   Option<bool>,
+    pub subscript:     Option<bool>,
+    pub font_family:   Option<FontFamily>,
+    pub font_size:     Option<FontSize>,
+    pub color:         Option<Rgb>,
+    pub background:    Option<Rgb>,
+}
+
+pub struct IrStyle {
+    pub id:         StyleId,
+    pub name:       String,
+    pub para_style: IrParaStyle,
+    pub run_style:  IrRunStyle,
+}
+
+/// A thread. The commented range is the `cm` mark on the runs, never a field here.
+pub struct IrComment {
+    pub id:         Uuid,
+    pub resolved:   bool,
+    pub created_at: Timestamp,
+    /// The opening body first, then the replies.
+    pub replies:    Vec<IrReply>,
+}
+
+pub struct IrReply {
+    pub id:         Uuid,
+    pub author:     DisplayName,
+    pub created_at: Timestamp,
+    pub text:       String,
+}
+
+pub enum IrImageAlign { Block, Left, Right, Center }
+```
+
 **The report, and the two error kinds.** A report is what the user reads after a conversion that
 finished. An error is what a caller gets when no document could be produced at all:
 
