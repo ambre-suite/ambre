@@ -282,7 +282,7 @@ pub struct FontSpec {
     pub family: FontFamily,
     /// The size, or automatic: a note's body then tracks its card.
     pub size: FontSizeChoice,
-    pub weight: u16, // CSS weight scale, 400 = regular, 700 = bold
+    pub weight: ambre_core::FontWeight,
     pub italic: bool,
     pub underline: bool,
     pub strikethrough: bool,
@@ -293,7 +293,7 @@ impl Default for FontSpec {
         Self {
             family: FontFamily::Sans,
             size: FontSizeChoice::DEFAULT,
-            weight: 400,
+            weight: ambre_core::FontWeight::REGULAR,
             italic: false,
             underline: false,
             strikethrough: false,
@@ -536,7 +536,7 @@ impl ElementStyle {
         // The bold toggle writes 700 or 400. A sent non-bold weight must not
         // collapse an element's own non-bold weight (500, 600), which the
         // surface folds to "not bold" and never shows exactly.
-        if sent.font.weight < 700 && self.font.weight < 700 {
+        if !sent.font.weight.is_bold() && !self.font.weight.is_bold() {
             out.font.weight = self.font.weight;
         }
         out
@@ -2480,7 +2480,7 @@ mod tests {
             font: FontSpec {
                 family: FontFamily::Serif,
                 size: FontSizeChoice::from_whole_points(Some(24)),
-                weight: 600,
+                weight: ambre_core::FontWeight::new(600).unwrap(),
                 italic: true,
                 underline: false,
                 strikethrough: true,

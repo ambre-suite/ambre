@@ -608,7 +608,7 @@ fn paint_text<S: DrawSurface>(
         font_size,
         wrap_w,
         Alignment::Start,
-        e.style.font.weight >= 700,
+        e.style.font.weight.is_bold(),
         e.style.font.italic,
         Some(e.style.font.family.label()),
         false,

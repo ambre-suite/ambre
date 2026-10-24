@@ -5167,7 +5167,12 @@ mod tests {
             .spans(channel)
             .into_iter()
             .map(|span| {
-                let look = (span.weight, span.italic, span.family, span.color);
+                let look = (
+                    span.weight.map(ambre_core::FontWeight::get),
+                    span.italic,
+                    span.family,
+                    span.color,
+                );
                 (
                     span.range.to_usize_range(),
                     look,

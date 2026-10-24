@@ -110,7 +110,7 @@ impl StyleEdit {
             // The choice holds no negative size, so none reaches the style
             // (`TOILE-UI-180`).
             StyleEdit::Size(s) => style.font.size = s,
-            StyleEdit::Bold(b) => style.font.weight = if b { 700 } else { 400 },
+            StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of_bold(b),
             StyleEdit::Italic(i) => style.font.italic = i,
             StyleEdit::Underline(u) => style.font.underline = u,
             StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
@@ -185,7 +185,7 @@ pub fn build_floatbar(
                 mixed.text_color |= s.text_color != b.text_color;
                 mixed.font_family |= s.font.family != b.font.family;
                 mixed.font_size |= s.font.size != b.font.size;
-                mixed.bold |= (s.font.weight >= 700) != (b.font.weight >= 700);
+                mixed.bold |= (s.font.weight.is_bold()) != (b.font.weight.is_bold());
                 mixed.italic |= s.font.italic != b.font.italic;
                 mixed.underline |= s.font.underline != b.font.underline;
                 mixed.strikethrough |= s.font.strikethrough != b.font.strikethrough;
@@ -495,7 +495,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0x4455_66ff)),
             font: ambre_bus::app::toile::FontSpec {
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: 700,
+                weight: ambre_core::FontWeight::BOLD,
                 italic: true,
                 underline: false,
                 strikethrough: true,
@@ -537,9 +537,9 @@ mod tests {
             ..ElementStyle::default()
         };
         StyleEdit::Bold(false).apply_to(&mut s);
-        assert_eq!(s.font.weight, 400);
+        assert_eq!(s.font.weight, ambre_core::FontWeight::REGULAR);
         StyleEdit::Bold(true).apply_to(&mut s);
-        assert_eq!(s.font.weight, 700);
+        assert_eq!(s.font.weight, ambre_core::FontWeight::BOLD);
         // A negative size is refused, never clamped to automatic: no choice
         // holds one, and a decoded one does not decode.
         assert!(
@@ -572,7 +572,7 @@ mod tests {
             font: FontSpec {
                 family: FontFamily::Other("Comic Sans MS".to_owned()),
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: 600,
+                weight: ambre_core::FontWeight::new(600).unwrap(),
                 italic: true,
                 ..Default::default()
             },
@@ -633,7 +633,7 @@ mod tests {
             font: FontSpec {
                 family: FontFamily::Sans,
                 size: FontSizeChoice::from_whole_points(Some(12)),
-                weight: 400,
+                weight: ambre_core::FontWeight::REGULAR,
                 italic: false,
                 underline: false,
                 strikethrough: false,
@@ -646,7 +646,7 @@ mod tests {
             font: FontSpec {
                 family: FontFamily::Serif,
                 size: FontSizeChoice::from_whole_points(Some(24)),
-                weight: 700,
+                weight: ambre_core::FontWeight::BOLD,
                 italic: true,
                 underline: true,
                 strikethrough: true,

@@ -924,7 +924,7 @@ mod inner_tests {
             corner: 12.0,
             shadow: Some(shadow),
             font: ambre_bus::app::toile::FontSpec {
-                weight: 600,
+                weight: ambre_core::FontWeight::new(600).unwrap(),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -934,7 +934,7 @@ mod inner_tests {
             corner: 0.0,
             shadow: None,
             font: ambre_bus::app::toile::FontSpec {
-                weight: 400,
+                weight: ambre_core::FontWeight::REGULAR,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -955,10 +955,10 @@ mod inner_tests {
         // The hidden fields survive; the shown fill changes on both.
         assert_eq!(st.style_of(&a).corner, 12.0);
         assert!(st.style_of(&a).shadow.is_some());
-        assert_eq!(st.style_of(&a).font.weight, 600);
+        assert_eq!(st.style_of(&a).font.weight.get(), 600);
         assert_eq!(st.style_of(&b).corner, 0.0);
         assert!(st.style_of(&b).shadow.is_none());
-        assert_eq!(st.style_of(&b).font.weight, 400);
+        assert_eq!(st.style_of(&b).font.weight, ambre_core::FontWeight::REGULAR);
         assert_eq!(st.style_of(&a).fill, Some(Rgba::from_bits(0x0000_ffff)));
         assert_eq!(st.style_of(&b).fill, Some(Rgba::from_bits(0x0000_ffff)));
     }

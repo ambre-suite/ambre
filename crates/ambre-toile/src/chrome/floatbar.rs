@@ -74,7 +74,7 @@ pub fn SelectionToolbar(
             text_color.set(m.base.text_color);
             font_family.set(m.base.font.family.picker_label().map(str::to_owned));
             font_size.set(m.base.font.size);
-            bold.set(m.base.font.weight >= 700);
+            bold.set(m.base.font.weight.is_bold());
             italic.set(m.base.font.italic);
             underline.set(m.base.font.underline);
             strikethrough.set(m.base.font.strikethrough);

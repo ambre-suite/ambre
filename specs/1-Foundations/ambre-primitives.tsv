@@ -364,7 +364,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | FontSizeChoice::whole_points(
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.italic | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.strikethrough | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.underline | field | bool	generic	named flag, setter of a flag, or predicate
-ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec.weight | field | u16	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | InitContent::Text.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::from_bytes(bytes) | param | &[u8]	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | LinkTarget::to_bytes() | ret | Vec<u8>	generic	byte codec
@@ -730,12 +729,10 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.family | field | 
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.italic | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.strikethrough | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.underline | field | bool	math	named state or style flag, local
-ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.weight | field | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.family | field | Option<String>	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.indent | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.italic | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextSpan.underline | field | bool	math	named state or style flag, local
-ambre-canvas | src/editor.rs | crate::editor | TextSpan.weight | field | Option<u16>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dx) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dy) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	generic	predicate result
@@ -967,7 +964,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.family | field 
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.indent | field | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.italic | field | bool	math	named state or style flag, local
 ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.underline | field | bool	math	named state or style flag, local
-ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.weight | field | Option<u16>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_hits | field | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_misses | field | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.scale | field | f32	math	geometry, layout, GPU or count arithmetic
@@ -1292,6 +1288,13 @@ ambre-core | src/font.rs | crate::font | FontSize::points() | ret | f32	newtype-
 ambre-core | src/font.rs | crate::font | FontSize::whole_points() | ret | u16	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | InvalidFontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	newtype-inner	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
+ambre-core | src/font.rs | crate::font | <FontWeight as TryFrom<u16>>::try_from(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/font.rs | crate::font | FontWeight.0 | field | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/font.rs | crate::font | FontWeight::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/font.rs | crate::font | FontWeight::is_bold() | ret | bool	generic	predicate result
+ambre-core | src/font.rs | crate::font | FontWeight::new(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/font.rs | crate::font | FontWeight::of_bold(bold) | param | bool	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/font.rs | crate::font | InvalidFontWeight.0 | field | u16	newtype-inner	the refused value an error reports
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
@@ -1992,7 +1995,6 @@ ambre-murmure | src/list.rs | crate::list | window(count) | param | usize	math	l
 ambre-murmure | src/list.rs | crate::list | window(height) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/list.rs | crate::list | window(measure) | param | impl FnMut(usize)->f32	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | BLOCK_INDENT | const | u16	math	local count/index/counter
-ambre-murmure | src/look.rs | crate::look | BOLD_WEIGHT | const | u16	math	local count/index/counter
 ambre-murmure | src/look.rs | crate::look | CODE_FAMILY | const | &str	free-text	UI text/label const
 ambre-murmure | src/look.rs | crate::look | LIST_DOT | const | f64	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | QUOTE_RULE | const | (f64,f64)	math	layout geometry in logical px

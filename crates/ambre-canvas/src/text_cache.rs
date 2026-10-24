@@ -80,7 +80,7 @@ impl std::hash::Hash for CacheKey {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpanShape {
     pub range: ByteSpan,
-    pub weight: Option<u16>,
+    pub weight: Option<ambre_core::FontWeight>,
     pub italic: bool,
     pub family: Option<String>,
     pub underline: bool,
@@ -184,7 +184,7 @@ pub(crate) fn push_shape(
         return false;
     }
     if let Some(weight) = shape.weight {
-        let weight = FontWeight::new(f32::from(weight));
+        let weight = FontWeight::new(f32::from(weight.get()));
         builder.push(StyleProperty::FontWeight(weight), range.clone());
     }
     if shape.italic {
@@ -557,7 +557,7 @@ mod tests {
         let mut cache = TextCache::new(1.0);
         let bold = SpanShape {
             range: ByteSpan::from_usize_range(0..4),
-            weight: Some(700),
+            weight: Some(ambre_core::FontWeight::BOLD),
             ..SpanShape::default()
         };
         let faces_of = |layout: &parley::Layout<ambre_draw::Brush>| {

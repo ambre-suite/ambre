@@ -103,7 +103,7 @@ pub enum EditIntent {
 /// `family` is a family label resolved through [`registered_family_name`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextEditorStyle {
-    pub weight: u16,
+    pub weight: ambre_core::FontWeight,
     pub italic: bool,
     pub family: String,
     pub base_size: f32,
@@ -123,7 +123,7 @@ pub struct TextSpan {
     /// The bytes of the buffer the span covers.
     pub range: ByteSpan,
     /// A weight in place of the pinned one.
-    pub weight: Option<u16>,
+    pub weight: Option<ambre_core::FontWeight>,
     pub italic: bool,
     /// A family label in place of the pinned one, resolved the same way.
     pub family: Option<String>,
@@ -544,7 +544,7 @@ impl TextEditor {
         let face = registered_family_name(Some(self.style.family.as_str()));
         [
             StyleProperty::FontSize(self.style.base_size * zoom as f32),
-            StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight))),
+            StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight.get()))),
             StyleProperty::FontStyle(if self.style.italic {
                 FontStyle::Italic
             } else {
@@ -877,7 +877,7 @@ mod tests {
 
     fn style() -> TextEditorStyle {
         TextEditorStyle {
-            weight: 400,
+            weight: ambre_core::FontWeight::REGULAR,
             italic: false,
             family: "Sans".to_owned(),
             base_size: 16.0,
@@ -1154,7 +1154,7 @@ mod tests {
         ed.flush(&mut fcx, 1000.0, 1.0);
         let plain = caret_x(&mut ed);
         let bold = TextSpan {
-            weight: Some(700),
+            weight: Some(ambre_core::FontWeight::BOLD),
             ..span(0..20)
         };
         ed.set_spans(&mut fcx, vec![bold]);
@@ -1245,7 +1245,7 @@ mod tests {
         ed.flush(&mut fcx, 1000.0, 1.0);
         let plain = ed.layout().expect("a layout").full_width();
         let bold = TextSpan {
-            weight: Some(700),
+            weight: Some(ambre_core::FontWeight::BOLD),
             ..span(0..20)
         };
         ed.set_spans(&mut fcx, vec![bold]);
@@ -1362,7 +1362,7 @@ mod tests {
             ids.len()
         };
         let bold = TextSpan {
-            weight: Some(700),
+            weight: Some(ambre_core::FontWeight::BOLD),
             ..span(0..2)
         };
         let italic = TextSpan {
@@ -1417,7 +1417,7 @@ mod tests {
         let mut ed = TextEditor::new("abcd", style());
         ed.flush(&mut fcx, 1000.0, 1.0);
         let pinned = vec![TextSpan {
-            weight: Some(700),
+            weight: Some(ambre_core::FontWeight::BOLD),
             ..span(2..4)
         }];
         ed.set_spans(&mut fcx, pinned.clone());

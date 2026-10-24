@@ -27,9 +27,6 @@ const QUOTE_RULE: (f64, f64) = (2.0, 4.0);
 /// The side of a list's dot, centred in the indent.
 const LIST_DOT: f64 = 3.0;
 
-/// The weight of a bold run.
-const BOLD_WEIGHT: u16 = 700;
-
 /// What `style` shapes over the bytes `range`.
 pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
     let mut shape = SpanShape {
@@ -37,7 +34,7 @@ pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
         ..SpanShape::default()
     };
     match style {
-        TextStyle::Bold => shape.weight = Some(BOLD_WEIGHT),
+        TextStyle::Bold => shape.weight = Some(ambre_core::FontWeight::BOLD),
         TextStyle::Italic => shape.italic = true,
         TextStyle::Code | TextStyle::CodeBlock => shape.family = Some(CODE_FAMILY.to_owned()),
         TextStyle::Link(_) => shape.underline = true,

@@ -110,7 +110,7 @@ pub fn style_scope_for(selection: &[ElementId], selected: &[DisplayElement]) -> 
         mixed.text_color |= s.text_color != base.text_color;
         mixed.font_family |= s.font.family != base.font.family;
         mixed.font_size |= s.font.size != base.font.size;
-        mixed.bold |= (s.font.weight >= 700) != (base.font.weight >= 700);
+        mixed.bold |= (s.font.weight.is_bold()) != (base.font.weight.is_bold());
         mixed.italic |= s.font.italic != base.font.italic;
         mixed.underline |= s.font.underline != base.font.underline;
         mixed.strikethrough |= s.font.strikethrough != base.font.strikethrough;

@@ -128,7 +128,7 @@ pub fn typing_line(names: &[Option<ambre_core::DisplayName>]) -> Option<String> 
 /// The style of a draft: the face and the size of a message body.
 fn body_style(color: Color) -> TextEditorStyle {
     TextEditorStyle {
-        weight: 400,
+        weight: ambre_core::FontWeight::REGULAR,
         italic: false,
         family: FAMILY.to_owned(),
         base_size: FONT_BODY,

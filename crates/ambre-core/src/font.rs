@@ -87,6 +87,83 @@ impl From<FontSize> for f32 {
     }
 }
 
+/// A font weight on the CSS scale, from 1 to 1000: 400 is regular, 700 is
+/// bold.
+///
+/// The type serializes as the bare `u16` it wraps, and a decoded weight off
+/// the scale is refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "u16", into = "u16")]
+pub struct FontWeight(u16);
+
+impl FontWeight {
+    /// The regular weight, 400.
+    pub const REGULAR: Self = Self(400);
+    /// The bold weight, 700.
+    pub const BOLD: Self = Self(700);
+
+    /// The weight `value`, or `None` off the CSS scale of 1 to 1000.
+    #[must_use]
+    pub const fn new(value: u16) -> Option<Self> {
+        if value >= 1 && value <= 1000 {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// The bold weight when `bold` holds, the regular one otherwise: what a
+    /// bold toggle writes.
+    #[must_use]
+    pub const fn of_bold(bold: bool) -> Self {
+        if bold { Self::BOLD } else { Self::REGULAR }
+    }
+
+    /// Whether the weight draws as bold: 700 or heavier.
+    #[must_use]
+    pub const fn is_bold(self) -> bool {
+        self.0 >= Self::BOLD.0
+    }
+
+    /// The weight on the CSS scale.
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+impl Default for FontWeight {
+    fn default() -> Self {
+        Self::REGULAR
+    }
+}
+
+impl std::fmt::Display for FontWeight {
+    /// The weight on the CSS scale, without a unit: `700` for bold.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The error of a decoded font weight off the CSS scale of 1 to 1000.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a font weight lies on the CSS scale of 1 to 1000, not {0}")]
+pub struct InvalidFontWeight(pub u16);
+
+impl TryFrom<u16> for FontWeight {
+    type Error = InvalidFontWeight;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        Self::new(value).ok_or(InvalidFontWeight(value))
+    }
+}
+
+impl From<FontWeight> for u16 {
+    fn from(weight: FontWeight) -> Self {
+        weight.0
+    }
+}
+
 /// A serde adapter for an `Option<FontSize>` stored as whole points, a
 /// `u16`, for a record whose layout predates [`FontSize`].
 ///
@@ -116,7 +193,19 @@ pub mod whole_points {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocPx, FontSize};
+    use super::{DocPx, FontSize, FontWeight};
+
+    /// A weight lies on the CSS scale, and bold starts at 700.
+    #[test]
+    fn a_font_weight_lies_on_the_css_scale() {
+        assert_eq!(FontWeight::new(0), None);
+        assert_eq!(FontWeight::new(1001), None);
+        assert_eq!(FontWeight::new(700), Some(FontWeight::BOLD));
+        assert!(FontWeight::new(800).is_some_and(FontWeight::is_bold));
+        assert!(!FontWeight::new(600).is_some_and(FontWeight::is_bold));
+        assert_eq!(FontWeight::of_bold(false), FontWeight::REGULAR);
+        assert!(FontWeight::try_from(0).is_err());
+    }
 
     #[test]
     fn twelve_points_are_sixteen_pixels() {

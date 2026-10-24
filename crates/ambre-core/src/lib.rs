@@ -113,7 +113,7 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
-pub use font::{FontSize, InvalidFontSize};
+pub use font::{FontSize, FontWeight, InvalidFontSize, InvalidFontWeight};
 pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,

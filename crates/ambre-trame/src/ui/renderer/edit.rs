@@ -35,7 +35,7 @@ pub fn draw_edit<S: DrawSurface>(
         .map(|c| (c.bold, c.italic))
         .unwrap_or((false, false));
     editor.core.set_style(TextEditorStyle {
-        weight: if bold { 700 } else { 400 },
+        weight: ambre_core::FontWeight::of_bold(bold),
         italic,
         family: "Sans".to_owned(),
         base_size: BODY_SIZE,
