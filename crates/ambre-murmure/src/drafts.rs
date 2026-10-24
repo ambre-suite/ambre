@@ -59,6 +59,12 @@ impl DraftRow {
 /// test.
 pub type DraftSink = Rc<dyn Fn(DraftWrite)>;
 
+ambre_core::define_generation! {
+    /// The number of loads and losses a draft shelf went through: what a
+    /// view repaints for when it moves.
+    pub struct ShelfVersion;
+}
+
 /// The drafts the device keeps, shared by every region of the page and the
 /// page's relay. A clone is the same shelf.
 #[derive(Clone, Default)]
@@ -76,7 +82,7 @@ struct Shelf {
     losses: Vec<Loss>,
     /// Counts the loads and the losses, which a view repaints for. A draft
     /// put moves it not: the region that typed it already shows it.
-    version: u64,
+    version: ShelfVersion,
     sink: Option<DraftSink>,
 }
 
@@ -120,7 +126,7 @@ impl DraftShelf {
     pub fn load(&self, user: UserId, rows: Vec<(DraftKey, DraftRow)>) {
         let mut shelf = self.0.borrow_mut();
         shelf.user = Some(user);
-        shelf.version += 1;
+        shelf.version = shelf.version.next();
         for (key, row) in rows {
             if let (Some(of), Some(draft)) = (parse_key(user, &key), decode(&row)) {
                 shelf.drafts.entry(of).or_insert(draft);
@@ -160,7 +166,7 @@ impl DraftShelf {
         shelf.drafts.retain(|of, _| of.channel() != channel);
         shelf.unsaved.retain(|of| of.channel() != channel);
         shelf.losses.push(Loss::Channel(channel));
-        shelf.version += 1;
+        shelf.version = shelf.version.next();
         if let Some(user) = shelf.user {
             let lower = row_key(user, DraftOf::Channel(channel));
             let upper = DraftKey::new(format!("{lower}{SEPARATOR}\u{10FFFF}"));
@@ -176,12 +182,12 @@ impl DraftShelf {
         shelf.drafts.clear();
         shelf.unsaved.clear();
         shelf.losses.push(Loss::All);
-        shelf.version += 1;
+        shelf.version = shelf.version.next();
         shelf.write(DraftWrite::DeleteAll);
     }
 
     /// Moves at each load and each loss.
-    pub fn version(&self) -> u64 {
+    pub fn version(&self) -> ShelfVersion {
         self.0.borrow().version
     }
 

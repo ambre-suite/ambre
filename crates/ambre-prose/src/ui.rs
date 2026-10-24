@@ -46,6 +46,12 @@ pub use crate::view::column::Viewport;
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
 pub const RECOUNT_DELAY_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
+ambre_core::define_generation! {
+    /// The number a draft is at, moved on every change. A paragraph shaped
+    /// from the draft can so tell it still reads what it was shaped from.
+    pub struct DraftGeneration;
+}
+
 /// What this view drew and the layout in force does not carry yet: the text
 /// typed and the text deleted. It is held apart from the document, never
 /// written into a second copy of it.
@@ -62,7 +68,7 @@ pub struct DraftBuffer {
     edits: Vec<DraftEdit>,
     /// Moves on every change, so a paragraph shaped from the draft can tell
     /// it still reads what it was shaped from.
-    generation: u64,
+    generation: DraftGeneration,
 }
 
 /// One command sent inside a block, and whether the Logic thread took it.
@@ -97,7 +103,7 @@ impl DraftBuffer {
 
     /// A number that moves whenever what the draft shows does.
     #[must_use]
-    pub fn generation(&self) -> u64 {
+    pub fn generation(&self) -> DraftGeneration {
         self.generation
     }
 
@@ -147,7 +153,7 @@ impl DraftBuffer {
     }
 
     fn bump(&mut self) {
-        self.generation = self.generation.wrapping_add(1);
+        self.generation = self.generation.next();
     }
 
     /// The command acknowledged as `seq` was taken as drawn

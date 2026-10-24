@@ -45,6 +45,7 @@ pub mod fingerprint;
 pub mod fixtures;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
+pub mod generation;
 pub mod id;
 /// Index families: a position, a count, a difference and a span, written by
 /// [`define_index!`].

@@ -253,7 +253,7 @@ pub struct MurmureView {
     /// The format bar this region last handed the page.
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
-    shelf_seen: u64,
+    shelf_seen: crate::drafts::ShelfVersion,
     dirty: bool,
 }
 
@@ -318,7 +318,7 @@ impl MurmureView {
             ticked: None,
             listed: None,
             barred: None,
-            shelf_seen: 0,
+            shelf_seen: crate::drafts::ShelfVersion::ZERO,
             dirty: true,
         }
     }

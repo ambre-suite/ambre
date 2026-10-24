@@ -44,9 +44,15 @@ impl ToastKind {
     }
 }
 
+ambre_core::define_generation! {
+    /// The number a toast is raised under, so a dismissal names that toast
+    /// alone.
+    pub struct ToastId;
+}
+
 #[derive(Clone)]
 struct Toast {
-    id: u64,
+    id: ToastId,
     message: String,
     kind: ToastKind,
 }
@@ -56,7 +62,7 @@ struct Toast {
 #[derive(Clone, Copy)]
 pub struct Toasts {
     items: RwSignal<Vec<Toast>>,
-    next_id: RwSignal<u64>,
+    next_id: RwSignal<ToastId>,
 }
 
 impl Default for Toasts {
@@ -69,7 +75,7 @@ impl Toasts {
     pub fn new() -> Self {
         Self {
             items: RwSignal::new(Vec::new()),
-            next_id: RwSignal::new(0),
+            next_id: RwSignal::new(ToastId::ZERO),
         }
     }
 
@@ -89,7 +95,7 @@ impl Toasts {
     /// Raise a toast and schedule its auto-dismiss.
     pub fn push(self, kind: ToastKind, message: impl Into<String>) {
         let id = self.next_id.get_untracked();
-        self.next_id.set(id + 1);
+        self.next_id.set(id.next());
         self.items.update(|v| {
             v.push(Toast {
                 id,
@@ -105,7 +111,7 @@ impl Toasts {
         );
     }
 
-    fn dismiss(self, id: u64) {
+    fn dismiss(self, id: ToastId) {
         self.items.update(|v| v.retain(|t| t.id != id));
     }
 }

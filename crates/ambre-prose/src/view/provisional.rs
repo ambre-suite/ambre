@@ -36,7 +36,12 @@ pub struct Splitting {
 
 /// What the provisional runs were shaped from: the draft, the layout, the
 /// split and the text held behind it.
-type Key = (u64, LayoutVersion, Option<Splitting>, String);
+type Key = (
+    crate::ui::DraftGeneration,
+    LayoutVersion,
+    Option<Splitting>,
+    String,
+);
 
 /// The provisional runs, and what they were shaped from.
 #[derive(Clone, Debug, Default)]
