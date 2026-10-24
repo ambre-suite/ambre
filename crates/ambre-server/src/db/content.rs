@@ -682,7 +682,7 @@ pub async fn insert_media(
     document_id: &ambre_core::DocumentId,
     uploaded_by: &ambre_core::UserId,
     content_hash: &ambre_core::ContentHash,
-    size_bytes: ambre_core::ByteSize,
+    size: ambre_core::ByteSize,
     s3_key: &ambre_core::ObjectKey,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -700,7 +700,7 @@ pub async fn insert_media(
     .bind(content_hash.as_str())
     .bind(did)
     .bind(uid)
-    .bind(i64::try_from(size_bytes.0).unwrap_or(i64::MAX))
+    .bind(i64::try_from(size.0).unwrap_or(i64::MAX))
     .bind(s3_key.as_str())
     .execute(&mut *tx)
     .await?;

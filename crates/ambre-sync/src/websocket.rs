@@ -13,7 +13,7 @@ const REPLAY_RETRY_LIMIT: u32 = 5;
 
 /// The delay before asking again after the `stop`-th stop of one replay,
 /// counted from one. Past the budget there is none (`SYNC-154`).
-fn replay_retry_delay_ms(stop: u32) -> Option<ambre_core::Millis> {
+fn replay_retry_delay(stop: u32) -> Option<ambre_core::Millis> {
     (1..=REPLAY_RETRY_LIMIT)
         .contains(&stop)
         .then(|| ambre_core::Millis(REPLAY_RETRY_BASE.0 << (stop - 1)))
@@ -301,7 +301,7 @@ impl SyncState {
             _ => 1,
         };
         tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
-        let delay = replay_retry_delay_ms(stop);
+        let delay = replay_retry_delay(stop);
         if delay.is_some() {
             self.replay_ticket = self.replay_ticket.next();
         }
@@ -313,12 +313,12 @@ impl SyncState {
                 ticket: self.replay_ticket,
             },
         );
-        if let Some(delay_ms) = delay {
+        if let Some(delay) = delay {
             let retry = SyncEvent::ReplayRetry {
                 document_id,
                 ticket: self.replay_ticket,
             };
-            self.arm_event_timer(retry, delay_ms);
+            self.arm_event_timer(retry, delay);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
             let message = format!("replay of {document_id:?} stopped {stop} times");
             // A first replay given up is an open that failed: no ready would
@@ -1650,7 +1650,7 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay_ms};
+    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay};
     use crate::http::{SecretToken, TokenPair};
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
@@ -2102,7 +2102,7 @@ mod tests {
     #[test]
     fn the_replay_retry_delay_doubles_up_to_its_budget() {
         let delays: Vec<Option<u64>> = (0..=6)
-            .map(|stop| replay_retry_delay_ms(stop).map(|d| d.0))
+            .map(|stop| replay_retry_delay(stop).map(|d| d.0))
             .collect();
         assert_eq!(
             delays,

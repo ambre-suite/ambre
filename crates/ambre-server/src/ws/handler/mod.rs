@@ -44,10 +44,10 @@ pub async fn ws_upgrade(
     // (axum defaults to 64 MiB). The delta ciphertext cap is enforced per-message
     // in `handle_update`. This is the outer envelope guard, sized with headroom
     // for the wire framing (version byte, postcard tag, public_data) around a
-    // `delta_max_bytes` ciphertext.
+    // `delta_max_size` ciphertext.
     let max_frame = state
         .config
-        .delta_max_bytes
+        .delta_max_size
         .as_len()
         .saturating_add(64 * 1024);
     let ws = ws.max_message_size(max_frame).max_frame_size(max_frame);

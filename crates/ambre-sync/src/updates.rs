@@ -32,7 +32,7 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay_ms(failure: u32) -> Option<ambre_core::Millis> {
+fn resend_retry_delay(failure: u32) -> Option<ambre_core::Millis> {
     (1..=RESEND_RETRY_LIMIT)
         .contains(&failure)
         .then(|| ambre_core::Millis(RESEND_RETRY_BASE.0 << (failure - 1)))
@@ -1254,14 +1254,14 @@ impl SyncState {
             return;
         };
         self.resend_ticket = ticket;
-        match resend_retry_delay_ms(failure) {
-            Some(delay_ms) => {
+        match resend_retry_delay(failure) {
+            Some(delay) => {
                 tracing::warn!("[Sync] delta failed doc={document_id} (failure {failure})");
                 let retry = SyncEvent::ResendRetry {
                     document_id,
                     ticket,
                 };
-                self.arm_event_timer(retry, delay_ms);
+                self.arm_event_timer(retry, delay);
             }
             None => {
                 self.hold_refused(document_id, &signature, HoldCause::Failed(failure));
@@ -3680,12 +3680,12 @@ mod tests {
     /// the budget the document holds it, reported once as a refused edit.
     #[test]
     fn a_delta_failing_past_the_budget_holds_its_document() {
-        assert_eq!(resend_retry_delay_ms(1), Some(RESEND_RETRY_BASE));
+        assert_eq!(resend_retry_delay(1), Some(RESEND_RETRY_BASE));
         assert_eq!(
-            resend_retry_delay_ms(2),
+            resend_retry_delay(2),
             Some(ambre_core::Millis(2 * RESEND_RETRY_BASE.0))
         );
-        assert_eq!(resend_retry_delay_ms(RESEND_RETRY_LIMIT + 1), None);
+        assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT + 1), None);
 
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         state.signing_key = Some(sk);

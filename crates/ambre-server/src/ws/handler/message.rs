@@ -349,10 +349,10 @@ pub(crate) async fn handle_update(
     // That is the same storage/cost abuse the media and snapshot caps close, on
     // the hot path.
     let cipher_len = ambre_core::ByteSize::of_len(update.ciphertext.len());
-    if cipher_len > state.config.delta_max_bytes {
+    if cipher_len > state.config.delta_max_size {
         let detail = format!(
             "delta ciphertext {} bytes exceeds max {}",
-            cipher_len.0, state.config.delta_max_bytes.0
+            cipher_len.0, state.config.delta_max_size.0
         );
         refuse_delta(outbound_tx, &update, RefusalCode::PayloadTooLarge, &detail).await;
         return;
@@ -571,7 +571,7 @@ async fn store_index_row(
     let author = &update.public_data.pub_key;
     let snapshot_id = &update.public_data.snapshot_id;
     let clock = update.public_data.clock;
-    if ambre_core::ByteSize::of_len(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
+    if ambre_core::ByteSize::of_len(wire.len()) < crate::hot_tail::INLINE_DELTA_MAX_SIZE {
         let inline = db::insert_inline_update(
             &state.db,
             &doc_id,
@@ -611,7 +611,7 @@ pub(crate) async fn handle_ephemeral(
     // blob is tiny. This mirrors the `handle_update` delta cap for the
     // fire-and-forget path. An oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
-    if ambre_core::ByteSize::of_len(eph.ciphertext.len()) > state.config.ephemeral_max_bytes {
+    if ambre_core::ByteSize::of_len(eph.ciphertext.len()) > state.config.ephemeral_max_size {
         return;
     }
 
@@ -1336,7 +1336,7 @@ mod ephemeral_binding_tests {
         };
         // Tighten the cap so the test payload is unambiguously oversized.
         Arc::get_mut(&mut state).unwrap().config = Arc::new(crate::state::Config {
-            ephemeral_max_bytes: ambre_core::ByteSize(8),
+            ephemeral_max_size: ambre_core::ByteSize(8),
             ..Default::default()
         });
         let doc_id = DocumentId::new();
@@ -1450,7 +1450,7 @@ mod delta_size_cap_tests {
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
         let config = crate::state::Config {
-            delta_max_bytes: ambre_core::ByteSize(delta_max_bytes),
+            delta_max_size: ambre_core::ByteSize(delta_max_bytes),
             ..Default::default()
         };
         Some(Arc::new(AppState {
@@ -2530,7 +2530,7 @@ mod hot_tail_tests {
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 0, "an inline delta takes no pending entry");
 
-        let large = crate::hot_tail::INLINE_DELTA_MAX_BYTES.as_len() + 1024;
+        let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE.as_len() + 1024;
         handle_update(
             &state,
             &mut conn,

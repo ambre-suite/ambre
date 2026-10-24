@@ -1400,7 +1400,7 @@ mod handler_tests {
         for (configured, minted) in [(24 * 3600, 900), (60, 60)] {
             let state = AppState {
                 config: Arc::new(Config {
-                    access_ttl_secs: ambre_core::Seconds(configured),
+                    access_ttl: ambre_core::Seconds(configured),
                     ..Config::default()
                 }),
                 ..(*base).clone()
@@ -2943,8 +2943,8 @@ mod handler_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_blob_above_its_kind_cap_is_refused(pool: sqlx::PgPool) {
         let state = test_app_state_presigning(pool).await;
-        let media_cap = state.config.media_max_bytes.0;
-        let snapshot_cap = state.config.snapshot_max_bytes.0;
+        let media_cap = state.config.media_max_size.0;
+        let snapshot_cap = state.config.snapshot_max_size.0;
         let setup = build_test_router(state.clone());
         let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;

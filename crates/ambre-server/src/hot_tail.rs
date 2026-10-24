@@ -12,7 +12,7 @@ use crate::state::AppState;
 
 /// A delta whose sealed envelope is under this size lives in its index row
 /// (`ambre-spec-budgets.md`, the inline delta size row).
-pub const INLINE_DELTA_MAX_BYTES: ByteSize = ByteSize(64 * 1024);
+pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize(64 * 1024);
 
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
@@ -23,7 +23,7 @@ pub const INLINE_CAP: InlineCap = InlineCap {
 
 /// How long a document goes without a write before its whole tail moves out
 /// (`ambre-spec-budgets.md section 8`; `SRV-152`).
-pub const IDLE_SECS: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
+pub const IDLE_AFTER: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
 
 /// How many idle documents one pass moves.
 const IDLE_PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
@@ -134,7 +134,7 @@ pub fn spawn_move(state: &std::sync::Arc<AppState>, document_id: ambre_core::Doc
 
 /// Moves the whole tail of every document idle past the delay (`SRV-152`).
 pub async fn move_idle_tails(state: &AppState) {
-    let idle = match crate::db::idle_inline_documents(&state.db, IDLE_SECS, IDLE_PASS_LIMIT).await {
+    let idle = match crate::db::idle_inline_documents(&state.db, IDLE_AFTER, IDLE_PASS_LIMIT).await {
         Ok(idle) => idle,
         Err(e) => {
             tracing::error!("idle tails read failed: {e}");

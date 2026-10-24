@@ -139,7 +139,7 @@ pub async fn issue_session(
     signing_pubkey: Option<ambre_core::PublicKey>,
 ) -> Result<TokenPair, AppError> {
     let now = crate::s3::unix_now();
-    let access_ttl = access_lifetime(state.config.access_ttl_secs);
+    let access_ttl = access_lifetime(state.config.access_ttl);
     let claims = Claims {
         sub: user_id,
         spk: signing_pubkey
@@ -161,7 +161,7 @@ pub async fn issue_session(
             user_id,
             signing_pubkey,
         },
-        state.config.refresh_ttl_secs,
+        state.config.refresh_ttl,
     )
     .await?;
 

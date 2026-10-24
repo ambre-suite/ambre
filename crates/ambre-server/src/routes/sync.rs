@@ -295,12 +295,13 @@ pub async fn create_snapshot(
     Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
 }
 
-/// Request for a presigned snapshot upload URL. `size_bytes` is the size of the
-/// encrypted snapshot blob. It is validated against `snapshot_max_bytes`, and
+/// Request for a presigned snapshot upload URL. `size` is the size of the
+/// encrypted snapshot blob. It is validated against `snapshot_max_size`, and
 /// bound into the presigned PUT URL so the upload cannot exceed it.
 #[derive(serde::Deserialize)]
 pub struct SnapshotUploadUrlRequest {
-    pub size_bytes: ambre_core::ByteSize,
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::ByteSize,
 }
 
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
@@ -326,11 +327,11 @@ pub async fn snapshot_upload_url(
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.snapshot_max_bytes
+    if req.size == ambre_core::ByteSize(0) || req.size > state.config.snapshot_max_size
     {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
-            req.size_bytes.0, state.config.snapshot_max_bytes.0
+            req.size.0, state.config.snapshot_max_size.0
         )));
     }
 
@@ -340,8 +341,8 @@ pub async fn snapshot_upload_url(
         &state.s3,
         &state.s3_bucket,
         &key,
-        state.config.presigned_url_ttl_secs,
-        req.size_bytes,
+        state.config.presigned_url_ttl,
+        req.size,
     )
     .await?;
     Ok(axum::Json(SnapshotUploadUrlResponse {
@@ -383,7 +384,7 @@ pub async fn snapshot_download_url(
         &state.s3,
         &state.s3_bucket,
         &snap.s3_key,
-        state.config.presigned_url_ttl_secs,
+        state.config.presigned_url_ttl,
     )
     .await?;
     Ok(axum::Json(SnapshotDownloadUrlResponse {

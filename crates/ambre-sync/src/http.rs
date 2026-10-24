@@ -323,7 +323,7 @@ pub(crate) fn bearer(token: &SecretToken) -> Zeroizing<String> {
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
 /// connection or a stalled proxy would block the Sync worker's request future
 /// forever (the browser `fetch` has no default timeout).
-const REQUEST_TIMEOUT_MS: ambre_core::Millis = ambre_core::Millis(30_000);
+const REQUEST_TIMEOUT: ambre_core::Millis = ambre_core::Millis(30_000);
 
 /// The method of one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -377,7 +377,7 @@ pub(crate) struct Outgoing {
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, Vec<u8>)>,
     /// How long the transport waits before it aborts the request.
-    pub timeout_ms: ambre_core::Millis,
+    pub timeout: ambre_core::Millis,
 }
 
 impl Outgoing {
@@ -389,7 +389,7 @@ impl Outgoing {
             url,
             bearer: None,
             body: None,
-            timeout_ms: REQUEST_TIMEOUT_MS,
+            timeout: REQUEST_TIMEOUT,
         }
     }
 
@@ -472,7 +472,7 @@ impl Transport for Fetch {
         // down the moment it is created. gloo-net copies it into the request,
         // so it may be dropped here while `fetch` still holds it.
         let signal = web_sys::AbortSignal::timeout_with_u32(
-            u32::try_from(request.timeout_ms.0).unwrap_or(u32::MAX),
+            u32::try_from(request.timeout.0).unwrap_or(u32::MAX),
         );
         let mut builder = gloo_net::http::RequestBuilder::new(request.url.expose())
             .method(request.method.gloo())
@@ -799,10 +799,10 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
     // The deadline is raced here, not left to the transport alone, so a
     // request that never answers is abandoned on every transport (`SYNC-071`).
     let send = std::pin::pin!(transport.send(request));
-    let deadline = std::pin::pin!(transport.elapse(request.timeout_ms));
+    let deadline = std::pin::pin!(transport.elapse(request.timeout));
     let answer = match select(send, deadline).await {
         Either::Left((answer, _)) => answer,
-        Either::Right(((), _)) => Err(TransportError::Deadline(request.timeout_ms)),
+        Either::Right(((), _)) => Err(TransportError::Deadline(request.timeout)),
     };
     answer.map_err(|reason| HttpError::NoAnswer {
         method: request.method,
@@ -1892,7 +1892,8 @@ pub(crate) struct DocumentMemberEntry {
 #[derive(Serialize)]
 pub(crate) struct UploadUrlRequest {
     pub content_hash: ambre_core::ContentHash,
-    pub size_bytes: ambre_core::ByteSize,
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::ByteSize,
 }
 
 #[derive(Deserialize)]
@@ -1916,7 +1917,8 @@ pub(crate) struct DownloadUrlResponse {
 #[derive(Serialize)]
 pub(crate) struct ConfirmUploadRequest {
     pub content_hash: ambre_core::ContentHash,
-    pub size_bytes: ambre_core::ByteSize,
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::ByteSize,
 }
 
 /// A transport that answers from a script and keeps every request it was
@@ -2161,7 +2163,7 @@ mod tests {
             (replay.method, &replay.url, &replay.body),
             (first.method, &first.url, &first.body)
         );
-        assert!(sent.iter().all(|r| r.timeout_ms == REQUEST_TIMEOUT_MS));
+        assert!(sent.iter().all(|r| r.timeout == REQUEST_TIMEOUT));
     }
 
     /// `SYNC-177`: a sign-out revokes the refresh token at the relay, under
@@ -2302,10 +2304,10 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT_MS.0)
+            format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT.0)
         );
         assert_eq!(transport.calls(), [(Method::Post, url.to_string())]);
-        assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT_MS]);
+        assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT]);
     }
 
     /// Each answer reads as what the caller acts on. A refusal keeps the
@@ -2571,11 +2573,11 @@ mod tests {
         let expected = ["content_hash", "size_bytes"];
         let ask = UploadUrlRequest {
             content_hash: ambre_core::ContentHash("ab".repeat(32)),
-            size_bytes: ambre_core::ByteSize(64),
+            size: ambre_core::ByteSize(64),
         };
         let confirm = ConfirmUploadRequest {
             content_hash: ambre_core::ContentHash("ab".repeat(32)),
-            size_bytes: ambre_core::ByteSize(64),
+            size: ambre_core::ByteSize(64),
         };
         assert_eq!(
             fields(serde_json::to_value(&ask).expect("serializes")),

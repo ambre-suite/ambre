@@ -40,7 +40,7 @@ pub async fn delete_document(
 
 /// When the second sweep of a delete begun now is due (`SRV-057`).
 pub fn sweep_due(state: &AppState) -> ambre_core::UnixSeconds {
-    let window = crate::s3::late_write_window(state.config.presigned_url_ttl_secs);
+    let window = crate::s3::late_write_window(state.config.presigned_url_ttl);
     crate::s3::unix_now().plus(window)
 }
 

@@ -17,9 +17,10 @@ use crate::state::AppState;
 #[derive(serde::Deserialize)]
 pub struct UploadUrlRequest {
     pub content_hash: ambre_core::ContentHash,
-    /// Declared size of the encrypted blob. Validated against `media_max_bytes`
+    /// Declared size of the encrypted blob. Validated against `media_max_size`
     /// and bound into the presigned PUT URL so the upload cannot exceed it.
-    pub size_bytes: ambre_core::ByteSize,
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::ByteSize,
 }
 #[derive(serde::Serialize)]
 pub struct UploadUrlResponse {
@@ -46,10 +47,10 @@ pub async fn media_upload_url(
     // Reject an oversized blob before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.media_max_bytes {
+    if req.size == ambre_core::ByteSize(0) || req.size > state.config.media_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size_bytes.0, state.config.media_max_bytes.0
+            req.size.0, state.config.media_max_size.0
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -57,8 +58,8 @@ pub async fn media_upload_url(
         &state.s3,
         &state.s3_bucket,
         &key,
-        state.config.presigned_url_ttl_secs,
-        req.size_bytes,
+        state.config.presigned_url_ttl,
+        req.size,
     )
     .await?;
     Ok(axum::Json(UploadUrlResponse {
@@ -102,7 +103,7 @@ pub async fn media_download_url(
         &state.s3,
         &state.s3_bucket,
         &key,
-        state.config.presigned_url_ttl_secs,
+        state.config.presigned_url_ttl,
     )
     .await?;
     Ok(axum::Json(DownloadUrlResponse { download_url: url }))
@@ -114,7 +115,8 @@ pub async fn media_download_url(
 #[derive(serde::Deserialize)]
 pub struct ConfirmUploadRequest {
     pub content_hash: ambre_core::ContentHash,
-    pub size_bytes: ambre_core::ByteSize,
+    #[serde(rename = "size_bytes")]
+    pub size: ambre_core::ByteSize,
 }
 
 pub async fn media_confirm_upload(
@@ -139,10 +141,10 @@ pub async fn media_confirm_upload(
     }
     // Mirror the upload-url cap so a recorded `media` row can never claim a size
     // the upload path would have refused.
-    if req.size_bytes == ambre_core::ByteSize(0) || req.size_bytes > state.config.media_max_bytes {
+    if req.size == ambre_core::ByteSize(0) || req.size > state.config.media_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size_bytes.0, state.config.media_max_bytes.0
+            req.size.0, state.config.media_max_size.0
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -151,7 +153,7 @@ pub async fn media_confirm_upload(
         &doc_id,
         &s.user_id,
         &req.content_hash,
-        req.size_bytes,
+        req.size,
         &key,
     )
     .await?;

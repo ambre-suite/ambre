@@ -38,20 +38,20 @@ pub struct AppState {
 pub struct Config {
     /// Access-token (JWT) lifetime in seconds (default 15 min). Short: it is not
     /// revocable before expiry, so the window of a leaked token is bounded.
-    pub access_ttl_secs: ambre_core::Seconds,
+    pub access_ttl: ambre_core::Seconds,
     /// Refresh-token lifetime in seconds (default 30 days). Stored in Redis and
     /// revocable (logout / rotation).
-    pub refresh_ttl_secs: ambre_core::Seconds,
+    pub refresh_ttl: ambre_core::Seconds,
     /// Presigned S3 URL lifetime in seconds (default 15 min).
-    pub presigned_url_ttl_secs: ambre_core::Seconds,
+    pub presigned_url_ttl: ambre_core::Seconds,
     /// Maximum size in bytes of a single encrypted media blob (default 100 MiB).
     /// The declared size is validated against this cap, and then bound into the
     /// presigned PUT URL (`Content-Length`). A member cannot upload an
     /// arbitrarily large object to the bucket.
-    pub media_max_bytes: ambre_core::ByteSize,
+    pub media_max_size: ambre_core::ByteSize,
     /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
-    /// Bound into the presigned PUT URL exactly like `media_max_bytes`.
-    pub snapshot_max_bytes: ambre_core::ByteSize,
+    /// Bound into the presigned PUT URL exactly like `media_max_size`.
+    pub snapshot_max_size: ambre_core::ByteSize,
     /// Maximum size in bytes of a single encrypted delta (`Update`) ciphertext
     /// carried inline over the WebSocket (default 4 MiB). A CRDT delta is small;
     /// a large blob belongs on the media path. Bounding this stops an authorized
@@ -59,7 +59,7 @@ pub struct Config {
     /// (S3 + Redis pending) and fanned out to every subscriber. That is the same
     /// storage/cost abuse the media and snapshot caps close, on the hot write
     /// path.
-    pub delta_max_bytes: ambre_core::ByteSize,
+    pub delta_max_size: ambre_core::ByteSize,
     /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: crate::s3::EnvPrefix,
     /// The registration with the `google` provider, `None` when provider
@@ -90,9 +90,9 @@ pub struct Config {
     /// Maximum size in bytes of an `Ephemeral` (presence/cursor) ciphertext
     /// carried over the WebSocket (default 64 KiB). A presence blob is tiny: a
     /// cursor position and a display name. This bounds the fire-and-forget
-    /// broadcast + Redis presence-hash write, mirroring `delta_max_bytes` for the
+    /// broadcast + Redis presence-hash write, mirroring `delta_max_size` for the
     /// durable `Update` path.
-    pub ephemeral_max_bytes: ambre_core::ByteSize,
+    pub ephemeral_max_size: ambre_core::ByteSize,
 }
 
 /// Whether the server runs in development mode, read from `DEV_MODE`.
@@ -177,19 +177,19 @@ message_limit!(
 impl Default for Config {
     fn default() -> Self {
         Self {
-            access_ttl_secs: ambre_core::Seconds(900),
-            refresh_ttl_secs: ambre_core::Seconds(30 * 24 * 3600),
-            presigned_url_ttl_secs: ambre_core::Seconds(900),
-            media_max_bytes: ambre_core::ByteSize(100 * 1024 * 1024),
-            snapshot_max_bytes: ambre_core::ByteSize(50 * 1024 * 1024),
-            delta_max_bytes: ambre_core::ByteSize(4 * 1024 * 1024),
+            access_ttl: ambre_core::Seconds(900),
+            refresh_ttl: ambre_core::Seconds(30 * 24 * 3600),
+            presigned_url_ttl: ambre_core::Seconds(900),
+            media_max_size: ambre_core::ByteSize(100 * 1024 * 1024),
+            snapshot_max_size: ambre_core::ByteSize(50 * 1024 * 1024),
+            delta_max_size: ambre_core::ByteSize(4 * 1024 * 1024),
             s3_env_prefix: crate::s3::EnvPrefix::new("dev-ambre".to_owned()),
             oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: RatePerSec::DEFAULT,
             ws_msg_burst: Burst::DEFAULT,
-            ephemeral_max_bytes: ambre_core::ByteSize(64 * 1024),
+            ephemeral_max_size: ambre_core::ByteSize(64 * 1024),
         }
     }
 }

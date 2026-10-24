@@ -203,9 +203,9 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
     );
-    let window_ms = ambre_core::Millis::from_duration(window.to_duration());
+    let window_span = ambre_core::Millis::from_duration(window.to_duration());
     let verdict =
-        match check_sliding_window(&state, &category, &bucket, now, window_ms, max_req).await {
+        match check_sliding_window(&state, &category, &bucket, now, window_span, max_req).await {
             Ok(verdict) => verdict,
             Err(e) if category.fail_closed() => {
                 tracing::error!("Rate limiter Redis error on auth tier: {e:?}, failing closed");
@@ -225,7 +225,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             }
         };
 
-    let reset = now.plus(window_ms).to_unix_seconds().0;
+    let reset = now.plus(window_span).to_unix_seconds().0;
 
     let Verdict::Allowed { remaining } = verdict else {
         return (
