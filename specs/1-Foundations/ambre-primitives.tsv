@@ -4321,7 +4321,7 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move(y) | para
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up(x) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up(y) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/view.rs | crate::ui::view | ZOOM_PER_WHEEL_PX | const | f64	math	wheel tuning constant (see G1 for the unit bug)
+ambre-toile | src/ui/view.rs | crate::ui::view | ZOOM_PER_WHEEL_PX | const | f64	math	log-zoom rate per wheel pixel: a step zooms by exp(-dy * rate)
 ambre-toile | src/ui/view.rs | crate::ui::view | canvas_client_offset() | ret | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	math	local state flag or value, not a mode selector

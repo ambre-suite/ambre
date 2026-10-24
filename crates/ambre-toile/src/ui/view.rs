@@ -113,7 +113,8 @@ fn send_session(
     }
 }
 
-/// One notch of the mouse wheel maps to this zoom factor (wheel / pinch).
+/// The zoom rate per pixel of wheel `dy`, a wheel notch and a pinch alike: a
+/// step zooms by the factor `exp(-dy * ZOOM_PER_WHEEL_PX)`.
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
