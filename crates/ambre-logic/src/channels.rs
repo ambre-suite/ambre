@@ -4849,15 +4849,15 @@ mod tests {
         drain(&ui);
 
         let (author, reporter) = (UserId::new(), UserId::new());
-        let dropped = |state: &mut LogicState, refinalize| {
+        let dropped = |state: &mut LogicState, after| {
             state.handle_logic_event(LogicEvent::SnapshotDropped {
                 document_id: closing.document_id(),
                 author: Some(author),
                 reporter: Some(reporter),
-                refinalize,
+                after,
             });
         };
-        dropped(&mut state, false);
+        dropped(&mut state, ambre_core::AfterDrop::Keep);
         let shown = channel_events(&ui);
         assert!(
             matches!(
@@ -4870,7 +4870,7 @@ mod tests {
         command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
         assert!(finalizes(&sync).is_empty(), "another member seals it");
 
-        dropped(&mut state, true);
+        dropped(&mut state, ambre_core::AfterDrop::Refinalize);
         finalize_at_one(&mut state, &sync, channel_id, closing, at(2));
         assert!(
             !drain(&sync)
@@ -5464,7 +5464,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::SegmentFinalizeFailed {
             channel_id,
             segment: closing,
-            withdrawn: false,
+            end: ambre_core::FinalizeEnd::Failed,
             message: "HTTP 500".into(),
         });
         command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
@@ -5480,7 +5480,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::SegmentFinalizeFailed {
             channel_id,
             segment: closing,
-            withdrawn: true,
+            end: ambre_core::FinalizeEnd::Withdrawn,
             message: "the relay refused an edit".into(),
         });
         command(

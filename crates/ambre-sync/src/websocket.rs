@@ -103,7 +103,7 @@ impl SyncState {
         for (doc_id, last_seq) in self
             .documents
             .iter()
-            .filter(|(_, d)| d.server_created)
+            .filter(|(_, d)| d.existence == crate::Existence::OnRelay)
             .map(|(id, d)| (*id, d.last_seq))
             .collect::<Vec<_>>()
         {
@@ -358,7 +358,7 @@ impl SyncState {
             return;
         }
         let cursor = match self.documents.get(&document_id) {
-            Some(doc) if doc.server_created => Some(doc.last_seq),
+            Some(doc) if doc.existence == crate::Existence::OnRelay => Some(doc.last_seq),
             Some(_) => None,
             None => self.light_cursor(document_id),
         };
@@ -455,10 +455,14 @@ impl SyncState {
     /// Hands a close with `code`, or an error with none, to the lifecycle,
     /// then carries out what it decided.
     fn socket_closed(&mut self, code: Option<CloseCode>) {
-        let wanted = !self.documents.is_empty();
+        let demand = if self.documents.is_empty() {
+            crate::lifecycle::Demand::Unneeded
+        } else {
+            crate::lifecycle::Demand::Needed
+        };
         let next = self
             .lifecycle
-            .closed(code, wanted, (self.clock)(), Self::jitter());
+            .closed(code, demand, (self.clock)(), Self::jitter());
         self.follow(next);
     }
 
@@ -632,7 +636,7 @@ impl SyncState {
                 covered_seq,
                 held_snapshot,
                 doc_type,
-                server_created,
+                existence,
                 signing_keys,
                 role,
                 rotation_owed,
@@ -645,7 +649,7 @@ impl SyncState {
                         document_id,
                         doc_key,
                         doc_type,
-                        server_created,
+                        existence,
                     ))
                     .into_mut();
                 doc_state.chain = crate::chain::Chain::new(document_id, links);
@@ -704,7 +708,7 @@ impl SyncState {
                 }
                 // Only subscribe over WS if the document actually exists
                 // server-side; a local-only doc subscribes after lazy creation.
-                let awaiting_replay = server_created && self.ws_connected();
+                let awaiting_replay = existence == crate::Existence::OnRelay && self.ws_connected();
                 if awaiting_replay {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
                     // Subscribing alone does not replay history (the server only
@@ -746,7 +750,7 @@ impl SyncState {
                 // so flush any buffered pre-session updates here -- they will take
                 // the lazy-create path. A server-side doc instead flushes from the
                 // `MissingUpdates` handler, after its clock has caught up.
-                if !server_created {
+                if existence == crate::Existence::LocalOnly {
                     self.flush_pre_session_updates(document_id);
                 }
             }
@@ -885,8 +889,12 @@ impl SyncState {
                 // A segment no longer closing, or whose snapshot another
                 // member sealed again, needs no lease from this client.
                 Err(error) => {
-                    let withdrawn = error.is_conflict();
-                    self.finalize_failed(channel_id, segment, withdrawn, &error.to_string());
+                    let end = if error.is_conflict() {
+                        ambre_core::FinalizeEnd::Withdrawn
+                    } else {
+                        ambre_core::FinalizeEnd::Failed
+                    };
+                    self.finalize_failed(channel_id, segment, end, &error.to_string());
                 }
             },
             SyncEvent::SegmentFinalized {
@@ -899,7 +907,12 @@ impl SyncState {
                     segment,
                 }),
                 Err(error) => {
-                    self.finalize_failed(channel_id, segment, false, &error.to_string());
+                    self.finalize_failed(
+                        channel_id,
+                        segment,
+                        ambre_core::FinalizeEnd::Failed,
+                        &error.to_string(),
+                    );
                 }
             },
             SyncEvent::FoldLeaseAnswered {
@@ -945,7 +958,7 @@ impl SyncState {
                 self.new_spaces.remove(&document_id);
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {
-                        doc_state.server_created = true;
+                        doc_state.existence = crate::Existence::OnRelay;
                         doc_state.creating = false;
                         std::mem::take(&mut doc_state.pending_updates)
                     }
@@ -1255,7 +1268,7 @@ impl SyncState {
                 if self
                     .documents
                     .get(&document_id)
-                    .is_some_and(|doc| doc.server_created)
+                    .is_some_and(|doc| doc.existence == crate::Existence::OnRelay)
                 {
                     self.handle_list_document_members(None, document_id);
                 }
@@ -1344,7 +1357,7 @@ impl SyncState {
                 document_id,
                 author,
                 reporter,
-                refinalize,
+                after,
                 ..
             } => {
                 // Both keys resolve as a cursor's does: the member list names
@@ -1362,7 +1375,12 @@ impl SyncState {
                     document_id,
                     author: doc_state.resolve_ephemeral_author(&author),
                     reporter: doc_state.resolve_ephemeral_author(&reporter),
-                    refinalize: refinalize && !own,
+                    // The author would seal the same snapshot again.
+                    after: if own {
+                        ambre_core::AfterDrop::Keep
+                    } else {
+                        after
+                    },
                 });
             }
 
@@ -1642,7 +1660,7 @@ mod tests {
         let id = DocumentId::new();
         state.documents.insert(
             id,
-            SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, false),
+            SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::LocalOnly),
         );
         (state, rx)
     }
@@ -1820,7 +1838,7 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
-        let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
+        let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::OnRelay);
         doc.last_seq = Seq(7);
         state.documents.insert(id, doc);
         state
@@ -1873,7 +1891,7 @@ mod tests {
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
             let id = DocumentId::new();
-            let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Trame, true);
+            let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Trame, crate::Existence::OnRelay);
             doc.last_seq = Seq(last);
             state.documents.insert(id, doc);
             cursors.insert(id, Seq(last));
@@ -1881,7 +1899,7 @@ mod tests {
         let local = DocumentId::new();
         state.documents.insert(
             local,
-            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, false),
+            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, crate::Existence::LocalOnly),
         );
 
         let (tx, wire) = ambre_bus::conduit::unbounded();
@@ -1940,7 +1958,7 @@ mod tests {
 
         let (mut state, _rx) = with_open_document();
         let id = *state.documents.keys().next().unwrap();
-        state.documents.get_mut(&id).unwrap().server_created = true;
+        state.documents.get_mut(&id).unwrap().existence = crate::Existence::OnRelay;
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
@@ -1991,7 +2009,7 @@ mod tests {
         let (mut state, rx) = with_open_document();
         let id = *state.documents.keys().next().unwrap();
         let doc = state.documents.get_mut(&id).unwrap();
-        doc.server_created = true;
+        doc.existence = crate::Existence::OnRelay;
         doc.last_seq = Seq(7);
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);

@@ -130,7 +130,7 @@ pub use media::{
     ByteSize, ContentHash, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
 };
 pub use member_count::{MemberCount, MemberCountError};
-pub use mode::{HistoryStep, StepDirection, Visibility};
+pub use mode::{AfterDrop, FinalizeEnd, HistoryStep, StepDirection, Visibility};
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };

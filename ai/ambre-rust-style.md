@@ -29,6 +29,15 @@
   4. Its name, or the single call that reads it, states its meaning.
 
   When one condition fails, the value takes a type. When you are not sure, give it a type.
+* **A `bool` that a caller writes as a literal is an `enum`.** At `f(true)` the reader sees `true`,
+  never what it picks. Such a parameter becomes an `enum` of two variants, each named for what it
+  picks. Tests are callers too.
+  * A predicate returns a `bool`: `is_empty()` reads as a question, and its answer stays a `bool`.
+  * A `bool` that crosses a thread, crate, wire or store and names a mode or a state is an `enum`
+    too. The variant that was `false` comes first, so a postcard frame reads the same.
+  * A store column that records a fact may stay a `bool`. Its allowlist line names the fact.
+  * Any other `bool` is a fact that selects no mode. Its allowlist line is `generic`, never
+    `math`: a `bool` is not arithmetic.
 * **A newtype is complete, so its callers never unwrap it.**
   * **Validation.** A value with a rule has a fallible constructor, and no other way in.
     Deserialisation goes through that constructor.

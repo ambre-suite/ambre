@@ -642,7 +642,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             author: Some(user),
             reporter: None,
-            refinalize: true,
+            after: ambre_core::AfterDrop::Refinalize,
         },
         LogicEvent::ThreadActivity { document_id: doc },
         LogicEvent::RemoteEphemeral {
@@ -779,7 +779,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentFinalizeFailed {
             channel_id: chan,
             segment,
-            withdrawn: true,
+            end: ambre_core::FinalizeEnd::Withdrawn,
             message: "refused".to_owned(),
         },
         LogicEvent::FoldLeaseAnswered {

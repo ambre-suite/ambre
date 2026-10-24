@@ -40,3 +40,25 @@ pub enum Visibility {
     /// Listed in the catalogue of its space, which any member may join.
     Public,
 }
+
+/// How a failed attempt to finalize a segment leaves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum FinalizeEnd {
+    /// The attempt failed, and this copy asks again later.
+    #[default]
+    Failed,
+    /// This copy holds an edit the relay refused, so it never finalizes the
+    /// segment: another member does.
+    Withdrawn,
+}
+
+/// What a member does with a segment once the relay dropped one of its
+/// snapshots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum AfterDrop {
+    /// Nothing: the snapshot was not the final one, or this copy sealed it.
+    #[default]
+    Keep,
+    /// Finalize the segment again: the final snapshot was dropped.
+    Refinalize,
+}

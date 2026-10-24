@@ -81,7 +81,7 @@ impl SyncState {
         if let Some(doc_state) = self
             .documents
             .get_mut(&document_id)
-            .filter(|d| !d.server_created)
+            .filter(|d| d.existence == crate::Existence::LocalOnly)
         {
             doc_state.pending_uploads.push((id, data));
             self.trigger_lazy_create(document_id);
@@ -503,7 +503,7 @@ mod tests {
         for byte in [0x31, 0x32] {
             let document_id = DocumentId::new();
             let key = DocumentKey::from_array([byte; 32]);
-            let doc_state = SyncDocumentState::new(document_id, key.clone(), DocType::Toile, true);
+            let doc_state = SyncDocumentState::new(document_id, key.clone(), DocType::Toile, crate::Existence::OnRelay);
             state.documents.insert(document_id, doc_state);
             state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
             let answer = rx.try_iter().find_map(|event| match event {
@@ -547,7 +547,7 @@ mod tests {
         for created in [true, false] {
             let document_id = DocumentId::new();
             let key = DocumentKey::from_array([0x41; 32]);
-            let doc_state = SyncDocumentState::new(document_id, key, DocType::Toile, false);
+            let doc_state = SyncDocumentState::new(document_id, key, DocType::Toile, crate::Existence::LocalOnly);
             state.documents.insert(document_id, doc_state);
             state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
             assert!(

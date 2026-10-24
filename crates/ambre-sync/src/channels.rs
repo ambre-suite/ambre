@@ -144,7 +144,7 @@ impl SyncState {
             .documents
             .get(&space_id.document_id())
             .ok_or(SyncError::NotOpen)?;
-        if !space.server_created {
+        if space.existence == crate::Existence::LocalOnly {
             return Err(SyncError::NotOnRelay);
         }
         let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
@@ -1458,7 +1458,7 @@ pub(crate) mod tests {
         let meta = DocumentId::new();
         state.documents.insert(
             meta,
-            SyncDocumentState::new(meta, DocumentKey::generate(), DocType::Murmure, true),
+            SyncDocumentState::new(meta, DocumentKey::generate(), DocType::Murmure, crate::Existence::OnRelay),
         );
 
         state.handle_delete_channel(channel_id);
@@ -1498,7 +1498,7 @@ pub(crate) mod tests {
         let meta = DocumentId::new();
         state.documents.insert(
             meta,
-            SyncDocumentState::new(meta, DocumentKey::generate(), DocType::Murmure, true),
+            SyncDocumentState::new(meta, DocumentKey::generate(), DocType::Murmure, crate::Existence::OnRelay),
         );
 
         state.handle_leave_channel(channel_id);
@@ -1622,7 +1622,7 @@ pub(crate) mod tests {
         state.user_id = Some(UserId::new());
         let (prose, murmure, unheld) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
         for (id, doc_type) in [(prose, DocType::Prose), (murmure, DocType::Murmure)] {
-            let doc = crate::SyncDocumentState::new(id, DocumentKey::generate(), doc_type, true);
+            let doc = crate::SyncDocumentState::new(id, DocumentKey::generate(), doc_type, crate::Existence::OnRelay);
             state.documents.insert(id, doc);
         }
         for document_id in [prose, murmure, unheld] {
@@ -1909,7 +1909,7 @@ pub(crate) mod tests {
         let (space_id, meta) = (SpaceId::new(), DocumentId::new());
         let document_id = space_id.document_id();
         let mut space =
-            SyncDocumentState::new(document_id, DocumentKey::generate(), DocType::Murmure, true);
+            SyncDocumentState::new(document_id, DocumentKey::generate(), DocType::Murmure, crate::Existence::OnRelay);
         space.word.removed.insert(ambre_bus::UserId::new());
         let word = space.word.clone();
         state.documents.insert(document_id, space);

@@ -93,13 +93,13 @@ pub enum LogicEvent {
 
     /// A snapshot the relay dropped on a member's report. It names its author
     /// and its reporter, each `None` for a key no member holds.
-    /// `refinalize` says it was the final snapshot of a segment, which
+    /// `after` says whether it was the final snapshot of a segment, which
     /// a member then finalizes again (the Murmure segments spec).
     SnapshotDropped {
         document_id: DocumentId,
         author: Option<UserId>,
         reporter: Option<UserId>,
-        refinalize: bool,
+        after: ambre_core::AfterDrop,
     },
 
     /// A thread this client holds neither in full nor light took a delta
@@ -305,13 +305,13 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         segment: SegmentId,
     },
-    /// A lease request or a commit of `segment` failed. `withdrawn` says this
-    /// copy holds an edit the relay refused, so it never finalizes the
+    /// A lease request or a commit of `segment` failed. `end` says whether
+    /// this copy holds an edit the relay refused, so it never finalizes the
     /// segment: another member does.
     SegmentFinalizeFailed {
         channel_id: ChannelId,
         segment: SegmentId,
-        withdrawn: bool,
+        end: ambre_core::FinalizeEnd,
         message: String,
     },
     /// The relay's answer to

@@ -194,24 +194,23 @@ impl LogicState {
         });
     }
 
-    /// A lease request or a commit of `segment` failed. A copy that
-    /// `withdrawn` leaves the segment to another member; any other failure
-    /// asks again later.
+    /// A lease request or a commit of `segment` failed. A copy that withdrew
+    /// leaves the segment to another member; any other failure asks again
+    /// later.
     pub(crate) fn segment_finalize_failed(
         &mut self,
         channel_id: ChannelId,
         segment: SegmentId,
-        withdrawn: bool,
+        end: ambre_core::FinalizeEnd,
         message: &str,
     ) {
         tracing::warn!("Logic: finalization of {segment} on {channel_id} failed: {message}");
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
-        if withdrawn {
-            channel.finalize_withdrawn(segment);
-        } else {
-            channel.finalize_failed(segment);
+        match end {
+            ambre_core::FinalizeEnd::Withdrawn => channel.finalize_withdrawn(segment),
+            ambre_core::FinalizeEnd::Failed => channel.finalize_failed(segment),
         }
     }
 
@@ -372,7 +371,7 @@ impl LogicState {
         document_id: DocumentId,
         author: Option<UserId>,
         reporter: Option<UserId>,
-        refinalize: bool,
+        after: ambre_core::AfterDrop,
     ) {
         let Some((&channel_id, channel)) = self
             .channels
@@ -382,7 +381,7 @@ impl LogicState {
             return;
         };
         let segment = SegmentId::from_document(document_id);
-        if refinalize {
+        if after == ambre_core::AfterDrop::Refinalize {
             channel.refinalize(segment);
         }
         self.send_to_ui(UiEvent::Channel {

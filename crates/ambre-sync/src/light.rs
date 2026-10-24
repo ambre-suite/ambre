@@ -19,7 +19,7 @@ pub(crate) struct LightSubscription {
     /// The kind of the document, for the reopen.
     doc_type: DocType,
     /// Whether the relay holds the document, so the socket subscribes it.
-    on_relay: bool,
+    on_relay: crate::Existence,
     /// The highest number the evicted copy holds with no gap below it. A
     /// reopen replays only what follows it (`RESID-010`).
     horizon: Seq,
@@ -44,7 +44,7 @@ impl LightSubscription {
         Self {
             doc_key,
             doc_type,
-            on_relay: true,
+            on_relay: crate::Existence::OnRelay,
             horizon,
             seen,
             counters: ActivityCounters::default(),
@@ -58,7 +58,7 @@ impl LightSubscription {
     /// passes what the session itself received.
     fn of(doc: SyncDocumentState, applied: Seq) -> Self {
         Self {
-            on_relay: doc.server_created,
+            on_relay: doc.existence,
             ..Self::new(
                 doc.doc_key,
                 doc.doc_type,
@@ -327,7 +327,7 @@ impl SyncState {
     pub(crate) fn light_cursors(&self) -> Vec<(DocumentId, Seq)> {
         self.light
             .iter()
-            .filter(|(_, light)| light.on_relay && light.replays)
+            .filter(|(_, light)| light.on_relay == crate::Existence::OnRelay && light.replays)
             .map(|(id, light)| (*id, light.seen))
             .collect()
     }
@@ -337,7 +337,7 @@ impl SyncState {
     pub(crate) fn light_heads(&self) -> Vec<DocumentId> {
         self.light
             .iter()
-            .filter(|(_, light)| light.on_relay && !light.replays)
+            .filter(|(_, light)| light.on_relay == crate::Existence::OnRelay && !light.replays)
             .map(|(id, _)| *id)
             .collect()
     }
@@ -346,7 +346,7 @@ impl SyncState {
     pub(crate) fn light_cursor(&self, document_id: DocumentId) -> Option<Seq> {
         self.light
             .get(&document_id)
-            .filter(|light| light.on_relay)
+            .filter(|light| light.on_relay == crate::Existence::OnRelay)
             .map(|light| light.seen)
     }
 
@@ -379,7 +379,7 @@ mod tests {
         state.user_id = Some(UserId::from_bytes([7; 16]));
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
-        let mut doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, true);
+        let mut doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
         doc.last_seq = Seq(9);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
@@ -523,7 +523,7 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
-        let doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, true);
+        let doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
         let echo = update(document_id, snapshot, &doc_key, None);
@@ -955,7 +955,7 @@ mod tests {
         let (mut state, rx, held, _, _) = released(ambre_bus::Seq(9));
         drain(&rx);
         let open = DocumentId::new();
-        let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, true);
+        let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, crate::Existence::OnRelay);
         state.documents.insert(open, doc);
         for document_id in [held, open] {
             state.handle_ws_message(WsServerMsg::ThreadActivity { document_id });

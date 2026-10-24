@@ -360,7 +360,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             snapshot_id: SnapshotId::from_bytes([17; 16]),
             author: PublicKey::from_array([18; 32]),
             reporter: PublicKey::from_array([19; 32]),
-            refinalize: true,
+            after: ambre_core::AfterDrop::Refinalize,
         },
         S::ThreadActivity { document_id: doc },
     ]

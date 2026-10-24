@@ -307,10 +307,10 @@ enum SyncEvent {
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
         /// with the right type on its first outbound update.
         doc_type: DocType,
-        /// Whether the document already exists server-side. `false` for a
-        /// local-only doc (server returned 404 for its members): no WebSocket
-        /// subscription yet, and the first update triggers lazy creation.
-        server_created: bool,
+        /// Whether the document already exists server-side. Local only for a
+        /// doc the server answered 404 for: no WebSocket subscription yet,
+        /// and the first update triggers lazy creation.
+        existence: Existence,
         /// Members' Ed25519 signing keys -> canonical `UserId`, harvested from
         /// the same members response that carried the wrapped DocumentKey
         /// (`ambre-spec-membership.md`). Seeds `SyncDocumentState::signing_keys` so
@@ -646,10 +646,10 @@ struct SyncDocumentState {
     doc_key: DocumentKey,
     /// Document kind, used for lazy server creation on the first outbound update.
     doc_type: DocType,
-    /// Whether the document row exists server-side. Starts `false` for a
-    /// local-only doc; flipped to `true` once lazily created so the POST and the
-    /// WebSocket subscription happen exactly once.
-    server_created: bool,
+    /// Whether the document row exists server-side. Starts local only for a
+    /// local-only doc, and moves to the relay once lazily created, so the POST
+    /// and the WebSocket subscription happen exactly once.
+    existence: Existence,
     /// A lazy-creation POST is in flight. Guards against firing several POSTs
     /// when updates arrive back-to-back before the first one completes.
     creating: bool,
@@ -762,6 +762,16 @@ struct PendingCheck {
 }
 
 /// A snapshot only its author confirmed, still sealed (`SRV-128`).
+/// Whether the relay holds the row of a document yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Existence {
+    /// Local only: the relay answered 404 for its members, and the first
+    /// update creates it.
+    LocalOnly,
+    /// The relay holds its row.
+    OnRelay,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct HeldSnapshot {
     pub snapshot_id: SnapshotId,
@@ -774,7 +784,7 @@ impl SyncDocumentState {
         document_id: DocumentId,
         doc_key: DocumentKey,
         doc_type: DocType,
-        server_created: bool,
+        existence: Existence,
     ) -> Self {
         // Anchor the base to the document's genesis snapshot, which every client
         // derives identically. Until a real snapshot is uploaded, the earliest
@@ -786,7 +796,7 @@ impl SyncDocumentState {
             document_id,
             doc_key,
             doc_type,
-            server_created,
+            existence,
             creating: false,
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
@@ -1269,7 +1279,7 @@ impl SyncState {
     /// flows. Neither can complete in a synchronous native test.
     pub fn mark_document_server_created(&mut self, document_id: DocumentId) {
         if let Some(doc_state) = self.documents.get_mut(&document_id) {
-            doc_state.server_created = true;
+            doc_state.existence = crate::Existence::OnRelay;
         }
     }
 
@@ -1887,7 +1897,7 @@ mod ephemeral_tests {
             DocumentId::new(),
             DocumentKey::generate(),
             DocType::Prose,
-            false,
+            crate::Existence::LocalOnly,
         )
     }
 
@@ -1978,7 +1988,7 @@ mod seal_tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
-        let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
+        let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::OnRelay);
         state.documents.insert(id, doc);
         state.session_nonces.insert(id, SessionNonce([1; 16]));
         let (tx, wire) = ambre_bus::conduit::unbounded();

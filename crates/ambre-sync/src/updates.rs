@@ -539,7 +539,7 @@ impl SyncState {
                     http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
                         .await,
                 );
-                let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
+                let (doc_key, existence, signing_keys, role, rotation_owed) = match answer {
                     MembersAnswer::Exists(resp) => match &exchange_key {
                         Some(ek) => {
                             match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
@@ -547,7 +547,13 @@ impl SyncState {
                                     signers = o.signers;
                                     named_key = o.named_key;
                                     word = Some(o.word);
-                                    (o.doc_key, true, o.signing_keys, o.role, o.rotation_owed)
+                                    (
+                                        o.doc_key,
+                                        crate::Existence::OnRelay,
+                                        o.signing_keys,
+                                        o.role,
+                                        o.rotation_owed,
+                                    )
                                 }
                                 Err((cause, _)) => {
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
@@ -573,7 +579,7 @@ impl SyncState {
                     // presence for anyway, and its creator owns it.
                     MembersAnswer::Absent => (
                         DocumentKey::generate(),
-                        false,
+                        crate::Existence::LocalOnly,
                         Vec::new(),
                         Role::Owner,
                         false,
@@ -594,7 +600,7 @@ impl SyncState {
                 // the snapshot among it (`SYNC-117`, `SYNC-119`).
                 // A link counts only when a writer the log names signed it
                 // (`SYNC-121`).
-                let links = if server_created {
+                let links = if existence == crate::Existence::OnRelay {
                     let links =
                         http::fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await;
                     crate::chain::signed_by_writers(links, signers.as_ref())
@@ -624,7 +630,7 @@ impl SyncState {
                 // latest one another member confirmed, and holds the latest one
                 // back until the replay is done (`AUTHOR-022`).
                 let mut held_snapshot = None;
-                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if server_created {
+                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence == crate::Existence::OnRelay {
                     let meta_url = crate::http::ApiRoot::of(url_scheme, &api_base)
                         .route(format!("/documents/{doc_id}/snapshot"));
                     match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
@@ -706,7 +712,7 @@ impl SyncState {
                     covered_seq,
                     held_snapshot,
                     doc_type,
-                    server_created,
+                    existence,
                     signing_keys,
                     role,
                     rotation_owed,
@@ -724,7 +730,7 @@ impl SyncState {
             let doc_key = DocumentKey::generate();
             self.documents.insert(
                 document_id,
-                SyncDocumentState::new(document_id, doc_key, doc_type, false),
+                SyncDocumentState::new(document_id, doc_key, doc_type, crate::Existence::LocalOnly),
             );
             if self.ws_connected() {
                 self.ws_send(&WsClientMsg::Subscribe { document_id });
@@ -1020,7 +1026,7 @@ impl SyncState {
         if self
             .documents
             .get(&document_id)
-            .is_some_and(|d| !d.server_created)
+            .is_some_and(|d| d.existence == crate::Existence::LocalOnly)
         {
             if let Some(doc_state) = self.documents.get_mut(&document_id) {
                 doc_state.pending_updates.push(body);
@@ -1927,7 +1933,7 @@ mod tests {
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
-        let doc_state = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, true);
+        let doc_state = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
         let known_snapshot = doc_state.current_snapshot_id;
         state.documents.insert(document_id, doc_state);
         state.session_nonces.insert(document_id, TEST_NONCE);
@@ -2012,7 +2018,7 @@ mod tests {
             covered_seq: Seq(3),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2279,7 +2285,7 @@ mod tests {
         let doc = DocumentId::new();
         state.documents.insert(
             doc,
-            SyncDocumentState::new(doc, key.clone(), DocType::Murmure, true),
+            SyncDocumentState::new(doc, key.clone(), DocType::Murmure, crate::Existence::OnRelay),
         );
         let parent = SnapshotId::new();
         state.receive_update(
@@ -2380,7 +2386,7 @@ mod tests {
             covered_seq: Seq(1500),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2420,7 +2426,7 @@ mod tests {
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2511,14 +2517,14 @@ mod tests {
                 snapshot_id: snapshot,
                 author: author.clone(),
                 reporter: reporter.clone(),
-                refinalize: true,
+                after: ambre_core::AfterDrop::Refinalize,
             });
         };
         dropped(&mut state);
         assert!(
             drain(&rx).iter().any(|e| matches!(
                 e,
-                LogicEvent::SnapshotDropped { document_id, author: Some(a), reporter: Some(r), refinalize: true }
+                LogicEvent::SnapshotDropped { document_id, author: Some(a), reporter: Some(r), after: ambre_core::AfterDrop::Refinalize }
                     if *document_id == doc && *a == alice && *r == bob
             )),
             "both keys resolve, and this member finalizes again"
@@ -2529,7 +2535,7 @@ mod tests {
             drain(&rx).iter().any(|e| matches!(
                 e,
                 LogicEvent::SnapshotDropped {
-                    refinalize: false,
+                    after: ambre_core::AfterDrop::Keep,
                     ..
                 }
             )),
@@ -2721,7 +2727,7 @@ mod tests {
         let local = DocumentId::new();
         state.documents.insert(
             local,
-            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, false),
+            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, crate::Existence::LocalOnly),
         );
         for document_id in [local, DocumentId::new()] {
             state.handle_ws_message(WsServerMsg::Subscribed { document_id });
@@ -2761,7 +2767,7 @@ mod tests {
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2827,7 +2833,7 @@ mod tests {
                 blob: snapshot_blob(doc, held, b"latest", &key, &sk),
             }),
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2870,7 +2876,7 @@ mod tests {
     /// overlay would hang forever with no `MissingUpdates` ever coming.
     #[test]
     fn open_document_ready_immediate_without_replay() {
-        // Offline open (no WS): server_created but not connected.
+        // Offline open (no WS): on the relay but not connected.
         let (mut state, rx, doc, key, _sk, _snap) = setup();
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
@@ -2880,7 +2886,7 @@ mod tests {
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
@@ -2920,7 +2926,7 @@ mod tests {
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Viewer,
             rotation_owed: false,
@@ -2947,7 +2953,7 @@ mod tests {
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
-            server_created: true,
+            existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Editor,
             rotation_owed: false,
@@ -3486,11 +3492,11 @@ mod tests {
                 &ambre_core::SnapshotBytes::new(b"s".to_vec()),
             );
         };
-        let withdrawn = |events: &[LogicEvent]| -> Vec<bool> {
+        let ends = |events: &[LogicEvent]| -> Vec<ambre_core::FinalizeEnd> {
             events
                 .iter()
                 .filter_map(|e| match e {
-                    LogicEvent::SegmentFinalizeFailed { withdrawn, .. } => Some(*withdrawn),
+                    LogicEvent::SegmentFinalizeFailed { end, .. } => Some(*end),
                     _ => None,
                 })
                 .collect()
@@ -3500,12 +3506,20 @@ mod tests {
         let sent = signatures(&drain_ws(&ws_rx));
         let _ = drain(&rx);
         finalize(&state);
-        assert_eq!(withdrawn(&drain(&rx)), vec![false], "it waits for the echo");
+        assert_eq!(
+            ends(&drain(&rx)),
+            vec![ambre_core::FinalizeEnd::Failed],
+            "it waits for the echo"
+        );
 
         refuse_by_name(&mut state, doc, sent[0]);
         let _ = drain(&rx);
         finalize(&state);
-        assert_eq!(withdrawn(&drain(&rx)), vec![true], "it withdraws");
+        assert_eq!(
+            ends(&drain(&rx)),
+            vec![ambre_core::FinalizeEnd::Withdrawn],
+            "it withdraws"
+        );
     }
 
     /// `SYNC-156`: once a delta is refused by name, no later delta of its
@@ -3534,7 +3548,7 @@ mod tests {
             "a delta left a document holding a refused one"
         );
 
-        let reopened = SyncDocumentState::new(doc, key, DocType::Trame, true);
+        let reopened = SyncDocumentState::new(doc, key, DocType::Trame, crate::Existence::OnRelay);
         state.documents.insert(doc, reopened);
         state.handle_send_update(doc, b"d".to_vec());
         assert_eq!(signatures(&drain_ws(&ws_rx)).len(), 1);
@@ -3924,7 +3938,7 @@ mod tests {
                 covered_seq: Seq(0),
                 held_snapshot: None,
                 doc_type: DocType::Trame,
-                server_created: true,
+                existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
                 role,
                 rotation_owed: true,
@@ -3958,7 +3972,7 @@ mod tests {
         // A reload forgets the counter; the replay echoes the two frames back.
         state.documents.insert(
             doc,
-            SyncDocumentState::new(doc, key.clone(), DocType::Trame, true),
+            SyncDocumentState::new(doc, key.clone(), DocType::Trame, crate::Existence::OnRelay),
         );
         state.receive_update(Seq(1), make_update(doc, snap, Clock(1), b"a", &key, &sk));
         state.receive_update(Seq(2), make_update(doc, snap, Clock(2), b"b", &key, &sk));
@@ -3994,7 +4008,7 @@ mod tests {
                 covered_seq: Seq(u64::from(with_snapshot)),
                 held_snapshot: None,
                 doc_type: DocType::Trame,
-                server_created: true,
+                existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
                 role: Role::Owner,
                 rotation_owed: false,

@@ -89,7 +89,7 @@ impl SyncState {
         ) else {
             return Step::Nothing;
         };
-        if !space.server_created || !space.role.can_write_document() {
+        if space.existence == crate::Existence::LocalOnly || !space.role.can_write_document() {
             return Step::Nothing;
         }
         if space.rekey.owes() {
@@ -218,7 +218,7 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let document_id = space_id.document_id();
         let mut doc =
-            SyncDocumentState::new(document_id, space_key.clone(), DocType::Murmure, true);
+            SyncDocumentState::new(document_id, space_key.clone(), DocType::Murmure, crate::Existence::OnRelay);
         doc.role = role;
         state.documents.insert(document_id, doc);
         state.space_rotations.insert(

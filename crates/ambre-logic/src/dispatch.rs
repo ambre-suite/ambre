@@ -345,9 +345,9 @@ impl LogicState {
                 document_id,
                 author,
                 reporter,
-                refinalize,
+                after,
             } => {
-                self.snapshot_dropped(document_id, author, reporter, refinalize);
+                self.snapshot_dropped(document_id, author, reporter, after);
             }
             LogicEvent::ThreadActivity { document_id } => self.thread_activity(document_id),
 
@@ -606,9 +606,9 @@ impl LogicState {
             LogicEvent::SegmentFinalizeFailed {
                 channel_id,
                 segment,
-                withdrawn,
+                end,
                 message,
-            } => self.segment_finalize_failed(channel_id, segment, withdrawn, &message),
+            } => self.segment_finalize_failed(channel_id, segment, end, &message),
             LogicEvent::FoldLeaseAnswered {
                 channel_id,
                 segment,
