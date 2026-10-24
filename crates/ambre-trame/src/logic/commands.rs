@@ -278,11 +278,9 @@ impl TrameState {
                 None => Self::find_nothing(),
             },
             TrameCommand::ReplaceAll { query, replacement } => match query {
-                Some(query) => self.replace_all(
-                    &query.text,
-                    &Replacement::new(replacement),
-                    query.options,
-                ),
+                Some(query) => {
+                    self.replace_all(&query.text, &Replacement::new(replacement), query.options)
+                }
                 None => Self::replace_nothing(),
             },
             TrameCommand::ImportCsv {
@@ -322,11 +320,9 @@ impl TrameState {
             }
 
             TrameCommand::ReplaceOne { query, replacement } => match query {
-                Some(query) => self.replace_one(
-                    &query.text,
-                    &Replacement::new(replacement),
-                    query.options,
-                ),
+                Some(query) => {
+                    self.replace_one(&query.text, &Replacement::new(replacement), query.options)
+                }
                 None => Self::replace_nothing(),
             },
 

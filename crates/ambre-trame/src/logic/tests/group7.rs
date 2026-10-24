@@ -438,10 +438,13 @@ fn find_matches_the_formatted_value() {
     let mut state = percent_sheet();
     let hits = |state: &mut TrameState, query: &str| {
         let out = state.handle_command(TrameCommand::FindNext {
-            query: ambre_bus::app::trame::FindQuery::new(query.to_owned(), crate::FindOptions {
-                extent: crate::MatchExtent::WholeCell,
-                ..Default::default()
-            }),
+            query: ambre_bus::app::trame::FindQuery::new(
+                query.to_owned(),
+                crate::FindOptions {
+                    extent: crate::MatchExtent::WholeCell,
+                    ..Default::default()
+                },
+            ),
         });
         match &out.display[..] {
             [TrameEvent::FindResult { matches, .. }] => matches.len(),

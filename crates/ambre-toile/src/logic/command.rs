@@ -16,11 +16,11 @@ pub use ambre_bus::app::toile::{
     BoolOp, Broadcast, ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipSlotVec,
     ClipValue, ClipboardPayload, CommentAnchor, CommentMessage, CommentPin, CommentSummary,
     CommentThread, CorrelationToken, DeckFrame, DeckView, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindQuery, FindResults, ImportSlot,
-    InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate, PresentFocus,
-    PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, SlideChange, SlideCount,
-    SlideIndex, SlidePosition, Sources, StatsRequestKind, TextDelta, ThreadMessageIndex,
-    ToileCommand, ToileError, ToileEvent, Viewport, ZOrderIndex, ZTarget,
+    DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindQuery, FindResults,
+    ImportSlot, InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate,
+    PresentFocus, PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, SlideChange,
+    SlideCount, SlideIndex, SlidePosition, Sources, StatsRequestKind, TextDelta,
+    ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, Viewport, ZOrderIndex, ZTarget,
 };
 pub use ambre_bus::rest::RequestId;
 

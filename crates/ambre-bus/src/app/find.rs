@@ -1,5 +1,5 @@
 //! A search and its matches (`ambre-spec-find.md`). Prose, Trame and Toile
-//! each run a search: each sends one [`FindQuery`] shape, over options of its
+//! each run a search. Each sends one [`FindQuery`] shape over options of its
 //! own, and each reports a list with one match current in it.
 //!
 //! The index and the total travel side by side on the wire and into the

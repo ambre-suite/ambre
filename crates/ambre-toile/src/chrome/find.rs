@@ -23,9 +23,9 @@ use leptos::prelude::*;
 use crate::ui::find::active_index;
 use ambre_bus::app::find::MatchIndex;
 
-/// A `Find` request emitted by the panel. It carries the query and its options
-/// (`None` for an emptied field), the hit to resume from (`None` = a fresh
-/// search focusing the first hit), and the step direction. The launcher
+/// A `Find` request emitted by the panel. It carries the query and its options,
+/// `None` for an emptied field. It carries the hit to resume from, `None` for a
+/// fresh search focusing the first hit, and the step direction. The launcher
 /// forwards it as [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps
 /// `focus` forward or backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

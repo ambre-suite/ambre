@@ -618,9 +618,7 @@ pub enum TrameCommand {
     /// sheet plus the index of the one to focus; no CRDT delta is emitted. The UI moves the
     /// active cell onto the focused match, so a repeated `FindNext` advances. `None` is the
     /// emptied field: the reply carries no match, which clears the highlight (`FIND-005`).
-    FindNext {
-        query: Option<super::FindQuery>,
-    },
+    FindNext { query: Option<super::FindQuery> },
 
     /// Replace every match of `query` with `replacement` across the active sheet (or all
     /// sheets for [`SheetScope::All`](super::SheetScope)) in a single undo group
