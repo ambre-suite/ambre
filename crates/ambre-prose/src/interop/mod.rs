@@ -100,7 +100,7 @@ pub struct IrFootnote {
 pub enum IrListStyle {
     Bullet,
     Ordered(IrOrderedStyle),
-    Todo(bool),
+    Todo(crate::events::TodoMark),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

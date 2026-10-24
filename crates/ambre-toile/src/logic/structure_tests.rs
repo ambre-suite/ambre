@@ -269,7 +269,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
     let bystander = rect(&mut st, 400.0, 0.0);
     st.handle_command(ToileCommand::LockElements {
         ids: vec![note.clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
     let before = (order(&st), st.bounds_of(&note), st.style_of(&note));
     let red = ElementStyle {
@@ -322,7 +322,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
 
     st.handle_command(ToileCommand::LockElements {
         ids: vec![note.clone()],
-        locked: false,
+        lock: ambre_bus::app::toile::LockState::Unlocked,
     });
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
     assert_eq!(st.element_count(), 0, "the unlock frees the delete");

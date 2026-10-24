@@ -12,13 +12,14 @@
 
 pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
-    ActiveMarks, Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply,
-    CommentThread, CrossRefKind, CursorPosition, DateFieldFormat, FindMatch, FindQuery,
+    ActiveMarks, Align, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder, ChangeOrigin, CommentReply,
+    CommentThread, CrossRefKind, CursorPosition, EditMode, DateFieldFormat, FindMatch, FindQuery, FirstPage,
     FootnoteEntry, FootnoteOrdinal, GraphemeCount, HeaderField, HeadingLevel, HfTarget, LineHeight,
     LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, PageCount,
-    PageIndex, PageNumber, PageSpan, ParagraphCount, ParagraphStyle, PresencePayload, ProseCommand,
+    PageIndex, PageNumber, PageSpan, ParagraphCount, PatternKind, ParagraphStyle, PresencePayload, ProseCommand,
     ProseError, ProseEvent, ProseRefusal, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
-    SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TriState,
+    SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
+    TodoMark, TriState,
     VAlign, WordCount, WordTotal,
 };
 

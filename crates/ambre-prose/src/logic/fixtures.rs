@@ -476,8 +476,12 @@ fn build_styled_document(seed: u64) -> Result<ProseState, FixtureError> {
         )?;
     }
 
-    run(&mut state, ProseCommand::SetHeaderEnabled { enabled: true })?;
-    run(&mut state, ProseCommand::SetFooterEnabled { enabled: true })?;
+    run(&mut state, ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        })?;
+    run(&mut state, ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        })?;
     let header = state
         .bands()
         .header

@@ -447,7 +447,7 @@ impl SyncState {
         for doc_id in self.documents.keys().copied().collect::<Vec<_>>() {
             self.send_to_logic(LogicEvent::ConnectionStatus {
                 document_id: doc_id,
-                connected: false,
+                connected: ambre_core::LinkState::Disconnected,
             });
         }
     }
@@ -731,7 +731,7 @@ impl SyncState {
                 }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
-                    connected: self.ws_connected(),
+                    connected: ambre_core::LinkState::connected_if(self.ws_connected()),
                 });
                 // Hydration-complete signal (dismisses the UI loading overlay).
                 // When a replay was requested above, defer it to the matching
@@ -825,7 +825,11 @@ impl SyncState {
                             channel_id,
                             closing,
                             active,
-                            created,
+                            successor: if created {
+                                ambre_bus::app::murmure::Successor::Created
+                            } else {
+                                ambre_bus::app::murmure::Successor::Fetched
+                            },
                         }
                     }
                     Err(error) => LogicEvent::SegmentCloseFailed {
@@ -1276,7 +1280,7 @@ impl SyncState {
                 }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
-                    connected: true,
+                    connected: ambre_core::LinkState::Connected,
                 });
             }
 

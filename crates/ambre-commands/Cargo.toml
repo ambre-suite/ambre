@@ -6,9 +6,11 @@ license.workspace = true
 description = "Shared command registry: CommandId/Command/CommandState/CommandSource plus keybinding resolution. Leaf affordance crate with zero UI dependencies (ambre-spec-commands.md)."
 
 [dependencies]
-# Intentionally empty. This is the leaf of the UI-thread crate graph: depended
-# on by every app AND by ambre-chrome, it must stay framework-agnostic. Pure
-# data + pure functions, fully testable on the host.
+# The leaf of the UI-thread crate graph: depended on by every app AND by
+# ambre-chrome, it must stay framework-agnostic. Pure data + pure functions,
+# fully testable on the host. It reaches `ambre-core` alone, for the choices
+# the bus carries too (`ambre-spec-architecture.md`).
+ambre-core = { path = "../ambre-core" }
 
 [lints]
 workspace = true

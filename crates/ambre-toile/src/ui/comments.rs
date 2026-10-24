@@ -210,22 +210,7 @@ impl ThreadFilter {
 }
 
 /// Where a thread stands, as the panel's filter reads it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ThreadState {
-    Open,
-    Resolved,
-}
-
-impl ThreadState {
-    /// `Resolved` when `resolved` holds, `Open` otherwise.
-    pub fn resolved_if(resolved: bool) -> Self {
-        if resolved {
-            ThreadState::Resolved
-        } else {
-            ThreadState::Open
-        }
-    }
-}
+pub use ambre_core::ThreadState;
 
 /// A composer the comment tool just opened at a click (`TOILE-UI-307`). It
 /// carries where the thread will hang, and where on screen the field must
@@ -250,7 +235,7 @@ pub enum CommentIntent {
     /// Append a message to an open thread.
     Reply { thread: ThreadId, body: String },
     /// Resolve a thread, or reopen it.
-    Resolve { thread: ThreadId, resolved: bool },
+    Resolve { thread: ThreadId, state: ThreadState },
     /// Open a thread from the board-wide list, bringing the camera to its anchor
     /// (`TOILE-UI-309`).
     Focus {

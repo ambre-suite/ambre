@@ -85,3 +85,85 @@ pub enum AfterDrop {
     /// Finalize the segment again: the final snapshot was dropped.
     Refinalize,
 }
+
+/// Whether a search tells upper case from lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum CaseMatch {
+    /// Both sides are lowercased before they are compared.
+    #[default]
+    Insensitive,
+    Sensitive,
+}
+
+/// Whether a text match may sit inside a word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum WordMatch {
+    /// The query may sit anywhere in the text.
+    #[default]
+    Anywhere,
+    /// A match must not touch a letter, a digit or an underscore on either
+    /// side.
+    WholeWord,
+}
+
+/// Whether a document's link to the relay is up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum LinkState {
+    #[default]
+    Disconnected,
+    Connected,
+}
+
+impl LinkState {
+    /// [`LinkState::Connected`] when the socket answers that it is open.
+    #[must_use]
+    pub fn connected_if(open: bool) -> Self {
+        if open {
+            LinkState::Connected
+        } else {
+            LinkState::Disconnected
+        }
+    }
+
+    #[must_use]
+    pub fn is_connected(self) -> bool {
+        self == LinkState::Connected
+    }
+}
+
+/// Which halves of the clipboard a paste reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum PasteForm {
+    /// Every half the view can read, formatting included.
+    #[default]
+    Rich,
+    /// The plain text alone: the formatting is dropped.
+    Plain,
+}
+
+/// Where a comment thread stands: open, or resolved. Resolving destroys
+/// neither the thread nor its messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum ThreadState {
+    #[default]
+    Open,
+    Resolved,
+}
+
+impl ThreadState {
+    /// [`ThreadState::Resolved`] when the stored flag holds, `Open` otherwise.
+    #[must_use]
+    pub fn resolved_if(resolved: bool) -> Self {
+        if resolved {
+            ThreadState::Resolved
+        } else {
+            ThreadState::Open
+        }
+    }
+
+    /// The flag as a document stores it.
+    #[must_use]
+    pub fn is_resolved(self) -> bool {
+        self == ThreadState::Resolved
+    }
+}

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use ambre_bus::DocumentId;
 use ambre_core::ByteSize;
-use ambre_core::residency::{Held, Residency, ViewTick};
+use ambre_core::residency::{Delivery, Held, Mutability, Residency, ViewTick};
 
 use crate::SealedWrite;
 
@@ -66,8 +66,8 @@ pub enum Refusal {
 pub struct Meta {
     cost: Cost,
     viewed: ViewTick,
-    immutable: bool,
-    unsent: bool,
+    immutable: Mutability,
+    unsent: Delivery,
 }
 
 impl Meta {
@@ -83,7 +83,8 @@ impl Meta {
             chunk.copy_from_slice(&field.to_le_bytes());
         }
         if let Some(flags) = row.get_mut(24) {
-            *flags = u8::from(self.immutable) | (u8::from(self.unsent) << 1);
+            *flags = u8::from(self.immutable == Mutability::Immutable)
+                | (u8::from(self.unsent == Delivery::Unsent) << 1);
         }
         row
     }
@@ -116,8 +117,16 @@ impl Meta {
                 deltas: ByteSize(deltas),
             },
             viewed: ViewTick(viewed),
-            immutable: flags & 1 != 0,
-            unsent: flags & 2 != 0,
+            immutable: if flags & 1 == 0 {
+                Mutability::Mutable
+            } else {
+                Mutability::Immutable
+            },
+            unsent: if flags & 2 == 0 {
+                Delivery::Sent
+            } else {
+                Delivery::Unsent
+            },
         })
     }
 }
@@ -170,21 +179,21 @@ impl StoreLedger {
                     snapshot: ByteSize::of_len(bytes.len()),
                     deltas: ByteSize(0),
                 };
-                self.charge(id, cost, true);
+                self.charge(id, cost, Delivery::Unsent);
             }
             SealedWrite::Delta(bytes) => {
                 cost.deltas = cost.deltas.saturating_add(ByteSize::of_len(bytes.len()));
-                self.charge(id, cost, true);
+                self.charge(id, cost, Delivery::Unsent);
             }
-            SealedWrite::Session { .. } => self.charge(id, cost, true),
+            SealedWrite::Session { .. } => self.charge(id, cost, Delivery::Unsent),
             SealedWrite::Shown => {
                 if !self.residency.holds(id) {
-                    self.charge(id, cost, false);
+                    self.charge(id, cost, Delivery::Sent);
                 }
                 self.residency.pin(id);
             }
             SealedWrite::Hidden => self.residency.unpin(id),
-            SealedWrite::Sent => self.residency.set_unsent(id, false),
+            SealedWrite::Sent => self.residency.set_unsent(id, Delivery::Sent),
             SealedWrite::ForgetSession { .. } | SealedWrite::ReadBack { .. } => {}
         }
         // The delta bytes alone change at every keystroke: a reload counts
@@ -198,11 +207,11 @@ impl StoreLedger {
     }
 
     /// Record what `id` costs, and mark it unsent when a write changed it.
-    fn charge(&mut self, id: DocumentId, cost: Cost, unsent: bool) {
+    fn charge(&mut self, id: DocumentId, cost: Cost, unsent: Delivery) {
         self.costs.insert(id, cost);
         self.residency.hold(id, cost.total());
-        if unsent {
-            self.residency.set_unsent(id, true);
+        if unsent == Delivery::Unsent {
+            self.residency.set_unsent(id, Delivery::Unsent);
         }
     }
 
@@ -237,7 +246,7 @@ impl StoreLedger {
 
     /// Record whether the application marks a document immutable
     /// (`RESID-007`).
-    pub fn set_immutable(&mut self, id: DocumentId, immutable: bool) {
+    pub fn set_immutable(&mut self, id: DocumentId, immutable: Mutability) {
         self.residency.set_immutable(id, immutable);
     }
 
@@ -250,7 +259,7 @@ impl StoreLedger {
     /// Whether the document carries a change the relay has not acknowledged.
     #[must_use]
     pub fn unsent(&self, id: DocumentId) -> bool {
-        self.residency.get(id).is_some_and(|held| held.unsent)
+        self.residency.get(id).is_some_and(|held| held.unsent == Delivery::Unsent)
     }
 
     /// The bytes every copy costs together.

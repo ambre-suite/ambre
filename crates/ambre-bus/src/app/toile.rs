@@ -1050,13 +1050,13 @@ pub enum End {
 }
 
 /// Options for a board `Find` (`toile-find`). Search runs against
-/// each element's plaintext body (sticky / text) and frame title; `match_case`
-/// toggles case folding, `whole_word` requires a word-boundary match. Replace is
+/// each element's plaintext body (sticky / text) and frame title; `case`
+/// toggles case folding, `word` may require a word-boundary match. Replace is
 /// out of MVP scope (`toile-find`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindOptions {
-    pub match_case: bool,
-    pub whole_word: bool,
+    pub case: ambre_core::CaseMatch,
+    pub word: ambre_core::WordMatch,
 }
 
 /// Result of a board `Find` (`toile-find`). `hits` are the matching
@@ -1609,6 +1609,28 @@ crate::token::define_token! {
     pub struct CorrelationToken;
 }
 
+/// Whether an element refuses every write (`TOILE-033`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum LockState {
+    #[default]
+    Unlocked,
+    Locked,
+}
+
+impl LockState {
+    /// [`LockState::Locked`] when `locked` holds.
+    #[must_use]
+    pub fn locked_if(locked: bool) -> Self {
+        if locked { Self::Locked } else { Self::Unlocked }
+    }
+
+    /// The flag as the board stores it.
+    #[must_use]
+    pub fn is_locked(self) -> bool {
+        self == Self::Locked
+    }
+}
+
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
@@ -1686,7 +1708,7 @@ pub enum ToileCommand {
     },
     LockElements {
         ids: Vec<ElementId>,
-        locked: bool,
+        lock: LockState,
     },
 
     // -- Z-order (over the unified NodeId layer list,
@@ -1844,7 +1866,7 @@ pub enum ToileCommand {
     /// destroys neither the thread nor its messages (`TOILE-FEAT-015`).
     ResolveThread {
         thread: ThreadId,
-        resolved: bool,
+        state: ambre_core::ThreadState,
     },
     /// Read comments back for the panel, which holds no state of its own
     /// (`TOILE-UI-023`). `Some(thread)` reads that one thread whole and answers

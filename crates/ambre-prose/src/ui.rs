@@ -26,7 +26,7 @@ use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
-    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan, PageIndex,
+    BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan, PageIndex,
     ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
     TextEdit, WordCount,
 };
@@ -328,14 +328,6 @@ impl DraftBuffer {
     }
 }
 
-/// Whose change of the text an event answers: this view's, which it drew
-/// when it sent the command, or a change it never drew.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Origin {
-    Remote,
-    Local,
-}
-
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
@@ -366,7 +358,7 @@ pub struct ProseUiState {
     /// Every pending suggestion, and whether this session is suggesting, as
     /// last answered.
     pub suggestions: Vec<Suggestion>,
-    pub suggesting: bool,
+    pub edit_mode: crate::events::EditMode,
     /// Every run of a link mark and its target, as last answered.
     pub links: Vec<LinkSpan>,
     /// Every cross reference, as last resolved.
@@ -591,7 +583,7 @@ impl ProseUiState {
                     text: text.clone(),
                     html: Some(html.clone()),
                     ambre: Some(payload.clone()),
-                    plain: false,
+                    form: ambre_core::PasteForm::Rich,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clip = Some(blob);
@@ -614,25 +606,21 @@ impl ProseUiState {
                 }
             }
             ProseEvent::TextChanged {
-                local,
+                origin,
                 seq,
                 acked,
                 edits,
                 removed,
             } => {
-                let origin = if *local {
-                    Origin::Local
-                } else {
-                    Origin::Remote
-                };
+                let origin = *origin;
                 self.take_acked(*acked, origin);
-                if origin == Origin::Remote {
+                if origin == ChangeOrigin::Remote {
                     self.seen = *seq;
                 }
                 self.take_text_change(origin, edits, removed);
             }
             ProseEvent::Synced { acked } => {
-                self.take_acked(*acked, Origin::Local);
+                self.take_acked(*acked, ChangeOrigin::Local);
                 // A split the document refused mints nothing to wait for.
                 if self.syncs.pop_front() == Some(true)
                     && self
@@ -663,11 +651,8 @@ impl ProseUiState {
                 self.comments.clone_from(threads);
                 self.index_highlights();
             }
-            ProseEvent::SuggestionsUpdated {
-                suggesting,
-                suggestions,
-            } => {
-                self.suggesting = *suggesting;
+            ProseEvent::SuggestionsUpdated { mode, suggestions } => {
+                self.edit_mode = *mode;
                 self.suggestions.clone_from(suggestions);
                 // A suggestion accepted or rejected takes its popover along.
                 if let Some(hovered) = self.hovered
@@ -734,14 +719,14 @@ impl ProseUiState {
     /// Drop the text commands the Logic thread took. A command it took
     /// as this view drew it confirms the draft; one it did not ends the
     /// draft, whose text the change takes back.
-    fn take_acked(&mut self, acked: ambre_bus::app::prose::TextAck, origin: Origin) {
+    fn take_acked(&mut self, acked: ambre_bus::app::prose::TextAck, origin: ChangeOrigin) {
         let mut ends_draft = false;
         while self.popped < acked {
             self.popped = self.popped.next();
             let Some(edit) = self.inflight.pop_front() else {
                 continue;
             };
-            if origin == Origin::Local {
+            if origin == ChangeOrigin::Local {
                 self.draft.confirm(self.popped);
             } else {
                 // The document did not do what the view drew: the catch-up
@@ -764,8 +749,8 @@ impl ProseUiState {
     /// (`PROSE-UI-028`, `PROSE-UI-152`).
     /// A deleted block drops the draft anchored in it (`PROSE-UI-143`), and
     /// the caret collapses beside it (`PROSE-UI-178`).
-    fn take_text_change(&mut self, origin: Origin, edits: &[TextEdit], removed: &[BlockId]) {
-        if origin == Origin::Remote {
+    fn take_text_change(&mut self, origin: ChangeOrigin, edits: &[TextEdit], removed: &[BlockId]) {
+        if origin == ChangeOrigin::Remote {
             let (inflight, edits) = rebase::transform_all(self.inflight.make_contiguous(), edits);
             self.inflight = inflight.into();
             self.draft.shift(&edits);
@@ -1068,7 +1053,7 @@ mod tests {
         };
         state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
-            local: true,
+            origin: crate::events::ChangeOrigin::Local,
             seq: ambre_bus::app::prose::TextChangeSeq(0),
             acked: ambre_bus::app::prose::TextAck(1),
             edits: vec![typed],

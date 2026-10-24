@@ -440,13 +440,17 @@ impl ToileState {
         touched
     }
 
-    pub(super) fn lock_elements(&mut self, ids: &[ElementId], locked: bool) -> ToileOutcome {
+    pub(super) fn lock_elements(
+        &mut self,
+        ids: &[ElementId],
+        lock: ambre_bus::app::toile::LockState,
+    ) -> ToileOutcome {
         let mut touched = false;
         for id in ids {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            let _ = em.insert(ElementKey::Locked, locked);
+            let _ = em.insert(ElementKey::Locked, lock.is_locked());
             touched = true;
         }
         if !touched {
@@ -789,7 +793,7 @@ mod inner_tests {
         let b = rect(&mut st, 40.0, 0.0, 10.0);
         st.handle_command(ToileCommand::LockElements {
             ids: vec![background.clone()],
-            locked: true,
+            lock: ambre_bus::app::toile::LockState::Locked,
         });
 
         st.handle_command(ToileCommand::AlignElements {
@@ -1002,7 +1006,7 @@ mod inner_tests {
         st.doc.commit();
         st.handle_command(ToileCommand::LockElements {
             ids: vec![id.clone()],
-            locked: true,
+            lock: ambre_bus::app::toile::LockState::Locked,
         });
         st.handle_command(ToileCommand::SetText {
             id: id.clone(),

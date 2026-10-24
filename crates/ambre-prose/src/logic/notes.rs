@@ -438,7 +438,9 @@ mod tests {
     #[test]
     fn a_note_is_refused_in_a_band_and_the_refusal_is_reported() {
         let (mut state, _) = document(ambre_core::PeerId(1), &["body"]);
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         let footer = doc::read_bands(state.document())
             .footer
             .block

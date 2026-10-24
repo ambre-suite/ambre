@@ -220,6 +220,15 @@ impl WindowWidth {
     }
 }
 
+/// Where a press of the main button on the list stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Drag {
+    /// The button is down and the pointer has not moved: a release clicks.
+    Held,
+    /// The pointer moved with the button down: a release ends a selection.
+    Moved,
+}
+
 /// The canvas view of a Murmure message region.
 pub struct MurmureView {
     /// The events of the Logic thread. The content canvas holds the page's
@@ -270,8 +279,8 @@ pub struct MurmureView {
     /// The text selected, and the points of a drag the next paint resolves
     /// (`MURMURE-425`).
     selecting: Selecting,
-    /// A mouse button holds a drag: `true` once it moved.
-    drag: Option<bool>,
+    /// A mouse button holds a drag, and whether it moved yet.
+    drag: Option<Drag>,
     /// The composer at the foot of the region, `MURMURE-199`. The thread's
     /// region holds one of its own (`MURMURE-523`).
     composer: Composer,
@@ -1604,14 +1613,14 @@ impl MurmureView {
                         press: Some(pointer),
                         ..Selecting::default()
                     };
-                    self.drag = Some(false);
+                    self.drag = Some(Drag::Held);
                     self.dirty = true;
                 }
             }
             InputEvent::PointerMove { at } => {
                 self.hover = Some(on_screen(at));
-                if let Some(moved) = self.drag.as_mut() {
-                    *moved = true;
+                if let Some(drag) = self.drag.as_mut() {
+                    *drag = Drag::Moved;
                     self.selecting.drag = Some(at);
                     self.dirty = true;
                     self.drag_past_edge(at.y);
@@ -1621,7 +1630,7 @@ impl MurmureView {
                 let at = on_screen(pointer);
                 self.hover = Some(at);
                 let drag = self.drag.take();
-                if drag == Some(true) {
+                if drag == Some(Drag::Moved) {
                     self.selecting.drag = Some(pointer);
                     self.dirty = true;
                     return false;
@@ -1632,12 +1641,12 @@ impl MurmureView {
                 }
                 // A click of the main button on a band asks for its segment
                 // again (`MURMURE-513`).
-                if drag == Some(false) && self.retry_at(pointer.y) {
+                if drag == Some(Drag::Held) && self.retry_at(pointer.y) {
                     return true;
                 }
                 // A click that moved nothing may land on a link, which the
                 // next paint finds under it (`MURMURE-567`).
-                if drag == Some(false) {
+                if drag == Some(Drag::Held) {
                     self.selecting.click = Some(pointer);
                     self.dirty = true;
                 }

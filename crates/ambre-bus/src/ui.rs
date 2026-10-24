@@ -58,7 +58,7 @@ pub enum UiEvent {
     /// WebSocket connection status for a document (online / offline indicator).
     ConnectionStatus {
         document_id: DocumentId,
-        connected: bool,
+        connected: ambre_core::LinkState,
     },
 
     /// The activity of a document not held in memory, for its badge

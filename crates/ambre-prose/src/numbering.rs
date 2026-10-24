@@ -472,7 +472,7 @@ mod tests {
     fn a_block_that_is_no_ordered_item_has_no_ordinal() {
         let mut state = ProseState::new().expect("a document is built");
         let bullet = item(&mut state, ListStyle::Bullet);
-        let ticked = item(&mut state, ListStyle::Todo(false));
+        let ticked = item(&mut state, ListStyle::Todo(crate::events::TodoMark::Open));
         let text = paragraph(&mut state);
 
         assert_eq!(ordinal(&state, &bullet), None);

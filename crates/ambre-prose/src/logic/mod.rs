@@ -123,7 +123,7 @@ pub struct ProseState {
     orphans: std::collections::HashSet<ambre_core::CommentId>,
     /// Whether this session turns typing and deleting into suggestions.
     /// Per session, never shared (`features/ambre-spec-prose-engine.md`).
-    suggesting: bool,
+    edit_mode: crate::events::EditMode,
     /// The suggestion the next adjacent edit joins (`PROSE-FEAT-085`).
     burst: Option<suggestions::Burst>,
     /// Every remote peer's latest caret and self-asserted name, keyed by the
@@ -294,7 +294,7 @@ impl ProseState {
             my_user_id: None,
             my_name: None,
             orphans: std::collections::HashSet::new(),
-            suggesting: false,
+            edit_mode: crate::events::EditMode::Editing,
             burst: None,
             presence: HashMap::new(),
             live: std::collections::HashSet::new(),
@@ -578,7 +578,7 @@ impl ProseState {
     }
 
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
-        if self.suggesting {
+        if self.edit_mode == crate::events::EditMode::Suggesting {
             if !suggestions::passes_while_suggesting(&command) {
                 return ProseOutcome::refused(ProseRefusal::NotWhileSuggesting);
             }
@@ -749,14 +749,14 @@ impl ProseState {
                 key,
                 action,
             } => self.format_selection(anchor, focus, &key, action),
-            ProseCommand::SetHeaderEnabled { enabled } => {
-                self.set_side_enabled(bands::Side::Header, enabled)
+            ProseCommand::SetHeaderEnabled { shown } => {
+                self.set_side_enabled(bands::Side::Header, shown)
             }
-            ProseCommand::SetFooterEnabled { enabled } => {
-                self.set_side_enabled(bands::Side::Footer, enabled)
+            ProseCommand::SetFooterEnabled { shown } => {
+                self.set_side_enabled(bands::Side::Footer, shown)
             }
-            ProseCommand::SetDifferentFirstPage { enabled } => {
-                self.set_different_first_page(enabled)
+            ProseCommand::SetDifferentFirstPage { first_page } => {
+                self.set_different_first_page(first_page)
             }
             ProseCommand::InsertHeaderField { field, target, pos } => {
                 self.insert_field(bands::Side::Header, field, target, pos)
@@ -795,8 +795,12 @@ impl ProseState {
                 text,
                 now_ms,
             } => self.reply_to_comment(&comment_id, &text, now_ms),
-            ProseCommand::ResolveComment { comment_id } => self.set_resolved(&comment_id, true),
-            ProseCommand::ReopenComment { comment_id } => self.set_resolved(&comment_id, false),
+            ProseCommand::ResolveComment { comment_id } => {
+                self.set_thread_state(&comment_id, ambre_core::ThreadState::Resolved)
+            }
+            ProseCommand::ReopenComment { comment_id } => {
+                self.set_thread_state(&comment_id, ambre_core::ThreadState::Open)
+            }
             ProseCommand::DeleteComment { comment_id } => self.delete_comment(&comment_id),
             ProseCommand::DeleteReply {
                 comment_id,
@@ -816,7 +820,7 @@ impl ProseState {
             ProseCommand::FollowCrossRef { block_id, pos } => {
                 self.follow_cross_ref(&tree_id(block_id), pos)
             }
-            ProseCommand::EnableTrackChanges { enabled } => self.enable_track_changes(enabled),
+            ProseCommand::EnableTrackChanges { mode } => self.enable_track_changes(mode),
             ProseCommand::AcceptSuggestion { suggestion_id } => {
                 self.resolve_suggestion(&suggestion_id, suggestions::Verdict::Accept)
             }
@@ -1218,12 +1222,12 @@ impl ProseState {
                 delta,
             })
             .collect();
-        let (local, seq, acked, edits) = self.catchup.stamp(source, edits);
+        let (origin, seq, acked, edits) = self.catchup.stamp(source, edits);
         if edits.is_empty() && removed.is_empty() {
             return None;
         }
         Some(ProseEvent::TextChanged {
-            local,
+            origin,
             seq,
             acked,
             edits,

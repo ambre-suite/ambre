@@ -72,8 +72,8 @@ pub struct OrgMemberResponse {
     pub display_name: ambre_core::DisplayName,
     /// Serialized as its lowercase word.
     pub role: Role,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub has_shamir_share: Option<bool>,
+    /// Whether the store holds a recovery share for the member.
+    pub has_shamir_share: bool,
 }
 
 fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
@@ -82,7 +82,7 @@ fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
         email: m.email.clone(),
         display_name: m.display_name.clone(),
         role: m.role,
-        has_shamir_share: Some(m.shamir_share_enc.is_some()),
+        has_shamir_share: m.shamir_share_enc.is_some(),
     }
 }
 
@@ -555,7 +555,7 @@ mod tests {
         assert_eq!(resp.email, ambre_core::Email::from("user@test.com"));
         assert_eq!(resp.display_name, "Test User");
         assert_eq!(resp.role, Role::Admin);
-        assert_eq!(resp.has_shamir_share, Some(true));
+        assert!(resp.has_shamir_share);
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod tests {
         };
         let resp = member_to_response(&member);
         assert_eq!(resp.role, Role::Member);
-        assert_eq!(resp.has_shamir_share, Some(false));
+        assert!(!resp.has_shamir_share);
     }
 
     // -- Integration tests (require Postgres + Redis) -----------------------

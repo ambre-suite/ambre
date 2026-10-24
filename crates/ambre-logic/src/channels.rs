@@ -3867,7 +3867,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ConnectionStatus {
             document_id: meta,
-            connected: true,
+            connected: ambre_core::LinkState::Connected,
         });
         let asked = erases(&drain(&sync));
         let [(again, document_id, hash)] = asked.as_slice() else {
@@ -3888,7 +3888,7 @@ mod tests {
         assert!(drain(&ui).is_empty(), "no view awaits the erase");
         state.handle_logic_event(LogicEvent::ConnectionStatus {
             document_id: meta,
-            connected: true,
+            connected: ambre_core::LinkState::Connected,
         });
         assert!(
             erases(&drain(&sync)).is_empty(),
@@ -4415,7 +4415,7 @@ mod tests {
             channel_id,
             closing,
             active: successor,
-            created: true,
+            successor: ambre_murmure::Successor::Created,
         });
         let meta = state.channels[&channel_id].meta_id().document_id();
         let sent = drain(&sync);
@@ -4453,7 +4453,7 @@ mod tests {
             channel_id,
             closing,
             active: SegmentId::new(),
-            created: true,
+            successor: ambre_murmure::Successor::Created,
         });
         assert_eq!(state.channels[&channel_id].active_id(), old);
         command(&mut state, channel_id, send("two", Vec::new()));
@@ -4466,7 +4466,7 @@ mod tests {
             channel_id,
             closing,
             active: successor,
-            created: true,
+            successor: ambre_murmure::Successor::Created,
         });
         assert_eq!(state.channels[&channel_id].active_id(), successor);
         assert!(state.close_successors.is_empty());
@@ -4508,7 +4508,7 @@ mod tests {
             channel_id,
             closing,
             active: successor,
-            created: true,
+            successor: ambre_murmure::Successor::Created,
         });
         drain(sync);
         (channel_id, closing)
@@ -4910,7 +4910,7 @@ mod tests {
             channel_id,
             closing: old,
             active: successor,
-            created: true,
+            successor: ambre_murmure::Successor::Created,
         });
         let peer = crate::test_peer();
         state

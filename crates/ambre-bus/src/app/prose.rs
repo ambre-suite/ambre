@@ -318,7 +318,34 @@ pub enum ListStyle {
     Bullet,
     Ordered(OrderedStyle),
     /// The checkbox, and whether it is ticked.
-    Todo(bool),
+    Todo(TodoMark),
+}
+
+/// Whether a to-do item's checkbox is ticked.
+///
+/// A clipboard payload carries it, so the variant that was `false` comes
+/// first and a payload written before reads the same.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TodoMark {
+    /// Not ticked: the item is still to do.
+    #[default]
+    Open,
+    /// Ticked: the item is done.
+    Done,
+}
+
+impl TodoMark {
+    /// [`TodoMark::Done`] when the stored or read checkbox is ticked.
+    #[must_use]
+    pub fn done_if(ticked: bool) -> Self {
+        if ticked { Self::Done } else { Self::Open }
+    }
+
+    /// The checkbox as the document stores it.
+    #[must_use]
+    pub fn is_done(self) -> bool {
+        self == Self::Done
+    }
 }
 
 /// How an ordered item's ordinal is spelled.
@@ -868,22 +895,97 @@ pub struct BandSet {
     pub footer: Option<BlockId>,
     pub header_first: Option<BlockId>,
     pub footer_first: Option<BlockId>,
-    pub header_enabled: bool,
-    pub footer_enabled: bool,
-    pub different_first_page: bool,
+    pub header_shown: BandState,
+    pub footer_shown: BandState,
+    pub first_page: FirstPage,
+}
+
+/// Whose change of the text an event answers: the view's own, which it drew
+/// when it sent the command, or a change it never drew.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ChangeOrigin {
+    #[default]
+    Remote,
+    Local,
+}
+
+/// Whether a session's edits land or wait as suggestions
+/// (`features/ambre-spec-prose-track-changes.md`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum EditMode {
+    /// An edit lands in the text.
+    #[default]
+    Editing,
+    /// An edit is marked as a suggestion, for another to accept or reject.
+    Suggesting,
+}
+
+/// Whether one side, the header or the footer, is drawn (`PROSE-FEAT-167`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BandState {
+    #[default]
+    Off,
+    On,
+}
+
+impl BandState {
+    /// [`BandState::On`] when the document's setting says the side shows.
+    #[must_use]
+    pub fn on_if(shown: bool) -> Self {
+        if shown { Self::On } else { Self::Off }
+    }
+
+    /// The setting as the document stores it.
+    #[must_use]
+    pub fn is_on(self) -> bool {
+        self == Self::On
+    }
+}
+
+/// Whether the first page draws a header and a footer of its own
+/// (`PROSE-FEAT-063`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum FirstPage {
+    /// The first page draws the regular pair.
+    #[default]
+    SameAsRest,
+    /// The first page draws its own pair.
+    OwnBands,
+}
+
+impl FirstPage {
+    /// [`FirstPage::OwnBands`] when the document's setting says so.
+    #[must_use]
+    pub fn own_if(own: bool) -> Self {
+        if own { Self::OwnBands } else { Self::SameAsRest }
+    }
+
+    /// The setting as the document stores it.
+    #[must_use]
+    pub fn has_own(self) -> bool {
+        self == Self::OwnBands
+    }
 }
 
 /// What a search looks for (`features/ambre-spec-prose-find-replace.md`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindQuery {
     pub text: String,
-    pub case_sensitive: bool,
-    /// A match must not touch a letter, a digit or an underscore on either
-    /// side.
-    pub whole_word: bool,
-    /// The regular-expression search, unbuilt: the engine refuses a query
-    /// that sets it.
-    pub use_regex: bool,
+    pub case: ambre_core::CaseMatch,
+    pub word: ambre_core::WordMatch,
+    /// [`PatternKind::Regex`] asks for the regular-expression search, unbuilt:
+    /// the engine refuses a query that sets it.
+    pub pattern: PatternKind,
+}
+
+/// How a find reads its text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PatternKind {
+    /// The text is looked for as it is written.
+    #[default]
+    Literal,
+    /// The text is a regular expression.
+    Regex,
 }
 
 /// One match: a range of code points inside the body of one block
@@ -1078,7 +1180,32 @@ pub struct TocEntry {
 pub struct TableOfContents {
     pub entries: Vec<TocEntry>,
     pub max_level: HeadingLevel,
-    pub numbered: bool,
+    pub numbered: TocNumbering,
+}
+
+/// Whether a table of contents prints each heading's section number
+/// (`PROSE-FEAT-062`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TocNumbering {
+    /// The entries show no section number.
+    #[default]
+    Plain,
+    /// Each entry shows its heading's section number.
+    Numbered,
+}
+
+impl TocNumbering {
+    /// [`TocNumbering::Numbered`] when the block's stored switch is on.
+    #[must_use]
+    pub fn numbered_if(numbered: bool) -> Self {
+        if numbered { Self::Numbered } else { Self::Plain }
+    }
+
+    /// The switch as the block stores it.
+    #[must_use]
+    pub fn is_numbered(self) -> bool {
+        self == Self::Numbered
+    }
 }
 
 // =============================================================================
@@ -1276,12 +1403,12 @@ pub enum ProseCommand {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
         max_level: HeadingLevel,
-        numbered: bool,
+        numbered: TocNumbering,
     },
     UpdateTocConfig {
         block_id: BlockId,
         max_level: HeadingLevel,
-        numbered: bool,
+        numbered: TocNumbering,
     },
 
     // -- Viewport (`features/ambre-spec-prose-viewport.md`) --
@@ -1345,16 +1472,16 @@ pub enum ProseCommand {
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
     /// Show or hide the top band (`PROSE-FEAT-167`).
     SetHeaderEnabled {
-        enabled: bool,
+        shown: BandState,
     },
     /// Show or hide the bottom band (`PROSE-FEAT-167`).
     SetFooterEnabled {
-        enabled: bool,
+        shown: BandState,
     },
     /// Turn the first page's own header and footer on or off, together
     /// (`PROSE-FEAT-063`).
     SetDifferentFirstPage {
-        enabled: bool,
+        first_page: FirstPage,
     },
     /// A field in the header block `target` names. A position past the end
     /// is clamped to it (`PROSE-FEAT-068`).
@@ -1462,7 +1589,7 @@ pub enum ProseCommand {
     /// Turn suggestion mode on or off for this session. Nothing pending is
     /// applied or cancelled (`PROSE-FEAT-089`).
     EnableTrackChanges {
-        enabled: bool,
+        mode: EditMode,
     },
     /// Apply every span of one suggestion (`PROSE-FEAT-083`).
     AcceptSuggestion {
@@ -1750,11 +1877,12 @@ pub enum ProseEvent {
     /// holds no document (`PROSE-UI-001`). The draft and the caret follow it
     /// (`PROSE-UI-005`, `PROSE-UI-028`, `PROSE-UI-143`).
     TextChanged {
-        /// The change is what a text command of the view did, as the view
-        /// already drew it. Any other change, remote or not, is `false`.
-        local: bool,
+        /// [`ChangeOrigin::Local`] when the change is what a text command of
+        /// the view did, as the view already drew it. Any other change, remote
+        /// or not, is [`ChangeOrigin::Remote`].
+        origin: ChangeOrigin,
         /// The count of changes the view did not draw, this one included when
-        /// `local` is `false`. The view hands it back in
+        /// `origin` is [`ChangeOrigin::Remote`]. The view hands it back in
         /// [`ProseCommand::Sync`].
         seq: TextChangeSeq,
         /// How many insertions and deletions of text the Logic thread has
@@ -1838,7 +1966,7 @@ pub enum ProseEvent {
     /// Every pending suggestion, in document order of its first span, and
     /// whether this session is suggesting.
     SuggestionsUpdated {
-        suggesting: bool,
+        mode: EditMode,
         suggestions: Vec<Suggestion>,
     },
     /// Every run of a link mark, in document order.

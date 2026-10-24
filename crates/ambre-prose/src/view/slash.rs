@@ -86,7 +86,7 @@ pub const ITEMS: [SlashItem; 12] = [
     },
     SlashItem {
         label: "Task list",
-        command: SlashCommand::List(ListStyle::Todo(false)),
+        command: SlashCommand::List(ListStyle::Todo(crate::events::TodoMark::Open)),
     },
     SlashItem {
         label: "Table",
@@ -144,7 +144,7 @@ impl SlashCommand {
                 parent_id: None,
                 after_id: Some(origin),
                 max_level: TOC_LEVEL,
-                numbered: false,
+                numbered: crate::events::TocNumbering::Plain,
             },
         }
     }

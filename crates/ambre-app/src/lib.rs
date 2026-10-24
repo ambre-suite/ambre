@@ -422,7 +422,7 @@ struct Wiring {
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 struct ChromeStatus {
     hydrating: bool,
-    connected: bool,
+    connected: ambre_core::LinkState,
 }
 
 impl ChromeStatus {
@@ -432,8 +432,8 @@ impl ChromeStatus {
     fn label(self) -> &'static str {
         match (self.hydrating, self.connected) {
             (true, _) => "Syncing",
-            (false, true) => "Synced",
-            (false, false) => "Offline",
+            (false, ambre_core::LinkState::Connected) => "Synced",
+            (false, ambre_core::LinkState::Disconnected) => "Offline",
         }
     }
 
@@ -441,8 +441,8 @@ impl ChromeStatus {
     fn dot_class(self) -> &'static str {
         match (self.hydrating, self.connected) {
             (true, _) => "dot syncing",
-            (false, true) => "dot",
-            (false, false) => "dot offline",
+            (false, ambre_core::LinkState::Connected) => "dot",
+            (false, ambre_core::LinkState::Disconnected) => "dot offline",
         }
     }
 
@@ -1131,7 +1131,7 @@ pub fn main() {
                 chrome_status.update(|s| {
                     s.hydrating = cur_doc.is_some();
                     if cur_doc.is_none() {
-                        s.connected = false;
+                        s.connected = ambre_core::LinkState::Disconnected;
                     }
                 });
             }
@@ -1943,7 +1943,7 @@ mod chrome_status_tests {
         let active = DocumentId::new();
         let loading = ChromeStatus {
             hydrating: true,
-            connected: true,
+            connected: ambre_core::LinkState::Connected,
         };
 
         let mut left = loading;
@@ -1967,6 +1967,7 @@ mod fan_out_tests {
     };
     use ambre_bus::conduit;
     use ambre_bus::{DocumentId, UiEvent};
+    use ambre_core::LinkState;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -1976,7 +1977,7 @@ mod fan_out_tests {
 
     /// An event a child's stream carries. Its `connected` flag tells two
     /// events apart, so the order they arrive in can be read back.
-    fn status(document_id: DocumentId, connected: bool) -> UiEvent {
+    fn status(document_id: DocumentId, connected: LinkState) -> UiEvent {
         UiEvent::ConnectionStatus {
             document_id,
             connected,
@@ -1990,7 +1991,7 @@ mod fan_out_tests {
         )
     }
 
-    fn connected(ev: UiEvent) -> bool {
+    fn connected(ev: UiEvent) -> LinkState {
         match ev {
             UiEvent::ConnectionStatus { connected, .. } => connected,
             _ => panic!("a foreign event reached the child"),
@@ -2021,9 +2022,9 @@ mod fan_out_tests {
         let (tx, rx) = conduit::local::<UiEvent>(1);
         routes.borrow_mut().entry(doc).or_default().push(tx);
 
-        send_to_child(&routes, &backlog, doc, status(doc, true));
-        send_to_child(&routes, &backlog, doc, status(doc, false));
-        send_to_child(&routes, &backlog, doc, status(doc, true));
+        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
+        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Disconnected));
+        send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
         assert_eq!(
             backlog.borrow()[&doc].len(),
             2,
@@ -2035,7 +2036,14 @@ mod fan_out_tests {
             seen.push(connected(ev));
             flush_child_backlog(&routes, &backlog);
         }
-        assert_eq!(seen, [true, false, true]);
+        assert_eq!(
+            seen,
+            [
+                LinkState::Connected,
+                LinkState::Disconnected,
+                LinkState::Connected
+            ]
+        );
         assert!(backlog.borrow().is_empty(), "a drained backlog lingers");
     }
 
@@ -2055,7 +2063,7 @@ mod fan_out_tests {
         tracing::subscriber::with_default(subscriber, || {
             // One taken by the queue, the bound waiting, and two past it.
             for _ in 0..CHILD_BACKLOG_LIMIT + 3 {
-                send_to_child(&routes, &backlog, doc, status(doc, true));
+                send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
             }
         });
         assert_eq!(backlog.borrow()[&doc].len(), CHILD_BACKLOG_LIMIT);
@@ -2076,18 +2084,18 @@ mod fan_out_tests {
         let board = DocumentId::new();
         let (tx, rx) = conduit::local::<UiEvent>(4);
         routes.borrow_mut().entry(child).or_default().push(tx);
-        assert_eq!(child_of(&routes, &status(child, true)), Some(child));
-        assert_eq!(child_of(&routes, &status(board, true)), None);
+        assert_eq!(child_of(&routes, &status(child, LinkState::Connected)), Some(child));
+        assert_eq!(child_of(&routes, &status(board, LinkState::Connected)), None);
 
         // The embed leaves the frame: its view, and with it the receiver, drop.
         drop(rx);
-        send_to_child(&routes, &backlog, child, status(child, true));
+        send_to_child(&routes, &backlog, child, status(child, LinkState::Connected));
         assert!(
             routes.borrow()[&child].is_empty(),
             "the dead view kept its slot"
         );
         assert_eq!(
-            child_of(&routes, &status(child, false)),
+            child_of(&routes, &status(child, LinkState::Disconnected)),
             Some(child),
             "an event of a document with no view fell through to the board"
         );

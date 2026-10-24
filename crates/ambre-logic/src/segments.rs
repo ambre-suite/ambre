@@ -53,14 +53,14 @@ impl LogicState {
     }
 
     /// The relay closed `closing` into `active`. `meta` records it, and the
-    /// successor opens: this client's own when `created`, the winner's
+    /// successor opens: this client's own when it created it, the winner's
     /// otherwise.
     pub(crate) fn segment_closed(
         &mut self,
         channel_id: ChannelId,
         closing: SegmentId,
         active: SegmentId,
-        created: bool,
+        successor: ambre_murmure::Successor,
     ) {
         let Some(now) = self.closing_segments.remove(&channel_id) else {
             return;
@@ -68,11 +68,6 @@ impl LogicState {
         self.close_successors.remove(&channel_id);
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
-        };
-        let successor = if created {
-            ambre_murmure::Successor::Created
-        } else {
-            ambre_murmure::Successor::Fetched
         };
         let closed = match channel.close_into(closing, active, successor, now) {
             Ok(closed) => closed,
@@ -91,7 +86,7 @@ impl LogicState {
         // The created successor is held already, and its whole content leaves
         // as its first update once its identity lands. A fetched one is
         // pending until its bytes are in.
-        if created || closed.fetch.is_some() {
+        if successor == ambre_murmure::Successor::Created || closed.fetch.is_some() {
             self.send_to_sync(SyncCommand::OpenDocument {
                 document_id: active.document_id(),
                 doc_type: DocType::Murmure,

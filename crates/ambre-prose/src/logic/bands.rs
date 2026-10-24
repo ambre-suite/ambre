@@ -16,7 +16,7 @@ use loro::TreeID;
 
 use crate::doc;
 use crate::events::{
-    Align, BandSet, BlockType, HeaderField, HfTarget, ProseEvent, ProseOutcome, ProseRefusal,
+    Align, BandSet, BandState, BlockType, FirstPage, HeaderField, HfTarget, ProseEvent, ProseOutcome, ProseRefusal,
     block_id,
 };
 
@@ -52,22 +52,22 @@ impl ProseState {
             footer: bands.footer.block.map(block_id),
             header_first: bands.header_first.block.map(block_id),
             footer_first: bands.footer_first.block.map(block_id),
-            header_enabled: bands.header_enabled,
-            footer_enabled: bands.footer_enabled,
-            different_first_page: bands.different_first_page,
+            header_shown: BandState::on_if(bands.header_enabled),
+            footer_shown: BandState::on_if(bands.footer_enabled),
+            first_page: FirstPage::own_if(bands.different_first_page),
         }
     }
 
     /// Show or hide one side. The block it names is left alone, so showing it
     /// again brings its text back (`PROSE-FEAT-167`, `PROSE-FEAT-168`).
-    pub(super) fn set_side_enabled(&mut self, side: Side, enabled: bool) -> ProseOutcome {
-        if enabled && let Err(outcome) = self.ensure_side(side) {
+    pub(super) fn set_side_enabled(&mut self, side: Side, shown: BandState) -> ProseOutcome {
+        if shown.is_on() && let Err(outcome) = self.ensure_side(side) {
             return outcome;
         }
         let (regular, _) = side.registers();
         let written = self
             .register(regular)
-            .and_then(|map| map.insert(doc::BandKey::Enabled, enabled).ok());
+            .and_then(|map| map.insert(doc::BandKey::Enabled, shown.is_on()).ok());
         if written.is_none() {
             return Self::err_write(doc::WriteError::Refused(
                 doc::RefusalCause::BandSettingRefused,
@@ -78,9 +78,9 @@ impl ProseState {
 
     /// Turn the first page's own bands on or off. It touches neither side's
     /// own setting nor any band block (`PROSE-FEAT-170`).
-    pub(super) fn set_different_first_page(&mut self, enabled: bool) -> ProseOutcome {
+    pub(super) fn set_different_first_page(&mut self, first_page: FirstPage) -> ProseOutcome {
         let meta = doc::meta(&self.doc);
-        if let Err(e) = meta.insert(doc::MetaKey::DifferentFirstPage, enabled) {
+        if let Err(e) = meta.insert(doc::MetaKey::DifferentFirstPage, first_page.has_own()) {
             return Self::err_write(e);
         }
         self.commit_bands()
@@ -231,7 +231,9 @@ pub(crate) mod tests {
 
     pub(crate) fn with_header() -> (ProseState, BlockId) {
         let mut state = ProseState::new().expect("a fresh document");
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("the header block");
         (state, header)
     }
@@ -336,15 +338,21 @@ pub(crate) mod tests {
     #[test]
     fn showing_one_side_changes_that_side_alone() {
         let mut state = ProseState::new().expect("a fresh document");
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         let before = state.bands();
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let after = state.bands();
-        assert!(after.header_enabled);
-        assert_eq!(after.footer_enabled, before.footer_enabled);
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: false });
-        assert!(!state.bands().header_enabled);
-        assert!(state.bands().footer_enabled);
+        assert_eq!(after.header_shown, BandState::On);
+        assert_eq!(after.footer_shown, before.footer_shown);
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::Off,
+        });
+        assert_eq!(state.bands().header_shown, BandState::Off);
+        assert_eq!(state.bands().footer_shown, BandState::On);
     }
 
     #[test]
@@ -355,9 +363,13 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
             text: "Kept".to_owned(),
         });
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: false });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::Off,
+        });
         assert_eq!(state.text_of(&header).as_deref(), Some("Kept"));
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         assert_eq!(state.bands().header, Some(header));
         assert_eq!(state.text_of(&header).as_deref(), Some("Kept"));
     }
@@ -365,7 +377,9 @@ pub(crate) mod tests {
     #[test]
     fn one_setting_governs_both_first_page_bands_and_touches_nothing_else() {
         let (mut state, _) = with_header();
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         let first = state.bands().header_first.expect("minted with the side");
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
@@ -373,9 +387,11 @@ pub(crate) mod tests {
             text: "Cover".to_owned(),
         });
         let before = state.bands();
-        state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
+        state.handle_command(ProseCommand::SetDifferentFirstPage {
+            first_page: crate::events::FirstPage::OwnBands,
+        });
         let on = state.bands();
-        assert!(on.different_first_page);
+        assert_eq!(on.first_page, FirstPage::OwnBands);
         assert_eq!(
             (on.header, on.footer, on.header_first, on.footer_first),
             (
@@ -386,10 +402,12 @@ pub(crate) mod tests {
             )
         );
         assert_eq!(
-            (on.header_enabled, on.footer_enabled),
-            (before.header_enabled, before.footer_enabled)
+            (on.header_shown, on.footer_shown),
+            (before.header_shown, before.footer_shown)
         );
-        state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: false });
+        state.handle_command(ProseCommand::SetDifferentFirstPage {
+            first_page: crate::events::FirstPage::SameAsRest,
+        });
         assert_eq!(state.text_of(&first).as_deref(), Some("Cover"));
         let meta = doc::meta(state.document());
         // A key of `meta` looked for in a band register, so the raw map.
@@ -406,7 +424,9 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
             text: "Page ".to_owned(),
         });
-        state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
+        state.handle_command(ProseCommand::SetDifferentFirstPage {
+            first_page: crate::events::FirstPage::OwnBands,
+        });
         let before = state.bands();
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::PageNumber,
@@ -499,7 +519,9 @@ pub(crate) mod tests {
     #[test]
     fn an_alignment_lands_on_the_band_named_and_on_no_other() {
         let (mut state, header) = with_header();
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
             pos: DocOffset::ZERO,
@@ -572,7 +594,9 @@ pub(crate) mod tests {
     #[test]
     fn two_peers_typing_in_one_band_converge_as_a_paragraph_would() {
         let (mut alice, mut bob) = two_peers();
-        let shown = alice.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        let shown = alice.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         send(&shown, &mut bob);
         let header = alice.bands().header.expect("the header");
         assert_eq!(bob.bands().header, Some(header));
@@ -597,7 +621,9 @@ pub(crate) mod tests {
     #[test]
     fn two_readers_resolve_one_date_from_the_stamp_and_never_their_clock() {
         let (mut alice, mut bob) = two_peers();
-        let shown = alice.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        let shown = alice.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         send(&shown, &mut bob);
         let field = alice.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Iso),
@@ -685,7 +711,9 @@ pub(crate) mod tests {
     #[test]
     fn the_first_page_draws_its_own_bands_only_while_the_setting_is_on() {
         let (mut state, _) = with_header();
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         let set = state.bands();
         let block = |band: Option<doc::Band>| band.and_then(|b| b.block).map(block_id);
         let off = state.paginate(&[]).clone();
@@ -693,7 +721,9 @@ pub(crate) mod tests {
             let (header, footer) = off.bands_on_page(page);
             assert_eq!((block(header), block(footer)), (set.header, set.footer));
         }
-        state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
+        state.handle_command(ProseCommand::SetDifferentFirstPage {
+            first_page: crate::events::FirstPage::OwnBands,
+        });
         let on = state.paginate(&[]).clone();
         let (header, footer) = on.bands_on_page(PageIndex::new(0));
         assert_eq!(
@@ -724,7 +754,9 @@ pub(crate) mod tests {
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let bare = state.paginate(&[]).clone();
         assert_eq!(bare.header_height_px, DocPx::new(0.0));
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,

@@ -10,7 +10,9 @@ use ambre_core::SuggestionId;
 use loro::{LoroMap, TreeID};
 
 use crate::doc;
-use crate::events::{ProseCommand, ProseEvent, ProseOutcome, ProseRefusal, SuggestionKind};
+use crate::events::{
+    EditMode, ProseCommand, ProseEvent, ProseOutcome, ProseRefusal, SuggestionKind,
+};
 use crate::suggest;
 
 use super::ProseState;
@@ -87,11 +89,11 @@ impl ProseState {
     /// Turn suggestion mode on or off. Nothing pending is touched
     /// (`PROSE-FEAT-089`), and the burst closes: the next edit starts a
     /// suggestion of its own.
-    pub(super) fn enable_track_changes(&mut self, enabled: bool) -> ProseOutcome {
-        if enabled && self.my_user_id.is_none() {
+    pub(super) fn enable_track_changes(&mut self, mode: EditMode) -> ProseOutcome {
+        if mode == EditMode::Suggesting && self.my_user_id.is_none() {
             return ProseOutcome::refused(ProseRefusal::NoIdentity);
         }
-        self.suggesting = enabled;
+        self.edit_mode = mode;
         self.burst = None;
         ProseOutcome {
             display: vec![self.suggestions_event()],
@@ -103,7 +105,7 @@ impl ProseState {
     /// Whether this session is suggesting.
     #[must_use]
     pub fn is_suggesting(&self) -> bool {
-        self.suggesting
+        self.edit_mode == EditMode::Suggesting
     }
 
     /// Every pending suggestion, as the view lists it.
@@ -114,7 +116,7 @@ impl ProseState {
 
     pub(super) fn suggestions_event(&self) -> ProseEvent {
         ProseEvent::SuggestionsUpdated {
-            suggesting: self.suggesting,
+            mode: self.edit_mode,
             suggestions: self.suggestions(),
         }
     }
@@ -564,7 +566,9 @@ mod tests {
     }
 
     fn suggest(state: &mut ProseState) {
-        state.handle_command(ProseCommand::EnableTrackChanges { enabled: true });
+        state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Suggesting,
+        });
     }
 
     fn type_at(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> ProseOutcome {
@@ -649,7 +653,9 @@ mod tests {
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), "!");
         let before = state.suggestions();
-        state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
+        state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Editing,
+        });
         assert_eq!(state.suggestions(), before);
         type_at(&mut state, ids[0], DocOffset::ZERO, ">");
         assert_eq!(text(&state, ids[0]), ">Hello!");
@@ -696,7 +702,9 @@ mod tests {
         let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(1), "XY");
-        state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
+        state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Editing,
+        });
         type_at(&mut state, ids[0], DocOffset::new(2), "q");
         assert_eq!(text(&state, ids[0]), "aXqYb");
         assert_eq!(spans(&only(&state)), vec![(1, 2), (3, 4)]);
@@ -1031,7 +1039,9 @@ mod tests {
     #[test]
     fn a_session_with_no_user_cannot_suggest() {
         let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
-        let outcome = state.handle_command(ProseCommand::EnableTrackChanges { enabled: true });
+        let outcome = state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Suggesting,
+        });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::NoIdentity));
         assert!(!state.is_suggesting());
     }

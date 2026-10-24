@@ -45,15 +45,7 @@ pub(super) struct Retry {
     at: Option<Timestamp>,
 }
 
-/// Who registered the segment a close moves to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Successor {
-    /// Another member won the race: the successor is fetched as they wrote
-    /// it.
-    Fetched,
-    /// This client registered it: the channel holds it at once.
-    Created,
-}
+pub use ambre_bus::app::murmure::Successor;
 
 /// What writing a close produced: the `meta` delta to send, and the successor
 /// to fetch when another client created it.

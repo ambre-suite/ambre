@@ -1197,9 +1197,13 @@ fn a_target_that_could_run_code_is_held_back() {
 fn banded() -> (Rig, BlockId, BlockId) {
     let mut rig = Rig::new(&["the body of the page"]);
     rig.outbox
-        .push(ProseCommand::SetHeaderEnabled { enabled: true });
+        .push(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
     rig.outbox
-        .push(ProseCommand::SetFooterEnabled { enabled: true });
+        .push(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
     rig.deliver();
     let bands = rig.logic.bands();
     let header = bands.header.expect("the header block");
@@ -2157,7 +2161,7 @@ fn the_kept_payload_serves_only_its_own_copy() {
         text: text.to_owned(),
         html: None,
         ambre: None,
-        plain: false,
+        form: ambre_core::PasteForm::Rich,
     };
     let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("other"), PasteSource::Own) else {
         panic!("a paste");
@@ -2221,7 +2225,7 @@ fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
         text: "x".to_owned(),
         html: Some("<b>x</b>".to_owned()),
         ambre: None,
-        plain: false,
+        form: ambre_core::PasteForm::Rich,
     };
     let input = rig.ui.paste_input(blob, PasteSource::Foreign);
     assert!(matches!(
@@ -2251,17 +2255,17 @@ fn a_plain_paste_carries_the_text_alone() {
     });
     rig.input(ProseInput::Copy(ClipboardWrite::Copy));
     rig.deliver();
-    let read = |plain: bool| ambre_bus::ClipboardBlob {
+    let read = |form: ambre_core::PasteForm| ambre_bus::ClipboardBlob {
         text: "hello".to_owned(),
         html: Some("<b>hello</b>".to_owned()),
         ambre: None,
-        plain,
+        form,
     };
-    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(false), PasteSource::Own) else {
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(ambre_core::PasteForm::Rich), PasteSource::Own) else {
         panic!("a paste");
     };
     assert!(rich.is_some(), "the ordinary paste serves the kept payload");
-    let input = rig.ui.paste_input(read(true), PasteSource::Own);
+    let input = rig.ui.paste_input(read(ambre_core::PasteForm::Plain), PasteSource::Own);
     assert!(matches!(
         &input,
         ProseInput::Paste { text, html: None, rich: None } if text == "hello"

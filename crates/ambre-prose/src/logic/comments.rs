@@ -101,11 +101,15 @@ impl ProseState {
     }
 
     /// Close or reopen thread `id`, whoever opened it (`PROSE-FEAT-187`).
-    pub(super) fn set_resolved(&mut self, id: &CommentId, resolved: bool) -> ProseOutcome {
+    pub(super) fn set_thread_state(
+        &mut self,
+        id: &CommentId,
+        state: ambre_core::ThreadState,
+    ) -> ProseOutcome {
         let Some(entry) = comment::entry(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         };
-        if let Err(e) = entry.insert(doc::AnnotKey::Resolved, resolved) {
+        if let Err(e) = entry.insert(doc::AnnotKey::Resolved, state.is_resolved()) {
             return Self::err_write(e);
         }
         self.commit_comments()
@@ -495,7 +499,9 @@ mod tests {
             add(&mut state, block, DocSpan::from_usize_range(2..9)),
             Some(ProseRefusal::BadRange)
         );
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("a header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,

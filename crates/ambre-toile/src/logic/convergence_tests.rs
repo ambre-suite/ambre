@@ -436,7 +436,7 @@ fn locked_element_ignores_move() {
     let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![id.clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
     st.handle_command(ToileCommand::MoveElements {
         ids: vec![id.clone()],
@@ -990,7 +990,7 @@ fn board_ids_excludes_locked_and_group_nodes() {
     let c = create_rect(&mut st, Point::new(80.0, 0.0), Size::new(10.0, 10.0));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![a.clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
     st.handle_command(ToileCommand::GroupElements {
         ids: vec![b.clone(), c.clone()],
@@ -1308,16 +1308,16 @@ fn find_honors_match_case_and_whole_word() {
     let substr = create_sticky(&mut st, Point::new(400.0, 0.0), "Cathedral");
 
     let case = crate::logic::command::FindOptions {
-        match_case: true,
-        whole_word: false,
+        case: ambre_core::CaseMatch::Sensitive,
+        word: ambre_core::WordMatch::Anywhere,
     };
     let r = find(&mut st, "Cat", case, None);
     // Case-sensitive: "Cat" and "Cathedral" (substring) match, "cat" does not.
     assert_eq!(r.hits, vec![exact.clone(), substr]);
 
     let whole = crate::logic::command::FindOptions {
-        match_case: true,
-        whole_word: true,
+        case: ambre_core::CaseMatch::Sensitive,
+        word: ambre_core::WordMatch::WholeWord,
     };
     let r = find(&mut st, "Cat", whole, None);
     // Whole-word + case: only the standalone "Cat" survives.
@@ -5341,14 +5341,14 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     let da = a
         .handle_command(ToileCommand::ResolveThread {
             thread: t.clone(),
-            resolved: true,
+            state: ambre_core::ThreadState::Resolved,
         })
         .update
         .expect("A's resolve broadcasts a delta");
     let db = b
         .handle_command(ToileCommand::ResolveThread {
             thread: t.clone(),
-            resolved: true,
+            state: ambre_core::ThreadState::Resolved,
         })
         .update
         .expect("B's resolve broadcasts a delta");
@@ -5365,14 +5365,14 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     // Idempotent: resolving an already-resolved thread writes nothing.
     let again = a.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
-        resolved: true,
+        state: ambre_core::ThreadState::Resolved,
     });
     assert!(again.update.is_none(), "a redundant resolve is not a write");
 
     // Reopening restores the thread whole.
     a.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
-        resolved: false,
+        state: ambre_core::ThreadState::Open,
     });
     let reopened = a.comment_thread(&t).expect("the thread survives a reopen");
     assert!(!reopened.resolved);
@@ -5575,7 +5575,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     let t = comment_on(&mut st, anchor.clone(), "open it", ambre_bus::Timestamp(0));
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
-        resolved: true,
+        state: ambre_core::ThreadState::Resolved,
     });
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
@@ -5607,7 +5607,7 @@ fn a_resolve_keeps_every_message_body() {
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
-        resolved: true,
+        state: ambre_core::ThreadState::Resolved,
     });
     assert_eq!(
         bodies(&st, &t),
@@ -5677,7 +5677,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
     );
     st.handle_command(ToileCommand::ResolveThread {
         thread: on_board.clone(),
-        resolved: true,
+        state: ambre_core::ThreadState::Resolved,
     });
 
     let pins = pins(&st);
@@ -6087,7 +6087,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
         PeerOp::LockNth { nth: n, locked } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::LockElements {
                 ids: vec![id],
-                locked: *locked,
+                lock: ambre_bus::app::toile::LockState::locked_if(*locked),
             }),
             None => return None,
         },
@@ -6740,7 +6740,7 @@ fn a_combine_consumes_only_its_sources() {
     let locked = filled_rect(&mut st, 3.0, Rgba::from_bits(0xFF00_00FF));
     st.handle_command(ToileCommand::LockElements {
         ids: vec![locked.clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
     let note = create_sticky(&mut st, Point::new(2.0, 2.0), "note");
     st.handle_command(ToileCommand::BooleanOp {

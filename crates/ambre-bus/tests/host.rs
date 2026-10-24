@@ -298,7 +298,7 @@ fn logic_event_roundtrips_through_postcard() {
     });
     roundtrip_event(&LogicEvent::ConnectionStatus {
         document_id: doc,
-        connected: true,
+        connected: ambre_core::LinkState::Connected,
     });
     roundtrip_event(&LogicEvent::MemberRevoked {
         document_id: doc,
@@ -670,7 +670,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::ConnectionStatus {
             document_id: doc,
-            connected: false,
+            connected: ambre_core::LinkState::Disconnected,
         },
         LogicEvent::Activity {
             document_id: doc,
@@ -732,7 +732,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             closing: segment,
             active: SegmentId::from_document(DocumentId::new()),
-            created: false,
+            successor: ambre_bus::app::murmure::Successor::Fetched,
         },
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,

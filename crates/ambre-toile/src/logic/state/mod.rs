@@ -551,7 +551,7 @@ impl ToileState {
             ToileCommand::RestyleElements { ids, style } => self.restyle_elements(&ids, style),
             ToileCommand::DeleteElements { ids } => self.delete_elements(&ids),
             ToileCommand::SetText { id, base, text } => self.set_text(&id, &base, &text),
-            ToileCommand::LockElements { ids, locked } => self.lock_elements(&ids, locked),
+            ToileCommand::LockElements { ids, lock } => self.lock_elements(&ids, lock),
             ToileCommand::Reorder { node, to } => self.reorder(node, to),
             ToileCommand::GroupElements { ids } => self.group_elements(&ids),
             ToileCommand::UngroupElements { groups } => self.ungroup_elements(&groups),
@@ -584,8 +584,8 @@ impl ToileState {
                 message,
                 delta,
             } => self.edit_comment(&thread, message, &delta),
-            ToileCommand::ResolveThread { thread, resolved } => {
-                self.resolve_thread(&thread, resolved)
+            ToileCommand::ResolveThread { thread, state } => {
+                self.resolve_thread(&thread, state)
             }
             ToileCommand::ReadComments { thread } => self.read_comments(thread.as_ref()),
             ToileCommand::BooleanOp { op, ids, sources } => self.boolean_op(op, &ids, sources),
@@ -1605,7 +1605,7 @@ mod undo_state_tests {
             },
             ToileCommand::LockElements {
                 ids: Vec::new(),
-                locked: true,
+                lock: ambre_bus::app::toile::LockState::Locked,
             },
         ] {
             let label = format!("{no_op:?}");

@@ -19,15 +19,9 @@ pub enum ClipboardWrite {
     Cut,
 }
 
-/// Which halves of the clipboard a paste reads.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub enum PasteForm {
-    /// Every half the view can read, formatting included.
-    #[default]
-    Rich,
-    /// The plain text alone: the formatting is dropped.
-    Plain,
-}
+/// Which halves of the clipboard a paste reads. The bus carries it on the
+/// blob a paste hands its view, so it lives in `ambre-core`.
+pub use ambre_core::PasteForm;
 
 /// What a caret move does to the selection anchor.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]

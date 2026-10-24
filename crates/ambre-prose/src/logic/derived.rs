@@ -12,7 +12,9 @@ use loro::{LoroValue, TreeID};
 
 use crate::count;
 use crate::doc;
-use crate::events::{BlockType, HeadingLevel, ProseEvent, ProseOutcome, TableOfContents, block_id};
+use crate::events::{
+    BlockType, HeadingLevel, ProseEvent, ProseOutcome, TableOfContents, TocNumbering, block_id,
+};
 use crate::toc;
 
 use super::ProseState;
@@ -29,7 +31,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         max_level: HeadingLevel,
-        numbered: bool,
+        numbered: TocNumbering,
     ) -> ProseOutcome {
         let id = match self.mint_placed(parent_id, after_id, BlockType::Toc) {
             Ok(id) => id,
@@ -46,7 +48,7 @@ impl ProseState {
         &mut self,
         id: &TreeID,
         max_level: HeadingLevel,
-        numbered: bool,
+        numbered: TocNumbering,
     ) -> ProseOutcome {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::Toc) {
             return Self::err_no_block(id);
@@ -60,7 +62,7 @@ impl ProseState {
         &mut self,
         id: &TreeID,
         max_level: HeadingLevel,
-        numbered: bool,
+        numbered: TocNumbering,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         let attrs = doc::node_of(&tree, id).and_then(|node| doc::attrs_at(&node));
@@ -72,7 +74,7 @@ impl ProseState {
         let level = i64::from(max_level.get());
         let written = attrs
             .insert(doc::AttrKey::MaxLevel, LoroValue::I64(level))
-            .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered)));
+            .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered.is_numbered())));
         if let Err(e) = written {
             return Self::err_write(e);
         }
@@ -172,7 +174,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    use crate::events::HeadingLevel;
+    use crate::events::{HeadingLevel, TocNumbering};
     use ambre_bus::app::prose::DocOffset;
     use loro::LoroValue;
 
@@ -218,7 +220,7 @@ mod tests {
 
     /// A table of contents after the first block, answering its id and the
     /// events the insert produced.
-    fn insert_toc(state: &mut ProseState, max_level: u8, numbered: bool) -> BlockId {
+    fn insert_toc(state: &mut ProseState, max_level: u8, numbered: TocNumbering) -> BlockId {
         let first = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertToc {
             parent_id: None,
@@ -267,7 +269,7 @@ mod tests {
     #[test]
     fn the_entries_are_the_headings_in_order_reading_their_own_text() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "Alpha");
         append(&mut state, BlockInit::Paragraph, "Body text.");
         heading(&mut state, 2, "Beta");
@@ -280,7 +282,7 @@ mod tests {
     #[test]
     fn an_entry_reads_the_page_its_heading_starts_on() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "First");
         append(&mut state, BlockInit::PageBreak, "");
         heading(&mut state, 1, "Second");
@@ -298,7 +300,7 @@ mod tests {
     #[test]
     fn a_heading_no_layout_places_draws_no_page_number() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "Lost");
         let tree = doc::blocks(state.document());
         let built = crate::toc::build(
@@ -314,7 +316,7 @@ mod tests {
     #[test]
     fn the_block_holds_its_two_settings_and_no_entry() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 3, true);
+        let toc = insert_toc(&mut state, 3, TocNumbering::Numbered);
         heading(&mut state, 1, "A heading");
         let _ = settled(&mut state, toc);
         let tree = doc::blocks(state.document());
@@ -335,7 +337,7 @@ mod tests {
     #[test]
     fn a_heading_deeper_than_the_depth_is_left_out() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 2, false);
+        let toc = insert_toc(&mut state, 2, TocNumbering::Plain);
         heading(&mut state, 1, "One");
         heading(&mut state, 3, "Three");
         heading(&mut state, 2, "Two");
@@ -345,7 +347,7 @@ mod tests {
     #[test]
     fn a_section_number_shows_only_while_numbered() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "One");
         heading(&mut state, 2, "One point one");
         let plain = settled(&mut state, toc);
@@ -358,7 +360,7 @@ mod tests {
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
             max_level: HeadingLevel::H6,
-            numbered: true,
+            numbered: TocNumbering::Numbered,
         });
         let numbered = settled(&mut state, toc);
         let numbers: Vec<Option<Vec<u32>>> = numbered
@@ -372,7 +374,7 @@ mod tests {
     #[test]
     fn two_converged_peers_list_the_same_entries() {
         let mut alice = fresh();
-        let toc = insert_toc(&mut alice, 6, false);
+        let toc = insert_toc(&mut alice, 6, TocNumbering::Plain);
         heading(&mut alice, 1, "One");
         heading(&mut alice, 2, "Two");
         heading(&mut alice, 3, "Three");
@@ -384,7 +386,7 @@ mod tests {
             .handle_command(ProseCommand::UpdateTocConfig {
                 block_id: toc,
                 max_level: HeadingLevel::H2,
-                numbered: true,
+                numbered: TocNumbering::Numbered,
             })
             .update
             .expect("a delta");
@@ -398,13 +400,13 @@ mod tests {
     fn an_insert_lands_where_it_was_named_carrying_its_settings() {
         let mut state = fresh();
         let first = state.root_blocks()[0];
-        let toc = insert_toc(&mut state, 3, true);
+        let toc = insert_toc(&mut state, 3, TocNumbering::Numbered);
         assert_eq!(state.root_blocks().get(1), Some(&toc));
         assert_eq!(state.root_blocks().first(), Some(&first));
         let tree = doc::blocks(state.document());
         assert_eq!(
             doc::toc_settings(&tree, &tree_id(toc)),
-            Some(settings(HeadingLevel::H3, true))
+            Some(settings(HeadingLevel::H3, TocNumbering::Numbered))
         );
     }
 
@@ -413,7 +415,7 @@ mod tests {
         let mut state = fresh();
         let kept = heading(&mut state, 2, "Kept as it was");
         let before = meta_of(&state, kept);
-        let toc = insert_toc(&mut state, 6, true);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Numbered);
         let _ = settled(&mut state, toc);
         assert_eq!(meta_of(&state, kept), before);
         assert_eq!(state.text_of(&kept).as_deref(), Some("Kept as it was"));
@@ -422,29 +424,29 @@ mod tests {
     #[test]
     fn a_settings_change_lands_on_the_block() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
             max_level: HeadingLevel::H4,
-            numbered: true,
+            numbered: TocNumbering::Numbered,
         });
         let tree = doc::blocks(state.document());
         assert_eq!(
             doc::toc_settings(&tree, &tree_id(toc)),
-            Some(settings(HeadingLevel::H4, true))
+            Some(settings(HeadingLevel::H4, TocNumbering::Numbered))
         );
     }
 
     #[test]
     fn the_next_layout_lists_by_the_settings_just_written() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 6, false);
+        let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "One");
         heading(&mut state, 2, "Two");
         let outcome = state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
             max_level: HeadingLevel::H1,
-            numbered: true,
+            numbered: TocNumbering::Numbered,
         });
         let listed = outcome.display.into_iter().find_map(|event| match event {
             ProseEvent::TocUpdated { toc: built, .. } => Some(built),
@@ -454,7 +456,7 @@ mod tests {
         assert_eq!(texts(&listed), ["One"]);
         assert_eq!(
             (listed.max_level, listed.numbered),
-            (HeadingLevel::H1, true)
+            (HeadingLevel::H1, TocNumbering::Numbered)
         );
     }
 
@@ -462,26 +464,26 @@ mod tests {
     fn changing_one_block_leaves_another_and_the_headings_alone() {
         let mut state = fresh();
         let kept = heading(&mut state, 1, "A heading");
-        let first = insert_toc(&mut state, 6, false);
+        let first = insert_toc(&mut state, 6, TocNumbering::Plain);
         let second = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::InsertToc {
             parent_id: None,
             after_id: Some(second),
             max_level: HeadingLevel::H2,
-            numbered: true,
+            numbered: TocNumbering::Numbered,
         });
         let other = *state.root_blocks().get(4).expect("the second block");
         let (heading_before, other_before) = (meta_of(&state, kept), meta_of(&state, other));
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: first,
             max_level: HeadingLevel::H3,
-            numbered: true,
+            numbered: TocNumbering::Numbered,
         });
         assert_eq!(meta_of(&state, kept), heading_before);
         assert_eq!(meta_of(&state, other), other_before);
     }
 
-    fn settings(max_level: HeadingLevel, numbered: bool) -> doc::TocSettings {
+    fn settings(max_level: HeadingLevel, numbered: TocNumbering) -> doc::TocSettings {
         doc::TocSettings {
             max_level,
             numbered,
@@ -494,7 +496,7 @@ mod tests {
     #[test]
     fn a_stored_depth_outside_one_to_six_reads_as_the_nearer_end() {
         let mut state = fresh();
-        let toc = insert_toc(&mut state, 3, false);
+        let toc = insert_toc(&mut state, 3, TocNumbering::Plain);
         for (stored, read) in [(0, HeadingLevel::H1), (200, HeadingLevel::H6)] {
             let tree = doc::blocks(state.document());
             let node = doc::node_of(&tree, &tree_id(toc)).expect("a live block");

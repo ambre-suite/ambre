@@ -19,7 +19,7 @@ use super::{IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, ProseIr, Wa
 #[must_use]
 pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport) {
     let mut writer = Writer {
-        gfm: flavor == MarkdownFlavor::Gfm,
+        flavor,
         out: String::new(),
         warnings: Warnings::new(ConversionFormat::Markdown),
     };
@@ -30,7 +30,7 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
         writer.warnings.unsupported("header and footer");
     }
     writer.blocks(&ir.blocks, "");
-    if writer.gfm {
+    if writer.flavor == MarkdownFlavor::Gfm {
         for note in &ir.footnotes {
             writer.separate();
             let text = writer.inline(&note.runs);
@@ -41,7 +41,7 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
 }
 
 struct Writer {
-    gfm: bool,
+    flavor: MarkdownFlavor,
     out: String,
     warnings: Warnings,
 }
@@ -162,8 +162,8 @@ impl Writer {
         run.previous = Some(style);
         let marker = match style {
             IrListStyle::Bullet => "- ".to_owned(),
-            IrListStyle::Todo(done) if self.gfm => {
-                format!("- [{}] ", if done { 'x' } else { ' ' })
+            IrListStyle::Todo(done) if self.flavor == MarkdownFlavor::Gfm => {
+                format!("- [{}] ", if done.is_done() { 'x' } else { ' ' })
             }
             IrListStyle::Todo(_) => {
                 self.warnings.unsupported("to-do item");
@@ -212,7 +212,7 @@ impl Writer {
                 self.warnings.unsupported("cell formatting");
             }
         }
-        if !self.gfm {
+        if self.flavor != MarkdownFlavor::Gfm {
             // No table syntax: each cell lands as a paragraph of its own
             // (`PROSE-IO-061`).
             self.warnings.unsupported("table");
@@ -312,7 +312,7 @@ impl Writer {
                 out.push_str(&escape(&run.text));
             }
             if let Some(ordinal) = run.footnote_ref {
-                if self.gfm {
+                if self.flavor == MarkdownFlavor::Gfm {
                     let _ = write!(out, "[^{ordinal}]");
                 } else {
                     self.warnings.unsupported("footnote");
@@ -338,7 +338,7 @@ impl Writer {
         if run.italic {
             wanted.push(Delimiter::Italic);
         }
-        if run.strikethrough && self.gfm {
+        if run.strikethrough && self.flavor == MarkdownFlavor::Gfm {
             wanted.push(Delimiter::Strike);
         }
         wanted
@@ -349,7 +349,7 @@ impl Writer {
             (run.underline, "underline"),
             (run.superscript, "superscript"),
             (run.subscript, "subscript"),
-            (run.strikethrough && !self.gfm, "strikethrough"),
+            (run.strikethrough && self.flavor != MarkdownFlavor::Gfm, "strikethrough"),
             (run.styled, "colour, size or font"),
             (run.comment, "comment"),
             (run.suggestion, "suggestion"),
@@ -570,7 +570,7 @@ mod tests {
                 "two",
                 Vec::new(),
             ),
-            item(IrListStyle::Todo(true), "done", Vec::new()),
+            item(IrListStyle::Todo(crate::events::TodoMark::Done), "done", Vec::new()),
         ]);
         let (text, _) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(text, "1. one\n   - inner\n2. two\n\n- [x] done\n");
@@ -596,7 +596,7 @@ mod tests {
         let mut doc = ir(vec![
             table(),
             IrBlock::ListItem {
-                style: IrListStyle::Todo(false),
+                style: IrListStyle::Todo(crate::events::TodoMark::Open),
                 runs: vec![IrRun::plain("task")],
                 children: Vec::new(),
             },

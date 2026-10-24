@@ -438,11 +438,11 @@ pub fn resolve_menu_command(
         BACKWARD => reorder_each(selection, ZTarget::Backward),
         LOCK => vec![ToileCommand::LockElements {
             ids: ids(),
-            locked: true,
+            lock: ambre_bus::app::toile::LockState::Locked,
         }],
         UNLOCK => vec![ToileCommand::LockElements {
             ids: ids(),
-            locked: false,
+            lock: ambre_bus::app::toile::LockState::Unlocked,
         }],
         // Align and distribute: one batch over the whole selection, whatever
         // the operation. Logic owns the arithmetic -- it holds the boxes, and
@@ -941,13 +941,19 @@ mod tests {
             resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv)
                 .unwrap()
                 .as_slice(),
-            [ToileCommand::LockElements { locked: true, .. }]
+            [ToileCommand::LockElements {
+                lock: ambre_bus::app::toile::LockState::Locked,
+                ..
+            }]
         ));
         assert!(matches!(
             resolve_menu_command(UNLOCK, &[eid("a")], None, &els(&dv), &dv)
                 .unwrap()
                 .as_slice(),
-            [ToileCommand::LockElements { locked: false, .. }]
+            [ToileCommand::LockElements {
+                lock: ambre_bus::app::toile::LockState::Unlocked,
+                ..
+            }]
         ));
     }
 

@@ -92,9 +92,9 @@ pub struct ClipboardBlob {
     /// not Ambre's own bytes. `None` when the active app writes none.
     pub html: Option<String>,
     pub ambre: Option<Vec<u8>>,
-    /// The user asked for the plain text alone: a view ignores every richer
-    /// half, and the copy it kept in memory too.
-    pub plain: bool,
+    /// [`PasteForm::Plain`] when the user asked for the plain text alone: a
+    /// view ignores every richer half, and the copy it kept in memory too.
+    pub form: ambre_core::PasteForm,
 }
 
 /// Whose copy the clipboard holds when a paste reads it. The ownership token
@@ -117,7 +117,7 @@ impl ClipboardBlob {
     /// (`UI-THREAD-007`).
     #[must_use]
     pub fn source<'a>(kept: Option<&'a Self>, read: &'a Self, source: PasteSource) -> &'a Self {
-        if read.plain {
+        if read.form == ambre_core::PasteForm::Plain {
             return read;
         }
         match (kept, source) {
@@ -277,7 +277,7 @@ mod clipboard_tests {
         );
         // A plain paste never takes the kept copy.
         let plain = ClipboardBlob {
-            plain: true,
+            form: ambre_core::PasteForm::Plain,
             ..blob("a\tb", 5)
         };
         assert_eq!(

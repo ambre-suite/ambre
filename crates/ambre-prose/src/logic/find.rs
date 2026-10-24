@@ -34,7 +34,7 @@ pub(super) struct FindSession {
 /// than one is compared as it is.
 pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
     let fold = |c: char| -> char {
-        if query.case_sensitive {
+        if query.case == ambre_core::CaseMatch::Sensitive {
             return c;
         }
         let mut lower = c.to_lowercase();
@@ -56,7 +56,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
         let hit = hay
             .get(at..end)
             .is_some_and(|window| window == needle.as_slice());
-        let bounded = !query.whole_word
+        let bounded = query.word == ambre_core::WordMatch::Anywhere
             || (!at
                 .checked_sub(1)
                 .and_then(|before| hay.get(before))
@@ -96,7 +96,7 @@ impl ProseState {
     /// Open a search. It reads the document and writes nothing
     /// (`PROSE-FEAT-151`).
     pub(super) fn find_start(&mut self, query: FindQuery) -> ProseOutcome {
-        if query.use_regex {
+        if query.pattern == crate::events::PatternKind::Regex {
             return ProseOutcome::refused(ProseRefusal::FindRefused(
                 "the regular-expression search is not built",
             ));
@@ -325,10 +325,10 @@ mod tests {
     fn case_and_whole_word_narrow_the_match() {
         let mut q = query("Cat");
         assert_eq!(pairs(match_offsets("cat Cat scatter", &q)).len(), 3);
-        q.case_sensitive = true;
+        q.case = ambre_core::CaseMatch::Sensitive;
         assert_eq!(pairs(match_offsets("cat Cat scatter", &q)), vec![(4, 7)]);
-        q.case_sensitive = false;
-        q.whole_word = true;
+        q.case = ambre_core::CaseMatch::Insensitive;
+        q.word = ambre_core::WordMatch::WholeWord;
         assert_eq!(
             pairs(match_offsets("cat Cat scatter", &q)),
             vec![(0, 3), (4, 7)]
@@ -561,7 +561,7 @@ mod tests {
     fn a_regular_expression_is_refused_rather_than_read_literally() {
         let (mut state, _) = document(&["a.c"]);
         let mut q = query("a.c");
-        q.use_regex = true;
+        q.pattern = crate::events::PatternKind::Regex;
         let outcome = state.handle_command(ProseCommand::FindStart { query: q });
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
         assert!(state.find.is_none());
@@ -570,7 +570,9 @@ mod tests {
     #[test]
     fn the_text_of_a_band_is_never_matched() {
         let (mut state, _) = document(&["body needle"]);
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,

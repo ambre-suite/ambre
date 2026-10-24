@@ -80,8 +80,16 @@ pub fn FindPanel(
         on_find.run(FindQuery {
             query: query.get_untracked(),
             options: FindOptions {
-                match_case: match_case.get_untracked(),
-                whole_word: whole_word.get_untracked(),
+                case: if match_case.get_untracked() {
+                    ambre_core::CaseMatch::Sensitive
+                } else {
+                    ambre_core::CaseMatch::Insensitive
+                },
+                word: if whole_word.get_untracked() {
+                    ambre_core::WordMatch::WholeWord
+                } else {
+                    ambre_core::WordMatch::Anywhere
+                },
             },
             from,
             direction,

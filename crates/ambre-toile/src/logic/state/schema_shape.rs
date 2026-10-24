@@ -544,7 +544,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::LockElements {
         ids: vec![rect.clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
     st.handle_command(ToileCommand::SetFrameChildren {
         frame: frame.clone(),
@@ -644,7 +644,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread,
-        resolved: true,
+        state: ambre_core::ThreadState::Resolved,
     });
     // The media map is seeded by the importer, which no command reaches from
     // here: its entries are the blobs an import carries. The thumbnail is a
@@ -799,7 +799,7 @@ fn a_value_changing_leaves_the_shape_alone() {
         .expect("the scenario creates an element");
     second.handle_command(ToileCommand::LockElements {
         ids: vec![id],
-        locked: false,
+        lock: ambre_bus::app::toile::LockState::Unlocked,
     });
     assert_eq!(
         render(&shape_of(&first.doc)),

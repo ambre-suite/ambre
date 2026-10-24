@@ -371,7 +371,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             style: ListStyle::Ordered(OrderedStyle::LowerRoman),
         },
         BlockInit::ListItem {
-            style: ListStyle::Todo(true),
+            style: ListStyle::Todo(crate::events::TodoMark::Done),
         },
         BlockInit::CodeBlock {
             lang: "rust".to_owned(),
@@ -391,7 +391,7 @@ pub(super) fn document_of_every_key() -> ProseState {
         parent_id: None,
         after_id: Some(root),
         max_level: HeadingLevel::H3,
-        numbered: true,
+        numbered: crate::events::TocNumbering::Numbered,
     });
     write_the_bands(&mut state);
     write_a_note_and_a_reference(&mut state, root);
@@ -434,9 +434,15 @@ pub(super) fn document_of_every_key() -> ProseState {
 /// field in it, and the last-modified stamp.
 fn write_the_bands(state: &mut ProseState) {
     use crate::events::{DateFieldFormat, HeaderField, HfTarget};
-    state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
-    state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
-    state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
+    state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
+    state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
+    state.handle_command(ProseCommand::SetDifferentFirstPage {
+            first_page: crate::events::FirstPage::OwnBands,
+        });
     let Some(header) = state.bands().header else {
         panic!("the scenario showed the header");
     };
@@ -488,7 +494,9 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
 /// A suggested insertion and a suggested deletion on `root`, the mode off
 /// again after them.
 fn write_a_suggestion(state: &mut ProseState, root: crate::events::BlockId) {
-    state.handle_command(ProseCommand::EnableTrackChanges { enabled: true });
+    state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Suggesting,
+        });
     state.handle_command(ProseCommand::InsertText {
         block_id: root,
         pos: DocOffset::ZERO,
@@ -498,7 +506,9 @@ fn write_a_suggestion(state: &mut ProseState, root: crate::events::BlockId) {
         block_id: root,
         range: DocSpan::from_usize_range(3..4),
     });
-    state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
+    state.handle_command(ProseCommand::EnableTrackChanges {
+            mode: crate::events::EditMode::Editing,
+        });
 }
 
 /// A footnote and a cross reference to `root`, both called from `root`.

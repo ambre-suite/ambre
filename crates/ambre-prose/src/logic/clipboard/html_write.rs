@@ -63,7 +63,7 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
             ClipKind::Bullet | ClipKind::Ordered(_) => element(&mut html, "li", &block.runs),
             ClipKind::Todo(done) => {
                 html.push_str("<li><input type=\"checkbox\" disabled");
-                if *done {
+                if done.is_done() {
                     html.push_str(" checked");
                 }
                 html.push('>');

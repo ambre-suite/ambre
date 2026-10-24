@@ -20,7 +20,7 @@ use loro::{
 
 use ambre_bus::app::prose::{
     Align, BlockType, DocCount, DocOffset, DocSpan, HeadingLevel, LineHeight, LineHeightMode,
-    LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle, StyleId,
+    LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle, StyleId, TocNumbering,
 };
 
 // -----------------------------------------------------------------------------
@@ -708,7 +708,10 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
             let code = u8::try_from(read_i64(&attrs, AttrKey::Spelling)?).ok()?;
             OrderedStyle::from_code(code).map(ListStyle::Ordered)
         }
-        2 => Some(ListStyle::Todo(read_bool(&attrs, AttrKey::Ticked)?)),
+        2 => Some(ListStyle::Todo(crate::events::TodoMark::done_if(read_bool(
+            &attrs,
+            AttrKey::Ticked,
+        )?))),
         _ => None,
     }
 }
@@ -732,7 +735,7 @@ pub(crate) struct TocSettings {
     /// The deepest level it lists.
     pub max_level: HeadingLevel,
     /// Whether it numbers its entries.
-    pub numbered: bool,
+    pub numbered: TocNumbering,
 }
 
 /// The settings of a live table of contents.
@@ -752,10 +755,12 @@ pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<TocSettings> 
         .and_then(|a| read_i64(a, AttrKey::MaxLevel))
         .and_then(|n| u8::try_from(n).ok())
         .map_or(HeadingLevel::MAX, HeadingLevel::clamp);
-    let numbered = attrs
-        .as_ref()
-        .and_then(|a| read_bool(a, AttrKey::Numbered))
-        .unwrap_or(false);
+    let numbered = TocNumbering::numbered_if(
+        attrs
+            .as_ref()
+            .and_then(|a| read_bool(a, AttrKey::Numbered))
+            .unwrap_or(false),
+    );
     Some(TocSettings {
         max_level,
         numbered,

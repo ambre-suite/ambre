@@ -285,7 +285,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         text,
                         html,
                         ambre,
-                        plain: false,
+                        form: ambre_core::PasteForm::Rich,
                     };
                     let read = clipboard.read();
                     let host_a = Rc::clone(&host_c);
@@ -315,7 +315,11 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         text,
                         html,
                         ambre,
-                        plain,
+                        form: if plain {
+                            ambre_core::PasteForm::Plain
+                        } else {
+                            ambre_core::PasteForm::Rich
+                        },
                     },
                     if own_copy {
                         PasteSource::Own

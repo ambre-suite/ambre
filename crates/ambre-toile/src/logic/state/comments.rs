@@ -203,7 +203,12 @@ impl ToileState {
     /// Resolve `thread`, or reopen it. Idempotent: a flag already at `resolved`
     /// produces neither a commit nor a delta. The thread and its messages
     /// survive both ways (`TOILE-FEAT-015`).
-    pub(super) fn resolve_thread(&mut self, thread: &ThreadId, resolved: bool) -> ToileOutcome {
+    pub(super) fn resolve_thread(
+        &mut self,
+        thread: &ThreadId,
+        state: ambre_core::ThreadState,
+    ) -> ToileOutcome {
+        let resolved = state.is_resolved();
         let Some(map) = self.thread_map(thread) else {
             return self.err_no_element(thread);
         };

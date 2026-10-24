@@ -446,7 +446,8 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let toc = reader.table_of_contents(&block_id(*id))?;
             format!(
                 "lists headings to level {}, numbered {}",
-                toc.max_level, toc.numbered
+                toc.max_level,
+                toc.numbered.is_numbered()
             )
         }
         doc::AttrKey::ColWidths => {

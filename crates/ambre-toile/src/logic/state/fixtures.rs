@@ -330,7 +330,7 @@ fn build_shapes_and_frame(state: &mut ToileState) {
     });
     state.handle_command(ToileCommand::LockElements {
         ids: vec![ids[0].clone()],
-        locked: true,
+        lock: ambre_bus::app::toile::LockState::Locked,
     });
 }
 

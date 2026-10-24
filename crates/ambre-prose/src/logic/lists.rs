@@ -62,7 +62,7 @@ impl ProseState {
             ListStyle::Todo(ticked) => {
                 attrs.insert(doc::AttrKey::Marker, 2_i64)?;
                 attrs.delete(doc::AttrKey::Spelling)?;
-                attrs.insert(doc::AttrKey::Ticked, ticked)?;
+                attrs.insert(doc::AttrKey::Ticked, ticked.is_done())?;
             }
         }
         Ok(())
@@ -235,7 +235,7 @@ mod tests {
             parent_id: Some(host),
             after_id: None,
             init: BlockInit::ListItem {
-                style: ListStyle::Todo(true),
+                style: ListStyle::Todo(crate::events::TodoMark::Done),
             },
             style_id: None,
         });
@@ -245,7 +245,7 @@ mod tests {
             .expect("the item landed under its parent");
 
         assert_eq!(state.parent_of(&child), Some(host));
-        assert_eq!(state.list_style_of(&child), Some(ListStyle::Todo(true)));
+        assert_eq!(state.list_style_of(&child), Some(ListStyle::Todo(crate::events::TodoMark::Done)));
         assert_eq!(state.block_type_of(&tail), Some(BlockType::ListItem));
         assert_eq!(census_without(&state, child), before);
     }
@@ -266,15 +266,15 @@ mod tests {
 
         state.handle_command(ProseCommand::SetListStyle {
             block_id: first,
-            style: ListStyle::Todo(true),
+            style: ListStyle::Todo(crate::events::TodoMark::Done),
         });
-        assert_eq!(state.list_style_of(&first), Some(ListStyle::Todo(true)));
+        assert_eq!(state.list_style_of(&first), Some(ListStyle::Todo(crate::events::TodoMark::Done)));
         // The ticked state is the one a checkbox carries, and it is read back.
         state.handle_command(ProseCommand::SetListStyle {
             block_id: first,
-            style: ListStyle::Todo(false),
+            style: ListStyle::Todo(crate::events::TodoMark::Open),
         });
-        assert_eq!(state.list_style_of(&first), Some(ListStyle::Todo(false)));
+        assert_eq!(state.list_style_of(&first), Some(ListStyle::Todo(crate::events::TodoMark::Open)));
 
         assert_eq!(state.text_of(&first).unwrap_or_default(), "kept");
         assert_eq!(state.parent_of(&first), None);

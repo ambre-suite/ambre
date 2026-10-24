@@ -394,7 +394,7 @@ impl ProseUiState {
     #[must_use]
     pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, from: PasteSource) -> ProseInput {
         let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &read, from);
-        if source.plain {
+        if source.form == ambre_core::PasteForm::Plain {
             // The menu path reads every half, so the view drops them itself.
             return ProseInput::Paste {
                 text: source.text.clone(),

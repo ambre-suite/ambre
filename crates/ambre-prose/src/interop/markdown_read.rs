@@ -160,7 +160,7 @@ impl Reader {
             }
             Event::TaskListMarker(done) => {
                 if let Some(Frame::Item { style, .. }) = self.frames.last_mut() {
-                    *style = IrListStyle::Todo(done);
+                    *style = IrListStyle::Todo(crate::events::TodoMark::done_if(done));
                 }
             }
             Event::FootnoteReference(_) => self.warnings.dropped("footnote"),
@@ -525,7 +525,7 @@ mod tests {
                     vec![item(IrListStyle::Bullet, "inner", Vec::new())]
                 ),
                 item(decimal, "two", Vec::new()),
-                item(IrListStyle::Todo(true), "done", Vec::new()),
+                item(IrListStyle::Todo(crate::events::TodoMark::Done), "done", Vec::new()),
             ]
         );
     }

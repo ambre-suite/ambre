@@ -1037,7 +1037,7 @@ impl ToileView {
                     text: String::new(),
                     html: None,
                     ambre: postcard::to_allocvec(&payload).ok(),
-                    plain: false,
+                    form: ambre_core::PasteForm::Rich,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);
@@ -2437,8 +2437,8 @@ impl ToileView {
                     ts: wall_clock_ms(),
                 });
             }
-            CommentIntent::Resolve { thread, resolved } => {
-                self.send_edit(ToileCommand::ResolveThread { thread, resolved });
+            CommentIntent::Resolve { thread, state } => {
+                self.send_edit(ToileCommand::ResolveThread { thread, state });
             }
             CommentIntent::Focus { thread, anchor } => {
                 self.focus_thread(&anchor);
@@ -4370,7 +4370,7 @@ impl ToileView {
         let Some(payload) = source
             .ambre
             .as_ref()
-            .filter(|_| !source.plain)
+            .filter(|_| source.form != ambre_core::PasteForm::Plain)
             .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes).ok())
         else {
             return;

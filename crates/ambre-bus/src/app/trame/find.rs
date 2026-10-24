@@ -6,14 +6,7 @@
 //! [`TrameCommand::ReplaceOne`]: super::TrameCommand::ReplaceOne
 //! [`TrameCommand::ReplaceAll`]: super::TrameCommand::ReplaceAll
 
-/// Whether a search tells upper case from lower case.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum CaseMatch {
-    /// Both sides are lowercased before they are compared.
-    #[default]
-    Insensitive,
-    Sensitive,
-}
+pub use ambre_core::CaseMatch;
 
 /// How much of a cell a match must cover.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

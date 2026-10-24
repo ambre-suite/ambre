@@ -124,7 +124,7 @@ impl CatchUp {
         source: ChangeSource,
         edits: Vec<TextEdit>,
     ) -> (
-        bool,
+        crate::events::ChangeOrigin,
         ambre_bus::app::prose::TextChangeSeq,
         ambre_bus::app::prose::TextAck,
         Vec<TextEdit>,
@@ -133,24 +133,25 @@ impl CatchUp {
             ChangeSource::Command => std::mem::take(&mut self.predicting),
             ChangeSource::Import => Prediction::None,
         };
-        let (local, edits) = match prediction {
-            Prediction::None => (false, edits),
-            Prediction::Barrier => (true, edits),
-            Prediction::Text(drawn) if drawn == edits => (true, edits),
+        use crate::events::ChangeOrigin;
+        let (origin, edits) = match prediction {
+            Prediction::None => (ChangeOrigin::Remote, edits),
+            Prediction::Barrier => (ChangeOrigin::Local, edits),
+            Prediction::Text(drawn) if drawn == edits => (ChangeOrigin::Local, edits),
             // The document did not do what the view drew: take the drawing
             // back, then show what it did.
             Prediction::Text(drawn) => {
                 let mut runs = rebase::inverse(&drawn);
                 runs.extend(edits);
-                (false, runs)
+                (ChangeOrigin::Remote, runs)
             }
         };
-        if !local && !edits.is_empty() {
+        if origin == ChangeOrigin::Remote && !edits.is_empty() {
             self.seq = self.seq.next();
             let seq = self.seq;
             self.queue.extend(edits.iter().map(|edit| (seq, *edit)));
         }
-        (local, self.seq, self.acked, edits)
+        (origin, self.seq, self.acked, edits)
     }
 }
 
@@ -324,9 +325,9 @@ impl ProseState {
             && !drawn.is_empty()
         {
             self.catchup.predicting = Prediction::Text(drawn);
-            let (local, seq, acked, edits) = self.catchup.stamp(ChangeSource::Command, Vec::new());
+            let (origin, seq, acked, edits) = self.catchup.stamp(ChangeSource::Command, Vec::new());
             outcome.display.push(ProseEvent::TextChanged {
-                local,
+                origin,
                 seq,
                 acked,
                 edits,
@@ -354,8 +355,8 @@ mod tests {
     #[test]
     fn a_change_the_view_did_not_draw_is_numbered_and_queued() {
         let mut sync = CatchUp::default();
-        let (local, seq, _, _) = sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
-        assert!(!local);
+        let (origin, seq, _, _) = sync.stamp(ChangeSource::Import, vec![run(0, 3)]);
+        assert_eq!(origin, crate::events::ChangeOrigin::Remote);
         assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(sync.rebase(run(2, 1)), Some(run(5, 1)));
     }
@@ -374,8 +375,8 @@ mod tests {
             predicting: Prediction::Text(vec![run(4, 2)]),
             ..CatchUp::default()
         };
-        let (local, seq, _, edits) = sync.stamp(ChangeSource::Command, Vec::new());
-        assert!(!local);
+        let (origin, seq, _, edits) = sync.stamp(ChangeSource::Command, Vec::new());
+        assert_eq!(origin, crate::events::ChangeOrigin::Remote);
         assert_eq!(seq, ambre_bus::app::prose::TextChangeSeq(1));
         assert_eq!(edits, vec![run(4, -2)]);
     }

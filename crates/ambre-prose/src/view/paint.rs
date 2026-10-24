@@ -1016,8 +1016,12 @@ mod tests {
         let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let body = append(&mut state, BlockInit::Paragraph, "Body text with a note.");
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
-        state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
+        state.handle_command(ProseCommand::SetFooterEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("the header block");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
@@ -1381,7 +1385,9 @@ mod tests {
         let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         append(&mut state, BlockInit::Paragraph, "Body");
-        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        state.handle_command(ProseCommand::SetHeaderEnabled {
+            shown: crate::events::BandState::On,
+        });
         let header = state.bands().header.expect("the header block");
         let mut ui = view_of(&mut state);
         ui.draft.push_str(

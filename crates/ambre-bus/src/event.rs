@@ -155,7 +155,7 @@ pub enum LogicEvent {
     /// WebSocket connection status for a document.
     ConnectionStatus {
         document_id: DocumentId,
-        connected: bool,
+        connected: ambre_core::LinkState,
     },
 
     /// The activity counted for a document not held in memory, read from the
@@ -241,14 +241,14 @@ pub enum LogicEvent {
     },
     /// The relay closed `closing`, answering
     /// [`SyncCommand::CloseSegment`](crate::SyncCommand::CloseSegment).
-    /// `active` is the successor the relay registered. `created` says it is
-    /// the one this client asked for. A close that lost its race names the
-    /// winner's, and the Sync worker deleted its own.
+    /// `active` is the successor the relay registered. `successor` says
+    /// whether it is the one this client asked for. A close that lost its race
+    /// names the winner's, and the Sync worker deleted its own.
     SegmentClosed {
         channel_id: ChannelId,
         closing: SegmentId,
         active: SegmentId,
-        created: bool,
+        successor: crate::app::murmure::Successor,
     },
     /// The relay refused the close of `closing`, or never answered it.
     SegmentCloseFailed {

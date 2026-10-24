@@ -60,15 +60,25 @@ pub(crate) enum Refusal {
     Resend,
 }
 
+/// Where the debt of one document stands: a rotation owed, then paid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum Rotation {
+    /// The document owes nothing.
+    #[default]
+    Settled,
+    /// The document owes a rotation this client pays before it sends.
+    Owed,
+    /// A payment of the owed rotation is running.
+    Paying,
+}
+
 /// The sent-frame log and the debt of one document.
 #[derive(Debug, Default)]
 pub(crate) struct Rekey {
     /// Updates sent and not yet echoed, in the order they left.
     sent: VecDeque<SentFrame>,
-    /// The document owes a rotation this client pays before it sends.
-    owed: bool,
-    /// A payment is running.
-    in_flight: bool,
+    /// The rotation the document owes, and whether its payment runs.
+    rotation: Rotation,
     /// Lowest refused clock not yet sent again. Every frame from it on is free.
     refused_from: Option<Clock>,
     /// Edits made while the rotation is owed, sealed once it lands.
@@ -225,7 +235,7 @@ impl Rekey {
         if key_id != current {
             return Refusal::Resend;
         }
-        self.owed = true;
+        self.found_debt();
         self.begin_payment()
     }
 
@@ -233,19 +243,22 @@ impl Rekey {
     /// payment starts at the next edit, so a debt nobody writes after costs
     /// nothing.
     pub(crate) fn found_debt(&mut self) {
-        self.owed = true;
+        if self.rotation == Rotation::Settled {
+            self.rotation = Rotation::Owed;
+        }
     }
 
     /// Whether an edit must wait for the rotation.
     pub(crate) fn owes(&self) -> bool {
-        self.owed
+        self.rotation != Rotation::Settled
     }
 
     /// Whether every frame sent was acknowledged, and no edit waits on a
     /// payment (`RESID-009`). A refused delta never settles: the relay lacks
     /// an edit this client holds.
     pub(crate) fn settled(&self) -> bool {
-        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight && !self.refused
+        self.sent.is_empty() && self.waiting.is_empty() && self.rotation != Rotation::Paying
+            && !self.refused
     }
 
     /// Holds an edit made while the rotation is owed. Returns whether the
@@ -259,28 +272,29 @@ impl Rekey {
     /// A space admin pays at once, so the channel keys sealed under the
     /// space key can follow it. Returns whether the caller starts it.
     pub(crate) fn pay_now(&mut self) -> bool {
-        self.owed && self.begin_payment() == Refusal::Settle
+        self.owes() && self.begin_payment() == Refusal::Settle
     }
 
     fn begin_payment(&mut self) -> Refusal {
-        if self.in_flight {
+        if self.rotation == Rotation::Paying {
             return Refusal::Wait;
         }
-        self.in_flight = true;
+        self.rotation = Rotation::Paying;
         Refusal::Settle
     }
 
     /// The payment failed. The debt stands, and the next edit tries again.
     pub(crate) fn payment_failed(&mut self) {
-        self.in_flight = false;
+        if self.rotation == Rotation::Paying {
+            self.rotation = Rotation::Owed;
+        }
     }
 
     /// A key was installed: the debt is paid, by us or by someone else.
     /// Returns the refused frames to seal again under `current`, at their own
     /// clocks and in order, then the edits that waited.
     pub(crate) fn key_installed(&mut self, current: KeyId) -> (RefusedFrames, Vec<UpdateFrame>) {
-        self.owed = false;
-        self.in_flight = false;
+        self.rotation = Rotation::Settled;
         (
             self.take_refused(current),
             std::mem::take(&mut self.waiting),

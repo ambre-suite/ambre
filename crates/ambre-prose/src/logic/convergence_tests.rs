@@ -797,17 +797,17 @@ fn unmerging_brings_a_masked_text_back_verbatim() {
 fn moved(
     events: &[ProseEvent],
 ) -> Option<(
-    bool,
+    crate::events::ChangeOrigin,
     Vec<crate::events::TextEdit>,
     Vec<crate::events::BlockId>,
 )> {
     events.iter().find_map(|event| match event {
         ProseEvent::TextChanged {
-            local,
+            origin,
             edits,
             removed,
             ..
-        } => Some((*local, edits.clone(), removed.clone())),
+        } => Some((*origin, edits.clone(), removed.clone())),
         _ => None,
     })
 }
@@ -822,8 +822,12 @@ fn a_change_tells_the_view_what_it_did_to_the_text() {
         pos: DocOffset::ZERO,
         text: "\u{e9}t\u{e9}".to_owned(),
     });
-    let (local, edits, removed) = moved(&typed.display).expect("the text moved");
-    assert!(local, "the command is this peer's own");
+    let (origin, edits, removed) = moved(&typed.display).expect("the text moved");
+    assert_eq!(
+        origin,
+        crate::events::ChangeOrigin::Local,
+        "the command is this peer's own"
+    );
     assert_eq!(edits.len(), 1);
     assert_eq!(
         (edits[0].block_id, edits[0].at, edits[0].delta),
@@ -832,8 +836,12 @@ fn a_change_tells_the_view_what_it_did_to_the_text() {
     assert!(removed.is_empty());
 
     let answered = bob.apply_remote(&typed.update.expect("a delta"));
-    let (local, edits, _) = moved(&answered).expect("the text moved");
-    assert!(!local, "the change came from a peer");
+    let (origin, edits, _) = moved(&answered).expect("the text moved");
+    assert_eq!(
+        origin,
+        crate::events::ChangeOrigin::Remote,
+        "the change came from a peer"
+    );
     assert_eq!(
         (edits[0].at, edits[0].delta),
         (DocOffset::ZERO, DocDelta::new(3))

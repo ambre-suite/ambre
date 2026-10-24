@@ -440,7 +440,7 @@ mod tests {
         let first = suggestion(a, SuggestionKind::Insertion, 2, 6);
         let second = suggestion(b, SuggestionKind::Deletion, 3, 8);
         ui.apply_event(&ProseEvent::SuggestionsUpdated {
-            suggesting: false,
+            mode: crate::events::EditMode::Editing,
             suggestions: vec![first.clone(), second.clone()],
         });
         let at = middle(&ui, a, 2, 6);
@@ -665,13 +665,13 @@ mod tests {
         let a = text_block(&ui, 0);
         let one = suggestion(a, SuggestionKind::Insertion, 2, 6);
         ui.apply_event(&ProseEvent::SuggestionsUpdated {
-            suggesting: false,
+            mode: crate::events::EditMode::Editing,
             suggestions: vec![one.clone()],
         });
         ui.hover(middle(&ui, a, 2, 6));
         assert!(ui.hovered.is_some());
         ui.apply_event(&ProseEvent::SuggestionsUpdated {
-            suggesting: false,
+            mode: crate::events::EditMode::Editing,
             suggestions: Vec::new(),
         });
         assert_eq!(ui.hovered, None);

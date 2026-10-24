@@ -214,15 +214,31 @@ pub(crate) fn async_write_clipboard(
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        let Some((item, web)) = publish_item(&blob, &token, clipboard_item) else {
+        let Some(Published { item, web }) = publish_item(&blob, &token, clipboard_item) else {
             return;
         };
         let items = js_sys::Array::of1(&item);
         let written = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
         // Only a landed write of the `web ` types moves the token out of the
         // paste event's reach (`UI-THREAD-054`).
-        published.set(web && written.is_ok());
+        published.set(web == WebTypes::Carried && written.is_ok());
     });
+}
+
+/// Whether a published clipboard item carries the `web ` types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WebTypes {
+    /// The browser refused them: the item holds the text and the marked HTML.
+    Dropped,
+    /// The item holds the private bytes and the token beside the text.
+    Carried,
+}
+
+/// The item an asynchronous clipboard write publishes.
+#[derive(Debug)]
+struct Published<T> {
+    item: T,
+    web: WebTypes,
 }
 
 /// The item the asynchronous write publishes, and whether it carries the `web `
@@ -239,7 +255,7 @@ fn publish_item<T>(
     blob: &ambre_bus::ClipboardBlob,
     token: &ambre_bus::ClipToken,
     build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
-) -> Option<(T, bool)> {
+) -> Option<Published<T>> {
     let html = blob.html.as_deref();
     let payload = blob.ambre.as_deref().map(base64_encode);
     let text = (ClipboardFormat::PlainText, Some(blob.text.as_str()));
@@ -250,10 +266,16 @@ fn publish_item<T>(
         (ClipboardFormat::WebAmbreToken, Some(token.as_str())),
     ];
     if let Some(item) = build(&full) {
-        return Some((item, true));
+        return Some(Published {
+            item,
+            web: WebTypes::Carried,
+        });
     }
     let marked = html.map(|h| ambre_bus::ClipboardBlob::mark_html(h, token));
-    build(&[text, (ClipboardFormat::Html, marked.as_deref())]).map(|item| (item, false))
+    build(&[text, (ClipboardFormat::Html, marked.as_deref())]).map(|item| Published {
+        item,
+        web: WebTypes::Dropped,
+    })
 }
 
 /// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
@@ -631,7 +653,8 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 #[cfg(test)]
 mod tests {
     use super::{
-        ClipboardFormat, FrameHost, base64_decode, base64_encode, clipboard_item, publish_item,
+        ClipboardFormat, FrameHost, Published, WebTypes, base64_decode, base64_encode,
+        clipboard_item, publish_item,
     };
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -792,13 +815,13 @@ mod tests {
             ambre: Some(bytes.to_vec()),
             ..ambre_bus::ClipboardBlob::default()
         };
-        let (item, web) = publish_item(
+        let Published { item, web } = publish_item(
             &blob,
             &ambre_bus::ClipToken::new("ambre-1".to_owned()),
             clipboard_item,
         )
         .expect("an item");
-        assert!(web, "Chrome takes the `web ` types");
+        assert_eq!(web, WebTypes::Carried, "Chrome takes the `web ` types");
         assert_eq!(
             types(&item),
             vec![
@@ -834,13 +857,13 @@ mod tests {
             ambre: Some(vec![1, 2, 3]),
             ..ambre_bus::ClipboardBlob::default()
         };
-        let (item, web) = publish_item(
+        let Published { item, web } = publish_item(
             &blob,
             &ambre_bus::ClipToken::new("ambre-2".to_owned()),
             refusing,
         )
         .expect("the second attempt");
-        assert!(!web);
+        assert_eq!(web, WebTypes::Dropped);
         assert_eq!(
             types(&item),
             vec![

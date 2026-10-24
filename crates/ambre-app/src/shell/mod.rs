@@ -161,7 +161,7 @@ pub(crate) fn mount_shell(
         // `ConnectionStatus` lands.
         let chrome_status = RwSignal::new(ChromeStatus {
             hydrating: boot_doc.is_some(),
-            connected: false,
+            connected: ambre_core::LinkState::Disconnected,
         });
         *chrome_status_slot.borrow_mut() = Some(chrome_status);
 

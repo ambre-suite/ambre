@@ -44,7 +44,7 @@ pub fn build(
                 block_id: block_id(heading),
                 level,
                 text: doc::get_block_text(document, &heading).to_string(),
-                section_number: numbered.then_some(number),
+                section_number: numbered.is_numbered().then_some(number),
                 page: pages.get(&heading).copied(),
             })
         })

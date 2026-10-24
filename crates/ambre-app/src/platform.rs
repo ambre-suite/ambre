@@ -93,7 +93,7 @@ pub(crate) async fn paste_from_clipboard(
     if form == PasteForm::Plain {
         blob = ambre_bus::ClipboardBlob {
             text: blob.text,
-            plain: true,
+            form: PasteForm::Plain,
             ..ambre_bus::ClipboardBlob::default()
         };
         token = None;

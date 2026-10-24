@@ -50,7 +50,7 @@ impl TrameView {
                 let src = self.state.expand_to_merges(bounds);
                 let block = self.state.fill_source_block(bounds);
                 self.fill_drag = Some((src, block));
-                self.set_fill_cursor(true);
+                self.set_cursor(GridCursor::Crosshair);
                 true
             }
             // Dragging the handle grows the destination rectangle, locked to the
@@ -650,29 +650,8 @@ impl TrameView {
         true
     }
 
-    /// Set the canvas cursor to the autofill crosshair (`on == true`) or back to
-    /// the default (`trame-autofill`): the thin "+" Excel/Sheets show over the
-    /// fill handle. A DOM write on the `#ambre-canvas` element; a no-op off-wasm.
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn set_fill_cursor(&self, on: bool) {
-        use wasm_bindgen::JsCast;
-        if let Some(el) = web_sys::window()
-            .and_then(|w| w.document())
-            .and_then(|d| d.get_element_by_id("ambre-canvas"))
-            .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
-        {
-            let _ = el
-                .style()
-                .set_property("cursor", if on { "crosshair" } else { "" });
-        }
-    }
-
-    /// Native/headless build: no DOM canvas to restyle.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn set_fill_cursor(&self, _on: bool) {}
-
-    /// Set `cursor` on `#ambre-canvas` (`trame-resize`); [`GridCursor::Unset`]
-    /// resets it. Generalises [`set_fill_cursor`]. No-op off-wasm.
+    /// Set `cursor` on `#ambre-canvas` (`trame-resize`, `trame-autofill`);
+    /// [`GridCursor::Unset`] resets it. No-op off-wasm.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn set_cursor(&self, cursor: GridCursor) {
         use wasm_bindgen::JsCast;

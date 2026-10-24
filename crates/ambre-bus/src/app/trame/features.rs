@@ -141,6 +141,16 @@ pub struct CondStyle {
     pub bold: bool,
 }
 
+/// Whether a number range admits its two bounds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum RangeBounds {
+    /// A value equal to `min` or `max` is refused.
+    #[default]
+    Exclusive,
+    /// A value equal to `min` or `max` is admitted.
+    Inclusive,
+}
+
 /// A data-validation predicate (`trame-cell-editing`). `List` /
 /// `NumberRange` / `TextLength` are Phase 2; `ListRange` / `DateRange` / `Regex`
 /// are Phase 3.
@@ -154,7 +164,7 @@ pub enum ValidationKind {
     NumberRange {
         min: f64,
         max: f64,
-        inclusive: bool,
+        bounds: RangeBounds,
     },
     NumberInteger,
     /// Dates between two bounds, each as a serial; the view parses the

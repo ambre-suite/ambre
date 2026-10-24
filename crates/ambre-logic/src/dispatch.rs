@@ -429,7 +429,7 @@ impl LogicState {
                 document_id,
                 connected,
             } => {
-                if connected {
+                if connected.is_connected() {
                     self.retry_erases();
                 }
                 self.send_to_ui(UiEvent::ConnectionStatus {
@@ -563,8 +563,8 @@ impl LogicState {
                 channel_id,
                 closing,
                 active,
-                created,
-            } => self.segment_closed(channel_id, closing, active, created),
+                successor,
+            } => self.segment_closed(channel_id, closing, active, successor),
             LogicEvent::SegmentCloseFailed {
                 channel_id,
                 closing,

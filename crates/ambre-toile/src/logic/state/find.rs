@@ -108,13 +108,13 @@ fn next_focus(
     }
 }
 
-/// Substring test honoring `match_case` and `whole_word`. Case folding is a
+/// Substring test honoring the case and the word options. Case folding is a
 /// plain lowercase on both sides (adequate for the Latin-script MVP).
 fn text_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
     if needle.is_empty() {
         return false;
     }
-    if options.match_case {
+    if options.case == ambre_core::CaseMatch::Sensitive {
         contains_match(haystack, needle, options)
     } else {
         contains_match(&haystack.to_lowercase(), &needle.to_lowercase(), options)
@@ -122,9 +122,9 @@ fn text_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
 }
 
 /// `haystack.contains(needle)`, refined to word boundaries when the options
-/// ask for `whole_word`. The case folding is the caller's.
+/// ask for whole words. The case folding is the caller's.
 fn contains_match(haystack: &str, needle: &str, options: FindOptions) -> bool {
-    if !options.whole_word {
+    if options.word == ambre_core::WordMatch::Anywhere {
         return haystack.contains(needle);
     }
     let mut from = 0;

@@ -202,7 +202,7 @@ impl TrameView {
     /// no-op beyond clearing the state.
     pub(crate) fn end_fill_drag(&mut self, mods: ambre_commands::Modifiers) {
         // The drag is over: drop the crosshair (the next hover re-arms it).
-        self.set_fill_cursor(false);
+        self.set_cursor(GridCursor::Unset);
         self.hover_cursor = GridCursor::Unset;
         let (Some((src, block)), Some(dest)) =
             (self.fill_drag.take(), self.state.fill_preview.take())
@@ -484,7 +484,7 @@ impl TrameView {
         let payload = source
             .ambre
             .as_ref()
-            .filter(|_| !source.plain)
+            .filter(|_| source.form != ambre_core::PasteForm::Plain)
             .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes).ok());
         match payload {
             Some(payload) => self.grid_paste_payload(payload),

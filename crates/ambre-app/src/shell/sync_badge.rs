@@ -47,7 +47,7 @@ mod tests {
     async fn the_badge_follows_the_link_after_a_tick() {
         let status = RwSignal::new(ChromeStatus {
             hydrating: false,
-            connected: true,
+            connected: ambre_core::LinkState::Connected,
         });
         let container = document().create_element("div").unwrap();
         document().body().unwrap().append_child(&container).unwrap();
@@ -57,7 +57,7 @@ mod tests {
 
         status.set(ChromeStatus {
             hydrating: false,
-            connected: false,
+            connected: ambre_core::LinkState::Disconnected,
         });
         leptos::task::tick().await;
         assert_eq!(text(&container, ".label"), "Offline");

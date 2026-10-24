@@ -25,6 +25,27 @@ impl ViewTick {
     }
 }
 
+/// Whether the relay acknowledged every change of a held document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Delivery {
+    /// The relay acknowledged every change, so the copy may leave.
+    #[default]
+    Sent,
+    /// It carries a change the relay has not acknowledged, so it stays
+    /// (`RESID-009`, `RESID-019`).
+    Unsent,
+}
+
+/// Whether the application of a held document marks it immutable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Mutability {
+    /// It may still change, so it leaves in the order of its last view.
+    #[default]
+    Mutable,
+    /// It never changes, so it leaves first (`RESID-007`).
+    Immutable,
+}
+
 /// What the policy knows of one held document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Held {
@@ -33,10 +54,10 @@ pub struct Held {
     /// A view shows it, so it never leaves (`RESID-003`).
     pub pinned: bool,
     /// Its application marks it immutable, so it leaves first (`RESID-007`).
-    pub immutable: bool,
+    pub immutable: Mutability,
     /// It carries a change the relay has not acknowledged, so it stays
     /// (`RESID-009`, `RESID-019`).
-    pub unsent: bool,
+    pub unsent: Delivery,
     /// The tick of its last view. A lower tick leaves first (`RESID-008`).
     viewed: ViewTick,
 }
@@ -114,7 +135,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     }
 
     /// Record whether the application marks a document immutable.
-    pub fn set_immutable(&mut self, key: K, immutable: bool) {
+    pub fn set_immutable(&mut self, key: K, immutable: Mutability) {
         if let Some(held) = self.held.get_mut(&key) {
             held.immutable = immutable;
         }
@@ -122,7 +143,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
 
     /// Record whether a document carries a change the relay has not
     /// acknowledged.
-    pub fn set_unsent(&mut self, key: K, unsent: bool) {
+    pub fn set_unsent(&mut self, key: K, unsent: Delivery) {
         if let Some(held) = self.held.get_mut(&key) {
             held.unsent = unsent;
         }
@@ -175,11 +196,11 @@ impl<K: Copy + Eq + Hash> Residency<K> {
         let mut candidates: Vec<(&K, &Held)> = self
             .held
             .iter()
-            .filter(|(_, held)| !held.pinned && !held.unsent)
+            .filter(|(_, held)| !held.pinned && held.unsent == Delivery::Sent)
             .collect();
         // Every tick is drawn once, so two documents never tie and the order
         // never depends on the map's.
-        candidates.sort_by_key(|(_, held)| (!held.immutable, held.viewed));
+        candidates.sort_by_key(|(_, held)| (held.immutable == Mutability::Mutable, held.viewed));
         candidates
             .into_iter()
             .take_while(|(_, held)| {
@@ -249,9 +270,9 @@ mod tests {
     #[test]
     fn an_unsent_change_keeps_its_document() {
         let mut tier = three();
-        tier.set_unsent(1, true);
+        tier.set_unsent(1, Delivery::Unsent);
         assert_eq!(evict(&mut tier, ByteSize(0)), vec![2, 3]);
-        tier.set_unsent(1, false);
+        tier.set_unsent(1, Delivery::Sent);
         assert_eq!(evict(&mut tier, ByteSize(0)), vec![1]);
     }
 
@@ -260,7 +281,7 @@ mod tests {
     #[test]
     fn an_immutable_document_leaves_before_any_other() {
         let mut tier = three();
-        tier.set_immutable(3, true);
+        tier.set_immutable(3, Mutability::Immutable);
         assert_eq!(tier.evictions(mb(20)), vec![3]);
     }
 
@@ -289,7 +310,7 @@ mod tests {
     fn what_cannot_leave_may_exceed_the_budget_alone() {
         let mut tier = three();
         tier.pin(1);
-        tier.set_unsent(2, true);
+        tier.set_unsent(2, Delivery::Unsent);
         assert_eq!(evict(&mut tier, mb(1)), vec![3]);
         assert_eq!(tier.bytes(), mb(20));
     }

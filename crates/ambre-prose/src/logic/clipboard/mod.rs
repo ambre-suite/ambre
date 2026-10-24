@@ -52,7 +52,7 @@ enum ClipKind {
     Heading(HeadingLevel),
     Bullet,
     Ordered(u8),
-    Todo(bool),
+    Todo(crate::events::TodoMark),
     Code(String),
 }
 

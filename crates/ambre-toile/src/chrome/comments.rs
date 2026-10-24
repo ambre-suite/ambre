@@ -147,7 +147,7 @@ pub fn CommentsPanel(
                                         class="ambre-comments-resolve"
                                         on:click=move |_| on_intent.run(CommentIntent::Resolve {
                                             thread: id.clone(),
-                                            resolved: !resolved,
+                                            state: crate::ui::comments::ThreadState::resolved_if(!resolved),
                                         })
                                     >
                                         {if resolved { "Reopen" } else { "Resolve" }}
