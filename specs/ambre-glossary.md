@@ -145,6 +145,8 @@
 | undo | taking back the last change of this client | | `1-Foundations/ambre-spec-undo.md` |
 | document locale | the language tag the content is formatted in | | `1-Foundations/ambre-spec-locale.md` |
 | interface language | the language the reader's own menus are in | | `1-Foundations/ambre-spec-locale.md` |
+| reader convention | which locale a reader sees and types numbers in (`NumberConvention`) | | `1-Foundations/ambre-spec-locale.md` |
+| reader locale | the locale a reader holds on their own device | | `1-Foundations/ambre-spec-locale.md` |
 
 ## 5. THE METHOD
 

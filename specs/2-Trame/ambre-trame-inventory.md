@@ -35,10 +35,10 @@
 | `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 |  |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 |  |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 41 |  |
-| `trame-number-formats` | A user picks Percent. | partial | 12 |  |
+| `trame-number-formats` | A user picks Percent. | partial | 14 |  |
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 11 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 474 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 476 contract rows, 0 loose.**

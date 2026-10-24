@@ -21,7 +21,7 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3716 rows: 3172 shipped, of which 3 loose. 544 unbuilt.**
+**3728 rows: 3172 shipped, of which 3 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -30,7 +30,7 @@
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 1 |  |  |  |  | 1 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 188 | 55 | 29 | 109 | 163 | 544 |
+| `unimplemented` | 198 | 57 | 29 | 109 | 163 | 556 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -95,7 +95,7 @@
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |
 | `ambre-spec-trame-import-export.md` | 41 | 28 | 28 |  | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |
-| `ambre-spec-trame-number-formats.md` | 12 | 11 | 11 |  | 1 |
+| `ambre-spec-trame-number-formats.md` | 14 | 11 | 11 |  | 3 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |
 | `ambre-spec-trame-resize.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |
@@ -208,7 +208,7 @@
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..015 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108 |
-| `ambre-spec-locale.md` | LOCALE-001..013 |
+| `ambre-spec-locale.md` | LOCALE-001..023 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176 |
@@ -333,7 +333,7 @@
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123 |
 | `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..049 |
 | `ambre-spec-trame-named-ranges.md` | TRAME-062..069,155..156 |
-| `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223 |
+| `ambre-spec-trame-number-formats.md` | TRAME-102..110,157..158,223,237..238 |
 | `ambre-spec-trame-pdf-export.md` | TRAME-IO-021..023,031 |
 | `ambre-spec-trame-resize.md` | TRAME-UI-036..042,126..128 |
 | `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177 |
