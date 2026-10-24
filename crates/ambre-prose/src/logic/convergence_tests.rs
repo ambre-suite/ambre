@@ -454,16 +454,19 @@ fn two_peers_appending_to_one_list_draw_the_same_ordinals() {
 
     assert_eq!(ordinals(&alice), ordinals(&bob));
     // Both items landed, and they are numbered one after the other.
-    assert_eq!(ordinals(&alice), vec![0, 1, 2]);
+    assert_eq!(ordinals(&alice), vec![None, Some(1), Some(2)]);
 }
 
 /// The ordinal of every live root block, in document order.
-fn ordinals(state: &ProseState) -> Vec<u32> {
+fn ordinals(state: &ProseState) -> Vec<Option<u32>> {
     let tree = crate::doc::blocks(state.document());
     state
         .root_blocks()
         .into_iter()
-        .map(|id| crate::numbering::compute_ordinal(&tree, &crate::events::tree_id(id)))
+        .map(|id| {
+            crate::numbering::compute_ordinal(&tree, &crate::events::tree_id(id))
+                .map(crate::numbering::ListOrdinal::get)
+        })
         .collect()
 }
 

@@ -27,7 +27,7 @@
 //! shape belt's, so the two belts read the same document. Its values are
 //! frozen here, so a command added to it lands with a raised version.
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::{DocOffset, FootnoteOrdinal};
 use ambre_core::Rgba;
 use std::collections::BTreeSet;
 
@@ -520,7 +520,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         .find(|n| *n.footnote_id.as_uuid() == id)
     {
         return Some(match field {
-            doc::AnnotKey::Kind => format!("footnote {:?}", note.ordinal),
+            doc::AnnotKey::Kind => format!("footnote {:?}", note.ordinal.map(FootnoteOrdinal::get)),
             doc::AnnotKey::NoteBlock => format!("note reads {:?}", note.text),
             _ => return None,
         });
@@ -604,7 +604,7 @@ fn mark_reading(
             .into_iter()
             .find(|n| Some(n.footnote_id) == id)
         {
-            Some(note) => format!("calls note {:?}", note.ordinal),
+            Some(note) => format!("calls note {:?}", note.ordinal.map(FootnoteOrdinal::get)),
             None => "calls no note".to_owned(),
         }
     } else if mark == crate::mark::MarkRoot::CrossRef.as_str() {

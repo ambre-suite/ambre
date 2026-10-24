@@ -14,7 +14,9 @@
 pub mod markdown_read;
 pub mod markdown_write;
 
-use ambre_bus::app::prose::{ConversionFormat, ConversionReport, ConversionWarning};
+use ambre_bus::app::prose::{
+    ConversionFormat, ConversionReport, ConversionWarning, FootnoteOrdinal,
+};
 
 use crate::doc::StoredLevel;
 
@@ -90,7 +92,7 @@ pub struct IrTableCell {
 /// One footnote body. A run points at it by ordinal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IrFootnote {
-    pub ordinal: u32,
+    pub ordinal: FootnoteOrdinal,
     pub runs: Vec<IrRun>,
 }
 
@@ -128,7 +130,7 @@ pub struct IrRun {
     pub suggestion: bool,
     pub cross_ref: bool,
     /// The ordinal of the footnote this run calls.
-    pub footnote_ref: Option<u32>,
+    pub footnote_ref: Option<FootnoteOrdinal>,
 }
 
 impl IrRun {

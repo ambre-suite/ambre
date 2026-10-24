@@ -12,7 +12,7 @@ use ambre_core::FootnoteId;
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
-use crate::events::FootnoteEntry;
+use crate::events::{FootnoteEntry, FootnoteOrdinal};
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
@@ -62,7 +62,7 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<FootnoteId> {
 /// A call whose note is gone counts for nothing. Two peers holding one text
 /// therefore count one set of numbers (`PROSE-FEAT-097`).
 #[must_use]
-pub fn ordinals(document: &LoroDoc) -> Vec<(FootnoteId, u32)> {
+pub fn ordinals(document: &LoroDoc) -> Vec<(FootnoteId, FootnoteOrdinal)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for anchor in doc::anchors(document, crate::mark::MarkRoot::Footnote) {
@@ -73,10 +73,7 @@ pub fn ordinals(document: &LoroDoc) -> Vec<(FootnoteId, u32)> {
             continue;
         }
         seen.insert(id);
-        let ordinal = u32::try_from(out.len())
-            .unwrap_or(u32::MAX)
-            .saturating_add(1);
-        out.push((id, ordinal));
+        out.push((id, FootnoteOrdinal::from_position(out.len())));
     }
     out
 }

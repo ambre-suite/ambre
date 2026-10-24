@@ -11,6 +11,8 @@ use std::fmt::Write as _;
 
 use ambre_bus::app::prose::{ConversionFormat, ConversionReport, MarkdownFlavor};
 
+use crate::numbering::ListOrdinal;
+
 use super::{IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, ProseIr, Warnings};
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.
@@ -48,7 +50,7 @@ struct Writer {
 /// ordinal the next ordered item takes.
 struct ListRun {
     previous: Option<IrListStyle>,
-    ordinal: u32,
+    ordinal: ListOrdinal,
 }
 
 impl Writer {
@@ -66,7 +68,7 @@ impl Writer {
     fn blocks(&mut self, blocks: &[IrBlock], indent: &str) {
         let mut run = ListRun {
             previous: None,
-            ordinal: 1,
+            ordinal: ListOrdinal::FIRST,
         };
         for block in blocks {
             if let IrBlock::ListItem {
@@ -79,7 +81,7 @@ impl Writer {
                 continue;
             }
             run.previous = None;
-            run.ordinal = 1;
+            run.ordinal = ListOrdinal::FIRST;
             self.separate();
             self.block(block, indent);
         }
@@ -154,7 +156,7 @@ impl Writer {
             ) | (Some(IrListStyle::Ordered(_)), IrListStyle::Ordered(_))
         );
         if !joins {
-            run.ordinal = 1;
+            run.ordinal = ListOrdinal::FIRST;
             self.separate();
         }
         run.previous = Some(style);
@@ -172,7 +174,7 @@ impl Writer {
                     self.warnings.unsupported("list numbering style");
                 }
                 let marker = format!("{}. ", run.ordinal);
-                run.ordinal += 1;
+                run.ordinal = run.ordinal.next();
                 marker
             }
         };
@@ -181,7 +183,7 @@ impl Writer {
         let inner = format!("{indent}{}", " ".repeat(marker.chars().count()));
         let mut child_run = ListRun {
             previous: None,
-            ordinal: 1,
+            ordinal: ListOrdinal::FIRST,
         };
         for (index, child) in children.iter().enumerate() {
             if let IrBlock::ListItem {
@@ -468,7 +470,7 @@ fn longest_run(text: &str, c: char) -> usize {
 mod tests {
     use super::*;
     use crate::interop::{IrFootnote, IrMeta, IrTableCell};
-    use ambre_bus::app::prose::ConversionWarning;
+    use ambre_bus::app::prose::{ConversionWarning, FootnoteOrdinal};
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
@@ -599,12 +601,12 @@ mod tests {
                 children: Vec::new(),
             },
             para(vec![IrRun {
-                footnote_ref: Some(1),
+                footnote_ref: Some(FootnoteOrdinal::FIRST),
                 ..IrRun::plain("claim")
             }]),
         ]);
         doc.footnotes.push(IrFootnote {
-            ordinal: 1,
+            ordinal: FootnoteOrdinal::FIRST,
             runs: vec![IrRun::plain("source")],
         });
         let (text, report) = write(&doc, MarkdownFlavor::CommonMark);

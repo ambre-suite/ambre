@@ -159,7 +159,9 @@ pub(crate) fn write_note_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{BlockId, BlockInit, FootnoteEntry, ProseCommand, block_id};
+    use crate::events::{
+        BlockId, BlockInit, FootnoteEntry, FootnoteOrdinal, ProseCommand, block_id,
+    };
     use crate::logic::ProseOutcome;
     use ambre_bus::app::prose::DocSpan;
 
@@ -223,7 +225,7 @@ mod tests {
         state
             .footnotes()
             .into_iter()
-            .map(|n| (n.text, n.ordinal))
+            .map(|n| (n.text, n.ordinal.map(FootnoteOrdinal::get)))
             .collect()
     }
 
@@ -313,7 +315,7 @@ mod tests {
             alice.footnotes(),
             vec![FootnoteEntry {
                 footnote_id: id,
-                ordinal: Some(1),
+                ordinal: Some(FootnoteOrdinal::FIRST),
                 text: "edited".to_owned(),
             }]
         );
@@ -338,7 +340,11 @@ mod tests {
         alice.apply_remote(&from_bob.update.expect("bob's note travels"));
         bob.apply_remote(&from_alice.update.expect("alice's note travels"));
         assert_eq!(alice.footnotes(), bob.footnotes());
-        let ordinals: Vec<_> = alice.footnotes().iter().map(|n| n.ordinal).collect();
+        let ordinals: Vec<_> = alice
+            .footnotes()
+            .iter()
+            .map(|n| n.ordinal.map(FootnoteOrdinal::get))
+            .collect();
         assert_eq!(ordinals, vec![Some(1), Some(2)]);
     }
 
@@ -374,7 +380,7 @@ mod tests {
             listed(&outcome),
             vec![FootnoteEntry {
                 footnote_id: kept,
-                ordinal: Some(1),
+                ordinal: Some(FootnoteOrdinal::FIRST),
                 text: "kept".to_owned(),
             }]
         );

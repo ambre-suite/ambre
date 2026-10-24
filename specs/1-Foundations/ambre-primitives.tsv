@@ -235,7 +235,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.case_sensitive | fi
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.use_regex | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.whole_word | field | bool	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.ordinal | field | Option<u32>	math	footnote ordinal, derived
 ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::TooLarge.0 | field | usize	math	size bound reported in an error
@@ -2439,7 +2438,6 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ListRun.ordinal | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.gfm | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.out | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::block(indent) | param | &str	free-text	text content / label / parser input
@@ -2471,7 +2469,6 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.text | fi
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Paragraph.styled | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Table.merged | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrFootnote.ordinal | field | u32	math	count, size or local index
 ambre-prose | src/interop/mod.rs | crate::interop | IrListStyle::Todo.0 | field | bool	newtype-inner	newtype inner field
 ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.bands | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.paged | field | bool	generic	independent flag or predicate
@@ -2480,7 +2477,6 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrRun.bold | field | bool	ge
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.code | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.comment | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.cross_ref | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.footnote_ref | field | Option<u32>	math	count, size or local index
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.italic | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.strikethrough | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.styled | field | bool	generic	independent flag or predicate
@@ -2536,19 +2532,17 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | right_to_left(c) 
 ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_draft((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_paragraph((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/pass.rs | crate::layout::pass | <BandHeights as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-prose | src/layout/pass.rs | crate::layout::pass | NoteKey | alias | (FootnoteId,u32,String,Vec<crate::layout::measure::MarkedSpan>,)	free-text	text content / label / parser input
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::call(line) | param | u32	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::touches() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/pass.rs | crate::layout::pass | column_widths_px(cols) | param | usize	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan.notes | field | HashMap<FootnoteId,(u32,DocPx,TreeID)>	math	the ordinal of a note, local to the plan
+ambre-prose | src/layout/pass.rs | crate::layout::pass | NoteKey | alias | (FootnoteId,FootnoteOrdinal,String,Vec<crate::layout::measure::MarkedSpan>,)	free-text	text content / label / parser input
 ambre-prose | src/layout/place.rs | crate::layout::place | <MeasuredBlock as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.is_split | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout.split_points | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | BlockLayout::shows_on() | ret | bool	generic	predicate result: whether the block shows on a page
 ambre-prose | src/layout/place.rs | crate::layout::place | Cursor::at_page_top() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/layout/place.rs | crate::layout::place | FootnoteLayout.ordinal | field | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | MIN_LINES_AT_BREAK | const | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock.keep_together | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock.keep_with_next | field | bool	generic	independent flag or predicate
@@ -2557,7 +2551,6 @@ ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock::line_c
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock::lines_fitting_in() | ret | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock::splittable() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/place.rs | crate::layout::place | NoteCall.line | field | u32	math	count, size or local index
-ambre-prose | src/layout/place.rs | crate::layout::place | NoteCall.ordinal | field | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | fragment() | ret | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | fragment(from) | param | u32	math	count, size or local index
 ambre-prose | src/layout/place.rs | crate::layout::place | height_between(from) | param | u32	math	count, size or local index
@@ -2746,13 +2739,10 @@ ambre-prose | src/logic/ids.rs | crate::logic::ids | pack(counter) | param | u64
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VARIANT | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VERSION | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/interop.rs | crate::logic::interop | ProseState::import_document(data) | param | &[u8]	math	count, size or local index
-ambre-prose | src/logic/interop.rs | crate::logic::interop | ProseState::walk_block(notes) | param | &HashMap<FootnoteId,u32>	math	count, size or local index
-ambre-prose | src/logic/interop.rs | crate::logic::interop | ProseState::walk_children(notes) | param | &HashMap<FootnoteId,u32>	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/interop.rs | crate::logic::interop | cell_styled() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/interop.rs | crate::logic::interop | file_stem(title) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/interop.rs | crate::logic::interop | ir_run(notes) | param | &HashMap<FootnoteId,u32>	math	count, size or local index
 ambre-prose | src/logic/interop.rs | crate::logic::interop | type_name() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/logic/marks.rs | crate::logic::marks | MarkFold.counts | field | [(u32,u32);5]	math	count, size or local index
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	free-text	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
@@ -2798,11 +2788,9 @@ ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	p
 ambre-prose | src/mark.rs | crate::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
-ambre-prose | src/note.rs | crate::note | ordinals() | ret | Vec<(FootnoteId,u32)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | compute_ordinal() | ret | u32	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | compute_section_number() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | list_depth() | ret | u32	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | section_numbers() | ret | Vec<(TreeID,Vec<u32>)>	math	count, size or local index
@@ -4529,7 +4517,6 @@ ambre-canvas | src/density.rs | crate::density | PixelSize.height | field | u32	
 ambre-canvas | src/density.rs | crate::density | PixelSize.width | field | u32	newtype-inner	the inside of a size typed by its pixel space; the u32 is what wgpu and the canvas element take
 ambre-canvas | src/density.rs | crate::density | PixelSize<P>::new(height) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
 ambre-canvas | src/density.rs | crate::density | PixelSize<P>::new(width) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
-ambre-bus | src/app/prose.rs | crate::app::prose | PageNumber::get() | ret | u32	newtype-inner	PageNumber newtype accessor
 ambre-prose | src/layout/run.rs | crate::layout::run | page_offset() | ret | Option<usize>	math	slot of a page in the window vector of the pages it carries
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,PageSpan)>	math	the usize is the number of faces the layout was shaped on, compared for equality
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor

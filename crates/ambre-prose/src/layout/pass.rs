@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{
-    BlockType, DocOffset, PageCount, PageIndex, PageNumber, ParagraphStyle,
+    BlockType, DocOffset, FootnoteOrdinal, PageCount, PageIndex, PageNumber, ParagraphStyle,
 };
 use ambre_core::{DocPx, FootnoteId, Pt};
 use ambre_draw::ScriptSet;
@@ -155,7 +155,7 @@ pub const NOTE_GAP_PX: DocPx = DocPx::new(4.0);
 /// of it (`PROSE-UI-207`).
 pub(crate) type NoteKey = (
     FootnoteId,
-    u32,
+    FootnoteOrdinal,
     String,
     Vec<crate::layout::measure::MarkedSpan>,
 );
@@ -169,7 +169,7 @@ pub(crate) struct NotePlan {
     /// The calls of each block: the code-point offset and the note.
     calls: HashMap<TreeID, Vec<(DocOffset, FootnoteId)>>,
     /// Each note's ordinal, shaped height and block.
-    notes: HashMap<FootnoteId, (u32, DocPx, TreeID)>,
+    notes: HashMap<FootnoteId, (FootnoteOrdinal, DocPx, TreeID)>,
     /// Each note's number as it was shaped.
     pub(crate) numbers: HashMap<FootnoteId, ShapedRun>,
     /// Each note's text as it was shaped, under the note's block, indented

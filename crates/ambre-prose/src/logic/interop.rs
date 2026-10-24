@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::{DocOffset, HeadingLevel};
+use ambre_bus::app::prose::{DocOffset, FootnoteOrdinal, HeadingLevel};
 use ambre_core::FootnoteId;
 use loro::{LoroValue, TreeID};
 
@@ -314,7 +314,7 @@ fn marked_of(run: &IrRun) -> MarkedRun {
 }
 
 /// A run of the document as the form holds it.
-fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, u32>) -> IrRun {
+fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, FootnoteOrdinal>) -> IrRun {
     let mut out = IrRun::plain(run.text);
     for (key, value) in run.marks {
         let on = !matches!(value, LoroValue::Null | LoroValue::Bool(false));
@@ -356,7 +356,7 @@ impl ProseState {
     /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
     pub(crate) fn walk(&self) -> ProseIr {
         let tree = doc::blocks(&self.doc);
-        let notes: HashMap<FootnoteId, u32> =
+        let notes: HashMap<FootnoteId, FootnoteOrdinal> =
             crate::note::ordinals(&self.doc).into_iter().collect();
         let bands = doc::read_bands(&self.doc);
         let mut footnotes = Vec::new();
@@ -385,7 +385,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         parent: Option<TreeID>,
-        notes: &HashMap<FootnoteId, u32>,
+        notes: &HashMap<FootnoteId, FootnoteOrdinal>,
     ) -> Vec<IrBlock> {
         let ids = match parent {
             None => doc::roots(tree),
@@ -400,7 +400,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         id: TreeID,
-        notes: &HashMap<FootnoteId, u32>,
+        notes: &HashMap<FootnoteId, FootnoteOrdinal>,
     ) -> Option<IrBlock> {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)

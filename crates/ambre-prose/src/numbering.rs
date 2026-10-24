@@ -20,6 +20,12 @@ use loro::{LoroTree, TreeID};
 use crate::doc;
 use crate::events::{HeadingLevel, ListStyle, OrderedStyle};
 
+ambre_core::define_ordinal! {
+    /// The number an ordered list item is drawn with, one for the first item
+    /// of its run. It is counted, never stored.
+    pub struct ListOrdinal;
+}
+
 /// The width of the counter vector: one counter per level the format declares.
 const LEVELS: usize = HeadingLevel::ALL.len();
 
@@ -103,8 +109,8 @@ fn ordered_style_of(tree: &LoroTree, id: &TreeID) -> Option<OrderedStyle> {
     }
 }
 
-/// The one-based ordinal an ordered item is drawn with, or zero when the id
-/// names no ordered item (`PROSE-FEAT-002`).
+/// The ordinal an ordered item is drawn with, `None` when the id names no
+/// ordered item (`PROSE-FEAT-002`).
 ///
 /// A run is the unbroken stretch of neighbours under one parent that share one
 /// numbering style. Any other neighbour ends it: a paragraph, a bullet, a
@@ -114,27 +120,23 @@ fn ordered_style_of(tree: &LoroTree, id: &TreeID) -> Option<OrderedStyle> {
 /// The count reads the sibling list backwards from the item, so it costs the
 /// length of the run rather than the length of the document.
 #[must_use]
-pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> u32 {
-    let Some(style) = ordered_style_of(tree, item_id) else {
-        return 0;
-    };
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal> {
+    let style = ordered_style_of(tree, item_id)?;
     let parent = match tree.parent(*item_id) {
         Some(loro::TreeParentId::Node(parent)) => Some(parent),
         Some(loro::TreeParentId::Root) => None,
-        _ => return 0,
+        _ => return None,
     };
     let siblings = doc::children_of(tree, parent);
-    let Some(here) = siblings.iter().position(|sibling| sibling == item_id) else {
-        return 0;
-    };
-    let mut ordinal = 1_u32;
+    let here = siblings.iter().position(|sibling| sibling == item_id)?;
+    let mut ordinal = ListOrdinal::FIRST;
     for before in siblings.iter().take(here).rev() {
         if ordered_style_of(tree, before) != Some(style) {
             break;
         }
-        ordinal = ordinal.saturating_add(1);
+        ordinal = ordinal.next();
     }
-    ordinal
+    Some(ordinal)
 }
 
 /// How deep an item sits in its list, counting the list items above it in the
@@ -370,8 +372,9 @@ mod tests {
     }
 
     /// The ordinal of one block.
-    fn ordinal(state: &ProseState, id: &BlockId) -> u32 {
+    fn ordinal(state: &ProseState, id: &BlockId) -> Option<u32> {
         compute_ordinal(&doc::blocks(state.document()), &crate::events::tree_id(*id))
+            .map(ListOrdinal::get)
     }
 
     /// The decimal style, which most of these tests number with.
@@ -387,12 +390,12 @@ mod tests {
         let bullet = item(&mut state, ListStyle::Bullet);
         let roman = item(&mut state, ListStyle::Ordered(OrderedStyle::LowerRoman));
 
-        assert_eq!(ordinal(&state, &first), 1);
-        assert_eq!(ordinal(&state, &second), 2);
+        assert_eq!(ordinal(&state, &first), Some(1));
+        assert_eq!(ordinal(&state, &second), Some(2));
         // A bullet carries no ordinal, and it is what ends the run.
-        assert_eq!(ordinal(&state, &bullet), 0);
+        assert_eq!(ordinal(&state, &bullet), None);
         // Another numbering style is another run, so it starts again at one.
-        assert_eq!(ordinal(&state, &roman), 1);
+        assert_eq!(ordinal(&state, &roman), Some(1));
     }
 
     /// A run that resumes after an interruption starts again at one
@@ -406,8 +409,8 @@ mod tests {
         let resumed = item(&mut state, DECIMAL);
         let after = item(&mut state, DECIMAL);
 
-        assert_eq!(ordinal(&state, &resumed), 1);
-        assert_eq!(ordinal(&state, &after), 2);
+        assert_eq!(ordinal(&state, &resumed), Some(1));
+        assert_eq!(ordinal(&state, &after), Some(2));
     }
 
     /// A nested item is numbered among its own siblings, and its depth is the
@@ -424,7 +427,7 @@ mod tests {
         assert_eq!(list_depth(&tree, &crate::events::tree_id(first)), 0);
         assert_eq!(list_depth(&tree, &crate::events::tree_id(second)), 1);
         // The nested item opens a run of its own under its new parent.
-        assert_eq!(ordinal(&state, &second), 1);
+        assert_eq!(ordinal(&state, &second), Some(1));
     }
 
     /// Reading an ordinal writes nothing, and no ordinal is stored
@@ -435,8 +438,8 @@ mod tests {
         let first = item(&mut state, DECIMAL);
         let second = item(&mut state, DECIMAL);
         let before = state.document().get_deep_value();
-        assert_eq!(ordinal(&state, &first), 1);
-        assert_eq!(ordinal(&state, &second), 2);
+        assert_eq!(ordinal(&state, &first), Some(1));
+        assert_eq!(ordinal(&state, &second), Some(2));
         assert_eq!(state.document().get_deep_value(), before);
     }
 
@@ -447,7 +450,7 @@ mod tests {
         let mut state = ProseState::new().expect("a document is built");
         let first = item(&mut state, DECIMAL);
         let last = item(&mut state, DECIMAL);
-        assert_eq!(ordinal(&state, &last), 2);
+        assert_eq!(ordinal(&state, &last), Some(2));
         let before = stored(&state, &last);
 
         state.handle_command(ProseCommand::InsertBlock {
@@ -456,7 +459,7 @@ mod tests {
             init: BlockInit::ListItem { style: DECIMAL },
             style_id: None,
         });
-        assert_eq!(ordinal(&state, &last), 3);
+        assert_eq!(ordinal(&state, &last), Some(3));
         assert_eq!(
             stored(&state, &last),
             before,
@@ -472,8 +475,8 @@ mod tests {
         let ticked = item(&mut state, ListStyle::Todo(false));
         let text = paragraph(&mut state);
 
-        assert_eq!(ordinal(&state, &bullet), 0);
-        assert_eq!(ordinal(&state, &ticked), 0);
-        assert_eq!(ordinal(&state, &text), 0);
+        assert_eq!(ordinal(&state, &bullet), None);
+        assert_eq!(ordinal(&state, &ticked), None);
+        assert_eq!(ordinal(&state, &text), None);
     }
 }

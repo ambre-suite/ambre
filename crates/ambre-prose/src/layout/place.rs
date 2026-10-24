@@ -5,7 +5,7 @@
 //! (`PROSE-078`). A constraint it cannot meet is resolved by moving forward,
 //! and the constraint order of section 2 decides which one gives way.
 
-use ambre_bus::app::prose::{BlockType, PageCount, PageIndex, PageSpan};
+use ambre_bus::app::prose::{BlockType, FootnoteOrdinal, PageCount, PageIndex, PageSpan};
 use ambre_core::{DocPx, FootnoteId};
 use std::sync::Arc;
 
@@ -29,7 +29,7 @@ pub struct NoteCall {
     pub block_id: TreeID,
     /// Counted before placement, from the calls in document order
     /// (`PROSE-117`).
-    pub ordinal: u32,
+    pub ordinal: FootnoteOrdinal,
     /// The line of the block the call sits on: a table's row, a text's line.
     pub line: u32,
     /// The note's shaped text, or its number when that is taller.
@@ -42,7 +42,7 @@ pub struct FootnoteLayout {
     pub footnote_id: FootnoteId,
     /// The block holding the note's text, the caret's address in it.
     pub block_id: TreeID,
-    pub ordinal: u32,
+    pub ordinal: FootnoteOrdinal,
     pub page: PageIndex,
     pub height_px: DocPx,
 }

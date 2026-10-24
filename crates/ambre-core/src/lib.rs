@@ -60,6 +60,7 @@ pub mod member_count;
 pub mod mode;
 pub mod name;
 pub mod object_key;
+pub mod ordinal;
 pub mod passphrase;
 pub mod payload;
 pub mod provider;

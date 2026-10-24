@@ -130,44 +130,33 @@ impl PageIndex {
     /// The one conversion from a page index to a page number. It saturates
     /// at the last number the axis holds.
     #[must_use]
-    pub const fn number(self) -> PageNumber {
-        match std::num::NonZeroU32::new(self.get().saturating_add(1)) {
-            Some(number) => PageNumber(number),
-            None => PageNumber::FIRST,
-        }
+    pub fn number(self) -> PageNumber {
+        PageNumber::from_position(self.to_usize())
     }
 }
 
-/// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
-///
-/// A table of contents and a page-number field show it. The layout counts
-/// pages from zero in a [`PageIndex`], and [`PageIndex::number`] is the one
-/// way from that count to this one. Zero is not a page number, so "no page
-/// known" is an `Option` and never a zero.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PageNumber(std::num::NonZeroU32);
+ambre_core::define_ordinal! {
+    /// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
+    ///
+    /// A table of contents and a page-number field show it. The layout counts
+    /// pages from zero in a [`PageIndex`], and [`PageIndex::number`] is the one
+    /// way from that count to this one. Zero is not a page number, so "no page
+    /// known" is an `Option` and never a zero.
+    pub struct PageNumber;
+}
 
 impl PageNumber {
-    /// The first page.
-    pub const FIRST: Self = Self(std::num::NonZeroU32::MIN);
-
     /// The page index this number shows.
     #[must_use]
     pub const fn index(self) -> PageIndex {
-        PageIndex::new(self.0.get() - 1)
-    }
-
-    /// The number, for the call into a foreign API.
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0.get()
+        PageIndex::new(self.get() - 1)
     }
 }
 
-impl fmt::Display for PageNumber {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
+ambre_core::define_ordinal! {
+    /// The number a footnote is called by, one for the first call in document
+    /// order. It is counted, never stored (`PROSE-FEAT-013`).
+    pub struct FootnoteOrdinal;
 }
 
 impl PageCount {
@@ -854,7 +843,7 @@ pub struct FindMatch {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FootnoteEntry {
     pub footnote_id: FootnoteId,
-    pub ordinal: Option<u32>,
+    pub ordinal: Option<FootnoteOrdinal>,
     pub text: String,
 }
 

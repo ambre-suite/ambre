@@ -80,7 +80,7 @@ fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
         .span()
         .into_iter()
         .flat_map(|page| layout.footnotes_on_page(page))
-        .map(|note| (note.footnote_id, note.ordinal, note.page.get()))
+        .map(|note| (note.footnote_id, note.ordinal.get(), note.page.get()))
         .collect();
     out.sort_by_key(|(_, ordinal, _)| *ordinal);
     out
@@ -128,7 +128,11 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let ordinals: Vec<(FootnoteId, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
     assert_eq!(ordinals, vec![(earlier, 1), (later, 2)]);
-    assert_eq!(ordinals, note::ordinals(state.document()));
+    let counted: Vec<(FootnoteId, u32)> = note::ordinals(state.document())
+        .into_iter()
+        .map(|(id, n)| (id, n.get()))
+        .collect();
+    assert_eq!(ordinals, counted);
 }
 
 #[test]

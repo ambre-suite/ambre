@@ -14,11 +14,11 @@ pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply,
     CommentThread, CrossRefKind, CursorPosition, DateFieldFormat, FindMatch, FindQuery,
-    FootnoteEntry, HeaderField, HeadingLevel, HfTarget, LineHeight, LineHeightMode, LinkSpan,
-    ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan,
-    ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal,
-    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
-    TableOfContents, TableValue, TextEdit, TocEntry, TriState, VAlign, WordCount,
+    FootnoteEntry, FootnoteOrdinal, HeaderField, HeadingLevel, HfTarget, LineHeight,
+    LineHeightMode, LinkSpan, ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex,
+    PageNumber, PageSpan, ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent,
+    ProseRefusal, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind,
+    SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TriState, VAlign, WordCount,
 };
 
 use loro::TreeID;
