@@ -8,6 +8,10 @@ is resolved, not assumed: a branch sitting on the base reads the parent commit,
 so a section edited by a commit landing straight on the base branch is caught
 like any other.
 
+A section binds only from the first release tag on. Each repository test runs
+in both modes, so an edit refused once a release ships passes before it, and a
+freeze parted from its belt is refused in both.
+
 The pairing of a freeze with its belt is tested on a tree alone, since no
 revision comes into it. The section reader is tested on text alone. The rest runs against a real
 repository built in a temporary directory, because the defect worth catching is
@@ -92,7 +96,17 @@ class SectionsTest(unittest.TestCase):
 
 
 class RepositoryTest(unittest.TestCase):
-    """The check against a base revision, on a repository built for it."""
+    """The check against a base revision, once a release tag exists.
+
+    `BOUND` is the exit code of an edited or a dropped section: 1 once a
+    release binds the sections, 0 before. The subclass below reruns every test
+    with no tag, so the coherence tests, whose outcome is fixed, hold in both
+    modes.
+    """
+
+    # The tag a test repository carries, or `None` for a pre-release one.
+    TAG: str | None = "v1.0.0"
+    BOUND = 1
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -107,6 +121,8 @@ class RepositoryTest(unittest.TestCase):
         self.shapes.write_text(HEADER + V1)
         git(self.root, "add", "-A")
         git(self.root, "commit", "-qm", "freeze v1")
+        if self.TAG is not None:
+            git(self.root, "tag", self.TAG)
         # The module reads one repository, named by a module constant.
         self.was = schema_freeze.ROOT
         schema_freeze.ROOT = self.root
@@ -129,6 +145,44 @@ class RepositoryTest(unittest.TestCase):
         git(self.root, "add", "-A")
         git(self.root, "commit", "-qm", "edit")
 
+    # The sections, held from the first release on.
+
+    def test_a_published_section_edited_binds_once_released(self):
+        self.commit(HEADER + V1.replace("i64", "f64"))
+        self.assertEqual(self.run_check("HEAD~1"), self.BOUND)
+
+    def test_a_published_section_dropped_binds_once_released(self):
+        # The compiled version moves to `v2` with every file, so the pairing
+        # holds and only the dropped `v1` can refuse.
+        belt(self.root, "ambre-x", version=2)
+        for name in schema_freeze.FREEZES:
+            shape(self.root, "ambre-x", HEADER + V2, name=name)
+        self.commit(HEADER + V2)
+        self.assertEqual(self.run_check("HEAD~1"), self.BOUND)
+
+    def test_a_published_scaffold_section_edited_binds_once_released(self):
+        shape(self.root, "ambre-x", HEADER + V1.replace("i64", "f64"), name="scaffold.txt")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-qm", "edit the scaffold")
+        self.assertEqual(self.run_check("HEAD~1"), self.BOUND)
+
+    def test_a_base_the_branch_sits_on_reads_the_parent_once_released(self):
+        # `main` is `HEAD`, so a diff against it is empty and the edit below
+        # would pass unseen unless the parent is read instead.
+        self.commit(HEADER + V1.replace("i64", "f64"))
+        self.assertEqual(self.run_check("main"), self.BOUND)
+
+    def test_a_base_that_cannot_be_read_binds_once_released(self):
+        # Before a release no base is read, so a missing one costs nothing.
+        self.assertEqual(self.run_check("nope/nope"), self.BOUND)
+
+    def test_only_a_tag_of_the_release_pattern_releases(self):
+        git(self.root, "tag", "nightly")
+        expected = [] if self.TAG is None else [self.TAG]
+        self.assertEqual(schema_freeze.released(), expected)
+
+    # Free in both modes.
+
     def test_a_section_appended_below_is_free(self):
         self.commit(HEADER + V1 + V2)
         self.assertEqual(self.run_check("HEAD~1"), 0)
@@ -139,38 +193,34 @@ class RepositoryTest(unittest.TestCase):
         self.commit(HEADER + V1 + "\n" + V2)
         self.assertEqual(self.run_check("HEAD~1"), 0)
 
-    def test_a_published_section_edited_is_refused(self):
-        self.commit(HEADER + V1.replace("i64", "f64"))
-        self.assertEqual(self.run_check("HEAD~1"), 1)
+    def test_the_comment_header_reworded_is_free(self):
+        self.commit("# another header\n" + V1)
+        self.assertEqual(self.run_check("HEAD~1"), 0)
 
-    def test_a_published_section_dropped_is_refused(self):
-        self.commit(HEADER + V2)
-        self.assertEqual(self.run_check("HEAD~1"), 1)
-
-    def test_a_published_scaffold_section_edited_is_refused(self):
-        shape(self.root, "ambre-x", HEADER + V1.replace("i64", "f64"), name="scaffold.txt")
-        git(self.root, "add", "-A")
-        git(self.root, "commit", "-qm", "edit the scaffold")
-        self.assertEqual(self.run_check("HEAD~1"), 1)
+    # The coherence of the tree, refused in both modes.
 
     def test_the_file_deleted_is_refused(self):
+        # The crate still stamps `v1`, so a deleted file parts the freeze from
+        # its stamp whatever the mode.
         self.shapes.unlink()
         git(self.root, "add", "-A")
         git(self.root, "commit", "-qm", "delete")
         self.assertEqual(self.run_check("HEAD~1"), 1)
 
-    def test_the_comment_header_reworded_is_free(self):
-        self.commit("# another header\n" + V1)
-        self.assertEqual(self.run_check("HEAD~1"), 0)
+    def test_a_freeze_with_no_belt_is_refused(self):
+        belt(self.root, "ambre-x", version=1, missing=schema_freeze.BELT)
+        self.assertEqual(self.run_check("HEAD"), 1)
 
-    def test_a_base_the_branch_sits_on_reads_the_parent(self):
-        # `main` is `HEAD`, so a diff against it is empty and the edit below
-        # would pass unseen unless the parent is read instead.
-        self.commit(HEADER + V1.replace("i64", "f64"))
-        self.assertEqual(self.run_check("main"), 1)
+    def test_a_bump_with_no_section_to_compare_against_is_refused(self):
+        belt(self.root, "ambre-x", version=2)
+        self.assertEqual(self.run_check("HEAD"), 1)
 
-    def test_a_base_that_cannot_be_read_is_refused(self):
-        self.assertEqual(self.run_check("nope/nope"), 1)
+
+class PrereleaseTest(RepositoryTest):
+    """The same repository before its first release: no section binds yet."""
+
+    TAG = None
+    BOUND = 0
 
 
 class BeltTest(unittest.TestCase):

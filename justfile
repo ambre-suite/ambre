@@ -348,9 +348,12 @@ prose:
 # green with the version never raised, while every peer on the old version reads
 # a document it cannot parse. A section is the record of what one version wrote,
 # so this refuses any section the base revision carries whose body moved. Pass
-# `--base` to name another revision.
+# `--base` to name another revision. A section binds only from the first release
+# on: while no `git tag` matches `v[0-9]*`, no peer holds a document written
+# under any section, so this reads no base and holds the pairing of each freeze
+# with its belt alone (`SCHEMA-019`).
 
-# append-only schema freezes: a published shape section never moves.
+# append-only schema freezes: a released shape section never moves.
 schema-freeze:
     python3 scripts/schema_freeze.py --check
 

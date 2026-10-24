@@ -18,6 +18,13 @@ This check reads the same file on a base revision and refuses any section of
 that revision whose body differs today, or which is gone. A version the base
 does not carry is new, and free.
 
+**A section binds from the first release on** (`SCHEMA-019`). Before a release
+ships, no peer holds a document written under any section, so a reset of the
+versions to 1 loses nothing. While the repository carries no tag matching
+`RELEASE_TAG`, the check reads no base. It holds the pairing of each freeze
+with its belt, and the section of each compiled version. The first release tag
+switches the append-only comparison on, for good.
+
 **The base, not the whole history.** Replaying every commit of the file would
 be the literal reading of the rule and would cost a clone of the repository.
 The base revision is the line that matters: below it a section is published and
@@ -57,6 +64,10 @@ FREEZES = {
     "migrations.txt": MIGRATION_BELT,
     "readings.txt": READING_BELT,
 }
+# The `git tag` pattern of a release. No tag matching it means no release has
+# shipped, so no section binds yet (`SCHEMA-019`, `ambre-spec-schema-version.md`
+# section 2 holds the same pattern).
+RELEASE_TAG = "v[0-9]*"
 # `== v3`: the line that opens a section. Everything above the first one is the
 # file's comment header, which explains the format and is free to be reworded.
 MARK = "== "
@@ -143,6 +154,17 @@ def resolve(base: str) -> str:
     return resolved
 
 
+def released() -> list[str]:
+    """The release tags of the repository, empty before the first release."""
+    done = subprocess.run(
+        ["git", "tag", "--list", RELEASE_TAG],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return done.stdout.split()
+
+
 # `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
 # `SCHEMA_VERSION_ABSENT` are not a stamped number.
 STAMP = re.compile(
@@ -205,6 +227,35 @@ def check_belts(errors: list[str]) -> int:
     return len(read)
 
 
+def report_belts(errors: list[str], check: bool) -> int:
+    """The pairing findings, printed, and the exit code they decide."""
+    for line in errors:
+        print(f"  {line}")
+    if check and errors:
+        print(
+            "\nERROR: a shape freeze and its belt came apart. The freeze is only "
+            "worth the test that compares a build against it, and `SCHEMA-009` "
+            "rests on that pairing holding for every application, including the "
+            "next one.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def prerelease(check: bool) -> int:
+    """The check before the first release: the pairing alone, no base read.
+
+    No peer holds a document written under a section yet, so an edited or a
+    dropped section breaks no reader.
+    """
+    errors: list[str] = []
+    paired = check_belts(errors)
+    print(f"mode: pre-release (no tag matches `{RELEASE_TAG}`), no base read and "
+          f"no section bound; {paired} crates read for a shape and its belt")
+    return report_belts(errors, check)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a finding")
@@ -214,6 +265,12 @@ def main() -> int:
         help="the revision holding the published sections (default: origin/main)",
     )
     args = parser.parse_args()
+
+    tags = released()
+    if not tags:
+        return prerelease(args.check)
+    print(f"mode: released ({len(tags)} tags match `{RELEASE_TAG}`), "
+          "every published section is append-only")
 
     try:
         base = resolve(args.base)
@@ -256,21 +313,12 @@ def main() -> int:
     print(f"\nbase {base[:12]}: {held} sections held, {added} new, "
           f"{len(edited)} edited, {len(dropped)} dropped; "
           f"{paired} crates read for a shape and its belt")
-    for line in errors:
-        print(f"  {line}")
     for line in edited:
         print(f"  edited  {line}")
     for line in dropped:
         print(f"  dropped {line}")
 
-    if args.check and errors:
-        print(
-            "\nERROR: a shape freeze and its belt came apart. The freeze is only "
-            "worth the test that compares a build against it, and `SCHEMA-009` "
-            "rests on that pairing holding for every application, including the "
-            "next one.",
-            file=sys.stderr,
-        )
+    if report_belts(errors, args.check):
         return 1
     if args.check and (edited or dropped):
         print(
