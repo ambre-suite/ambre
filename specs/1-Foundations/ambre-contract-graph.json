@@ -2478,6 +2478,8 @@
   {"edge": "cites-pillar", "from": "SRV-014", "to": "Security"},
   {"edge": "cites-section", "from": "SRV-021", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "verified-by", "from": "SRV-021", "to": "ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both"},
+  {"edge": "cites-section", "from": "SRV-226", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
+  {"edge": "verified-by", "from": "SRV-226", "to": "ambre_server::redis_ops::tests::a_store_older_than_the_minimum_is_refused"},
   {"edge": "cites-document", "from": "SRV-171", "section": "2", "to": "ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "SRV-171", "to": "ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated"},
   {"edge": "cites-document", "from": "SRV-069", "section": "2", "to": "ambre-spec-architecture.md"},

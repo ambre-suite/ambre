@@ -33,14 +33,6 @@
 //! So the bucket must allow `PUT` and `GET` from the application's origin.
 //! Without that rule, every picture upload fails in the browser. minio
 //! allows every origin by default; AWS S3 allows none.
-//!
-//! ## Valkey 8+ Migration
-//!
-//! Current minimum: Redis 7.4+ / Valkey 8.0+.
-//! Valkey 8.0 adds per-field `HEXPIRE` (expire individual hash fields,
-//! useful for presence TTLs: expire `players:{doc_id}:{user_id}` per-field
-//! instead of whole-token TTL). Migration path: upgrade Valkey cluster,
-//! then replace `SETEX` with `HEXPIRE` in `redis_ops::presence_*` functions.
 
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::presigning::PresigningConfig;

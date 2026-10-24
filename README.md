@@ -171,7 +171,7 @@ without the four columns a review reads. It writes nothing, and the file stays t
 
 - Rust stable (with `wasm32-unknown-unknown` target)
 - `trunk` for building and serving the WASM frontend
-- PostgreSQL and Redis (for the server)
+- PostgreSQL and Redis 7.4 or later (for the server)
 
 ### Building
 
