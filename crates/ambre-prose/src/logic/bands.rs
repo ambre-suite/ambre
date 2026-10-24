@@ -630,6 +630,12 @@ pub(crate) mod tests {
             now_ms: ambre_core::Timestamp(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
+        // A new document carries no language, so the date takes the neutral
+        // form rather than a fixed language (`LOCALE-013`).
+        let seeded =
+            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        assert_eq!(seeded, "2026-03-05");
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "en");
         let english =
             crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(english, "March 5, 2026");

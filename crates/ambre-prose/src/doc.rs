@@ -1240,7 +1240,6 @@ pub(crate) fn write_page_format(
 pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     let meta = meta(doc);
     meta.insert(MetaKey::Title, "").ok()?;
-    meta.insert(MetaKey::Lang, "en").ok()?;
     meta.insert(MetaKey::Pageless, false).ok()?;
     if !write_page_format(doc, Orientation::Portrait, A4_WIDTH, A4_HEIGHT) {
         return None;

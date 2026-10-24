@@ -634,6 +634,8 @@ fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
             text.insert(0, "old note").expect("written");
             text.mark(0..3, "b", "true").expect("marked");
         }
+        // The seed of version 9 wrote a language, and the step leaves it.
+        9 => {}
         _ => panic!("the step from version {from} has no canonical document: write one here"),
     }
     if from > ambre_core::schema::SCHEMA_VERSION_ABSENT {

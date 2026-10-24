@@ -205,3 +205,195 @@ t:*/@sup = "" => block 1 from character 2: raised true
 t:*/@u = "" => block 1 from character 0: underlined true
 t:*/@u = "" => block 1 from character 1: underlined true
 t:*/@u = "" => block 1 from character 2: underlined true
+
+== v10
+annots/*/anchor_block = "14@16115415824206179190" => on block 1
+annots/*/anchor_end = 2 => to character 2
+annots/*/anchor_start = 1 => from character 1
+annots/*/author = "" => suggested by ""
+annots/*/block_id = "145@1" => note reads "A note."
+annots/*/kind = "comment" => a comment thread
+annots/*/kind = "footnote" => footnote None
+annots/*/kind = "suggestion" => a suggested Deletion
+annots/*/kind = "suggestion" => a suggested Insertion
+annots/*/replies/*/author = "" => reply 1 by ""
+annots/*/replies/*/author = "" => reply 2 by ""
+annots/*/replies/*/created_at = 1 => reply 1 at 1 ms
+annots/*/replies/*/created_at = 2 => reply 2 at 2 ms
+annots/*/replies/*/id = "00000000-0000-8001-8000-000000000002" => reply 1 is 00000000-0000-8001-8000-000000000002
+annots/*/replies/*/id = "00000000-0000-8001-8000-000000000003" => reply 2 is 00000000-0000-8001-8000-000000000003
+annots/*/replies/*/text = "A comment." => reply 1 reads "A comment."
+annots/*/replies/*/text = "A reply." => reply 2 reads "A reply."
+annots/*/replies/*/user_id = "07070707-0707-0707-0707-070707070707" => reply 1 by user 07070707-0707-0707-0707-070707070707
+annots/*/replies/*/user_id = "07070707-0707-0707-0707-070707070707" => reply 2 by user 07070707-0707-0707-0707-070707070707
+annots/*/resolved = false => resolved false
+annots/*/user_id = "07070707-0707-0707-0707-070707070707" => suggested by user 07070707-0707-0707-0707-070707070707
+blocks/*/a/bb = 0.5 => block 3.2.2 bottom edge 0.6666667 px
+blocks/*/a/bc = "#000000" => block 3.2.2 edged #000000ff
+blocks/*/a/bg = "#ff8800" => block 3.2.2 filled #ff8800ff
+blocks/*/a/bl = 0.5 => block 3.2.2 left edge 0.6666667 px
+blocks/*/a/br = 0.5 => block 3.2.2 right edge 0.6666667 px
+blocks/*/a/bt = 0.5 => block 3.2.2 top edge 0.6666667 px
+blocks/*/a/col_widths/* = 72 => block 3 column 1 is 96 px wide
+blocks/*/a/col_widths/* = 72 => block 3 column 2 is 96 px wide
+blocks/*/a/lang = "rust" => block 6 in "rust"
+blocks/*/a/level = 2 => block 10 at level 2
+blocks/*/a/lo = 3 => block 8 marked Ordered(LowerRoman)
+blocks/*/a/ls = 0 => block 9 marked Bullet
+blocks/*/a/ls = 1 => block 8 marked Ordered(LowerRoman)
+blocks/*/a/ls = 2 => block 7 marked Todo(true)
+blocks/*/a/max_level = 3 => block 2 lists headings to level 3, numbered true
+blocks/*/a/merged/*/e = "87@1" => block 3 merges block 3.1.1 through block 3.1.2
+blocks/*/a/merged/*/n = 119 => block 3 merge stamped 119
+blocks/*/a/numbered = true => block 2 lists headings to level 3, numbered true
+blocks/*/a/pad = 4 => block 3.2.2 padded 5.3333335 px
+blocks/*/a/tc = true => block 7 marked Todo(true)
+blocks/*/a/va = 1 => block 3.2.2 set Middle
+blocks/*/align = 1 => block 1 aligned Center
+blocks/*/gn = "1" => block 5 hidden true
+blocks/*/hb = true => block 11 is a band true
+blocks/*/hb = true => block 12 is a band true
+blocks/*/hb = true => block 13 is a band true
+blocks/*/hb = true => block 14 is a band true
+blocks/*/indent_first = 1 => block 1 first line indented 1.3333334 px
+blocks/*/indent_left = 2 => block 1 indented 2.6666667 px on the left
+blocks/*/indent_right = 3 => block 1 indented 4 px on the right
+blocks/*/keep_together = true => block 1 kept together true
+blocks/*/keep_with_next = true => block 1 kept with the next true
+blocks/*/line_height/mode = 0 => block 1 lines FontSizeRelative(1.5)
+blocks/*/line_height/value = 1.5 => block 1 lines FontSizeRelative(1.5)
+blocks/*/nb = true => block 15 is a note true
+blocks/*/rg = true => block 1 counted among the grown empty roots false
+blocks/*/s = "Body" => block 1 styled "Body"
+blocks/*/space_after = 5 => block 1 6.666667 px below
+blocks/*/space_before = 4 => block 1 5.3333335 px above
+blocks/*/t = 0 => block 1 is a Paragraph
+blocks/*/t = 0 => block 11 is a Paragraph
+blocks/*/t = 0 => block 12 is a Paragraph
+blocks/*/t = 0 => block 13 is a Paragraph
+blocks/*/t = 0 => block 14 is a Paragraph
+blocks/*/t = 0 => block 15 is a Paragraph
+blocks/*/t = 0 => block 3.1.1.1 is a Paragraph
+blocks/*/t = 0 => block 3.1.2.1 is a Paragraph
+blocks/*/t = 0 => block 3.2.1.1 is a Paragraph
+blocks/*/t = 0 => block 3.2.2.1 is a Paragraph
+blocks/*/t = 1 => block 10 is a Heading
+blocks/*/t = 10 => block 2 is a Toc
+blocks/*/t = 2 => block 7 is a ListItem
+blocks/*/t = 2 => block 8 is a ListItem
+blocks/*/t = 2 => block 9 is a ListItem
+blocks/*/t = 3 => block 3 is a Table
+blocks/*/t = 4 => block 3.1 is a TableRow
+blocks/*/t = 4 => block 3.2 is a TableRow
+blocks/*/t = 5 => block 3.1.1 is a TableCell
+blocks/*/t = 5 => block 3.1.2 is a TableCell
+blocks/*/t = 5 => block 3.2.1 is a TableCell
+blocks/*/t = 5 => block 3.2.2 is a TableCell
+blocks/*/t = 6 => block 6 is a CodeBlock
+blocks/*/t = 8 => block 4 is a PageBreak
+blocks/*/t = 9 => block 5 hidden, so read by no reader until restored
+meta/defaults/font_family = "Inter" => body set in "Inter"
+meta/defaults/font_size_pt = 11 => body set at 14.666667 px
+meta/defaults/line_height = 1.5 => body lines FontSizeRelative(1.5)
+meta/different_first_page = true => first page has its own bands true
+meta/footer/block_id = "128@1" => footer drawn from block 13
+meta/footer/enabled = true => footer shown true
+meta/footer_first/block_id = "133@1" => footer_first drawn from block 14
+meta/header/align = "center" => header aligned Center
+meta/header/block_id = "117@1" => header drawn from block 11
+meta/header/enabled = true => header shown true
+meta/header_first/block_id = "122@1" => header_first drawn from block 12
+meta/page/height_mm = 297 => height_mm is 1122.5198 px
+meta/page/margin_bottom_mm = 20 => margin_bottom_mm is 75.590515 px
+meta/page/margin_left_mm = 20 => margin_left_mm is 75.59055 px
+meta/page/margin_right_mm = 20 => margin_right_mm is 75.590515 px
+meta/page/margin_top_mm = 20 => margin_top_mm is 75.59055 px
+meta/page/orientation = "portrait" => read by no reader of this build
+meta/page/width_mm = 210 => width_mm is 793.7008 px
+meta/pageless = false => read by no reader of this build
+meta/schema_version = 10 => version 10, Current
+meta/title = "" => titled ""
+meta/updated_at = 1 => last modified 1970-01-01 UTC
+styles = {} => read by no reader of this build
+t:* = "" => block 10 reads ""
+t:* = "" => block 11 reads ""
+t:* = "" => block 13 reads ""
+t:* = "" => block 14 reads ""
+t:* = "" => block 2 is a Toc, whose body no reader opens
+t:* = "" => block 3 is a Table, whose body no reader opens
+t:* = "" => block 3.1 is a TableRow, whose body no reader opens
+t:* = "" => block 3.1.1 is a TableCell, whose body no reader opens
+t:* = "" => block 3.1.1.1 reads ""
+t:* = "" => block 3.1.2 is a TableCell, whose body no reader opens
+t:* = "" => block 3.1.2.1 reads ""
+t:* = "" => block 3.2 is a TableRow, whose body no reader opens
+t:* = "" => block 3.2.1 is a TableCell, whose body no reader opens
+t:* = "" => block 3.2.1.1 reads ""
+t:* = "" => block 3.2.2 is a TableCell, whose body no reader opens
+t:* = "" => block 3.2.2.1 reads ""
+t:* = "" => block 4 is a PageBreak, whose body no reader opens
+t:* = "" => block 6 reads ""
+t:* = "" => block 7 reads ""
+t:* = "" => block 8 reads ""
+t:* = "" => block 9 reads ""
+t:* = "A note." => block 15 reads "A note."
+t:* = "S￼￼The shape of a paragraph." => block 1 reads "S￼￼The shape of a paragraph."
+t:* = "￼" => block 12 reads "￼"
+t:*/@a = "x" => block 1 from character 0: links to "x"
+t:*/@a = "x" => block 1 from character 1: links to "x"
+t:*/@a = "x" => block 1 from character 2: links to "x"
+t:*/@b = "" => block 1 from character 0: bold true
+t:*/@b = "" => block 1 from character 1: bold true
+t:*/@b = "" => block 1 from character 2: bold true
+t:*/@bg = "#ff8800" => block 1 from character 0: highlight #ff8800ff
+t:*/@bg = "#ff8800" => block 1 from character 1: highlight #ff8800ff
+t:*/@bg = "#ff8800" => block 1 from character 2: highlight #ff8800ff
+t:*/@c = "" => block 1 from character 0: inline code true
+t:*/@c = "" => block 1 from character 1: inline code true
+t:*/@c = "" => block 1 from character 2: inline code true
+t:*/@cm = "x" => block 1 from character 0: anchors nothing
+t:*/@cm = "x" => block 1 from character 1: anchors nothing
+t:*/@cm = "x" => block 1 from character 2: anchors nothing
+t:*/@cm:* = "00000000-0000-8001-8000-000000000001" => block 1 from character 1: anchors a thread over characters 1..2
+t:*/@f:dt = "iso" => block 12 from character 0: band shows "1970-01-01" on page 1
+t:*/@f:pn = "x" => block 1 from character 0: band shows "111The shape of a paragraph." on page 1
+t:*/@f:pn = "x" => block 1 from character 1: band shows "111The shape of a paragraph." on page 1
+t:*/@f:pn = "x" => block 1 from character 2: band shows "111The shape of a paragraph." on page 1
+t:*/@ff = "x" => block 1 from character 0: set in "x"
+t:*/@ff = "x" => block 1 from character 1: set in "x"
+t:*/@ff = "x" => block 1 from character 2: set in "x"
+t:*/@fg = "#ff8800" => block 1 from character 0: ink #ff8800ff
+t:*/@fg = "#ff8800" => block 1 from character 1: ink #ff8800ff
+t:*/@fg = "#ff8800" => block 1 from character 2: ink #ff8800ff
+t:*/@fn = "x" => block 1 from character 0: calls no note
+t:*/@fn = "x" => block 1 from character 1: calls no note
+t:*/@fn = "x" => block 1 from character 2: calls no note
+t:*/@fs = "11" => block 1 from character 0: 11 pt
+t:*/@fs = "11" => block 1 from character 1: 11 pt
+t:*/@fs = "11" => block 1 from character 2: 11 pt
+t:*/@i = "" => block 1 from character 0: italic true
+t:*/@i = "" => block 1 from character 1: italic true
+t:*/@i = "" => block 1 from character 2: italic true
+t:*/@ref = "x" => block 1 from character 0: refers to nothing
+t:*/@ref = "x" => block 1 from character 1: refers to nothing
+t:*/@ref = "x" => block 1 from character 2: refers to nothing
+t:*/@s = "" => block 1 from character 0: struck true
+t:*/@s = "" => block 1 from character 1: struck true
+t:*/@s = "" => block 1 from character 2: struck true
+t:*/@sd = "x" => block 1 from character 0: anchors nothing
+t:*/@sd = "x" => block 1 from character 1: anchors nothing
+t:*/@sd = "x" => block 1 from character 2: anchors nothing
+t:*/@sd:* = "00000000-0000-8001-8000-000000000005" => block 1 from character 3: suggests Deletion by ""
+t:*/@si = "x" => block 1 from character 0: anchors nothing
+t:*/@si = "x" => block 1 from character 1: anchors nothing
+t:*/@si = "x" => block 1 from character 2: anchors nothing
+t:*/@si:* = "00000000-0000-8001-8000-000000000004" => block 1 from character 0: suggests Insertion by ""
+t:*/@sub = "" => block 1 from character 0: lowered false
+t:*/@sub = "" => block 1 from character 1: lowered false
+t:*/@sub = "" => block 1 from character 2: lowered false
+t:*/@sup = "" => block 1 from character 0: raised true
+t:*/@sup = "" => block 1 from character 1: raised true
+t:*/@sup = "" => block 1 from character 2: raised true
+t:*/@u = "" => block 1 from character 0: underlined true
+t:*/@u = "" => block 1 from character 1: underlined true
+t:*/@u = "" => block 1 from character 2: underlined true

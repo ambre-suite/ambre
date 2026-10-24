@@ -30,7 +30,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-018`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(9);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(10);
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -108,6 +108,10 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 /// `8 -> 9` moves a footnote's text out of its entry into a block of its own
 /// (`PROSE-FEAT-305`). A version 8 document may hold notes, so this step
 /// rewrites each one: see [`notes_to_blocks`].
+///
+/// `9 -> 10` is the seed that writes no language (`LOCALE-013`). A version 9
+/// document keeps the tag its seed wrote, and a reader still honours it, so
+/// this step stamps the number and rewrites nothing.
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: SchemaVersion::new(0),
@@ -153,6 +157,11 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         from: SchemaVersion::new(8),
         to: SchemaVersion::new(9),
         apply: notes_to_blocks,
+    },
+    SchemaMigration {
+        from: SchemaVersion::new(9),
+        to: SchemaVersion::new(10),
+        apply: stamp_step,
     },
 ];
 
