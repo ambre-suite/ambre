@@ -496,7 +496,7 @@ pub async fn point_rows_at_batch(
 pub async fn idle_inline_documents(
     pool: &PgPool,
     idle: ambre_core::Seconds,
-    limit: i64,
+    limit: QueryLimit,
 ) -> Result<Vec<ambre_core::DocumentId>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT u.document_id FROM updates u WHERE u.wire IS NOT NULL \
@@ -505,7 +505,7 @@ pub async fn idle_inline_documents(
          LIMIT $2",
     )
     .bind(i64::try_from(idle.0).unwrap_or(i64::MAX))
-    .bind(limit)
+    .bind(limit.as_i64())
     .fetch_all(pool)
     .await?;
     Ok(ids.into_iter().map(uuid_row_to_id).collect())
@@ -516,7 +516,7 @@ pub async fn get_updates_after(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     after_seq: ambre_core::Seq,
-    limit: i64,
+    limit: QueryLimit,
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
@@ -524,7 +524,7 @@ pub async fn get_updates_after(
     )
     .bind(did)
     .bind(after_seq.to_i64_saturating())
-    .bind(limit)
+    .bind(limit.as_i64())
     .fetch_all(pool)
     .await?;
 

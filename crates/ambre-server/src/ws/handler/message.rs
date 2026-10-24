@@ -714,7 +714,7 @@ pub(crate) async fn handle_request_missing(
     // client more than PAGE_SIZE deltas behind. The client applies the batch and
     // declares itself hydrated, never re-requesting the tail. Paging replays the
     // full history in order across several messages instead.
-    const PAGE_SIZE: i64 = 1000;
+    const PAGE_SIZE: db::QueryLimit = db::QueryLimit::MAX;
     let mut cursor = after_seq;
     let mut first_page = true;
     let mut batches = crate::hot_tail::BatchCache::default();
@@ -832,7 +832,7 @@ pub(crate) async fn handle_request_missing(
         }
 
         // A short page means the index is exhausted.
-        if (page_len as i64) < PAGE_SIZE {
+        if page_len < PAGE_SIZE.as_usize() {
             return;
         }
         cursor = next_cursor;
@@ -1960,10 +1960,15 @@ mod access_tests {
             .unwrap();
         assert_eq!(history, 0, "no number, no clock, no pending entry");
         assert!(
-            db::get_updates_after(&pool, &doc_id, ambre_core::Seq(0), 10)
-                .await
-                .unwrap()
-                .is_empty()
+            db::get_updates_after(
+                &pool,
+                &doc_id,
+                ambre_core::Seq(0),
+                crate::db::QueryLimit::saturating(10)
+            )
+            .await
+            .unwrap()
+            .is_empty()
         );
         let _ = state.redis.del(format!("doc:{doc_id}:presence")).await;
     }
@@ -2512,9 +2517,14 @@ mod hot_tail_tests {
         let pending_key = format!("doc:{doc_id}:pending");
 
         handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
-        let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
-            .await
-            .unwrap();
+        let rows = db::get_updates_after(
+            &state.db,
+            &doc_id,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(10),
+        )
+        .await
+        .unwrap();
         assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 0, "an inline delta takes no pending entry");
@@ -2527,9 +2537,14 @@ mod hot_tail_tests {
             &tx,
         )
         .await;
-        let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(1), 10)
-            .await
-            .unwrap();
+        let rows = db::get_updates_after(
+            &state.db,
+            &doc_id,
+            ambre_core::Seq(1),
+            crate::db::QueryLimit::saturating(10),
+        )
+        .await
+        .unwrap();
         assert!(matches!(rows.as_slice(), [r] if r.wire.is_none() && r.s3_key.is_some()));
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 1, "a large delta waits for the flush");
@@ -2563,10 +2578,15 @@ mod hot_tail_tests {
         let (tx, _rx) = mpsc::channel::<Payload>(8);
         let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
         let stored = |state: Arc<AppState>| async move {
-            db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
-                .await
-                .unwrap()
-                .len()
+            db::get_updates_after(
+                &state.db,
+                &doc_id,
+                ambre_core::Seq(0),
+                crate::db::QueryLimit::saturating(10),
+            )
+            .await
+            .unwrap()
+            .len()
         };
 
         handle_update(&state, &mut first, signed_update(&key, doc_id, 1, 16), &tx).await;

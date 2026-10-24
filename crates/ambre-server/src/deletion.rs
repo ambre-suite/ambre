@@ -5,7 +5,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 /// How many marked deletes one pass works through.
-const PASS_LIMIT: i64 = 100;
+const PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
 
 /// Begins the delete of a document, then runs it. The mark in the register
 /// goes first, so a failure at any later step leaves a delete the pass finishes

@@ -3369,8 +3369,13 @@ mod handler_tests {
         assert_eq!(status, StatusCode::NO_CONTENT);
         let held = crate::db::get_snapshot(&state.db, &document, &snapshot).await;
         assert!(held.unwrap().is_none(), "the pending snapshot is dropped");
-        let deltas =
-            crate::db::get_updates_after(&state.db, &document, ambre_core::Seq(0), 10).await;
+        let deltas = crate::db::get_updates_after(
+            &state.db,
+            &document,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(10),
+        )
+        .await;
         assert_eq!(deltas.unwrap().len(), 3, "no delta is dropped with it");
         let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
             .await

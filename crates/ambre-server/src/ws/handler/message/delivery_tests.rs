@@ -88,9 +88,14 @@ async fn a_refused_index_write_is_retried_until_the_row_lands(pool: sqlx::PgPool
 
     handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
 
-    let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
-        .await
-        .unwrap();
+    let rows = db::get_updates_after(
+        &state.db,
+        &doc_id,
+        ambre_core::Seq(0),
+        crate::db::QueryLimit::saturating(10),
+    )
+    .await
+    .unwrap();
     assert!(matches!(rows.as_slice(), [r] if r.seq == ambre_core::Seq(1) && r.wire.is_some()));
     assert!(dead_letters(&state, doc_id).await.is_empty());
     forget(&state, doc_id).await;
@@ -115,10 +120,15 @@ async fn an_index_write_that_never_lands_leaves_the_whole_frame(pool: sqlx::PgPo
     handle_update(&state, &mut conn, update.clone(), &tx).await;
 
     assert!(
-        db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
-            .await
-            .unwrap()
-            .is_empty()
+        db::get_updates_after(
+            &state.db,
+            &doc_id,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(10)
+        )
+        .await
+        .unwrap()
+        .is_empty()
     );
     let object =
         crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, ambre_core::Seq(1));
@@ -157,9 +167,14 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
 
     handle_update(&state, &mut conn, update.clone(), &tx).await;
 
-    let rows = db::get_updates_after(&state.db, &doc_id, ambre_core::Seq(0), 10)
-        .await
-        .unwrap();
+    let rows = db::get_updates_after(
+        &state.db,
+        &doc_id,
+        ambre_core::Seq(0),
+        crate::db::QueryLimit::saturating(10),
+    )
+    .await
+    .unwrap();
     assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
     let sent = replayed(&replay(&state, &mut conn, doc_id).await);
     assert!(matches!(sent.as_slice(), [d] if d.seq.0 == 1 && d.update == update));

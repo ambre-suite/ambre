@@ -7,6 +7,7 @@ use sqlx::{PgPool, Row};
 mod channels;
 mod content;
 mod documents;
+mod limit;
 mod members;
 mod orgs;
 mod read_cursors;
@@ -15,6 +16,7 @@ mod users;
 pub use channels::*;
 pub use content::*;
 pub use documents::*;
+pub use limit::QueryLimit;
 pub use members::*;
 pub use orgs::*;
 pub use read_cursors::*;
@@ -376,9 +378,14 @@ mod tests {
             "seq 1..=6 are covered by the snapshot and purged"
         );
 
-        let remaining = get_updates_after(&pool, &document_id, ambre_core::Seq(0), 100)
-            .await
-            .expect("list remaining");
+        let remaining = get_updates_after(
+            &pool,
+            &document_id,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(100),
+        )
+        .await
+        .expect("list remaining");
         let seqs: Vec<i64> = remaining
             .iter()
             .map(|u| u.seq.to_i64_saturating())
@@ -452,9 +459,14 @@ mod tests {
             "MIN(3, 8) = 3, so only seq 1..=3 are purged"
         );
 
-        let remaining = get_updates_after(&pool, &document_id, ambre_core::Seq(0), 100)
-            .await
-            .expect("list remaining");
+        let remaining = get_updates_after(
+            &pool,
+            &document_id,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(100),
+        )
+        .await
+        .expect("list remaining");
         let seqs: Vec<i64> = remaining
             .iter()
             .map(|u| u.seq.to_i64_saturating())

@@ -26,7 +26,7 @@ pub const INLINE_CAP: InlineCap = InlineCap {
 pub const IDLE_SECS: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
 
 /// How many idle documents one pass moves.
-const IDLE_PASS_LIMIT: i64 = 100;
+const IDLE_PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
@@ -319,18 +319,23 @@ mod db_tests {
         state: &AppState,
         doc: &ambre_core::DocumentId,
     ) -> Vec<(i64, bool, Option<String>)> {
-        crate::db::get_updates_after(&state.db, doc, ambre_core::Seq(0), 1000)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|r| {
-                (
-                    r.seq.to_i64_saturating(),
-                    r.wire.is_some(),
-                    r.batch_key.map(|k| k.0),
-                )
-            })
-            .collect()
+        crate::db::get_updates_after(
+            &state.db,
+            doc,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(1000),
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| {
+            (
+                r.seq.to_i64_saturating(),
+                r.wire.is_some(),
+                r.batch_key.map(|k| k.0),
+            )
+        })
+        .collect()
     }
 
     /// `SRV-150`: a tail at its cap, in deltas or in bytes, takes no more, and

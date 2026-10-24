@@ -255,14 +255,14 @@ pub(super) async fn begin_deletions_in(
 /// Every delete still marked, the earliest sweep first, at most `limit`.
 pub async fn pending_deletions(
     pool: &PgPool,
-    limit: i64,
+    limit: QueryLimit,
 ) -> Result<Vec<PendingDeletion>, AppError> {
     let rows: Vec<(uuid::Uuid, i64, bool)> = sqlx::query_as(
         "SELECT d.document_id, d.sweep_due, \
                 EXISTS (SELECT 1 FROM documents WHERE id = d.document_id) \
          FROM document_deletions d ORDER BY d.sweep_due LIMIT $1",
     )
-    .bind(limit)
+    .bind(limit.as_i64())
     .fetch_all(pool)
     .await?;
     Ok(rows

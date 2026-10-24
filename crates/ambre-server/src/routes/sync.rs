@@ -391,7 +391,7 @@ pub async fn snapshot_download_url(
 #[derive(serde::Deserialize)]
 pub struct DeltasQuery {
     pub after_seq: Option<ambre_core::Seq>,
-    pub limit: Option<i64>,
+    pub limit: Option<db::QueryLimit>,
 }
 /// One delta entry in the response list.
 #[derive(serde::Serialize)]
@@ -419,9 +419,9 @@ pub async fn get_deltas(
         .await?
         .ok_or(AppError::Forbidden)?;
     let after = params.after_seq.unwrap_or(ambre_core::Seq::ZERO);
-    // Clamp the page size (M16): an unbounded `limit` forces a full-table scan of
-    // `updates` and a large response allocation. 1..=1000 is a trivial guard.
-    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
+    // The page size arrives clamped (M16): an unbounded `limit` would force a
+    // full-table scan of `updates` and a large response allocation.
+    let limit = params.limit.unwrap_or(db::QueryLimit::DEFAULT);
     let updates = db::get_updates_after(&state.db, &doc_id, after, limit).await?;
     let deltas: Vec<_> = updates
         .into_iter()

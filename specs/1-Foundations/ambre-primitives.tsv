@@ -3335,14 +3335,11 @@ ambre-server | src/db/content.rs | crate::db::content | Trim.rows | field | u64	
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | find_compactable_snapshots(keep) | param | i64	math	count kept
-ambre-server | src/db/content.rs | crate::db::content | get_updates_after(limit) | param | i64	math	SQL limit
-ambre-server | src/db/content.rs | crate::db::content | idle_inline_documents(limit) | param | i64	math	SQL limit
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
 ambre-server | src/db/documents.rs | crate::db::documents | DocumentSummaryRow.member_count | field | i64	math	count
 ambre-server | src/db/documents.rs | crate::db::documents | PendingDeletion.rows_left | field | bool	math	named state or style flag, local
 ambre-server | src/db/documents.rs | crate::db::documents | create_document() | ret | Result<(DocumentRow,bool),AppError>	generic	predicate result
-ambre-server | src/db/documents.rs | crate::db::documents | pending_deletions(limit) | param | i64	math	SQL limit
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
@@ -3387,7 +3384,6 @@ ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | fie
 ambre-server | src/db/users.rs | crate::db::users | UserSearch.0 | field | String	newtype-inner	the trimmed search text of UserSearch
 ambre-server | src/db/users.rs | crate::db::users | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
 ambre-server | src/db/users.rs | crate::db::users | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
-ambre-server | src/deletion.rs | crate::deletion | PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param | bool	math	named state or style flag, local
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field | String	free-text	user text or error message
@@ -3402,7 +3398,6 @@ ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
-ambre-server | src/hot_tail.rs | crate::hot_tail | IDLE_PASS_LIMIT | const | i64	math	pass limit count
 ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Result<usize,AppError>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
@@ -3491,7 +3486,6 @@ ambre-server | src/routes/read_cursors.rs | crate::routes::read_cursors | Activi
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | doc_role_rank() | ret | Option<u8>	math	role rank for comparison, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/routes/sync.rs | crate::routes::sync | DeltasQuery.limit | field | Option<i64>	math	query limit
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
@@ -3503,7 +3497,6 @@ ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	gene
 ambre-server | src/state.rs | crate::state | Config.base_url | field | String	free-text	config URL
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFences::holds() | ret | bool	generic	predicate result
-ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | handle_request_missing::PAGE_SIZE | const | i64	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | membership_still_valid() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse_delta(detail) | param | &str	free-text	refusal detail
@@ -5107,3 +5100,8 @@ ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	n
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
 ambre-logic | src/lib.rs | crate | DocState::ambre_file_bytes() | ret | Option<(String,ambre_core::PlaintextContainer)>	generic	generic byte/text API or codec
+ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit.0 | field | u16	newtype-inner	the row count QueryLimit wraps, held in 1..=1000
+ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_i64() | ret | i64	newtype-inner	the count as the sqlx LIMIT bind takes it
+ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_usize() | ret | usize	newtype-inner	the count compared against a page length
+ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::clamped(n) | param | i64	newtype-inner	the integer a request names, clamped into range
+ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::saturating(n) | param | u16	newtype-inner	a const count, saturated into range

@@ -212,12 +212,17 @@ mod db_tests {
 
     /// Each remaining delta's number and author tag.
     async fn rows(state: &AppState, doc: &ambre_core::DocumentId) -> Vec<(i64, u8)> {
-        db::get_updates_after(&state.db, doc, ambre_core::Seq(0), 1000)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|r| (r.seq.to_i64_saturating(), r.author_pubkey.as_array()[0]))
-            .collect()
+        db::get_updates_after(
+            &state.db,
+            doc,
+            ambre_core::Seq(0),
+            crate::db::QueryLimit::saturating(1000),
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| (r.seq.to_i64_saturating(), r.author_pubkey.as_array()[0]))
+        .collect()
     }
 
     /// `SRV-127`: a snapshot nobody confirmed moves no trim, and once another
