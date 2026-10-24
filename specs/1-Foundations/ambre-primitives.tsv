@@ -2586,7 +2586,6 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | SKIPPED | const | [&str;14]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Step::Enter.0 | field | usize	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | UNCOUNTED | const | [&str;31]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr(name) | param | &str	free-text	text content / label / parser input
@@ -2636,16 +2635,9 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState:
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena.templates | field | RefCell<HashMap<usize,usize>>	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::append_to(parent) | param | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::detach(id) | param | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(parent) | param | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::push() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data::Text.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Handle.id | field | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.children | field | Vec<usize>	math	count, size or local index
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Node.parent | field | Option<usize>	math	count, size or local index
+ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | NodeId.0 | field | usize	newtype-inner	the slot of a node in the parse arena, handed out only by Nodes::push
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::own_reply() | ret | Result<(LoroList,usize),ProseOutcome>	math	count, size or local index
@@ -3092,8 +3084,6 @@ ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::w
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | verify_sealed_signature(public_data_bytes) | param | &[u8]	generic	generic codec/parser/bytes API
-ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.capacity | field | f64	math	token bucket arithmetic
-ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.refill_per_sec | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.tokens | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature set by the trait

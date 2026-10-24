@@ -24,9 +24,9 @@ use crate::state::{Burst, RatePerSec};
 /// sustained rate below the refill rate is never rejected by rounding.
 pub(crate) struct TokenBucket {
     /// Maximum number of tokens the bucket can hold (the burst allowance).
-    capacity: f64,
+    capacity: Burst,
     /// Tokens replenished per second (the sustained rate).
-    refill_per_sec: f64,
+    refill_per_sec: RatePerSec,
     /// Current token count, in `[0, capacity]`.
     tokens: f64,
     /// Last instant the bucket was refilled.
@@ -38,11 +38,10 @@ impl TokenBucket {
     /// `refill_per_sec`. A full start lets a freshly connected client burst up to
     /// `capacity` messages (for example an initial batch of subscribes) immediately.
     pub(crate) fn new(capacity: Burst, refill_per_sec: RatePerSec) -> Self {
-        let capacity = f64::from(capacity.get());
         Self {
             capacity,
-            refill_per_sec: f64::from(refill_per_sec.get()),
-            tokens: capacity,
+            refill_per_sec,
+            tokens: f64::from(capacity.get()),
             last_refill: Instant::now(),
         }
     }
@@ -69,8 +68,8 @@ impl TokenBucket {
         // `now` (should not happen with `Instant`, but keeps the math safe).
         let elapsed = now.saturating_duration_since(self.last_refill);
         self.last_refill = now;
-        self.tokens =
-            (self.tokens + elapsed.as_secs_f64() * self.refill_per_sec).min(self.capacity);
+        let refilled = elapsed.as_secs_f64() * f64::from(self.refill_per_sec.get());
+        self.tokens = (self.tokens + refilled).min(f64::from(self.capacity.get()));
 
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;

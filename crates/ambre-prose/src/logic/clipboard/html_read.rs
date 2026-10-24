@@ -19,7 +19,7 @@ use html5ever::{Attribute, LocalName, ParseOpts, ns, parse_document};
 
 use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
 
-use super::sink::{Arena, Data, Node};
+use super::sink::{Arena, Data, NodeId, Nodes};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
 use crate::mark::{self, MarkRoot, MarkValue};
 use ambre_bus::app::prose::MarkKey;
@@ -163,7 +163,7 @@ fn too_deep(html: &str) -> bool {
 }
 
 enum Step {
-    Enter(usize),
+    Enter(NodeId),
     Leave,
 }
 
@@ -244,8 +244,8 @@ fn hidden(style: &str) -> bool {
 }
 
 impl Reader {
-    fn walk(&mut self, nodes: &[Node]) {
-        let mut steps = vec![Step::Enter(0)];
+    fn walk(&mut self, nodes: &Nodes) {
+        let mut steps = vec![Step::Enter(NodeId::DOCUMENT)];
         while let Some(step) = steps.pop() {
             let id = match step {
                 Step::Leave => {

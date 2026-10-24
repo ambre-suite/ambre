@@ -26,25 +26,59 @@ pub(super) enum Data {
 }
 
 pub(super) struct Node {
-    pub(super) parent: Option<usize>,
-    pub(super) children: Vec<usize>,
+    pub(super) parent: Option<NodeId>,
+    pub(super) children: Vec<NodeId>,
     pub(super) data: Data,
+}
+
+/// A node's place in the arena. Only the arena hands one out, so an id
+/// always names a node of the tree it came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) struct NodeId(usize);
+
+impl NodeId {
+    /// The document, the root every other node hangs from.
+    pub(super) const DOCUMENT: Self = Self(0);
+}
+
+/// The nodes of a parsed tree, by id.
+pub(super) struct Nodes(Vec<Node>);
+
+impl Nodes {
+    /// The node `id` names, `None` past the arena.
+    pub(super) fn get(&self, id: NodeId) -> Option<&Node> {
+        self.0.get(id.0)
+    }
+
+    fn get_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.0.get_mut(id.0)
+    }
+
+    /// Add a node under no parent, and name it.
+    fn push(&mut self, data: Data) -> NodeId {
+        self.0.push(Node {
+            parent: None,
+            children: Vec::new(),
+            data,
+        });
+        NodeId(self.0.len() - 1)
+    }
 }
 
 /// A node's index, and the element name the tree builder asks for without
 /// reaching into the arena.
 #[derive(Clone)]
 pub(super) struct Handle {
-    id: usize,
+    id: NodeId,
     name: QualName,
 }
 
 /// The arena the tree builder writes into. Index 0 is the document.
 pub(super) struct Arena {
-    nodes: RefCell<Vec<Node>>,
+    nodes: RefCell<Nodes>,
     /// A template's contents: a fragment no parent holds, so a paste never
     /// reads it.
-    templates: RefCell<HashMap<usize, usize>>,
+    templates: RefCell<HashMap<NodeId, NodeId>>,
 }
 
 fn nameless() -> QualName {
@@ -54,23 +88,17 @@ fn nameless() -> QualName {
 impl Arena {
     pub(super) fn new() -> Self {
         Self {
-            nodes: RefCell::new(vec![Node {
+            nodes: RefCell::new(Nodes(vec![Node {
                 parent: None,
                 children: Vec::new(),
                 data: Data::Document,
-            }]),
+            }])),
             templates: RefCell::new(HashMap::new()),
         }
     }
 
-    fn push(&self, data: Data) -> usize {
-        let mut nodes = self.nodes.borrow_mut();
-        nodes.push(Node {
-            parent: None,
-            children: Vec::new(),
-            data,
-        });
-        nodes.len() - 1
+    fn push(&self, data: Data) -> NodeId {
+        self.nodes.borrow_mut().push(data)
     }
 
     fn handle(&self, data: Data) -> Handle {
@@ -84,7 +112,7 @@ impl Arena {
         }
     }
 
-    fn detach(nodes: &mut [Node], id: usize) {
+    fn detach(nodes: &mut Nodes, id: NodeId) {
         let Some(parent) = nodes.get(id).and_then(|node| node.parent) else {
             return;
         };
@@ -98,7 +126,7 @@ impl Arena {
 
     /// Put `child` under `parent` at `index` among its children, merging
     /// text into a text neighbour as the tree builder expects.
-    fn insert(&self, parent: usize, index: usize, child: NodeOrText<Handle>) {
+    fn insert(&self, parent: NodeId, index: usize, child: NodeOrText<Handle>) {
         let mut nodes = self.nodes.borrow_mut();
         let Some(count) = nodes.get(parent).map(|node| node.children.len()) else {
             return;
@@ -117,12 +145,7 @@ impl Arena {
                     previous.push_str(&text);
                     return;
                 }
-                nodes.push(Node {
-                    parent: None,
-                    children: Vec::new(),
-                    data: Data::Text(text.to_string()),
-                });
-                nodes.len() - 1
+                nodes.push(Data::Text(text.to_string()))
             }
             NodeOrText::AppendNode(handle) => {
                 Self::detach(&mut nodes, handle.id);
@@ -140,7 +163,7 @@ impl Arena {
         }
     }
 
-    fn append_to(&self, parent: usize, child: NodeOrText<Handle>) {
+    fn append_to(&self, parent: NodeId, child: NodeOrText<Handle>) {
         let end = self
             .nodes
             .borrow()
@@ -152,10 +175,10 @@ impl Arena {
 
 impl TreeSink for Arena {
     type Handle = Handle;
-    type Output = Vec<Node>;
+    type Output = Nodes;
     type ElemName<'a> = &'a QualName;
 
-    fn finish(self) -> Vec<Node> {
+    fn finish(self) -> Nodes {
         self.nodes.into_inner()
     }
 
@@ -163,7 +186,7 @@ impl TreeSink for Arena {
 
     fn get_document(&self) -> Handle {
         Handle {
-            id: 0,
+            id: NodeId::DOCUMENT,
             name: nameless(),
         }
     }
