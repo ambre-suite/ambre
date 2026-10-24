@@ -168,11 +168,7 @@ fn scale(image: RgbaImage, size: ImageSize) -> Vec<u8> {
 }
 
 fn delay(ms: Millis) -> Millis {
-    if ms <= FAST_DELAY {
-        SLOW_DELAY
-    } else {
-        ms
-    }
+    if ms <= FAST_DELAY { SLOW_DELAY } else { ms }
 }
 
 #[cfg(test)]

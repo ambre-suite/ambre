@@ -323,9 +323,7 @@ impl FrameHost {
             |child| {
                 child.update();
                 !matches!(
-                    child
-                        .plan_repaint(now, ambre_canvas::HudTick::Idle)
-                        .content,
+                    child.plan_repaint(now, ambre_canvas::HudTick::Idle).content,
                     ContentRepaint::Reuse
                 )
             },
@@ -377,12 +375,7 @@ impl FrameHost {
 
     /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
     /// pointer apart (`PROSE-UI-217`); answers whether it did.
-    pub fn touch(
-        &mut self,
-        phase: TouchPhase,
-        at: ViewPoint,
-        now: ambre_core::PageTime,
-    ) -> bool {
+    pub fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> bool {
         self.view.touch(phase, at, now)
     }
 

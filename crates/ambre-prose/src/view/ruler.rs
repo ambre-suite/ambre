@@ -288,9 +288,7 @@ mod tests {
             let layout = &ui.shaped.layout;
             let left = ui.column.left(&ui.viewport).get() + layout.margin_left.get() * zoom;
             assert!((ruler.page_left.get() - left).abs() < 1e-3);
-            assert!(
-                (ruler.content_width.get() - layout.content_width.get() * zoom).abs() < 1e-3
-            );
+            assert!((ruler.content_width.get() - layout.content_width.get() * zoom).abs() < 1e-3);
             // A handle placed at its value reads back the same value.
             for handle in [
                 RulerHandle::IndentFirst,

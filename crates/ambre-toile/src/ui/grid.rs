@@ -43,10 +43,7 @@ const MAX_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
 pub fn grid_step(zoom: ambre_core::ZoomFactor, base: f64) -> f64 {
     let zoom = zoom.get();
     // The band, in the f64 of the board's screen geometry.
-    let (min, max) = (
-        f64::from(MIN_SPACING.get()),
-        f64::from(MAX_SPACING.get()),
-    );
+    let (min, max) = (f64::from(MIN_SPACING.get()), f64::from(MAX_SPACING.get()));
     debug_assert!(base > 0.0);
     let mut step = base;
     // Zoomed out: coarsen until the spacing is legible.

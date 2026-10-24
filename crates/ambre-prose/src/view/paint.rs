@@ -417,8 +417,7 @@ impl ProseUiState {
                 None => {
                     if let Some(caret) = ghost.caret {
                         let rect = to_rect(&placed, &ghost.run.data().caret_box(caret));
-                        let bar =
-                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH.get(), rect.y1);
+                        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH.get(), rect.y1);
                         frame.ghost_carets.push(GhostCaret {
                             top,
                             clip: placed.clip,
@@ -714,12 +713,7 @@ impl ProseUiState {
                 &data.caret_box(crate::view::answered(peer.position.offset)),
             );
             surface.fill_rect(
-                Rect::new(
-                    caret.x0,
-                    caret.y0,
-                    caret.x0 + CARET_WIDTH.get(),
-                    caret.y1,
-                ),
+                Rect::new(caret.x0, caret.y0, caret.x0 + CARET_WIDTH.get(), caret.y1),
                 colour.multiply_alpha(0.8),
             );
             surface.fill_rect(

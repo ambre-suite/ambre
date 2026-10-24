@@ -1477,11 +1477,7 @@ pub(crate) mod tests {
                 focus: None,
                 selecting: Selecting::default(),
                 me: None,
-                pictures: Some(Pictured {
-                    shelf,
-                    now,
-                    motion,
-                }),
+                pictures: Some(Pictured { shelf, now, motion }),
             };
             paint_from(shown, 600.0)
         };

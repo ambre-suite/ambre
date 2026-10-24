@@ -1781,10 +1781,7 @@ mod tests {
         // Rotate: bounds hold, rotation follows the pointer angle about the center.
         let mut tool = SelectTool::new();
         let rot_screen = to_screen(&cam, Point::new(50.0, 0.0)); // top-center world
-        let rot_screen = Point::new(
-            rot_screen.x,
-            rot_screen.y - f64::from(ROTATE_OFFSET.get()),
-        );
+        let rot_screen = Point::new(rot_screen.x, rot_screen.y - f64::from(ROTATE_OFFSET.get()));
         // Press the rotate handle (world point under it is the top-center edge).
         tool.pointer_down(Point::new(50.0, 0.0), rot_screen, &sel, &disp, &cam, None);
         // Drag to the right-center: a quarter turn from straight up.

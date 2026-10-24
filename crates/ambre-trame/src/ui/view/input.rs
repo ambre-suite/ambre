@@ -462,9 +462,7 @@ impl TrameView {
         if mods.primary {
             return false;
         }
-        let outcome = self
-            .scroll
-            .wheel(&mut self.state, delta, self.clock.now());
+        let outcome = self.scroll.wheel(&mut self.state, delta, self.clock.now());
         self.note_scroll(outcome);
         true
     }
@@ -510,9 +508,7 @@ impl TrameView {
             .drag_point
             .filter(|_| held)
             .map(|at| self.state.edge_scroll_speed(at));
-        let outcome = self
-            .scroll
-            .edge(&mut self.state, speed, self.clock.now());
+        let outcome = self.scroll.edge(&mut self.state, speed, self.clock.now());
         if matches!(self.note_scroll(outcome), ScrollOutcome::Moved) {
             self.follow_drag();
         }

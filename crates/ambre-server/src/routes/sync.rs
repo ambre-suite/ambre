@@ -327,8 +327,7 @@ pub async fn snapshot_upload_url(
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::ByteSize(0) || req.size > state.config.snapshot_max_size
-    {
+    if req.size == ambre_core::ByteSize(0) || req.size > state.config.snapshot_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
             req.size.0, state.config.snapshot_max_size.0

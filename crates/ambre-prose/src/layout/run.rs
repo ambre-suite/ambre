@@ -353,12 +353,7 @@ impl ParleyRunData {
     }
 
     /// Record the style, the marks and the width the text was shaped in.
-    pub(crate) fn shaped_in(
-        &mut self,
-        style: &EffectiveStyle,
-        marks: &[MarkedSpan],
-        width: DocPx,
-    ) {
+    pub(crate) fn shaped_in(&mut self, style: &EffectiveStyle, marks: &[MarkedSpan], width: DocPx) {
         self.style = Some(style.clone());
         self.marks = marks.to_vec();
         self.width = Some(width);

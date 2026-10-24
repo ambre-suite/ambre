@@ -130,8 +130,7 @@ impl Rig {
         let placed = &layout.blocks[index.to_usize()];
         let run = ui.shaped.blocks[&placed.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
-        let x =
-            layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+        let x = layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
         let y_doc = ui.column.page_top_y(placed.page_start)
             + layout.body_top()
             + placed.y_in_page

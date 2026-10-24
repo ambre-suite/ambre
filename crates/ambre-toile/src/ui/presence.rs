@@ -726,10 +726,7 @@ mod tests {
         );
         assert!(
             sender
-                .due(
-                    at(1.0),
-                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get())
-                )
+                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get()))
                 .is_some(),
             "an idle peer still says it is there"
         );
@@ -738,10 +735,7 @@ mod tests {
         sender.reset();
         assert!(
             sender
-                .due(
-                    at(1.0),
-                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get())
-                )
+                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get()))
                 .is_some()
         );
     }

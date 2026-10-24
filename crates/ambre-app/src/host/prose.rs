@@ -582,12 +582,9 @@ impl ProseView {
                 // A key or typed text starts the three keystroke measures.
                 if consumed && matches!(input, ProseInput::Key { .. } | ProseInput::Text(_)) {
                     let dispatch = if sent { Dispatch::Sent } else { Dispatch::Kept };
-                    let echoed = self.probe.handled(
-                        start,
-                        super::probe::now(),
-                        &self.state.draft,
-                        dispatch,
-                    );
+                    let echoed =
+                        self.probe
+                            .handled(start, super::probe::now(), &self.state.draft, dispatch);
                     self.timeline.record(echoed);
                 }
                 // The shell's one open-URL path takes the target

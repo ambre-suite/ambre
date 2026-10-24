@@ -134,7 +134,8 @@ pub fn spawn_move(state: &std::sync::Arc<AppState>, document_id: ambre_core::Doc
 
 /// Moves the whole tail of every document idle past the delay (`SRV-152`).
 pub async fn move_idle_tails(state: &AppState) {
-    let idle = match crate::db::idle_inline_documents(&state.db, IDLE_AFTER, IDLE_PASS_LIMIT).await {
+    let idle = match crate::db::idle_inline_documents(&state.db, IDLE_AFTER, IDLE_PASS_LIMIT).await
+    {
         Ok(idle) => idle,
         Err(e) => {
             tracing::error!("idle tails read failed: {e}");

@@ -188,8 +188,7 @@ impl PageColumn {
     #[must_use]
     pub fn left(&self, viewport: &Viewport) -> ViewPx {
         ViewPx::new(
-            ((viewport.width.get() - self.page_width.get() * viewport.scale()) / 2.0)
-                .max(0.0),
+            ((viewport.width.get() - self.page_width.get() * viewport.scale()) / 2.0).max(0.0),
         )
     }
 

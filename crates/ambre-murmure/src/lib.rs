@@ -91,17 +91,16 @@ mod thread_tests;
 mod unread_tests;
 
 pub use channel::{
-    ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot,
-    FoldSnapshot, Linked, MessageCount, Named, Relocated, Replay, Replied, SEGMENT_SNAPSHOT_SIZE,
-    SEGMENT_MESSAGES, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, ThreadLinked,
+    ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot, FoldSnapshot,
+    Linked, MessageCount, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
+    SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, ThreadLinked,
     ThreadTarget,
 };
 pub use delta::{JSON_SCHEMA_VERSION, JsonSchemaVersion, Refusal, Signer};
 pub use error::MurmureError;
 pub use layout::{MessageRef, MurmurePane, Region};
 pub use members::{
-    PRESENCE_EXPIRY, REFRESH_PERIOD, Roster, find_members, is_presence_sample,
-    presence_sample,
+    PRESENCE_EXPIRY, REFRESH_PERIOD, Roster, find_members, is_presence_sample, presence_sample,
 };
 pub use mention::{CONFIRM_CHANNEL_PAST, Screened, members_only, screen};
 pub use opening::{Opening, OpeningChannel, Receipt};

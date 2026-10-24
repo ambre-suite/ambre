@@ -531,9 +531,7 @@ pub fn reshape_paragraph(
         (text, marks),
         style,
         width,
-        &mut |part, spans, style| {
-            shape_paragraph(font_cx, layout_cx, (part, spans), style, width)
-        },
+        &mut |part, spans, style| shape_paragraph(font_cx, layout_cx, (part, spans), style, width),
     );
     match windowed {
         Some(data) => ShapedRun::from_data(data),

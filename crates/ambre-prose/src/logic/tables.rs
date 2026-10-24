@@ -486,12 +486,7 @@ impl ProseState {
     }
 
     /// Rewrite one width entry, and never the count (`PROSE-FEAT-239`).
-    pub(super) fn resize_table_col(
-        &mut self,
-        table: &TreeID,
-        col: Col,
-        width: Pt,
-    ) -> ProseOutcome {
+    pub(super) fn resize_table_col(&mut self, table: &TreeID, col: Col, width: Pt) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if Grid::read(&tree, table).is_none() {
             return Self::err_no_block(table);

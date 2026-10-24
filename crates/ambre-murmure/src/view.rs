@@ -956,11 +956,9 @@ impl MurmureView {
             return;
         };
         let now = (self.reads.now)();
-        let step = self.kinetic.wheel(
-            down(over.on_page(CssPx::ZERO)),
-            WheelDeltaMode::Page,
-            now,
-        );
+        let step = self
+            .kinetic
+            .wheel(down(over.on_page(CssPx::ZERO)), WheelDeltaMode::Page, now);
         self.scroll_by(step);
     }
 
@@ -1078,9 +1076,9 @@ impl MurmureView {
         };
         if over != ViewPx::ZERO {
             let now = (self.reads.now)();
-            let step =
-                self.kinetic
-                    .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now);
+            let step = self
+                .kinetic
+                .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now);
             self.scroll_by(step);
         }
     }
@@ -1839,7 +1837,7 @@ mod tests {
     const SPACE_2: f32 = theme::SPACE_2.get();
     const SPACE_4: f32 = theme::SPACE_4.get();
     const SPACE_8: f32 = theme::SPACE_8.get();
-    const ALSO_PX: f32 = crate::composer::ALSO_PX.get();
+    const ALSO_PX: f32 = crate::composer::ALSO_HEIGHT.get();
 
     /// Each row of a paint as its index, its top and its bottom.
     fn spans(rows: &[crate::paint::PaintedRow]) -> Vec<(u32, f32, f32)> {
@@ -4780,8 +4778,9 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
-        page.clock
-            .set(ambre_bus::PageTime(TICK_PERIOD.to_page_millis().get() - 1.0));
+        page.clock.set(ambre_bus::PageTime(
+            TICK_PERIOD.to_page_millis().get() - 1.0,
+        ));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 0, "inside the period");
         page.clock
@@ -4797,8 +4796,9 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
         let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
-        page.clock
-            .set(ambre_bus::PageTime(10.0 * TICK_PERIOD.to_page_millis().get()));
+        page.clock.set(ambre_bus::PageTime(
+            10.0 * TICK_PERIOD.to_page_millis().get(),
+        ));
         frame(&mut thread_view);
         assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
         page.pane.set(MurmurePane::ChannelList);

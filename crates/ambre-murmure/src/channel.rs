@@ -42,7 +42,7 @@ mod threading;
 
 pub use amending::{ChangeTarget, Linked};
 pub use closing::{
-    Closed, MessageCount, SEGMENT_SNAPSHOT_SIZE, SEGMENT_MESSAGES, SUCCESSOR_RETRY, Successor,
+    Closed, MessageCount, SEGMENT_MESSAGES, SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, Successor,
 };
 pub use finalizing::{FINALIZE_RETRY, FinalSnapshot};
 pub use folding::{FOLD_DELAY, FoldSnapshot, Settled};

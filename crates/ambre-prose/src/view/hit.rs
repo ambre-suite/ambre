@@ -390,8 +390,7 @@ mod tests {
         let block = &layout.blocks[index];
         let run = ui.shaped.blocks[&block.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
-        let x =
-            layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+        let x = layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
         let y_doc = ui.column.page_top_y(block.page_start)
             + layout.body_top()
             + block.y_in_page

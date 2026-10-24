@@ -19,9 +19,7 @@ use crate::error::MurmureError;
 use crate::schema::{MessageKey, Root};
 use crate::sequence::loro_part;
 use crate::session::next_peer;
-use crate::{
-    ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY, FOLD_DELAY, Replay, Signer,
-};
+use crate::{ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY, FOLD_DELAY, Replay, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 const LEASE_MS: u64 = 30_000;
@@ -284,10 +282,7 @@ fn the_fold_lease_is_asked_as_the_relay_says() {
     alice.fold_committed(segment);
     let base = base + 2 * FINALIZE_RETRY.0;
     assert_eq!(alice.fold_lease_to_ask(at(base)), None, "the tick dates it");
-    assert_eq!(
-        alice.fold_lease_to_ask(at(base + FOLD_DELAY.0 - 1)),
-        None
-    );
+    assert_eq!(alice.fold_lease_to_ask(at(base + FOLD_DELAY.0 - 1)), None);
     assert_eq!(
         alice.fold_lease_to_ask(at(base + FOLD_DELAY.0)),
         Some(segment)
@@ -412,10 +407,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
     );
     assert!(alice.fold_snapshot(NOW).expect("fold").is_none());
     assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
-    assert_eq!(
-        alice.fold_lease_to_ask(at(FINALIZE_RETRY.0)),
-        Some(segment)
-    );
+    assert_eq!(alice.fold_lease_to_ask(at(FINALIZE_RETRY.0)), Some(segment));
 
     alice.fold_answered(
         segment,

@@ -1605,9 +1605,8 @@ impl ToileView {
         // reports success on a send nobody made. The view is tearing down and
         // no later frame will run, so retrying for ever would be the leak.
         let (to_logic, fatal) = (&self.to_logic, self.fatal);
-        self.embed_sessions.sync(&self.display, now, |cmd| {
-            send_session(to_logic, fatal, cmd)
-        });
+        self.embed_sessions
+            .sync(&self.display, now, |cmd| send_session(to_logic, fatal, cmd));
         // Focus cannot outlive the element that held it. An embed a peer
         // deleted, or one scrolled far enough away to close, leaves the board
         // with nothing to route input into.

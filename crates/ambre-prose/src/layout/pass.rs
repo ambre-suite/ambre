@@ -199,11 +199,7 @@ impl NotePlan {
 
     /// Number every note, then shape each one against the content width:
     /// the number first, then the text in the room left beside it.
-    pub(crate) fn read(
-        measurer: &mut Measurer,
-        document: &LoroDoc,
-        content_width: DocPx,
-    ) -> Self {
+    pub(crate) fn read(measurer: &mut Measurer, document: &LoroDoc, content_width: DocPx) -> Self {
         let key = Self::key_of(document);
         if key.is_empty() {
             return Self::default();
@@ -561,10 +557,7 @@ fn measure_one(
         // A signal, not a sized block.
         BlockType::PageBreak => (DocPx::ZERO, None),
         BlockType::HRule => (RULE_HEIGHT, None),
-        BlockType::Image => (
-            image_height(measurer, tree, id, &style, text_width),
-            None,
-        ),
+        BlockType::Image => (image_height(measurer, tree, id, &style, text_width), None),
         BlockType::Table => {
             let (rows, shape) =
                 table_metrics(measurer, document, tree, defaults, id, content_width);
@@ -671,9 +664,7 @@ fn image_height(
     );
     let caption_height = match string_at(&attrs, doc::AttrKey::ImageCaption) {
         Some(caption) if !caption.is_empty() => {
-            measurer
-                .measure(&caption, style, text_width)
-                .text_height
+            measurer.measure(&caption, style, text_width).text_height
         }
         _ => DocPx::ZERO,
     };
@@ -733,10 +724,7 @@ fn table_metrics(
                 .find(|(_, rect)| rect.top_left == at)
                 .map_or(at, |(_, rect)| rect.bottom_right);
             let x = col_x.get(col).copied().unwrap_or(DocPx::ZERO);
-            let right_x = col_x
-                .get(last.col.next().to_usize())
-                .copied()
-                .unwrap_or(x);
+            let right_x = col_x.get(last.col.next().to_usize()).copied().unwrap_or(x);
             let width = right_x - x;
             let style = cell_style(tree, cell);
             let text_width = (width - style.padding * 2.0).max(DocPx::ZERO);

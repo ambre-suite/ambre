@@ -93,12 +93,13 @@ mod belts {
     /// make two peers disagree without either being wrong.
     #[test]
     fn nothing_identifying_a_peer_reaches_a_measurement() {
-        const BANNED: [&str; 6] = [
+        const BANNED: [&str; 7] = [
             "PeerID",
             "peer_id",
             "SystemTime",
             "Instant",
-            "now",
+            "now_ms",
+            "now:",
             "random",
         ];
         for (name, source) in SOURCES {

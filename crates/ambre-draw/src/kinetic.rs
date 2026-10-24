@@ -330,8 +330,7 @@ impl Kinetic {
         }
         let speed = match self.glide {
             Some(glide) if now - glide.last_at <= WHEEL_GAP => {
-                let dt =
-                    (now - glide.last_at).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
+                let dt = (now - glide.last_at).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
                 let b = WHEEL_BLEND;
                 moved.per(dt).scaled(b) + glide.speed.scaled(1.0 - b)
             }
@@ -520,10 +519,7 @@ mod tests {
                 .sample(pt(10.0, 60.0), ambre_core::PageTime(16.0))
                 .is_some()
         );
-        assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS.get())),
-            None
-        );
+        assert_eq!(kinetic.held(ambre_core::PageTime(LONG_PRESS.get())), None);
         assert_eq!(
             Kinetic::default().held(ambre_core::PageTime(LONG_PRESS.get())),
             None
