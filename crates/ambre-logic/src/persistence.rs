@@ -69,14 +69,9 @@ const DB_NAME: DbName<'static> = DbName("ambre-persistence");
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct DbVersion(u32);
 
-// v2 adds the `trusted_keys` store (`ambre-spec-key-verification.md`).
-// The upgrade handler creates each store only if absent, so bumping the version
-// on an existing v1 database adds `trusted_keys` without touching `snapshots`.
-// v3 adds the `deltas` store, created the same guarded way.
-// v4 adds the `sessions` store, created the same guarded way.
-// v5 adds the `meta` store, created the same guarded way.
-// v6 adds the `drafts` store, created the same guarded way.
-const DB_VERSION: DbVersion = DbVersion(6);
+// The upgrade handler creates each store only if absent, so a later version
+// adds its new store without touching the ones a browser already holds.
+const DB_VERSION: DbVersion = DbVersion(1);
 
 /// The object stores of the database, one variant each.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -219,6 +214,15 @@ impl PersistenceStore {
     /// [`open`](Self::open) uses the production [`DB_NAME`]; tests pass a unique
     /// name so each runs against an isolated database.
     fn open_named(db_name: DbName<'_>) -> oneshot::Receiver<Result<Self, String>> {
+        Self::open_at(db_name, DB_VERSION)
+    }
+
+    /// Open a named database at a given version. Only a test passes a version
+    /// other than [`DB_VERSION`], to run the upgrade a later version runs.
+    fn open_at(
+        db_name: DbName<'_>,
+        version: DbVersion,
+    ) -> oneshot::Receiver<Result<Self, String>> {
         let (tx, rx) = answer();
 
         let factory = match web_sys::window().and_then(|w| w.indexed_db().ok().flatten()) {
@@ -229,7 +233,7 @@ impl PersistenceStore {
             }
         };
 
-        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name.0, DB_VERSION.0) {
+        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name.0, version.0) {
             Ok(req) => req,
             Err(e) => {
                 tx.send(Err(format!("open request failed: {e:?}")));
@@ -238,9 +242,9 @@ impl PersistenceStore {
         };
 
         // Create the object stores during upgrade (first visit or version bump).
-        // This fires for a fresh database (v0->2) AND for an existing v1 database
-        // (v1->2). Each store is therefore created only if it does not already
-        // exist. Calling `create_object_store` for a store that exists throws
+        // A bump fires the upgrade on a database that already holds stores, so
+        // each store is created only if it does not already exist. Calling
+        // `create_object_store` for a store that exists throws
         // `ConstraintError` and aborts the whole upgrade transaction.
         let on_upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
@@ -1041,7 +1045,7 @@ fn request_database(event: &web_sys::Event) -> Option<IdbDatabase> {
 // wasm tests (headless Chrome via `wasm-pack test`). Exercise the two paths the
 // TOFU store adds (`ambre-spec-key-verification.md`, CHROME-053) that a native
 // test cannot reach. One is the trusted_keys roundtrip. The other is the
-// DB_VERSION 1 -> 2 upgrade that must add trusted_keys WITHOUT a
+// upgrade to the next version, which must add trusted_keys WITHOUT a
 // ConstraintError on the existing snapshots store.
 // ============================================================================
 #[cfg(test)]
@@ -1079,14 +1083,16 @@ mod wasm_tests {
         let _ = rx.await;
     }
 
-    /// Recreate the pre-TOFU (v1) database shape: version 1 with ONLY the
-    /// `snapshots` store, holding one snapshot row. This is the state every
-    /// existing user's browser is in before this upgrade ships.
-    async fn seed_v1_with_snapshot(name: &str, doc_id: DocumentId, bytes: &[u8]) {
+    /// A database at [`DB_VERSION`] with ONLY the `snapshots` store, holding
+    /// one snapshot row: a browser that holds documents and lacks a store the
+    /// next version adds.
+    async fn seed_snapshots_only(name: &str, doc_id: DocumentId, bytes: &[u8]) {
         let (tx, rx) = answer::<()>();
-        let req = factory().open_with_u32(name, 1).expect("open v1");
+        let req = factory()
+            .open_with_u32(name, DB_VERSION.0)
+            .expect("open at the current version");
 
-        // v1 upgrade: the old code created `snapshots` unconditionally.
+        // An upgrade that creates `snapshots` alone, unconditionally.
         let upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
                 let _ = db.create_object_store(IdbStore::Snapshots.name());
@@ -1186,20 +1192,20 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
-    async fn upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots() {
-        let name = "ambre-test-migration-v1-v2";
+    async fn an_upgrade_adds_trusted_keys_and_keeps_snapshots() {
+        let name = "ambre-test-migration-trusted-keys";
         delete_db(name).await;
 
         let doc = DocumentId::from_bytes([3; 16]);
         let snapshot = vec![1u8, 2, 3, 4, 5];
-        seed_v1_with_snapshot(name, doc, &snapshot).await;
+        seed_snapshots_only(name, doc, &snapshot).await;
 
-        // Open with the current (v2) code: the guarded onupgradeneeded must add
+        // Open at the next version: the guarded onupgradeneeded must add
         // `trusted_keys` without throwing ConstraintError on `snapshots`.
-        let store = PersistenceStore::open_named(DbName(name))
+        let store = PersistenceStore::open_at(DbName(name), DbVersion(DB_VERSION.0 + 1))
             .await
             .expect("channel")
-            .expect("v1 database upgrades to v2 cleanly");
+            .expect("the database upgrades to the next version cleanly");
 
         // The pre-existing snapshot survived the upgrade untouched.
         assert_eq!(
@@ -1365,12 +1371,12 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
-    async fn upgrade_v1_to_current_adds_deltas_and_sessions() {
+    async fn an_upgrade_adds_deltas_and_sessions() {
         let name = "ambre-test-migration-deltas";
         delete_db(name).await;
         let doc = DocumentId::from_bytes([8; 16]);
-        seed_v1_with_snapshot(name, doc, &[1, 2]).await;
-        let store = PersistenceStore::open_named(DbName(name))
+        seed_snapshots_only(name, doc, &[1, 2]).await;
+        let store = PersistenceStore::open_at(DbName(name), DbVersion(DB_VERSION.0 + 1))
             .await
             .expect("channel")
             .expect("the database upgrades cleanly");
