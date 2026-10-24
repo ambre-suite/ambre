@@ -127,7 +127,7 @@ menu is where a user looks for a file.
 | Trigger | What must happen |
 |---|---|
 | the File menu export entry | the Logic thread builds the pages and assembles the file (`TOILE-IO-029`) |
-| the answer | the UI thread hands the bytes to the browser as `deck.pdf`; no board state changes (`PDF-016`, `PDF-014`, `TOILE-IO-046`) |
+| the answer | the UI thread hands the bytes to the browser as `deck.pdf`, a name `DOCFILE-019` and `DOCFILE-020` hold; no board state changes (`PDF-016`, `PDF-014`, `TOILE-IO-046`) |
 | an export with no page, or a session whose fonts have not landed | a notice says which, rather than a file that never arrives (`TOILE-IO-048`) |
 
 **The handler sits on the Logic thread, not in the board.** Every other board command is answered by

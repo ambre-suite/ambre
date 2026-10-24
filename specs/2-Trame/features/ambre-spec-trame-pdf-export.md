@@ -69,7 +69,7 @@ export owns no other state.
 | Shape | Direction | Carries |
 |---|---|---|
 | `TrameCommand::ExportPdf { sheet_id, page_setup }` | UI to Logic | the sheet, and an optional one-off format that overrides the stored one |
-| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the bytes, on the same path a CSV export uses |
+| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, on the same path a CSV export uses |
 
 **The page format:**
 

@@ -135,7 +135,7 @@ document and adds nothing to it.
 | `TrameCommand::ExportCsv` | UI to Logic | the sheet, an optional delimiter, an optional range |
 | `TrameCommand::ExportActiveSheetCsv` | UI to Logic | nothing: the Logic thread resolves the active sheet itself |
 | `TrameEvent::ImportComplete { sheet_id, rows, cols }` | Logic to UI | what landed, and where |
-| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the bytes, for the UI thread to hand to the browser |
+| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, for the UI thread to hand to the browser |
 
 The two Excel commands are designed and absent from the bus. Their warnings have no carrier: the
 event above holds no report, which `TRAME-IO-012` needs and the shared vocabulary Story supplies

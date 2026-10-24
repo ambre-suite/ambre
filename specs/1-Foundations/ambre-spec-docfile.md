@@ -31,8 +31,6 @@ status values are normative in `ambre-spec-template.md`.
 | `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | `ambre_toile::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`; `ambre_trame::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted` -- asserted on the command's label, the one string a user reads before clicking, rather than on a tooltip or a dialog, so a surface that drops the warning cannot compile green | none | verified |
 | `DOCFILE-014` | `INV` | Sealing and opening a file MUST run in the Sync worker. | this spec section 5; `ARCH-004` | `ambre_logic::dispatch::tests::a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui`; `ambre_sync::integration::a_sealed_file_round_trips_through_the_service_plane` -- the worker's own half; cargo-deny -- `ambre-core`, `ambre-logic`, `ambre-toile` and `ambre-trame` declare no crypto dependency, so neither an application nor the container layer can seal anything | none | verified |
 | `DOCFILE-017` | `INV` | A sealed export MUST reach the user through the event its plaintext export already uses. | this spec section 5; `ARCH-004` | `ambre_logic::dispatch::tests::the_sealed_bytes_come_back_as_the_application_s_own_export_event`; `::a_failed_seal_answers_a_failure_and_no_file`; `::a_document_closed_mid_seal_drops_the_answer` -- the one event on all three outcomes | none | verified |
-| `DOCFILE-019` | `INV` | An export file name MUST NOT hold a path separator or a control character, nor be `.` or `..`. | this spec section 4 | `ambre_core::export_file::tests::a_path_separator_is_refused`; `::a_control_character_is_refused`; `::a_folder_reference_is_refused`; `::an_empty_name_is_refused`; `::a_plain_name_is_taken_as_written` -- the checked constructor; `::a_title_loses_what_a_host_refuses`; `::a_title_of_dots_takes_the_fallback` -- a name derived from a title passes the same check; type-level -- every export event carries an `ExportFilename`, which only these two paths build | none | verified |
-| `DOCFILE-020` | `INV` | An export file name MUST fit 255 bytes, its extension whole. | this spec section 4 | `ambre_core::export_file::tests::a_name_past_the_bound_is_refused` -- the checked constructor at the bound and one byte past it; `::a_long_title_is_cut_and_keeps_its_extension` -- a two-byte character repeated past the bound, cut on a character boundary | none | verified |
 
 ### 1.2 Read a `.ambre` file
 
@@ -57,6 +55,17 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 |---|---|---|---|---|---|---|
 | `DOCFILE-015` | `FRAME` | The seal prompt MUST take the passphrase twice, and MUST NOT seal on a mismatch. | this spec section 4 | `ambre_chrome::passphrase::tests::sealing_needs_the_two_fields_to_agree`; `::nothing_is_submitted_from_an_empty_prompt`; `::opening_asks_once_and_ignores_the_second_field` -- the rule is the prompt's one decision, so it is a pure function of the two fields and tested on host, and the two inputs around it stay DOM glue | none | verified |
 | `DOCFILE-016` | `FAIL` | A file that does not open MUST report the same failure whether the passphrase is wrong or the file was modified. | this spec section 5 | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` -- three inputs, a wrong passphrase, an edited ciphertext and an edited salt, against one variant; type-level -- `RestEvent::DocFileOpenFailed` is a unit variant, so a message that distinguished the two causes would have nothing to read | none | verified |
+
+### 1.4 Name every file the suite writes
+
+These two rules cover the name of every file the suite writes from a document, native or
+exported: a `.ambre` file, a CSV, a Markdown, an SVG and a PDF. An application import and export
+spec that names a file cites them, and restates neither.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `DOCFILE-019` | `INV` | A file name the suite writes MUST NOT hold a path separator or a control character, nor be `.` or `..`. | this spec section 4 | `ambre_core::export_file::tests::a_path_separator_is_refused`; `::a_control_character_is_refused`; `::a_folder_reference_is_refused`; `::an_empty_name_is_refused`; `::a_plain_name_is_taken_as_written` -- the checked constructor; `::a_title_loses_what_a_host_refuses`; `::a_title_of_dots_takes_the_fallback` -- a name derived from a title passes the same check; type-level -- every event that hands a written file to the browser carries an `ExportFilename`, which only these two paths build | none | verified |
+| `DOCFILE-020` | `INV` | A file name the suite writes MUST fit 255 bytes, its extension whole. | this spec section 4 | `ambre_core::export_file::tests::a_name_past_the_bound_is_refused` -- the checked constructor at the bound and one byte past it; `::a_long_title_is_cut_and_keeps_its_extension` -- a two-byte character repeated past the bound, cut on a character boundary | none | verified |
 
 * **Budget.** none, and `ambre-spec-budgets.md` records that: the container adds a 22-byte write,
   a 22-byte parse, and a few dozen bytes in `ambre-core`, shared rather than duplicated.

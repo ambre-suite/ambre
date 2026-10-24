@@ -412,7 +412,7 @@ budget row rather than four, and what keeps a writer from reading the document (
 | `ProseCommand::ImportDocument` | UI to Logic | the format and the bytes |
 | `ProseCommand::ExportDocument` | UI to Logic | the format; the options join it with the first writer that reads one |
 | `ProseEvent::ImportCompleted` | Logic to UI | the report of what the file lost |
-| `ProseEvent::ExportReady` | Logic to UI | the file name, the bytes and their media type; the report joins it with the first lossy writer |
+| `ProseEvent::ExportReady` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, the bytes and their media type; the report joins it with the first lossy writer |
 | `ProseEvent::ImportProgress`, `::ExportProgress` | Logic to UI | a percentage, past one megabyte (`PROSE-IO-021`) |
 
 ```rust
@@ -447,7 +447,8 @@ The media type each format declares:
 | HTML | `text/html; charset=utf-8` |
 
 A Markdown and an HTML writer produce text, and the bus encodes it as UTF-8 bytes. The view has
-one download path and reads the media type to name the file (`PROSE-IO-020`).
+one download path and types the download with the media type (`PROSE-IO-020`). The file name
+obeys `DOCFILE-019` and `DOCFILE-020`.
 
 **The native file.** Prose owns one pair of entry points over the shared container, and nothing
 else. The header layout, the version registry, the migration policy and the at-rest decision are
