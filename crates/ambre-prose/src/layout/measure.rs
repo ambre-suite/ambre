@@ -11,7 +11,8 @@ use parley::{
 };
 
 use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
-use ambre_core::{ByteDelta, ByteOffset, ByteSpan, Pt, char_to_byte};
+use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, char_to_byte};
+
 use ambre_draw::{ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -84,19 +85,19 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EffectiveStyle {
     pub font_family: String,
-    pub font_size_px: f32,
+    pub font_size_px: DocPx,
     pub line_height: LineHeight,
     /// The floor an `AtLeast` line height sets, in pixels. `None` for the two
     /// modes parley expresses on its own.
-    pub at_least_floor_px: Option<f32>,
+    pub at_least_floor_px: Option<DocPx>,
     pub bold: bool,
     pub italic: bool,
     pub align: Align,
-    pub indent_first_px: f32,
-    pub indent_left_px: f32,
-    pub indent_right_px: f32,
-    pub space_before_px: f32,
-    pub space_after_px: f32,
+    pub indent_first_px: DocPx,
+    pub indent_left_px: DocPx,
+    pub indent_right_px: DocPx,
+    pub space_before_px: DocPx,
+    pub space_after_px: DocPx,
     pub keep_together: bool,
     pub keep_with_next: bool,
 }
@@ -133,7 +134,7 @@ impl EffectiveStyle {
     ) -> Self {
         // A stored size outside the range of a font size lays out at zero
         // rather than at a negative height.
-        let font_size_px = defaults.font_size.to_px();
+        let font_size_px = DocPx::new(defaults.font_size.to_px());
         Self {
             font_family: defaults.font_family.clone(),
             font_size_px,
@@ -142,21 +143,11 @@ impl EffectiveStyle {
             bold: weight == Weight::Bold,
             italic: false,
             align: paragraph.align.unwrap_or(Align::Left),
-            indent_first_px: Pt::new(paragraph.indent_first.unwrap_or(0.0))
-                .to_doc_px()
-                .get(),
-            indent_left_px: Pt::new(paragraph.indent_left.unwrap_or(0.0))
-                .to_doc_px()
-                .get(),
-            indent_right_px: Pt::new(paragraph.indent_right.unwrap_or(0.0))
-                .to_doc_px()
-                .get(),
-            space_before_px: Pt::new(paragraph.space_before.unwrap_or(0.0))
-                .to_doc_px()
-                .get(),
-            space_after_px: Pt::new(paragraph.space_after.unwrap_or(0.0))
-                .to_doc_px()
-                .get(),
+            indent_first_px: Pt::new(paragraph.indent_first.unwrap_or(0.0)).to_doc_px(),
+            indent_left_px: Pt::new(paragraph.indent_left.unwrap_or(0.0)).to_doc_px(),
+            indent_right_px: Pt::new(paragraph.indent_right.unwrap_or(0.0)).to_doc_px(),
+            space_before_px: Pt::new(paragraph.space_before.unwrap_or(0.0)).to_doc_px(),
+            space_after_px: Pt::new(paragraph.space_after.unwrap_or(0.0)).to_doc_px(),
             keep_together: paragraph.keep_together.unwrap_or(false),
             keep_with_next: paragraph.keep_with_next.unwrap_or(false),
         }
@@ -166,8 +157,8 @@ impl EffectiveStyle {
     /// side indents. Never below zero, so a pair of indents wider than the page
     /// still breaks one word per line rather than looping.
     #[must_use]
-    pub fn text_width_px(&self, content_width_px: f32) -> f32 {
-        (content_width_px - self.indent_left_px - self.indent_right_px).max(0.0)
+    pub fn text_width_px(&self, content_width_px: DocPx) -> DocPx {
+        (content_width_px - self.indent_left_px - self.indent_right_px).max(DocPx::ZERO)
     }
 }
 
@@ -191,20 +182,20 @@ fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> Li
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextMetrics {
     /// The shaped text alone, with neither margin included.
-    pub text_height_px: f32,
+    pub text_height_px: DocPx,
     pub line_count: u32,
     /// The top of each line, relative to the top of the text. A break is only
     /// ever taken at one of these (`PROSE-071`).
-    pub line_tops: Vec<f32>,
+    pub line_tops: Vec<DocPx>,
 }
 
 impl TextMetrics {
     /// The height the first `lines` lines take. Zero for none, the whole text
     /// for every line, and the top of the next line in between.
     #[must_use]
-    pub fn height_of_first(&self, lines: u32) -> f32 {
+    pub fn height_of_first(&self, lines: u32) -> DocPx {
         if lines == 0 {
-            return 0.0;
+            return DocPx::ZERO;
         }
         match self.line_tops.get(lines as usize) {
             Some(top) => *top,
@@ -214,7 +205,7 @@ impl TextMetrics {
 
     /// How many whole lines fit in a height. Never more than the text has.
     #[must_use]
-    pub fn lines_fitting_in(&self, height_px: f32) -> u32 {
+    pub fn lines_fitting_in(&self, height_px: DocPx) -> u32 {
         let mut fitting = 0;
         for line in 1..=self.line_count {
             if self.height_of_first(line) > height_px {
@@ -328,7 +319,7 @@ impl Measurer {
         text: &str,
         marks: &[MarkedSpan],
         style: &EffectiveStyle,
-        width_px: f32,
+        width_px: DocPx,
     ) -> Layout<ParleyBrush> {
         self.shaped = self.shaped.saturating_add(1);
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
@@ -346,7 +337,7 @@ impl Measurer {
     ///
     /// For a caller that needs no glyphs. A block the view draws is measured
     /// with its run instead (`PROSE-036`).
-    pub fn measure(&mut self, text: &str, style: &EffectiveStyle, width_px: f32) -> TextMetrics {
+    pub fn measure(&mut self, text: &str, style: &EffectiveStyle, width_px: DocPx) -> TextMetrics {
         metrics_of(&self.shape(text, &[], style, width_px))
     }
 
@@ -359,7 +350,7 @@ impl Measurer {
         &mut self,
         text: &str,
         style: &EffectiveStyle,
-        width_px: f32,
+        width_px: DocPx,
     ) -> (TextMetrics, ShapedRun) {
         let layout = self.shape(text, &[], style, width_px);
         (metrics_of(&layout), ShapedRun::styled(text, layout, style))
@@ -379,7 +370,7 @@ impl Measurer {
         &mut self,
         (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
-        width_px: f32,
+        width_px: DocPx,
         offsets: &[DocOffset],
         previous: Option<&ShapedRun>,
     ) -> (TextMetrics, Vec<u32>, ShapedRun) {
@@ -409,7 +400,7 @@ impl Measurer {
         previous: &ParleyRunData,
         (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
-        width_px: f32,
+        width_px: DocPx,
     ) -> Option<ShapedRun> {
         let Self {
             font_cx,
@@ -437,7 +428,7 @@ impl Measurer {
         document: &LoroDoc,
         defaults: &doc::DocDefaults,
         id: &TreeID,
-        content_width_px: f32,
+        content_width_px: DocPx,
         weight: Weight,
     ) -> (EffectiveStyle, TextMetrics) {
         let tree = doc::blocks(document);
@@ -458,7 +449,7 @@ pub fn shape_paragraph(
     layout_cx: &mut LayoutContext<ParleyBrush>,
     (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
-    width_px: f32,
+    width_px: DocPx,
 ) -> Layout<ParleyBrush> {
     let family = fonts::resolve(&style.font_family).face_name();
     let shaped = |font_cx: &mut FontContext, layout_cx: &mut _, height| {
@@ -478,9 +469,9 @@ pub fn shape_paragraph(
     if let Some(floor_px) = style.at_least_floor_px
         && layout.height() > 0.0
         && let lines = layout.len().max(1) as f32
-        && layout.height() / lines < floor_px
+        && layout.height() / lines < floor_px.get()
     {
-        return shaped(font_cx, layout_cx, LineHeight::Absolute(floor_px));
+        return shaped(font_cx, layout_cx, LineHeight::Absolute(floor_px.get()));
     }
     layout
 }
@@ -496,7 +487,7 @@ pub fn reshape_paragraph(
     previous: &ParleyRunData,
     (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
-    width_px: f32,
+    width_px: DocPx,
 ) -> ShapedRun {
     let windowed = reshape_window(
         previous,
@@ -552,7 +543,7 @@ pub(crate) fn reshape_window(
     previous: &ParleyRunData,
     (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
-    width_px: f32,
+    width_px: DocPx,
     shape: &mut ShapeFn<'_>,
 ) -> Option<ParleyRunData> {
     let alike = previous.width_px() == Some(width_px)
@@ -619,7 +610,7 @@ pub(crate) fn reshape_window(
     // the window starts there.
     let mut window_style = style.clone();
     if cut > RunLine::ZERO {
-        window_style.indent_first_px = 0.0;
+        window_style.indent_first_px = DocPx::ZERO;
     }
     if let Some(&(_, end)) = meets
         .get(REACH)
@@ -699,13 +690,13 @@ fn build(
     style: &EffectiveStyle,
     family: &str,
     line_height: LineHeight,
-    width_px: Option<f32>,
+    width_px: Option<DocPx>,
 ) -> Layout<ParleyBrush> {
     let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
     builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
         family.to_string().into(),
     )));
-    builder.push_default(StyleProperty::FontSize(style.font_size_px));
+    builder.push_default(StyleProperty::FontSize(style.font_size_px.get()));
     builder.push_default(StyleProperty::LineHeight(line_height));
     if style.bold {
         builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
@@ -732,27 +723,27 @@ fn build(
     // breaks, aligns and hit-tests around it (`PROSE-FEAT-309`). Only a whole
     // paragraph takes it: a draft is a piece typed inside one. A hanging
     // indent has no box that could express it (`PROSE-FEAT-310`).
-    if width_px.is_some() && style.indent_first_px > 0.0 {
+    if width_px.is_some() && style.indent_first_px > DocPx::ZERO {
         builder.push_inline_box(parley::InlineBox {
             id: 0,
             kind: parley::InlineBoxKind::InFlow,
             index: 0,
-            width: style.indent_first_px,
+            width: style.indent_first_px.get(),
             height: 0.0,
             baseline: None,
             vertical_align: parley::VerticalAlign::BASELINE,
         });
     }
     let mut layout: Layout<ParleyBrush> = builder.build(text);
-    layout.break_all_lines(width_px);
+    layout.break_all_lines(width_px.map(DocPx::get));
     layout.align(alignment_of(style.align), AlignmentOptions::default());
     layout
 }
 
 /// The floor an `AtLeast` line height sets, in pixels.
-fn at_least_floor_of(paragraph: &ParagraphStyle) -> Option<f32> {
+fn at_least_floor_of(paragraph: &ParagraphStyle) -> Option<DocPx> {
     match paragraph.line_height? {
-        StoredLineHeight::AtLeast(floor) => Some(floor.to_doc_px().get()),
+        StoredLineHeight::AtLeast(floor) => Some(floor.to_doc_px()),
         StoredLineHeight::Multiple(_) | StoredLineHeight::Exact(_) => None,
     }
 }
@@ -760,14 +751,15 @@ fn at_least_floor_of(paragraph: &ParagraphStyle) -> Option<f32> {
 /// The line tops and the height a shaped layout carries.
 fn metrics_of(layout: &Layout<ParleyBrush>) -> TextMetrics {
     let mut line_tops = Vec::with_capacity(layout.len() + 1);
-    let mut top = 0.0;
+    let mut top = DocPx::ZERO;
     for line in layout.lines() {
         line_tops.push(top);
-        top += line.metrics().line_height;
+        top += DocPx::new(line.metrics().line_height);
     }
-    line_tops.push(layout.height());
+    line_tops.push(DocPx::new(layout.height()));
     TextMetrics {
-        text_height_px: layout.height(),
+        text_height_px: DocPx::new(layout.height()),
+
         line_count: u32::try_from(layout.len()).unwrap_or(u32::MAX),
         line_tops,
     }
@@ -867,7 +859,8 @@ mod tests {
             .into_iter()
             .map(rounded)
             .collect();
-        (starts, data.line_tops(), baselines, carets, boxes)
+        let tops = data.line_tops().into_iter().map(DocPx::get).collect();
+        (starts, tops, baselines, carets, boxes)
     }
 
     fn rounded(rect: BoundingBox) -> [i64; 4] {
@@ -885,7 +878,7 @@ mod tests {
     #[test]
     fn a_run_shaped_from_the_edit_on_matches_one_shaped_whole() {
         let mut indented = style();
-        indented.indent_first_px = 40.0;
+        indented.indent_first_px = DocPx::new(40.0);
         let mut centered = style();
         centered.align = Align::Center;
         let bold = |text: &str| {
@@ -909,7 +902,7 @@ mod tests {
         let mut text = LONG.repeat(12);
         let marks = marks_of(&text);
         let (_, _, mut run) =
-            measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+            measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
         // Type at the end, in the middle, near the start; erase; paste a
         // long word; and keep going past the segment cap.
         let edits: Vec<(usize, &str, usize)> = (0..40)
@@ -931,10 +924,15 @@ mod tests {
             text.replace_range(at..end, insert);
             let marks = marks_of(&text);
             let before = measurer.shaped();
-            let (metrics, _, next) =
-                measurer.measure_with_lines((&text, &marks), &style, width, &[], Some(&run));
+            let (metrics, _, next) = measurer.measure_with_lines(
+                (&text, &marks),
+                &style,
+                DocPx::new(width),
+                &[],
+                Some(&run),
+            );
             let (whole_metrics, _, whole) =
-                measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+                measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
             assert_eq!(measurer.shaped(), before + 2);
             if next.data().segment_count() > 1 {
                 partial += 1;
@@ -967,8 +965,13 @@ mod tests {
                 ..MarkedSpan::default()
             }]
         };
-        let (_, _, run) =
-            measurer.measure_with_lines((&base, &bold(&base)), &style, width, &[], None);
+        let (_, _, run) = measurer.measure_with_lines(
+            (&base, &bold(&base)),
+            &style,
+            DocPx::new(width),
+            &[],
+            None,
+        );
         assert!(run.data().line_count().get() > 20);
         // A letter, one in the first line, and two accented ones. A key
         // moves a word or two, and a few lines take it back. An erased
@@ -985,10 +988,15 @@ mod tests {
             let mut text = base.clone();
             text.replace_range(at..at + erase, insert);
             let marks = bold(&text);
-            let (metrics, _, windowed) =
-                measurer.measure_with_lines((&text, &marks), &style, width, &[], Some(&run));
+            let (metrics, _, windowed) = measurer.measure_with_lines(
+                (&text, &marks),
+                &style,
+                DocPx::new(width),
+                &[],
+                Some(&run),
+            );
             let (whole_metrics, _, whole) =
-                measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+                measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
             let fresh = windowed.data().fresh_lines(run.data());
             assert!(fresh <= most, "{fresh} lines shaped for an edit at {at}");
             assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
@@ -1007,7 +1015,8 @@ mod tests {
         let mut measurer = super::shipped_measurer();
         let style = style();
         let text = LONG.repeat(12);
-        let (_, _, run) = measurer.measure_with_lines((&text, &[]), &style, 300.0, &[], None);
+        let (_, _, run) =
+            measurer.measure_with_lines((&text, &[]), &style, DocPx::new(300.0), &[], None);
         let edited = format!("x{text}");
         let marks = [MarkedSpan {
             start: ByteOffset::from_usize(edited.len() - 300),
@@ -1015,10 +1024,15 @@ mod tests {
             bold: true,
             ..MarkedSpan::default()
         }];
-        let (_, _, windowed) =
-            measurer.measure_with_lines((&edited, &marks), &style, 300.0, &[], Some(&run));
+        let (_, _, windowed) = measurer.measure_with_lines(
+            (&edited, &marks),
+            &style,
+            DocPx::new(300.0),
+            &[],
+            Some(&run),
+        );
         let (_, _, whole) =
-            measurer.measure_with_lines((&edited, &marks), &style, 300.0, &[], None);
+            measurer.measure_with_lines((&edited, &marks), &style, DocPx::new(300.0), &[], None);
         assert_eq!(picture(&windowed), picture(&whole));
     }
 
@@ -1028,13 +1042,14 @@ mod tests {
         let mut measurer = super::shipped_measurer();
         let style = style();
         let text = LONG.repeat(6);
-        let (_, _, run) = measurer.measure_with_lines((&text, &[]), &style, 300.0, &[], None);
+        let (_, _, run) =
+            measurer.measure_with_lines((&text, &[]), &style, DocPx::new(300.0), &[], None);
         let longer = format!("{text}x");
         let (_, _, wider) =
-            measurer.measure_with_lines((&longer, &[]), &style, 320.0, &[], Some(&run));
+            measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(320.0), &[], Some(&run));
         assert_eq!(wider.data().segment_count(), 1);
         let (_, _, same) =
-            measurer.measure_with_lines((&longer, &[]), &style, 300.0, &[], Some(&run));
+            measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(300.0), &[], Some(&run));
         assert_eq!(same.data().segment_count(), 2);
     }
 
@@ -1042,8 +1057,8 @@ mod tests {
     fn a_narrow_width_breaks_a_run_into_more_lines_than_a_wide_one() {
         let mut measurer = super::shipped_measurer();
         let style = style();
-        let wide = measurer.measure(LONG, &style, 2000.0);
-        let narrow = measurer.measure(LONG, &style, 120.0);
+        let wide = measurer.measure(LONG, &style, DocPx::new(2000.0));
+        let narrow = measurer.measure(LONG, &style, DocPx::new(120.0));
         assert!(narrow.line_count > wide.line_count);
         assert!(narrow.text_height_px > wide.text_height_px);
     }
@@ -1051,21 +1066,21 @@ mod tests {
     #[test]
     fn the_line_tops_climb_and_end_at_the_measured_height() {
         let mut measurer = super::shipped_measurer();
-        let metrics = measurer.measure(LONG, &style(), 200.0);
+        let metrics = measurer.measure(LONG, &style(), DocPx::new(200.0));
         assert!(metrics.line_count >= 2);
         for pair in metrics.line_tops.windows(2) {
             let [first, second] = pair else { continue };
             assert!(second >= first);
         }
-        assert_eq!(metrics.line_tops.first(), Some(&0.0));
+        assert_eq!(metrics.line_tops.first(), Some(&DocPx::ZERO));
         assert_eq!(metrics.line_tops.last(), Some(&metrics.text_height_px));
     }
 
     #[test]
     fn a_height_holding_no_whole_line_fits_none_of_them() {
         let mut measurer = super::shipped_measurer();
-        let metrics = measurer.measure(LONG, &style(), 200.0);
-        assert_eq!(metrics.lines_fitting_in(0.0), 0);
+        let metrics = measurer.measure(LONG, &style(), DocPx::new(200.0));
+        assert_eq!(metrics.lines_fitting_in(DocPx::new(0.0)), 0);
         assert_eq!(
             metrics.lines_fitting_in(metrics.text_height_px),
             metrics.line_count
@@ -1093,16 +1108,16 @@ mod tests {
         let style =
             EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), Weight::Regular);
         let twelve = ambre_core::FontSize::from_whole_points(12);
-        assert_eq!(style.font_size_px, twelve.to_px());
-        assert_eq!(style.font_size_px, 16.0);
+        assert_eq!(style.font_size_px, DocPx::new(twelve.to_px()));
+        assert_eq!(style.font_size_px, DocPx::new(16.0));
     }
 
     #[test]
     fn two_indents_wider_than_the_page_still_leave_a_width_to_break_against() {
         let mut style = style();
-        style.indent_left_px = 900.0;
-        style.indent_right_px = 900.0;
-        assert_eq!(style.text_width_px(400.0), 0.0);
+        style.indent_left_px = DocPx::new(900.0);
+        style.indent_right_px = DocPx::new(900.0);
+        assert_eq!(style.text_width_px(DocPx::new(400.0)), DocPx::new(0.0));
     }
 
     #[test]
@@ -1111,10 +1126,10 @@ mod tests {
         let mut style = style();
         style.line_height = LineHeight::Absolute(30.0);
         style.at_least_floor_px = None;
-        let metrics = measurer.measure(LONG, &style, 200.0);
+        let metrics = measurer.measure(LONG, &style, DocPx::new(200.0));
         assert!(metrics.line_count >= 2);
         let expected = 30.0 * metrics.line_count as f32;
-        assert!((metrics.text_height_px - expected).abs() < 0.5);
+        assert!((metrics.text_height_px - DocPx::new(expected)).abs() < DocPx::new(0.5));
     }
 
     #[test]
@@ -1123,9 +1138,9 @@ mod tests {
         let mut style = style();
         style.line_height = LineHeight::MetricsRelative(1.0);
         style.at_least_floor_px = None;
-        let natural = measurer.measure(LONG, &style, 200.0);
-        style.at_least_floor_px = Some(60.0);
-        let floored = measurer.measure(LONG, &style, 200.0);
+        let natural = measurer.measure(LONG, &style, DocPx::new(200.0));
+        style.at_least_floor_px = Some(DocPx::new(60.0));
+        let floored = measurer.measure(LONG, &style, DocPx::new(200.0));
         assert_eq!(floored.line_count, natural.line_count);
         assert!(floored.text_height_px > natural.text_height_px);
     }
@@ -1136,9 +1151,9 @@ mod tests {
         let mut style = style();
         style.line_height = LineHeight::MetricsRelative(1.0);
         style.at_least_floor_px = None;
-        let natural = measurer.measure(LONG, &style, 200.0);
-        style.at_least_floor_px = Some(1.0);
-        let floored = measurer.measure(LONG, &style, 200.0);
+        let natural = measurer.measure(LONG, &style, DocPx::new(200.0));
+        style.at_least_floor_px = Some(DocPx::new(1.0));
+        let floored = measurer.measure(LONG, &style, DocPx::new(200.0));
         assert_eq!(floored, natural);
     }
 }

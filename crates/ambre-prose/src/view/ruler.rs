@@ -158,9 +158,8 @@ impl ProseUiState {
         let zoom = self.viewport.zoom;
         let mut ruler = RulerState {
             visible: false,
-            page_left: ViewPx::new(self.column.left_px(&self.viewport))
-                + DocPx::new(layout.margin_left_px).zoomed(zoom),
-            content_width: DocPx::new(layout.content_width_px).zoomed(zoom),
+            page_left: self.column.left_px(&self.viewport) + layout.margin_left_px.zoomed(zoom),
+            content_width: layout.content_width_px.zoomed(zoom),
             point_width: Pt::new(1.0).to_doc_px().zoomed(zoom),
             indent_first: Pt::ZERO,
             indent_left: Pt::ZERO,
@@ -176,9 +175,9 @@ impl ProseUiState {
         if let Some(style) = style {
             ruler.visible = true;
             // A hanging indent is laid out as none (`PROSE-FEAT-310`).
-            ruler.indent_first = DocPx::new(style.indent_first_px.max(0.0)).to_pt();
-            ruler.indent_left = DocPx::new(style.indent_left_px).to_pt();
-            ruler.indent_right = DocPx::new(style.indent_right_px).to_pt();
+            ruler.indent_first = style.indent_first_px.max(DocPx::ZERO).to_pt();
+            ruler.indent_left = style.indent_left_px.to_pt();
+            ruler.indent_right = style.indent_right_px.to_pt();
         }
         ruler
     }
@@ -242,7 +241,7 @@ mod tests {
             },
         });
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         (state, ui, [plain, quoted])
     }
@@ -287,9 +286,11 @@ mod tests {
             ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
             let ruler = ui.ruler();
             let layout = &ui.shaped.layout;
-            let left = ui.column.left_px(&ui.viewport) + layout.margin_left_px * zoom;
+            let left = ui.column.left_px(&ui.viewport).get() + layout.margin_left_px.get() * zoom;
             assert!((ruler.page_left.get() - left).abs() < 1e-3);
-            assert!((ruler.content_width.get() - layout.content_width_px * zoom).abs() < 1e-3);
+            assert!(
+                (ruler.content_width.get() - layout.content_width_px.get() * zoom).abs() < 1e-3
+            );
             // A handle placed at its value reads back the same value.
             for handle in [
                 RulerHandle::IndentFirst,

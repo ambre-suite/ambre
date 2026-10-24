@@ -20,23 +20,23 @@ use ambre_bus::app::prose::{DocOffset, VAlign};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Fragment {
     /// The top of the fragment, from the top of the body.
-    pub top: f32,
-    pub height: f32,
+    pub top: DocPx,
+    pub height: DocPx,
     /// The top of the fragment's first line, from the top of the run.
-    pub run_top: f32,
+    pub run_top: DocPx,
 }
 
 /// Where a cell and its text sit, from the top-left corner of its table.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CellFrame {
-    pub x0: f32,
-    pub y0: f32,
-    pub x1: f32,
-    pub y1: f32,
+    pub x0: DocPx,
+    pub y0: DocPx,
+    pub x1: DocPx,
+    pub y1: DocPx,
     /// The top-left corner of the text: inside the padding, at the cell's
     /// vertical alignment (`PROSE-UI-180`).
-    pub text_x: f32,
-    pub text_y: f32,
+    pub text_x: DocPx,
+    pub text_y: DocPx,
 }
 
 /// The frame of `cell` in `table`. The view draws and hits it alike.
@@ -44,9 +44,9 @@ pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFra
     let y0 = *table.row_tops.get(cell.rows.start)?;
     let y1 = *table.row_tops.get(cell.rows.end)?;
     let pad = cell.style.padding_px;
-    let room = (y1 - y0 - 2.0 * pad - cell.content_px).max(0.0);
+    let room = (y1 - y0 - pad * 2.0 - cell.content_px).max(DocPx::ZERO);
     let shift = match cell.style.valign {
-        VAlign::Top => 0.0,
+        VAlign::Top => DocPx::ZERO,
         VAlign::Middle => room / 2.0,
         VAlign::Bottom => room,
     };
@@ -83,7 +83,7 @@ impl HitOffset {
 
 /// The block and the offset under `(x, y)` in `table`, both from its
 /// top-left corner, the offset counted in the run held there.
-fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> {
+fn cell_hit(table: &TableShape, x: DocPx, y: DocPx) -> Option<(BlockId, RunOffset)> {
     let (cell, frame) = table.cells.iter().find_map(|cell| {
         let frame = cell_frame(table, cell)?;
         (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
@@ -99,11 +99,8 @@ fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> 
     let id = block_id(*held);
     let data = run.data();
     let x = x - frame.text_x - data.indent_px();
-    let y = (y - top).clamp(0.0, data.height().max(0.0));
-    Some((
-        id,
-        data.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y))),
-    ))
+    let y = (y - *top).clamp(DocPx::ZERO, data.height().max(DocPx::ZERO));
+    Some((id, data.offset_at(DocPoint::new(x, y))))
 }
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
@@ -111,13 +108,13 @@ fn cell_hit(table: &TableShape, x: f32, y: f32) -> Option<(BlockId, RunOffset)> 
 pub(crate) fn fragment(
     block: &BlockLayout,
     page: PageIndex,
-    line_tops: &[f32],
+    line_tops: &[DocPx],
 ) -> Option<Fragment> {
     if page == block.page_start {
         return Some(Fragment {
             top: block.y_in_page,
             height: block.height_px,
-            run_top: 0.0,
+            run_top: DocPx::ZERO,
         });
     }
     let k = page
@@ -127,9 +124,9 @@ pub(crate) fn fragment(
     let height = *block.continuation_heights.get(k)?;
     let first_line = *block.split_points.get(k)? as usize;
     Some(Fragment {
-        top: 0.0,
+        top: DocPx::ZERO,
         height,
-        run_top: line_tops.get(first_line).copied().unwrap_or(0.0),
+        run_top: line_tops.get(first_line).copied().unwrap_or(DocPx::ZERO),
     })
 }
 
@@ -138,8 +135,8 @@ pub(crate) fn fragment(
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BandSlot {
     pub block: TreeID,
-    pub top: f32,
-    pub bottom: f32,
+    pub top: DocPx,
+    pub bottom: DocPx,
 }
 
 /// A footnote drawn at the foot of a page. It carries its identity, the block
@@ -148,8 +145,8 @@ pub(crate) struct BandSlot {
 pub(crate) struct NoteSlot {
     pub footnote_id: ambre_core::FootnoteId,
     pub block: TreeID,
-    pub top: f32,
-    pub bottom: f32,
+    pub top: DocPx,
+    pub bottom: DocPx,
 }
 
 /// The block and the offset under a canvas point (`UI-THREAD-001`).
@@ -181,7 +178,7 @@ impl ProseUiState {
             .filter(|note| note.page == page)
             .collect();
         notes.sort_by_key(|note| note.ordinal);
-        let total: f32 = notes.iter().map(|note| note.height_px).sum();
+        let total: DocPx = notes.iter().map(|note| note.height_px).sum();
         let mut y = layout.body_top_px() + layout.body_height_px() - total;
         notes
             .into_iter()
@@ -250,8 +247,8 @@ impl ProseUiState {
     fn band_hit(
         &self,
         page: PageIndex,
-        x_in_page: f32,
-        y_in_page: f32,
+        x_in_page: DocPx,
+        y_in_page: DocPx,
     ) -> Option<(BlockId, RunOffset)> {
         let bands = self
             .band_slots(page)
@@ -267,11 +264,9 @@ impl ProseUiState {
         let slot = BandSlot { block, top, bottom };
         let run = self.drawn_of(slot.block)?.data();
         let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
-        let y = (y_in_page - slot.top).clamp(0.0, (slot.bottom - slot.top).max(0.0));
-        Some((
-            block_id(slot.block),
-            run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y))),
-        ))
+        let y =
+            (y_in_page - slot.top).clamp(DocPx::ZERO, (slot.bottom - slot.top).max(DocPx::ZERO));
+        Some((block_id(slot.block), run.offset_at(DocPoint::new(x, y))))
     }
 
     /// The indices of the blocks a page shows, in flow order. Read from the
@@ -322,8 +317,7 @@ impl ProseUiState {
             return Some((
                 new_block,
                 HitOffset::Drawn(DocOffset::new(
-                    run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y_body - at.top)))
-                        .get(),
+                    run.offset_at(DocPoint::new(x, y_body - at.top)).get(),
                 )),
             ));
         }
@@ -344,7 +338,8 @@ impl ProseUiState {
         // there (`PROSE-UI-216`).
         if let Some(table) = &chosen.table {
             let x = x_in_page - layout.margin_left_px;
-            let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
+            let y = (y_body - piece.top).clamp(DocPx::ZERO, piece.height.max(DocPx::ZERO))
+                + piece.run_top;
             if let Some((id, offset)) = cell_hit(table, x, y) {
                 // A table drawn with its provisional runs counts the document
                 // in them, even once an input replayed since made them stale.
@@ -361,8 +356,9 @@ impl ProseUiState {
             Some(run) => {
                 let run = run.data();
                 let x = x_in_page - layout.margin_left_px - run.indent_px();
-                let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
-                run.offset_at(DocPoint::new(DocPx::new(x), DocPx::new(y)))
+                let y = (y_body - piece.top).clamp(DocPx::ZERO, piece.height.max(DocPx::ZERO))
+                    + piece.run_top;
+                run.offset_at(DocPoint::new(x, y))
             }
             None => RunOffset::ZERO,
         };
@@ -380,7 +376,7 @@ impl ProseUiState {
 mod tests {
     use crate::layout::run::RunOffset;
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::{ViewPoint, ViewPx};
+    use ambre_core::{DocPx, ViewPoint, ViewPx};
     use ambre_draw::HitTest;
 
     use crate::events::block_id;
@@ -394,15 +390,16 @@ mod tests {
         let block = &layout.blocks[index];
         let run = ui.shaped.blocks[&block.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
-        let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-        let y_doc = ui.column.page_top_y(block.page_start).get()
+        let x =
+            layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+        let y_doc = ui.column.page_top_y(block.page_start)
             + layout.body_top_px()
             + block.y_in_page
-            + (caret.y0 + caret.y1) as f32 / 2.0;
+            + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            ui.column.left_px(&ui.viewport) + x * scale,
-            (y_doc - ui.viewport.scroll_y) * scale,
+            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (y_doc - ui.viewport.scroll_y).get() * scale,
         )
     }
 
@@ -410,12 +407,12 @@ mod tests {
     fn a_block_never_painted_resolves_a_point_off_its_shaped_runs() {
         let (_, shaped) = laid_out(80, 50);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         // Scroll to a far block no paint ever reached.
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
-        ui.viewport.scroll_y = ui.column.page_top_y(page).get();
+        ui.viewport.scroll_y = DocPx::new(ui.column.page_top_y(page).get());
         assert_eq!(ui.runs.built(), 0);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);

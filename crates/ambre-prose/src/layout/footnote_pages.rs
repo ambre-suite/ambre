@@ -5,7 +5,7 @@
 //! layout read back is the one the view is handed.
 
 use ambre_bus::app::prose::DocOffset;
-use ambre_core::FootnoteId;
+use ambre_core::{DocPx, FootnoteId};
 use loro::TreeID;
 
 use crate::events::{BlockId, BlockInit, ProseCommand, tree_id};
@@ -90,12 +90,12 @@ fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
 fn nothing_runs_into_the_notes(layout: &PageLayout) {
     let body = layout.body_height_px();
     for page in layout.page_count.span() {
-        let foot: f32 = layout
+        let foot: DocPx = layout
             .footnotes_on_page(page)
             .iter()
             .map(|note| note.height_px)
             .sum();
-        if foot <= 0.0 {
+        if foot <= DocPx::ZERO {
             continue;
         }
         let foot = foot + crate::layout::place::NOTE_SEPARATOR_PX;
@@ -108,11 +108,11 @@ fn nothing_runs_into_the_notes(layout: &PageLayout) {
                     .continuation_heights
                     .get(index)
                     .copied()
-                    .unwrap_or(0.0)
+                    .unwrap_or(DocPx::new(0.0))
             };
             assert!(
-                bottom <= body - foot + 0.01,
-                "page {page:?}: text reaches {bottom}, the notes start at {}",
+                bottom <= body - foot + DocPx::new(0.01),
+                "page {page:?}: text reaches {bottom:?}, the notes start at {:?}",
                 body - foot
             );
         }

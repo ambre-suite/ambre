@@ -27,6 +27,8 @@ use std::sync::Arc;
 use loro::TreeID;
 
 use ambre_bus::app::prose::{DocOffset, ProseCommand};
+use ambre_core::{DocPx, ViewPx};
+
 use ambre_draw::kinetic::ScrollStep;
 
 use crate::events::{BlockId, PageCount, TocEntry, tree_id};
@@ -148,15 +150,15 @@ impl ProseUiState {
     /// (`PROSE-UI-127`). Only the model builds a step, so a distance the view
     /// computed itself does not reach the column (`KINETIC-001`).
     pub fn scroll_by(&mut self, step: ScrollStep) {
-        let moved = self.viewport.scroll_y + step.y().get() / self.viewport.scale();
+        let moved = self.viewport.scroll_y + DocPx::new(step.y().get() / self.viewport.scale());
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, moved);
     }
 
     /// The canvas took a new size. The offset and the zoom stay
     /// (`PROSE-UI-130`): what was at the top of the canvas still is.
-    pub fn resize(&mut self, width_px: f32, height_px: f32) {
-        self.viewport.width_px = width_px.max(0.0);
-        self.viewport.height_px = height_px.max(0.0);
+    pub fn resize(&mut self, width_px: ViewPx, height_px: ViewPx) {
+        self.viewport.width_px = width_px.max(ViewPx::ZERO);
+        self.viewport.height_px = height_px.max(ViewPx::ZERO);
     }
 
     /// Bring the heading a table-of-contents entry reads to the top of the
@@ -178,7 +180,7 @@ impl ProseUiState {
             self.awaited_reveal = Some(block);
             return;
         };
-        let top = self.column.page_top_y(layout.page_start).get()
+        let top = self.column.page_top_y(layout.page_start)
             + self.shaped.layout.body_top_px()
             + layout.y_in_page;
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, top);
@@ -357,7 +359,7 @@ pub(crate) mod tests {
     fn a_scroll_asks_for_the_pages_around_the_canvas() {
         let (mut state, _) = laid_out(400, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
         ui.scroll_by(down(
@@ -384,7 +386,7 @@ pub(crate) mod tests {
     fn revealing_a_block_not_carried_asks_for_it_then_shows_it() {
         let (mut state, _) = laid_out(400, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         let far = state
             .full_layout()
@@ -394,7 +396,8 @@ pub(crate) mod tests {
         assert!(!ui.shaped.carries(&far.0));
         ui.reveal_block(block);
         assert_eq!(
-            ui.viewport.scroll_y, 0.0,
+            ui.viewport.scroll_y,
+            DocPx::new(0.0),
             "nothing moves before the block comes"
         );
         let Some(command) = ui.window_request() else {
@@ -426,7 +429,7 @@ pub(crate) mod tests {
         }
         append(&mut state, BlockInit::Paragraph, "needle at the end");
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         let in_view = |ui: &ProseUiState| {
             let hit = ui.find_matches[ui.find_current.expect("a current match") as usize];
@@ -456,9 +459,13 @@ pub(crate) mod tests {
                 },
             },
         );
-        assert_eq!(ui.viewport.scroll_y, 0.0, "the first match is in view");
+        assert_eq!(
+            ui.viewport.scroll_y,
+            DocPx::new(0.0),
+            "the first match is in view"
+        );
         step(&mut ui, ProseCommand::FindNext);
-        assert!(ui.viewport.scroll_y > 0.0);
+        assert!(ui.viewport.scroll_y > DocPx::new(0.0));
         assert!(in_view(&ui), "the last match is brought into view");
         step(&mut ui, ProseCommand::FindNext);
         assert!(in_view(&ui), "the wrap brings the first one back");
@@ -527,8 +534,8 @@ pub(crate) mod tests {
         ShapedLayout::new(
             crate::layout::run::LayoutVersion::new(version),
             Arc::new(PageLayout {
-                page_width_px: 800.0,
-                page_height_px: 1000.0,
+                page_width_px: DocPx::new(800.0),
+                page_height_px: DocPx::new(1000.0),
                 page_count: PageCount::new(pages),
                 ..PageLayout::default()
             }),
@@ -540,7 +547,7 @@ pub(crate) mod tests {
 
     fn a_view() -> ProseUiState {
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui
     }
 
@@ -595,7 +602,7 @@ pub(crate) mod tests {
         ui.apply_layout(a_layout(2, 2));
         assert_eq!(ui.viewport.scroll_y, ui.column.max_scroll(&ui.viewport));
         ui.apply_layout(a_layout(3, 0));
-        assert_eq!(ui.viewport.scroll_y, 0.0);
+        assert_eq!(ui.viewport.scroll_y, DocPx::new(0.0));
     }
 
     #[test]
@@ -605,11 +612,11 @@ pub(crate) mod tests {
         ui.viewport.zoom = ambre_core::ZoomFactor::positive(2.0);
         let (column, version) = (ui.column, ui.layout_version);
         ui.scroll_by(down(300.0));
-        assert_eq!(ui.viewport.scroll_y, 150.0);
+        assert_eq!(ui.viewport.scroll_y, DocPx::new(150.0));
         ui.scroll_by(down(-100.0));
-        assert_eq!(ui.viewport.scroll_y, 100.0);
+        assert_eq!(ui.viewport.scroll_y, DocPx::new(100.0));
         ui.scroll_by(down(-1.0e6));
-        assert_eq!(ui.viewport.scroll_y, 0.0);
+        assert_eq!(ui.viewport.scroll_y, DocPx::new(0.0));
         assert_eq!(ui.viewport.zoom.get(), 2.0);
         assert_eq!(ui.column, column);
         assert_eq!(ui.layout_version, version);
@@ -622,7 +629,7 @@ pub(crate) mod tests {
         ui.viewport.zoom = ambre_core::ZoomFactor::positive(0.8);
         ui.scroll_by(down(2000.0));
         let scroll_y = ui.viewport.scroll_y;
-        ui.resize(300.0, 4000.0);
+        ui.resize(ViewPx::new(300.0), ViewPx::new(4000.0));
         assert_eq!(ui.viewport.scroll_y, scroll_y);
         assert_eq!(ui.viewport.zoom.get(), 0.8);
     }
@@ -643,9 +650,8 @@ pub(crate) mod tests {
             page: Some(far.page_start.number()),
         };
         ui.follow_toc_entry(&entry);
-        let top = ui.column.page_top_y(far.page_start).get()
-            + ui.shaped.layout.body_top_px()
-            + far.y_in_page;
+        let top =
+            ui.column.page_top_y(far.page_start) + ui.shaped.layout.body_top_px() + far.y_in_page;
         assert_eq!(
             ui.viewport.scroll_y,
             ui.column.clamp_scroll(&ui.viewport, top)

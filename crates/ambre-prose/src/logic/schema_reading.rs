@@ -330,7 +330,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                 }
                 doc::PageKey::Orientation => return None,
             };
-            Some(format!("{} is {length} px", stored.key(1)?))
+            Some(format!("{} is {} px", stored.key(1)?, length.get()))
         }
         doc::MetaKey::Defaults => {
             let defaults = doc::read_defaults(document);
@@ -344,7 +344,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                     Some(format!("body set in {:?}", style.font_family))
                 }
                 doc::DefaultsKey::FontSizePt => {
-                    Some(format!("body set at {} px", style.font_size_px))
+                    Some(format!("body set at {} px", style.font_size_px.get()))
                 }
                 doc::DefaultsKey::LineHeight => Some(format!("body lines {:?}", style.line_height)),
             }
@@ -409,11 +409,17 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         doc::NodeKey::Band => format!("is a band {}", doc::is_band(&tree, &id)),
         doc::NodeKey::Note => format!("is a note {}", doc::is_note(&tree, &id)),
         doc::NodeKey::Align => format!("aligned {:?}", style.align),
-        doc::NodeKey::IndentFirst => format!("first line indented {} px", style.indent_first_px),
-        doc::NodeKey::IndentLeft => format!("indented {} px on the left", style.indent_left_px),
-        doc::NodeKey::IndentRight => format!("indented {} px on the right", style.indent_right_px),
-        doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before_px),
-        doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after_px),
+        doc::NodeKey::IndentFirst => {
+            format!("first line indented {} px", style.indent_first_px.get())
+        }
+        doc::NodeKey::IndentLeft => {
+            format!("indented {} px on the left", style.indent_left_px.get())
+        }
+        doc::NodeKey::IndentRight => {
+            format!("indented {} px on the right", style.indent_right_px.get())
+        }
+        doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before_px.get()),
+        doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after_px.get()),
         doc::NodeKey::LineHeight => format!("lines {:?}", style.line_height),
         doc::NodeKey::KeepTogether => format!("kept together {}", style.keep_together),
         doc::NodeKey::KeepWithNext => format!("kept with the next {}", style.keep_with_next),
@@ -448,7 +454,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let stored_pt = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width_px;
             let widths = column_widths_px(&stored_pt, stored_pt.len(), content);
-            format!("column {} is {} px wide", at + 1, widths.get(at)?)
+            format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
         doc::AttrKey::Merged => {
             let anchor = TreeID::try_from(stored.key(3)?).ok()?;
@@ -465,12 +471,12 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             }
         }
         doc::AttrKey::CellBg => format!("filled {}", colour(cell().fill?)),
-        doc::AttrKey::EdgeTop => format!("top edge {} px", edge(|b| b.top)),
-        doc::AttrKey::EdgeBottom => format!("bottom edge {} px", edge(|b| b.bottom)),
-        doc::AttrKey::EdgeLeft => format!("left edge {} px", edge(|b| b.left)),
-        doc::AttrKey::EdgeRight => format!("right edge {} px", edge(|b| b.right)),
+        doc::AttrKey::EdgeTop => format!("top edge {} px", edge(|b| b.top.get())),
+        doc::AttrKey::EdgeBottom => format!("bottom edge {} px", edge(|b| b.bottom.get())),
+        doc::AttrKey::EdgeLeft => format!("left edge {} px", edge(|b| b.left.get())),
+        doc::AttrKey::EdgeRight => format!("right edge {} px", edge(|b| b.right.get())),
         doc::AttrKey::EdgeColor => format!("edged {}", colour(cell().border?.color?)),
-        doc::AttrKey::Padding => format!("padded {} px", cell().padding_px),
+        doc::AttrKey::Padding => format!("padded {} px", cell().padding_px.get()),
         doc::AttrKey::VAlign => format!("set {:?}", cell().valign),
         _ => return None,
     })

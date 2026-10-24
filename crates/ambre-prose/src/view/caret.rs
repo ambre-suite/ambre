@@ -6,7 +6,7 @@
 //! enters the document (`PROSE-UI-010`).
 
 use ambre_commands::SelectionMode;
-use ambre_core::{StepDirection, ViewPoint, ViewPx};
+use ambre_core::{DocPx, StepDirection, ViewPoint, ViewPx};
 use ambre_draw::kinetic::EdgeSpeed;
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
@@ -165,7 +165,10 @@ impl ProseUiState {
         };
         let x_goal = if vertical {
             let caret = run.caret_box_at(laid, affinity);
-            Some(self.x_goal.unwrap_or(run.indent_px() + caret.x0 as f32))
+            Some(
+                self.x_goal
+                    .unwrap_or(run.indent_px() + DocPx::new(caret.x0 as f32)),
+            )
         } else {
             None
         };
@@ -185,7 +188,7 @@ impl ProseUiState {
                     StepDirection::Backward
                 };
                 let caret = run.caret_box_at(laid, affinity);
-                let line = ((caret.y1 - caret.y0) as f32).max(1.0);
+                let line = DocPx::new(((caret.y1 - caret.y0) as f32).max(1.0));
                 let lines = (self.viewport.visible_height() / line).floor().max(1.0) as usize;
                 let mut here = (block, laid, affinity);
                 for _ in 0..lines {
@@ -283,13 +286,13 @@ impl ProseUiState {
         laid: RunOffset,
         affinity: Affinity,
         direction: StepDirection,
-        x_goal: Option<f32>,
+        x_goal: Option<DocPx>,
     ) -> (BlockId, RunOffset, Affinity) {
         let Some(run) = self.run_of(block) else {
             return (block, laid, affinity);
         };
         let down = direction == StepDirection::Forward;
-        let x = x_goal.unwrap_or(0.0);
+        let x = x_goal.unwrap_or(DocPx::ZERO);
         let line = run.line_of(laid, affinity);
         let inside = if down {
             (line.next() < run.line_count().as_end()).then_some(line.next())
@@ -332,7 +335,7 @@ impl ProseUiState {
         &mut self,
         next: Spot,
         affinity: Affinity,
-        x_goal: Option<f32>,
+        x_goal: Option<DocPx>,
         mode: SelectionMode,
     ) {
         let anchor = match (&self.cursor, mode) {
@@ -377,7 +380,7 @@ impl ProseUiState {
 
     /// Where the caret is drawn, from the top of the column: its top and its
     /// bottom, in document pixels.
-    pub(crate) fn caret_span(&self) -> Option<(f32, f32)> {
+    pub(crate) fn caret_span(&self) -> Option<(DocPx, DocPx)> {
         let cursor = self.cursor.as_ref()?;
         if self.flow_index(&tree_id(cursor.block_id)).is_none() {
             let laid = self.to_laid(cursor.block_id, cursor.offset);
@@ -394,13 +397,13 @@ impl ProseUiState {
         block_id: BlockId,
         offset: DocOffset,
         affinity: Affinity,
-    ) -> Option<(f32, f32)> {
+    ) -> Option<(DocPx, DocPx)> {
         let laid = self.to_laid(block_id, offset);
         let index = self.flow_index(&tree_id(block_id))?;
         let block = self.shaped.block(index)?;
         let run = self.run_of(block_id)?;
         let caret = run.caret_box_at(laid, affinity);
-        let (y0, y1) = (caret.y0 as f32, caret.y1 as f32);
+        let (y0, y1) = (DocPx::new(caret.y0 as f32), DocPx::new(caret.y1 as f32));
         let body_top = self.shaped.layout.body_top_px();
         let last = block.last_page();
         for page in block.page_span() {
@@ -413,8 +416,7 @@ impl ProseUiState {
                 continue;
             };
             if page == last || y0 < piece.run_top + piece.height {
-                let base =
-                    self.column.page_top_y(page).get() + body_top + piece.top - piece.run_top;
+                let base = self.column.page_top_y(page) + body_top + piece.top - piece.run_top;
                 return Some((base + y0, base + y1));
             }
         }
@@ -423,7 +425,7 @@ impl ProseUiState {
 
     /// Where the caret is drawn in a band, on the page it was placed on, or
     /// in a note, on the page that carries it.
-    fn band_caret_span(&self, block: BlockId, laid: RunOffset) -> Option<(f32, f32)> {
+    fn band_caret_span(&self, block: BlockId, laid: RunOffset) -> Option<(DocPx, DocPx)> {
         let id = tree_id(block);
         let (page, top) = match self.note_page(block) {
             Some(page) => {
@@ -443,8 +445,11 @@ impl ProseUiState {
             }
         };
         let caret = self.run_of(block)?.caret_box_at(laid, self.caret_affinity);
-        let base = self.column.page_top_y(page).get() + top;
-        Some((base + caret.y0 as f32, base + caret.y1 as f32))
+        let base = self.column.page_top_y(page) + top;
+        Some((
+            base + DocPx::new(caret.y0 as f32),
+            base + DocPx::new(caret.y1 as f32),
+        ))
     }
 
     /// Whether a selection may run from `anchor` to `focus`: a header or a
@@ -479,7 +484,7 @@ impl ProseUiState {
     }
 
     /// Scroll the least that brings a span of the column into the window.
-    fn reveal_span(&mut self, (top, bottom): (f32, f32)) {
+    fn reveal_span(&mut self, (top, bottom): (DocPx, DocPx)) {
         let visible = self.viewport.visible_height();
         let scroll = self.viewport.scroll_y;
         let wanted = if top < scroll {
@@ -531,7 +536,8 @@ impl ProseUiState {
         if matches!(offset, HitOffset::Drawn(_)) || self.run_of(block).is_some() {
             return Some((block, self.doc_of_hit(block, offset)));
         }
-        let x_in_page = (at.x.get() - self.column.left_px(&self.viewport)) / self.viewport.scale();
+        let x_in_page =
+            DocPx::new((at.x - self.column.left_px(&self.viewport)).get() / self.viewport.scale());
         let middle = self.shaped.layout.margin_left_px + self.shaped.layout.content_width_px / 2.0;
         let (side, other) = if x_in_page >= middle {
             (StepDirection::Forward, StepDirection::Backward)
@@ -572,7 +578,7 @@ impl ProseUiState {
         };
         self.drag_pointer = Some(at);
         // A pointer off the text resolves on the edge line of the canvas.
-        let bottom = ViewPx::new((self.viewport.height_px - 1.0).max(0.0));
+        let bottom = (self.viewport.height_px - ViewPx::new(1.0)).max(ViewPx::ZERO);
         let edge = ViewPoint::new(at.x, at.y.clamp(ViewPx::ZERO, bottom));
         let Some(focus) = self.place_at(at).or_else(|| self.place_at(edge)) else {
             return;
@@ -594,7 +600,7 @@ impl ProseUiState {
     /// edge speed (`KINETIC-007`).
     fn autoscroll_speed(&self) -> Option<EdgeSpeed> {
         let at = self.drag_pointer.filter(|_| self.dragging.is_some())?;
-        Some(EdgeSpeed::at(at.y.get(), self.viewport.height_px))
+        Some(EdgeSpeed::at(at.y.get(), self.viewport.height_px.get()))
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near

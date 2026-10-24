@@ -227,6 +227,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::events::{BlockId, DateFieldFormat, PageCount, PageIndex, ProseCommand};
     use ambre_bus::app::prose::DocSpan;
+    use ambre_core::DocPx;
 
     pub(crate) fn with_header() -> (ProseState, BlockId) {
         let mut state = ProseState::new().expect("a fresh document");
@@ -716,7 +717,7 @@ pub(crate) mod tests {
         let mut state = ProseState::new().expect("a fresh document");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let bare = state.paginate(&[]).clone();
-        assert_eq!(bare.header_height_px, 0.0);
+        assert_eq!(bare.header_height_px, DocPx::new(0.0));
         state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
@@ -725,7 +726,7 @@ pub(crate) mod tests {
             text: "A header".to_owned(),
         });
         let banded = state.paginate(&[]).clone();
-        assert!(banded.header_height_px > 0.0);
+        assert!(banded.header_height_px > DocPx::new(0.0));
         assert!(banded.body_height_px() < bare.body_height_px());
     }
 
@@ -740,7 +741,7 @@ pub(crate) mod tests {
         });
         let layout = state.paginate(&[]).clone();
         let cap = layout.content_height_px * crate::layout::geometry::BAND_SHARE;
-        assert!((layout.header_height_px - cap).abs() < 0.01);
+        assert!((layout.header_height_px - cap).abs() < DocPx::new(0.01));
         assert!(layout.body_height_px() >= layout.content_height_px * 0.5);
         assert_eq!(layout.page_count, crate::events::PageCount::new(1));
     }

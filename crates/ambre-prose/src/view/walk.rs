@@ -8,7 +8,7 @@
 //! sheets and the selections before the walk, and the carets and the
 //! composition after it.
 
-use ambre_core::Rgba;
+use ambre_core::{Rgba, SurfacePx};
 use ambre_draw::{Affine, Brush, Color, DocumentWalk, DrawSurface, PositionedLayoutItem, Rect};
 
 use crate::layout::run::{CellStyle, ParleyRunData, RunLine, ShapedRun};
@@ -114,7 +114,7 @@ pub(crate) enum PageItem {
 #[derive(Clone, Debug)]
 pub(crate) struct PagePaint {
     /// The top of the page down the column.
-    pub top: f64,
+    pub top: SurfacePx,
     /// What it shows, in the order it is drawn.
     pub items: Vec<PageItem>,
 }
@@ -123,8 +123,8 @@ pub(crate) struct PagePaint {
 pub struct PageView<'v> {
     pub(crate) palette: &'v PagePalette,
     /// The size of a page.
-    pub(crate) width: f64,
-    pub(crate) height: f64,
+    pub(crate) width: SurfacePx,
+    pub(crate) height: SurfacePx,
     pub(crate) pages: &'v [PagePaint],
 }
 
@@ -142,12 +142,17 @@ impl DocumentWalk for PageWalk<'_> {
         self.highlights_walked = 0;
         surface.push_clip(region);
         for page in view.pages {
-            let bounds = Rect::new(0.0, page.top, view.width, page.top + view.height);
+            let bounds = Rect::new(
+                0.0,
+                page.top.get(),
+                view.width.get(),
+                (page.top + view.height).get(),
+            );
             let hit = bounds.intersect(region);
             if hit.width() <= 0.0 || hit.height() <= 0.0 {
                 continue;
             }
-            surface.push_transform(Affine::translate((0.0, page.top)));
+            surface.push_transform(Affine::translate((0.0, page.top.get())));
             for item in &page.items {
                 self.item(surface, view.palette, item);
             }
@@ -374,8 +379,9 @@ fn paint_cell_box<S: DrawSurface>(
         return;
     };
     let colour = border.color.map_or(palette.sheet_border, packed);
-    let (top, bottom) = (f64::from(border.top), f64::from(border.bottom));
-    let (left, right) = (f64::from(border.left), f64::from(border.right));
+    let (top, bottom) = (f64::from(border.top.get()), f64::from(border.bottom.get()));
+    let (left, right) = (f64::from(border.left.get()), f64::from(border.right.get()));
+
     let edges = [
         Rect::new(bounds.x0, bounds.y0, bounds.x1, bounds.y0 + top),
         Rect::new(bounds.x0, bounds.y1 - bottom, bounds.x1, bounds.y1),

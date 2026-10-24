@@ -16,6 +16,7 @@
 use std::hint::black_box;
 
 use ambre_bus::app::prose::ParagraphStyle;
+use ambre_core::DocPx;
 use ambre_draw::ParleyBrush;
 use ambre_prose::doc::DocDefaults;
 use ambre_prose::layout::fonts::register_faces;
@@ -75,7 +76,14 @@ fn ambre_budget_prose_paragraph_shape(
     text: &str,
     style: &EffectiveStyle,
 ) -> ShapedRun {
-    reshape_paragraph(font_cx, layout_cx, laid, (text, &[]), style, COLUMN_PX)
+    reshape_paragraph(
+        font_cx,
+        layout_cx,
+        laid,
+        (text, &[]),
+        style,
+        DocPx::new(COLUMN_PX),
+    )
 }
 
 /// The shape the row names at its worst: a key typed in the first line of a
@@ -102,7 +110,8 @@ fn paragraph_shape() {
     let mut found = None;
     'search: for word in WORDS {
         let text = paragraph(word);
-        let (_, _, laid) = measurer.measure_with_lines((&text, &[]), &style, COLUMN_PX, &[], None);
+        let (_, _, laid) =
+            measurer.measure_with_lines((&text, &[]), &style, DocPx::new(COLUMN_PX), &[], None);
         for key in ['i', 'x', 'm', 'W'] {
             let mut typed = text.clone();
             typed.insert(1, key);
@@ -112,7 +121,7 @@ fn paragraph_shape() {
                 laid.data(),
                 (&typed, &[]),
                 &style,
-                COLUMN_PX,
+                DocPx::new(COLUMN_PX),
             );
             if run.data().segment_count() == 1 {
                 found = Some((laid, typed));

@@ -430,7 +430,7 @@ pub(crate) mod tests {
             .blocks
             .get(&crate::events::tree_id(block))
             .expect("the run");
-        run.data().full_width()
+        (run.data().full_width()).get()
     }
 
     /// `PROSE-UI-207`: a bold or italic mark reaches the glyphs it covers

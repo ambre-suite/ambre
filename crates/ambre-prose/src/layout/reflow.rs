@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{BlockType, PageCount, PageIndex, PageNumber, PageSpan};
-use ambre_core::FootnoteId;
+use ambre_core::{DocPx, FootnoteId};
 use loro::{LoroDoc, TreeID};
 
 use crate::doc;
@@ -419,7 +419,7 @@ impl Paginator {
 
     /// The cursor the block before `from` left, or `None` when `from` is the
     /// first block or the old layout is too short to answer.
-    fn cursor_before(&self, from: usize, body_height_px: f32) -> Option<place::Cursor> {
+    fn cursor_before(&self, from: usize, body_height_px: DocPx) -> Option<place::Cursor> {
         let index = from.checked_sub(1)?;
         let entry = self.layout.blocks.get(index)?;
         let block = self.measured.get(index)?;

@@ -47,7 +47,8 @@ impl ProseUiState {
     /// A trackpad glide that pauses keeps its momentum; a notch never does
     /// (`KINETIC-002`).
     pub fn wheel(&mut self, delta: WheelDelta, now_ms: ambre_core::PageTime) {
-        let page = CssPx::new(self.viewport.height_px);
+        let page = CssPx::new(self.viewport.height_px.get());
+
         let line = CssVector::new(WHEEL_LINE_PX, WHEEL_LINE_PX);
         let dy = delta.to_px(line, CssVector::new(page, page)).dy;
         let step = self

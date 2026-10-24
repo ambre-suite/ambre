@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::FootnoteId;
+use ambre_core::{DocPx, FootnoteId};
 use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
@@ -30,7 +30,7 @@ pub enum RunKey {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RunDrawState {
     /// The line and the item of each glyph run, with the top of its line.
-    pub glyph_runs: Vec<(RunLine, usize, f32)>,
+    pub glyph_runs: Vec<(RunLine, usize, DocPx)>,
 }
 
 impl RunDrawState {
@@ -39,7 +39,8 @@ impl RunDrawState {
         let mut glyph_runs = Vec::new();
         let tops = data.line_tops();
         for (line_index, (line, _)) in data.lines().enumerate() {
-            let top = tops.get(line_index).copied().unwrap_or(0.0);
+            let top = tops.get(line_index).copied().unwrap_or(DocPx::ZERO);
+
             for (item_index, item) in line.items().enumerate() {
                 if matches!(item, ambre_draw::PositionedLayoutItem::GlyphRun(_)) {
                     glyph_runs.push((RunLine::from_usize(line_index), item_index, top));

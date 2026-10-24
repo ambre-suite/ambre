@@ -5,6 +5,7 @@
 //! no break position and no measured height is stored, so no reader can find a
 //! stale one (`PROSE-033`, `PROSE-065`).
 
+use ambre_core::DocPx;
 use loro::LoroDoc;
 
 use crate::doc;
@@ -18,13 +19,13 @@ pub(crate) const BAND_SHARE: f32 = 0.25;
 /// it and never against the sheet.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PageBox {
-    pub page_width_px: f32,
-    pub page_height_px: f32,
-    pub content_width_px: f32,
-    pub content_height_px: f32,
+    pub page_width_px: DocPx,
+    pub page_height_px: DocPx,
+    pub content_width_px: DocPx,
+    pub content_height_px: DocPx,
     /// Where the content box starts on the sheet.
-    pub margin_left_px: f32,
-    pub margin_top_px: f32,
+    pub margin_left_px: DocPx,
+    pub margin_top_px: DocPx,
 }
 
 impl Default for PageBox {
@@ -50,17 +51,17 @@ impl PageBox {
     /// The pixel box a millimetre format converts to at 96 DPI.
     #[must_use]
     pub fn from_mm(format: doc::PageFormat) -> Self {
-        let page_width_px = format.width.to_doc_px().get();
-        let page_height_px = format.height.to_doc_px().get();
-        let horizontal = (format.margin_left + format.margin_right).to_doc_px().get();
-        let vertical = (format.margin_top + format.margin_bottom).to_doc_px().get();
+        let page_width_px = format.width.to_doc_px();
+        let page_height_px = format.height.to_doc_px();
+        let horizontal = (format.margin_left + format.margin_right).to_doc_px();
+        let vertical = (format.margin_top + format.margin_bottom).to_doc_px();
         Self {
             page_width_px,
             page_height_px,
-            content_width_px: (page_width_px - horizontal).max(0.0),
-            content_height_px: (page_height_px - vertical).max(0.0),
-            margin_left_px: format.margin_left.to_doc_px().get(),
-            margin_top_px: format.margin_top.to_doc_px().get(),
+            content_width_px: (page_width_px - horizontal).max(DocPx::ZERO),
+            content_height_px: (page_height_px - vertical).max(DocPx::ZERO),
+            margin_left_px: format.margin_left.to_doc_px(),
+            margin_top_px: format.margin_top.to_doc_px(),
         }
     }
 
@@ -71,7 +72,7 @@ impl PageBox {
     /// a band as tall as the page leaves placement no height to put a line in,
     /// which is the loop `PROSE-017` forbids.
     #[must_use]
-    pub fn band_cap_px(&self) -> f32 {
+    pub fn band_cap_px(&self) -> DocPx {
         self.content_height_px * BAND_SHARE
     }
 
@@ -80,9 +81,9 @@ impl PageBox {
     /// Each band is capped first, so the answer is at least half the content
     /// height whatever the bands measured.
     #[must_use]
-    pub fn body_height_px(&self, header_px: f32, footer_px: f32) -> f32 {
+    pub fn body_height_px(&self, header_px: DocPx, footer_px: DocPx) -> DocPx {
         let cap = self.band_cap_px();
-        (self.content_height_px - header_px.min(cap) - footer_px.min(cap)).max(0.0)
+        (self.content_height_px - header_px.min(cap) - footer_px.min(cap)).max(DocPx::ZERO)
     }
 }
 
@@ -98,9 +99,19 @@ mod tests {
     #[test]
     fn the_content_box_is_what_the_four_margins_leave() {
         let page = a4();
-        let margins_px = ambre_core::Mm::new(40.0).to_doc_px().get();
-        assert!((page.content_width_px - (page.page_width_px - margins_px)).abs() < 0.01);
-        assert!((page.content_height_px - (page.page_height_px - margins_px)).abs() < 0.01);
+        let margins_px = ambre_core::Mm::new(40.0).to_doc_px();
+        assert!(
+            (page.content_width_px - (page.page_width_px - margins_px))
+                .abs()
+                .get()
+                < 0.01
+        );
+        assert!(
+            (page.content_height_px - (page.page_height_px - margins_px))
+                .abs()
+                .get()
+                < 0.01
+        );
     }
 
     #[test]
@@ -109,7 +120,7 @@ mod tests {
         let cap = page.band_cap_px();
         let tall = page.content_height_px * 4.0;
         let body = page.body_height_px(tall, tall);
-        assert!((body - (page.content_height_px - 2.0 * cap)).abs() < 0.01);
+        assert!((body - (page.content_height_px - cap * 2.0)).abs().get() < 0.01);
         assert!(body >= page.content_height_px / 2.0);
     }
 
@@ -120,8 +131,8 @@ mod tests {
             margin_top: ambre_core::Mm::new(500.0),
             ..doc::PageFormat::default()
         });
-        assert_eq!(page.content_width_px, 0.0);
-        assert_eq!(page.content_height_px, 0.0);
-        assert_eq!(page.body_height_px(0.0, 0.0), 0.0);
+        assert_eq!(page.content_width_px, DocPx::ZERO);
+        assert_eq!(page.content_height_px, DocPx::ZERO);
+        assert_eq!(page.body_height_px(DocPx::ZERO, DocPx::ZERO), DocPx::ZERO);
     }
 }

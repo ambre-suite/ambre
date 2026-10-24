@@ -130,7 +130,7 @@ impl ProseView {
         let theme = theme_ctl.get();
         let size = (width as f32, height as f32);
         let mut state = ProseUiState::default();
-        state.resize(size.0, size.1);
+        state.resize(ViewPx::new(size.0), ViewPx::new(size.1));
         Self {
             document_id,
             outbox: Outbox::new(to_logic.clone()),
@@ -507,7 +507,8 @@ impl ProseView {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.size = (width as f32, height as f32);
-        self.state.resize(self.size.0, self.size.1);
+        self.state
+            .resize(ViewPx::new(self.size.0), ViewPx::new(self.size.1));
         self.dirty = true;
     }
 
@@ -722,7 +723,8 @@ impl ProseView {
     pub fn set_document(&mut self, document_id: DocumentId) {
         self.document_id = document_id;
         self.state = ProseUiState::default();
-        self.state.resize(self.size.0, self.size.1);
+        self.state
+            .resize(ViewPx::new(self.size.0), ViewPx::new(self.size.1));
         self.announced = None;
         self.shown = None;
         self.publish_hover();

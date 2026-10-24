@@ -60,6 +60,7 @@ mod tests {
     use crate::events::HeadingLevel;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::{BlockInit, CursorPosition};
+    use ambre_core::ViewPx;
 
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
@@ -81,7 +82,7 @@ mod tests {
         );
         let body = append(&mut logic, BlockInit::Paragraph, "");
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         if let Some(event) = logic.layout_event() {
             ui.apply_event(&event);
         }

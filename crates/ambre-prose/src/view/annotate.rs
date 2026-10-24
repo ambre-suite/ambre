@@ -142,7 +142,7 @@ impl ProseUiState {
             .page_span()
             .into_iter()
             .filter_map(|page| Some((page, fragment(layout, page, &tops)?)))
-            .take_while(|(_, piece)| piece.run_top <= run_y.get())
+            .take_while(|(_, piece)| piece.run_top <= run_y)
             .last()
     }
 
@@ -159,14 +159,14 @@ impl ProseUiState {
             .flow_index(&tree_id(block))
             .and_then(|index| self.shaped.block(index))
             .and_then(|b| self.shaped.blocks.get(&b.block_id))
-            .map_or(0.0, |run| run.data().indent_px());
+            .map_or(DocPx::ZERO, |run| run.data().indent_px());
         let scale = self.viewport.scale();
-        let page_x = layout.margin_left_px + indent + at.x.get();
-        let page_y = layout.body_top_px() + piece.top + (at.y.get() - piece.run_top);
+        let page_x = layout.margin_left_px + indent + at.x;
+        let page_y = layout.body_top_px() + piece.top + (at.y - piece.run_top);
         ViewPoint::new(
-            ViewPx::new(self.column.left_px(&self.viewport) + page_x * scale),
+            self.column.left_px(&self.viewport) + ViewPx::new(page_x.get() * scale),
             ViewPx::new(
-                (self.column.page_top_y(page).get() + page_y - self.viewport.scroll_y) * scale,
+                (self.column.page_top_y(page) + page_y - self.viewport.scroll_y).get() * scale,
             ),
         )
     }
@@ -187,11 +187,12 @@ impl ProseUiState {
         let piece = fragment(layout, page, &run.line_tops())?;
         let bottom = piece.run_top + piece.height;
         run.range_boxes(span).into_iter().find_map(|part| {
-            let (y0, y1) = (part.y0 as f32, part.y1 as f32);
+            let (y0, y1) = (DocPx::new(part.y0 as f32), DocPx::new(part.y1 as f32));
             if y1 <= piece.run_top || y0 >= bottom {
                 return None;
             }
-            let corner = |x: f64, y: f32| DocPoint::new(DocPx::new(x as f32), DocPx::new(y));
+            let corner = |x: f64, y: DocPx| DocPoint::new(DocPx::new(x as f32), y);
+
             let top_left = self.to_screen(block, page, piece, corner(part.x0, y0));
             let bottom_right = self.to_screen(block, page, piece, corner(part.x1, y1));
             let rect = ScreenRect {
@@ -380,7 +381,7 @@ mod tests {
     fn view(paragraphs: usize) -> ProseUiState {
         let (_, shaped) = laid_out(paragraphs, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         ui
     }
@@ -546,7 +547,7 @@ mod tests {
             ),
             None
         );
-        assert!(ui.viewport.scroll_y > 0.0);
+        assert!(ui.viewport.scroll_y > DocPx::new(0.0));
         let reply = AnnotationIntent::Reply {
             comment_id: id,
             text: "ok".to_owned(),

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, DocPoint, FootnoteId};
+use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, DocPoint, DocPx, FootnoteId};
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
@@ -178,7 +178,7 @@ pub(crate) struct Resume {
 struct LineAt {
     segment: usize,
     local: LocalLine,
-    top: f32,
+    top: DocPx,
     shift: f32,
 }
 
@@ -190,13 +190,13 @@ pub struct ParleyRunData {
     /// Every line of the run, in order, across the segments.
     lines: RunLineVec<LineAt>,
     /// The height every line takes, summed as the shaper sums it.
-    height: f32,
+    height: DocPx,
     /// The byte offset each code point starts at, the text's length last. An
     /// offset in the document counts code points, and the shaper counts bytes.
     char_starts: RunVec<ByteOffset>,
     /// How far the text sits from the left of the content box. It is the
     /// block's left indent, which the width it was broken to left out.
-    indent_px: f32,
+    indent_px: DocPx,
     /// The text the glyphs were shaped from. The caret walks its graphemes
     /// and its words, which the glyphs alone do not tell apart.
     text: String,
@@ -208,14 +208,14 @@ pub struct ParleyRunData {
     marks: Vec<MarkedSpan>,
     /// The width the text was broken to, when pagination shaped it. Only such
     /// a run is re-shaped in part (`PROSE-128`).
-    width_px: Option<f32>,
+    width_px: Option<DocPx>,
 }
 
 impl ParleyRunData {
     /// The run of `text` as `layout` shaped it, `indent_px` from the left of
     /// the content box.
     #[must_use]
-    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: f32) -> Self {
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: DocPx) -> Self {
         let mut char_starts: RunVec<ByteOffset> = text
             .char_indices()
             .map(|(at, _)| ByteOffset::from_usize(at))
@@ -232,7 +232,7 @@ impl ParleyRunData {
                 first_line: RunLine::ZERO,
             }],
             lines: RunLineVec::new(),
-            height: 0.0,
+            height: DocPx::ZERO,
             char_starts,
             indent_px,
             text: text.to_owned(),
@@ -317,7 +317,7 @@ impl ParleyRunData {
         &mut self,
         style: &EffectiveStyle,
         marks: &[MarkedSpan],
-        width_px: f32,
+        width_px: DocPx,
     ) {
         self.style = Some(style.clone());
         self.marks = marks.to_vec();
@@ -325,7 +325,7 @@ impl ParleyRunData {
     }
 
     /// The width the text was broken to, when pagination shaped it.
-    pub(crate) fn width_px(&self) -> Option<f32> {
+    pub(crate) fn width_px(&self) -> Option<DocPx> {
         self.width_px
     }
 
@@ -359,7 +359,7 @@ impl ParleyRunData {
     /// is the rounded top in the run less the rounded top in its segment.
     fn index_lines(&mut self) {
         let mut lines = RunLineVec::new();
-        let mut top = 0.0_f32;
+        let mut top = DocPx::ZERO;
         let mut y = 0.0_f64;
         for (index, segment) in self.segments.iter_mut().enumerate() {
             segment.first_line = lines.len().as_end();
@@ -381,13 +381,13 @@ impl ParleyRunData {
                     top,
                     shift: (y.round() - local_y.round()) as f32,
                 });
-                top += height;
+                top += DocPx::new(height);
                 y += f64::from(height);
                 local_y += f64::from(height);
             }
         }
         self.lines = lines;
-        self.height = y as f32;
+        self.height = DocPx::new(y as f32);
     }
 
     /// The byte line `line` starts at, in the run's text.
@@ -456,22 +456,24 @@ impl ParleyRunData {
 
     /// How far the text sits from the left of the content box.
     #[must_use]
-    pub fn indent_px(&self) -> f32 {
+    pub fn indent_px(&self) -> DocPx {
         self.indent_px
     }
 
     /// The height the shaped text takes.
     #[must_use]
-    pub fn height(&self) -> f32 {
+    pub fn height(&self) -> DocPx {
         self.height
     }
 
     /// The widest line, its trailing spaces counted.
     #[must_use]
-    pub fn full_width(&self) -> f32 {
-        self.lines()
-            .map(|(line, _)| line.metrics().advance)
-            .fold(0.0, f32::max)
+    pub fn full_width(&self) -> DocPx {
+        DocPx::new(
+            self.lines()
+                .map(|(line, _)| line.metrics().advance)
+                .fold(0.0, f32::max),
+        )
     }
 
     /// Every line, in order, with the vertical shift that moves its glyphs
@@ -506,8 +508,9 @@ impl ParleyRunData {
     /// The top of each line, relative to the top of the run, the run's height
     /// last.
     #[must_use]
-    pub fn line_tops(&self) -> Vec<f32> {
-        let mut tops: Vec<f32> = self.lines.iter().map(|at| at.top).collect();
+    pub fn line_tops(&self) -> Vec<DocPx> {
+        let mut tops: Vec<DocPx> = self.lines.iter().map(|at| at.top).collect();
+
         tops.push(self.height);
         tops
     }
@@ -520,7 +523,7 @@ impl ParleyRunData {
         let index = self
             .lines
             .as_slice()
-            .partition_point(|at| at.top <= y)
+            .partition_point(|line| line.top <= at.y)
             .saturating_sub(1);
         let Some((segment, local_y)) = self.on_line(RunLine::from_usize(index), y) else {
             return RunOffset::ZERO;
@@ -612,7 +615,7 @@ impl ParleyRunData {
     #[must_use]
     pub fn line_of(&self, offset: RunOffset, affinity: Affinity) -> RunLine {
         let caret = self.caret_box_at(offset, affinity);
-        let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
+        let middle = DocPx::new(((caret.y0 + caret.y1) / 2.0) as f32);
         let under = self
             .lines
             .as_slice()
@@ -629,7 +632,7 @@ impl ParleyRunData {
 
     /// The caret on line `line` nearest to `x`, and its affinity.
     #[must_use]
-    pub fn at_line(&self, line: RunLine, x: f32) -> (RunOffset, Affinity) {
+    pub fn at_line(&self, line: RunLine, x: DocPx) -> (RunOffset, Affinity) {
         let index = line.min(self.last_line());
         let Some(at) = self.lines.get(index) else {
             return (RunOffset::ZERO, Affinity::Downstream);
@@ -643,7 +646,7 @@ impl ParleyRunData {
         let metrics = local.metrics();
         let cursor = Cursor::from_point(
             &segment.layout,
-            x,
+            x.get(),
             (metrics.block_min_coord + metrics.block_max_coord) / 2.0,
         );
         (
@@ -857,7 +860,7 @@ impl ShapedRun {
     /// The run of `text` as `layout` shaped it, `indent_px` from the left of
     /// the content box.
     #[must_use]
-    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: f32) -> Self {
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: DocPx) -> Self {
         Self(Arc::new(ParleyRunData::new(text, layout, indent_px)))
     }
 
@@ -1190,7 +1193,7 @@ where
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TableShape {
     /// The top of each row from the table's top, and the bottom of the last.
-    pub row_tops: Vec<f32>,
+    pub row_tops: Vec<DocPx>,
     pub cells: Vec<CellShape>,
 }
 
@@ -1199,15 +1202,15 @@ pub struct TableShape {
 pub struct CellShape {
     /// The cell the text sits in: a region's top-left cell.
     pub cell: TreeID,
-    pub x_px: f32,
-    pub width_px: f32,
+    pub x_px: DocPx,
+    pub width_px: DocPx,
     /// The rows the cell spans, the last one excluded.
     pub rows: std::ops::Range<usize>,
     /// The text blocks the cell holds, each with its top from the top of the
     /// padded box, before the vertical alignment moves them.
-    pub blocks: Vec<(TreeID, f32, ShapedRun)>,
+    pub blocks: Vec<(TreeID, DocPx, ShapedRun)>,
     /// The height of that text, padding excluded: what the alignment places.
-    pub content_px: f32,
+    pub content_px: DocPx,
     pub style: CellStyle,
 }
 
@@ -1220,7 +1223,7 @@ pub struct CellStyle {
     /// The stored border. None draws the theme's hairline (`PROSE-UI-181`).
     pub border: Option<CellBorderPx>,
     /// The inset on each of the four sides.
-    pub padding_px: f32,
+    pub padding_px: DocPx,
     pub valign: ambre_bus::app::prose::VAlign,
 }
 
@@ -1229,7 +1232,7 @@ impl Default for CellStyle {
         Self {
             fill: None,
             border: None,
-            padding_px: 0.0,
+            padding_px: DocPx::ZERO,
             valign: ambre_bus::app::prose::VAlign::Top,
         }
     }
@@ -1238,10 +1241,11 @@ impl Default for CellStyle {
 /// The four border widths of a cell, and their colour.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct CellBorderPx {
-    pub top: f32,
-    pub bottom: f32,
-    pub left: f32,
-    pub right: f32,
+    pub top: DocPx,
+    pub bottom: DocPx,
+    pub left: DocPx,
+    pub right: DocPx,
+
     /// None takes the theme's border colour.
     pub color: Option<Rgba>,
 }
@@ -1277,7 +1281,7 @@ mod tests {
     #[test]
     fn a_point_resolves_to_the_offset_the_caret_box_puts_there() {
         let mut measurer = shipped_measurer();
-        let (_, run) = measurer.measure_run("h\u{e9}llo world", &style(), 400.0);
+        let (_, run) = measurer.measure_run("h\u{e9}llo world", &style(), DocPx::new(400.0));
         let run = run.data();
         for offset in (0..=run.len().get()).map(RunOffset::new) {
             let caret = run.caret_box(offset);
@@ -1296,10 +1300,10 @@ mod tests {
     fn the_first_line_starts_at_its_indent() {
         let mut measurer = shipped_measurer();
         let mut indented = style();
-        indented.indent_first_px = 40.0;
+        indented.indent_first_px = DocPx::new(40.0);
         let text = "one two three four five six seven eight nine ten eleven";
-        let (plain_metrics, plain) = measurer.measure_run(text, &style(), 120.0);
-        let (metrics, run) = measurer.measure_run(text, &indented, 120.0);
+        let (plain_metrics, plain) = measurer.measure_run(text, &style(), DocPx::new(120.0));
+        let (metrics, run) = measurer.measure_run(text, &indented, DocPx::new(120.0));
         let run = run.data();
         assert!(metrics.line_count >= plain_metrics.line_count);
         let lines = run.range_boxes(RunSpan::from_count(RunOffset::ZERO, run.len()));
@@ -1313,7 +1317,7 @@ mod tests {
         );
         // The plain run is untouched.
         assert!(plain.data().caret_box(RunOffset::ZERO).x0.abs() < 1e-3);
-        let (_, empty) = measurer.measure_run("", &indented, 120.0);
+        let (_, empty) = measurer.measure_run("", &indented, DocPx::new(120.0));
         assert!((empty.data().caret_box(RunOffset::ZERO).x0 - 40.0).abs() < 1e-3);
         assert!(
             (empty
@@ -1330,7 +1334,7 @@ mod tests {
     fn a_range_covers_one_box_per_line_it_crosses() {
         let mut measurer = shipped_measurer();
         let text = "one two three four five six seven eight nine ten eleven";
-        let (metrics, run) = measurer.measure_run(text, &style(), 90.0);
+        let (metrics, run) = measurer.measure_run(text, &style(), DocPx::new(90.0));
         assert!(metrics.line_count > 2);
         let whole = run
             .data()

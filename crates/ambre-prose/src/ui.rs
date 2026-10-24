@@ -411,7 +411,7 @@ pub struct ProseUiState {
     /// drawn on it to `caret_drawn`.
     pub(crate) page_frame: ambre_draw::Affine,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
-    pub(crate) x_goal: Option<f32>,
+    pub(crate) x_goal: Option<ambre_core::DocPx>,
     /// The page whose header or footer holds the caret. A band is drawn on
     /// every page, and the caret shows on the one it was placed on
     /// (`PROSE-UI-033`).

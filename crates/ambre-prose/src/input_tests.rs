@@ -7,7 +7,7 @@ use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
 use ambre_commands::ClipboardWrite;
-use ambre_core::ViewPx;
+use ambre_core::{DocPx, ViewPx};
 use ambre_draw::HitTest;
 
 use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent, TriState};
@@ -35,7 +35,7 @@ impl Rig {
             append(&mut logic, BlockInit::Paragraph, text);
         }
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         let mut rig = Self {
             logic,
             ui,
@@ -130,15 +130,16 @@ impl Rig {
         let placed = &layout.blocks[index];
         let run = ui.shaped.blocks[&placed.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
-        let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-        let y_doc = ui.column.page_top_y(placed.page_start).get()
+        let x =
+            layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+        let y_doc = ui.column.page_top_y(placed.page_start)
             + layout.body_top_px()
             + placed.y_in_page
-            + (caret.y0 + caret.y1) as f32 / 2.0;
+            + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            ui.column.left_px(&ui.viewport) + x * scale,
-            (y_doc - ui.viewport.scroll_y) * scale,
+            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (y_doc - ui.viewport.scroll_y).get() * scale,
         )
     }
 
@@ -146,7 +147,8 @@ impl Rig {
     fn caret_on_screen(&self) -> bool {
         let (top, bottom) = self.ui.caret_span().expect("the caret is laid out");
         let scroll = self.ui.viewport.scroll_y;
-        top >= scroll - 0.01 && bottom <= scroll + self.ui.viewport.visible_height() + 0.01
+        top >= scroll - DocPx::new(0.01)
+            && bottom <= scroll + self.ui.viewport.visible_height() + DocPx::new(0.01)
     }
 }
 
@@ -535,10 +537,14 @@ fn a_press_in_the_margin_resolves_to_the_nearest_caret() {
     let block = rig.blocks()[0];
     let (_, y) = rig.point_of(block, 0);
     let left = rig.ui.column.left_px(&rig.ui.viewport);
-    assert!(rig.press((left + 2.0, y), false, ambre_core::PageTime(0.0)));
+    assert!(rig.press((left.get() + 2.0, y), false, ambre_core::PageTime(0.0)));
     assert_eq!(rig.caret().offset, DocOffset::ZERO);
-    let bottom = rig.ui.viewport.height_px - 2.0;
-    assert!(rig.press((left + 400.0, bottom), false, ambre_core::PageTime(1000.0)));
+    let bottom = rig.ui.viewport.height_px - ViewPx::new(2.0);
+    assert!(rig.press(
+        (left.get() + 400.0, bottom.get()),
+        false,
+        ambre_core::PageTime(1000.0)
+    ));
     assert!(rig.ui.cursor.is_some());
 }
 
@@ -559,19 +565,19 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
         .expect("laid out");
     let placed = rig.ui.shaped.layout.blocks[index].clone();
     let layout = rig.ui.shaped.layout.clone();
-    let y_doc = rig.ui.column.page_top_y(placed.page_start).get()
+    let y_doc = rig.ui.column.page_top_y(placed.page_start)
         + layout.body_top_px()
         + placed.y_in_page
         + placed.height_px / 2.0;
-    let y = y_doc - rig.ui.viewport.scroll_y;
-    let left = rig.ui.column.left_px(&rig.ui.viewport) + layout.margin_left_px;
+    let y = (y_doc - rig.ui.viewport.scroll_y).get();
+    let left = rig.ui.column.left_px(&rig.ui.viewport).get() + layout.margin_left_px.get();
     rig.press((left + 5.0, y), false, ambre_core::PageTime(0.0));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
         (before, DocOffset::new(6))
     );
     rig.press(
-        (left + layout.content_width_px - 5.0, y),
+        (left + layout.content_width_px.get() - 5.0, y),
         false,
         ambre_core::PageTime(1000.0),
     );
@@ -676,12 +682,12 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     use std::collections::HashMap;
     use std::sync::Arc;
     let mut ui = ProseUiState::default();
-    ui.resize(1200.0, 900.0);
+    ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
     let empty = crate::layout::run::ShapedLayout::new(
         crate::layout::run::LayoutVersion::new(1),
         Arc::new(crate::layout::pass::PageLayout {
-            page_width_px: 800.0,
-            page_height_px: 1000.0,
+            page_width_px: DocPx::new(800.0),
+            page_height_px: DocPx::new(1000.0),
             page_count: crate::events::PageCount::ONE,
             ..crate::layout::pass::PageLayout::default()
         }),
@@ -867,7 +873,8 @@ fn home_and_end_honour_the_wrapped_line() {
     let second_line = {
         let run = rig.ui.run_of(block).expect("a run");
         assert!(run.line_count().get() > 2);
-        run.at_line(crate::layout::run::RunLine::new(1), 5.0).0
+        run.at_line(crate::layout::run::RunLine::new(1), DocPx::new(5.0))
+            .0
     };
     rig.ui
         .set_caret((block, DocOffset::new(second_line.get() + 2)));
@@ -926,7 +933,7 @@ fn every_move_leaves_the_caret_on_screen() {
         rig.key(ProseKey::Down, false, false);
     }
     let (_, bottom) = rig.ui.caret_span().expect("laid out");
-    assert!((bottom - (rig.ui.viewport.scroll_y + visible)).abs() < 0.01);
+    assert!((bottom - (rig.ui.viewport.scroll_y + visible)).abs() < DocPx::new(0.01));
 }
 
 // -- Dragging -----------------------------------------------------------------
@@ -1040,7 +1047,7 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
     let block = rig.blocks()[12];
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
         rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
-        rig.ui.viewport.scroll_y = 0.0;
+        rig.ui.viewport.scroll_y = DocPx::new(0.0);
         rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42, 120] {
             let (x, y) = rig.point_of(block, offset);
@@ -1221,12 +1228,13 @@ fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
         .expect("the band is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
-    let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-    let y_doc = ui.column.page_top_y(page).get() + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let x = layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+    let y_doc =
+        ui.column.page_top_y(page) + slot.top + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
     let scale = ui.viewport.scale();
     (
-        ui.column.left_px(&ui.viewport) + x * scale,
-        (y_doc - ui.viewport.scroll_y) * scale,
+        (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+        (y_doc - ui.viewport.scroll_y).get() * scale,
     )
 }
 
@@ -1322,14 +1330,14 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
         .expect("the note is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
-    let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
-    let y_doc = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
+    let x = layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+    let y_doc = ui.column.page_top_y(crate::events::PageIndex::new(0))
         + slot.top
-        + (caret.y0 + caret.y1) as f32 / 2.0;
+        + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
     let scale = ui.viewport.scale();
     (
-        ui.column.left_px(&ui.viewport) + x * scale,
-        (y_doc - ui.viewport.scroll_y) * scale,
+        (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+        (y_doc - ui.viewport.scroll_y).get() * scale,
     )
 }
 
@@ -2279,9 +2287,9 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     let first = rig.blocks()[0];
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
-    let bottom = rig.ui.viewport.height_px + 40.0;
+    let bottom = rig.ui.viewport.height_px + ViewPx::new(40.0);
     rig.input(ProseInput::Drag {
-        at: view_at(x, bottom),
+        at: view_at(x, bottom.get()),
     });
     let before = rig.ui.selection().expect("a selection").1;
     assert!(
@@ -2294,7 +2302,7 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
         assert!(rig.ui.tick_autoscroll(ambre_core::PageTime(now)));
         rig.lay();
     }
-    assert!(rig.ui.viewport.scroll_y > 0.0);
+    assert!(rig.ui.viewport.scroll_y > DocPx::new(0.0));
     let after = rig.ui.selection().expect("a selection").1;
     assert_ne!(after, before, "the focus follows the revealed text");
     assert_eq!(rig.caret().anchor, Some((first, DocOffset::new(2))));
@@ -2309,9 +2317,9 @@ fn a_released_drag_leaves_nothing_armed() {
     let first = rig.blocks()[0];
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
-    let bottom = rig.ui.viewport.height_px + 40.0;
+    let bottom = rig.ui.viewport.height_px + ViewPx::new(40.0);
     rig.input(ProseInput::Drag {
-        at: view_at(x, bottom),
+        at: view_at(x, bottom.get()),
     });
     rig.ui.tick_autoscroll(ambre_core::PageTime(0.0));
     rig.input(ProseInput::Release);
@@ -2322,7 +2330,7 @@ fn a_released_drag_leaves_nothing_armed() {
     // Escape disarms a drag in flight the same way.
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(1000.0));
     rig.input(ProseInput::Drag {
-        at: view_at(x, bottom),
+        at: view_at(x, bottom.get()),
     });
     rig.ui.tick_autoscroll(ambre_core::PageTime(40.0));
     rig.key(ProseKey::Escape, false, false);
@@ -2399,14 +2407,14 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     assert!((speed - 2.0).abs() < 0.01, "the release speed, {speed}");
     let mut now = 80.0;
     rig.ui.tick_fling(ambre_core::PageTime(now));
-    let (mut last_step, mut scroll) = (f32::INFINITY, rig.ui.viewport.scroll_y);
+    let (mut last_step, mut scroll) = (DocPx::new(f32::INFINITY), rig.ui.viewport.scroll_y);
     while rig.ui.fling_speed().is_some() {
         now += 16.0;
         rig.ui.tick_fling(ambre_core::PageTime(now));
         rig.lay();
         let step = rig.ui.viewport.scroll_y - scroll;
         assert!(
-            step >= 0.0 && step < last_step,
+            step >= DocPx::ZERO && step < last_step,
             "each frame slower than the last"
         );
         (last_step, scroll) = (step, rig.ui.viewport.scroll_y);
@@ -2416,7 +2424,7 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     // Near the end of the column, the motion stops there.
     let end = rig.ui.column.max_scroll(&rig.ui.viewport);
     rig.ui.scroll_by(down(
-        (end - rig.ui.viewport.scroll_y - 5.0) * rig.ui.viewport.scale(),
+        ((end - rig.ui.viewport.scroll_y - DocPx::new(5.0)) * rig.ui.viewport.scale()).get(),
     ));
     flick_up(&mut rig);
     for frame in 1..=20 {
@@ -2475,14 +2483,17 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
         glide(2.0 * f64::from(ambre_draw::WHEEL_LINE_PX.get())),
         ambre_core::PageTime(0.0),
     );
-    assert!(by_px.ui.viewport.scroll_y > 0.0, "the column moved");
+    assert!(
+        by_px.ui.viewport.scroll_y > DocPx::new(0.0),
+        "the column moved"
+    );
     assert_eq!(by_line.ui.viewport.scroll_y, by_px.ui.viewport.scroll_y);
 
     let mut by_page = long_rig();
     let page = by_page.ui.viewport.height_px;
     let page_delta = ambre_draw::WheelDelta::new(0.0, 1.0, ambre_draw::WheelDeltaMode::Page);
     by_page.ui.wheel(page_delta, ambre_core::PageTime(0.0));
-    assert_eq!(by_page.ui.viewport.scroll_y, page);
+    assert_eq!(by_page.ui.viewport.scroll_y.get(), page.get());
 }
 
 /// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the column
@@ -2536,7 +2547,7 @@ fn a_finger_that_barely_moves_is_a_tap() {
         rig.ui.touch_end(ambre_core::PageTime(20.0)),
         Some(view_at(300.0, 400.0))
     );
-    assert_eq!(rig.ui.viewport.scroll_y, 0.0);
+    assert_eq!(rig.ui.viewport.scroll_y, DocPx::new(0.0));
     assert_eq!(rig.ui.fling_speed(), None);
 }
 
@@ -2575,7 +2586,7 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
     let block = rig.blocks()[12];
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
         rig.ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
-        rig.ui.viewport.scroll_y = 0.0;
+        rig.ui.viewport.scroll_y = DocPx::new(0.0);
         rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42] {
             caret_at(&mut rig, block, offset);

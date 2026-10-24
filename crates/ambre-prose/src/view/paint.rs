@@ -8,7 +8,7 @@
 //! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
 //! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_core::{ByteCount, ByteOffset};
+use ambre_core::{ByteCount, ByteOffset, SurfacePx};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
@@ -41,7 +41,7 @@ struct ScreenBlock {
     run: ShapedRun,
     placed: Placed,
     /// The top of its page down the column.
-    top: f64,
+    top: SurfacePx,
     /// Whether the local caret and selection show in it.
     local: bool,
     /// Whether the other peers' carets show in it: body text only.
@@ -55,21 +55,21 @@ struct Frame {
     blocks: Vec<ScreenBlock>,
     /// The caret of the paragraph a split opens, before the document names
     /// its block: its page top, its clip and its bar.
-    ghost_carets: Vec<(f64, Rect, Rect)>,
+    ghost_carets: Vec<(SurfacePx, Rect, Rect)>,
 }
 
 /// Where a run is drawn: from the left of the content box, at the top of
 /// its fragment, clipped to it.
 fn place(left: f64, body_top: f64, content_width: f64, run: &ShapedRun, piece: Fragment) -> Placed {
-    let clip_top = body_top + f64::from(piece.top);
+    let clip_top = body_top + f64::from(piece.top.get());
     Placed {
-        origin_x: left + f64::from(run.data().indent_px()),
-        origin_y: clip_top - f64::from(piece.run_top),
+        origin_x: left + f64::from(run.data().indent_px().get()),
+        origin_y: clip_top - f64::from(piece.run_top.get()),
         clip: Rect::new(
             left,
             clip_top,
             left + content_width,
-            clip_top + f64::from(piece.height),
+            clip_top + f64::from(piece.height.get()),
         ),
     }
 }
@@ -207,11 +207,11 @@ impl ProseUiState {
             return;
         };
         let camera = self.camera();
-        let width = f64::from(self.shaped.layout.page_width_px);
-        let height = f64::from(self.shaped.layout.page_height_px);
+        let width = SurfacePx::new(f64::from(self.shaped.layout.page_width_px.get()));
+        let height = SurfacePx::new(f64::from(self.shaped.layout.page_height_px.get()));
         let mut frame = Frame::default();
         for page in pages {
-            let top = f64::from(self.column.page_top_y(page).get());
+            let top = SurfacePx::new(f64::from(self.column.page_top_y(page).get()));
             self.resolve_page(&mut frame, page, top);
         }
 
@@ -220,7 +220,7 @@ impl ProseUiState {
             paint_sheet(surface, palette, page.top, width, height);
         }
         for block in &frame.blocks {
-            surface.push_transform(Affine::translate((0.0, block.top)));
+            surface.push_transform(Affine::translate((0.0, block.top.get())));
             surface.push_clip(block.placed.clip);
             self.paint_selections(surface, palette, block);
             surface.pop_clip();
@@ -244,25 +244,25 @@ impl ProseUiState {
             .saturating_add(walk.highlights_walked);
 
         for block in &frame.blocks {
-            self.page_frame = camera * Affine::translate((0.0, block.top));
-            surface.push_transform(Affine::translate((0.0, block.top)));
+            self.page_frame = camera * Affine::translate((0.0, block.top.get()));
+            surface.push_transform(Affine::translate((0.0, block.top.get())));
             surface.push_clip(block.placed.clip);
             self.paint_caret(surface, palette, block);
             surface.pop_clip();
             surface.pop_transform();
         }
         for &(top, clip, bar) in &frame.ghost_carets {
-            surface.push_transform(Affine::translate((0.0, top)));
+            surface.push_transform(Affine::translate((0.0, top.get())));
             surface.push_clip(clip);
             surface.fill_rect(bar, palette.accent);
             surface.pop_clip();
             surface.pop_transform();
             self.caret_drawn =
-                Some((camera * Affine::translate((0.0, top))).transform_rect_bbox(bar));
+                Some((camera * Affine::translate((0.0, top.get()))).transform_rect_bbox(bar));
         }
         // Last, so a collaborator's caret never hides the text under it.
         for block in frame.blocks.iter().filter(|block| block.remote_carets) {
-            surface.push_transform(Affine::translate((0.0, block.top)));
+            surface.push_transform(Affine::translate((0.0, block.top.get())));
             self.paint_carets(surface, block.id, block.run.data(), &block.placed);
             surface.pop_transform();
         }
@@ -272,30 +272,30 @@ impl ProseUiState {
     /// The camera from column coordinates to the canvas: the column's left
     /// edge, the zoom, then the scroll.
     fn camera(&self) -> Affine {
-        Affine::translate((f64::from(self.column.left_px(&self.viewport)), 0.0))
+        Affine::translate((f64::from(self.column.left_px(&self.viewport).get()), 0.0))
             * Affine::scale(f64::from(self.viewport.scale()))
-            * Affine::translate((0.0, -f64::from(self.viewport.scroll_y)))
+            * Affine::translate((0.0, -f64::from(self.viewport.scroll_y.get())))
     }
 
     /// The region the walk covers: the canvas, and the pages built on each
     /// side of it. Their runs are then ready when a scroll reaches them.
     fn walk_region(&self, camera: Affine, frame: &Frame) -> Rect {
-        let width = f64::from(self.shaped.layout.page_width_px);
-        let height = f64::from(self.shaped.layout.page_height_px);
+        let width = f64::from(self.shaped.layout.page_width_px.get());
+        let height = f64::from(self.shaped.layout.page_height_px.get());
         let canvas = Rect::new(
             0.0,
             0.0,
-            f64::from(self.viewport.width_px),
-            f64::from(self.viewport.height_px),
+            f64::from(self.viewport.width_px.get()),
+            f64::from(self.viewport.height_px.get()),
         );
         frame.pages.iter().fold(
             camera.inverse().transform_rect_bbox(canvas),
             |region, page| {
                 region.union(Rect::new(
                     0.0,
-                    page.top,
+                    page.top.get(),
                     width + SHADOW_OFFSET_PX,
-                    page.top + height + SHADOW_OFFSET_PX,
+                    page.top.get() + height + SHADOW_OFFSET_PX,
                 ))
             },
         )
@@ -303,11 +303,11 @@ impl ProseUiState {
 
     /// Resolve what `page` shows into the items the walk draws, and the
     /// blocks the screen draws around.
-    fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: f64) {
+    fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: SurfacePx) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
-        let left = f64::from(layout.margin_left_px);
-        let body_top = f64::from(layout.body_top_px());
-        let content_width = f64::from(layout.content_width_px);
+        let left = f64::from(layout.margin_left_px.get());
+        let body_top = f64::from(layout.body_top_px().get());
+        let content_width = f64::from(layout.content_width_px.get());
         let right = left + content_width;
         let mut items = Vec::new();
         let (pieces, ghost_at) = self.pieces(page);
@@ -317,21 +317,21 @@ impl ProseUiState {
             };
             let fragment = piece.fragment;
             if let Some(table) = piece.table {
-                let clip_top = body_top + f64::from(fragment.top);
+                let clip_top = body_top + f64::from(fragment.top.get());
                 // A table may be wider than the text: it grows to the right
                 // rather than squeezing its columns.
                 let table_right = table
                     .cells
                     .iter()
-                    .map(|cell| f64::from(cell.x_px + cell.width_px))
+                    .map(|cell| f64::from((cell.x_px + cell.width_px).get()))
                     .fold(content_width, f64::max);
                 let clip = Rect::new(
                     left,
                     clip_top,
                     left + table_right + 1.0,
-                    clip_top + f64::from(fragment.height) + 1.0,
+                    clip_top + f64::from(fragment.height.get()) + 1.0,
                 );
-                let origin = (left, clip_top - f64::from(fragment.run_top));
+                let origin = (left, clip_top - f64::from(fragment.run_top.get()));
                 let cells = self.table_cells(frame, &table, origin, clip, top);
                 items.push(PageItem::Table { clip, cells });
                 continue;
@@ -384,9 +384,9 @@ impl ProseUiState {
             let Some(run) = self.drawn_of(slot.block).cloned() else {
                 continue;
             };
-            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
+            let (from, to) = (f64::from(slot.top.get()), f64::from(slot.bottom.get()));
             let placed = Placed {
-                origin_x: left + f64::from(run.data().indent_px()),
+                origin_x: left + f64::from(run.data().indent_px().get()),
                 origin_y: from,
                 clip: Rect::new(left, from, right, to),
             };
@@ -407,11 +407,11 @@ impl ProseUiState {
             items.push(PageItem::Rule {
                 x0: left,
                 x1: left + content_width / 3.0,
-                y: f64::from(first.top - NOTE_SEPARATOR_PX / 2.0),
+                y: f64::from((first.top - NOTE_SEPARATOR_PX / 2.0).get()),
             });
         }
         for slot in slots {
-            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
+            let (from, to) = (f64::from(slot.top.get()), f64::from(slot.bottom.get()));
             let clip = Rect::new(left, from, right, to);
             if let Some(number) = self.shaped.notes.get(&slot.footnote_id).cloned() {
                 items.push(PageItem::Block(BlockPaint {
@@ -428,7 +428,7 @@ impl ProseUiState {
             }
             if let Some(text) = self.drawn_of(slot.block).cloned() {
                 let placed = Placed {
-                    origin_x: left + f64::from(text.data().indent_px()),
+                    origin_x: left + f64::from(text.data().indent_px().get()),
                     origin_y: from,
                     clip,
                 };
@@ -457,7 +457,7 @@ impl ProseUiState {
         table: &TableShape,
         (left, top_y): (f64, f64),
         clip: Rect,
-        page_top: f64,
+        page_top: SurfacePx,
     ) -> Vec<CellPaint> {
         let mut cells = Vec::with_capacity(table.cells.len());
         for cell in &table.cells {
@@ -465,16 +465,16 @@ impl ProseUiState {
                 continue;
             };
             let bounds = Rect::new(
-                left + f64::from(cell_box.x0),
-                top_y + f64::from(cell_box.y0),
-                left + f64::from(cell_box.x1),
-                top_y + f64::from(cell_box.y1),
+                left + f64::from(cell_box.x0.get()),
+                top_y + f64::from(cell_box.y0.get()),
+                left + f64::from(cell_box.x1.get()),
+                top_y + f64::from(cell_box.y1.get()),
             );
             let mut blocks = Vec::with_capacity(cell.blocks.len());
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
-                    origin_x: left + f64::from(cell_box.text_x + run.data().indent_px()),
-                    origin_y: top_y + f64::from(cell_box.text_y + *y),
+                    origin_x: left + f64::from((cell_box.text_x + run.data().indent_px()).get()),
+                    origin_y: top_y + f64::from((cell_box.text_y + *y).get()),
                     clip: bounds.intersect(clip),
                 };
                 let id = block_id(*block);
@@ -505,7 +505,7 @@ impl ProseUiState {
         id: BlockId,
         run: ShapedRun,
         placed: Placed,
-        top: f64,
+        top: SurfacePx,
         (local, remote_carets): (bool, bool),
     ) -> BlockPaint {
         // The composition, placed before the run is drawn: the text after it
@@ -568,7 +568,7 @@ impl ProseUiState {
     fn composition(&self) -> Option<(f64, ShapedRun)> {
         let (shaped_text, shape) = self.compose_shape.as_ref()?;
         (*shaped_text == self.composing)
-            .then(|| (f64::from(shape.data().full_width()), shape.clone()))
+            .then(|| (f64::from(shape.data().full_width().get()), shape.clone()))
     }
 
     /// Under the glyphs: the local selection, then each peer's.
@@ -671,10 +671,11 @@ impl ProseUiState {
 fn paint_sheet<S: DrawSurface>(
     surface: &mut S,
     palette: &PagePalette,
-    top: f64,
-    width: f64,
-    height: f64,
+    top: SurfacePx,
+    width: SurfacePx,
+    height: SurfacePx,
 ) {
+    let (width, height) = (width.get(), height.get());
     let sheet = Rect::new(0.0, 0.0, width, height);
     let shadow = Rect::new(
         SHADOW_OFFSET_PX,
@@ -682,7 +683,7 @@ fn paint_sheet<S: DrawSurface>(
         width + SHADOW_OFFSET_PX,
         height + SHADOW_OFFSET_PX,
     );
-    surface.push_transform(Affine::translate((0.0, top)));
+    surface.push_transform(Affine::translate((0.0, top.get())));
     surface.fill_rect(shadow, palette.shadow);
     surface.fill_rect(sheet, palette.sheet);
     surface.stroke_rect(sheet, palette.sheet_border, 1.0);
@@ -698,6 +699,7 @@ mod tests {
     use ambre_bus::app::prose::{DocCount, DocOffset};
     use ambre_core::ByteOffset;
     use ambre_core::UserId;
+    use ambre_core::{DocPx, SurfacePx, ViewPx};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Color, DocumentWalk};
 
@@ -726,7 +728,7 @@ mod tests {
 
     fn view_of(state: &mut ProseState) -> ProseUiState {
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         ui
     }
@@ -771,7 +773,7 @@ mod tests {
     fn a_long_document_builds_only_the_pages_around_the_canvas() {
         let (_, shaped) = laid_out(400, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let pages = ui.column.page_count;
         assert!(pages.get() > 20, "the document spans {pages} pages");
@@ -792,7 +794,7 @@ mod tests {
     fn a_run_is_built_on_its_first_paint_and_reused_after() {
         let (_, shaped) = laid_out(6, 30);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         assert_eq!(ui.runs.built(), 0);
         let first_paint = paint(&mut ui);
@@ -808,7 +810,7 @@ mod tests {
     fn the_run_cache_stays_bounded_over_a_long_scroll() {
         let (mut state, shaped) = laid_out(1200, 8);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let bottom = ui.column.max_scroll(&ui.viewport);
         while ui.viewport.scroll_y < bottom {
@@ -825,7 +827,7 @@ mod tests {
     fn selections_go_under_the_glyphs_and_highlights_over_them() {
         let (_, shaped) = laid_out(1, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.cursor = Some(CursorPosition {
@@ -860,7 +862,7 @@ mod tests {
     fn a_remote_caret_is_painted_after_every_glyph_of_its_page() {
         let (_, shaped) = laid_out(3, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let user = UserId::from_bytes([7; 16]);
@@ -890,7 +892,7 @@ mod tests {
     fn every_colour_comes_from_the_palette_or_a_peer() {
         let (_, shaped) = laid_out(4, 30);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let user = UserId::from_bytes([9; 16]);
@@ -1001,7 +1003,7 @@ mod tests {
     fn a_block_split_across_two_pages_is_drawn_on_both() {
         let (_, shaped) = laid_out(3, 900);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 4000.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(4000.0));
         ui.apply_layout(shaped);
         let split = ui
             .shaped
@@ -1030,7 +1032,7 @@ mod tests {
     fn highlights_are_walked_on_the_blocks_drawn_and_no_other() {
         let (_, shaped) = laid_out(300, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let mark = Highlight {
             kind: HighlightKind::Comment,
@@ -1083,7 +1085,7 @@ mod tests {
 
         let surface = paint(&mut ui);
         let border = palette().sheet_border;
-        let page_width = f64::from(ui.shaped.layout.page_width_px);
+        let page_width = f64::from(ui.shaped.layout.page_width_px.get());
         let widths: Vec<f64> = surface
             .ops()
             .iter()
@@ -1180,7 +1182,7 @@ mod tests {
         };
         assert_eq!(fills(fill), 1, "one fill");
         assert_eq!(fills(edge), 4, "four edges");
-        let page_width = f64::from(ui.shaped.layout.page_width_px);
+        let page_width = f64::from(ui.shaped.layout.page_width_px.get());
         let hairlines = surface
             .ops()
             .iter()
@@ -1201,11 +1203,9 @@ mod tests {
         let mut ui = view_of(&mut state);
         let (x0, y0) = first_text_at(&paint(&mut ui));
         let table = |ui: &ProseUiState| {
-            ui.shaped
-                .tables
-                .values()
-                .next()
-                .map_or(0.0, |t| t.row_tops.last().copied().unwrap_or(0.0))
+            ui.shaped.tables.values().next().map_or(DocPx::ZERO, |t| {
+                t.row_tops.last().copied().unwrap_or(DocPx::ZERO)
+            })
         };
         let height0 = table(&ui);
 
@@ -1223,7 +1223,7 @@ mod tests {
         );
         assert!((y1 - y0 - pad).abs() < 0.5, "and down by it");
         assert!(
-            (f64::from(table(&ui) - height0) - 2.0 * pad).abs() < 0.5,
+            (f64::from((table(&ui) - height0).get()) - 2.0 * pad).abs() < 0.5,
             "the row grows by both sides"
         );
 
@@ -1276,7 +1276,7 @@ mod tests {
     fn a_composition_away_from_the_draft_is_drawn_at_once() {
         let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_str(
@@ -1306,7 +1306,7 @@ mod tests {
     fn a_draft_is_drawn_before_the_document_answers() {
         let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         assert!(drawn_glyphs(&paint(&mut ui), 14));
@@ -1377,7 +1377,7 @@ mod tests {
         );
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
-        let text_px = laid.cells[0].width_px - 2.0 * laid.cells[0].style.padding_px;
+        let text_px = laid.cells[0].width_px - laid.cells[0].style.padding_px * 2.0;
         assert!(
             run.data().line_count().get() > 1,
             "the draft wraps in its column"
@@ -1385,7 +1385,10 @@ mod tests {
         let widest = (0..=run.data().len().get())
             .map(|at| run.data().caret_box(RunOffset::new(at)).x0)
             .fold(0.0, f64::max);
-        assert!(widest <= f64::from(text_px) + 0.5, "at the column's width");
+        assert!(
+            widest <= f64::from(text_px.get()) + 0.5,
+            "at the column's width"
+        );
         let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
         let grown = pieces
             .iter()
@@ -1410,7 +1413,7 @@ mod tests {
     fn the_text_after_a_draft_moves_right_by_its_width() {
         let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let after = x_of(&ui, id, 4);
@@ -1452,7 +1455,7 @@ mod tests {
             "Title",
         );
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         let paragraph = first_block(&ui);
         let laid = ui.shaped.blocks[&tree_id(heading)].data().style().cloned();
@@ -1482,7 +1485,7 @@ mod tests {
             value: None,
         });
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         let id = block;
         let bold_at = |ui: &mut ProseUiState, at: u32| {
@@ -1524,7 +1527,7 @@ mod tests {
             });
         }
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         let text = palette().text;
         let surface = paint(&mut ui);
@@ -1558,7 +1561,7 @@ mod tests {
             value: None,
         });
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         let id = block;
         let text = palette().text;
@@ -1596,7 +1599,7 @@ mod tests {
         let (mut state, _) = laid_out(1, 3);
         let block = *state.root_blocks().last().expect("a block");
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(state.shaped_layout());
         let id = block;
         let typed = " more".repeat(40);
@@ -1622,7 +1625,10 @@ mod tests {
         assert_eq!(drawn.data().line_tops(), laid.line_tops());
         let starts = |run: &crate::layout::run::ParleyRunData| {
             (0..run.line_count().get())
-                .map(|line| run.at_line(crate::layout::run::RunLine::new(line), 0.0).0)
+                .map(|line| {
+                    run.at_line(crate::layout::run::RunLine::new(line), DocPx::new(0.0))
+                        .0
+                })
                 .collect::<Vec<_>>()
         };
         assert_eq!(starts(drawn.data()), starts(laid), "the lines break alike");
@@ -1634,7 +1640,7 @@ mod tests {
     fn deleted_text_leaves_the_screen_before_the_answer() {
         let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_delete(
@@ -1657,7 +1663,7 @@ mod tests {
     fn the_paragraph_a_split_opens_is_drawn_before_the_answer() {
         let (_, shaped) = laid_out(2, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let first = first_block(&ui);
         let top_of_second = |ui: &ProseUiState| {
@@ -1687,7 +1693,7 @@ mod tests {
         assert!(drawn_glyphs(&surface, 6), "the new paragraph is drawn");
         let moved = top_of_second(&ui) - before;
         assert!(
-            (moved - ghost.data().height()).abs() < 0.5,
+            (moved - ghost.data().height()).abs() < DocPx::new(0.5),
             "the next block moves down by the new paragraph"
         );
         // The document answers with the block it minted: the text typed
@@ -1716,7 +1722,7 @@ mod tests {
     fn a_press_in_the_paragraph_a_split_opens_lands_in_it() {
         let (_, shaped) = laid_out(2, 3);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let first = first_block(&ui);
         ui.splitting = Some(crate::view::provisional::Splitting {
@@ -1743,18 +1749,21 @@ mod tests {
         let run = ui.ghost().expect("shaped").run.clone();
         let caret = run.data().caret_box(RunOffset::new(3));
         let layout = &ui.shaped.layout;
-        let x = layout.margin_left_px + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
+        let x = layout.margin_left_px
+            + run.data().indent_px()
+            + DocPx::new(caret.x0 as f32)
+            + DocPx::new(0.5);
+        let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
             + layout.body_top_px()
             + at.top
-            + (caret.y0 + caret.y1) as f32 / 2.0;
+            + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         let point = (
-            ui.column.left_px(&ui.viewport) + x * scale,
-            (y - ui.viewport.scroll_y) * scale,
+            ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale),
+            (y - ui.viewport.scroll_y).get() * scale,
         );
         assert_eq!(
-            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
+            ui.place_at(crate::view::tests::view_at(point.0.get(), point.1)),
             Some((minted, DocOffset::new(3)))
         );
         // A keystroke replayed before the next frame shapes again.
@@ -1765,7 +1774,7 @@ mod tests {
             DocOffset::new(2),
         );
         assert_eq!(
-            ui.place_at(crate::view::tests::view_at(point.0, point.1)),
+            ui.place_at(crate::view::tests::view_at(point.0.get(), point.1)),
             Some((minted, DocOffset::new(3)))
         );
     }
@@ -1797,18 +1806,21 @@ mod tests {
         let run = ui.provisional_run(block).cloned().unwrap_or(run);
         let caret = run.data().caret_box(RunOffset::new(at));
         let layout = &ui.shaped.layout;
-        let x =
-            layout.margin_left_px + frame.text_x + run.data().indent_px() + caret.x0 as f32 + 0.5;
-        let y = ui.column.page_top_y(crate::events::PageIndex::new(0)).get()
+        let x = layout.margin_left_px
+            + frame.text_x
+            + run.data().indent_px()
+            + DocPx::new(caret.x0 as f32)
+            + DocPx::new(0.5);
+        let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
             + layout.body_top_px()
             + piece.fragment.top
             + frame.text_y
             + top
-            + (caret.y0 + caret.y1) as f32 / 2.0;
+            + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            ui.column.left_px(&ui.viewport) + x * scale,
-            (y - ui.viewport.scroll_y) * scale,
+            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (y - ui.viewport.scroll_y).get() * scale,
         )
     }
 
@@ -1915,7 +1927,7 @@ mod tests {
     fn a_thread_the_logic_thread_sends_is_painted_over_its_range_and_no_other() {
         let (_, shaped) = laid_out(1, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let comment = palette().highlight(HighlightKind::Comment);
@@ -1939,7 +1951,7 @@ mod tests {
     fn two_overlapping_threads_are_both_painted() {
         let (_, shaped) = laid_out(1, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.apply_event(&crate::events::ProseEvent::CommentsUpdated {
@@ -1956,7 +1968,7 @@ mod tests {
     fn an_insertion_is_underlined_and_a_deletion_struck_through() {
         let (_, shaped) = laid_out(1, 20);
         let mut ui = ProseUiState::default();
-        ui.resize(1200.0, 900.0);
+        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         let mark = |kind| Highlight {
@@ -2014,11 +2026,11 @@ mod tests {
         ) {
             let (_, shaped) = laid_out(1, 20);
             let mut ui = ProseUiState::default();
-            ui.resize(width, height);
+            ui.resize(ViewPx::new(width), ViewPx::new(height));
             ui.apply_layout(shaped);
             ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
             let bottom = ui.column.page_top_y(crate::events::PageIndex::new(1)).get();
-            ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, scroll * bottom);
+            ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, DocPx::new(scroll * bottom));
             let id = first_block(&ui);
             ui.cursor = Some(CursorPosition {
                 block_id: id,
@@ -2036,15 +2048,15 @@ mod tests {
 
             let mut frame = super::Frame::default();
             for page in ui.column.built_pages(&ui.viewport).into_iter().flatten() {
-                let top = f64::from(ui.column.page_top_y(page).get());
+                let top = SurfacePx::new(f64::from(ui.column.page_top_y(page).get()));
                 ui.resolve_page(&mut frame, page, top);
             }
             let region = ui.walk_region(ui.camera(), &frame);
             let palette = palette();
             let view = PageView {
                 palette: &palette,
-                width: f64::from(ui.shaped.layout.page_width_px),
-                height: f64::from(ui.shaped.layout.page_height_px),
+                width: SurfacePx::new(f64::from(ui.shaped.layout.page_width_px.get())),
+                height: SurfacePx::new(f64::from(ui.shaped.layout.page_height_px.get())),
                 pages: &frame.pages,
             };
             let mut runs = RunCache::default();
