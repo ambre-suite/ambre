@@ -58,8 +58,8 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 
 ### 1.4 Name every file the suite writes
 
-These two rules cover the name of every file the suite writes from a document, native or
-exported: a `.ambre` file, a CSV, a Markdown, an SVG and a PDF. An application import and export
+These two rules name every file the suite writes from a document, native or exported. That is a
+`.ambre` file, a CSV, a Markdown, an SVG and a PDF. An application import and export
 spec that names a file cites them, and restates neither.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |

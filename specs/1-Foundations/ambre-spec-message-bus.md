@@ -125,8 +125,8 @@ pub struct RequestId(pub u64);
 ```
 
 The four envelopes and the service family are the contract. The variant lists are not restated
-here, because a second copy of two hundred variants is a copy that drifts. They live in `crates/ambre-bus/src/`,
-one module per row of the table above.
+here, because a second copy of two hundred variants is a copy that drifts. They live in
+`crates/ambre-bus/src/`, one module per row of the table above.
 
 **What stays on an envelope, and what joins the service family.**
 

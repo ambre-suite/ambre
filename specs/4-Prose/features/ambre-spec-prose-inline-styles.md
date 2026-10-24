@@ -170,9 +170,9 @@ pub enum LineHeight { Multiple(LineSpacingMultiple), Exact(Pt), AtLeast(Pt) }
 ```
 
 The command carries every property, each optional; the handler compares what it names against
-what is stored and writes only the keys that differ (`PROSE-FEAT-025`). The command stays coarse and the storage stays granular,
-which is what lets two authors change two properties of one paragraph at once
-(`PROSE-FEAT-176`).
+what is stored and writes only the keys that differ (`PROSE-FEAT-025`). The command stays coarse
+and the storage stays granular, which is what lets two authors change two properties of one
+paragraph at once (`PROSE-FEAT-176`).
 
 **The four commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
