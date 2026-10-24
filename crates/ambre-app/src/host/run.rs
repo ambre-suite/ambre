@@ -42,7 +42,7 @@ pub fn run_with<F, C, P>(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
-    F: FnOnce(f64, f64, TextInput) -> AppView,
+    F: FnOnce(ambre_core::SurfacePx, ambre_core::SurfacePx, TextInput) -> AppView,
     C: Fn(DocumentId, DocType, Size, TextInput) -> AppView + 'static,
     P: FnMut() + 'static,
 {
@@ -82,7 +82,11 @@ where
 
     // The view lays out in logical pixels (`CANVAS-032`).
     let CssSize { width, height, .. } = size.logical();
-    let view = make_view(f64::from(width), f64::from(height), text_input.clone());
+    let view = make_view(
+        ambre_core::SurfacePx::new(f64::from(width)),
+        ambre_core::SurfacePx::new(f64::from(height)),
+        text_input.clone(),
+    );
     // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
     // can build a child view (`toile-embeds`) knowing nothing about the pipe. The
     // child reuses the one transparent textarea, but is constructed in embedded

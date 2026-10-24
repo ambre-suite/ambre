@@ -71,9 +71,9 @@ pub struct Painted {
     /// The unread line is on screen (`MURMURE-184`).
     pub line_shown: bool,
     /// The row the list rests on and its top, `None` on the latest row.
-    pub rest: Option<(usize, f32)>,
+    pub rest: Option<(usize, ViewPx)>,
     /// The first row on screen and its top, wherever the list rests.
-    pub top: Option<(usize, f32)>,
+    pub top: Option<(usize, ViewPx)>,
     /// The last row on screen, wherever the list rests.
     pub bottom: Option<usize>,
     /// The top and the bottom of the focused row, `None` when it is off
@@ -119,7 +119,7 @@ pub struct Shown<'a> {
     pub list: &'a MessageList,
     pub unread: Option<MessageId>,
     /// The row at the top and its top, `None` to rest on the latest row.
-    pub anchor: Option<(usize, f32)>,
+    pub anchor: Option<(usize, ViewPx)>,
     /// The row that holds the focus, ringed in the accent (`MURMURE-205`).
     pub focus: Option<usize>,
     /// The selection, and the points of a drag the paint resolves.
@@ -152,9 +152,9 @@ pub fn paint_list<S: DrawSurface>(
     let rows = shown.list.rows();
     let text_width = (width - 2.0 * SPACE_8).max(1.0);
     let mut words: HashMap<usize, (RowWords, bool)> = HashMap::new();
-    let reached = window(rows.len(), height, shown.anchor, |i| {
+    let reached = window(rows.len(), ViewPx::new(height), shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
-            return 0.0;
+            return ViewPx::ZERO;
         };
         let line = shown.unread.is_some() && shown.unread == row.message().map(|m| m.id);
         let row = row.words(name_of, time_of);
@@ -163,8 +163,14 @@ pub fn paint_list<S: DrawSurface>(
             tall += line_height(font_cx, cache, text_width);
         }
         words.insert(i, (row, line));
-        tall
+        ViewPx::new(tall)
     });
+    // The rows the paint draws and hit-tests, in the floats its layout takes.
+    let laid: Vec<(usize, f32, f32)> = reached
+        .rows
+        .iter()
+        .map(|&(i, top, tall)| (i, top.get(), tall.get()))
+        .collect();
     let selecting = shown.selecting;
     let active = selecting != Selecting::default();
     let keys = if active {
@@ -173,7 +179,7 @@ pub fn paint_list<S: DrawSurface>(
         Vec::new()
     };
     let mut selection = selecting.selection;
-    let mut spot_at = |at| spot_at(font_cx, cache, &reached.rows, &words, &keys, at, text_width);
+    let mut spot_at = |at| spot_at(font_cx, cache, &laid, &words, &keys, at, text_width);
     if let Some(at) = selecting.press {
         selection = spot_at(at).map(|spot| TextSelection {
             anchor: spot,
@@ -187,18 +193,18 @@ pub fn paint_list<S: DrawSurface>(
     }
     let link = selecting
         .click
-        .and_then(|at| link_at(font_cx, cache, &reached.rows, &words, at, text_width));
+        .and_then(|at| link_at(font_cx, cache, &laid, &words, at, text_width));
     let pics = shown.pictures;
     let chip = selecting
         .click
-        .and_then(|at| chip_at(font_cx, cache, &reached.rows, &words, at, text_width, pics));
+        .and_then(|at| chip_at(font_cx, cache, &laid, &words, at, text_width, pics));
     let file = selecting
         .click
-        .and_then(|at| file_at(font_cx, cache, &reached.rows, &words, at, text_width, pics));
+        .and_then(|at| file_at(font_cx, cache, &laid, &words, at, text_width, pics));
     let mut played = Played::default();
     let mut line_shown = false;
     let mut focus = None;
-    for &(i, top, tall) in &reached.rows {
+    for &(i, top, tall) in &laid {
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
@@ -271,8 +277,7 @@ pub fn paint_list<S: DrawSurface>(
         top: reached.rows.first().map(|&(i, top, _)| (i, top)),
         bottom: reached.rows.last().map(|&(i, _, _)| i),
         focus,
-        rows: reached
-            .rows
+        rows: laid
             .iter()
             .map(|&(i, top, tall)| (i, top, top + tall))
             .collect(),
@@ -1136,11 +1141,11 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let (_, painted) = paint_from(at((10, 0.0)), 200.0);
-        assert_eq!(painted.rest, Some((10, 0.0)));
+        let (_, painted) = paint_from(at((10, ViewPx::ZERO)), 200.0);
+        assert_eq!(painted.rest, Some((10, ViewPx::ZERO)));
         assert!(!painted.latest_shown && !painted.oldest_shown);
         assert!(painted.laid_out < 20, "{painted:?}");
-        let (_, top) = paint_from(at((0, 0.0)), 200.0);
+        let (_, top) = paint_from(at((0, ViewPx::ZERO)), 200.0);
         assert!(top.oldest_shown && !top.latest_shown);
         let (_, bottom) = paint(&list, 200.0);
         assert_eq!(bottom.rest, None);

@@ -229,6 +229,13 @@ impl DocPx {
         ViewPx(self.0 * zoom.get() as f32)
     }
 
+    /// The length on a drawing surface at `zoom`, scaled in the surface's
+    /// `f64` so a sheet far down keeps its precision.
+    #[must_use]
+    pub fn zoomed_on_surface(self, zoom: ZoomFactor) -> SurfacePx {
+        SurfacePx(f64::from(self.0) * zoom.get())
+    }
+
     /// The length in points.
     #[must_use]
     pub fn to_pt(self) -> Pt {
@@ -417,6 +424,7 @@ mod tests {
         let zoom = ZoomFactor::positive(2.0);
         assert_eq!(DocPx::new(12.0).zoomed(zoom), ViewPx::new(24.0));
         assert_eq!(ViewPx::new(24.0).unzoomed(zoom), DocPx::new(12.0));
+        assert_eq!(DocPx::new(12.0).zoomed_on_surface(zoom), SurfacePx::new(24.0));
     }
 
     #[test]

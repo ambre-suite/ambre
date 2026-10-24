@@ -11,8 +11,8 @@ impl TrameView {
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: f64,
-        canvas_height: f64,
+        canvas_width: ambre_core::SurfacePx,
+        canvas_height: ambre_core::SurfacePx,
         text_input: TextInput,
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
@@ -52,8 +52,8 @@ impl TrameView {
             to_logic,
             from_logic,
             state: TrameUiState::new(
-                ambre_core::SurfacePx::new(canvas_width),
-                ambre_core::SurfacePx::new(canvas_height),
+                canvas_width,
+                canvas_height,
             ),
             text_input,
             anchor,

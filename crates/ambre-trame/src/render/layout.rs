@@ -91,11 +91,16 @@ impl GridLayout<'_> {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
+    /// The padding between a cell's side and its text, at the zoom.
+    pub fn pad_x(&self) -> ambre_core::SurfacePx {
+        super::CELL_PAD_X.zoomed_on_surface(self.zoom)
+    }
+
     /// Width (logical px) of column `col`: its per-column entry, else the
     /// uniform [`col_width`](Self::col_width).
     pub fn col_w(&self, col: Col) -> f64 {
         let width = self.col_widths.get(&col).copied().unwrap_or(self.col_width);
-        f64::from(width.get()) * self.zoom.get()
+        width.zoomed_on_surface(self.zoom).get()
     }
 
     /// Height (logical px) of row `row`: its per-row entry, else the uniform
@@ -107,7 +112,7 @@ impl GridLayout<'_> {
             .get(&row)
             .copied()
             .unwrap_or(self.row_height);
-        f64::from(height.get()) * self.zoom.get()
+        height.zoomed_on_surface(self.zoom).get()
     }
 
     /// X of column `col`'s left edge relative to the surface, summing the

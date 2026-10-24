@@ -612,7 +612,9 @@ impl TrameView {
     fn editor_local_point(&self, at: ViewPoint) -> Option<DocPoint> {
         let ed = self.editor.as_ref()?;
         let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.at)?;
-        let pad = f64::from(crate::render::CELL_PAD_X.get()) * self.state.zoom.get();
+        let pad = crate::render::CELL_PAD_X
+            .zoomed_on_surface(self.state.zoom)
+            .get();
         let x = (f64::from(at.x.get()) - (cx + pad)).max(0.0) as f32;
         Some(DocPoint::new(DocPx::new(x), DocPx::ZERO))
     }

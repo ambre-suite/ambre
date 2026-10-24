@@ -693,8 +693,8 @@ impl ToileView {
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: f64,
-        canvas_height: f64,
+        canvas_width: ambre_core::SurfacePx,
+        canvas_height: ambre_core::SurfacePx,
         text_input: TextInput,
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
@@ -743,7 +743,7 @@ impl ToileView {
             notices,
             to_logic,
             from_logic,
-            cam: ViewportTransform::new(canvas_width, canvas_height),
+            cam: ViewportTransform::new(canvas_width.get(), canvas_height.get()),
             display: DisplayViewport {
                 version: ambre_bus::ViewportVersion(0),
                 grid_unit: super::grid::BASE_GRID,
@@ -776,7 +776,7 @@ impl ToileView {
             edit_dirty: false,
             edit_pointer_down: false,
             click_edit_candidate: None,
-            last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
+            last_pointer: Point::new(canvas_width.get() / 2.0, canvas_height.get() / 2.0),
             panning: None,
             kinetic: Default::default(),
             finger: None,

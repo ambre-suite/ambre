@@ -59,7 +59,7 @@ where
             // underline/strike) exactly like a plain cell, but always clipped to
             // and aligned within the span rect.
             let avail =
-                (rect.width() - 2.0 * f64::from(CELL_PAD_X.get()) * layout.zoom.get()).max(0.0);
+                (rect.width() - 2.0 * layout.pad_x().get()).max(0.0);
             // True zoom: scale the glyph size with the grid (span metrics already
             // scale via `cell_rect`/`merge_rect`).
             let font_size = super::cell_font_px(content.size) * layout.zoom.get() as f32;
@@ -89,7 +89,7 @@ where
             let fg = content.fg.map(rgb).unwrap_or(palette.cell_text);
             let brush = Brush::Solid(fg);
             surface.push_clip(rect);
-            let origin_x = rect.x0 + f64::from(CELL_PAD_X.get()) * layout.zoom.get() + x_off;
+            let origin_x = rect.x0 + layout.pad_x().get() + x_off;
             draw_layout_runs_decorated(
                 surface,
                 layout_text,

@@ -161,7 +161,7 @@ enum Rest {
     Latest,
     /// With a row at a height, which rows loaded above or below leave in
     /// place (`MURMURE-192`).
-    Row { key: RowKey, anchor_y: f32 },
+    Row { key: RowKey, anchor_y: ambre_core::ViewPx },
 }
 
 /// The lists every region of the page reads, and a count of their changes.
@@ -234,7 +234,7 @@ pub struct MurmureView {
     /// on its latest row until it comes.
     pending: bool,
     /// The first row on screen at the last paint, and its top.
-    top_row: Option<(RowKey, f32)>,
+    top_row: Option<(RowKey, ambre_core::ViewPx)>,
     /// The way the last step went: below zero towards the oldest row.
     heading: f32,
     /// The scroll, through the model every application shares
@@ -489,7 +489,7 @@ impl MurmureView {
 
     /// Where the list rests: the row at the top and its top, `None` on the
     /// latest row.
-    pub fn resting_on(&self) -> Option<(RowKey, f32)> {
+    pub fn resting_on(&self) -> Option<(RowKey, ambre_core::ViewPx)> {
         match self.rest {
             Rest::Row { key, anchor_y } if !self.pending => Some((key, anchor_y)),
             _ => None,
@@ -509,7 +509,7 @@ impl MurmureView {
         };
         self.rest = Rest::Row {
             key,
-            anchor_y: anchor_y - step.y().get(),
+            anchor_y: anchor_y - step.y(),
         };
         self.pending = false;
         self.heading = step.y().get();
@@ -794,7 +794,7 @@ impl MurmureView {
         };
         self.rest = Rest::Row {
             key: RowKey::Message(message),
-            anchor_y: self.list_height() * AT_FRACTION,
+            anchor_y: ambre_core::ViewPx::new(self.list_height() * AT_FRACTION),
         };
         self.pending = false;
         self.kinetic.stop();
@@ -916,7 +916,10 @@ impl MurmureView {
             return;
         };
         let Some((top, bottom)) = painted.focus else {
-            self.rest = Rest::Row { key, anchor_y: 0.0 };
+            self.rest = Rest::Row {
+                key,
+                anchor_y: ambre_core::ViewPx::ZERO,
+            };
             self.pending = false;
             self.dirty = true;
             return;
@@ -1461,7 +1464,7 @@ impl MurmureView {
         self.rest = match (self.region, pane) {
             (Region::Channel, MurmurePane::Channel { at: Some(at), .. }) => Rest::Row {
                 key: RowKey::Message(at.message),
-                anchor_y: self.list_height() * AT_FRACTION,
+                anchor_y: ambre_core::ViewPx::new(self.list_height() * AT_FRACTION),
             },
             _ => Rest::Latest,
         };
@@ -1477,7 +1480,7 @@ impl MurmureView {
     /// Keep where the paint left the list, and stop a motion that met an
     /// end of it.
     fn settle(&mut self, painted: &Painted, keys: &[RowKey]) {
-        let key_of = |(i, y): (usize, f32)| keys.get(i).map(|&key| (key, y));
+        let key_of = |(i, y): (usize, ambre_core::ViewPx)| keys.get(i).map(|&key| (key, y));
         self.top_row = painted.top.and_then(key_of);
         if !self.pending {
             self.rest = painted
@@ -1486,7 +1489,7 @@ impl MurmureView {
                 .map_or(Rest::Latest, |(key, anchor_y)| Rest::Row { key, anchor_y });
         }
         let at_latest = painted.rest.is_none();
-        let at_oldest = painted.rest.is_some_and(|(i, y)| i == 0 && y >= 0.0);
+        let at_oldest = painted.rest.is_some_and(|(i, y)| i == 0 && y >= ambre_core::ViewPx::ZERO);
         let edge = if self.heading > 0.0 {
             at_latest
         } else {
