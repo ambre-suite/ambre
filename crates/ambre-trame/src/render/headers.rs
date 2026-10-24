@@ -29,7 +29,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     text_pass: TextPass,
 ) {
     let w = layout.width;
-    let hh = layout.header_height;
+    let hh = layout.header_height.get();
     let top = layout.top;
 
     // Opaque background over the full top strip (corner included).
@@ -75,7 +75,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     // visible columns as the label loop below, independent of `text_pass`.
     {
         let mut col = layout.origin_col;
-        let mut col_x = layout.header_width;
+        let mut col_x = layout.header_width.get();
         while col < layout.total_cols.as_end() && col_x < w {
             let edge = col_x + layout.col_w(col);
             surface.stroke_line(
@@ -93,7 +93,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     }
     let brush = Brush::Solid(palette.header_text);
     let mut col = layout.origin_col;
-    let mut col_x = layout.header_width;
+    let mut col_x = layout.header_width.get();
     loop {
         if col >= layout.total_cols.as_end() || col_x >= w {
             break;
@@ -115,7 +115,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(col_x, top, col_x + cw, top + hh));
         }
-        draw_layout_runs(surface, lyt, col_x, top + y_off, &brush);
+        draw_layout_runs(surface, lyt, Point::new(col_x, top + y_off), &brush);
         if needs_clip {
             surface.pop_clip();
         }
@@ -144,9 +144,9 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     text_pass: TextPass,
 ) {
     let h = layout.height;
-    let hw = layout.header_width;
+    let hw = layout.header_width.get();
     let top = layout.top;
-    let cells_top = top + layout.header_height;
+    let cells_top = top + layout.header_height.get();
 
     // Opaque background over the full left strip (below the formula bar band).
     surface.fill_rect(Rect::new(0.0, top, hw, h), palette.header_bg);
@@ -252,7 +252,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(0.0, row_y, hw, row_y + rh));
         }
-        draw_layout_runs(surface, lyt, 4.0, row_y + y_off, &brush);
+        draw_layout_runs(surface, lyt, Point::new(4.0, row_y + y_off), &brush);
         if needs_clip {
             surface.pop_clip();
         }

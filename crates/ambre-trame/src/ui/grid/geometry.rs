@@ -70,13 +70,13 @@ impl TrameUiState {
     /// Width (logical px) of the fixed row-number strip on the left, scaled by
     /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
     pub fn header_w(&self) -> f64 {
-        HEADER_WIDTH * self.zoom.get()
+        (HEADER_WIDTH * self.zoom.get()).get()
     }
 
     /// Height (logical px) of the fixed column-letter strip on top, scaled by
     /// the current [`zoom`](Self::zoom).
     pub fn header_h(&self) -> f64 {
-        HEADER_HEIGHT * self.zoom.get()
+        (HEADER_HEIGHT * self.zoom.get()).get()
     }
 
     /// X of column `col`'s left edge relative to the canvas, summing the variable

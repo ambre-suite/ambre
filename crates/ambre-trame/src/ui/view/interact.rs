@@ -612,7 +612,7 @@ impl TrameView {
     fn editor_local_point(&self, at: ViewPoint) -> Option<DocPoint> {
         let ed = self.editor.as_ref()?;
         let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.at)?;
-        let pad = crate::render::CELL_PAD_X * self.state.zoom.get();
+        let pad = f64::from(crate::render::CELL_PAD_X.get()) * self.state.zoom.get();
         let x = (f64::from(at.x.get()) - (cx + pad)).max(0.0) as f32;
         Some(DocPoint::new(DocPx::new(x), DocPx::ZERO))
     }
@@ -878,7 +878,7 @@ pub(crate) fn fit_column_width(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
 ) -> DocPx {
-    let pad = (crate::render::CELL_PAD_X * 2.0) as f32;
+    let pad = (crate::render::CELL_PAD_X * 2.0).get();
     let widest = cells
         .iter()
         .filter(|cell| !cell.text.is_empty())

@@ -11,6 +11,7 @@
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
 use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
+use ambre_core::{CssPoint, CssPx, ViewPoint};
 use leptos::prelude::*;
 
 use super::commands::{
@@ -33,8 +34,8 @@ pub struct TrameHandler {
     pub filter_values: RwSignal<Vec<String>>,
     /// The active cell's style, which the bold and italic toggles flip.
     pub style: StyleState,
-    /// Where the view last drew the active cell, in canvas CSS pixels.
-    pub anchor: RwSignal<Option<(f64, f64)>>,
+    /// Where the view last drew the active cell, on the canvas.
+    pub anchor: RwSignal<Option<ViewPoint>>,
 }
 
 impl TrameHandler {
@@ -42,12 +43,11 @@ impl TrameHandler {
     /// for that column's values (`trame-shared-filter`). The menu entry and
     /// the in-canvas filter button both come here, so they share one path.
     pub fn open_filter(&self) -> AppCommand {
-        let (x, y) = client_anchor(self.anchor.get_untracked());
+        let at = client_anchor(self.anchor.get_untracked());
         // `col` is provisional; the ColumnValues reply carries the real one.
         self.filter_popover.set(Some(FilterPopoverState {
             col: ambre_bus::Col::ZERO,
-            x,
-            y,
+            at,
         }));
         self.filter_values.set(Vec::new());
         AppCommand::Trame(TrameCommand::RequestActiveColumnValues)
@@ -158,16 +158,16 @@ impl CommandHandler for TrameHandler {
     }
 }
 
-/// Convert a canvas-relative anchor (CSS px) into client space, by adding the
-/// canvas's offset in the viewport. With no anchor, the canvas's top-left.
-fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
-    let (ox, oy) = document()
+/// Convert a canvas-relative anchor into client space, by adding the canvas's
+/// offset in the viewport. With no anchor, the canvas's top-left.
+fn client_anchor(anchor: Option<ViewPoint>) -> CssPoint {
+    let origin = document()
         .get_element_by_id("ambre-canvas")
         .map(|c| {
             let r = c.get_bounding_client_rect();
-            (r.left(), r.top())
+            // The DOM measures in `f64`; a CSS pixel is an `f32`.
+            CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
         })
-        .unwrap_or((0.0, 0.0));
-    let (ax, ay) = anchor.unwrap_or((0.0, 0.0));
-    (ox + ax, oy + ay)
+        .unwrap_or_default();
+    anchor.unwrap_or_default().on_page(origin)
 }

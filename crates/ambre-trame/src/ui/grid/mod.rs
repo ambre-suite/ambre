@@ -10,7 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
-use ambre_core::{DocPx, Rgb};
+use ambre_core::{DocPx, Rgb, SurfacePx};
 use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
@@ -31,9 +31,11 @@ use crate::{
 mod geometry;
 mod state;
 
-pub const HEADER_HEIGHT: f64 = 24.0;
+/// Height of the column-letter strip at zoom 1.
+pub const HEADER_HEIGHT: SurfacePx = SurfacePx::new(24.0);
 
-pub const HEADER_WIDTH: f64 = 50.0;
+/// Width of the row-number strip at zoom 1.
+pub const HEADER_WIDTH: SurfacePx = SurfacePx::new(50.0);
 
 pub use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
 

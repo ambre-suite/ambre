@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::DocPx;
+use ambre_core::{DocPx, SurfacePx};
 use ambre_draw::DocumentWalk;
 
 use super::*;
@@ -58,18 +58,18 @@ impl SheetAxes<'_> {
     }
 
     /// X of column `col`'s left edge.
-    pub fn col_x(&self, col: Col) -> f64 {
+    pub fn col_x(&self, col: Col) -> SurfacePx {
         let resized: f64 = self
             .col_widths
             .iter()
             .filter(|&(&c, _)| c < col)
             .map(|(_, &w)| f64::from(w.get()) - f64::from(self.col_width.get()))
             .sum();
-        f64::from(col.get()) * f64::from(self.col_width.get()) + resized
+        SurfacePx::new(f64::from(col.get()) * f64::from(self.col_width.get()) + resized)
     }
 
     /// Y of row `row`'s top edge. The hidden rows above it take no height.
-    pub fn row_y(&self, row: Row) -> f64 {
+    pub fn row_y(&self, row: Row) -> SurfacePx {
         let hidden = self.hidden_rows.partition_point(|&r| r < row) as f64;
         let resized: f64 = self
             .row_heights
@@ -77,18 +77,18 @@ impl SheetAxes<'_> {
             .filter(|&(&r, _)| r < row && !self.is_hidden(r))
             .map(|(_, &h)| f64::from(h.get()) - f64::from(self.row_height.get()))
             .sum();
-        (f64::from(row.get()) - hidden) * f64::from(self.row_height.get()) + resized
+        SurfacePx::new((f64::from(row.get()) - hidden) * f64::from(self.row_height.get()) + resized)
     }
 
     /// The column whose band holds `x`, clamped to the grid.
-    pub fn col_at(&self, x: f64) -> Col {
+    pub fn col_at(&self, x: SurfacePx) -> Col {
         ColSpan::from_count(Col::ZERO, TOTAL_COLS)
             .first_where(|c| self.col_x(c.next()) > x)
             .min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
-    pub fn row_at(&self, y: f64) -> Row {
+    pub fn row_at(&self, y: SurfacePx) -> Row {
         RowSpan::from_count(Row::ZERO, TOTAL_ROWS)
             .first_where(|r| self.row_y(r.next()) > y)
             .min(LAST_ROW)
@@ -134,9 +134,18 @@ impl DocumentWalk for SheetWalk<'_> {
     fn walk<S: DrawSurface>(&mut self, view: &SheetView<'_>, region: Rect, surface: &mut S) {
         let axes = &view.axes;
         let palette = view.palette;
-        let (c0, r0) = (axes.col_at(region.x0), axes.row_at(region.y0));
-        let c1 = axes.col_at(region.x1).next().min(TOTAL_COLS.as_end());
-        let r1 = axes.row_at(region.y1).next().min(TOTAL_ROWS.as_end());
+        let (c0, r0) = (
+            axes.col_at(SurfacePx::new(region.x0)),
+            axes.row_at(SurfacePx::new(region.y0)),
+        );
+        let c1 = axes
+            .col_at(SurfacePx::new(region.x1))
+            .next()
+            .min(TOTAL_COLS.as_end());
+        let r1 = axes
+            .row_at(SurfacePx::new(region.y1))
+            .next()
+            .min(TOTAL_ROWS.as_end());
         let (cols, rows) = (ColSpan::new(c0, c1), RowSpan::new(r0, r1));
         // The primitives lay out from an origin cell: pin it at its own sheet
         // position, so every rect they produce is in sheet coordinates.

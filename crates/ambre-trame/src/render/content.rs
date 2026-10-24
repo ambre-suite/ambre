@@ -164,14 +164,12 @@ fn border_stroke(style: ambre_bus::BorderStyle) -> (f64, f64) {
 /// draws two thin parallel lines straddling the edge.
 fn styled_segment<S: DrawSurface>(
     surface: &mut S,
-    x0: f64,
-    y0: f64,
-    x1: f64,
-    y1: f64,
+    segment: ambre_draw::Line,
     color: Color,
     style: ambre_bus::BorderStyle,
 ) {
     use ambre_bus::BorderStyle as Bs;
+    let (x0, y0, x1, y1) = (segment.p0.x, segment.p0.y, segment.p1.x, segment.p1.y);
     let (width, period) = border_stroke(style);
     if style == Bs::Double {
         // Two 1px lines offset by 1px on each side of the edge.
@@ -226,16 +224,16 @@ fn draw_cell_border<S: DrawSurface>(
     default_color: Color,
 ) {
     let b = &content.borders;
-    let mut edge = |cb: Option<ambre_bus::CellBorder>, x0, y0, x1, y1| {
+    let mut edge = |cb: Option<ambre_bus::CellBorder>, from: (f64, f64), to: (f64, f64)| {
         if let Some(cb) = cb {
             let color = cb.color.map(rgb).unwrap_or(default_color);
-            styled_segment(surface, x0, y0, x1, y1, color, cb.style);
+            styled_segment(surface, ambre_draw::Line::new(from, to), color, cb.style);
         }
     };
-    edge(b.top, rect.x0, rect.y0, rect.x1, rect.y0);
-    edge(b.bottom, rect.x0, rect.y1, rect.x1, rect.y1);
-    edge(b.left, rect.x0, rect.y0, rect.x0, rect.y1);
-    edge(b.right, rect.x1, rect.y0, rect.x1, rect.y1);
+    edge(b.top, (rect.x0, rect.y0), (rect.x1, rect.y0));
+    edge(b.bottom, (rect.x0, rect.y1), (rect.x1, rect.y1));
+    edge(b.left, (rect.x0, rect.y0), (rect.x0, rect.y1));
+    edge(b.right, (rect.x1, rect.y0), (rect.x1, rect.y1));
 }
 
 /// Whether any of the four edges carries a border (drives the border pass).

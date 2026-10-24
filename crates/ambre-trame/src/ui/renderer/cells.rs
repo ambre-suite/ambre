@@ -48,8 +48,8 @@ pub(crate) fn sheet_camera(state: &TrameUiState) -> Affine {
     let axes = sheet_axes(state);
     let zoom = state.zoom.get();
     Affine::translate((
-        state.header_w() - zoom * axes.col_x(state.left_col),
-        state.header_h() - zoom * axes.row_y(state.top_row),
+        state.header_w() - zoom * axes.col_x(state.left_col).get(),
+        state.header_h() - zoom * axes.row_y(state.top_row).get(),
     )) * Affine::scale(zoom)
 }
 

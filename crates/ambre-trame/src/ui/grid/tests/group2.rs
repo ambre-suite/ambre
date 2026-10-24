@@ -373,14 +373,14 @@ fn header_strip_starts_at_top_of_canvas() {
 
     // A point inside the header strip is not a cell.
     assert_eq!(
-        state.cell_at(pointer(100.0, super::super::HEADER_HEIGHT - 1.0)),
+        state.cell_at(pointer(100.0, super::super::HEADER_HEIGHT.get() - 1.0)),
         None
     );
     // The first cell starts just below the header strip.
     assert_eq!(
         state.cell_at(pointer(
-            super::super::HEADER_WIDTH + 1.0,
-            super::super::HEADER_HEIGHT + 1.0
+            super::super::HEADER_WIDTH.get() + 1.0,
+            super::super::HEADER_HEIGHT.get() + 1.0
         )),
         Some(at(0, 0)),
     );
@@ -388,7 +388,7 @@ fn header_strip_starts_at_top_of_canvas() {
     let (_, y, _, _) = state
         .cell_pixel_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("visible");
-    assert_eq!(y, super::super::HEADER_HEIGHT);
+    assert_eq!(y, super::super::HEADER_HEIGHT.get());
 }
 
 /// On a very short canvas the grid area never inverts: `grid_bottom` floors
@@ -396,7 +396,7 @@ fn header_strip_starts_at_top_of_canvas() {
 #[test]
 fn grid_bottom_floors_at_header_on_tiny_canvas() {
     let state = TrameUiState::new(800.0, 10.0);
-    assert_eq!(state.grid_bottom(), super::super::HEADER_HEIGHT);
+    assert_eq!(state.grid_bottom(), super::super::HEADER_HEIGHT.get());
 }
 
 /// A screen of narrow columns requests every column it shows

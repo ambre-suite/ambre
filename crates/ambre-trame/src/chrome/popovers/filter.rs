@@ -11,9 +11,8 @@ use super::*;
 pub struct FilterPopoverState {
     /// Grid column (0-based) the filter targets.
     pub col: Col,
-    /// Client-space anchor (CSS px): the popover's top-left.
-    pub x: f64,
-    pub y: f64,
+    /// The popover's top-left on the page.
+    pub at: ambre_core::CssPoint,
 }
 
 /// Whether the active sheet is filtered (`trame-shared-filter`). The context
@@ -102,7 +101,8 @@ pub fn FilterPopover(
         state.get().map(|st| {
             let style = format!(
                 "position: fixed; left: {}px; top: {}px; z-index: 50;",
-                st.x, st.y
+                st.at.x.get(),
+                st.at.y.get()
             );
             view! {
                 <div class="ambre-filter-popover" style=style>

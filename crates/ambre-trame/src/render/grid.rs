@@ -26,13 +26,13 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
     }
 
     // Vertical lines at each visible column boundary.
-    let cells_top = layout.top + layout.header_height;
+    let cells_top = layout.top + layout.header_height.get();
     let line_y0 = area.y0.max(cells_top);
     let line_y1 = area.y1.min(layout.height);
     if line_y1 > line_y0 {
         // Walk the variable column widths, stroking a separator at each left edge.
         let mut col = layout.origin_col;
-        let mut x = layout.header_width;
+        let mut x = layout.header_width.get();
         loop {
             if col > layout.total_cols.as_end() || x > layout.width {
                 break;
@@ -50,7 +50,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
     }
 
     // Horizontal lines at each visible row boundary.
-    let line_x0 = area.x0.max(layout.header_width);
+    let line_x0 = area.x0.max(layout.header_width.get());
     let line_x1 = area.x1.min(layout.width);
     if line_x1 > line_x0 {
         // Walk the *visible* rows' variable heights (hidden rows occupy no space).

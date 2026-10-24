@@ -170,9 +170,10 @@ pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, 
     s.stroke_line(ambre_draw::Line::new((bx + w, by), (cx, by + h)), c, 1.0);
 }
 
-/// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
-/// offset left by `phase` (the marching-ants crawl, `trame-clipboard`).
-pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: Color, phase: f64) {
+/// Stroke the horizontal `line` dashed, left to right, the dashes offset left
+/// by `phase` (the marching-ants crawl, `trame-clipboard`).
+pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Color, phase: f64) {
+    let (x0, x1, y) = (line.p0.x, line.p1.x, line.p0.y);
     let mut t = x0 - phase;
     while t < x1 {
         let a = t.max(x0);
@@ -184,8 +185,9 @@ pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: C
     }
 }
 
-/// Stroke a vertical dashed line from `y0` to `y1` at column `x` (see [`dashed_h`]).
-pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, y0: f64, y1: f64, x: f64, c: Color, phase: f64) {
+/// Stroke the vertical `line` dashed, top to bottom (see [`dashed_h`]).
+pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Color, phase: f64) {
+    let (y0, y1, x) = (line.p0.y, line.p1.y, line.p0.x);
     let mut t = y0 - phase;
     while t < y1 {
         let a = t.max(y0);
@@ -263,7 +265,7 @@ pub fn draw_overlay<S: DrawSurface>(
         let w = 8.0 * z;
         let h = 7.0 * z;
         let bx = (cell.x1 - w - 3.0 * z).max(cell.x0 + 2.0);
-        let by = layout.top + (layout.header_height - h) / 2.0;
+        let by = layout.top + (layout.header_height.get() - h) / 2.0;
         draw_funnel(surface, bx, by, w, h, palette.selection);
     }
 
@@ -404,10 +406,25 @@ pub fn draw_overlay<S: DrawSurface>(
     {
         let phase = (clock.now_ms().0 / 40.0) % MARCHING_PERIOD;
         let c = palette.selection;
-        dashed_h(surface, x, x + w, y, c, phase);
-        dashed_h(surface, x, x + w, y + ht, c, phase);
-        dashed_v(surface, y, y + ht, x, c, phase);
-        dashed_v(surface, y, y + ht, x + w, c, phase);
+        dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
+        dashed_h(
+            surface,
+            ambre_draw::Line::new((x, y + ht), (x + w, y + ht)),
+            c,
+            phase,
+        );
+        dashed_v(
+            surface,
+            ambre_draw::Line::new((x, y), (x, y + ht)),
+            c,
+            phase,
+        );
+        dashed_v(
+            surface,
+            ambre_draw::Line::new((x + w, y), (x + w, y + ht)),
+            c,
+            phase,
+        );
     }
 
     // -- 2c. Autofill (`trame-autofill`): a dashed preview outline of the destination
@@ -417,10 +434,20 @@ pub fn draw_overlay<S: DrawSurface>(
         && let Some((x, y, w, ht)) = state.range_pixel_rect(rect)
     {
         let c = palette.selection;
-        dashed_h(surface, x, x + w, y, c, 0.0);
-        dashed_h(surface, x, x + w, y + ht, c, 0.0);
-        dashed_v(surface, y, y + ht, x, c, 0.0);
-        dashed_v(surface, y, y + ht, x + w, c, 0.0);
+        dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, 0.0);
+        dashed_h(
+            surface,
+            ambre_draw::Line::new((x, y + ht), (x + w, y + ht)),
+            c,
+            0.0,
+        );
+        dashed_v(surface, ambre_draw::Line::new((x, y), (x, y + ht)), c, 0.0);
+        dashed_v(
+            surface,
+            ambre_draw::Line::new((x + w, y), (x + w, y + ht)),
+            c,
+            0.0,
+        );
     }
     if let Some((hx, hy, hw, hh)) = state.fill_handle_rect() {
         let r = Rect::new(hx, hy, hx + hw, hy + hh);

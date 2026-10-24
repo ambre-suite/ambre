@@ -144,7 +144,6 @@ ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(na
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.palette_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.seal_open | field | RwSignal<bool>	math	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
-ambre-app | src/shell/mod.rs | crate::shell | mount_shell(anchor_slot) | param | Slot<RwSignal<Option<(f64,f64)>>>	math	css position
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | param | RwSignal<String>	free-text	presenter notes text
@@ -4210,14 +4209,9 @@ ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | Replace
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.replacement | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(cell_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(content) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.anchor | field | RwSignal<Option<(f64,f64)>>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor() | ret | (f64,f64)	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/handler.rs | crate::chrome::handler | client_anchor(anchor) | param | Option<(f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FILTER_OPS | const | &[(FilterOp,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopoverState.x | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopoverState.y | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
@@ -4559,13 +4553,7 @@ ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset() |
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(box_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(text_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x0) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | styled_segment(x1) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y0) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | styled_segment(y1) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_height | field | f64	math	the surface offset of the content area, in the f64 of the grid's other surface coordinates: the sheet walk sets it to an absolute sheet position, up to 100000 rows of 20 px, where the f32 that ViewPx holds steps by a quarter pixel
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.header_width | field | f64	math	the surface offset of the content area, in the f64 of the grid's other surface coordinates: the sheet walk sets it to an absolute sheet position, up to 100000 rows of 20 px, where the f32 that ViewPx holds steps by a quarter pixel
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
@@ -4578,26 +4566,15 @@ ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/mod.rs | crate::render | BODY_SIZE | const | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/render/mod.rs | crate::render | CELL_PAD_X | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/mod.rs | crate::render | HEADER_SIZE | const | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/mod.rs | crate::render | cell_font_px() | ret | f32	math	a value local to one algorithm
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(origin_x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(font_size) | param | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(origin_x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(font_size) | param | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(max_width) | param | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/text.rs | crate::render::text | draw_text(origin_y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_at(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::col_x() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_at(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::row_y() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
@@ -4634,8 +4611,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | par
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_HEIGHT | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | HEADER_WIDTH | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | RESIZE_BAND | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Col.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Row.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -4672,13 +4647,7 @@ ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHI
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_PERIOD | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(x0) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(x1) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(y) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(y0) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(y1) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(bx) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(by) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(h) | param | f64	math	local geometry / pixel arithmetic

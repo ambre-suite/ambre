@@ -10,8 +10,7 @@ use super::*;
 // Text helper
 // -----------------------------------------------------------------------------
 
-/// Shape `text` and emit its glyph runs at `(origin_x, origin_y)` (the layout's
-/// top-left). Shared by the headers, the HUD, and any one-shot label.
+/// Shape `text` and emit its glyph runs at `origin` (the layout's top-left). Shared by the headers, the HUD, and any one-shot label.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_text<S: DrawSurface>(
     surface: &mut S,
@@ -21,8 +20,7 @@ pub fn draw_text<S: DrawSurface>(
     font_size: f32,
     max_width: f32,
     align: Alignment,
-    origin_x: f64,
-    origin_y: f64,
+    origin: Point,
     color: Color,
 ) {
     if text.is_empty() {
@@ -31,11 +29,11 @@ pub fn draw_text<S: DrawSurface>(
     let layout: &Layout<ParleyBrush> =
         cache.get_or_build(font_cx, text, font_size, max_width, align, false, false);
     let brush = Brush::Solid(color);
-    draw_layout_runs(surface, layout, origin_x, origin_y, &brush);
+    draw_layout_runs(surface, layout, origin, &brush);
 }
 
-/// Emit every glyph run of an already-built `layout` at `(origin_x, origin_y)`
-/// (the layout's top-left) in a single `brush`. This is the one place the
+/// Emit every glyph run of an already-built `layout` at `origin` (the layout's
+/// top-left) in a single `brush`. This is the one place the
 /// `lines() -> items() -> GlyphRun` walk lives. The headers, the inline editor
 /// and any decoration-free label all delegate here instead of re-inlining the
 /// same nested loop. `lines() -> items() -> GlyphRun` walk lives; the headers,
@@ -44,8 +42,7 @@ pub fn draw_text<S: DrawSurface>(
 pub fn draw_layout_runs<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    origin_x: f64,
-    origin_y: f64,
+    origin: Point,
     brush: &Brush,
 ) {
     for line in layout.lines() {
@@ -53,8 +50,8 @@ pub fn draw_layout_runs<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = origin_x + run.offset() as f64;
-            let ty = origin_y + run.baseline() as f64;
+            let tx = origin.x + run.offset() as f64;
+            let ty = origin.y + run.baseline() as f64;
             surface.draw_glyphs(&run, brush, Affine::translate((tx, ty)));
         }
     }
@@ -68,8 +65,7 @@ pub fn draw_layout_runs<S: DrawSurface>(
 pub fn draw_layout_runs_decorated<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    origin_x: f64,
-    origin_y: f64,
+    origin: Point,
     brush: &Brush,
     deco_color: Color,
     font_size: f32,
@@ -80,8 +76,8 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = origin_x + run.offset() as f64;
-            let ty = origin_y + run.baseline() as f64;
+            let tx = origin.x + run.offset() as f64;
+            let ty = origin.y + run.baseline() as f64;
             surface.draw_glyphs(&run, brush, Affine::translate((tx, ty)));
             if decoration == Decoration::default() {
                 continue;

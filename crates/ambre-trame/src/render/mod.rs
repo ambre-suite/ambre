@@ -26,14 +26,14 @@ use ambre_bus::{
     CellPos, Col, ColCount, ColDelta, ColSpan, MergeSpan, Row, RowCount, RowDelta, RowSpan,
 };
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::FontSize;
+use ambre_core::{DocPx, FontSize};
 use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
+    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush, Point,
     PositionedLayoutItem, Rect,
 };
 
 /// Cell text left padding (also the caret's x origin inside a cell).
-pub const CELL_PAD_X: f64 = 4.0;
+pub const CELL_PAD_X: DocPx = DocPx::new(4.0);
 /// Body font size of a cell that carries none, in points.
 pub const BODY_FONT: FontSize = FontSize::from_whole_points(9);
 /// Body font size in px, shared by the cell renderer and the edit overlay. It

@@ -4,7 +4,7 @@
 use super::*;
 use crate::test_support::at;
 use ambre_canvas::{TextCache, Theme};
-use ambre_core::Rgb;
+use ambre_core::{Rgb, SurfacePx};
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -26,8 +26,8 @@ fn empty_heights() -> &'static std::collections::HashMap<Row, ambre_core::DocPx>
 fn layout() -> GridLayout<'static> {
     GridLayout {
         hidden_rows: &[],
-        header_width: 50.0,
-        header_height: 24.0,
+        header_width: SurfacePx::new(50.0),
+        header_height: SurfacePx::new(24.0),
         top: 0.0,
         col_width: ambre_core::DocPx::new(80.0),
         row_height: ambre_core::DocPx::new(20.0),

@@ -21,6 +21,7 @@
 //   - Overlay-only diff: draw_overlay
 // ============================================================================
 
+use ambre_core::SurfacePx;
 use ambre_draw::{Clock, Color, DrawSurface, FontContext, Rect};
 
 use ambre_canvas::{Palette, TextCache};
@@ -52,8 +53,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         hidden_rows: &state.hidden_rows,
         // Header strips zoom with the grid: pass the already-scaled sizes (the
         // layout multiplies only the content-area metrics by `zoom`).
-        header_width: state.header_w(),
-        header_height: state.header_h(),
+        header_width: SurfacePx::new(state.header_w()),
+        header_height: SurfacePx::new(state.header_h()),
         top: 0.0,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
@@ -408,7 +409,12 @@ mod tests {
         assert_eq!(
             surface.ops().first(),
             Some(&DrawOp::FillRect {
-                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, state.grid_bottom(),),
+                rect: Rect::new(
+                    HEADER_WIDTH.get(),
+                    HEADER_HEIGHT.get(),
+                    800.0,
+                    state.grid_bottom(),
+                ),
                 color: palette.content_pending,
             }),
         );
@@ -436,10 +442,10 @@ mod tests {
 
         // One row entering at the top: [HEADER_HEIGHT, HEADER_HEIGHT + ROW_HEIGHT].
         let strip = Rect::new(
-            HEADER_WIDTH,
-            HEADER_HEIGHT,
+            HEADER_WIDTH.get(),
+            HEADER_HEIGHT.get(),
             800.0,
-            HEADER_HEIGHT + f64::from(ROW_HEIGHT.get()),
+            HEADER_HEIGHT.get() + f64::from(ROW_HEIGHT.get()),
         );
         draw_cells(
             &mut surface,
@@ -609,7 +615,7 @@ mod tests {
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
-        let header_corner = Rect::new(0.0, 0.0, HEADER_WIDTH, HEADER_HEIGHT);
+        let header_corner = Rect::new(0.0, 0.0, HEADER_WIDTH.get(), HEADER_HEIGHT.get());
         draw_cells(
             &mut surface,
             &state,

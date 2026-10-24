@@ -852,7 +852,7 @@ pub fn main() {
     let store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
     let toile_store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
     let commands_slot: Slot<shell::CommandPath> = Rc::new(RefCell::new(None));
-    let anchor_slot: Slot<RwSignal<Option<(f64, f64)>>> = Rc::new(RefCell::new(None));
+    let anchor_slot: Slot<RwSignal<Option<ambre_core::ViewPoint>>> = Rc::new(RefCell::new(None));
     let toasts_slot: Slot<Toasts> = Rc::new(RefCell::new(None));
     let user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>> = Rc::new(RefCell::new(None));
     let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
@@ -1052,7 +1052,7 @@ pub fn main() {
     let vault_frame = vault.clone();
     let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
-    let mut last_anchor: Option<(f64, f64)> = None;
+    let mut last_anchor: Option<ambre_core::ViewPoint> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
@@ -1631,9 +1631,7 @@ pub fn main() {
 
         // Mirror the view's published selection anchor into the chrome signal,
         // only on change so the floating toolbar repositions just when it moves.
-        let next = anchor_pub_pump
-            .read()
-            .map(|a| (f64::from(a.x.get()), f64::from(a.y.get())));
+        let next = anchor_pub_pump.read();
         if next != last_anchor {
             last_anchor = next;
             anchor_pos.set(next);

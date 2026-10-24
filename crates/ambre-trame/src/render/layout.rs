@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::DocPx;
+use ambre_core::{DocPx, SurfacePx};
 
 use super::*;
 
@@ -34,9 +34,9 @@ pub struct GridLayout<'a> {
     /// visible.
     pub hidden_rows: &'a [Row],
     /// Width of the fixed row-number strip on the left.
-    pub header_width: f64,
+    pub header_width: SurfacePx,
     /// Height of the fixed column-letter strip on the top.
-    pub header_height: f64,
+    pub header_height: SurfacePx,
     /// Vertical offset (logical px) of the whole grid from the surface top.
     /// This is the height of any band reserved above the column-header
     /// strip: the formula bar on screen, `0.0` for PDF export.
@@ -78,8 +78,8 @@ impl GridLayout<'_> {
     /// The scrollable content area (everything below + right of the headers).
     pub fn content_area(&self) -> Rect {
         Rect::new(
-            self.header_width,
-            self.top + self.header_height,
+            self.header_width.get(),
+            self.top + self.header_height.get(),
             self.width,
             self.height,
         )
@@ -115,7 +115,7 @@ impl GridLayout<'_> {
     /// origin yield a coordinate smaller than [`header_width`](Self::header_width)
     /// (callers clip).
     pub fn col_left(&self, col: Col) -> f64 {
-        let mut x = self.header_width;
+        let mut x = self.header_width.get();
         if col >= self.origin_col {
             for c in ColSpan::new(self.origin_col, col) {
                 x += self.col_w(c);
@@ -132,7 +132,7 @@ impl GridLayout<'_> {
     /// heights of the *visible* rows from [`origin_row`](Self::origin_row). The
     /// row axis collapses over filtered rows (`trame-shared-filter`).
     pub fn row_top(&self, row: Row) -> f64 {
-        let mut y = self.top + self.header_height;
+        let mut y = self.top + self.header_height.get();
         if row >= self.origin_row {
             for r in RowSpan::new(self.origin_row, row) {
                 if !self.is_hidden(r) {
@@ -153,10 +153,10 @@ impl GridLayout<'_> {
     /// area), walking the variable widths from the origin. `None` left of the
     /// header strip or past the grid's last column.
     pub fn col_at(&self, px: f64) -> Option<Col> {
-        if px < self.header_width {
+        if px < self.header_width.get() {
             return None;
         }
-        let mut x = self.header_width;
+        let mut x = self.header_width.get();
         let mut col = self.origin_col;
         while col < self.total_cols.as_end() {
             let w = self.col_w(col);
@@ -173,7 +173,7 @@ impl GridLayout<'_> {
     /// area), walking the *visible* variable heights from the origin. `None`
     /// above the header strip or past the grid's last row.
     pub fn row_at(&self, py: f64) -> Option<Row> {
-        let cells_top = self.top + self.header_height;
+        let cells_top = self.top + self.header_height.get();
         if py < cells_top {
             return None;
         }
