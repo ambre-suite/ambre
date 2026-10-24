@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
-use ambre_core::{DocumentId, KeyId, PublicKey, Role, RoleRank, UserId};
+use ambre_core::{DocumentId, DocumentRank, KeyId, PublicKey, Role, UserId};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
@@ -222,7 +222,7 @@ impl Log {
             // and touches no member above it, as the relay checks.
             MembershipAct::Invite => match (author_rank, granted) {
                 (Some(by), Some(role)) => {
-                    by >= RoleRank::Middle
+                    by >= DocumentRank::Editor
                         && role <= by
                         && target
                             .is_none_or(|held| held.role.document_rank().is_some_and(|t| t <= by))
@@ -230,12 +230,12 @@ impl Log {
                 _ => false,
             },
             MembershipAct::ChangeRole => {
-                author_rank == Some(RoleRank::Highest) && target.is_some() && granted.is_some()
+                author_rank == Some(DocumentRank::Owner) && target.is_some() && granted.is_some()
             }
             // A member removes themselves, and an owner removes anyone.
             MembershipAct::Revoke => {
                 target.is_some()
-                    && (entry.author == entry.member || author_rank == Some(RoleRank::Highest))
+                    && (entry.author == entry.member || author_rank == Some(DocumentRank::Owner))
             }
             MembershipAct::SelfJoin => {
                 entry.author == entry.member && granted.is_some() && self_join(entry)
@@ -278,7 +278,7 @@ impl Log {
             && held
                 .role
                 .document_rank()
-                .is_some_and(|r| r >= RoleRank::Middle)
+                .is_some_and(|r| r >= DocumentRank::Editor)
         {
             self.signers.insert(held.key.clone());
         }

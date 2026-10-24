@@ -88,31 +88,23 @@ impl Role {
 
     /// This role's place in the grant order of a document, `None` for a role
     /// no document holds. A role that has no rank can never be granted.
-    pub const fn document_rank(self) -> Option<RoleRank> {
-        if self.is_valid_for_document() {
-            Some(self.rank())
-        } else {
-            None
+    pub const fn document_rank(self) -> Option<DocumentRank> {
+        match self {
+            Self::Owner => Some(DocumentRank::Owner),
+            Self::Editor => Some(DocumentRank::Editor),
+            Self::Viewer => Some(DocumentRank::Viewer),
+            Self::Admin | Self::Member => None,
         }
     }
 
     /// This role's place in the grant order of an organization, `None` for a
     /// role no organization holds.
-    pub const fn organization_rank(self) -> Option<RoleRank> {
-        if self.is_valid_for_organization() {
-            Some(self.rank())
-        } else {
-            None
-        }
-    }
-
-    /// The one grant order every scope shares: the owner, then the role that
-    /// manages members, then the base role.
-    const fn rank(self) -> RoleRank {
+    pub const fn organization_rank(self) -> Option<OrganizationRank> {
         match self {
-            Self::Owner => RoleRank::Highest,
-            Self::Editor | Self::Admin => RoleRank::Middle,
-            Self::Viewer | Self::Member => RoleRank::Lowest,
+            Self::Owner => Some(OrganizationRank::Owner),
+            Self::Admin => Some(OrganizationRank::Admin),
+            Self::Member => Some(OrganizationRank::Member),
+            Self::Editor | Self::Viewer => None,
         }
     }
 
@@ -132,20 +124,39 @@ impl Role {
     }
 }
 
-/// Where a role sits in the grant order of its scope: a higher rank grants
+/// Where a role sits in the grant order of a document: a higher rank grants
 /// more. A member grants a role at or below their own rank, and touches no
 /// member above it.
 ///
-/// Only [`Role::document_rank`] and [`Role::organization_rank`] build one, so
-/// a rank always comes from a role its scope holds.
+/// Each scope has its own rank type, so a document rank compared with an
+/// organization rank does not compile. Only [`Role::document_rank`] builds
+/// one, so a rank always comes from a role a document holds.
+///
+/// ```compile_fail
+/// use ambre_core::Role;
+/// let _ = Role::Owner.document_rank() > Role::Owner.organization_rank();
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RoleRank {
-    /// A viewer of a document, a member of an organization.
-    Lowest,
-    /// An editor of a document, an admin of an organization.
-    Middle,
+pub enum DocumentRank {
+    /// A viewer, who reads.
+    Viewer,
+    /// An editor, who writes and invites.
+    Editor,
     /// The owner.
-    Highest,
+    Owner,
+}
+
+/// Where a role sits in the grant order of an organization, with the order
+/// and the grant rule of [`DocumentRank`]. Only [`Role::organization_rank`]
+/// builds one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum OrganizationRank {
+    /// A member, the base role.
+    Member,
+    /// An admin, who manages members.
+    Admin,
+    /// The owner.
+    Owner,
 }
 
 impl fmt::Display for Role {
@@ -276,20 +287,11 @@ mod tests {
     }
 
     #[test]
-    fn the_two_scopes_share_one_grant_order() {
+    fn each_scope_keeps_its_own_grant_order() {
         assert!(Role::Owner.document_rank() > Role::Editor.document_rank());
         assert!(Role::Editor.document_rank() > Role::Viewer.document_rank());
         assert!(Role::Owner.organization_rank() > Role::Admin.organization_rank());
         assert!(Role::Admin.organization_rank() > Role::Member.organization_rank());
-        // The middle and the base role of each scope sit at the same place.
-        assert_eq!(
-            Role::Editor.document_rank(),
-            Role::Admin.organization_rank()
-        );
-        assert_eq!(
-            Role::Viewer.document_rank(),
-            Role::Member.organization_rank()
-        );
         // A role of the other scope has no rank, so it is never granted.
         for role in [Role::Admin, Role::Member] {
             assert_eq!(role.document_rank(), None);
