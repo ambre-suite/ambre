@@ -18,6 +18,15 @@
   The type is unwrapped at that call and nowhere else. The compiler then refuses a message id
   passed as a document id, or a row passed as a column (`ambre-spec-testing.md section 2`).
 
+  Four cases take a type, and none of them is `local`, `generic` or `math`:
+  * A pixel length, a width, a height or a font size that crosses a function boundary is a unit
+    quantity.
+  * A byte count or a byte size is a unit quantity, `ByteSize`. Opaque bytes are never `math`:
+    a blob is a newtype, or `foreign-api` at the foreign call.
+  * A value with a parse into a type carries the parsed type, never the text.
+  * Two or more values of one type in a tuple that crosses a function boundary are swap-prone.
+    The tuple becomes a struct with a named field for each value.
+
   A new concept gets its newtype in the change that introduces it, never later. If no type
   exists, the change adds one.
 * **A local value keeps its primitive only when four conditions hold.** The allowlist names it
@@ -31,10 +40,12 @@
   When one condition fails, the value takes a type. When you are not sure, give it a type.
 * **A `bool` that a caller writes as a literal is an `enum`.** At `f(true)` the reader sees `true`,
   never what it picks. Such a parameter becomes an `enum` of two variants, each named for what it
-  picks. Tests are callers too.
+  picks. Tests are callers too: a literal in a test makes the parameter an `enum`.
   * A predicate returns a `bool`: `is_empty()` reads as a question, and its answer stays a `bool`.
   * A `bool` that crosses a thread, crate, wire or store and names a mode or a state is an `enum`
     too. The variant that was `false` comes first, so a postcard frame reads the same.
+  * A `bool` field of a bus command or event crosses a thread. It names a state or a mode, so it
+    is an `enum`, never `local`.
   * A store column that records a fact may stay a `bool`. Its allowlist line names the fact.
   * Any other `bool` is a fact that selects no mode. Its allowlist line is `generic`, never
     `math`: a `bool` is not arithmetic.
@@ -65,6 +76,8 @@
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.
+  * A `foreign-api` line names the site of the foreign call, never an accessor that wraps it.
+  * The note of a line describes the value truthfully. A reviewer reads the note as code.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.
