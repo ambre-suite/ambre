@@ -129,7 +129,7 @@ truncated frame never imports.
 
 | Part | Where |
 |---|---|
-| the cursor table | `crates/ambre-server/migrations/20261010010000_read_cursors.sql` |
+| the cursor table | `crates/ambre-server/migrations/20261024000000_initial_schema.sql`, table `read_cursors` |
 | the cursor queries | `crates/ambre-server/src/db/read_cursors.rs` |
 | the cursor, activity and mark read routes | `crates/ambre-server/src/routes/read_cursors.rs` |
 | the requests and the last number delivered | `crates/ambre-sync/src/channels.rs` |

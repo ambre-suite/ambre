@@ -633,7 +633,7 @@ request body carries no passphrase field.
 ### N5 (LOW) -- No uniqueness on `users.email` weakens the N3 identity
 
 **Crate:** `ambre-server`
-**Files:** `migrations/20250101000000_initial_schema.sql` (`email TEXT NOT NULL`),
+**Files:** `migrations/20261024000000_initial_schema.sql` (`email TEXT NOT NULL`),
 `db/users.rs` (`get_user_by_email`)
 
 N3 now records the client-supplied `email`, but the column has no `UNIQUE`
@@ -912,5 +912,5 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       `create_user_duplicate_email_is_conflict`,
       `oidc_login_with_squatted_email_is_conflict`,
       `get_user_by_email_is_case_insensitive`.
-      (`server/migrations/20260708000000_users_email_unique.sql`,
+      (`server/migrations/20261024000000_initial_schema.sql`, index `users_email_lower_unique`,
       `db/users.rs`, `routes/tests.rs`)
