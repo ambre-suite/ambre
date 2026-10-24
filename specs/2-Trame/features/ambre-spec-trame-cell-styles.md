@@ -23,6 +23,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-092` | `INV` | A style MUST stay on the cell it was applied to, never following the cursor. | this spec section 3 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | none | verified |
 | `TRAME-186` | `INV` | A cell the toolbar calls a number MUST be a cell the grid aligns as one. | this spec section 6 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` | none | verified |
+| `TRAME-239` | `INV` | A top-N percentage MUST lie between 0 and 100 inclusive. | this spec section 3 | `ambre_bus::app::trame::features::tests::a_percentage_runs_from_zero_to_a_hundred` -- both bounds pass, while NaN, both infinities and a value past either bound are refused | none | verified |
+| `TRAME-240` | `INV` | A top-N percentage MUST keep the value it was given, with no rounding. | this spec section 3 | `ambre_bus::app::trame::features::tests::a_percentage_runs_from_zero_to_a_hundred` -- `12.5` and `33.333_33` read back bit for bit | none | verified |
 | `TRAME-095` | `IO` | A style MUST survive a reload. | this spec section 3 | `ambre_trame::logic::tests::group1::formatting_survives_snapshot_roundtrip`; `::set_cell_style_round_trips_and_formats_numbers` | none | verified |
 | `TRAME-187` | `IO` | A stored style a reload cannot read MUST NOT come back as the default style with no notice. | this spec section 6 | `ambre_trame::logic::schema::tests::a_register_that_cannot_be_decoded_reaches_the_user` | none | verified |
 | `TRAME-097` | `OBS` | The toolbar MUST report the style of the active cell. | this spec section 4 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection`; `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` -- the chrome half | none | verified |
@@ -59,10 +61,11 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** none of its own: a style is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 18 `verified`, 4 `unimplemented`. What holds is the single-register model:
-  where a style lives, how it undoes, how it broadcasts, how it reloads and what the toolbar reads.
-  The gesture around it is held too. Each preset reaches its own edges over a 3x3 range, a covered
-  cell takes no style, and a run keeps every value and the selection.
+* **Verification.** 20 `verified`, 4 `unimplemented`. What holds is the single-register model: where
+  a style lives, how it undoes, how it broadcasts, how it reloads and what the toolbar reads. The
+  gesture around it is held too. Each preset reaches its own edges over a 3x3 range, a covered cell
+  takes no style, and a run keeps every value and the selection. A top-N percentage is held to its
+  range, unrounded.
 
 ---
 
@@ -164,7 +167,7 @@ pub enum CondFormatKind {
     ColorScale2 { min_color: u32, max_color: u32 },
     ColorScale3 { min_color: u32, mid_color: u32, max_color: u32 },
     DataBar { color: u32 },
-    TopN(u32), BottomN(u32), TopNPercent(Percent), // 0 to 100
+    TopN(u32), BottomN(u32), TopNPercent(Percent), // 0 to 100, unrounded (`TRAME-239`, `TRAME-240`)
 }
 ```
 

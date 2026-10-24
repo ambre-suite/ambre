@@ -64,8 +64,9 @@ pub enum HeaderRow {
 #[error("{0} is not a percentage between 0 and 100")]
 pub struct InvalidPercent(pub f32);
 
-/// A share of a whole, in percent, from 0 to 100 inclusive. A top-N rule
-/// ranks the cells it covers by it (`trame-cell-styles`).
+/// A share of a whole, in percent, from 0 to 100 inclusive, kept as given
+/// with no rounding (`TRAME-239`, `TRAME-240`). A top-N rule ranks the cells it covers by
+/// it (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Percent(f32);
 
@@ -181,12 +182,14 @@ pub enum ValidationOnInvalid {
 mod tests {
     use super::Percent;
 
+    /// `TRAME-239`: the range is closed. `TRAME-240`: a value inside it is
+    /// kept as given, with no rounding.
     #[test]
     fn a_percentage_runs_from_zero_to_a_hundred() {
-        for value in [0.0, 12.5, 100.0] {
+        for value in [0.0, 12.5, 33.333_33, 100.0] {
             assert_eq!(Percent::new(value).map(Percent::value), Ok(value));
         }
-        for value in [-0.5, 100.5, f32::NAN, f32::INFINITY] {
+        for value in [-0.5, 100.5, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
             assert!(Percent::new(value).is_err(), "{value} is refused");
         }
     }

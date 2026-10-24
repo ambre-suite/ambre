@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3728 rows: 3172 shipped, of which 3 loose. 556 unbuilt.**
+**3730 rows: 3174 shipped, of which 3 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 900 | 425 | 817 | 610 | 417 | 3169 |
+| `verified` | 900 | 427 | 817 | 610 | 417 | 3171 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 1 |  |  |  |  | 1 |
@@ -84,7 +84,7 @@
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 13 | 10 | 10 |  | 3 |
-| `ambre-spec-trame-cell-styles.md` | 22 | 18 | 18 |  | 4 |
+| `ambre-spec-trame-cell-styles.md` | 24 | 20 | 20 |  | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 8 | 8 |  | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-engine.md` | 17 | 17 | 17 |  |  |
@@ -322,7 +322,7 @@
 | `ambre-spec-trame-cell-editing.md` | TRAME-FEAT-020..024,047..050; TRAME-UI-010..011,015,050..058,091..092,155..171,176 |
 | `ambre-spec-trame-cell-merges.md` | TRAME-019..020,027..031,125..128,130..133,135..138,140..150; TRAME-IO-016; TRAME-UI-009,111..116 |
 | `ambre-spec-trame-cell-rendering.md` | TRAME-UI-020..021,093..100,139..140,177 |
-| `ambre-spec-trame-cell-styles.md` | TRAME-092..101,186..193; TRAME-FEAT-017..019,028 |
+| `ambre-spec-trame-cell-styles.md` | TRAME-092..101,186..193,239..240; TRAME-FEAT-017..019,028 |
 | `ambre-spec-trame-clipboard.md` | TRAME-UI-059,061..065,124..125,174 |
 | `ambre-spec-trame-context-menu.md` | TRAME-UI-085..090,117..120 |
 | `ambre-spec-trame-engine.md` | TRAME-001..002,015,023..024,166..169,231; TRAME-FEAT-001; TRAME-UI-001..002,006,014,141..142 |
