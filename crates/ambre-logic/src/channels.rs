@@ -16,8 +16,8 @@ use ambre_bus::{
 };
 use ambre_core::Name;
 use ambre_murmure::{
-    ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
-    Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
+    ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Receipt,
+    Sample, Screened, SeekStep, Sent, Signer, ThreadTarget, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -63,6 +63,15 @@ pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<DocumentId> {
         }
     }
     documents
+}
+
+/// Notes a payload that an opening did not keep. Each caller asks
+/// `expects` first, so a refusal means the two answers disagree. A debug
+/// trace records it, and nothing else changes.
+fn trace_receipt(document_id: DocumentId, receipt: Receipt) {
+    if receipt == Receipt::NotExpected {
+        tracing::debug!("Logic: an opening did not expect a payload of {document_id}");
+    }
 }
 
 /// The document a change of a message of `segment` writes. A locked one may
@@ -552,10 +561,12 @@ impl LogicState {
             return;
         };
         if let Some(copy) = snapshot {
-            let _kept =
-                opening.receive_at(document_id, Some(Order::Snapshot(horizon)), (&copy).into());
+            trace_receipt(
+                document_id,
+                opening.receive_at(document_id, Some(Order::Snapshot(horizon)), (&copy).into()),
+            );
             for delta in deltas {
-                let _kept = opening.receive(document_id, delta.into());
+                trace_receipt(document_id, opening.receive(document_id, delta.into()));
             }
             self.channel_ledgers
                 .entry(document_id)
@@ -1887,7 +1898,7 @@ impl LogicState {
             .find(|o| o.expects(document_id))
         {
             for &(order, payload) in payloads {
-                let _kept = opening.receive_at(document_id, order, payload);
+                trace_receipt(document_id, opening.receive_at(document_id, order, payload));
             }
             return true;
         }
