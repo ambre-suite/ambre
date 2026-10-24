@@ -1643,6 +1643,7 @@ ambre-logic | src/lib.rs | crate | stamp_pass(_start) | param | Option<f64>	math
 ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
+ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed() | ret | oneshot::Receiver<bool>	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/persistence.rs | crate::persistence | bytes_to_js(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
