@@ -826,9 +826,9 @@ impl SyncState {
                             closing,
                             active,
                             successor: if created {
-                                ambre_bus::app::murmure::Successor::Created
+                                ambre_bus::Successor::Created
                             } else {
-                                ambre_bus::app::murmure::Successor::Fetched
+                                ambre_bus::Successor::Fetched
                             },
                         }
                     }

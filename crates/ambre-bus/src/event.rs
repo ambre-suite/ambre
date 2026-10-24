@@ -248,7 +248,7 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         closing: SegmentId,
         active: SegmentId,
-        successor: crate::app::murmure::Successor,
+        successor: Successor,
     },
     /// The relay refused the close of `closing`, or never answered it.
     SegmentCloseFailed {
@@ -628,4 +628,17 @@ impl fmt::Display for ApiRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+/// Who registered the segment a close moves to.
+///
+/// The variant that was `false`, when the relay's answer said whether this
+/// client created it, comes first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Successor {
+    /// Another member won the race: the successor is fetched as they wrote
+    /// it.
+    Fetched,
+    /// This client registered it: the channel holds it at once.
+    Created,
 }

@@ -637,18 +637,9 @@ pub struct SearchMatch {
     pub message: MessageView,
 }
 
-/// Who registered the segment a close moves to.
-///
-/// The variant that was `false`, when the relay's answer said whether this
-/// client created it, comes first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Successor {
-    /// Another member won the race: the successor is fetched as they wrote
-    /// it.
-    Fetched,
-    /// This client registered it: the channel holds it at once.
-    Created,
-}
+/// Who registered the segment a close moves to. The Sync worker answers it,
+/// so it lives on the event plane, and the worker names no app message.
+pub use crate::event::Successor;
 
 /// What a search found in one open channel, and which part of its history
 /// it read (the Murmure search spec).

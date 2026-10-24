@@ -54,7 +54,7 @@ pub use app::murmure::{
 pub use command::SyncCommand;
 pub use event::{
     ApiRequest, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose,
-    SnapshotVerdict,
+    SnapshotVerdict, Successor,
 };
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
