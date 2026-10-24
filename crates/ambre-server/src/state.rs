@@ -7,7 +7,7 @@ use crate::oidc::OidcClients;
 /// Application state shared across all Axum handlers via `State<Arc<Self>>`.
 ///
 /// Holds handles to the three external services the Blind Relay depends on.
-/// PostgreSQL for metadata, Valkey/Redis for sessions and real-time state,
+/// PostgreSQL for metadata, Redis for sessions and real-time state,
 /// S3 for encrypted blobs (snapshots, deltas, media). It also holds the OIDC
 /// clients for authentication.
 #[derive(Clone)]

@@ -1,7 +1,8 @@
 use crate::error::AppError;
 use rustis::client::Client;
 use rustis::commands::{
-    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands, StringCommands,
+    GenericCommands, HashCommands, InfoSection, ListCommands, PubSubCommands, ScriptingCommands,
+    ServerCommands, StringCommands,
 };
 use rustis::resp::RefBulkString;
 
@@ -695,7 +696,7 @@ pub async fn doc_presence_update(
 ) -> Result<(), AppError> {
     use base64::Engine;
     let presence_b64 = base64::engine::general_purpose::URL_SAFE.encode(&presence.0);
-    // Expire THIS member's field individually (Redis 7.4+ / Valkey 8 `HEXPIRE`),
+    // Expire THIS member's field individually (Redis 7.4+ `HEXPIRE`, `SRV-226`),
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
     // distinct author forever. The tombstone check, the write and its TTL run
@@ -1112,9 +1113,93 @@ pub async fn oidc_state_take(
     Ok((pkce_verifier, nonce))
 }
 
+/// A Redis server version, read from the `redis_version` line of `INFO server`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StoreVersion {
+    pub major: u16,
+    pub minor: u16,
+}
+
+/// The oldest Redis the relay runs on. The presence and session scripts call
+/// `HEXPIRE`, which Redis 7.4 introduced (`SRV-226`).
+pub const MIN_STORE_VERSION: StoreVersion = StoreVersion { major: 7, minor: 4 };
+
+/// Reads the server version from an `INFO server` reply.
+///
+/// Answers `None` when the reply has no `redis_version` line, or when the line
+/// does not start with `major.minor`.
+pub fn parse_store_version(info: &str) -> Option<StoreVersion> {
+    let version = info
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("redis_version:"))?;
+    let mut parts = version.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some(StoreVersion { major, minor })
+}
+
+/// Refuses an `INFO server` reply that names no version, or a version older
+/// than [`MIN_STORE_VERSION`].
+fn check_store_version(info: &str) -> Result<StoreVersion, AppError> {
+    let version = parse_store_version(info)
+        .ok_or_else(|| AppError::Redis("INFO server names no redis_version".into()))?;
+    if version < MIN_STORE_VERSION {
+        return Err(AppError::Redis(format!(
+            "Redis {}.{} is too old: the relay needs {}.{} or later for HEXPIRE",
+            version.major, version.minor, MIN_STORE_VERSION.major, MIN_STORE_VERSION.minor
+        )));
+    }
+    Ok(version)
+}
+
+/// Refuses to boot on a Redis older than [`MIN_STORE_VERSION`] (`SRV-226`).
+///
+/// An older server accepts the connection and every other script. The failure
+/// would then surface only at the first presence sample, as an unknown command.
+///
+/// # Errors
+///
+/// `AppError::Redis` when `INFO` fails, names no version, or names an older one.
+pub async fn require_store_version(redis: &Client) -> Result<StoreVersion, AppError> {
+    let info: String = redis
+        .info([InfoSection::Server])
+        .await
+        .map_err(|e| AppError::Redis(format!("INFO server: {e}")))?;
+    check_store_version(&info)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_store_older_than_the_minimum_is_refused() {
+        let info = |v: &str| format!("# Server\r\nredis_version:{v}\r\nredis_mode:standalone\r\n");
+        assert_eq!(
+            check_store_version(&info("7.4.0")).ok(),
+            Some(StoreVersion { major: 7, minor: 4 })
+        );
+        assert_eq!(
+            check_store_version(&info("8.2.1")).ok(),
+            Some(StoreVersion { major: 8, minor: 2 })
+        );
+        assert!(matches!(
+            check_store_version(&info("7.2.5")),
+            Err(AppError::Redis(_))
+        ));
+        assert!(matches!(
+            check_store_version(&info("6.10.0")),
+            Err(AppError::Redis(_))
+        ));
+        assert!(matches!(
+            check_store_version("# Server\r\nredis_mode:standalone\r\n"),
+            Err(AppError::Redis(_))
+        ));
+        assert!(matches!(
+            check_store_version(&info("unstable")),
+            Err(AppError::Redis(_))
+        ));
+    }
 
     /// A presence sample: its bytes stand for an encrypted cursor.
     pub(super) fn sample() -> ambre_protocol::messages::Ciphertext {
