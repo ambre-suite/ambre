@@ -41,7 +41,7 @@ use super::types::{
 };
 use super::vm::EvalContext;
 use crate::model::Uid;
-use crate::{Col, Row};
+use crate::{Col, ColCount, Row, RowCount};
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -413,7 +413,11 @@ proptest! {
     #[test]
     fn sum_flattens_range_like_scalars(xs in proptest::collection::vec(-100_000i64..100_000, 0..24)) {
         let scalar = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
-        let range = CellValue::Range(RangeValue::new(1, xs.len(), nums(&xs)));
+        let range = CellValue::Range(RangeValue::new(
+            RowCount::ONE,
+            ColCount::from_len(xs.len()),
+            nums(&xs),
+        ));
         let ranged = as_num(&call_builtin(&function("SUM"), &[range], fnctx()));
         prop_assert_eq!(scalar, ranged);
     }

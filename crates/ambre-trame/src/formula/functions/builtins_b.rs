@@ -244,23 +244,30 @@ pub(crate) fn vlookup(args: &[CellValue]) -> CellValue {
         _ => return CellValue::Error(FormulaError::NaError),
     };
     let col_index = match arg(args, 2).as_number() {
-        Ok(n) if n >= 1.0 => n as usize - 1,
+        Ok(n) if n >= 1.0 => Col::from_usize(n as usize - 1),
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    if col_index >= table.cols {
+    if col_index >= table.cols.as_end() {
         return CellValue::Error(FormulaError::NaError);
     }
     let approximate = match args.get(3) {
         Some(v) => is_truthy(v),
         None => true,
     };
-    if approximate && !keys_ascending((0..table.rows).filter_map(|row| table.get(row, 0))) {
+    if approximate
+        && !keys_ascending(
+            table
+                .row_offsets()
+                .into_iter()
+                .filter_map(|row| table.get(row, Col::ZERO)),
+        )
+    {
         return CellValue::Error(FormulaError::NaError);
     }
 
-    let mut best: Option<usize> = None;
-    for row in 0..table.rows {
-        let key = match table.get(row, 0) {
+    let mut best: Option<Row> = None;
+    for row in table.row_offsets() {
+        let key = match table.get(row, Col::ZERO) {
             Some(CellValue::Empty) if approximate => continue,
             Some(k) => k,
             None => continue,
@@ -311,11 +318,11 @@ pub(crate) fn index(args: &[CellValue]) -> CellValue {
     };
     let (row, col) = match args.get(2).and_then(to_index) {
         Some(c) => (n1, c),
-        None if range.rows == 1 => (1, n1),
-        None if range.cols == 1 => (n1, 1),
+        None if range.rows == RowCount::ONE => (1, n1),
+        None if range.cols == ColCount::ONE => (n1, 1),
         None => (n1, 1),
     };
-    match range.get(row - 1, col - 1) {
+    match range.get(Row::from_usize(row - 1), Col::from_usize(col - 1)) {
         Some(v) => v.clone(),
         None => CellValue::Error(FormulaError::NaError),
     }

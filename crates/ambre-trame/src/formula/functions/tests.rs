@@ -148,7 +148,11 @@ fn txt(s: &str) -> CellValue {
     CellValue::Text(s.into())
 }
 fn range(rows: usize, cols: usize, vals: Vec<CellValue>) -> CellValue {
-    CellValue::Range(RangeValue::new(rows, cols, vals))
+    CellValue::Range(RangeValue::new(
+        RowCount::from_len(rows),
+        ColCount::from_len(cols),
+        vals,
+    ))
 }
 
 #[test]

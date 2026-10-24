@@ -1,6 +1,8 @@
 use std::fmt;
 
-use ambre_bus::{CellPos, Col, DefinedName, Row, SheetId, SheetName};
+use ambre_bus::{
+    CellPos, Col, ColCount, ColSpan, DefinedName, Row, RowCount, RowSpan, SheetId, SheetName,
+};
 
 use crate::model::{Line, SheetIndex, Uid};
 
@@ -386,24 +388,45 @@ pub fn nearly_equal(x: f64, y: f64) -> bool {
 /// need a flat stream iterate `values` directly.
 #[derive(Debug, Clone)]
 pub struct RangeValue {
-    pub rows: usize,
-    pub cols: usize,
+    pub rows: RowCount,
+    pub cols: ColCount,
     /// Row-major, `len == rows * cols`.
     pub values: Vec<CellValue>,
 }
 
 impl RangeValue {
-    pub fn new(rows: usize, cols: usize, values: Vec<CellValue>) -> Self {
-        debug_assert_eq!(values.len(), rows * cols);
+    pub fn new(rows: RowCount, cols: ColCount, values: Vec<CellValue>) -> Self {
+        debug_assert_eq!(values.len(), rows.to_usize() * cols.to_usize());
         Self { rows, cols, values }
     }
 
-    /// Value at zero-based `(row, col)`, or `None` if out of bounds.
-    pub fn get(&self, row: usize, col: usize) -> Option<&CellValue> {
-        if row >= self.rows || col >= self.cols {
+    /// The single `#REF!` a range collapses to when it cannot be read.
+    pub fn broken_ref() -> Self {
+        Self::new(
+            RowCount::ONE,
+            ColCount::ONE,
+            vec![CellValue::Error(FormulaError::BrokenRef)],
+        )
+    }
+
+    /// The rows of the block, counted from its own top row.
+    pub fn row_offsets(&self) -> RowSpan {
+        RowSpan::from_count(Row::ZERO, self.rows)
+    }
+
+    /// The columns of the block, counted from its own left column.
+    pub fn col_offsets(&self) -> ColSpan {
+        ColSpan::from_count(Col::ZERO, self.cols)
+    }
+
+    /// Value at `(row, col)` from the block's top-left cell, or `None` if out
+    /// of bounds. The offsets are relative to the block, not to the sheet.
+    pub fn get(&self, row: Row, col: Col) -> Option<&CellValue> {
+        if row >= self.rows.as_end() || col >= self.cols.as_end() {
             return None;
         }
-        self.values.get(row * self.cols + col)
+        self.values
+            .get(row.to_index()? * self.cols.to_usize() + col.to_index()?)
     }
 }
 

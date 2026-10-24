@@ -398,19 +398,26 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
         _ => return CellValue::Error(FormulaError::NaError),
     };
     let row_index = match arg(args, 2).as_number() {
-        Ok(n) if n >= 1.0 => n as usize - 1,
+        Ok(n) if n >= 1.0 => Row::from_usize(n as usize - 1),
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    if row_index >= table.rows {
+    if row_index >= table.rows.as_end() {
         return CellValue::Error(FormulaError::NaError);
     }
     let approximate = args.get(3).map(is_truthy).unwrap_or(true);
-    if approximate && !keys_ascending((0..table.cols).filter_map(|col| table.get(0, col))) {
+    if approximate
+        && !keys_ascending(
+            table
+                .col_offsets()
+                .into_iter()
+                .filter_map(|col| table.get(Row::ZERO, col)),
+        )
+    {
         return CellValue::Error(FormulaError::NaError);
     }
-    let mut best: Option<usize> = None;
-    for col in 0..table.cols {
-        let key = match table.get(0, col) {
+    let mut best: Option<Col> = None;
+    for col in table.col_offsets() {
+        let key = match table.get(Row::ZERO, col) {
             Some(CellValue::Empty) if approximate => continue,
             Some(k) => k,
             None => continue,
@@ -449,10 +456,10 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
 
 /// Dimensions of the first argument: a `Range` yields `(rows, cols)`, a scalar
 /// behaves like a 1x1 range.
-pub(crate) fn range_dims(args: &[CellValue]) -> Option<(usize, usize)> {
+pub(crate) fn range_dims(args: &[CellValue]) -> Option<(RowCount, ColCount)> {
     match args.first()? {
         CellValue::Range(r) => Some((r.rows, r.cols)),
-        _ => Some((1, 1)),
+        _ => Some((RowCount::ONE, ColCount::ONE)),
     }
 }
 

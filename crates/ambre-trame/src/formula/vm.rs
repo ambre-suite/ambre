@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{Col, Row};
+use ambre_bus::{Col, ColCount, Row, RowCount};
 
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
@@ -44,8 +44,8 @@ struct RangeGrant(usize);
 /// Grant a `rows` x `cols` range against the per-range cap and what the pass
 /// has `left`. A grant debits `left`. A refusal leaves it whole and allocates
 /// nothing (`TRAME-209`, `TRAME-210`).
-fn grant_range(rows: usize, cols: usize, left: &mut usize) -> Option<RangeGrant> {
-    let cells = rows.saturating_mul(cols);
+fn grant_range(rows: RowCount, cols: ColCount, left: &mut usize) -> Option<RangeGrant> {
+    let cells = rows.to_usize().saturating_mul(cols.to_usize());
     if cells > MAX_RANGE_CELLS || cells > *left {
         return None;
     }
@@ -297,21 +297,21 @@ impl<'a> EvalContext<'a> {
     /// `Empty`. A deleted bound endpoint yields a single `#REF!` value.
     fn eval_range(&mut self, dep: &RangeId) -> RangeValue {
         let Some(idx) = self.indices.get(&dep.sheet) else {
-            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
+            return RangeValue::broken_ref();
         };
         let (rs, re) = match dep.row_range(idx) {
             Some(r) => r,
-            None => return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]),
+            None => return RangeValue::broken_ref(),
         };
         let (cs, ce) = match dep.col_range(idx) {
             Some(r) => r,
-            None => return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]),
+            None => return RangeValue::broken_ref(),
         };
         if re < rs || ce < cs {
-            return RangeValue::new(0, 0, Vec::new());
+            return RangeValue::new(RowCount::ZERO, ColCount::ZERO, Vec::new());
         }
-        let rows = re.count_from(rs).get() as usize + 1;
-        let cols = ce.count_from(cs).get() as usize + 1;
+        let rows = re.count_from(rs) + RowCount::ONE;
+        let cols = ce.count_from(cs) + ColCount::ONE;
         // Bound the materialized range. A compiled range stores only its two
         // endpoints (O(1) to register), but evaluating it allocates one
         // `CellValue` per member cell. With remote apply live, a malicious peer
@@ -321,7 +321,7 @@ impl<'a> EvalContext<'a> {
         // ceiling is generous relative to any real spreadsheet's used area.
         // The whole pass shares one budget (`TRAME-210`).
         let Some(RangeGrant(cells)) = grant_range(rows, cols, &mut self.range_cells_left) else {
-            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
+            return RangeValue::broken_ref();
         };
         let mut values = Vec::with_capacity(cells);
         for rp in rs.through(re) {
@@ -608,7 +608,7 @@ mod tests {
         // `CellValue::Range`, so we can assert on its shape and content.
         match eval_formula("A1:ZZ100000") {
             CellValue::Range(r) => {
-                assert_eq!((r.rows, r.cols), (1, 1));
+                assert_eq!((r.rows, r.cols), (RowCount::ONE, ColCount::ONE));
                 assert!(matches!(
                     r.values.as_slice(),
                     [CellValue::Error(FormulaError::BrokenRef)]
@@ -638,12 +638,25 @@ mod tests {
     #[test]
     fn a_range_over_the_cap_is_granted_nothing() {
         let mut left = MAX_PASS_RANGE_CELLS;
-        assert_eq!(grant_range(100_000, 702, &mut left), None);
-        assert_eq!(grant_range(usize::MAX, 2, &mut left), None);
-        assert_eq!(grant_range(MAX_RANGE_CELLS + 1, 1, &mut left), None);
+        assert_eq!(
+            grant_range(RowCount::new(100_000), ColCount::new(702), &mut left),
+            None
+        );
+        assert_eq!(
+            grant_range(RowCount::new(u32::MAX), ColCount::new(u32::MAX), &mut left),
+            None
+        );
+        assert_eq!(
+            grant_range(
+                RowCount::from_len(MAX_RANGE_CELLS + 1),
+                ColCount::ONE,
+                &mut left
+            ),
+            None
+        );
         assert_eq!(left, MAX_PASS_RANGE_CELLS, "a refusal debits nothing");
         assert_eq!(
-            grant_range(1_000, 1_000, &mut left),
+            grant_range(RowCount::new(1_000), ColCount::new(1_000), &mut left),
             Some(RangeGrant(MAX_RANGE_CELLS))
         );
         assert_eq!(left, MAX_PASS_RANGE_CELLS - MAX_RANGE_CELLS);

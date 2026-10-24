@@ -4069,7 +4069,6 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | range_dims() | ret | Option<(usize,usize)>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(months) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	local geometry / pixel arithmetic
@@ -4174,12 +4173,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains(
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue.cols | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue.rows | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(col) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::get(row) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(cols) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeValue::new(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
@@ -4187,9 +4180,7 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.range_cells_l
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_PASS_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/vm.rs | crate::formula::vm | RangeGrant.0 | field | usize	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(cols) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(rows) | param | usize	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	local: the pass budget of range cells, private to vm.rs; the only other cell count in scope is the grant it debits
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string

@@ -5,7 +5,7 @@
 //! `Range` values transparently (so `SUM(A1:A10)` works with the range as a
 //! single argument containing 10 values).
 
-use ambre_bus::{Col, Row};
+use ambre_bus::{Col, ColCount, Row, RowCount};
 
 use super::types::{CellValue, FormulaError, FunctionName, nearly_equal};
 use ambre_bus::{CivilDate, DateSerial, DaySerial};
@@ -138,8 +138,8 @@ pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> Cell
         "INDEX" => index(args),
         "MATCH" => match_fn(args),
         "CHOOSE" => choose(args),
-        "ROWS" => CellValue::Number(range_dims(args).map(|(r, _)| r).unwrap_or(0) as f64),
-        "COLUMNS" => CellValue::Number(range_dims(args).map(|(_, c)| c).unwrap_or(0) as f64),
+        "ROWS" => CellValue::Number(range_dims(args).map_or(0.0, |(r, _)| f64::from(r.get()))),
+        "COLUMNS" => CellValue::Number(range_dims(args).map_or(0.0, |(_, c)| f64::from(c.get()))),
         "ROW" => row_col(args, ctx.cell_row.map(|r| f64::from(r.get()) + 1.0)),
         "COLUMN" => row_col(args, ctx.cell_col.map(|c| f64::from(c.get()) + 1.0)),
 
