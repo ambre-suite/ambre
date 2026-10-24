@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn every_pin_paints_a_marker_and_a_badge() {
         let mut font_cx = FontContext::new();
-        let mut text_cache = TextCache::new(1.0);
+        let mut text_cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         let vp = viewport(vec![
             pin("t1", Point::new(0.0, 0.0), 1, false),

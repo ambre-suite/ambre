@@ -114,7 +114,7 @@ impl Rig {
             .plan_repaint(self.clock.now_ms(), ambre_canvas::HudTick::Idle);
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         self.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         self.view.paint_overlay(
@@ -379,7 +379,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
     );
     let mut surface = RecordingSurface::new();
     let mut font_cx = FontContext::new();
-    let mut cache = TextCache::new(1.0);
+    let mut cache = TextCache::new();
     rig.view
         .paint_content(&mut surface, &mut font_cx, &mut cache, None);
     let fills = surface.fill_colors();
@@ -1060,7 +1060,7 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     let expected = super::interact::fit_column_width(
         &cells,
         &mut FontContext::new(),
-        &mut TextCache::new(1.0),
+        &mut TextCache::new(),
     );
     rig.answer(TrameEvent::ColumnContent {
         col: Col::new(0),

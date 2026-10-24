@@ -220,7 +220,7 @@ mod tests {
     /// paint order. A pill is the one path stroked in the header border.
     fn pills(vp: &DisplayViewport, cam: &ViewportTransform) -> Vec<Rect> {
         let mut font_cx = FontContext::new();
-        let mut text_cache = TextCache::new(1.0);
+        let mut text_cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         paint_reactions(&mut surface, vp, cam, &mut font_cx, &mut text_cache, &LIGHT);
         surface
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn empty_reactions_paint_nothing() {
         let mut font_cx = FontContext::new();
-        let mut text_cache = TextCache::new(1.0);
+        let mut text_cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         let vp = vp_with(
             vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))],

@@ -918,7 +918,7 @@ mod tests {
     /// width (`trame-resize`).
     #[test]
     fn a_column_fit_sizes_from_content_or_defaults_when_empty() {
-        let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new());
         let empty = fit_column_width(&[], &mut font_cx, &mut cache);
         assert_eq!(empty, crate::ui::grid::COL_WIDTH);
         let blank = crate::DisplayCell::default();

@@ -933,7 +933,7 @@ mod tests {
                 &pages[0],
                 ambre_canvas::Theme::Light.palette(),
                 &mut ambre_draw::FontContext::default(),
-                &mut ambre_canvas::TextCache::new(1.0),
+                &mut ambre_canvas::TextCache::new(),
                 images,
             );
             s.count(|op| {

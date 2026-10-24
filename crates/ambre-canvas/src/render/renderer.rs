@@ -10,7 +10,7 @@
 use super::*;
 use crate::SurfaceSize;
 use crate::density::{CssSize, DevicePixelRatio, DevicePx, DeviceSize};
-use ambre_core::ViewPx;
+use ambre_core::{ImageSize, ViewPx};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
 
@@ -27,15 +27,14 @@ impl OffscreenTarget {
     fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
-        width: u32,
-        height: u32,
+        size: DeviceSize,
         label: &str,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width: width.max(1),
-                height: height.max(1),
+                width: size.width.max(1),
+                height: size.height.max(1),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -161,8 +160,7 @@ struct CacheEntry<T> {
     /// The size of the upload. A key reused at a different size is content that
     /// changed behind its identity, so the cache replaces the entry rather than
     /// stretching it (`ImageSource::key`).
-    width: u32,
-    height: u32,
+    size: ImageSize,
     /// Frame ordinal of the last draw that bound it, for eviction.
     last_used: u64,
 }
@@ -199,10 +197,10 @@ impl<T> ImageCache<T> {
 
     /// The payload for `key`, if these exact pixels are already resident. Stamps
     /// the entry so eviction sees it as recently used.
-    fn get(&mut self, key: ImageKey, width: u32, height: u32) -> Option<&T> {
+    fn get(&mut self, key: ImageKey, size: ImageSize) -> Option<&T> {
         let clock = self.clock;
         let entry = self.map.get_mut(&key)?;
-        if entry.width != width || entry.height != height {
+        if entry.size != size {
             return None;
         }
         entry.last_used = clock;
@@ -617,8 +615,8 @@ impl QuadRenderer {
 
         // -- Ping-pong offscreen pair (initial dummy 1x1, sized on first frame) --
         let offscreens = [
-            OffscreenTarget::new(device, offscreen_format, 1, 1, "cells_offscreen_a"),
-            OffscreenTarget::new(device, offscreen_format, 1, 1, "cells_offscreen_b"),
+            OffscreenTarget::new(device, offscreen_format, DeviceSize::new(1, 1), "cells_offscreen_a"),
+            OffscreenTarget::new(device, offscreen_format, DeviceSize::new(1, 1), "cells_offscreen_b"),
         ];
         let blit_bind_groups = [
             make_blit_bg(
@@ -684,22 +682,10 @@ impl QuadRenderer {
     /// the wasm host has a surface to size.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn resize_offscreens(&mut self, device: &wgpu::Device, size: SurfaceSize) {
-        let DeviceSize { width, height, .. } = size.physical();
+        let physical = size.physical();
         self.offscreens = [
-            OffscreenTarget::new(
-                device,
-                self.offscreen_format,
-                width,
-                height,
-                "cells_offscreen_a",
-            ),
-            OffscreenTarget::new(
-                device,
-                self.offscreen_format,
-                width,
-                height,
-                "cells_offscreen_b",
-            ),
+            OffscreenTarget::new(device, self.offscreen_format, physical, "cells_offscreen_a"),
+            OffscreenTarget::new(device, self.offscreen_format, physical, "cells_offscreen_b"),
         ];
         self.blit_bind_groups = [
             make_blit_bg(
@@ -878,7 +864,7 @@ impl QuadRenderer {
         }
         if self
             .images
-            .get(image.key, image.size.width, image.size.height)
+            .get(image.key, image.size)
             .is_none()
         {
             let Some(uploaded) = self.upload_image(device, queue, image) else {
@@ -975,24 +961,22 @@ impl QuadRenderer {
         Some(CacheEntry {
             payload: bind_group,
             bytes,
-            width: image.size.width,
-            height: image.size.height,
+            size: image.size,
             last_used: self.images.clock,
         })
     }
 
     // -- Glyph geometry -------------------------------------------------------
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn push_glyph(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
-        color: Color,
-    ) {
+    pub(super) fn push_glyph(&mut self, quad: GlyphQuad, color: Color) {
+        let GlyphQuad {
+            x,
+            y,
+            width: w,
+            height: h,
+            uv_min,
+            uv_max,
+        } = quad;
         if w <= 0.0 || h <= 0.0 {
             return;
         }
@@ -1029,15 +1013,15 @@ impl QuadRenderer {
     /// batch. Same geometry as `push_glyph`; the color pipeline samples the
     /// RGBA atlas and ignores the tint, so `color` is a placeholder here.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn push_color_glyph(
-        &mut self,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        uv_min: [f32; 2],
-        uv_max: [f32; 2],
-    ) {
+    pub(super) fn push_color_glyph(&mut self, quad: GlyphQuad) {
+        let GlyphQuad {
+            x,
+            y,
+            width: w,
+            height: h,
+            uv_min,
+            uv_max,
+        } = quad;
         if w <= 0.0 || h <= 0.0 {
             return;
         }
@@ -1374,8 +1358,7 @@ mod image_cache_tests {
         CacheEntry {
             payload: w,
             bytes,
-            width: w,
-            height: h,
+            size: ImageSize::new(w, h),
             last_used,
         }
     }
@@ -1388,7 +1371,7 @@ mod image_cache_tests {
         let mut c: ImageCache<u32> = ImageCache::new(1024);
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
         c.clock = 7;
-        assert_eq!(c.get(ImageKey(1), 2, 2), Some(&2));
+        assert_eq!(c.get(ImageKey(1), ImageSize::new(2, 2)), Some(&2));
         assert_eq!(c.map[&ImageKey(1)].last_used, 7);
     }
 
@@ -1399,8 +1382,8 @@ mod image_cache_tests {
     fn a_key_at_another_size_is_a_miss() {
         let mut c: ImageCache<u32> = ImageCache::new(1024);
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
-        assert_eq!(c.get(ImageKey(1), 4, 4), None);
-        assert!(c.get(ImageKey(1), 2, 2).is_some());
+        assert_eq!(c.get(ImageKey(1), ImageSize::new(4, 4)), None);
+        assert!(c.get(ImageKey(1), ImageSize::new(2, 2)).is_some());
     }
 
     /// Over budget, the entry drawn longest ago goes first and the recent ones

@@ -67,6 +67,22 @@ struct GlyphVertex {
     color: [f32; 4],
 }
 
+/// One axis-aligned glyph quad in screen pixels, and the box of the atlas it
+/// samples.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GlyphQuad {
+    /// The left edge.
+    x: f32,
+    /// The top edge.
+    y: f32,
+    width: f32,
+    height: f32,
+    /// The texture coordinate of the top-left corner.
+    uv_min: [f32; 2],
+    /// The texture coordinate of the bottom-right corner.
+    uv_max: [f32; 2],
+}
+
 const GLYPH_VERTEX_SIZE: usize = std::mem::size_of::<GlyphVertex>();
 const INITIAL_GLYPHS: usize = 4096;
 

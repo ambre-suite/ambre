@@ -720,7 +720,7 @@ mod pdf_tests {
             page,
             ambre_canvas::Theme::Light.palette(),
             &mut ambre_draw::FontContext::default(),
-            &mut ambre_canvas::TextCache::new(1.0),
+            &mut ambre_canvas::TextCache::new(),
             &crate::ui::render::ImageStore::new(),
         );
         s
@@ -818,7 +818,7 @@ mod pdf_tests {
             &pages[0].camera,
             ambre_canvas::Theme::Light.palette(),
             &mut ambre_draw::FontContext::default(),
-            &mut ambre_canvas::TextCache::new(1.0),
+            &mut ambre_canvas::TextCache::new(),
             None,
             &crate::ui::render::ImageStore::new(),
             &std::collections::HashMap::new(),

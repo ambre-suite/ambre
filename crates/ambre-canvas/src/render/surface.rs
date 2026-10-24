@@ -66,17 +66,17 @@ fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> (f32, f32, f32, f32
 /// A `tint` of `Some` names the alpha atlas, drawn in that colour. `None` names
 /// the colour atlas, drawn untinted. [`QuadRenderer`] is the frame's sink.
 pub(super) trait GlyphSink {
-    /// An axis-aligned quad, as `[x, y, width, height]` in screen pixels.
-    fn glyph(&mut self, rect: [f32; 4], uv: [[f32; 2]; 2], tint: Option<Color>);
+    /// An axis-aligned quad, in screen pixels.
+    fn glyph(&mut self, quad: GlyphQuad, tint: Option<Color>);
     /// A rotated quad, by its four screen corners.
     fn glyph_corners(&mut self, corners: [[f32; 2]; 4], uv: [[f32; 2]; 2], tint: Option<Color>);
 }
 
 impl GlyphSink for QuadRenderer {
-    fn glyph(&mut self, [x, y, w, h]: [f32; 4], [min, max]: [[f32; 2]; 2], tint: Option<Color>) {
+    fn glyph(&mut self, quad: GlyphQuad, tint: Option<Color>) {
         match tint {
-            Some(color) => self.push_glyph(x, y, w, h, min, max, color),
-            None => self.push_color_glyph(x, y, w, h, min, max),
+            Some(color) => self.push_glyph(quad, color),
+            None => self.push_color_glyph(quad),
         }
     }
 
@@ -129,7 +129,15 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     let (x0, y0) = (origin.x as f32 + bl, origin.y as f32 - bt);
     let (x1, y1) = (x0 + sw, y0 + sh);
     let Some(clip) = at.clip else {
-        sink.glyph([x0, y0, sw, sh], [slot.uv_min, slot.uv_max], tint);
+        let quad = GlyphQuad {
+            x: x0,
+            y: y0,
+            width: sw,
+            height: sh,
+            uv_min: slot.uv_min,
+            uv_max: slot.uv_max,
+        };
+        sink.glyph(quad, tint);
         return;
     };
     // A glyph straddling the clip is trimmed and its UVs remapped. Drawn whole,
@@ -150,7 +158,15 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
     let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
     let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
-    sink.glyph([nx0, ny0, nx1 - nx0, ny1 - ny0], [[u0, v0], [u1, v1]], tint);
+    let quad = GlyphQuad {
+        x: nx0,
+        y: ny0,
+        width: nx1 - nx0,
+        height: ny1 - ny0,
+        uv_min: [u0, v0],
+        uv_max: [u1, v1],
+    };
+    sink.glyph(quad, tint);
 }
 
 // ============================================================================
@@ -631,13 +647,13 @@ mod tests {
     /// Records each glyph a run hands over, with the tint that routes it.
     #[derive(Default)]
     struct Batches {
-        quads: Vec<([f32; 4], Option<Color>)>,
+        quads: Vec<(GlyphQuad, Option<Color>)>,
         corners: Vec<Option<Color>>,
     }
 
     impl GlyphSink for Batches {
-        fn glyph(&mut self, rect: [f32; 4], _: [[f32; 2]; 2], tint: Option<Color>) {
-            self.quads.push((rect, tint));
+        fn glyph(&mut self, quad: GlyphQuad, tint: Option<Color>) {
+            self.quads.push((quad, tint));
         }
         fn glyph_corners(&mut self, _: [[f32; 2]; 4], _: [[f32; 2]; 2], tint: Option<Color>) {
             self.corners.push(tint);
@@ -694,7 +710,11 @@ mod tests {
         emit_glyph(&mut batches, &glyph(false), &at(10.0));
         emit_glyph(&mut batches, &glyph(false), &at(20.0));
         assert_eq!(batches.quads.len(), 1, "the glyph past the clip is dropped");
-        assert_eq!(batches.quads[0].0, [10.0, 0.0, 5.0, 10.0]);
+        let quad = batches.quads[0].0;
+        assert_eq!(
+            [quad.x, quad.y, quad.width, quad.height],
+            [10.0, 0.0, 5.0, 10.0]
+        );
     }
 
     /// A closed triangle with a base of 10 and a height of 10.

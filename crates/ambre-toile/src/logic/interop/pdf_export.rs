@@ -220,7 +220,7 @@ mod tests {
     fn export_yields_a_pdf() {
         let palette = Theme::Light.palette();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         let bytes = export_pdf(
             &[one_page()],
             PageSize::default(),
@@ -241,7 +241,7 @@ mod tests {
         let palette = Theme::Light.palette();
         let run = || {
             let mut font_cx = FontContext::new();
-            let mut tc = TextCache::new(1.0);
+            let mut tc = TextCache::new();
             export_pdf(
                 &[one_page()],
                 PageSize::default(),
@@ -303,7 +303,7 @@ mod tests {
                     .collection
                     .register_fonts(bytes.clone().into(), None);
             }
-            let mut tc = TextCache::new(1.0);
+            let mut tc = TextCache::new();
             export_pdf(
                 &[a_page_with_text()],
                 PageSize::default(),
@@ -328,7 +328,7 @@ mod tests {
     fn empty_pages_is_an_error() {
         let palette = Theme::Light.palette();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         let err = export_pdf(
             &[],
             PageSize::default(),
@@ -347,7 +347,7 @@ mod tests {
     fn multiple_pages_serialize() {
         let palette = Theme::Light.palette();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         let pages = vec![one_page(), one_page(), one_page()];
         let bytes = export_pdf(
             &pages,
@@ -377,7 +377,7 @@ mod tests {
         for bytes in shipped_faces() {
             font_cx.collection.register_fonts(bytes.into(), None);
         }
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         let images = ImageStore::new();
 
         let mut printed = RecordingSurface::new();
@@ -444,7 +444,7 @@ mod tests {
             for bytes in shipped_faces() {
                 font_cx.collection.register_fonts(bytes.into(), None);
             }
-            let mut tc = TextCache::new(1.0);
+            let mut tc = TextCache::new();
             let images = ImageStore::new();
             let anim = HashMap::new();
             let camera = ViewportTransform {
@@ -500,7 +500,7 @@ mod tests {
         for bytes in shipped_faces() {
             font_cx.collection.register_fonts(bytes.into(), None);
         }
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         let mut page = RecordingSurface::new();
         paint_page(
             &mut page,

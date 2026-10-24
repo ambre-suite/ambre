@@ -174,7 +174,7 @@ impl Rig {
     fn paint(&mut self) -> ambre_draw::testing::RecordingSurface {
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         self.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         self.view.paint_overlay(
@@ -2609,7 +2609,7 @@ fn paint_passes(
     ambre_draw::testing::RecordingSurface,
 ) {
     let mut font_cx = FontContext::new();
-    let mut cache = TextCache::new(1.0);
+    let mut cache = TextCache::new();
     let mut content = ambre_draw::testing::RecordingSurface::new();
     rig.view
         .paint_content(&mut content, &mut font_cx, &mut cache, None);

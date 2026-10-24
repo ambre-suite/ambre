@@ -1109,7 +1109,7 @@ pub(crate) mod tests {
 
     fn paint_from(shown: Shown<'_>, height: f32) -> (RecordingSurface, Painted) {
         let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let painted = paint_list(
             &mut surface,
             &mut font_cx,
@@ -1147,7 +1147,7 @@ pub(crate) mod tests {
     #[test]
     fn the_jump_control_paints_its_words_inside_what_it_answers() {
         let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let rect = paint_jump(
             &mut surface,
             &mut font_cx,
@@ -1517,7 +1517,7 @@ pub(crate) mod tests {
     fn the_emoji_face_is_asked_for_on_first_use_only() {
         let requested = |list: &MessageList| {
             let (mut surface, mut font_cx) = (RecordingSurface::new(), fonts());
-            let mut cache = TextCache::new(1.0);
+            let mut cache = TextCache::new();
             let shown = Shown {
                 list,
                 unread: None,
@@ -1598,7 +1598,7 @@ pub(crate) mod tests {
             .collect();
         marks.sort_unstable();
         assert_eq!(marks, [(8, 12), (13, 14), (15, 16)]);
-        let (mut font_cx, mut cache) = (fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (fonts(), TextCache::new());
         let plain = shape(
             &mut font_cx,
             &mut cache,

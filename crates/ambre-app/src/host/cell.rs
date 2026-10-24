@@ -765,7 +765,7 @@ mod tests {
     /// test, so the text shapes with no width: the host tier holds the bytes.
     fn paint(view: &mut MurmureView) {
         let mut font_cx = ambre_canvas::fonts::font_context_from_bytes([]);
-        let mut cache = ambre_canvas::TextCache::new(1.0);
+        let mut cache = ambre_canvas::TextCache::new();
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();
         view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);

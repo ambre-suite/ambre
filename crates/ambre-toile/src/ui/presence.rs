@@ -426,7 +426,7 @@ mod tests {
     ) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         cursors.paint(&mut surface, vp, &cam(), &mut font_cx, &mut tc, now_ms);
         surface
     }

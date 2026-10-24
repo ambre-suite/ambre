@@ -230,7 +230,7 @@ fn board_paint() {
     );
     let bytes = std::fs::read(face).expect("the workspace ships its faces");
     font_cx.collection.register_fonts(bytes.into(), None);
-    let mut cache = TextCache::new(1.0);
+    let mut cache = TextCache::new();
     // The frame before, outside the counted function: it fills the cache.
     walk(&viewport, &camera, &mut font_cx, &mut cache);
     let ops =

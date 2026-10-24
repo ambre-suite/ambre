@@ -2068,7 +2068,7 @@ mod tests {
         let plan = view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle);
         let full = matches!(plan.content, ContentRepaint::Full);
         if full {
-            let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new(1.0));
+            let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new());
             let mut surface = RecordingSurface::new();
             view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
         }
@@ -2234,7 +2234,7 @@ mod tests {
     fn frame_with_fonts(view: &mut MurmureView) {
         view.update();
         view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
     }
@@ -2331,7 +2331,7 @@ mod tests {
         let [(_, _, first), (_, _, second)] = rows.as_slice() else {
             panic!("two rows: {rows:?}");
         };
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut x_after = |text| {
             let width = crate::paint::shape(
                 &mut font_cx,
@@ -2405,7 +2405,7 @@ mod tests {
         let [(_, _, bottom)] = rows.as_slice() else {
             panic!("one row: {rows:?}");
         };
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let first = crate::paint::shape(
             &mut font_cx,
             &mut cache,
@@ -3845,7 +3845,7 @@ mod tests {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -4469,7 +4469,7 @@ mod tests {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -4921,7 +4921,7 @@ mod tests {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -5321,7 +5321,7 @@ mod tests {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -5409,7 +5409,7 @@ mod tests {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
-        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
+        let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new());
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);

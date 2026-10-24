@@ -184,7 +184,7 @@ impl ToileState {
         let pages = self.pdf_pages(page);
         // The page camera maps world units onto PDF points 1:1, so the text
         // cache runs at unit scale like the export walk itself.
-        let mut text_cache = ambre_canvas::TextCache::new(1.0);
+        let mut text_cache = ambre_canvas::TextCache::new();
         crate::logic::interop::export_pdf(
             &pages,
             page,

@@ -310,7 +310,6 @@ struct CachedLayout {
 pub struct TextCache {
     layouts: FxHashMap<CacheKey, CachedLayout>,
     layout_cx: LayoutContext<Brush>,
-    scale: f32,
     /// Monotonic access clock; bumped on every `get_or_build` so eviction can
     /// rank entries by recency. Wraps only after 2^64 accesses (never in
     /// practice).
@@ -324,12 +323,21 @@ pub struct TextCache {
     pub frame_misses: usize,
 }
 
+impl Default for TextCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextCache {
-    pub fn new(scale: f32) -> Self {
+    /// An empty cache. It shapes in logical pixels, at a display scale of 1:
+    /// a layout reasons in logical coordinates, and the density is applied
+    /// when the frame is drawn (`CANVAS-032`).
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             layouts: FxHashMap::default(),
             layout_cx: LayoutContext::new(),
-            scale,
             tick: 0,
             lazy_fonts: LazyFontLoader::new(),
             frame_hits: 0,
@@ -541,7 +549,6 @@ impl TextCache {
                     &e.key().text,
                     look,
                     &e.key().spans,
-                    self.scale,
                 );
                 &e.insert(CachedLayout {
                     layout,
@@ -558,7 +565,6 @@ impl TextCache {
         text: &str,
         look: Look<'_, L>,
         spans: &[SpanShape],
-        scale: f32,
     ) -> Layout<Brush> {
         let Look {
             font_size,
@@ -569,7 +575,7 @@ impl TextCache {
             family,
             word_break,
         } = look;
-        let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
+        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
         // Resolve every requested family to an actually-loaded face through the
         // single family authority. A family is a toolbar label
         // ("Sans"/"Serif"/...), the CSS-generic default ("sans-serif"), or an
@@ -653,7 +659,7 @@ mod tests {
         let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
             .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
         let mut cx = crate::fonts::font_context_from_bytes(faces);
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let bold = SpanShape {
             range: ByteSpan::from_usize_range(0..4),
             weight: Some(ambre_core::FontWeight::BOLD),
@@ -720,7 +726,7 @@ mod tests {
     #[test]
     fn an_indent_starts_each_line_of_its_paragraphs_past_it() {
         let mut cx = font_cx();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let long = "word ".repeat(20);
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
@@ -769,7 +775,7 @@ mod tests {
     #[test]
     fn an_overflow_evicts_the_coldest_layouts_and_keeps_the_rest() {
         let mut cx = font_cx();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         for i in 0..10 {
             shape(&mut cache, &mut cx, &format!("cell {i}"));
         }
@@ -794,7 +800,7 @@ mod tests {
     #[test]
     fn an_eviction_changes_nothing_a_surviving_layout_draws() {
         let mut cx = font_cx();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let before = shape(&mut cache, &mut cx, "Quarterly revenue");
         assert!(before.1 > 0, "the face shaped the string");
         for i in 0..10 {
@@ -816,7 +822,7 @@ mod tests {
     #[test]
     fn a_missing_script_arms_a_fetch_and_its_face_lands_later() {
         let mut cx = font_cx();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         shape(&mut cache, &mut cx, "中文");
         assert_eq!(cache.lazy_fonts.requested_count(), 1, "the fetch is armed");
         assert_eq!(cache.cache_size(), 1, "the frame shaped without waiting");
@@ -835,7 +841,7 @@ mod tests {
     #[test]
     fn each_alignment_of_a_text_is_cached_apart() {
         let mut cx = font_cx();
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let text = "word ".repeat(20);
         let all = [
             Alignment::Start,

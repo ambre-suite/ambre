@@ -276,7 +276,7 @@ mod tests {
             RecordingSurface::new(),
             FixedClock::default(),
             FontContext::new(),
-            TextCache::new(1.0),
+            TextCache::new(),
             DrawStats::default(),
         )
     }

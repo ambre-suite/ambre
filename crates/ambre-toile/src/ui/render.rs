@@ -703,7 +703,7 @@ mod tests {
         };
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         paint_content(
             &mut surface,
             &vp,
@@ -767,7 +767,7 @@ mod tests {
         );
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         paint_content(
             &mut surface,
             &vp,
@@ -824,7 +824,7 @@ mod tests {
     fn paint(vp: &DisplayViewport) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         paint_content(
             &mut surface,
             vp,
@@ -1138,7 +1138,7 @@ mod tests {
         );
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         paint_content(
             &mut surface,
             &vp,
@@ -1841,7 +1841,7 @@ mod tests {
     fn paint_pass(vp: &DisplayViewport, cam: &ViewportTransform, pass: &Pass) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = shipped_fonts();
-        let mut tc = TextCache::new(1.0);
+        let mut tc = TextCache::new();
         paint_content(
             &mut surface,
             vp,

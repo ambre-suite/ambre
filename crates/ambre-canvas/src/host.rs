@@ -301,7 +301,7 @@ async fn create_gpu_state(
         size,
         quad_renderer,
         font_cx,
-        text_cache: TextCache::new(1.0),
+        text_cache: TextCache::new(),
     })
 }
 

@@ -410,7 +410,7 @@ mod tests {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let face = std::fs::read(format!("{dir}NotoSans-Regular.ttf")).unwrap_or_default();
         let mut font_cx = crate::fonts::font_context_from_bytes([face]);
-        let mut cache = TextCache::new(1.0);
+        let mut cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         paint_fatal(
             &mut surface,
