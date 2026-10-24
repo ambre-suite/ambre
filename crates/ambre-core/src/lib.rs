@@ -55,6 +55,7 @@ pub mod lang;
 /// The target of a link: [`LinkUrl`].
 pub mod link;
 pub mod media;
+pub mod member_count;
 /// Two-way choices shared across crates: [`StepDirection`], [`HistoryStep`].
 pub mod mode;
 pub mod name;
@@ -123,6 +124,7 @@ pub use link::LinkUrl;
 pub use media::{
     ByteSize, ContentHash, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
 };
+pub use member_count::{MemberCount, MemberCountError};
 pub use mode::{HistoryStep, StepDirection, Visibility};
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,

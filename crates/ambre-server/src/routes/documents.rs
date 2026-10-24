@@ -178,7 +178,7 @@ pub struct DocumentSummaryJson {
     /// own key.
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// Total member count (routing metadata). `> 1` => shared.
-    pub member_count: u32,
+    pub member_count: ambre_core::MemberCount,
     pub updated_at: ambre_core::Rfc3339,
 }
 /// Response wrapper for the document listing.
@@ -209,7 +209,7 @@ pub async fn list_documents(
                     .wrapper_exchange_pubkey
                     .map(ambre_core::ExchangeKeyHex::encode)
                     .unwrap_or_default(),
-                member_count: d.member_count.max(0) as u32,
+                member_count: d.member_count,
                 updated_at: ambre_core::Rfc3339::formatted(d.updated_at.to_rfc3339()),
             }
         })

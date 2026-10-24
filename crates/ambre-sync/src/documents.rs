@@ -47,7 +47,7 @@ impl SyncState {
                                     let ms = js_sys::Date::parse(e.updated_at.as_str());
                                     ambre_bus::Timestamp(if ms.is_nan() { 0 } else { ms as u64 })
                                 },
-                                member_count: e.member_count.max(1),
+                                member_count: e.member_count.max(ambre_core::MemberCount::ONE),
                             });
                         }
                         let _ = tx.send(SyncEvent::DocumentList {
@@ -70,7 +70,7 @@ impl SyncState {
                     name: Some(name.clone()),
                     role: Role::Owner,
                     updated_at: ambre_bus::Timestamp(0),
-                    member_count: 1,
+                    member_count: ambre_core::MemberCount::ONE,
                 })
                 .collect();
             let count = documents.len();

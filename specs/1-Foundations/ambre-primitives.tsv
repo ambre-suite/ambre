@@ -104,7 +104,6 @@ ambre-app | src/host/prose.rs | crate::host::prose | download(filename) | param 
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | layer_click_through(takes_input) | param | bool	math	value flag to the DOM
-ambre-app | src/landing.rs | crate::landing | DocItem.member_count | field | u32	math	count
 ambre-app | src/landing.rs | crate::landing | DocItem.name | field | Option<String>	free-text	document name for display
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
@@ -634,7 +633,6 @@ ambre-bus | src/rest.rs | crate::rest | <SecretBytes as Deref>::deref() | ret | 
 ambre-bus | src/rest.rs | crate::rest | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	trait	signature fixed by the trait
 ambre-bus | src/rest.rs | crate::rest | <SecretString as Deref>::deref() | ret | &str	newtype-inner	secret newtype
 ambre-bus | src/rest.rs | crate::rest | <SecretString as From<String>>::from(s) | param | String	trait	signature fixed by the trait
-ambre-bus | src/rest.rs | crate::rest | DocumentSummary.member_count | field | u32	math	member count
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
@@ -3337,7 +3335,6 @@ ambre-server | src/db/content.rs | crate::db::content | document_holds_media() |
 ambre-server | src/db/content.rs | crate::db::content | find_compactable_snapshots(keep) | param | i64	math	count kept
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
-ambre-server | src/db/documents.rs | crate::db::documents | DocumentSummaryRow.member_count | field | i64	math	count
 ambre-server | src/db/documents.rs | crate::db::documents | PendingDeletion.rows_left | field | bool	math	named state or style flag, local
 ambre-server | src/db/documents.rs | crate::db::documents | create_document() | ret | Result<(DocumentRow,bool),AppError>	generic	predicate result
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	math	named state or style flag, local
@@ -3472,7 +3469,6 @@ ambre-server | src/routes/channels.rs | crate::routes::channels | DirectMessageJ
 ambre-server | src/routes/channels.rs | crate::routes::channels | MemberChannelJson.public | field | bool	math	named state or style flag, local
 ambre-server | src/routes/channels.rs | crate::routes::channels | ThreadJson.created | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | CreateDocumentRequest.space | field | bool	math	named state or style flag, local
-ambre-server | src/routes/documents.rs | crate::routes::documents | DocumentSummaryJson.member_count | field | u32	math	count
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	math	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	math	named state or style flag, local
@@ -3542,7 +3538,6 @@ ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsR
 ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | DocumentEntry.member_count | field | u32	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
@@ -5105,3 +5100,10 @@ ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_i64() | ret |
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_usize() | ret | usize	newtype-inner	the count compared against a page length
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::clamped(n) | param | i64	newtype-inner	the integer a request names, clamped into range
 ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::saturating(n) | param | u16	newtype-inner	a const count, saturated into range
+ambre-core | src/member_count.rs | crate::member_count | <MemberCount as TryFrom<i64>>::try_from(n) | param | i64	newtype-inner	the store's 64-bit count, checked into MemberCount
+ambre-core | src/member_count.rs | crate::member_count | MemberCount.0 | field | u32	newtype-inner	the member count MemberCount wraps
+ambre-core | src/member_count.rs | crate::member_count | MemberCount::get() | ret | u32	newtype-inner	the count MemberCount wraps
+ambre-core | src/member_count.rs | crate::member_count | MemberCount::is_shared() | ret | bool	generic	predicate result
+ambre-core | src/member_count.rs | crate::member_count | MemberCount::new(n) | param | u32	newtype-inner	the count MemberCount wraps
+ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
+ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once

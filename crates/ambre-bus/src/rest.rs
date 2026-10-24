@@ -192,7 +192,7 @@ pub struct DocumentSummary {
     /// Epoch milliseconds.
     pub updated_at: crate::Timestamp,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
-    pub member_count: u32,
+    pub member_count: ambre_core::MemberCount,
 }
 
 /// Member of a document or channel.

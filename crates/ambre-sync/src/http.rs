@@ -1322,7 +1322,7 @@ pub(crate) struct DocumentEntry {
     pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
     /// Total member count; `> 1` => shared.
     #[serde(default)]
-    pub member_count: u32,
+    pub member_count: ambre_core::MemberCount,
     pub updated_at: ambre_core::Rfc3339,
 }
 

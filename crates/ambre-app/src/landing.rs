@@ -42,7 +42,7 @@ pub struct DocItem {
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
     pub updated_at: ambre_bus::Timestamp,
     /// Total member count; `> 1` => shared.
-    pub member_count: u32,
+    pub member_count: ambre_core::MemberCount,
 }
 
 /// How the server lets a user sign in, as `/api/auth/config` reports it.
@@ -343,7 +343,7 @@ fn doc_card(
 ) -> impl IntoView {
     let doc_type = d.doc_type;
     let id = d.document_id;
-    let shared = d.member_count > 1;
+    let shared = d.member_count.is_shared();
     let updated_at = d.updated_at;
     let display_name = d.name.clone();
 
@@ -1049,7 +1049,7 @@ mod tests {
             doc_type: DocType::Prose,
             name: Some("Plan".to_owned()),
             updated_at: ambre_bus::Timestamp(0),
-            member_count: 1,
+            member_count: ambre_core::MemberCount::ONE,
         };
         let docs = RwSignal::new(vec![item.clone()]);
         let pending_delete = RwSignal::new(None);

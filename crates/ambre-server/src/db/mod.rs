@@ -58,6 +58,12 @@ fn decode_display_names(texts: Vec<String>) -> Result<Vec<ambre_core::DisplayNam
     texts.into_iter().map(decode_display_name).collect()
 }
 
+/// A stored member count, checked into 32 bits. A count that does not fit is
+/// a decode error, never a truncation (`SRV-238`).
+fn decode_member_count(count: i64) -> Result<ambre_core::MemberCount, sqlx::Error> {
+    ambre_core::MemberCount::try_from(count).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
 /// A stored sequence number column, as a [`Seq`](ambre_core::Seq). A
 /// negative value is a decode error: the relay numbers from zero up.
 fn decode_seq(value: i64) -> Result<ambre_core::Seq, sqlx::Error> {
@@ -239,6 +245,19 @@ pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `SRV-238`: a count past 32 bits is refused when read, never truncated.
+    #[test]
+    fn a_member_count_past_u32_is_refused_not_truncated() {
+        let fits = decode_member_count(i64::from(u32::MAX)).expect("the widest count fits");
+        assert_eq!(fits.get(), u32::MAX);
+        for count in [i64::from(u32::MAX) + 1, -1] {
+            assert!(
+                matches!(decode_member_count(count), Err(sqlx::Error::Decode(_))),
+                "{count} must not decode"
+            );
+        }
+    }
 
     /// `covered_seq` survives the insert and both read paths. This is the value a
     /// client gates its post-open `RequestMissing` on, so a silent reset to 0

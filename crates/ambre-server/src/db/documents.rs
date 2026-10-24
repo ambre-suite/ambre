@@ -30,7 +30,7 @@ pub struct DocumentSummaryRow {
     pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
-    pub member_count: i64,
+    pub member_count: ambre_core::MemberCount,
 }
 
 /// Fetches a document by id.
@@ -98,7 +98,7 @@ pub async fn list_documents_for_user(
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
                     r.try_get("wrapper_exchange_pubkey")?,
                 )?,
-                member_count: r.try_get("member_count")?,
+                member_count: decode_member_count(r.try_get("member_count")?)?,
             })
         })
         .collect()
