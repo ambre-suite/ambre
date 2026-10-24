@@ -569,7 +569,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
 /// A rename to a name the rule refuses keeps the editor open, its reason on
 /// the field, and sends nothing. A valid name is sent (`TRAME-234`).
 #[wasm_bindgen_test]
-fn sheet_tabs_refuse_a_name_the_rule_refuses() {
+async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     let renamed = RwSignal::new(None::<(SheetId, SheetName)>);
     let container = mount_in_container(move || {
         let sheets = RwSignal::new(vec![SheetTab {
@@ -599,6 +599,8 @@ fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     let dbl = web_sys::Event::new("dblclick").unwrap();
     dbl.init_event_with_bubbles("dblclick", true);
     tab.dispatch_event(&dbl).unwrap();
+    // The double click swaps the tab for the editor on a scheduled effect.
+    settle().await;
     let field = || -> web_sys::HtmlInputElement {
         container
             .query_selector(".tab-rename")
