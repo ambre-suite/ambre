@@ -713,12 +713,14 @@ impl ParagraphStyle {
 // Presence (`1-Foundations/ambre-spec-presence.md`)
 // =============================================================================
 
-/// Where a caret is, in the document's own coordinates.
+/// Where a caret is on this replica: the block, and the offset resolved
+/// against the document this peer holds.
 ///
-/// A `BlockId` is a peer and a counter, globally unique and portable. The same
-/// value therefore means the same place on every replica, and postcard
-/// round-trips it with no custom logic. `offset` is a count of Unicode code
-/// points into the named block's body.
+/// `offset` is a count of Unicode code points into the named block's body. A
+/// command carries the position and the view is handed it. No frame carries
+/// it: an offset names another character on a peer that has not applied the
+/// same insertions. So the presence sample carries an [`EncodedCursor`]
+/// instead (`PROSE-004`). The type derives `serde`, and nothing serializes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CursorPosition {
     pub block_id: BlockId,
@@ -1251,9 +1253,9 @@ impl TocNumbering {
 /// memory, so no shape here derives `serde`. Every offset is a count of Unicode
 /// code points into the body of the block the command names (`PROSE-045`).
 ///
-/// The variants are the ones the engine answers today. Comments, footnotes,
-/// find, interop and the clipboard reach this enum with the Story that builds
-/// each of them (`ambre-roadmap.md` E5).
+/// The variants are the ones the engine answers today. The pictures, the
+/// spell checker and the Word, HTML and PDF filters reach this enum with the
+/// Story that builds each of them (`ambre-roadmap.md`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseCommand {
     /// Changes nothing, and is the one command a test drives the empty outcome

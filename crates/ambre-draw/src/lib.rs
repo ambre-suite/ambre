@@ -195,11 +195,10 @@ pub trait DrawSurface {
     /// vector geometry. `KrillaSurface` hands the pixels to krilla as a raster
     /// image.
     ///
-    /// **`WgpuSurface` does not implement this method.** The screen back end has
-    /// no texture pipeline. On the GPU this call is the default no-op above, and
-    /// a picture never reaches a frame. That is design, not oversight, and it
-    /// lands with the screen media cache (`ambre-spec-drawing-surface.md` section
-    /// 2, `ambre-spec-render-assets.md`).
+    /// `WgpuSurface` draws the image as a textured quad. Each corner of `dest`
+    /// maps through the active transform, so a rotated element turns its
+    /// picture with it. A clip rejects the quad by its bounding box and never
+    /// trims it (`ambre-spec-drawing-surface.md` section 5).
     ///
     /// Per `toile-media`, the caller paints a Toile image as a placeholder rect
     /// (via `fill_rect`) until its pixels arrive from the media cache. It is

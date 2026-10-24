@@ -206,7 +206,8 @@ section 2` declares them.
 2. measure the header and the footer against the content width, and the first-page variants when
    the document asks for them. Cap each band at a quarter of the content height (`PROSE-016`), and
    clip a band that exceeds the cap rather than growing the page;
-3. keep the shaped runs of both bands, since measuring them required shaping them;
+3. keep the shaped run of each band a page shows, up to four, for the view to draw. Measuring a
+   band shaped it, so the view never shapes it again;
 4. collect every footnote, shape it against the content width, and order the set by the position
    of its reference in the document flow. Assign the ordinals in that order, and prefix each text
    with its own ordinal before shaping.

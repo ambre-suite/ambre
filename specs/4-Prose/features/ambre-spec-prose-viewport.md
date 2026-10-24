@@ -224,10 +224,6 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
   reader who zooms to a hundred and fifty per cent does it again on the next visit.
 * **A page wider than the viewport has no horizontal scroll.** The column pins to the left edge
   and the right side of the page is unreachable at a zoom the rules allow.
-* **Nothing rules on a device pixel ratio that changes.** The ratio is carried in the view state
-  and a conversion multiplies by it. Moving the window to a second screen changes every mapping
-  `PROSE-UI-023` governs. Section 3 lists a canvas resize and not this, and `PROSE-UI-130` says
-  what a resize leaves alone without saying whether a ratio change is one.
 * **A pageless mode would replace this column.** `meta/pageless` is a container the schema carries
   as deferred. With it set, the layout is linear, the gutters go and the width follows the
   viewport. That is a different geometry, not a variant of this one.

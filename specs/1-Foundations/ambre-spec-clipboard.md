@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | `ambre_app::host::tests::the_asynchronous_item_carries_everything_the_copy_published` -- the written item, read back, holds the mirror and the private type | none | verified |
-| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the four names | `ambre_bus::clipboard_tests::only_the_launcher_names_a_clipboard_type` -- the code of every crate is scanned, and a private type spelled outside the launcher fails it | none | verified |
+| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the six names | `ambre_bus::clipboard_tests::only_the_launcher_names_a_clipboard_type` -- the code of every crate is scanned, and a private type spelled outside the launcher fails it | none | verified |
 | `UI-THREAD-053` | `INV` | Every view MUST choose between the copy it kept and what the browser read through one shared rule, and a plain paste MUST take the read. | this spec section 2, the ladder | `ambre_bus::clipboard_tests::a_paste_takes_the_kept_copy_only_on_the_token`; structural -- `ClipboardBlob::source` is the one site, and Trame, Toile and Prose each call it | none | verified |
 | `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | `ambre_app::host::pipe::tests::a_paste_event_and_the_paste_button_end_in_one_call` -- a raised `paste` event and a button press each end in the host's one paste call | none | verified |
 | `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | `ambre_app::host::pipe::tests::a_paste_event_and_the_paste_button_end_in_one_call` -- both paths reach a host that names no application. Structural: `pipe::wire_pipe` and `pipe::button_paste` take any `PipeHost`, so no application type is in reach | none | verified |
@@ -92,7 +92,7 @@ pub struct ClipboardBlob {
 }
 ```
 
-**The four names on the clipboard.** The host owns all four, and an application names none
+**The six names on the clipboard.** The host owns all six, and an application names none
 (`UI-THREAD-006`).
 
 | Name | Written by | Carries |

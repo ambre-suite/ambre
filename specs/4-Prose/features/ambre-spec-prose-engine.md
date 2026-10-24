@@ -317,9 +317,10 @@ below derives `serde`.
 > **The offset unit is the Unicode code point.** Every `pos`, every `range` and every
 > `(BlockId, DocOffset)` endpoint below is a count of code points into the target block's body text
 > (`PROSE-FEAT-006`). That is the unit Loro indexes a text container and a cursor with, so a write
-> path converts nothing. A caret advances by **grapheme cluster**, which is a rule of the view. The
-> view's own hit-test answers **UTF-8 bytes**. Each conversion happens where it is read, and section
-> 6 carries what the corpus still owes on it.
+> path converts nothing. A caret advances by **grapheme cluster**, which is a rule of the view. A
+> shaped run joins glyphs to **UTF-8 bytes**, and the view's hit-test converts the byte under a point
+> to a code point before it answers. Each conversion happens where it is read, and section 6
+> carries what the corpus still owes on it.
 
 The variants below are the ones the engine answers today, plus two groups marked not built: the
 pictures and the spell checker. Each of those arrives with the Story that builds it, and the whole
@@ -649,8 +650,9 @@ command they name.
 
 ### D. What Prose puts on the wire
 
-Two shapes, and they are the only Prose values that carry `serde`: they are the presence sample the
-Sync worker seals and sends. The event payload built from an arriving sample carries none.
+One shape crosses the wire: the presence sample the Sync worker seals and sends. `CursorPosition`
+derives `serde` too, and no frame carries it. The event payload built from an arriving sample
+carries no `serde`.
 
 ```rust
 /// Where a caret is on **this** replica: the block, and the absolute offset resolved
@@ -864,11 +866,12 @@ must swallow the event. The Prose view is an arm of the frame host's application
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The layout, the tracking flag and the feature commands are declared and unbuilt.** The engine
-  core built the document model, the two planes and the seam. Pagination, the tables, the comments
-  and the footnotes each land with their own Story (`ambre-roadmap.md` E5). So do the find
-  machinery, the clipboard, the bands, the spell checker and the interop filters. Each one adds its
-  commands to the plane of section 3.B and its events to section 3.C.
+* **The images, three interop filters and the spell checker are declared and unbuilt.** The
+  engine core built the document model, the two planes and the seam. Pagination, the tables, the
+  comments, the footnotes, the bands, the find machinery, the clipboard, the tracking flag and the
+  Markdown filters have landed since. The images and the HTML, Word and PDF filters each land with
+  their own Story (`ambre-roadmap.md` E5). The spell checker is not scheduled (`ambre-roadmap.md`
+  section 8). Each one adds its commands to the plane of section 3.B and its events to section 3.C.
 * **The offset unit is decided, and the view converts.** The plane counts Unicode code points,
   which is what the CRDT indexes (`PROSE-FEAT-006`). A shaped run joins glyphs to UTF-8 byte ranges
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
