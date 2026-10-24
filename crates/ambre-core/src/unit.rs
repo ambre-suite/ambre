@@ -16,6 +16,7 @@
 //! | [`Mm`] | a millimetre | a page size, a margin |
 //! | [`Radians`] | an angle | a rotated element |
 //! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
+//! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
@@ -26,6 +27,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::font::PX_PER_PT;
+use crate::span::PageMillis;
 use crate::zoom::ZoomFactor;
 
 /// CSS pixels per millimetre: a CSS pixel is 1/96 inch, an inch is 25.4 mm.
@@ -223,6 +225,12 @@ define_length! {
     Radians(f64)
 }
 
+define_length! {
+    /// A speed along one axis of the zoomed view, in view pixels per
+    /// millisecond: what a flick or a glide moves at.
+    ViewSpeed(f32)
+}
+
 impl DocPx {
     /// The length on the view at `zoom`.
     #[must_use]
@@ -287,6 +295,22 @@ impl ViewPx {
     }
 }
 
+impl ViewPx {
+    /// The speed of a move of this length over `span`.
+    #[must_use]
+    pub fn per(self, span: PageMillis) -> ViewSpeed {
+        ViewSpeed(self.0 / span.get() as f32)
+    }
+}
+
+impl ViewSpeed {
+    /// The length a move at this speed covers over `span`.
+    #[must_use]
+    pub fn over(self, span: PageMillis) -> ViewPx {
+        ViewPx(self.0 * span.get() as f32)
+    }
+}
+
 impl Radians {
     /// The angle in degrees, for a writer whose format takes degrees.
     #[must_use]
@@ -341,6 +365,22 @@ impl<P> Vector<P> {
     #[must_use]
     pub const fn new(dx: P, dy: P) -> Self {
         Self { dx, dy }
+    }
+}
+
+/// A size of one length space: a width and a height, kept apart by name so
+/// the two never swap.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Size<P> {
+    pub width: P,
+    pub height: P,
+}
+
+impl<P> Size<P> {
+    /// The size of `width` across and `height` down.
+    #[must_use]
+    pub const fn new(width: P, height: P) -> Self {
+        Self { width, height }
     }
 }
 
@@ -426,6 +466,41 @@ pub type CssVector = Vector<CssPx>;
 /// A displacement of the zoomed view.
 pub type ViewVector = Vector<ViewPx>;
 
+/// A size on the zoomed view: a canvas, a list, a box.
+pub type ViewSize = Size<ViewPx>;
+
+/// A velocity on the zoomed view, in view pixels per millisecond on each
+/// axis: what a flick leaves.
+pub type ViewVelocity = Vector<ViewSpeed>;
+
+impl ViewVelocity {
+    /// The speed along the direction of travel.
+    #[must_use]
+    pub fn magnitude(self) -> ViewSpeed {
+        ViewSpeed(self.dx.0.hypot(self.dy.0))
+    }
+
+    /// The velocity scaled by a bare number: a decay, a blend weight.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        Vector::new(self.dx * factor, self.dy * factor)
+    }
+}
+
+impl ViewVector {
+    /// The length of the displacement.
+    #[must_use]
+    pub fn length(self) -> ViewPx {
+        ViewPx(self.dx.0.hypot(self.dy.0))
+    }
+
+    /// The velocity of this displacement made over `span`.
+    #[must_use]
+    pub fn per(self, span: PageMillis) -> ViewVelocity {
+        Vector::new(self.dx.per(span), self.dy.per(span))
+    }
+}
+
 impl ViewPoint {
     /// The point on the page, for a canvas whose corner sits at
     /// `canvas_origin`.
@@ -451,8 +526,10 @@ impl CssPoint {
 
 #[cfg(test)]
 mod tests {
-    use super::{CssPoint, CssPx, DocPx, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewVector};
-    use crate::ZoomFactor;
+    use super::{
+        CssPoint, CssPx, DocPx, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewSpeed, ViewVector,
+    };
+    use crate::{PageMillis, ZoomFactor};
 
     #[test]
     fn a_document_length_scales_by_the_zoom_and_back() {
@@ -515,6 +592,18 @@ mod tests {
         let at = SurfacePx::new(2_000_010.25);
         assert_eq!(at.in_view(origin), ViewPx::new(10.25));
         assert_eq!(ViewPx::new(10.25).on_surface(origin), at);
+    }
+
+    #[test]
+    fn a_move_over_a_span_is_a_speed_that_covers_the_move_again() {
+        let span = PageMillis::new(4.0);
+        let by = ViewVector::new(ViewPx::new(3.0), ViewPx::new(4.0));
+        let velocity = by.per(span);
+        assert_eq!(velocity.dy, ViewSpeed::new(1.0));
+        assert_eq!(velocity.magnitude(), ViewSpeed::new(1.25));
+        assert_eq!(velocity.dx.over(span), ViewPx::new(3.0));
+        assert_eq!(by.length(), ViewPx::new(5.0));
+        assert_eq!(velocity.scaled(2.0).dy, ViewSpeed::new(2.0));
     }
 
     #[test]

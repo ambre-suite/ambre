@@ -152,7 +152,7 @@ impl GridScroll {
 
     /// The speed of the motion in flight, px per ms, or `None` at rest.
     #[cfg(test)]
-    pub(crate) fn speed(&self) -> Option<(f32, f32)> {
+    pub(crate) fn speed(&self) -> Option<ambre_core::ViewVelocity> {
         self.kinetic.speed()
     }
 }
@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(s.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and later ones move.
         s.tick(&mut g, ambre_bus::PageTime(64.0 + 70.0));
-        let (_, vy) = s.speed().expect("the paused glide carries on");
+        let vy = s.speed().expect("the paused glide carries on").dy.get();
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         let mut now = 64.0 + 70.0;
         while g.top_row == glided {

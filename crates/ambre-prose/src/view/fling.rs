@@ -80,7 +80,7 @@ impl ProseUiState {
     }
 
     /// The vertical speed of the flick in motion, if any.
-    pub fn fling_speed(&self) -> Option<f32> {
-        self.kinetic.speed().map(|(_, dy)| dy)
+    pub fn fling_speed(&self) -> Option<ambre_core::ViewSpeed> {
+        self.kinetic.speed().map(|speed| speed.dy)
     }
 }

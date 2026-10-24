@@ -603,7 +603,7 @@ impl ProseUiState {
     /// edge speed (`KINETIC-007`).
     fn autoscroll_speed(&self) -> Option<EdgeSpeed> {
         let at = self.drag_pointer.filter(|_| self.dragging.is_some())?;
-        Some(EdgeSpeed::at(at.y.get(), self.viewport.height_px.get()))
+        Some(EdgeSpeed::at(at.y, self.viewport.height_px))
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near

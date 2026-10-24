@@ -215,8 +215,12 @@ impl TrameUiState {
     pub fn edge_scroll_speed(&self, at: ViewPoint) -> (EdgeSpeed, EdgeSpeed) {
         let (x, y) = (on_grid(at.x), on_grid(at.y));
         let (left, top) = (self.header_w(), self.header_h());
+        // Both are measured from the cell area's corner, inside one view.
         let at = |offset: SurfacePx, extent: SurfacePx| {
-            EdgeSpeed::at(offset.get() as f32, extent.get() as f32)
+            EdgeSpeed::at(
+                offset.in_view(SurfacePx::ZERO),
+                extent.in_view(SurfacePx::ZERO),
+            )
         };
         (
             at(x - left, self.canvas_width - left),

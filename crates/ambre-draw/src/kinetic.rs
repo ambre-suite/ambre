@@ -7,12 +7,12 @@
 //! cells, a board under a zoom. A trackpad glide that stops keeps its
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
-use ambre_core::{CssVector, PageMillis, ViewPoint, ViewPx};
+use ambre_core::{CssPx, CssVector, PageMillis, ViewPoint, ViewPx, ViewSpeed, ViewVelocity};
 
 use crate::wheel::WheelDeltaMode;
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
-pub const TAP_SLOP_PX: f32 = 8.0;
+pub const TAP_SLOP_PX: ViewPx = ViewPx::new(8.0);
 /// How long a press held inside the slop lasts before it is a long press
 /// (`KINETIC-014`).
 pub const LONG_PRESS_MS: PageMillis = PageMillis::new(500.0);
@@ -23,28 +23,29 @@ pub const SAMPLE_MS: PageMillis = PageMillis::new(100.0);
 pub const DECAY_MS: PageMillis = PageMillis::new(325.0);
 /// Below this speed, in screen pixels per millisecond, a release leaves no
 /// motion and a motion stops.
-pub const STOP_SPEED: f32 = 0.02;
+pub const STOP_SPEED: ViewSpeed = ViewSpeed::new(0.02);
 /// The longest step one tick takes, so a stalled frame does not jump. It is
 /// private: a step is timed here alone (`KINETIC-013`).
 const MAX_STEP_MS: PageMillis = PageMillis::new(50.0);
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
-pub const WHEEL_NOTCH_PX: f32 = 40.0;
+pub const WHEEL_NOTCH_PX: CssPx = CssPx::new(40.0);
 /// A pause between wheel events this long ends a glide.
 pub const WHEEL_GAP_MS: PageMillis = PageMillis::new(60.0);
 /// A glide slower than this at its end, in screen pixels per millisecond,
 /// leaves no motion.
-pub const WHEEL_START_SPEED: f32 = 0.05;
+pub const WHEEL_START_SPEED: ViewSpeed = ViewSpeed::new(0.05);
 /// The weight of the newest wheel sample in the glide speed.
 pub const WHEEL_BLEND: f32 = 0.8;
 
 /// How far from an edge a drag starts to scroll, in screen pixels.
-pub const EDGE_BAND_PX: f32 = 32.0;
+pub const EDGE_BAND_PX: ViewPx = ViewPx::new(32.0);
 /// How deep past the band the edge speed still grows, in screen pixels.
-pub const EDGE_DEPTH_PX: f32 = 160.0;
-/// Screen pixels per millisecond for each pixel of depth: 2 px/ms at most.
-pub const EDGE_GAIN: f32 = 1.0 / 80.0;
+pub const EDGE_DEPTH_PX: ViewPx = ViewPx::new(160.0);
+/// The span the edge speed covers its depth in: 1/80 px/ms for each pixel
+/// of depth, so 2 px/ms at most.
+pub const EDGE_SPAN_MS: PageMillis = PageMillis::new(80.0);
 
 /// How far the view moves, in screen pixels on each axis (`KINETIC-013`).
 ///
@@ -110,20 +111,20 @@ impl ScrollStep {
 /// millisecond, towards the far end for a positive one (`KINETIC-007`).
 /// Only [`EdgeSpeed::at`] builds a speed other than none.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct EdgeSpeed(f32);
+pub struct EdgeSpeed(ViewSpeed);
 
 impl EdgeSpeed {
     /// No edge scroll on this axis.
-    pub const NONE: Self = Self(0.0);
+    pub const NONE: Self = Self(ViewSpeed::ZERO);
 
     /// The speed of a pointer at `at` along one axis, in a view of `extent`.
     /// Zero away from both edges.
-    pub fn at(at: f32, extent: f32) -> Self {
+    pub fn at(at: ViewPx, extent: ViewPx) -> Self {
         Self(edge_speed(at, extent))
     }
 
     /// The speed, for a reader.
-    pub fn get(self) -> f32 {
+    pub fn get(self) -> ViewSpeed {
         self.0
     }
 }
@@ -149,10 +150,10 @@ impl EdgeScroll {
             return None;
         };
         let last = self.last_ms.replace(now_ms)?;
-        let elapsed = step_ms(now_ms - last);
+        let elapsed = step_span(now_ms - last);
         Some(ScrollStep {
-            x: ViewPx::new(sx.0 * elapsed),
-            y: ViewPx::new(sy.0 * elapsed),
+            x: sx.0.over(elapsed),
+            y: sy.0.over(elapsed),
         })
     }
 
@@ -185,7 +186,7 @@ pub struct Kinetic {
 /// A trackpad glide under way: its speed so far and its last event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
-    speed: (f32, f32),
+    speed: ViewVelocity,
     last_ms: ambre_core::PageTime,
 }
 
@@ -205,7 +206,7 @@ struct Pan {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
-    speed: (f32, f32),
+    speed: ViewVelocity,
     last_ms: Option<ambre_core::PageTime>,
 }
 
@@ -247,7 +248,7 @@ impl Kinetic {
         }
         if !pan.panned {
             let moved = at - pan.start;
-            if moved.dx.get().hypot(moved.dy.get()) < TAP_SLOP_PX {
+            if moved.length() < TAP_SLOP_PX {
                 return None;
             }
             pan.panned = true;
@@ -279,13 +280,12 @@ impl Kinetic {
         let (Some(first), Some(last)) = (recent.next(), recent.next_back()) else {
             return Release::Rest;
         };
-        let span = ms_f32(last.0 - first.0);
-        if span <= 0.0 {
+        let span = last.0 - first.0;
+        if span <= PageMillis::ZERO {
             return Release::Rest;
         }
-        let moved = first.1 - last.1;
-        let speed = (moved.dx.get() / span, moved.dy.get() / span);
-        if speed.0.hypot(speed.1) < STOP_SPEED {
+        let speed = (first.1 - last.1).per(span);
+        if speed.magnitude() < STOP_SPEED {
             return Release::Rest;
         }
         self.motion = Some(Motion {
@@ -314,28 +314,30 @@ impl Kinetic {
         mode: WheelDeltaMode,
         now_ms: ambre_core::PageTime,
     ) -> ScrollStep {
-        let (dx, dy) = (delta.dx.get(), delta.dy.get());
         self.motion = None;
+        // The wheel delta is already in screen pixels, and a view pixel is a
+        // CSS pixel in size (`CANVAS-032`): the step takes it one for one.
+        let moved = ambre_core::ViewVector::new(
+            ViewPx::new(delta.dx.get()),
+            ViewPx::new(delta.dy.get()),
+        );
         let step = ScrollStep {
-            x: ViewPx::new(dx),
-            y: ViewPx::new(dy),
+            x: moved.dx,
+            y: moved.dy,
         };
-        if mode.is_step() || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
+        let notch = delta.dx.abs() >= WHEEL_NOTCH_PX || delta.dy.abs() >= WHEEL_NOTCH_PX;
+        if mode.is_step() || notch {
             self.glide = None;
             return step;
         }
         let speed = match self.glide {
             Some(glide) if now_ms - glide.last_ms <= WHEEL_GAP_MS => {
-                let dt = ms_f32(
-                    (now_ms - glide.last_ms).clamp(PageMillis::new(1.0), PageMillis::new(100.0)),
-                );
+                let dt =
+                    (now_ms - glide.last_ms).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
                 let b = WHEEL_BLEND;
-                (
-                    b * dx / dt + (1.0 - b) * glide.speed.0,
-                    b * dy / dt + (1.0 - b) * glide.speed.1,
-                )
+                moved.per(dt).scaled(b) + glide.speed.scaled(1.0 - b)
             }
-            _ => (dx / 16.0, dy / 16.0),
+            _ => moved.per(PageMillis::new(16.0)),
         };
         self.glide = Some(Glide {
             speed,
@@ -355,7 +357,7 @@ impl Kinetic {
                 return Some(ScrollStep::ZERO);
             }
             self.glide = None;
-            if glide.speed.0.hypot(glide.speed.1) < WHEEL_START_SPEED {
+            if glide.speed.magnitude() < WHEEL_START_SPEED {
                 return None;
             }
             self.motion = Some(Motion {
@@ -368,14 +370,16 @@ impl Kinetic {
         let Some(last) = motion.last_ms.replace(now_ms) else {
             return Some(ScrollStep::ZERO);
         };
-        let elapsed = step_ms(now_ms - last);
+        let elapsed = step_span(now_ms - last);
         let step = ScrollStep {
-            x: ViewPx::new(motion.speed.0 * elapsed),
-            y: ViewPx::new(motion.speed.1 * elapsed),
+            x: motion.speed.dx.over(elapsed),
+            y: motion.speed.dy.over(elapsed),
         };
-        let decay = (-elapsed / ms_f32(DECAY_MS)).exp();
-        motion.speed = (motion.speed.0 * decay, motion.speed.1 * decay);
-        if motion.speed.0.hypot(motion.speed.1) < STOP_SPEED {
+        let decay = (-(elapsed / DECAY_MS)).exp();
+        #[allow(clippy::cast_possible_truncation)]
+        let decay = decay as f32;
+        motion.speed = motion.speed.scaled(decay);
+        if motion.speed.magnitude() < STOP_SPEED {
             self.motion = None;
         }
         Some(step)
@@ -395,7 +399,7 @@ impl Kinetic {
     }
 
     /// The speed of the motion under way, in screen pixels per millisecond.
-    pub fn speed(&self) -> Option<(f32, f32)> {
+    pub fn speed(&self) -> Option<ViewVelocity> {
         self.motion.map(|motion| motion.speed)
     }
 
@@ -405,17 +409,10 @@ impl Kinetic {
     }
 }
 
-/// The span one tick moves by, in the `f32` milliseconds a speed in screen
-/// pixels per millisecond scales by: never negative, and never past
+/// The span one tick moves by: never negative, and never past
 /// [`MAX_STEP_MS`].
-fn step_ms(elapsed: PageMillis) -> f32 {
-    ms_f32(elapsed.clamp(PageMillis::ZERO, MAX_STEP_MS))
-}
-
-/// The span in the `f32` milliseconds a speed scales by.
-#[allow(clippy::cast_possible_truncation)]
-fn ms_f32(span: PageMillis) -> f32 {
-    span.get() as f32
+fn step_span(elapsed: PageMillis) -> PageMillis {
+    elapsed.clamp(PageMillis::ZERO, MAX_STEP_MS)
 }
 
 /// The speed a drag held near an edge scrolls at, in screen pixels per
@@ -424,16 +421,18 @@ fn ms_f32(span: PageMillis) -> f32 {
 /// `at` is the pointer along one axis, and `extent` the length of the view
 /// on it. The speed is zero away from both edges. It grows with how deep
 /// the pointer sits in the band or past it, and stops growing further out.
-fn edge_speed(at: f32, extent: f32) -> f32 {
+fn edge_speed(at: ViewPx, extent: ViewPx) -> ViewSpeed {
     let far = extent - EDGE_BAND_PX;
     let depth = if at < EDGE_BAND_PX {
         at - EDGE_BAND_PX
     } else if at > far {
         at - far
     } else {
-        0.0
+        ViewPx::ZERO
     };
-    depth.clamp(-EDGE_DEPTH_PX, EDGE_DEPTH_PX) * EDGE_GAIN
+    depth
+        .clamp(-EDGE_DEPTH_PX, EDGE_DEPTH_PX)
+        .per(EDGE_SPAN_MS)
 }
 
 #[cfg(test)]
@@ -552,7 +551,8 @@ mod tests {
     #[test]
     fn a_pan_released_carries_on_at_the_speed_of_its_last_window() {
         let kinetic = flicked();
-        let (sx, sy) = kinetic.speed().expect("a motion");
+        let speed = kinetic.speed().expect("a motion");
+        let (sx, sy) = (speed.dx.get(), speed.dy.get());
         assert!(
             (sx - 1.0).abs() < 1e-3 && (sy - 2.0).abs() < 1e-3,
             "{sx} {sy}"
@@ -599,7 +599,7 @@ mod tests {
             .expect("a step")
             .y()
             .get();
-        assert!(dy <= 2.0 * super::ms_f32(MAX_STEP_MS) + 1e-3);
+        assert!(dy <= ViewSpeed::new(2.0).over(MAX_STEP_MS).get() + 1e-3);
     }
 
     /// `KINETIC-006`: a press or an edge the application met stops the
@@ -708,13 +708,16 @@ mod tests {
     /// depth, and is capped.
     #[test]
     fn the_edge_speed_grows_with_depth_and_is_capped() {
-        assert_eq!(edge_speed(400.0, 900.0), 0.0);
-        assert_eq!(edge_speed(EDGE_BAND_PX, 900.0), 0.0);
-        let (near, deeper) = (edge_speed(880.0, 900.0), edge_speed(890.0, 900.0));
-        assert!(0.0 < near && near < deeper);
-        assert!(edge_speed(10.0, 900.0) < 0.0);
-        let cap = EDGE_DEPTH_PX * EDGE_GAIN;
-        assert_eq!(edge_speed(5_000.0, 900.0), cap);
-        assert_eq!(edge_speed(-5_000.0, 900.0), -cap);
+        let px = ViewPx::new;
+        let extent = px(900.0);
+        assert_eq!(edge_speed(px(400.0), extent), ViewSpeed::ZERO);
+        assert_eq!(edge_speed(EDGE_BAND_PX, extent), ViewSpeed::ZERO);
+        let (near, deeper) = (edge_speed(px(880.0), extent), edge_speed(px(890.0), extent));
+        assert!(ViewSpeed::ZERO < near && near < deeper);
+        assert!(edge_speed(px(10.0), extent) < ViewSpeed::ZERO);
+        let cap = EDGE_DEPTH_PX.per(EDGE_SPAN_MS);
+        assert_eq!(cap, ViewSpeed::new(2.0));
+        assert_eq!(edge_speed(px(5_000.0), extent), cap);
+        assert_eq!(edge_speed(px(-5_000.0), extent), -cap);
     }
 }

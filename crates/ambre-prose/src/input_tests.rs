@@ -2403,7 +2403,7 @@ fn flick_up(rig: &mut Rig) {
 fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     let mut rig = long_rig();
     flick_up(&mut rig);
-    let speed = rig.ui.fling_speed().expect("a flick is in motion");
+    let speed = rig.ui.fling_speed().expect("a flick is in motion").get();
     assert!((speed - 2.0).abs() < 0.01, "the release speed, {speed}");
     let mut now = 80.0;
     rig.ui.tick_fling(ambre_core::PageTime(now));
@@ -2514,7 +2514,7 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     );
     // The frame past the pause launches the motion, and the next one moves.
     rig.ui.tick_fling(ambre_core::PageTime(64.0 + 70.0));
-    let speed = rig.ui.fling_speed().expect("the paused glide carries on");
+    let speed = rig.ui.fling_speed().expect("the paused glide carries on").get();
     assert!((speed - 1.0).abs() < 0.05, "the glide's speed, {speed}");
     assert!(rig.ui.tick_fling(ambre_core::PageTime(64.0 + 86.0)));
     assert!(rig.ui.viewport.scroll_y > glided);

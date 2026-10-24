@@ -5,7 +5,7 @@
 //! screen pixels. The board moves its camera by it, the content going the
 //! other way, so the zoom never changes how far a flick travels.
 
-use ambre_core::CssVector;
+use ambre_core::{CssVector, ViewPx};
 use ambre_draw::kinetic::{EdgeSpeed, Kinetic, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use kurbo::Point;
@@ -89,9 +89,12 @@ pub fn move_view(cam: &mut ViewportTransform, step: ScrollStep) {
 /// The speed a gesture held at `at` pans the board at, in screen pixels per
 /// millisecond, on each axis (`KINETIC-007`). Zero away from the edges.
 pub fn edge_pan_speed(cam: &ViewportTransform, at: Point) -> (EdgeSpeed, EdgeSpeed) {
+    // A screen point of the board is a view pixel, in the `f64` kurbo takes.
+    #[allow(clippy::cast_possible_truncation)]
+    let screen_px = |at: f64| ViewPx::new(at as f32);
     (
-        EdgeSpeed::at(at.x as f32, cam.size.width as f32),
-        EdgeSpeed::at(at.y as f32, cam.size.height as f32),
+        EdgeSpeed::at(screen_px(at.x), screen_px(cam.size.width)),
+        EdgeSpeed::at(screen_px(at.y), screen_px(cam.size.height)),
     )
 }
 
@@ -170,7 +173,7 @@ mod tests {
         assert_eq!(kinetic.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and the next one moves.
         coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0));
-        let (_, vy) = kinetic.speed().expect("the paused glide carries on");
+        let vy = kinetic.speed().expect("the paused glide carries on").dy.get();
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         assert!(coast(
             &mut cam,
