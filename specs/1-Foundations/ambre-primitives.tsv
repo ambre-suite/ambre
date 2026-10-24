@@ -1798,6 +1798,7 @@ ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin(name) | param |
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::busy() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::remove(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
+ambre-murmure | src/uploads.rs | crate::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
 ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::KB | const | u64	math	byte multiples for a size label
 ambre-murmure | src/uploads.rs | crate::uploads | size_label::MB | const | u64	math	byte multiples for a size label
@@ -3837,7 +3838,7 @@ ambre-bus | src/app/find.rs | crate::app::find | MatchIndex::ordinal() | ret | u
 ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | String	newtype-inner	the find text the newtype wraps, never empty
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
 ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
-ambre-bus | src/app/find.rs | crate::app::find | FindQuery::new(text) | param | String	newtype-inner	the text FindText validates
+ambre-bus | src/app/find.rs | crate::app::find | FindQuery<O>::new(text) | param | String	newtype-inner	the text FindText validates
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
@@ -3958,6 +3959,10 @@ ambre-core | src/export_file.rs | crate::export_file | ExportFilename::named(ste
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(title) | param | &str	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(fallback) | param | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(name) | param | &str	free-text	the name another user sent, which the name is cleaned from
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	free-text	the extension a received name ends with
+ambre-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
 ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(room) | param | usize	math	byte budget of the stem
