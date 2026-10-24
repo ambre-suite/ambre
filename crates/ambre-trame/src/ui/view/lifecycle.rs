@@ -280,7 +280,7 @@ impl TrameView {
         let next = self
             .state
             .cell_pixel_rect(self.state.active_cell())
-            .map(|(x, y, w, _h)| view_point(ambre_draw::Point::new(x + w / 2.0, y)));
+            .map(|cell| view_point(ambre_draw::Point::new(cell.center().x, cell.y0)));
         if next != self.last_anchor {
             self.last_anchor = next;
             self.anchor.publish(next);
@@ -315,10 +315,10 @@ impl TrameView {
     /// Slide the textarea pipe onto a cell (CSS px) so the IME popup anchors
     /// there. The grid lays out in CSS px too (`CANVAS-032`).
     pub(crate) fn park_input_on(&self, at: CellPos) {
-        if let Some((x, y, _, h)) = self.state.cell_pixel_rect(at) {
-            let height = ambre_core::ViewPx::new(h as f32);
+        if let Some(cell) = self.state.cell_pixel_rect(at) {
+            let height = ambre_core::ViewPx::new(cell.height() as f32);
             self.text_input
-                .set_caret(view_point(ambre_draw::Point::new(x, y)), height);
+                .set_caret(view_point(ambre_draw::Point::new(cell.x0, cell.y0)), height);
         }
     }
 

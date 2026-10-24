@@ -611,7 +611,7 @@ impl TrameView {
     /// Single-line: the local y is 0 (line 0), so only x carries information.
     fn editor_local_point(&self, at: ViewPoint) -> Option<DocPoint> {
         let ed = self.editor.as_ref()?;
-        let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.at)?;
+        let cx = self.state.cell_pixel_rect(ed.at)?.x0;
         let pad = crate::render::CELL_PAD_X
             .zoomed_on_surface(self.state.zoom)
             .get();

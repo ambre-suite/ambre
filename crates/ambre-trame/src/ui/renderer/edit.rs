@@ -26,7 +26,8 @@ pub fn draw_edit<S: DrawSurface>(
     font_cx: &mut FontContext,
 ) -> Option<Rect> {
     // An active cell scrolled out of view: nothing to draw.
-    let (x, y, cw, ch) = state.cell_pixel_rect(editor.at)?;
+    let cell = state.cell_pixel_rect(editor.at)?;
+    let (x, y, cw, ch) = (cell.x0, cell.y0, cell.width(), cell.height());
 
     // Match the cell's pinned formatting so the edit looks like the result.
     let (bold, italic) = state

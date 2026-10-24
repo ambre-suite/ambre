@@ -345,16 +345,16 @@ impl TrameUiState {
         })
     }
 
-    /// Screen pixel rect (x, y, w, h) of the merged block the active cell belongs
+    /// Screen pixel rect of the merged block the active cell belongs
     /// to. `None` when the active cell is not merged (or scrolled out). Lets the
     /// overlay draw the active-cell border around the whole merge.
-    pub fn active_merge_rect(&self) -> Option<(f64, f64, f64, f64)> {
+    pub fn active_merge_rect(&self) -> Option<ambre_draw::Rect> {
         self.range_pixel_rect(self.merge_master_at(self.active_cell())?)
     }
 
-    /// Screen pixel rect (x, y, w, h) of cell `at` relative to the top-left
+    /// Screen pixel rect of cell `at` relative to the top-left
     /// corner of the canvas. `None` if the cell is outside the visible area.
-    pub fn cell_pixel_rect(&self, at: CellPos) -> Option<(f64, f64, f64, f64)> {
+    pub fn cell_pixel_rect(&self, at: CellPos) -> Option<ambre_draw::Rect> {
         let CellPos { row, col } = at;
         // A collapsed (filtered) row is not drawn at all.
         if self.is_row_hidden(row) {
@@ -374,14 +374,19 @@ impl TrameUiState {
         if y + rh <= cells_top || y >= self.grid_bottom() {
             return None;
         }
-        Some((x.get(), y.get(), cw.get(), rh.get()))
+        Some(ambre_draw::Rect::new(
+            x.get(),
+            y.get(),
+            (x + cw).get(),
+            (y + rh).get(),
+        ))
     }
 
-    /// Screen pixel rect (x, y, w, h) covering the cells of `rect`, clipped to
+    /// Screen pixel rect covering the cells of `rect`, clipped to
     /// the scrollable grid area. The clip never reaches under a header strip or
     /// the tab strip. Returns `None` if the range is entirely outside the
     /// visible area. Used to fill / outline a multi-cell selection.
-    pub fn range_pixel_rect(&self, rect: CellRect) -> Option<(f64, f64, f64, f64)> {
+    pub fn range_pixel_rect(&self, rect: CellRect) -> Option<ambre_draw::Rect> {
         let (first, last) = (rect.top_left, rect.bottom_right);
         let cells_top = self.header_h();
         // Unclipped edges (signed: the range may start left/above the viewport).
@@ -409,7 +414,12 @@ impl TrameUiState {
         if cx2 <= cx1 || cy2 <= cy1 {
             return None;
         }
-        Some((cx1.get(), cy1.get(), (cx2 - cx1).get(), (cy2 - cy1).get()))
+        Some(ambre_draw::Rect::new(
+            cx1.get(),
+            cy1.get(),
+            cx2.get(),
+            cy2.get(),
+        ))
     }
 
     /// Grow `rect` so it fully contains every merged block it intersects. A merge
@@ -489,25 +499,26 @@ impl TrameUiState {
             .collect()
     }
 
-    /// Screen pixel rect (x, y, w, h) of the autofill handle: a small square
+    /// Screen pixel rect of the autofill handle: a small square
     /// centred on the bottom-right corner of the selection (`trame-autofill`).
     /// When the selection's corner falls in a merge, the handle anchors on the
     /// block's extent corner so it hugs the whole block. `None` when that corner
     /// cell is scrolled out of view.
-    pub fn fill_handle_rect(&self) -> Option<(f64, f64, f64, f64)> {
+    pub fn fill_handle_rect(&self) -> Option<ambre_draw::Rect> {
         let corner = self.expand_to_merges(self.selection.bounds()).bottom_right;
-        let (x, y, w, h) = self.cell_pixel_rect(corner)?;
+        let cell = self.cell_pixel_rect(corner)?;
         let s = FILL_HANDLE_SIZE;
-        Some((x + w - s / 2.0, y + h - s / 2.0, s, s))
+        let (x0, y0) = (cell.x1 - s / 2.0, cell.y1 - s / 2.0);
+        Some(ambre_draw::Rect::new(x0, y0, x0 + s, y0 + s))
     }
 
     /// True if `at` (logical px) hits the fill handle, with a small tolerance
     /// margin so the ~7px square is easy to grab.
     pub fn fill_handle_at(&self, at: ViewPoint) -> bool {
         let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
-        self.fill_handle_rect().is_some_and(|(hx, hy, w, h)| {
+        self.fill_handle_rect().is_some_and(|handle| {
             let m = 2.0;
-            x >= hx - m && x <= hx + w + m && y >= hy - m && y <= hy + h + m
+            x >= handle.x0 - m && x <= handle.x1 + m && y >= handle.y0 - m && y <= handle.y1 + m
         })
     }
 
@@ -570,18 +581,19 @@ impl TrameUiState {
         Some(rect)
     }
 
-    /// Screen pixel rect (x, y, w, h) of the autofilter button of cell `at`, a
+    /// Screen pixel rect of the autofilter button of cell `at`, a
     /// cell of the current region's header row (`trame-shared-filter`). It is a
     /// small square hugging the right edge of the cell. `None` when that cell is
     /// hidden or scrolled out of view.
-    pub fn filter_button_rect(&self, at: CellPos) -> Option<(f64, f64, f64, f64)> {
-        let (x, y, w, h) = self.cell_pixel_rect(at)?;
+    pub fn filter_button_rect(&self, at: CellPos) -> Option<ambre_draw::Rect> {
+        let cell = self.cell_pixel_rect(at)?;
+        let (x, y, w, h) = (cell.x0, cell.y0, cell.width(), cell.height());
         // Scale the button with the grid zoom so it tracks the cell (which is
         // already zoom-scaled via `cell_pixel_rect`); clamp to the cell height.
         let s = (FILTER_BUTTON_SIZE * self.zoom.get()).min(h - 2.0).max(0.0);
         let bx = x + w - s - 1.0;
         let by = y + (h - s) / 2.0;
-        Some((bx, by, s, s))
+        Some(ambre_draw::Rect::new(bx, by, bx + s, by + s))
     }
 
     /// Hit-test the autofilter button row: returns the header cell of the
@@ -593,9 +605,9 @@ impl TrameUiState {
         let band_row = region.top_left.row;
         region.cols().into_iter().find_map(|col| {
             let at = CellPos::new(band_row, col);
-            self.filter_button_rect(at).and_then(|(bx, by, w, h)| {
+            self.filter_button_rect(at).and_then(|b| {
                 let m = 2.0;
-                (x >= bx - m && x <= bx + w + m && y >= by - m && y <= by + h + m).then_some(at)
+                (x >= b.x0 - m && x <= b.x1 + m && y >= b.y0 - m && y <= b.y1 + m).then_some(at)
             })
         })
     }

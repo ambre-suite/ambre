@@ -278,11 +278,10 @@ pub fn draw_overlay<S: DrawSurface>(
     if let Some(region) = state.current_region() {
         let band_row = region.top_left.row;
         for col in region.cols() {
-            let Some((bx, by, bw, bh)) = state.filter_button_rect(CellPos::new(band_row, col))
-            else {
+            let Some(r) = state.filter_button_rect(CellPos::new(band_row, col)) else {
                 continue;
             };
-            let r = Rect::new(bx, by, bx + bw, by + bh);
+            let (bx, by, bw, bh) = (r.x0, r.y0, r.width(), r.height());
             surface.fill_rect(r, palette.header_bg);
             surface.stroke_rect(r, palette.grid_line, 1.0);
             // Glyph inset so it reads inside the button, scaled with the zoom
@@ -305,11 +304,8 @@ pub fn draw_overlay<S: DrawSurface>(
     //        active cell, so it also carries the active border drawn below.
     if !state.find_matches.is_empty() {
         for &at in &state.find_matches {
-            if let Some((x, y, cw, ch)) = state.cell_pixel_rect(at) {
-                surface.fill_rect(
-                    Rect::new(x, y, x + cw, y + ch),
-                    palette.selection.with_alpha(0.28),
-                );
+            if let Some(cell) = state.cell_pixel_rect(at) {
+                surface.fill_rect(cell, palette.selection.with_alpha(0.28));
             }
         }
     }
@@ -377,8 +373,7 @@ pub fn draw_overlay<S: DrawSurface>(
     // whole-axis band (drawn above): its `bounds()` collapses to row/col 0.
     if sel.kind == grid::SelKind::Cells && sel.is_multi() {
         for rect in state.selection_rects() {
-            if let Some((x, y, w, ht)) = state.range_pixel_rect(rect) {
-                let rect = Rect::new(x, y, x + w, y + ht);
+            if let Some(rect) = state.range_pixel_rect(rect) {
                 surface.fill_rect(rect, palette.selection.with_alpha(0.16));
                 surface.stroke_rect(rect, palette.selection, 1.0);
             }
@@ -392,18 +387,19 @@ pub fn draw_overlay<S: DrawSurface>(
     // whole block, so the merge reads as one selected cell.
     if sel.kind == grid::SelKind::Cells
         && !sel.is_multi()
-        && let Some((x, y, cw, ch)) = state
+        && let Some(cell) = state
             .active_merge_rect()
             .or_else(|| state.cell_pixel_rect(state.active_cell()))
     {
-        surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
+        surface.stroke_rect(cell, palette.selection, 2.0);
     }
 
     // -- 2b. Clipboard marching-ants marquee (`trame-clipboard`). A dashed rectangle around
     //        the copied/cut range, its dashes crawling so the marquee animates.
     if let Some(rect) = state.clipboard_anchor
-        && let Some((x, y, w, ht)) = state.range_pixel_rect(rect)
+        && let Some(range) = state.range_pixel_rect(rect)
     {
+        let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
         let phase = (clock.now_ms().0 / 40.0) % MARCHING_PERIOD;
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
@@ -431,8 +427,9 @@ pub fn draw_overlay<S: DrawSurface>(
     //        rectangle while the handle is dragged, then the small blue handle
     //        square at the selection's bottom-right corner.
     if let Some(rect) = state.fill_preview
-        && let Some((x, y, w, ht)) = state.range_pixel_rect(rect)
+        && let Some(range) = state.range_pixel_rect(rect)
     {
+        let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, 0.0);
         dashed_h(
@@ -449,8 +446,7 @@ pub fn draw_overlay<S: DrawSurface>(
             0.0,
         );
     }
-    if let Some((hx, hy, hw, hh)) = state.fill_handle_rect() {
-        let r = Rect::new(hx, hy, hx + hw, hy + hh);
+    if let Some(r) = state.fill_handle_rect() {
         surface.fill_rect(r, palette.selection);
         surface.stroke_rect(r, palette.content_bg, 1.0);
     }

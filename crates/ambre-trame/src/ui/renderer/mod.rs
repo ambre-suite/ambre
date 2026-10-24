@@ -230,8 +230,9 @@ mod tests {
         let mut checked = 0;
         for row in 10..22 {
             for col in 3..9 {
-                let Some((x, y, w, h)) =
-                    state.cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
+                let Some((x, y, w, h)) = state
+                    .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
+                    .map(|r| (r.x0, r.y0, r.width(), r.height()))
                 else {
                     assert!(
                         layout.is_hidden(Row::new(row)),

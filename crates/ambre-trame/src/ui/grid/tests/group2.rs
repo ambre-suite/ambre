@@ -148,13 +148,13 @@ fn filtered_rows_collapse_geometry_and_nav() {
         .cell_pixel_rect(CellPos::new(Row::new(4), Col::new(0)))
         .expect("row 4 visible");
     // Row 4 sits exactly one slot below row 1 (the two hidden rows took none).
-    assert_eq!(r4.1 - r1.1, f64::from(super::super::ROW_HEIGHT.get()));
+    assert_eq!(r4.y0 - r1.y0, f64::from(super::super::ROW_HEIGHT.get()));
 
     // Hit-testing the second visible slot resolves to row 4, not row 2.
     let CellPos {
         row: hit_row,
         col: _,
-    } = state.cell_at(pointer(r4.0 + 1.0, r4.1 + 1.0)).expect("hit");
+    } = state.cell_at(pointer(r4.x0 + 1.0, r4.y0 + 1.0)).expect("hit");
     assert_eq!(hit_row, Row::new(4));
 
     // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.
@@ -386,9 +386,10 @@ fn header_strip_starts_at_top_of_canvas() {
         Some(at(0, 0)),
     );
     // (0,0)'s pixel rect sits at the cell-area top-left.
-    let (_, y, _, _) = state
+    let y = state
         .cell_pixel_rect(CellPos::new(Row::new(0), Col::new(0)))
-        .expect("visible");
+        .expect("visible")
+        .y0;
     assert_eq!(y, super::super::HEADER_HEIGHT.get());
 }
 

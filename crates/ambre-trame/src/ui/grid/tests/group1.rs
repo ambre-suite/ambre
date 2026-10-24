@@ -37,11 +37,12 @@ fn filter_button_hit_test_matches_drawn_rect() {
 
     // The button for column 1 sits at the right edge of cell (0, 1). Hitting
     // its centre resolves to that column on the region's header row.
-    let (bx, by, w, h) = state
+    let button = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(1)))
         .expect("button visible");
+    let centre = button.center();
     assert_eq!(
-        state.filter_button_at(pointer(bx + w / 2.0, by + h / 2.0)),
+        state.filter_button_at(pointer(centre.x, centre.y)),
         Some(at(0, 1))
     );
     // A point well clear of any button misses.
@@ -57,14 +58,16 @@ fn filter_button_hit_test_matches_drawn_rect() {
 fn filter_button_scales_with_zoom() {
     let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     put(&mut state, 0, 0, "a");
-    let (.., w100, _) = state
+    let w100 = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
-        .expect("button visible");
+        .expect("button visible")
+        .width();
 
     state.set_zoom(ambre_core::ZoomFactor::positive(2.0));
-    let (.., w200, _) = state
+    let w200 = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
-        .expect("button visible");
+        .expect("button visible")
+        .width();
     // At 2x the cell is taller than the un-clamped button, so the side is the
     // zoom-scaled base: strictly larger than at 100%.
     assert!(w200 > w100, "button must grow with zoom: {w100} -> {w200}");
@@ -321,13 +324,13 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
     assert_eq!(state.row_height_of(Row::new(0)).get(), 40.0);
 
     // Cell (1,1) sits after the wide col 0 and below the tall row 0.
-    let (x, y, w, h) = state
+    let cell = state
         .cell_pixel_rect(CellPos::new(Row::new(1), Col::new(1)))
         .expect("visible");
-    assert_eq!(x, super::super::HEADER_WIDTH.get() + 160.0);
-    assert_eq!(y, super::super::HEADER_HEIGHT.get() + 40.0);
+    assert_eq!(cell.x0, super::super::HEADER_WIDTH.get() + 160.0);
+    assert_eq!(cell.y0, super::super::HEADER_HEIGHT.get() + 40.0);
     assert_eq!(
-        (w, h),
+        (cell.width(), cell.height()),
         (
             f64::from(super::super::COL_WIDTH.get()),
             f64::from(super::super::ROW_HEIGHT.get())
@@ -629,13 +632,13 @@ fn fill_handle_sits_on_merge_extent_corner() {
         .expect("extent corner visible");
     let s = super::super::FILL_HANDLE_SIZE;
     assert_eq!(
-        handle.0,
-        extent.0 + extent.2 - s / 2.0,
+        handle.x0,
+        extent.x1 - s / 2.0,
         "handle x on extent"
     );
     assert_eq!(
-        handle.1,
-        extent.1 + extent.3 - s / 2.0,
+        handle.y0,
+        extent.y1 - s / 2.0,
         "handle y on extent"
     );
 }

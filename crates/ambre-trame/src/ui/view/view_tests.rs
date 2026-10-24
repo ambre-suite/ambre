@@ -326,17 +326,17 @@ fn the_pipe_follows_the_caret_inside_the_cell() {
     rig.type_text("x");
     rig.frame();
     let first = rig.view.caret_drawn.expect("the editor drew a caret");
-    let (x, y, w, h) = rig
+    let cell = rig
         .view
         .state
         .cell_pixel_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("A1 is in view");
     assert!(
-        first.x0 > x && first.x0 < x + w,
+        first.x0 > cell.x0 && first.x0 < cell.x1,
         "inside the cell: {first:?}"
     );
     assert!(
-        first.y0 >= y && first.y1 <= y + h,
+        first.y0 >= cell.y0 && first.y1 <= cell.y1,
         "inside the cell: {first:?}"
     );
     rig.type_text("yyyy");
@@ -466,12 +466,12 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
     }
     rig.type_text("hi");
     rig.frame();
-    let (x, y, _w, h) = rig
+    let cell = rig
         .view
         .state
         .cell_pixel_rect(CellPos::new(Row::new(3), Col::new(3)))
         .expect("D4 is in view");
-    let point = (x + 1.0, y + h / 2.0);
+    let point = (cell.x0 + 1.0, cell.center().y);
     rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(point.0, point.1),
         button: PointerButton::Primary,
@@ -1103,20 +1103,21 @@ fn a_merged_fill_previews_whole_blocks() {
         ],
     });
     rig.sent();
-    let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
+    let handle = rig.view.state.fill_handle_rect().expect("a handle").center();
     rig.view.handle_input(&InputEvent::PointerDown {
-        at: pointer(hx + w / 2.0, hy + h / 2.0),
+        at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
     let mid = |rig: &Rig, row: u32| {
-        let (x, y, w, h) = rig
+        let centre = rig
             .view
             .state
             .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(0)))
-            .expect("in view");
-        (x + w / 2.0, y + h / 2.0)
+            .expect("in view")
+            .center();
+        (centre.x, centre.y)
     };
     // Row 2 is one row past the source, row 4 is three: each snaps up to the
     // block that holds it.
@@ -1209,12 +1210,13 @@ fn a_ctrl_wheel_scrolls_nothing() {
 fn a_selection_held_below_the_cells_scrolls_and_follows() {
     let mut rig = Rig::new();
     rig.frame();
-    let (x, y, w, h) = rig
+    let centre = rig
         .view
         .state
         .cell_pixel_rect(CellPos::new(Row::new(1), Col::new(1)))
-        .expect("B2 is in view");
-    let (px, py) = (x + w / 2.0, y + h / 2.0);
+        .expect("B2 is in view")
+        .center();
+    let (px, py) = (centre.x, centre.y);
     rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(px, py),
         button: PointerButton::Primary,
@@ -1584,9 +1586,9 @@ fn a_refused_fill_leaves_the_selection() {
     let mut rig = Rig::new();
     rig.frame();
     rig.sent();
-    let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
+    let handle = rig.view.state.fill_handle_rect().expect("a handle").center();
     rig.view.handle_input(&InputEvent::PointerDown {
-        at: pointer(hx + w / 2.0, hy + h / 2.0),
+        at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,

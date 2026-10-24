@@ -44,11 +44,12 @@ fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
     state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     assert!(state.set_zoom(ambre_core::ZoomFactor::positive(2.0)));
     for (row, col) in [(10, 3), (12, 4)] {
-        let (x, y, w, h) = state
+        let cell = state
             .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
             .expect("visible");
+        let centre = cell.center();
         assert_eq!(
-            state.hit_test(view_point(x + w / 2.0, y + h / 2.0)),
+            state.hit_test(view_point(centre.x, centre.y)),
             Some(at(row, col))
         );
     }
