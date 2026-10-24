@@ -16,10 +16,12 @@ macro_rules! define_tally {
         $(#[$meta])*
         #[derive(
             Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash,
-            ::serde::Serialize, ::serde::Deserialize,
         )]
-        #[serde(transparent)]
         pub struct $name(u32);
+
+        // Serde through core's own paths, so a crate that expands the macro
+        // needs no serde dependency of its own.
+        $crate::define_index!(@serde $name, u32);
 
         impl $name {
             /// Nothing counted.
