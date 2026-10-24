@@ -59,6 +59,11 @@ pub mod __private {
 /// forbids that panic outside a test, so production code calls `get`, which
 /// returns an `Option`.
 ///
+/// A span is half-open, and no position lies past `MAX`. So
+/// `pos.through(MAX)` stops before `MAX` and leaves it out, and
+/// `MAX.through(MAX)` is empty. No Ambre axis reaches its top, so no caller
+/// loses a position it holds.
+///
 /// The span exists because `core::iter::Step` is unstable (tracking issue
 /// rust-lang/rust#73121), so a `Range` of a newtype cannot iterate. When
 /// `Step` reaches stable, implement it for every position type, replace each
@@ -703,6 +708,8 @@ mod tests {
             vec![Line::new(u32::MAX - 1)]
         );
         assert!(!span.contains(Line::MAX));
+        assert_eq!(span.len(), LineCount::ONE);
+        assert_eq!(Line::MAX.through(Line::MAX).len(), LineCount::ZERO);
     }
 
     #[test]
