@@ -835,7 +835,7 @@ fn steps_written() -> Vec<String> {
                 .export(ExportMode::updates(&before))
                 .expect("the step's writes export");
             format!(
-                "{} -> {} {:016x}",
+                "{} -> {} {}",
                 step.from,
                 step.to,
                 step_fingerprint(&written)

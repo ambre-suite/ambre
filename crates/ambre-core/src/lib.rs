@@ -53,6 +53,7 @@ pub mod index;
 pub mod key_hex;
 pub mod key_id;
 pub mod lang;
+pub mod layout;
 /// The target of a link: [`LinkUrl`].
 pub mod link;
 pub mod media;

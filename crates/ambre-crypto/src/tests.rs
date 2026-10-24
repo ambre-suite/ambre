@@ -251,7 +251,7 @@ fn the_store_key_matches_its_frozen_domain() {
 fn a_store_row_opens_only_where_it_was_sealed() {
     let key = fixed_seed().derive_store_key();
     let row = aead::seal_row(b"a copy", &Aad::of(b"doc:0a"), &key).unwrap();
-    assert_eq!(row.first(), Some(&aead::ROW_VERSION));
+    assert_eq!(row.first(), Some(&aead::RowLayout::CURRENT.byte()));
     assert!(!row.windows(6).any(|w| w == b"a copy"));
     assert_eq!(
         aead::open_row(&row, &Aad::of(b"doc:0a"), &key).unwrap(),
@@ -269,7 +269,14 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     // A row the store held in the clear, or a stub, opens as nothing.
     assert!(aead::open_row(b"a copy", &Aad::of(b"doc:0a"), &key).is_err());
     assert!(aead::open_row(&[], &Aad::of(b"doc:0a"), &key).is_err());
-    assert!(aead::open_row(&[aead::ROW_VERSION], &Aad::of(b"doc:0a"), &key).is_err());
+    assert!(
+        aead::open_row(
+            &[aead::RowLayout::CURRENT.byte()],
+            &Aad::of(b"doc:0a"),
+            &key
+        )
+        .is_err()
+    );
 }
 
 // -- ECDH --------------------------------------------------------------------

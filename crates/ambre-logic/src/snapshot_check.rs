@@ -17,7 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use ambre_bus::{SnapshotPurpose as Purpose, SnapshotVerdict as Outcome};
 use ambre_core::Seq;
 use loro::{
-    Counter, IdSpan, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector, json::JsonChange,
+    Counter, IdSpan, Lamport, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector,
+    json::JsonChange,
 };
 
 /// What a client learned of a document's sequenced deltas since its last
@@ -194,7 +195,7 @@ fn registry_entry(doc: &LoroDoc, peer: PeerID) -> Option<Vec<u8>> {
 #[derive(Debug, PartialEq)]
 struct Piece {
     start: Counter,
-    lamport: u32,
+    lamport: Lamport,
     deps: Vec<String>,
     container: String,
     content: serde_json::Value,

@@ -81,8 +81,14 @@ pub fn open_file(
     open_under(nonce, ciphertext, aad, key.as_bytes())
 }
 
-/// The first byte of a sealed row of the local store: the layout below.
-pub const ROW_VERSION: u8 = 1;
+ambre_core::define_layout_version! {
+    /// The first byte of a sealed row of the local store: its layout.
+    pub enum RowLayout {
+        /// A 24-byte nonce, then the ciphertext and its tag.
+        V1 = 1,
+    }
+    current = V1;
+}
 
 /// Seals one row of the local store under the user's [`StoreKey`]: the
 /// version byte, a fresh nonce, then the ciphertext and its tag.
@@ -101,7 +107,7 @@ pub fn seal_row(
 ) -> Result<Vec<u8>, CryptoError> {
     let (nonce, ciphertext) = seal_under(plaintext, context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
-    row.push(ROW_VERSION);
+    row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(&nonce.0);
     row.extend_from_slice(&ciphertext.0);
     Ok(row)
@@ -119,7 +125,10 @@ pub fn open_row(
     context: &ambre_core::Aad,
     key: &StoreKey,
 ) -> Result<Vec<u8>, CryptoError> {
-    let Some((&ROW_VERSION, rest)) = row.split_first() else {
+    let Some((&first, rest)) = row.split_first() else {
+        return Err(CryptoError::AeadFailed);
+    };
+    let Some(RowLayout::V1) = RowLayout::from_byte(first) else {
         return Err(CryptoError::AeadFailed);
     };
     let (Some(nonce), Some(ciphertext)) = (rest.get(..NONCE_LEN), rest.get(NONCE_LEN..)) else {

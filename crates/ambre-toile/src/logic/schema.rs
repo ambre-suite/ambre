@@ -99,8 +99,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 /// step therefore stamps the number and changes nothing else, which is what
 /// makes it a migration rather than a rewrite.
 ///
-/// `1 -> 2` puts [`STYLE_VERSION`] in front of every `"style"` register, the
-/// element registers and the connector registers alike.
+/// `1 -> 2` puts the [`StyleLayout`](ambre_bus::app::toile::StyleLayout) byte
+/// in front of every `"style"` register, the element registers and the
+/// connector registers alike.
 ///
 /// `2 -> 3` copies the slide order and the presentation config out of the
 /// `presentation` map, whose two sub-containers each peer created for itself.

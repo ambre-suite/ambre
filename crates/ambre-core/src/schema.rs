@@ -275,10 +275,21 @@ pub fn scaffold_peer(scaffold: &[u8]) -> crate::PeerId {
 /// version it leaves. A step edited after its version shipped writes other
 /// operations, so its fingerprint moves.
 #[must_use]
-pub fn step_fingerprint(written: &[u8]) -> u64 {
+pub fn step_fingerprint(written: &[u8]) -> StepFingerprint {
     let mut hash = Fnv::new(b"ambre-migration-step");
     hash.feed(written);
-    hash.0
+    StepFingerprint(hash.0)
+}
+
+/// The fingerprint of one migration step, from [`step_fingerprint`]. It is
+/// only compared and printed, as the 16 hex digits `migrations.txt` holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StepFingerprint(u64);
+
+impl fmt::Display for StepFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:016x}", self.0)
+    }
 }
 
 /// FNV-1a over a domain tag, then the bytes fed to it.

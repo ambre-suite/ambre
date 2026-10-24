@@ -447,10 +447,16 @@ impl From<FontSizeChoice> for f32 {
     }
 }
 
-/// The style register's own layout version, its first byte (`TOILE-UI-071`). A
-/// later layout change bumps it and adds a migration row, so an older build's
-/// style survives instead of resetting to the default.
-pub const STYLE_VERSION: u8 = 1;
+ambre_core::define_layout_version! {
+    /// The style register's own layout version, its first byte (`TOILE-UI-071`).
+    /// A later layout change adds a variant and a migration row, so an older
+    /// build's style survives instead of resetting to the default.
+    pub enum StyleLayout {
+        /// The postcard value of [`ElementStyle`] behind the version byte.
+        V1 = 1,
+    }
+    current = V1;
+}
 
 impl ElementStyle {
     /// The style seeded at element birth (`toile-styles`, "Per-kind
@@ -480,11 +486,11 @@ impl ElementStyle {
     /// practice (a fixed, all-owned struct); a failure logs a line and yields an
     /// empty blob, which decodes back to `default()`.
     ///
-    /// The first byte is [`STYLE_VERSION`], the register's own layout version
+    /// The first byte is [`StyleLayout`], the register's own layout version
     /// (`TOILE-UI-071`). It lets a later layout change add a migration instead
     /// of resetting every element an older build drew.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = vec![STYLE_VERSION];
+        let mut out = vec![StyleLayout::CURRENT.byte()];
         out.extend_from_slice(&postcard::to_allocvec(self).unwrap_or_default());
         out
     }
@@ -503,12 +509,13 @@ impl ElementStyle {
     pub fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
         match bytes.split_first() {
             None => Some(Self::default()),
-            Some((&STYLE_VERSION, body)) => postcard::from_bytes(body).ok(),
-            Some(_) => None,
+            Some((&first, body)) => match StyleLayout::from_byte(first)? {
+                StyleLayout::V1 => postcard::from_bytes(body).ok(),
+            },
         }
     }
 
-    /// Rewrite a `"style"` register a build before [`STYLE_VERSION`] wrote.
+    /// Rewrite a `"style"` register a build before [`StyleLayout`] wrote.
     ///
     /// That build stored the bare postcard value under no version byte.
     /// [`try_from_bytes`](Self::try_from_bytes) reads such a register as a
@@ -523,7 +530,7 @@ impl ElementStyle {
     /// Every version 1 register holds the bare value, so the decode below is the
     /// whole test. Reading the first byte to guess whether a register already
     /// carries a version would be the weaker one. A bare value whose first byte
-    /// is [`STYLE_VERSION`] passes that guess.
+    /// is [`StyleLayout`] passes that guess.
     pub fn upgrade_unversioned(bytes: &[u8]) -> Option<Vec<u8>> {
         let style: Self = postcard::from_bytes(bytes).ok()?;
         Some(style.to_bytes())
@@ -2589,7 +2596,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let bytes = style.to_bytes();
-        assert_eq!(bytes[0], STYLE_VERSION);
+        assert_eq!(StyleLayout::from_byte(bytes[0]), Some(StyleLayout::CURRENT));
         assert_eq!(ElementStyle::try_from_bytes(&bytes), Some(style));
     }
 
@@ -2626,7 +2633,7 @@ mod tests {
     /// reported, never silently reset to the default.
     #[test]
     fn a_style_from_an_unknown_layout_is_reported() {
-        let mut bytes = vec![STYLE_VERSION + 1];
+        let mut bytes = vec![StyleLayout::CURRENT.byte() + 1];
         bytes.extend_from_slice(&postcard::to_allocvec(&ElementStyle::default()).unwrap());
         assert_eq!(ElementStyle::try_from_bytes(&bytes), None);
     }

@@ -362,7 +362,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.emoji | field |
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.vote_count | field | u32	math	vote weight / tally
 ambre-bus | src/app/toile.rs | crate::app::toile | ReactionTally.vote_total | field | i64	math	vote weight / tally
 ambre-bus | src/app/toile.rs | crate::app::toile | STICKY_CORNER | const | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | STYLE_VERSION | const | u8	generic	bound / format version constant
 ambre-bus | src/app/toile.rs | crate::app::toile | SelectionStats.count | field | u32	math	count
 ambre-bus | src/app/toile.rs | crate::app::toile | Shadow.blur | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | Shadow.dx | field | f32	math	board geometry, style metric, opacity or pressure
@@ -1385,8 +1384,8 @@ ambre-core | src/schema.rs | crate::schema | SchemaVersion.0 | field | u32	newty
 ambre-core | src/schema.rs | crate::schema | SchemaVersion::get() | ret | u32	newtype-inner	SchemaVersion newtype accessor
 ambre-core | src/schema.rs | crate::schema | SchemaVersion::new(version) | param | u32	newtype-inner	SchemaVersion newtype accessor
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
-ambre-core | src/schema.rs | crate::schema | step_fingerprint() | ret | u64	generic	FNV hash over bytes
-ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes
+ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
+ambre-core | src/schema.rs | crate::schema | StepFingerprint.0 | field | u64	newtype-inner	the FNV-1a hash a migration step fingerprint holds
 ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
 ambre-core | src/seq.rs | crate::seq | Seq.0 | field | u64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/seq.rs | crate::seq | Seq::to_i64_saturating() | ret | i64	newtype-inner	Seq/Version newtype accessor
@@ -1450,7 +1449,6 @@ ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(hi) | param | f64	ne
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | ROW_VERSION | const | u8	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_anchored_key(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
@@ -1717,7 +1715,6 @@ ambre-logic | src/segments.rs | crate::segments | LogicState::segment_fold_faile
 ambre-logic | src/segments.rs | crate::segments | LogicState::snapshot_dropped(refinalize) | param | bool	generic	the fact LogicEvent::SnapshotDropped.refinalize carries
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.container | field | String	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.deps | field | Vec<String>	generic	generic byte/text API or codec
-ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | field | u32	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
