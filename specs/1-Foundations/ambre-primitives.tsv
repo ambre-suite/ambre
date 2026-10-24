@@ -695,18 +695,14 @@ ambre-canvas | src/editor.rs | crate::editor | EditIntent::Replace.text | field 
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Right.select | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Right.word | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Up.select | field | bool	math	named state or style flag, local
-ambre-canvas | src/editor.rs | crate::editor | LineGoal.geometry | field | (f32,f64)	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | LineGoal.text | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | Styled.text | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.initial | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.seeded | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.wrap_w | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | TextEditor.zoom | field | f64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | TextEditor::base_styles(zoom) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::commit_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::committed_text() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::flush(wrap_w) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/editor.rs | crate::editor | TextEditor::flush(zoom) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::initial_text() | ret | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::insert(s) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::layout_height() | ret | Option<f32>	math	geometry, layout, GPU or count arithmetic
@@ -728,6 +724,7 @@ ambre-canvas | src/editor.rs | crate::editor | offset_box(dx) | param | f64	math
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dy) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	generic	predicate result
 ambre-canvas | src/editor.rs | crate::editor | Caret::shown_if(visible) | param | bool	newtype-inner	enum/newtype own accessor or constructor
+ambre-canvas | src/editor.rs | crate::editor | LineGoal.geometry | field | (f32,ZoomFactor)	math	geometry, layout, GPU or count arithmetic: the wrap width beside the typed zoom
 ambre-canvas | src/fatal.rs | crate::fatal | FATAL_MSG | static | Mutex<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
@@ -1560,10 +1557,6 @@ ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str
 ambre-draw | src/lib.rs | crate | ImageSource.height | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageSource.pixels | field | &'a[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-draw | src/lib.rs | crate | ImageSource.width | field | u32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb() | ret | (u8,u8,u8)	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(h) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(l) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/peer.rs | crate::peer | hsl_to_rgb(s) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
@@ -1583,6 +1576,9 @@ ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dx) | param | f64	
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dy) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	foreign-api	the DOM deltaMode code
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result
+ambre-draw | src/peer.rs | crate::peer | Hue.0 | field | u16	newtype-inner	the whole degrees of a hue below 360, built only by Hue::of_user
+ambre-draw | src/peer.rs | crate::peer | PEER_LIGHTNESS | const | f32	math	an HSL formula constant private to peer.rs, read only by Hue::peer_rgb
+ambre-draw | src/peer.rs | crate::peer | PEER_SATURATION | const | f32	math	an HSL formula constant private to peer.rs, read only by Hue::peer_rgb
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/bin/ambre-fixtures.rs | crate | freeze(name) | param | &str	free-text	free text: message, label, name or report
@@ -2841,7 +2837,7 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | Piece.provisi
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::held_text() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_drawn() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState::provisional_fresh() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/provisional.rs | crate::view::provisional | Key | alias | (crate::ui::DraftGeneration,LayoutVersion,Option<Splitting>,String)	free-text	text content / label / parser input
+ambre-prose | src/view/provisional.rs | crate::view::provisional | Key | alias | (crate::ui::DraftGeneration,LayoutVersion,Option<Splitting>,String,)	free-text	text content / label / parser input
 ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerState.visible | field | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input
@@ -3869,7 +3865,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_cancel() | ret
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_down() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ZOOM_PER_WHEEL_PX | const | f64	math	log-zoom rate per wheel pixel: a step zooms by exp(-dy * rate)
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
@@ -4431,6 +4426,8 @@ ambre-prose | src/band.rs | crate::band | CivilDate::month() | ret | u32	newtype
 ambre-prose | src/band.rs | crate::band | CivilDate::year() | ret | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,ambre_core::Radians)>	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
+ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::from_stored(value) | param | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::stored_value() | ret | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-canvas | src/density.rs | crate::density | DevicePx.0 | field | i32	newtype-inner	the inside of the device pixel newtype, signed because a buffer shift is

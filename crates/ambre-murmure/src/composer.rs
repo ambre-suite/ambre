@@ -1053,7 +1053,7 @@ impl Composer {
             end: at + ByteCount::from_len(1 + query.len()),
             text: format!("{written} "),
         });
-        editor.flush(font_cx, wrap, 1.0);
+        editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
         let start = byte_to_char(&text, at);
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
@@ -1142,7 +1142,7 @@ impl Composer {
                 text: String::new(),
             });
         }
-        editor.flush(font_cx, wrap, 1.0);
+        editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
         if editor.text() != after {
             return;
         }
@@ -1303,7 +1303,7 @@ impl Composer {
             && let Some(mut editor) = self.drafts.remove(&asked)
         {
             editor.set_style(style.clone());
-            editor.flush(font_cx, wrap, 1.0);
+            editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
             // A marker or a chord typed before Enter lands before the draft
             // leaves, never on the draft that comes back.
             self.close_marker(asked, &mut editor, font_cx, wrap);
@@ -1361,7 +1361,7 @@ impl Composer {
             Some(mut editor) => {
                 let before = editor.text();
                 editor.set_style(style);
-                editor.flush(font_cx, wrap, 1.0);
+                editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
                 // A pick lands once the keys before it did.
                 self.write_pick(&mut editor, font_cx, wrap);
                 // Record the edits that landed, then walk the steps asked
@@ -1376,7 +1376,7 @@ impl Composer {
                     }
                 }
                 if walked {
-                    editor.flush(font_cx, wrap, 1.0);
+                    editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
                 }
                 if let Some(marks) = self.marks.get_mut(&shown) {
                     marks.follow(&editor.text());

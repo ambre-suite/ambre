@@ -49,7 +49,7 @@ pub fn draw_edit<S: DrawSurface>(
     // is multi-line (Excel/Sheets in-cell editor).
     let pad = f64::from(CELL_PAD_X.get()) * state.zoom.get();
     let wrap_w = (cw - 2.0 * pad).max(1.0) as f32;
-    editor.core.flush(font_cx, wrap_w, state.zoom.get());
+    editor.core.flush(font_cx, wrap_w, state.zoom);
 
     // The field grows downward to fit every line, overflowing the cell like a
     // spreadsheet, and is never shorter than the row. A layout that fits the row

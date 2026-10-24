@@ -106,14 +106,16 @@ fn assert_parity(seed: &str, ops: &[Op]) {
     );
     let mut core = TextEditor::new(seed, style());
     // First flush seeds both carets at text end.
-    cell.core.flush(&mut fcx, 1000.0, 1.0);
-    core.flush(&mut fcx, 1000.0, 1.0);
+    cell.core
+        .flush(&mut fcx, 1000.0, ambre_core::ZoomFactor::ONE);
+    core.flush(&mut fcx, 1000.0, ambre_core::ZoomFactor::ONE);
 
     for (i, op) in ops.iter().enumerate() {
         apply_cell(&mut cell, op);
         core.push(intent(op));
-        cell.core.flush(&mut fcx, 1000.0, 1.0);
-        core.flush(&mut fcx, 1000.0, 1.0);
+        cell.core
+            .flush(&mut fcx, 1000.0, ambre_core::ZoomFactor::ONE);
+        core.flush(&mut fcx, 1000.0, ambre_core::ZoomFactor::ONE);
 
         assert_eq!(
             cell.text(),

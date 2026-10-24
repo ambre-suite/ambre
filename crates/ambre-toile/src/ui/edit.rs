@@ -203,7 +203,7 @@ impl InlineEditor {
     /// apply every queued intent. Must run before rendering. `wrap_w` is the wrap
     /// width in screen pixels; `zoom` bakes into the font size.
     pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: f32, zoom: ambre_core::ZoomFactor) {
-        self.core.flush(font_cx, wrap_w, zoom.get());
+        self.core.flush(font_cx, wrap_w, zoom);
     }
 
     /// The caret rectangle in local editor coordinates, for the transparent

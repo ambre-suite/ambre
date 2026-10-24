@@ -113,9 +113,21 @@ fn send_session(
     }
 }
 
-/// The zoom rate per pixel of wheel `dy`, a wheel notch and a pinch alike: a
-/// step zooms by the factor `exp(-dy * ZOOM_PER_WHEEL_PX)`.
-const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
+/// A log-zoom rate per pixel of wheel `dy`: a step of `dy` zooms by the
+/// factor `exp(-dy * rate)`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WheelZoomRate(f64);
+
+impl WheelZoomRate {
+    /// The relative zoom factor a wheel step of `dy` applies. A step down
+    /// zooms out, a step up zooms in, and no step keeps the zoom.
+    fn factor(self, dy: CssPx) -> f64 {
+        (-f64::from(dy.get()) * self.0).exp()
+    }
+}
+
+/// The zoom rate of a wheel notch and of a pinch alike.
+const ZOOM_PER_WHEEL_PX: WheelZoomRate = WheelZoomRate(0.0018);
 
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
@@ -1351,7 +1363,7 @@ impl ToileView {
             self.kinetic.stop();
             // Zoom about the cursor. A trackpad pinch and a mouse notch both land
             // here; only `dy` drives the factor.
-            let factor = (-f64::from(px.dy.get()) * ZOOM_PER_WHEEL_PX).exp();
+            let factor = ZOOM_PER_WHEEL_PX.factor(px.dy);
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
             // Two-finger scroll pans the 2D plane in both axes. The model

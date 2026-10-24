@@ -26,15 +26,7 @@ use crate::Color;
 /// both the light and dark board backgrounds. It also stays visually distinct
 /// from its neighbours around the wheel.
 pub fn peer_color(user_id: &UserId) -> Color {
-    // FNV-1a over the id seed bytes -> a well-mixed 32-bit hash.
-    let mut hash: u32 = 0x811c_9dc5;
-    for &b in user_id.as_bytes() {
-        hash ^= b as u32;
-        hash = hash.wrapping_mul(0x0100_0193);
-    }
-    // Hue spread across the full wheel; fixed S/L keeps every peer legible.
-    let hue = (hash % 360) as f32;
-    let (r, g, b) = hsl_to_rgb(hue, 0.62, 0.55);
+    let [r, g, b] = Hue::of_user(user_id).peer_rgb().channels();
     Color::from_rgba8(r, g, b, 255)
 }
 
@@ -45,22 +37,47 @@ pub fn peer_rgb(user_id: &UserId) -> Rgb {
     Rgb::from_channels(r, g, b)
 }
 
-/// HSL (hue in degrees, saturation / lightness in `0.0..=1.0`) to 8-bit sRGB.
-fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
-    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-    let hp = h / 60.0;
-    let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
-    let (r1, g1, b1) = match hp as u32 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    let m = l - c / 2.0;
-    let to_u8 = |v: f32| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
-    (to_u8(r1), to_u8(g1), to_u8(b1))
+/// The saturation of every peer colour, in `0.0..=1.0`.
+const PEER_SATURATION: f32 = 0.62;
+
+/// The lightness of every peer colour, in `0.0..=1.0`.
+const PEER_LIGHTNESS: f32 = 0.55;
+
+/// A whole hue on the colour wheel, in degrees below 360.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Hue(u16);
+
+impl Hue {
+    /// The hue of a peer: the id seed bytes folded with FNV-1a, spread over
+    /// the full wheel.
+    fn of_user(user_id: &UserId) -> Self {
+        let mut hash: u32 = 0x811c_9dc5;
+        for &b in user_id.as_bytes() {
+            hash ^= u32::from(b);
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+        // `hash % 360` is below 360, so it fits in a u16.
+        Self((hash % 360) as u16)
+    }
+
+    /// This hue at the peer saturation and lightness, in 8-bit sRGB.
+    fn peer_rgb(self) -> Rgb {
+        let (s, l) = (PEER_SATURATION, PEER_LIGHTNESS);
+        let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+        let hp = f32::from(self.0) / 60.0;
+        let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
+        let (r1, g1, b1) = match self.0 / 60 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        let m = l - c / 2.0;
+        let to_u8 = |v: f32| ((v + m) * 255.0).round().clamp(0.0, 255.0) as u8;
+        Rgb::from_channels(to_u8(r1), to_u8(g1), to_u8(b1))
+    }
 }
 
 #[cfg(test)]
