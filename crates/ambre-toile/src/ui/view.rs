@@ -272,7 +272,10 @@ fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::Fi
 #[cfg(not(target_arch = "wasm32"))]
 fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
     #[cfg(test)]
-    DOWNLOADS.with(|d| d.borrow_mut().push((filename.to_string(), data.as_bytes().to_vec())));
+    DOWNLOADS.with(|d| {
+        d.borrow_mut()
+            .push((filename.to_string(), data.as_bytes().to_vec()))
+    });
     #[cfg(not(test))]
     let _ = (filename, data);
 }

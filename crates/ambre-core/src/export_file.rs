@@ -1,9 +1,9 @@
 //! The file an export hands the browser: its name and its bytes.
 //!
 //! An export name derives from a document title or a sheet name, so it is
-//! user input. The browser saves the download under that name, and a
-//! separator or a `..` in it names a place outside the download folder on a
-//! host that honours it. So the name is a validated type (`DOCFILE-019`).
+//! user input. The browser saves the download under that name. On a host
+//! that honours it, a separator or a `..` names a place outside the download
+//! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
 use crate::media::ByteSize;
 
@@ -56,9 +56,10 @@ pub enum ExportFilenameError {
     TooLong,
 }
 
-/// The name an export file is saved under: never empty, never `.` or `..`,
-/// with no path separator, no control character, and at most
-/// [`MAX_BYTES`](Self::MAX_BYTES) bytes (`DOCFILE-019`).
+/// The name an export file is saved under. It is never empty, never `.` or
+/// `..`, and holds no path separator and no control character
+/// (`DOCFILE-019`). It holds at most [`MAX_BYTES`](Self::MAX_BYTES) bytes
+/// (`DOCFILE-020`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ExportFilename(String);
 
@@ -109,9 +110,7 @@ impl ExportFilename {
     pub fn from_title(title: &str, fallback: &'static str, extension: ExportExtension) -> Self {
         let suffix = extension.as_str();
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_BYTES
-            .as_len()
-            .saturating_sub(suffix.len() + 1);
+        let room = Self::MAX_BYTES.as_len().saturating_sub(suffix.len() + 1);
         let stem = [title, fallback, Self::FALLBACK_STEM]
             .into_iter()
             .map(|text| clean_stem(text, room))
@@ -161,8 +160,8 @@ fn clean_stem(text: &str, room: usize) -> String {
     }
 }
 
-/// The bytes of a file crossing an import or an export: what the browser read
-/// from a picked file, or what an export writes for the browser to save.
+/// The bytes of a file crossing an import or an export. They are what the
+/// browser read from a picked file, or what an export writes for it to save.
 ///
 /// The bytes are the user's content, so `Debug` prints their length alone.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -259,7 +258,7 @@ mod tests {
         }
     }
 
-    /// `DOCFILE-019`: a name past the bound is refused, and one at it is
+    /// `DOCFILE-020`: a name past the bound is refused, and one at it is
     /// taken.
     #[test]
     fn a_name_past_the_bound_is_refused() {
@@ -291,7 +290,7 @@ mod tests {
         }
     }
 
-    /// `DOCFILE-019`: a long title is cut on a character boundary, and the
+    /// `DOCFILE-020`: a long title is cut on a character boundary, and the
     /// extension survives the cut whole.
     #[test]
     fn a_long_title_is_cut_and_keeps_its_extension() {

@@ -111,7 +111,11 @@ impl ImportJob {
 
 impl ToileState {
     /// Convert a dropped SVG document and apply it (`toile-import-export`).
-    pub(super) fn import_svg_bytes(&mut self, bytes: &ambre_core::FileBytes, at: Point) -> ToileOutcome {
+    pub(super) fn import_svg_bytes(
+        &mut self,
+        bytes: &ambre_core::FileBytes,
+        at: Point,
+    ) -> ToileOutcome {
         self.begin_import(import_svg(bytes.as_bytes(), &Limits::default()), at)
     }
 

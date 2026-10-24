@@ -921,7 +921,8 @@ mod tests {
     #[test]
     fn a_written_file_is_handed_to_the_host_once() {
         let mut state = ProseUiState::default();
-        let filename = ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Ambre);
+        let filename =
+            ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Ambre);
         state.apply_event(&ProseEvent::ExportReady {
             filename: filename.clone(),
             media_type: ambre_core::MediaType::from("application/octet-stream"),

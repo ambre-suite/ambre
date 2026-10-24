@@ -474,7 +474,7 @@ impl ProseState {
         };
         let ir = self.walk();
         // The title is user text, so the name is cleaned of what a host
-        // refuses and bounded (`DOCFILE-019`).
+        // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         let filename = ambre_core::ExportFilename::from_title(
             ir.meta.title.as_deref().unwrap_or_default(),
             "document",

@@ -3964,7 +3964,7 @@ ambre-core | src/export_file.rs | crate::export_file | ExportFilename::new(text)
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::named(stem) | param | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(title) | param | &str	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_title(fallback) | param | &'static str	free-text	a stem the suite names itself
-ambre-core | src/export_file.rs | crate::export_file | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
+ambre-core | src/export_file.rs | crate::export_file | ExportFilename::FALLBACK_STEM | const | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(room) | param | usize	math	byte budget of the stem

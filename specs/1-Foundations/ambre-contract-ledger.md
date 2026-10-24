@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3735 rows: 3179 shipped, of which 3 loose. 556 unbuilt.**
+**3737 rows: 3181 shipped, of which 3 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 903 | 428 | 818 | 610 | 417 | 3176 |
+| `verified` | 905 | 428 | 818 | 610 | 417 | 3178 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 1 |  |  |  |  | 1 |
@@ -47,7 +47,7 @@
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-delta-order.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 6 |  |  |
-| `ambre-spec-docfile.md` | 18 | 18 | 18 |  |  |
+| `ambre-spec-docfile.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-drawing-surface.md` | 16 | 12 | 12 |  | 4 |
 | `ambre-spec-find.md` | 15 | 10 | 10 |  | 5 |
 | `ambre-spec-fixtures.md` | 36 | 36 | 36 |  |  |
@@ -198,7 +198,7 @@
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
 | `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087,101,131,147..148 |
 | `ambre-spec-design-tokens.md` | UI-THREAD-029..034 |
-| `ambre-spec-docfile.md` | DOCFILE-001..018 |
+| `ambre-spec-docfile.md` | DOCFILE-001..020 |
 | `ambre-spec-drawing-surface.md` | CANVAS-002,025..030,055..056,061..066,074 |
 | `ambre-spec-find.md` | FIND-001..015 |
 | `ambre-spec-fixtures.md` | FIXTURE-001..036 |

@@ -192,7 +192,7 @@ impl TrameState {
             _ => sheet_id.to_string(),
         };
         // A sheet name is user text, so the file name is cleaned of what a
-        // host refuses and bounded (`DOCFILE-019`).
+        // host refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         TrameOutcome::display_only(vec![TrameEvent::ExportComplete {
             filename: ambre_core::ExportFilename::from_title(
                 &name,
