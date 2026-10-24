@@ -219,10 +219,7 @@ impl PersistenceStore {
 
     /// Open a named database at a given version. Only a test passes a version
     /// other than [`DB_VERSION`], to run the upgrade a later version runs.
-    fn open_at(
-        db_name: DbName<'_>,
-        version: DbVersion,
-    ) -> oneshot::Receiver<Result<Self, String>> {
+    fn open_at(db_name: DbName<'_>, version: DbVersion) -> oneshot::Receiver<Result<Self, String>> {
         let (tx, rx) = answer();
 
         let factory = match web_sys::window().and_then(|w| w.indexed_db().ok().flatten()) {
@@ -1084,8 +1081,8 @@ mod wasm_tests {
     }
 
     /// A database at [`DB_VERSION`] with ONLY the `snapshots` store, holding
-    /// one snapshot row: a browser that holds documents and lacks a store the
-    /// next version adds.
+    /// one snapshot row. It stands for a browser that holds documents and
+    /// lacks a store the next version adds.
     async fn seed_snapshots_only(name: &str, doc_id: DocumentId, bytes: &[u8]) {
         let (tx, rx) = answer::<()>();
         let req = factory()
