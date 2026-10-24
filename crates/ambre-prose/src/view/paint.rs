@@ -73,14 +73,26 @@ struct ContentBox {
     width: SurfacePx,
 }
 
+/// The caret of the paragraph a split opens, before the document names its
+/// block. The clip and the bar are two rects side by side, so each is named.
+#[derive(Clone, Copy)]
+struct GhostCaret {
+    /// The top of its page.
+    top: SurfacePx,
+    /// The fragment it is clipped to.
+    clip: Rect,
+    /// The caret bar itself.
+    bar: Rect,
+}
+
 /// What one frame resolves before it paints.
 #[derive(Default)]
 struct Frame {
     pages: Vec<PagePaint>,
     blocks: Vec<ScreenBlock>,
     /// The caret of the paragraph a split opens, before the document names
-    /// its block: its page top, its clip and its bar.
-    ghost_carets: Vec<(SurfacePx, Rect, Rect)>,
+    /// its block.
+    ghost_carets: Vec<GhostCaret>,
 }
 
 /// Where a run is drawn: from the left of the content box, at the top of
@@ -279,7 +291,7 @@ impl ProseUiState {
             surface.pop_clip();
             surface.pop_transform();
         }
-        for &(top, clip, bar) in &frame.ghost_carets {
+        for &GhostCaret { top, clip, bar } in &frame.ghost_carets {
             surface.push_transform(Affine::translate((0.0, top.get())));
             surface.push_clip(clip);
             surface.fill_rect(bar, palette.accent);
@@ -407,7 +419,11 @@ impl ProseUiState {
                         let rect = to_rect(&placed, &ghost.run.data().caret_box(caret));
                         let bar =
                             Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
-                        frame.ghost_carets.push((top, placed.clip, bar));
+                        frame.ghost_carets.push(GhostCaret {
+                            top,
+                            clip: placed.clip,
+                            bar,
+                        });
                     }
                     items.push(PageItem::Shape {
                         run: ghost.run,

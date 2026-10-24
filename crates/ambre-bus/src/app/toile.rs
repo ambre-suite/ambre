@@ -300,6 +300,14 @@ impl StyleLength {
     }
 }
 
+/// A length a style stores, widened to the `f64` the board is measured in.
+/// Both are world units, so no camera stands between them.
+impl From<StyleLength> for ambre_core::BoardLength {
+    fn from(length: StyleLength) -> Self {
+        Self::new(f64::from(length.get()))
+    }
+}
+
 /// The whole visual style of an element, held as **one** postcard-encoded LWW
 /// register (`toile-styles`). One register means a fill update racing a stroke
 /// update cannot leave a half-applied tear.
@@ -1359,7 +1367,7 @@ pub struct AutoLayout {
     /// Main-axis flow.
     pub direction: Direction,
     /// Space between consecutive children on the main axis.
-    pub gap: f64,
+    pub gap: ambre_core::BoardLength,
     /// The inset of the content box inside the frame.
     pub padding: Padding,
     /// Main-axis distribution of children in the free space.
@@ -1375,19 +1383,19 @@ pub struct AutoLayout {
 /// `[f64; 4]` the register held before.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Padding {
-    pub top: f64,
-    pub right: f64,
-    pub bottom: f64,
-    pub left: f64,
+    pub top: ambre_core::BoardLength,
+    pub right: ambre_core::BoardLength,
+    pub bottom: ambre_core::BoardLength,
+    pub left: ambre_core::BoardLength,
 }
 
 impl Padding {
     /// No inset.
-    pub const ZERO: Self = Self::uniform(0.0);
+    pub const ZERO: Self = Self::uniform(ambre_core::BoardLength::ZERO);
 
     /// The same inset on all four sides.
     #[must_use]
-    pub const fn uniform(side: f64) -> Self {
+    pub const fn uniform(side: ambre_core::BoardLength) -> Self {
         Self {
             top: side,
             right: side,

@@ -17,6 +17,7 @@
 //! | [`Radians`] | an angle | a rotated element |
 //! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
+//! | [`BoardLength`] | a world unit of a board, before the camera's zoom | a frame's padding, a hit reach |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
@@ -229,6 +230,17 @@ define_length! {
     /// A speed along one axis of the zoomed view, in view pixels per
     /// millisecond: what a flick or a glide moves at.
     ViewSpeed(f32)
+}
+
+define_length! {
+    /// A length on a board, in world units: what a board's camera scales by
+    /// the zoom into view pixels.
+    ///
+    /// A view length and a board length are both floats. A reach of four view
+    /// pixels taken as four board units picks wrong at every zoom but 1, so
+    /// the camera's named conversion stands between the two. The `f64` is the
+    /// one kurbo measures a board in.
+    BoardLength(f64)
 }
 
 impl DocPx {

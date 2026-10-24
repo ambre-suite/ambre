@@ -4370,8 +4370,8 @@ fn concurrent_notes_edits_converge() {
 fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
     AutoLayout {
         direction,
-        gap,
-        padding: ambre_bus::app::toile::Padding::uniform(4.0),
+        gap: ambre_core::BoardLength::new(gap),
+        padding: ambre_bus::app::toile::Padding::uniform(ambre_core::BoardLength::new(4.0)),
         align: Align::Start,
         sizing: Sizing::Hug,
     }

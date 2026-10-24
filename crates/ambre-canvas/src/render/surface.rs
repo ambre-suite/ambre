@@ -48,17 +48,29 @@ fn split_linear(t: Affine) -> Option<(f64, Affine)> {
     Some((scale, unit))
 }
 
-/// A glyph bitmap's logical box, as `(left bearing, top bearing, width,
-/// height)`. The bitmap has one texel per device pixel. So each is divided by
-/// the density and the glyph covers the same logical area on every screen.
-fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> (f32, f32, f32, f32) {
+/// A glyph bitmap's box in logical pixels, the `f32` the quad takes. The four
+/// are floats of one unit side by side, so each is named.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GlyphBox {
+    /// From the pen to the bitmap's left edge.
+    left_bearing: f32,
+    /// From the baseline up to the bitmap's top edge.
+    top_bearing: f32,
+    width: f32,
+    height: f32,
+}
+
+/// A glyph bitmap's logical box. The bitmap has one texel per device pixel.
+/// So each length is divided by the density and the glyph covers the same
+/// logical area on every screen.
+fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> GlyphBox {
     let density = density.get() as f32;
-    (
-        slot.bearing_left as f32 / density,
-        slot.bearing_top as f32 / density,
-        slot.pixel_width as f32 / density,
-        slot.pixel_height as f32 / density,
-    )
+    GlyphBox {
+        left_bearing: slot.bearing_left as f32 / density,
+        top_bearing: slot.bearing_top as f32 / density,
+        width: slot.pixel_width as f32 / density,
+        height: slot.pixel_height as f32 / density,
+    }
 }
 
 /// The two batches a placed glyph lands in.
@@ -109,7 +121,12 @@ struct GlyphPlacement {
 /// straddling the clip is trimmed, its UVs remapped, never drawn whole.
 fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) {
     let tint = (!slot.is_color).then_some(at.color);
-    let (bl, bt, sw, sh) = glyph_box(slot, at.density);
+    let GlyphBox {
+        left_bearing: bl,
+        top_bearing: bt,
+        width: sw,
+        height: sh,
+    } = glyph_box(slot, at.density);
     let origin = at.origin;
 
     // Rotated run: corners = origin + linear * local offset. A rotated run
@@ -775,11 +792,21 @@ mod tests {
         // A bitmap of 20 x 30 device pixels at density 2.
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), ratio(2.0)),
-            (1.0, 12.0, 10.0, 15.0)
+            GlyphBox {
+                left_bearing: 1.0,
+                top_bearing: 12.0,
+                width: 10.0,
+                height: 15.0,
+            }
         );
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), DevicePixelRatio::ONE),
-            (2.0, 24.0, 20.0, 30.0)
+            GlyphBox {
+                left_bearing: 2.0,
+                top_bearing: 24.0,
+                width: 20.0,
+                height: 30.0,
+            }
         );
     }
 

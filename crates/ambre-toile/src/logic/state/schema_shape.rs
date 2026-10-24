@@ -266,12 +266,12 @@ fn postcard_layouts() -> Vec<(String, String)> {
     };
     let layout = AutoLayout {
         direction: Direction::Vertical,
-        gap: 1.5,
+        gap: ambre_core::BoardLength::new(1.5),
         padding: ambre_bus::app::toile::Padding {
-            top: 2.5,
-            right: 3.5,
-            bottom: 4.5,
-            left: 5.5,
+            top: ambre_core::BoardLength::new(2.5),
+            right: ambre_core::BoardLength::new(3.5),
+            bottom: ambre_core::BoardLength::new(4.5),
+            left: ambre_core::BoardLength::new(5.5),
         },
         align: Align::End,
         sizing: Sizing::Fill,
@@ -559,8 +559,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: frame.clone(),
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
-            gap: 8.0,
-            padding: ambre_bus::app::toile::Padding::uniform(4.0),
+            gap: ambre_core::BoardLength::new(8.0),
+            padding: ambre_bus::app::toile::Padding::uniform(ambre_core::BoardLength::new(4.0)),
             align: Align::Start,
             sizing: Sizing::Hug,
         }),

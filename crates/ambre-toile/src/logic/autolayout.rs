@@ -62,10 +62,10 @@ pub fn solve_layout(frame: Rect, layout: &AutoLayout, children: &[Size]) -> Vec<
     // Content box: the frame inset by the padding.
     let pad = layout.padding;
     let content = Rect::new(
-        frame.x0 + pad.left,
-        frame.y0 + pad.top,
-        frame.x1 - pad.right,
-        frame.y1 - pad.bottom,
+        frame.x0 + pad.left.get(),
+        frame.y0 + pad.top.get(),
+        frame.x1 - pad.right.get(),
+        frame.y1 - pad.bottom.get(),
     );
 
     match layout.direction {
@@ -102,10 +102,12 @@ fn solve_axis(content: Rect, layout: &AutoLayout, children: &[Size], axis: Axis)
 
     let n = children.len();
     let fill = layout.sizing == Sizing::Fill;
+    // The gap in the float kurbo lays the rects out in.
+    let gap = layout.gap.get();
 
     // Main-axis size of each child: Fill shares the leftover equally, otherwise
     // each keeps its own size.
-    let total_gap = layout.gap * (n.saturating_sub(1)) as f64;
+    let total_gap = gap * (n.saturating_sub(1)) as f64;
     let main_sizes: Vec<f64> = if fill {
         let intrinsic: f64 = children.iter().map(|s| main_of(*s)).sum();
         let leftover = (content_main - total_gap - intrinsic).max(0.0);
@@ -120,19 +122,19 @@ fn solve_axis(content: Rect, layout: &AutoLayout, children: &[Size], axis: Axis)
     let used: f64 = main_sizes.iter().sum::<f64>() + total_gap;
     let free = (content_main - used).max(0.0);
     let (mut cursor, spacing) = if fill {
-        (0.0, layout.gap)
+        (0.0, gap)
     } else {
         match layout.align {
-            Align::Start => (0.0, layout.gap),
-            Align::Center => (free / 2.0, layout.gap),
-            Align::End => (free, layout.gap),
+            Align::Start => (0.0, gap),
+            Align::Center => (free / 2.0, gap),
+            Align::End => (free, gap),
             Align::SpaceBetween => {
                 if n < 2 {
-                    (0.0, layout.gap)
+                    (0.0, gap)
                 } else {
                     // First at start, last at end: spread the free space across
                     // the (n - 1) interior gaps, on top of the base gap.
-                    (0.0, layout.gap + free / (n - 1) as f64)
+                    (0.0, gap + free / (n - 1) as f64)
                 }
             }
         }
@@ -183,7 +185,7 @@ fn solve_wrap(content: Rect, layout: &AutoLayout, children: &[Size]) -> Vec<Rect
         let next = if row.is_empty() {
             s.width
         } else {
-            row_main + layout.gap + s.width
+            row_main + layout.gap.get() + s.width
         };
         if !row.is_empty() && next > content.width() {
             rows.push(std::mem::take(&mut row));
@@ -213,7 +215,7 @@ fn solve_wrap(content: Rect, layout: &AutoLayout, children: &[Size]) -> Vec<Rect
                 *slot = r;
             }
         }
-        y += row_height + layout.gap;
+        y += row_height + layout.gap.get();
     }
     out
 }
@@ -234,7 +236,7 @@ mod tests {
     fn layout(direction: Direction, gap: f64, align: Align, sizing: Sizing) -> AutoLayout {
         AutoLayout {
             direction,
-            gap,
+            gap: ambre_core::BoardLength::new(gap),
             padding: Padding::ZERO,
             align,
             sizing,
@@ -272,12 +274,12 @@ mod tests {
         let frame = rect(0.0, 0.0, 200.0, 100.0);
         let l = AutoLayout {
             direction: Direction::Horizontal,
-            gap: 0.0,
+            gap: ambre_core::BoardLength::ZERO,
             padding: Padding {
-                top: 5.0,
-                right: 10.0,
-                bottom: 15.0,
-                left: 20.0,
+                top: ambre_core::BoardLength::new(5.0),
+                right: ambre_core::BoardLength::new(10.0),
+                bottom: ambre_core::BoardLength::new(15.0),
+                left: ambre_core::BoardLength::new(20.0),
             },
             align: Align::Start,
             sizing: Sizing::Fixed,
@@ -443,10 +445,10 @@ mod tests {
         let frame = rect(0.0, 0.0, 200.0, 100.0);
         let mut l = layout(Direction::Horizontal, 0.0, Align::End, Sizing::Fixed);
         l.padding = Padding {
-            top: 10.0,
-            right: 20.0,
-            bottom: 10.0,
-            left: 30.0,
+            top: ambre_core::BoardLength::new(10.0),
+            right: ambre_core::BoardLength::new(20.0),
+            bottom: ambre_core::BoardLength::new(10.0),
+            left: ambre_core::BoardLength::new(30.0),
         };
         let out = solve_layout(frame, &l, &[size(40.0, 10.0), size(40.0, 10.0)]);
         assert_eq!(out[1].x1, 180.0, "the run stops at the inner edge");

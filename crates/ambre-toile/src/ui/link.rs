@@ -21,7 +21,7 @@ use ambre_draw::{Point, Rect};
 pub const BADGE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Gap between the badge and the element's top-right corner, in screen pixels.
-const BADGE_GAP: f64 = 3.0;
+const BADGE_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(3.0);
 
 /// What following a link does. None of the three writes to the document
 /// (`TOILE-063`) or enters the undo history (`TOILE-115`).
@@ -107,8 +107,9 @@ pub fn wants_follow(mods: Modifiers, mode: PresentMode) -> bool {
 /// its top-right corner.
 pub fn badge_rect(screen_bounds: Rect) -> Rect {
     let side = f64::from(BADGE_PX.get());
-    let x1 = screen_bounds.x1 + BADGE_GAP + side;
-    let y0 = screen_bounds.y0 - BADGE_GAP - side;
+    let gap = f64::from(BADGE_GAP.get());
+    let x1 = screen_bounds.x1 + gap + side;
+    let y0 = screen_bounds.y0 - gap - side;
     Rect::new(x1 - side, y0, x1, y0 + side)
 }
 

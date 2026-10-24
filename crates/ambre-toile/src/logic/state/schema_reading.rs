@@ -268,7 +268,8 @@ fn layout_reading(layout: &AutoLayout) -> String {
         align,
         sizing,
     } = layout;
-    let sides = [padding.top, padding.right, padding.bottom, padding.left];
+    let sides = [padding.top, padding.right, padding.bottom, padding.left].map(|side| side.get());
+    let gap = gap.get();
     format!(
         "flows {direction:?}, gap {gap} px, padding {sides:?} px, aligned {align:?}, \
          sized {sizing:?}"

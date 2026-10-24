@@ -18,63 +18,9 @@ use ambre_core::{ViewPx, ZoomFactor};
 use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
-/// A length on the board, in world units: what the camera scales by the zoom
-/// into screen pixels.
-///
-/// A screen length and a board length are both floats. A reach of four screen
-/// pixels taken as four board units picks wrong at every zoom but 1.
-/// The only way from a [`ViewPx`] in is [`ViewportTransform::to_board`], so
-/// the zoom stands between the two. The type wraps the `f64` that kurbo
-/// measures the board in, and no rule bounds it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
-pub struct BoardLength(f64);
-
-impl BoardLength {
-    /// No length: a reach that touches only what lies under the point.
-    pub const ZERO: Self = Self(0.0);
-
-    /// The length of `units` world units, as kurbo measures a board distance.
-    #[must_use]
-    pub const fn new(units: f64) -> Self {
-        Self(units)
-    }
-
-    /// The number of world units, for the kurbo call that takes the float.
-    #[must_use]
-    pub const fn get(self) -> f64 {
-        self.0
-    }
-
-    /// The larger of the two lengths.
-    #[must_use]
-    pub fn max(self, other: Self) -> Self {
-        Self(self.0.max(other.0))
-    }
-}
-
-/// A length a style stores, widened to the `f64` the board is measured in.
-/// Both are world units, so no camera stands between them.
-impl From<ambre_bus::app::toile::StyleLength> for BoardLength {
-    fn from(length: ambre_bus::app::toile::StyleLength) -> Self {
-        Self(f64::from(length.get()))
-    }
-}
-
-/// The length scaled by a bare number.
-impl std::ops::Mul<f64> for BoardLength {
-    type Output = Self;
-    fn mul(self, factor: f64) -> Self {
-        Self(self.0 * factor)
-    }
-}
-
-/// The length divided by a bare number.
-impl std::ops::Div<f64> for BoardLength {
-    type Output = Self;
-    fn div(self, divisor: f64) -> Self {
-        Self(self.0 / divisor)
-    }
-}
+/// A length on the board, in world units: the camera's named conversion,
+/// [`ViewportTransform::to_board`], is the way from a [`ViewPx`] in.
+pub use ambre_core::BoardLength;
 
 /// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
 /// by this factor. A discrete notch, coarser than a wheel tick.
@@ -128,7 +74,7 @@ impl ViewportTransform {
     /// The board length that `screen` pixels cover at this zoom.
     #[must_use]
     pub fn to_board(&self, screen: ViewPx) -> BoardLength {
-        BoardLength(f64::from(screen.get()) / self.zoom.get())
+        BoardLength::new(f64::from(screen.get()) / self.zoom.get())
     }
 
     /// The inverse mapping (screen -> world). Always invertible: `zoom > 0`.

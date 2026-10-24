@@ -167,7 +167,7 @@ pub use text_offset::{
     utf16_to_char,
 };
 pub use unit::{
-    CssPoint, CssPx, CssVector, DocPoint, DocPx, ImagePx, ImageSize, Mm, PX_PER_MM, PixelSize,
+    BoardLength, CssPoint, CssPx, CssVector, DocPoint, DocPx, ImagePx, ImageSize, Mm, PX_PER_MM, PixelSize,
     Point, Pt, Radians, Size, SurfacePx, Vector, ViewPoint, ViewPx, ViewSize, ViewSpeed,
     ViewSpeedVector, ViewVector,
 };
