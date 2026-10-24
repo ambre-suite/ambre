@@ -324,8 +324,8 @@ pub struct ElementStyle {
     pub fill: Option<Rgba>, // None = no fill
     pub stroke: Option<Rgba>,
     pub stroke_w: f32,
-    pub opacity: f32, // 0.0 ..= 1.0
-    pub corner: f32,  // corner radius for rect / sticky
+    pub opacity: ambre_core::Opacity,
+    pub corner: f32, // corner radius for rect / sticky
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
     /// Text (foreground) colour, RGBA. `None` = the kind's default ink (a
@@ -340,7 +340,7 @@ impl Default for ElementStyle {
             fill: Some(Rgba::from_bits(0xFFFF_FFFF)),
             stroke: Some(Rgba::from_bits(0x3333_33FF)),
             stroke_w: 1.0,
-            opacity: 1.0,
+            opacity: ambre_core::Opacity::OPAQUE,
             corner: 0.0,
             font: FontSpec::default(),
             shadow: None,
@@ -1315,8 +1315,8 @@ pub struct SnapElement {
     pub bounds: Rect,
     /// The rotation (the element `rot` field).
     pub rotation: ambre_core::Radians,
-    /// Opacity `0.0 ..= 1.0` (from [`ElementStyle::opacity`]).
-    pub opacity: f32,
+    /// Opacity (from [`ElementStyle::opacity`]).
+    pub opacity: ambre_core::Opacity,
     /// Fill color, `None` = no fill (from [`ElementStyle::fill`]).
     pub fill: Option<Rgba>,
 }

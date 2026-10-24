@@ -760,7 +760,7 @@ mod tests {
                 id: ElementId("a".into()),
                 bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
                 rotation: ambre_core::Radians::ZERO,
-                opacity: 0.5,
+                opacity: ambre_core::Opacity::new(0.5).unwrap(),
                 fill: Some(Rgba::from_bits(0x0000_FFFF)),
             },
         );
@@ -878,7 +878,7 @@ mod tests {
         let card = ops
             .iter()
             .position(
-                |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, 1.0)),
+                |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, ambre_core::Opacity::OPAQUE)),
             )
             .expect("the sticky paints its card");
         let plates: Vec<usize> = ops
@@ -923,7 +923,7 @@ mod tests {
         let surface = paint(&vp);
         // The card is a FillPath in the sticky's own colour.
         let card = surface.ops().iter().any(
-            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, 1.0)),
+            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(fill, ambre_core::Opacity::OPAQUE)),
         );
         assert!(
             card,
@@ -931,14 +931,14 @@ mod tests {
         );
         // A drop shadow is painted behind the card, in the translucent shadow colour.
         let shadow = surface.ops().iter().any(
-            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(STICKY_SHADOW, 1.0)),
+            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == style_color(STICKY_SHADOW, ambre_core::Opacity::OPAQUE)),
         );
         assert!(shadow, "a sticky must paint a drop shadow behind its card");
         // Any glyphs the body produces use the fixed ink, never the card colour
         // (the ink is independent of `fill`,). Font-availability agnostic:
         // if no glyphs are shaped this simply holds vacuously.
-        let card_color = style_color(fill, 1.0);
-        let ink = style_color(STICKY_INK, 1.0);
+        let card_color = style_color(fill, ambre_core::Opacity::OPAQUE);
+        let ink = style_color(STICKY_INK, ambre_core::Opacity::OPAQUE);
         for op in surface.ops() {
             if let DrawOp::Glyphs { color: Some(c), .. } = op {
                 assert_eq!(*c, ink, "sticky body must use the ink, not the card colour");
@@ -1433,7 +1433,7 @@ mod tests {
                 id: ElementId("r".into()),
                 bounds: preview_bounds,
                 rotation: ambre_core::Radians::ZERO,
-                opacity: 1.0,
+                opacity: ambre_core::Opacity::new(1.0).unwrap(),
                 fill: None,
             },
         );
@@ -1930,8 +1930,12 @@ mod tests {
                     .ops()
                     .iter()
                     .position(|op| match op {
-                        DrawOp::FillPath { color: Some(k) } => *k == style_color(want, 1.0),
-                        DrawOp::StrokePath { color: Some(k), .. } => *k == style_color(want, 1.0),
+                        DrawOp::FillPath { color: Some(k) } => {
+                            *k == style_color(want, ambre_core::Opacity::OPAQUE)
+                        }
+                        DrawOp::StrokePath { color: Some(k), .. } => {
+                            *k == style_color(want, ambre_core::Opacity::OPAQUE)
+                        }
                         _ => false,
                     })
                     .expect("every node paints")
@@ -1968,7 +1972,11 @@ mod tests {
             assert_ne!(ink, card, "card {card:08x}");
             assert!(contrast(ink, card) >= 4.0, "card {card:08x}");
             for (color, _, _) in painted {
-                assert_eq!(color, Some(style_color(ink, 1.0)), "card {card:08x}");
+                assert_eq!(
+                    color,
+                    Some(style_color(ink, ambre_core::Opacity::OPAQUE)),
+                    "card {card:08x}"
+                );
             }
         }
     }
@@ -2117,7 +2125,7 @@ mod tests {
             id: ElementId("a".into()),
             bounds: Rect::new(20.0, 30.0, 80.0, 60.0),
             rotation: ambre_core::Radians::new(0.5),
-            opacity: 1.0,
+            opacity: ambre_core::Opacity::new(1.0).unwrap(),
             fill: None,
         };
         let mut pass = Pass::default();

@@ -116,7 +116,7 @@ mod tests {
             id: ElementId(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::ZERO,
-            opacity: 1.0,
+            opacity: ambre_core::Opacity::new(1.0).unwrap(),
             fill: Some(Rgba::from_bits(0x0000_00FF)),
         }
     }
@@ -170,7 +170,7 @@ mod tests {
             .iter()
             .find(|a| a.id == ElementId("new".into()))
             .unwrap();
-        assert_eq!(new.opacity, 0.0);
+        assert_eq!(new.opacity.get(), 0.0);
     }
 
     #[test]
@@ -195,7 +195,7 @@ mod tests {
             .iter()
             .find(|a| a.id == ElementId("new".into()))
             .unwrap();
-        assert!((new.opacity - 1.0).abs() < 1e-6);
+        assert!((new.opacity.get() - 1.0).abs() < 1e-6);
     }
 
     #[test]

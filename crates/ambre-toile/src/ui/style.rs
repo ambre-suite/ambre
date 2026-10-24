@@ -254,12 +254,12 @@ mod tests {
     fn differing_stroke_width_and_opacity_flag_both() {
         let a = ElementStyle {
             stroke_w: 1.0,
-            opacity: 1.0,
+            opacity: ambre_core::Opacity::new(1.0).unwrap(),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
             stroke_w: 3.0,
-            opacity: 0.5,
+            opacity: ambre_core::Opacity::new(0.5).unwrap(),
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);

@@ -115,9 +115,99 @@ impl std::fmt::Display for Rgb {
     }
 }
 
+/// An opacity, from 0, transparent, to 1, opaque.
+///
+/// The value is finite and lies in that range. It serializes as the bare
+/// `f32` it wraps, and a decoded value outside the range is refused.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "f32", into = "f32")]
+pub struct Opacity(f32);
+
+impl Opacity {
+    /// Nothing shows.
+    pub const TRANSPARENT: Self = Self(0.0);
+    /// Everything shows.
+    pub const OPAQUE: Self = Self(1.0);
+
+    /// The opacity `value`, or `None` when it is not a finite number from 0
+    /// to 1.
+    #[must_use]
+    pub fn new(value: f32) -> Option<Self> {
+        (0.0..=1.0).contains(&value).then_some(Self(value))
+    }
+
+    /// The opacity nearest `value`: a value past either end reads as that
+    /// end, and a NaN reads as transparent.
+    #[must_use]
+    pub fn clamped(value: f32) -> Self {
+        if value.is_nan() {
+            Self::TRANSPARENT
+        } else {
+            Self(value.clamp(0.0, 1.0))
+        }
+    }
+
+    /// The fraction that shows.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+
+    /// The opacity multiplied by `factor`, held in range: a fade at `factor`.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        Self::clamped(self.0 * factor)
+    }
+
+    /// The opacity a fraction `t` of the way from `self` to `to`.
+    #[must_use]
+    pub fn lerp(self, to: Self, t: f64) -> Self {
+        Self::clamped(self.0 + (to.0 - self.0) * t as f32)
+    }
+
+    /// The alpha byte of a channel of alpha `alpha`, from 0 to 1, drawn at
+    /// this opacity.
+    #[must_use]
+    pub fn alpha_byte(self, alpha: f32) -> u8 {
+        (alpha * self.0 * 255.0).round() as u8
+    }
+}
+
+impl Default for Opacity {
+    fn default() -> Self {
+        Self::OPAQUE
+    }
+}
+
+impl std::fmt::Display for Opacity {
+    /// The fraction, without a unit: `0.5` for half.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The error of a decoded opacity that is not a finite number from 0 to 1.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("an opacity is a finite number from 0 to 1, not {0}")]
+pub struct InvalidOpacity(pub f32);
+
+impl TryFrom<f32> for Opacity {
+    type Error = InvalidOpacity;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        Self::new(value).ok_or(InvalidOpacity(value))
+    }
+}
+
+impl From<Opacity> for f32 {
+    fn from(opacity: Opacity) -> Self {
+        opacity.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Rgb, Rgba};
+    use super::{Opacity, Rgb, Rgba};
 
     // One orange in the two packings: red 0xff, green 0x80, blue 0x20,
     // alpha 0x40.
@@ -167,5 +257,17 @@ mod tests {
         assert_eq!(bytes, postcard::to_allocvec(&ORANGE_RGBA).ok());
         let back: Option<Rgb> = serde_json::from_str("16744480").ok();
         assert_eq!(back, Some(Rgb::from_bits(ORANGE_RGB)));
+    }
+
+    #[test]
+    fn an_opacity_lies_between_zero_and_one() {
+        assert_eq!(Opacity::new(1.5), None);
+        assert_eq!(Opacity::new(f32::NAN), None);
+        assert_eq!(Opacity::clamped(-1.0), Opacity::TRANSPARENT);
+        assert_eq!(Opacity::clamped(f32::NAN), Opacity::TRANSPARENT);
+        assert_eq!(Opacity::OPAQUE.scaled(2.0), Opacity::OPAQUE);
+        assert_eq!(Opacity::OPAQUE.alpha_byte(0.5), 128);
+        let past: Result<Opacity, _> = serde_json::from_str("2.0");
+        assert!(past.is_err(), "a decoded opacity past 1 is refused");
     }
 }

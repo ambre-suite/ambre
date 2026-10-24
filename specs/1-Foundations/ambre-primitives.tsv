@@ -344,7 +344,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::as_str() | ret | &
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::mint(counter) | param | u32	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementKind::type_tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle.corner | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle.opacity | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle.stroke_w | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
@@ -383,7 +382,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | Shadow.dy | field | f32	math	
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | SlideChange.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | SnapElement.opacity | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
@@ -1184,6 +1182,16 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(a) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
+ambre-core | src/color.rs | crate::color | <Opacity as TryFrom<f32>>::try_from(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/color.rs | crate::color | InvalidOpacity.0 | field | f32	newtype-inner	the refused value an error reports
+ambre-core | src/color.rs | crate::color | Opacity.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/color.rs | crate::color | Opacity::alpha_byte() | ret | u8	foreign-api	the 8-bit alpha channel of a packed RGBA pixel
+ambre-core | src/color.rs | crate::color | Opacity::alpha_byte(alpha) | param | f32	math	a colour channel's own alpha, from 0 to 1
+ambre-core | src/color.rs | crate::color | Opacity::clamped(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/color.rs | crate::color | Opacity::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/color.rs | crate::color | Opacity::lerp(t) | param | f64	math	interpolation fraction
+ambre-core | src/color.rs | crate::color | Opacity::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-core | src/color.rs | crate::color | Opacity::scaled(factor) | param | f32	math	a fade factor the opacity is multiplied by
 ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static str	newtype-inner	the spelling of a typed commit origin, for the Loro call that sets or excludes it
 ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed container family, which the application joins to an id
 ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
@@ -3351,17 +3359,12 @@ ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.delta | field | fn(f64)->Vec2	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.extent | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/align.rs | crate::logic::align | Axis.near | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement.opacity | field | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rgba(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32() | ret | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32(a) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32(b) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f32(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(a) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(b) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -3442,7 +3445,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | paint_rgba(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/schema.rs | crate::logic::schema | body_text_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
@@ -3668,7 +3670,6 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::opened_text() | r
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::render(show_caret) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
-ambre-toile | src/ui/edit.rs | crate::ui::edit | ink_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::on_release() | ret | bool	generic	predicate or handled-flag result
@@ -3684,7 +3685,6 @@ ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | fi
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Bold.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Italic.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Opacity.0 | field | f32	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Strikethrough.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::StrokeWidth.0 | field | f32	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Underline.0 | field | bool	newtype-inner	single field of its own wrapper
@@ -3917,7 +3917,6 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geomet
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | STICKY_SHADOW_OFFSET | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | TEXT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | style_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text

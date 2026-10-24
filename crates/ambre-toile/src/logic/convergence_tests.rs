@@ -2521,7 +2521,7 @@ fn frame_snapshot_captures_declared_children_props() {
     // Give `a` a distinctive style + rotation so the snapshot picks them up.
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x1234_56FF)),
-        opacity: 0.5,
+        opacity: ambre_core::Opacity::new(0.5).unwrap(),
         ..ElementStyle::default()
     };
     st.handle_command(ToileCommand::RestyleElements {
@@ -2551,7 +2551,7 @@ fn frame_snapshot_captures_declared_children_props() {
     let sa = snap.by_id(&a).expect("a captured");
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
     assert_eq!(sa.rotation, ambre_core::Radians::new(1.0));
-    assert_eq!(sa.opacity, 0.5);
+    assert_eq!(sa.opacity.get(), 0.5);
     assert_eq!(sa.fill, Some(Rgba::from_bits(0x1234_56FF)));
 
     // A frame with no children yields an empty snapshot; a transition between an
@@ -2562,7 +2562,7 @@ fn frame_snapshot_captures_declared_children_props() {
     assert_eq!(anim.len(), 2);
     assert!(
         anim.iter()
-            .any(|e| e.id == a && (e.opacity - 0.5).abs() < 1e-6)
+            .any(|e| e.id == a && (e.opacity.get() - 0.5).abs() < 1e-6)
     );
 }
 
@@ -6309,7 +6309,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
             stroke_w: 4.0,
-            opacity: 0.5,
+            opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
         },
@@ -6320,7 +6320,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
             stroke_w: 1.5,
-            opacity: 0.25,
+            opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
         },

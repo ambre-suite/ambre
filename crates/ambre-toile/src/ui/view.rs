@@ -1463,7 +1463,7 @@ impl ToileView {
             let (opacity, fill) = self
                 .find_element(&id)
                 .map(|e| (e.style.opacity, e.style.fill))
-                .unwrap_or((1.0, None));
+                .unwrap_or((ambre_core::Opacity::OPAQUE, None));
             self.gesture_overrides.insert(
                 id.clone(),
                 AnimatedElement {

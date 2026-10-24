@@ -448,13 +448,19 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
         ..ElementStyle::default()
     };
     if let Some(fill) = path.fill() {
-        match paint_rgba(fill.paint(), fill.opacity().get()) {
+        match paint_rgba(
+            fill.paint(),
+            ambre_core::Opacity::clamped(fill.opacity().get()),
+        ) {
             Some(rgba) => style.fill = Some(rgba),
             None => batch.report.skip("path fill: non-solid paint dropped"),
         }
     }
     if let Some(stroke) = path.stroke() {
-        match paint_rgba(stroke.paint(), stroke.opacity().get()) {
+        match paint_rgba(
+            stroke.paint(),
+            ambre_core::Opacity::clamped(stroke.opacity().get()),
+        ) {
             Some(rgba) => {
                 style.stroke = Some(rgba);
                 style.stroke_w = stroke.width().get();
@@ -467,10 +473,10 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
 
 /// A solid paint as packed RGBA (`ElementStyle` color encoding), or `None` for a
 /// gradient / pattern paint.
-fn paint_rgba(paint: &usvg::Paint, opacity: f32) -> Option<Rgba> {
+fn paint_rgba(paint: &usvg::Paint, opacity: ambre_core::Opacity) -> Option<Rgba> {
     match paint {
         usvg::Paint::Color(c) => {
-            let a = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let a = opacity.alpha_byte(1.0);
             Some(Rgb::from_channels(c.red, c.green, c.blue).to_rgba(a))
         }
         _ => None,

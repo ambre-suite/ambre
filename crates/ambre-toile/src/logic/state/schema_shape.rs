@@ -246,7 +246,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
         stroke_w: 1.5,
-        opacity: 0.25,
+        opacity: ambre_core::Opacity::new(0.25).unwrap(),
         corner: 3.5,
         font: FontSpec {
             family: ambre_bus::app::toile::FontFamily::Other("f".to_owned()),

@@ -38,7 +38,7 @@ pub struct AnimatedElement {
     pub id: ElementId,
     pub bounds: Rect,
     pub rotation: ambre_core::Radians,
-    pub opacity: f32,
+    pub opacity: ambre_core::Opacity,
     pub fill: Option<Rgba>,
 }
 
@@ -53,7 +53,7 @@ impl AnimatedElement {
             id: b.id.clone(),
             bounds: lerp_rect(a.bounds, b.bounds, t),
             rotation: a.rotation + (b.rotation - a.rotation) * t,
-            opacity: lerp_f32(a.opacity, b.opacity, t),
+            opacity: a.opacity.lerp(b.opacity, t),
             fill: lerp_fill(a.fill, b.fill, t),
         }
     }
@@ -65,7 +65,7 @@ impl AnimatedElement {
             id: e.id.clone(),
             bounds: e.bounds,
             rotation: e.rotation,
-            opacity: e.opacity * t as f32,
+            opacity: e.opacity.scaled(t as f32),
             fill: e.fill,
         }
     }
@@ -77,7 +77,7 @@ impl AnimatedElement {
             id: a.id.clone(),
             bounds: a.bounds,
             rotation: a.rotation,
-            opacity: a.opacity * (1.0 - t) as f32,
+            opacity: a.opacity.scaled((1.0 - t) as f32),
             fill: a.fill,
         }
     }
@@ -132,10 +132,6 @@ fn lerp_f64(a: f64, b: f64, t: f64) -> f64 {
     a + (b - a) * t
 }
 
-fn lerp_f32(a: f32, b: f32, t: f64) -> f32 {
-    a + (b - a) * t as f32
-}
-
 fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
     Rect::new(
         lerp_f64(a.x0, b.x0, t),
@@ -188,7 +184,7 @@ mod tests {
             id: ElementId(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::new(rotation),
-            opacity,
+            opacity: ambre_core::Opacity::new(opacity).unwrap(),
             fill,
         }
     }
@@ -226,7 +222,7 @@ mod tests {
         // Geometry / rotation / opacity are the exact midpoints.
         assert_eq!(m.bounds, rect(10.0, 20.0, 20.0, 30.0));
         assert_eq!(m.rotation, ambre_core::Radians::new(1.0));
-        assert_eq!(m.opacity, 0.5);
+        assert_eq!(m.opacity.get(), 0.5);
         // Blue channel midpoint of 0x00 -> 0xFF is 0x80 (128), alpha stays 0xFF.
         assert_eq!(m.fill, Some(Rgba::from_bits(0x0000_80FF)));
     }
@@ -248,7 +244,7 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, b.id);
         assert_eq!(out[0].bounds, b.bounds); // geometry held at target
-        assert!((out[0].opacity - 0.8 * 0.25).abs() < 1e-6);
+        assert!((out[0].opacity.get() - 0.8 * 0.25).abs() < 1e-6);
     }
 
     #[test]
@@ -268,7 +264,7 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, a.id);
         assert_eq!(out[0].bounds, a.bounds); // geometry held at source
-        assert!((out[0].opacity - 0.6 * 0.75).abs() < 1e-6);
+        assert!((out[0].opacity.get() - 0.6 * 0.75).abs() < 1e-6);
     }
 
     #[test]
@@ -297,13 +293,13 @@ mod tests {
         assert_eq!(at1.bounds, b.bounds);
         assert_eq!(at1.rotation, b.rotation);
         // f32 lerp `a + (b - a) * 1.0` reproduces b within rounding.
-        assert!((at1.opacity - b.opacity).abs() < 1e-6);
+        assert!((at1.opacity.get() - b.opacity.get()).abs() < 1e-6);
         assert_eq!(at1.fill, b.fill);
         // Fade endpoints.
-        assert_eq!(AnimatedElement::fade_in(&b, 0.0).opacity, 0.0);
+        assert_eq!(AnimatedElement::fade_in(&b, 0.0).opacity.get(), 0.0);
         assert_eq!(AnimatedElement::fade_in(&b, 1.0).opacity, b.opacity);
         assert_eq!(AnimatedElement::fade_out(&a, 0.0).opacity, a.opacity);
-        assert_eq!(AnimatedElement::fade_out(&a, 1.0).opacity, 0.0);
+        assert_eq!(AnimatedElement::fade_out(&a, 1.0).opacity.get(), 0.0);
     }
 
     #[test]
@@ -326,9 +322,9 @@ mod tests {
         assert_eq!(out[0].id, ElementId("a".to_owned()));
         assert_eq!(out[0].bounds, rect(2.5, 2.5, 1.0, 1.0)); // tween midpoint
         assert_eq!(out[1].id, ElementId("c".to_owned()));
-        assert_eq!(out[1].opacity, 0.5); // fade in at t=0.5
+        assert_eq!(out[1].opacity.get(), 0.5); // fade in at t=0.5
         assert_eq!(out[2].id, ElementId("b".to_owned()));
-        assert_eq!(out[2].opacity, 0.5); // fade out at t=0.5
+        assert_eq!(out[2].opacity.get(), 0.5); // fade out at t=0.5
     }
 
     #[test]
@@ -344,12 +340,12 @@ mod tests {
         };
         let out = smart_animate(&FrameSnapshot::default(), &to, 0.5);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].opacity, 0.5);
+        assert_eq!(out[0].opacity.get(), 0.5);
         // to empty -> all fade out.
         let from = FrameSnapshot { elements: vec![e] };
         let out = smart_animate(&from, &FrameSnapshot::default(), 0.5);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].opacity, 0.5);
+        assert_eq!(out[0].opacity.get(), 0.5);
     }
 
     #[test]

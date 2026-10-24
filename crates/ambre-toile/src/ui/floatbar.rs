@@ -74,8 +74,8 @@ pub enum StyleEdit {
     Stroke(Option<Rgba>),
     /// Stroke width in world px, floored at zero. The panel alone emits it.
     StrokeWidth(f32),
-    /// Opacity, clamped to `[0, 1]`. The panel alone emits it.
-    Opacity(f32),
+    /// Opacity. The panel alone emits it.
+    Opacity(ambre_core::Opacity),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<Rgba>),
     /// Font family. The picker's "Default" reset is [`FontFamily::Sans`].
@@ -104,7 +104,7 @@ impl StyleEdit {
             StyleEdit::Fill(c) => style.fill = c,
             StyleEdit::Stroke(c) => style.stroke = c,
             StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(0.0),
-            StyleEdit::Opacity(o) => style.opacity = o.clamp(0.0, 1.0),
+            StyleEdit::Opacity(o) => style.opacity = o,
             StyleEdit::TextColor(c) => style.text_color = c,
             StyleEdit::Font(f) => style.font.family = f,
             // The choice holds no negative size, so none reaches the style
@@ -566,7 +566,7 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
             stroke_w: 3.0,
-            opacity: 0.5,
+            opacity: ambre_core::Opacity::new(0.5).unwrap(),
             corner: 7.0,
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
@@ -601,9 +601,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::Opacity(2.0),
+                StyleEdit::Opacity(ambre_core::Opacity::clamped(2.0)),
                 ElementStyle {
-                    opacity: 1.0,
+                    opacity: ambre_core::Opacity::OPAQUE,
                     ..base.clone()
                 },
             ),
