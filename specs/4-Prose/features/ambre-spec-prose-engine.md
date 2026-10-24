@@ -368,13 +368,13 @@ pub enum ProseCommand {
     DeleteTableRow   { row_id: TreeID },
     /// `at_col` is the index the new column takes; `None` width takes the document default
     /// (`PROSE-FEAT-232`).
-    InsertTableCol   { table_id: TreeID, at_col: Col, width_pt: Option<f32> },
+    InsertTableCol   { table_id: TreeID, at_col: Col, width: Option<Pt> },
     DeleteTableCol   { table_id: TreeID, col_index: Col },
-    ResizeTableCol   { table_id: TreeID, col_index: Col, width_pt: f32 },
+    ResizeTableCol   { table_id: TreeID, col_index: Col, width: Pt },
     MergeTableCells  { table_id: TreeID, start: CellPos, end: CellPos },
     UnmergeTableCell { cell_id: TreeID },
     SetCellStyle     { cell_id: TreeID, bg: Option<u32>, valign: Option<VAlign>,
-                       border: Option<CellBorder>, padding_pt: Option<f32> },
+                       border: Option<CellBorder>, padding: Option<Pt> },
     /// Tab and Shift-Tab; past the last cell, a row is appended (`PROSE-FEAT-251`).
     StepTableCell    { cell_id: TreeID, backwards: bool },
 
@@ -412,10 +412,10 @@ pub enum ProseCommand {
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// The author is stamped by the dispatcher from the session identity, never
-    /// carried here (`PROSE-FEAT-077`). `now_ms` is a display stamp.
-    AddComment       { block_id: TreeID, range: (u32, u32), text: String, now_ms: Timestamp },
+    /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
+    AddComment       { block_id: TreeID, range: (u32, u32), text: String, now: Timestamp },
     /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: Uuid, text: String, now_ms: Timestamp },
+    ReplyToComment   { comment_id: Uuid, text: String, now: Timestamp },
     ResolveComment   { comment_id: Uuid },
     /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
     ReopenComment    { comment_id: Uuid },

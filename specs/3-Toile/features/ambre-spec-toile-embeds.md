@@ -171,7 +171,7 @@ pub struct VisibleEmbed {
 
 /// How long an embed stays out of the culled set before its child's session is
 /// closed. A re-entry cancels the pending close.
-pub const EMBED_CLOSE_DEBOUNCE_MS: f64 = 5_000.0;
+pub const EMBED_CLOSE_DEBOUNCE: PageMillis = PageMillis::new(5_000.0);
 
 /// How far the pointer may travel between press and release and still count as
 /// a click that enters the embed rather than a drag that moves it.

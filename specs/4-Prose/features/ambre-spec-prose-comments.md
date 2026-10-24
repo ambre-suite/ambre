@@ -199,8 +199,8 @@ thread, as any deletion does.
 
 | Shape | Behaviour |
 |---|---|
-| `AddComment { block_id, range, text, now_ms }` | a thread on that range, and the mark that reaches it |
-| `ReplyToComment { comment_id, text, now_ms }` | a reply, and a reopen if the thread was closed |
+| `AddComment { block_id, range, text, now }` | a thread on that range, and the mark that reaches it |
+| `ReplyToComment { comment_id, text, now }` | a reply, and a reopen if the thread was closed |
 | `ResolveComment { comment_id }` | closes the thread |
 | `ReopenComment { comment_id }` | reopens it, with no reply added |
 | `DeleteComment { comment_id }` | removes the thread and its mark |

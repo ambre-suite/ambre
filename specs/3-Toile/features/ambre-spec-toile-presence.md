@@ -120,8 +120,8 @@ pub struct PresencePayload {
 a world point for the pointer and the laser, and the peer's `ElementId` set for the ghosts. Both
 survive a structural change, which is `PRESENCE-007`.
 
-**Command** (`ambre-bus`): `Presence { payload, now_ms }`, non-mutating, answered by an ephemeral: the
-local pointer is the browser's, not the board's. `now_ms` is the UI's wall clock, which the Logic thread does
+**Command** (`ambre-bus`): `Presence { payload, now }`, non-mutating, answered by an ephemeral: the
+local pointer is the browser's, not the board's. `now` is the UI's wall clock, which the Logic thread does
 not hold. It never travels, and it is what ages the peers this client knows about. A sender's own clock
 decides nothing, so a wrong or hostile one ages nobody.
 

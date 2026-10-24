@@ -130,16 +130,16 @@ status values are normative in `ambre-spec-template.md`.
 /// Global document layout -- the single source of truth for the UI thread and PDF
 /// export (`PROSE-064`). Derived on every recomputation, never persisted.
 pub struct PageLayout {
-    pub page_width_px:     f32,
-    pub page_height_px:    f32,
-    pub content_width_px:  f32,
-    pub content_height_px: f32,
+    pub page_width:        DocPx,
+    pub page_height:       DocPx,
+    pub content_width:     DocPx,
+    pub content_height:    DocPx,
     pub page_count:        PageCount,
     pub blocks:            Vec<BlockLayout>,
-    pub header_height_px:  f32,
-    pub header_first_height_px: f32,
-    pub footer_height_px:  f32,
-    pub footer_first_height_px: f32,
+    pub header_height:     DocPx,
+    pub header_first_height: DocPx,
+    pub footer_height:     DocPx,
+    pub footer_first_height: DocPx,
     /// The first page this layout differs from the one it replaces on (`PROSE-067`).
     /// `None` when nothing moved.
     pub first_dirty_page: Option<PageIndex>,
@@ -156,7 +156,7 @@ pub struct BlockLayout {
     pub block_type:  BlockType,
     /// The height of the portion on `page_start` alone -- never the whole block when
     /// `is_split`. The later fragments are in `continuation_heights`.
-    pub height_px:   f32,
+    pub height:      DocPx,
     pub page_start:  PageIndex,
     pub y_in_page:   f32,
     pub is_split:    bool,
@@ -169,7 +169,7 @@ pub struct BlockLayout {
     /// The notes this block calls, each on the page its calling line took.
     pub notes:       Vec<FootnoteLayout>,
     /// The height the notes hold at the foot of the block's last page once it is placed.
-    pub foot_px:     f32,
+    pub foot_height: DocPx,
 }
 
 /// A footnote placed at the foot of a page.
@@ -178,7 +178,7 @@ pub struct FootnoteLayout {
     /// Sequential across the whole document, assigned in pass 0.
     pub ordinal:      u32,
     pub page:         PageIndex,
-    pub height_px:    f32,
+    pub height:       DocPx,
 }
 
 /// Header and footer runs. `Static` when the band carries no page-number field, so one

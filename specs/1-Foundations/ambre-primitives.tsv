@@ -2083,7 +2083,7 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_draft((text
 ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_paragraph((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/pass.rs | crate::layout::pass | <BandHeights as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::touches() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/layout/pass.rs | crate::layout::pass | column_widths_px(cols) | param | usize	math	count, size or local index
+ambre-prose | src/layout/pass.rs | crate::layout::pass | column_widths(cols) | param | usize	math	count, size or local index
 ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NoteKey | alias | (FootnoteId,FootnoteOrdinal,String,Vec<crate::layout::measure::MarkedSpan>,)	free-text	text content / label / parser input
@@ -2770,14 +2770,14 @@ ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | re
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | Vouch::Report.0 | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | members_failure_message() | ret | String	free-text	error message text
-ambre-sync | src/updates.rs | crate::updates | resend_retry_delay_ms(failure) | param | u32	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/updates.rs | crate::updates | resend_retry_delay(failure) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(reason) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay_ms(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/worker.rs | crate::worker | post_bytes(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text

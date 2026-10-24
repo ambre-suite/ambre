@@ -87,13 +87,13 @@ The column is rebuilt from the layout on every layout that is applied.
 /// The geometry of the page column, derived from the page layout. Owns which pages are
 /// visible, where each page starts, and the inverse of that mapping.
 pub struct PageColumn {
-    pub page_height_px:  f32,
+    pub page_height:     DocPx,
     /// The page trim width, which is what the column is centred on.
-    pub page_width_px:   f32,
-    pub gutter_px:       f32,
+    pub page_width:      DocPx,
+    pub gutter:          DocPx,
     /// Zero for a layout that has not arrived yet.
     pub page_count:      PageCount,
-    pub total_height_px: f32,
+    pub total_height:    DocPx,
 }
 
 impl PageColumn {
@@ -115,8 +115,8 @@ impl PageColumn {
 pub struct Viewport {
     /// From the top of the document, in document pixels.
     pub scroll_y:     f32,
-    pub width_px:     f32,
-    pub height_px:    f32,
+    pub width:        ViewPx,
+    pub height:       ViewPx,
     /// The ratio the browser imposes, not a user setting.
     pub device_pixel_ratio: f32,
     /// The left edge of the centred column inside the viewport (`PROSE-UI-026`).

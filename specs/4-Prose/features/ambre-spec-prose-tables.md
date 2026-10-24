@@ -169,12 +169,12 @@ describe is **covered**: it is not painted, it is not measured, and it keeps its
 | `InsertTable { parent_id, after_id, rows, cols }` | a table of that size, one empty paragraph per cell, every column at the default width |
 | `InsertTableRow { table_id, after_row }` | a row of one cell per column, at a place in the table |
 | `DeleteTableRow { row_id }` | removes the row, after the merge pass below |
-| `InsertTableCol { table_id, at_col, width_pt }` | a cell in every row, and one width entry beside them |
+| `InsertTableCol { table_id, at_col, width }` | a cell in every row, and one width entry beside them |
 | `DeleteTableCol { table_id, col_index }` | removes the cell in every row and the width entry |
-| `ResizeTableCol { table_id, col_index, width_pt }` | rewrites one width entry, and never the count |
+| `ResizeTableCol { table_id, col_index, width }` | rewrites one width entry, and never the count |
 | `MergeTableCells { table_id, start, end }` | the two selection corners, resolved to two block ids |
 | `UnmergeTableCell { cell_id }` | removes the region that cell anchors, or the one covering it |
-| `SetCellStyle { cell_id, bg, valign, border, padding_pt }` | the background, the alignment, the four borders and the padding |
+| `SetCellStyle { cell_id, bg, valign, border, padding }` | the background, the alignment, the four borders and the padding |
 | `StepTableCell { cell_id, backwards }` | Tab and Shift-Tab: the next or previous stop, and a new row past the last one |
 
 `MergeTableCells` carries grid positions, because that is what a selection is. The dispatcher
