@@ -116,19 +116,22 @@ and the document title. The mark's key is the field, and adjacent typing never j
 is one atom to the caret (`PROSE-FEAT-163`).
 
 ```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeaderField { PageNumber, PageCount, Date(DateFieldFormat), Title }
 
 /// What the date field stores: a format, never a rendered date (`PROSE-FEAT-065`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DateFieldFormat {
-    /// The locale's short form.
+    /// The language's short form.
     Short,
-    /// The locale's long form.
+    /// The language's long form.
     Long,
-    /// The calendar date, the same in every locale.
+    /// The calendar date, the same in every language.
     Iso,
 }
 
 /// Which of the two blocks of a side a field insertion targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HfTarget { Regular, FirstPage }
 ```
 

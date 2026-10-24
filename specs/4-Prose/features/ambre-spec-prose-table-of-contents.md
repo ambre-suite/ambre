@@ -86,6 +86,7 @@ so no container holds them.
 
 ```rust
 /// One line of the table of contents. Nothing here is persisted.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TocEntry {
     pub block_id:       BlockId,
     pub level:          HeadingLevel,
@@ -97,11 +98,15 @@ pub struct TocEntry {
     pub page:           Option<PageNumber>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TableOfContents {
     pub entries:   Vec<TocEntry>,
     pub max_level: HeadingLevel,
-    pub numbered:  bool,
+    pub numbered:  TocNumbering,
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TocNumbering { #[default] Plain, Numbered }
 ```
 
 **The build, in order:**

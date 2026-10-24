@@ -185,7 +185,7 @@ client check what the relay serves.
 ```rust
 pub struct MembershipEntry {
     pub document: DocumentId,
-    pub position: u64,                  // the place in the log, from zero
+    pub position: LogPosition,          // the place in the log, from zero
     pub member: UserId,
     pub member_key: PublicKey,          // the member's signing key
     pub act: MembershipAct,
@@ -193,7 +193,7 @@ pub struct MembershipEntry {
     pub key: Option<KeyId>,             // the key an invite or a self-join wraps
     pub previous: Option<EntryDigest>,  // absent on the first entry alone
     pub author: UserId,
-    pub signature: Vec<u8>,
+    pub signature: Signature,
 }
 pub enum MembershipAct { Create, Invite, Revoke, ChangeRole, SelfJoin }
 pub struct EntryDigest([u8; 32]);

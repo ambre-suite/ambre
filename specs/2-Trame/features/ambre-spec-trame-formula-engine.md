@@ -140,22 +140,26 @@ the sheet's current name (`DisplayFormula`). One type per text keeps one from pa
 **Reference identity.** A position is what the user types; a uid is what the engine keeps.
 
 ```rust
-pub enum AxisId {
-    Bound(Uid),     // a materialized row or column. #REF! once that uid is deleted
-    Virtual(u32),   // a position past the used range: stays positional, reads empty
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AxisId<P> {    // P is `Row` or `Col`
+    Bound(Uid),         // a materialized row or column. #REF! once that uid is deleted
+    Virtual(P),         // a position past the used range: stays positional, reads empty
 }
 
-pub struct CellId { pub sheet: u16, pub row: AxisId, pub col: AxisId }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CellId { pub sheet: EngineSheet, pub row: AxisId<Row>, pub col: AxisId<Col> }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeId {
-    pub sheet: u16,
-    pub row_start: RangeEndpoint, pub row_end: RangeEndpoint,
-    pub col_start: RangeEndpoint, pub col_end: RangeEndpoint,
+    pub sheet: EngineSheet,
+    pub row_start: RangeEndpoint<Row>, pub row_end: RangeEndpoint<Row>,
+    pub col_start: RangeEndpoint<Col>, pub col_end: RangeEndpoint<Col>,
 }
 
-pub enum RangeEndpoint {
-    Specific(AxisId),   // stable through the axis id
-    EntireAxis,         // the far axis of A:A or 1:1: its used part (`TRAME-048`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RangeEndpoint<P> {
+    Specific(AxisId<P>),   // stable through the axis id
+    EntireAxis,            // the far axis of A:A or 1:1: its used part (`TRAME-048`)
 }
 ```
 
@@ -189,10 +193,10 @@ is tested for containment. One entire column would otherwise cost a hundred thou
 
 ```rust
 pub struct DependencyGraph {
-    cell_dag: StableGraph<CellId, ()>,          // level 1: cycles are static
-    cell_to_node: HashMap<CellId, NodeIndex>,
-    range_deps: HashMap<CellId, Vec<RangeId>>,  // level 2: cycles are dynamic
-    range_index: HashMap<u16, Vec<(CellId, RangeId)>>,
+    pub cell_dag: StableGraph<CellId, ()>,          // level 1: cycles are static
+    pub cell_to_node: HashMap<CellId, NodeIndex>,
+    pub range_deps: HashMap<CellId, Vec<RangeId>>,  // level 2: cycles are dynamic
+    pub range_index: HashMap<EngineSheet, Vec<(CellId, RangeId)>>,
 }
 ```
 
@@ -208,25 +212,29 @@ pushed, executed, popped and memoised. This is the only guard against a loop the
 **The value domain.** What the machine pushes, what a builtin receives, and what the cache holds.
 
 ```rust
+#[derive(Debug, Clone)]
 pub enum CellValue {
     Number(f64),
     Text(String),
     Boolean(bool),
-    Error(FormulaError),
     Empty,
-    Range(Vec<CellValue>),   // machine-internal: never in the value cache
+    Range(RangeValue),       // machine-internal: never in the value cache
+    Error(FormulaError),
 }
 
+#[derive(Debug, Clone)]
+pub struct RangeValue { pub rows: RowCount, pub cols: ColCount, pub values: Vec<CellValue> }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormulaError {
     CircularReference,
-    BrokenRef,
     ParseError(ParseError), // why the text did not parse
+    BrokenRef,
     DivisionByZero,
     TypeError,
-    InvalidRef(String),
-    NameNotFound(String),
     NumError,
     NaError,
+    NameError,              // a name the workbook does not define (`TRAME-065`)
 }
 ```
 

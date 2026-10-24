@@ -120,35 +120,38 @@ A cell key is a uid pair, so this is the bridge between what the user points at 
 document stores. Both directions resolve in constant time.
 
 ```rust
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SheetIndex {
-    row_by_pos: Vec<Uid>,
-    col_by_pos: Vec<Uid>,
-    row_to_pos: HashMap<Uid, usize>,
-    col_to_pos: HashMap<Uid, usize>,
+    row_by_pos: RowVec<Uid>,
+    col_by_pos: ColVec<Uid>,
+    row_to_pos: HashMap<Uid, Row>,
+    col_to_pos: HashMap<Uid, Col>,
 }
 
 impl SheetIndex {
     /// Read each list element's uid VALUE in order. O(used range), not O(100k).
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self;
 
-    /// Shift the positions after `pos`, and reindex.
-    pub fn apply_insert_row(&mut self, pos: usize, id: Uid);
-    pub fn apply_delete_row(&mut self, pos: usize) -> Uid;
+    /// Shift the positions after `pos`, and reindex. A position past the end
+    /// inserts nothing, and deletes nothing, answering `None`.
+    pub fn apply_insert_row(&mut self, pos: Row, id: Uid);
+    pub fn apply_delete_row(&mut self, pos: Row) -> Option<Uid>;
 
     /// Permute the order to mirror a `mov(from, to)`: the primitive behind a sort.
-    pub fn apply_move_row(&mut self, from: usize, to: usize);
+    pub fn apply_move_row(&mut self, from: Row, to: Row);
 
     /// A position pair to a uid pair. `None` past the used range.
-    pub fn resolve(&self, row: usize, col: usize) -> Option<(Uid, Uid)>;
+    pub fn resolve(&self, at: CellPos) -> Option<(Uid, Uid)>;
 
     /// Whether a uid still names a line: what turns a reference into `#REF!`.
     pub fn contains_row(&self, id: &Uid) -> bool;
     pub fn contains_col(&self, id: &Uid) -> bool;
-
-    /// Bijective base 26, the spreadsheet convention: 0 -> "A", 26 -> "AA".
-    pub fn col_letter(index: usize) -> String;
-    pub fn letter_to_index(s: &str) -> usize;
 }
+
+// ambre-trame/src/columns.rs
+/// Bijective base 26, the spreadsheet convention: 0 -> "A", 26 -> "AA".
+pub fn col_to_alpha(col: Col) -> String;
+pub fn alpha_to_col(s: &str) -> Result<Col, ColumnParseError>;
 ```
 
 The vectors are dense over the used range, never over the virtual 100 000 rows
@@ -186,9 +189,9 @@ the feature that owns it, in `ambre-bus::app::trame`, where the code is authorit
 /// What a handler returns. The `ambre-logic` dispatcher is the only place that
 /// turns any of these three into a message on a queue (`TRAME-FEAT-001`).
 pub struct TrameOutcome {
-    display:   Vec<TrameEvent>,   // to the UI thread
-    update:    Option<Vec<u8>>,   // the CRDT delta to broadcast
-    ephemeral: Option<Vec<u8>>,   // presence, broadcast and never persisted
+    pub display:   Vec<TrameEvent>,         // to the UI thread
+    pub update:    Option<DeltaBytes>,      // the CRDT delta to broadcast
+    pub ephemeral: Option<EphemeralBytes>,  // presence, broadcast and never persisted
 }
 
 impl TrameState {
@@ -199,16 +202,16 @@ impl TrameState {
     /// A remote delta, already decrypted by Sync. Imports, rebuilds the derived
     /// caches, recomputes, and answers with display events alone: an import is
     /// never re-broadcast.
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent>;
+    pub fn apply_remote(&mut self, payload: &DeltaBytes) -> Vec<TrameEvent>;
 
-    /// A remote presence payload. The author is the Sync-resolved `from_user_id`
-    /// and never a self-asserted one (`ambre-spec-membership.md`,
-    /// `SYNC-014`); the cursor set that comes back is whole, so a departed peer
-    /// disappears on its own (`features/ambre-spec-trame-selection.md`).
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<TrameEvent>;
+    /// A remote presence payload. Answers no event until collaborator presence
+    /// lands (`features/ambre-spec-trame-selection.md`); its author is the one
+    /// Sync resolved, never a self-asserted one (`ambre-spec-membership.md`,
+    /// `SYNC-014`).
+    pub fn apply_ephemeral(&mut self, payload: &EphemeralBytes) -> Vec<TrameEvent>;
 
     /// A full snapshot, for compaction and for a `SnapshotNeeded` from Sync.
-    pub fn export_snapshot(&self) -> Vec<u8>;
+    pub fn export_snapshot(&self) -> SnapshotBytes;
 }
 ```
 
@@ -230,8 +233,8 @@ directly -- there is no `DisplayViewport` type on the bus. One cell of it is fla
 ```rust
 #[derive(Debug, Clone, Default)]
 pub struct DisplayCell {
-    pub row: u32,
-    pub col: u32,
+    pub row: Row,
+    pub col: Col,
     pub text: String,                    // the value the user reads
     pub raw: String,                     // the text they typed, for the formula bar
     pub bold: bool,
@@ -239,15 +242,16 @@ pub struct DisplayCell {
     pub underline: bool,
     pub strikethrough: bool,
     pub h_align: HAlign,
+    pub numeric: bool,                   // the value is a number: what `Auto` resolves on
     pub v_align: VAlign,
     pub wrap: bool,
-    pub fg: Option<u32>,                 // 0xRRGGBB, None = the theme's colour
-    pub bg: Option<u32>,                 // 0xRRGGBB, None = transparent
-    pub font: Option<String>,
+    pub fg: Option<Rgb>,                 // None = the theme's colour
+    pub bg: Option<Rgb>,                 // None = transparent
+    pub font: Option<FontFamily>,
     pub size: Option<FontSize>,         // points
     pub borders: Borders,
     pub is_merged: bool,                 // a master, or a cell it covers
-    pub merge_span: Option<(u32, u32)>,  // Some((col_span, row_span)) on the master
+    pub merge_span: Option<MergeSpan>,   // the rows and columns it covers, on the master
     pub is_filtered: bool,               // hidden by the active shared filter
 }
 ```
@@ -354,8 +358,8 @@ Each viewport answer carries a version, and the UI drops one older than the last
   seal is what closes it. A lost `SetCellsBatch` is a paste the user watched land.
   `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) states the general rule, unbuilt.
 * **Presence is a stub, and section 3.D describes what it will be.** `apply_ephemeral` takes a
-  payload it ignores and returns an empty vector; it takes no `from_user_id` at all. The signature
-  in section 3.D, and the rule about a Sync-resolved author it carries, describe the target.
+  payload it ignores and returns an empty vector; it takes no author at all. Section 3.D shows that
+  signature, and the rule about a Sync-resolved author it carries describes the target.
   `features/ambre-spec-trame-selection.md` owns the collaborator cursors that will use it.
 * **No budget is measured.** One benchmark exists, for the recompute, and no CI job runs it. Every
   divergence above is a claim about a cost that nothing weighs.

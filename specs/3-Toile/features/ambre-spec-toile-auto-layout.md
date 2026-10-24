@@ -91,9 +91,10 @@ owed. `TOILE-029` is the rule for the containers that do owe one.
 **The rule** (`ambre-bus`):
 
 ```rust
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoLayout {
     pub direction: Direction,   // Horizontal | Vertical | Wrap
-    pub gap:       f64,
+    pub gap:       BoardLength,
     pub padding:   Padding,     // top, right, bottom, left: named sides, the bytes of [f64; 4]
     pub align:     Align,       // Start | Center | End | SpaceBetween
     pub sizing:    Sizing,      // Hug | Fill | Fixed

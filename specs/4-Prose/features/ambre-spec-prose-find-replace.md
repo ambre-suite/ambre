@@ -99,26 +99,36 @@ thread, and nothing about a search is persisted (`ambre-spec-find.md`, `FIND-001
 **The query and a match:**
 
 ```rust
+// ambre_bus::app::prose
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindQuery {
-    pub text:           String,
-    pub case_sensitive: bool,
-    pub whole_word:     bool,
-    /// The regular-expression search, which is a Story of its own and unbuilt.
-    pub use_regex:      bool,
+    pub text:    String,
+    pub case:    CaseMatch,
+    pub word:    WordMatch,
+    /// `PatternKind::Regex` asks for the regular-expression search, which is a Story of its
+    /// own and unbuilt: the engine refuses a query that sets it.
+    pub pattern: PatternKind,
 }
 
-pub struct FindMatch { pub block_id: TreeID, pub range: (u32, u32) }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PatternKind { #[default] Literal, Regex }
 
-/// Every match in the document, in block order (`PROSE-FEAT-033`, `PROSE-FEAT-034`).
-pub fn find_all(doc: &LoroDoc, tree: &LoroMovableTree, query: &FindQuery) -> Vec<FindMatch>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FindMatch { pub block_id: BlockId, pub range: DocSpan }
+
+// ambre-prose/src/logic/find.rs
+impl ProseState {
+    /// Every match in the document, in block order (`PROSE-FEAT-033`, `PROSE-FEAT-034`).
+    fn find_all(&self, query: &FindQuery) -> Vec<FindMatch>;
+
+    /// The replacements, from the end of the document backwards, in one commit
+    /// (`PROSE-FEAT-036`).
+    fn replace_all(&mut self, replacement: &str) -> ProseOutcome;
+}
 
 /// The match spans inside one block's text, honouring case and whole-word, and never
 /// overlapping (`PROSE-FEAT-035`).
-fn match_offsets(hay: &str, query: &FindQuery) -> Vec<(u32, u32)>;
-
-/// The replacements, from the end of the document backwards (`PROSE-FEAT-036`).
-pub fn replace_all(doc: &LoroDoc, tree: &LoroMovableTree, query: &FindQuery,
-                   replacement: &str) -> Vec<ProseCommand>;
+fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan>;
 ```
 
 * **What is searched** -- the body blocks of the movable tree, in document order, and nothing else.

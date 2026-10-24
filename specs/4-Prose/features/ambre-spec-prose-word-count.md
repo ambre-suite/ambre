@@ -64,19 +64,20 @@ status values are normative in `ambre-spec-template.md`.
 page count is read from the layout the engine took last (`PROSE-FEAT-038`).
 
 ```rust
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words:                  u32,
+    pub words:                  WordTotal,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters:             u32,
-    pub characters_with_spaces: u32,
-    pub paragraphs:             u32,
+    pub characters:             GraphemeCount,
+    pub characters_with_spaces: GraphemeCount,
+    pub paragraphs:             ParagraphCount,
     /// From the layout taken last, not from the tally (`PROSE-FEAT-038`).
-    pub pages:                  u32,
+    pub pages:                  PageCount,
 }
 
 /// The four text tallies of the whole document. `pages` is left at zero: the engine stamps it
 /// from the layout it took last.
-pub fn compute_word_count(doc: &LoroDoc) -> WordCount;
+pub fn compute_word_count(document: &LoroDoc) -> WordCount;
 ```
 
 **The half second.** The view holds it, and sends `CountWords` once the changes stop

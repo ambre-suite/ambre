@@ -118,11 +118,13 @@ the text being edited looks like the text that was there.
 
 ```rust
 pub struct TextEditorStyle {
-    pub weight: u16,
+    pub weight: FontWeight,
     pub italic: bool,
-    pub family: String,
-    pub base_size: f32,
+    pub family: FontFamily,
+    pub base_size: DocPx,
     pub color: Color,
+    pub underline: bool,
+    pub strikethrough: bool,
 }
 ```
 

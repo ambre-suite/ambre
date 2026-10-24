@@ -84,7 +84,7 @@ A page element never resolves a point to content: it receives what the surface r
 ```rust
 pub trait HitTest {
     type Target;
-    fn hit_test(&self, x: f64, y: f64) -> Option<Self::Target>;
+    fn hit_test(&self, at: ViewPoint) -> Option<Self::Target>;
 }
 ```
 

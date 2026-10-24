@@ -210,7 +210,8 @@ nor either read rule (`DOCFILE-007`).
 // ambre-core
 
 /// The writer rule: no version parameter, because there is no write mode to pick.
-pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &[u8]) -> Vec<u8>;
+pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &[u8])
+    -> PlaintextContainer;
 
 /// Any `DocType`, version-recovery rule applied. What a file-open router reads
 /// before it knows which app to hand the bytes to.
@@ -226,14 +227,15 @@ pub fn read_ambre_plaintext_as(expected: DocType, data: &[u8]) -> Result<AmbreHe
 pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
 
 /// Forward migration, one step per version bump. A step is added with its row.
-pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
+pub fn migrate_ambre(from: ContainerVersion, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AmbreHeader {
-    pub version: u8,
+    pub version: ContainerVersion,
     pub doc_type: DocType,
     pub document_id: DocumentId,
     /// Offset 22 onward: the raw Loro snapshot.
-    pub payload: Vec<u8>,
+    pub payload: SnapshotBytes,
 }
 ```
 
@@ -248,35 +250,37 @@ container assembles and parses the envelope, and its caller fills it (`DOCFILE-0
 /// short to hold either header in full.
 pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError>;
 
-pub enum ContainerKind { Plaintext(u8), Sealed(u8) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContainerKind { Plaintext(ContainerVersion), Sealed(ContainerVersion) }
 
 /// The associated data a seal must be computed over, for a file about to be
 /// written under `salt`: the header up to the nonce.
-pub fn sealed_aad(salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN];
+pub fn sealed_aad(salt: &FileSalt) -> Aad;
 
 /// The sealed writer rule. No version parameter either: a sealed file is written
 /// at `AMBRE_SEALED_VERSION` or not at all.
 pub fn write_ambre_sealed(
-    salt: &[u8; SALT_LEN],
-    nonce: &[u8; SEAL_NONCE_LEN],
-    ciphertext: &[u8],
-) -> Vec<u8>;
+    salt: &FileSalt,
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
+) -> SealedContainer;
 
 /// The current sealed layout exactly, with no recovery walk behind it.
 pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError>;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedAmbre {
-    pub version: u8,
-    pub salt: [u8; SALT_LEN],
-    pub nonce: [u8; SEAL_NONCE_LEN],
+    pub version: ContainerVersion,
+    pub salt: FileSalt,
+    pub nonce: Nonce,
     /// Offset 45 onward. Opens to a whole plaintext container.
-    pub ciphertext: Vec<u8>,
+    pub ciphertext: Ciphertext,
 }
 
 impl SealedAmbre {
     /// The associated data this file was sealed against, assembled from the same
     /// code as `sealed_aad`, so the two cannot drift.
-    pub fn aad(&self) -> [u8; SEALED_AAD_LEN];
+    pub fn aad(&self) -> Aad;
 }
 ```
 
@@ -285,12 +289,13 @@ application's `LoroDoc`; the header handling is not reimplemented per applicatio
 
 ```rust
 /// Header + uncompressed, unencrypted snapshot. Pure; no crypto (`DOCFILE-006`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Vec<u8>;
+/// `None` when the document could not be read, so no file is written.
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<PlaintextContainer>;
 
 /// Validates magic, version and doc_type, and returns the payload. The caller
 /// compares the returned `DocType` against its own and re-dispatches on
 /// mismatch rather than coercing.
-pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+pub fn import_ambre_plaintext(data: &PlaintextContainer) -> Result<AmbreHeader, DocFileError>;
 ```
 
 An application owns the payload half alone: its `export_ambre_plaintext` is `write_ambre_plaintext`
@@ -304,12 +309,13 @@ state-level pair, so saving a live document does not reach for its `LoroDoc`.
 **The error taxonomy.** Fatal by nature: a header failure means no document can be produced.
 
 ```rust
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum DocFileError {
     TruncatedHeader,
     InvalidMagic,
     /// `found < AMBRE_VERSION` -> recoverable through `migrate_ambre`.
     /// `found > AMBRE_VERSION` -> unrecoverable; prompt the user to update.
-    UnsupportedVersion { found: u8 },
+    UnsupportedVersion { found: ContainerVersion },
     /// The `doc_type` byte names no app this build knows -- a file from a client
     /// that shipped a new document type, or corruption. Distinct from
     /// `WrongDocType`, which is a *valid* type belonging to another app and is
@@ -331,12 +337,12 @@ pub enum DocFileError {
     /// The plaintext reader was handed a sealed container. Its mirror is
     /// `NotSealed`, and a caller that classifies first reaches neither: both
     /// exist so that neither parser has to guess what the other's bytes mean.
-    SealedFile { version: u8 },
+    SealedFile,
     NotSealed,
     /// A sealed layout this build does not know. Distinct from
     /// `UnsupportedVersion`, whose older half promises a migration: the sealed
     /// lineage has none to promise.
-    SealedVersionUnsupported { found: u8 },
+    SealedVersionUnsupported { found: ContainerVersion },
 }
 ```
 

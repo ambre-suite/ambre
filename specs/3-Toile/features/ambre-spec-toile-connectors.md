@@ -131,14 +131,14 @@ paint order. `ambre-spec-toile-schema.md section 3` declares both, with the fiel
 element's box. A path kind decides how the arrow joins the two anchors:
 
 ```rust
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-pub enum Anchor { Top, Bottom, Left, Right, Center, Free { u: f32, v: f32 } }
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+pub enum Anchor { Top, Bottom, Left, Right, Center, Free { u: UnitFraction, v: UnitFraction } }
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum PathType { Straight, Elbow, Curved }
 
 /// Directional decoration, persisted as two flags on the connector.
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct EndCaps { pub start: bool, pub end: bool }
 ```
 

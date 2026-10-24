@@ -85,29 +85,30 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   messages (`MURMURE-013`).
 
 **Every value has its type.** The containers below name the Rust newtype each value maps to, per
-`ai/ambre-rust-style.md`. `DocumentId`, `UserId`, `ChannelId` and `MessageId` exist in `ambre-core`.
-`SpaceId` and `CategoryId` join them through the same `define_id!` macro, with the spaces Story.
+`ai/ambre-rust-style.md`. `DocumentId`, `UserId`, `ChannelId`, `MessageId`, `SpaceId`, `CategoryId`
+and `MeetingId` exist in `ambre-core`, minted by the same `define_id!` macro. The types marked not
+built join with the feature that first writes them.
 
 ```rust
-pub struct Timestamp(u64);              // Unix milliseconds, display only: a clock is untrusted
-pub struct Emoji(String);               // exactly one extended grapheme cluster
-pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }
-pub struct ReactionKey { pub emoji: ReactionEmoji, pub user: UserId }  // one map key, encoded as a string
-pub struct CustomEmojiId(Uuid);         // minted by the admin's client
-pub struct TagId(Uuid);                 // minted by the forum owner's client
-pub struct ImportOrigin { pub name: String, pub ts: Timestamp }
+pub struct Timestamp(pub u64);          // Unix milliseconds, display only: a clock is untrusted
+pub struct Emoji(Cow<'static, str>);    // exactly one extended grapheme cluster
+pub(crate) struct ReactionKey(String);  // "{user} {emoji}": the first space ends the user
+pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }  // not built: custom emoji
+pub struct CustomEmojiId(Uuid);         // not built: minted by the admin's client
+pub struct TagId(Uuid);                 // not built: minted by the forum owner's client
+pub struct ImportOrigin { pub name: String, pub ts: Timestamp }  // not built
 pub struct MeetingId(Uuid);             // a Rendez-Vous meeting
-pub struct MediaType(String);           // a lower-case type and subtype
-pub struct ByteSize(u64);
+pub struct MediaType(pub String);       // a lower-case type and subtype
+pub struct ByteSize(pub u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
 pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
 pub enum ChannelType { Direct, Private, Public }
-pub enum ChannelLayout { Stream, Forum }  // absent means a stream
+pub enum ChannelLayout { Stream, Forum }  // not built; absent means a stream
 pub enum SegmentState { Active, Closing, Final }
-pub enum DeletedBy { Author, Moderator }
-pub enum NoticeKind { MemberAdded }     // a notice has an empty body; absent on a written message
+pub(crate) enum DeletedBy { Author }   // `Moderator` joins with moderation
+pub(crate) enum NoticeKind { MemberAdded } // a notice has an empty body; absent on a written message
 pub enum MentionTarget { User(UserId), Channel }
-pub enum NotifyLevel { All, Mentions, None }
+pub enum NotifyLevel { All, Mentions, None }  // not built
 ```
 
 ---

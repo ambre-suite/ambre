@@ -159,8 +159,10 @@ the edits of the draft and of its marks (`MURMURE-433`). Sending ends that histo
 is changed by an edit or a delete, never by an undo (`MURMURE-434`).
 
 ```rust
-pub enum TextStyle { Bold, Italic, Code, Link(String), CodeBlock, Quote, List }
-pub struct StyleMark { pub style: TextStyle, pub range: Range<usize> }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TextStyle { Bold, Italic, Code, Link(LinkUrl), CodeBlock, Quote, List }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StyleMark { pub style: TextStyle, pub range: CharSpan }
 ```
 
 **Markdown, as typed.** An inline marker closes on its second half: `**` bold, `_` italic,

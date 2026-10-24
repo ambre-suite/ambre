@@ -108,7 +108,10 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 | list the keys | none: the palette offers it | anywhere in Murmure |
 
 ```rust
-pub struct PaletteEntry { pub key: [u8; 16], pub label: String, pub hint: Option<&'static str> }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaletteEntry { pub key: PaletteKey, pub label: String, pub hint: Option<&'static str> }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PaletteKey { Channel(ChannelId), Member(UserId) }
 pub enum PaletteRow<'a> { Entry(&'a PaletteEntry), Command(&'a Command) }
 ```
 

@@ -182,6 +182,7 @@ elements.
 
 ```rust
 /// One leaf: an element's world box, already expanded to cover its rotation.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ElementBounds {
     pub id:  ElementId,
     pub min: [f64; 2],
@@ -242,8 +243,8 @@ that owns it, in `ambre-bus::app::toile`, where the code is authoritative.
 /// turns any of these four into a message on a queue (`TOILE-089`).
 pub struct ToileOutcome {
     pub display:   Vec<ToileEvent>,     // to the UI thread
-    pub update:    Option<Vec<u8>>,     // the CRDT delta to broadcast
-    pub ephemeral: Option<Vec<u8>>,     // presence, broadcast and never persisted
+    pub update:    Option<DeltaBytes>,     // the CRDT delta to broadcast
+    pub ephemeral: Option<EphemeralBytes>, // presence, broadcast and never persisted
     pub requests:  Vec<ToileRequest>,   // a media upload or download, lowered by the dispatcher
 }
 
@@ -255,22 +256,24 @@ impl ToileState {
     /// A remote delta or snapshot, already decrypted by Sync. Imports, rebuilds
     /// the derived caches and answers with display events alone: a remote change
     /// is never re-broadcast.
-    pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent>;
+    pub fn apply_remote(&mut self, update: &DeltaBytes) -> Vec<ToileEvent>;
 
     /// A batch of remote deltas -- a history replay on open -- as one import
     /// sweep and one rebuild, so the board repaints once instead of once per
     /// delta.
-    pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent>;
+    pub fn apply_remote_batch(&mut self, updates: &[DeltaBytes]) -> Vec<ToileEvent>;
 
     /// A remote presence sample. The author is the Sync-resolved user id and
     /// never a self-asserted one (`ambre-spec-membership.md`, `SYNC-014`).
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ToileEvent>;
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &EphemeralBytes) -> Vec<ToileEvent>;
 
     /// A full snapshot, for local persistence, for compaction and for a Sync
     /// request. Its named counterpart, `import_snapshot`, is the name every
     /// engine shares, so a loader can address the two without a per-app match.
-    pub fn export_snapshot(&self) -> Vec<u8>;
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<ToileEvent>;
+    /// A refused snapshot leaves the state untouched and answers the schema
+    /// gate's verdict.
+    pub fn export_snapshot(&self) -> SnapshotBytes;
+    pub fn import_snapshot(&mut self, payload: &SnapshotBytes) -> Result<Vec<ToileEvent>, SchemaError>;
 }
 ```
 
@@ -327,8 +330,14 @@ data beyond that: the render side never links the CRDT (`TOILE-UI-001`). One sna
 the whole contract between the two threads.
 
 ```rust
+#[derive(Clone, Debug)]
 pub struct DisplayViewport {
+    /// The viewport requests applied when the frame was built: the view drops
+    /// a frame older than the one it last accepted (`BUS-017`).
+    pub version:   ViewportVersion,
     pub viewport:  Viewport,
+    /// The board's grid unit, in world units, as its `board` register holds it.
+    pub grid_unit: f64,
     /// Elements and connectors interleaved in one paint order
     /// (`features/ambre-spec-toile-z-order.md`).
     pub nodes:     Vec<DisplayNode>,
@@ -340,6 +349,7 @@ pub struct DisplayViewport {
     pub pins:      Vec<CommentPin>,
 }
 
+#[derive(Clone, Debug)]
 pub enum DisplayNode {
     Element(DisplayElement),
     Connector(DisplayConnector),

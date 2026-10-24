@@ -187,7 +187,7 @@ pub struct KeyLink {
     pub document_id: DocumentId,
     pub key: KeyId,                 // the key the link starts from
     pub previous: KeyId,            // the key it seals
-    pub sealed: Vec<u8>,            // `previous` as a sealed object under `key`
+    pub sealed: SealedPreviousKey,  // `previous` as a sealed object under `key`
 }
 ```
 

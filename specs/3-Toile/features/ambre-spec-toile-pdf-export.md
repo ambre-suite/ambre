@@ -87,7 +87,8 @@ pub struct PdfPage {
 
 /// Page dimensions, in points. The camera's pixel size equals these points
 /// one for one, so the on-screen fit maps onto the page with no extra scale.
-pub struct PageSize { pub width: f64, pub height: f64 }
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PageSize { pub width: Pt, pub height: Pt }
 ```
 
 **Steps, when the pages are built** (the shared flow draws and assembles them,

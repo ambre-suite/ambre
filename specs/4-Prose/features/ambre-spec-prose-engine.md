@@ -159,11 +159,11 @@ is total over every key (`PROSE-090`).
 // ambre-prose/src/doc.rs
 pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText;
 
-// ambre-prose/src/features/list.rs
-pub fn compute_depth(tree: &LoroMovableTree, item_id: &TreeID) -> u8;
+// ambre-prose/src/numbering.rs
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> u32;
 
 // ambre-prose/src/mark.rs
-pub fn expand_type_for(mark_key: &str) -> ExpandType;
+pub fn expand_type_for(mark_key: &MarkKey) -> ExpandType;
 ```
 
 **The block on the plane is a [`BlockId`], never a `TreeID`.** It carries the same pair the tree
@@ -175,7 +175,7 @@ converts at its own boundary, so the value is one identity and not two.
 
 | Crate | Role | Rationale |
 |---|---|---|
-| `loro` | the single-document CRDT | `LoroMovableTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers, `UndoManager` for the local history |
+| `loro` | the single-document CRDT | `LoroTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers, `UndoManager` for the local history |
 | `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw` |
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
 | `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
@@ -208,32 +208,47 @@ thread leaves as a return value (`PROSE-024`).
 | the session identity | the canonical `UserId` and the display name, seeded from `SessionReady` | per session, never in the document |
 | the peer set | every remote peer's last resolved caret, keyed by that `UserId` (`PROSE-058`) | from each inbound sample; it dies with the session |
 
-The layout and the tracking flag are declared and unbuilt: each lands with its own feature's Story.
-
 ```rust
 // ambre-prose/src/logic/mod.rs
 
 pub struct ProseState {
     doc:              LoroDoc,
-    undo:             loro::UndoManager,
-    layout:           Option<PageLayout>,
-    layout_version:   u64,
-    tracking:         bool,
-    media_cache:      HashMap<String, Vec<u8>>,
+    undo:             UndoManager,
+    media_cache:      HashMap<ContentHash, MediaBytes>,
     last_exported_vv: VersionVector,
-    peer:             u64,
+    peer:             PeerId,
     my_user_id:       Option<UserId>,
-    my_name:          Option<String>,
-    presence:         HashMap<UserId, CursorPosition>,
+    my_name:          Option<DisplayName>,
+    orphans:          HashSet<CommentId>,
+    edit_mode:        EditMode,
+    burst:            Option<suggestions::Burst>,
+    presence:         HashMap<UserId, (CursorPosition, Option<DisplayName>)>,
+    live:             HashSet<UserId>,
+    last_frame:       Option<EphemeralBytes>,
+    owe_greeting:     bool,
+    paginator:        Option<Paginator>,
+    faces:            Vec<FontBytes>,
+    handed:           Option<(loro::Frontiers, usize, PageSpan)>,
+    window:           PageSpan,
+    handed_version:   LayoutVersion,
+    in_view:          Vec<Arc<ShapedLayout>>,
+    ids:              ids::IdSource,
+    word_count:       WordCount,
+    find:             Option<find::FindSession>,
+    stamped_counter:  OpCounter,
+    touched:          touched::Touched,
+    catchup:          catchup::CatchUp,
+    entry_end:        Option<OpCounter>,
 }
 
 /// What a content command returns. The Logic dispatcher explodes it: the display events
 /// become `AppEvent::Prose`, the delta becomes `SyncCommand::SendUpdate`, the presence
 /// sample becomes `SyncCommand::SendEphemeral` under the document id Logic holds.
+#[derive(Debug, Default)]
 pub struct ProseOutcome {
     pub display:   Vec<ProseEvent>,
-    pub update:    Option<Vec<u8>>,
-    pub ephemeral: Option<Vec<u8>>,
+    pub update:    Option<DeltaBytes>,
+    pub ephemeral: Option<EphemeralBytes>,
 }
 
 impl ProseState {
@@ -242,29 +257,33 @@ impl ProseState {
     /// layout and the reshaped runs after a keystroke -- and with one delta.
     pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome;
 
-    /// A remote delta or a remote snapshot, routed here by document id. One that brings no
-    /// operation this peer lacks, such as its own change echoed by the relay, answers nothing
-    /// (`PROSE-126`).
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent>;
+    /// A remote delta, routed here by document id. One that brings no operation this peer
+    /// lacks, such as its own change echoed by the relay, answers nothing (`PROSE-126`).
+    pub fn apply_remote(&mut self, payload: &DeltaBytes) -> Vec<ProseEvent>;
+
+    /// A remote snapshot, trusted the way a remote delta is: the two share one path.
+    pub fn apply_remote_snapshot(&mut self, payload: &SnapshotBytes) -> Vec<ProseEvent>;
 
     /// A remote presence sample. The author is the **Sync-resolved `from_user_id`**, never
     /// read from the payload (`PRESENCE-003`, `ambre-spec-membership.md`).
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent>;
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &EphemeralBytes)
+        -> Vec<ProseEvent>;
 
     /// A relay's history replay on open: one import sweep, one repaint.
-    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<ProseEvent>;
+    pub fn apply_remote_batch(&mut self, payloads: &[DeltaBytes]) -> Vec<ProseEvent>;
 
     /// Answered on a snapshot request; the bytes are sealed by `ambre-sync`.
-    pub fn export_snapshot(&self) -> Vec<u8>;
+    pub fn export_snapshot(&self) -> SnapshotBytes;
 
     /// The schema gate runs first, on a scratch document, so a refused read leaves this
     /// one as it was (`SCHEMA-012`). The error is the foundation's, shared with Trame and
     /// Toile, because the verdict is the protocol's and not this application's.
-    pub fn import_snapshot(&mut self, snapshot: &[u8])
+    pub fn import_snapshot(&mut self, payload: &SnapshotBytes)
         -> Result<Vec<ProseEvent>, ambre_core::schema::SchemaError>;
 
     /// A decrypted picture arrived on its own Logic route: cache it, invalidate what showed it.
-    pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent>;
+    pub fn on_media_downloaded(&mut self, content_hash: ContentHash, data: MediaBytes)
+        -> Vec<ProseEvent>;
 }
 ```
 
@@ -296,150 +315,124 @@ The plane the UI thread writes on. Values move on an `ambre_bus::conduit` queue,
 below derives `serde`.
 
 > **The offset unit is the Unicode code point.** Every `pos`, every `range` and every
-> `(TreeID, u32)` endpoint below is a count of code points into the target block's body text
+> `(BlockId, DocOffset)` endpoint below is a count of code points into the target block's body text
 > (`PROSE-FEAT-006`). That is the unit Loro indexes a text container and a cursor with, so a write
 > path converts nothing. A caret advances by **grapheme cluster**, which is a rule of the view. The
 > view's own hit-test answers **UTF-8 bytes**. Each conversion happens where it is read, and section
 > 6 carries what the corpus still owes on it.
 
-The variants below are the ones the engine core answers. Tables, comments, footnotes and find reach
-this enum later, and so do the clipboard, the bands, the spell checker and the interop filters. Each
-arrives with the Story that builds it, and the whole list is `ambre-roadmap.md` E5.
+The variants below are the ones the engine answers today, plus two groups marked not built: the
+pictures and the spell checker. Each of those arrives with the Story that builds it, and the whole
+list is `ambre-roadmap.md` E5.
 
 ```rust
-// ambre-prose/src/events.rs -- re-exported from `ambre_bus::app::prose`. Move on a link,
-// no serde.
-#[derive(Debug, Clone)]
+// ambre_bus::app::prose -- re-exported by `ambre-prose`. Move on a link, no serde.
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProseCommand {
     Noop,
+    /// The view has taken every text change up to `seen`; the answer is `Synced`.
+    Sync          { seen: TextChangeSeq },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
-    InsertText    { block_id: TreeID, pos: u32, text: String },
-    DeleteText    { block_id: TreeID, range: (u32, u32) },
+    InsertText    { block_id: BlockId, pos: DocOffset, text: String },
+    DeleteText    { block_id: BlockId, range: DocSpan },
     /// One arbitrary, possibly cross-block, selection deleted in one command. The endpoints
     /// arrive in either order and the dispatcher normalizes them; it is also the single join
     /// primitive (`PROSE-037`, `PROSE-039`). A content mark fully covered goes with the text;
     /// a partially covered comment, suggestion or footnote follows the orphan rule.
-    DeleteRange   { anchor: (TreeID, u32), focus: (TreeID, u32) },
+    DeleteRange   { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
     /// The inverse of the join case above (`PROSE-038`).
-    SplitBlock    { block_id: TreeID, pos: u32 },
+    SplitBlock    { block_id: BlockId, pos: DocOffset },
 
     // -- Inline marks (`features/ambre-spec-prose-inline-styles.md`) --
     /// `value` is the mark's payload, always a String: the key, its value grammar and its
     /// canonical form are the registry of `ambre-spec-prose-schema.md section 3` (`PROSE-008`),
     /// which interop parses and emits unchanged. `None` clears the value for a key whose
     /// presence alone is meaningful.
-    ApplyMark     { block_id: TreeID, range: (u32, u32), key: String, value: Option<String> },
-    RemoveMark    { block_id: TreeID, range: (u32, u32), key: String },
-    ClearInlineMarks { block_id: TreeID, range: (u32, u32) },
+    ApplyMark     { block_id: BlockId, range: DocSpan, key: MarkKey, value: Option<String> },
+    RemoveMark    { block_id: BlockId, range: DocSpan, key: MarkKey },
+    ClearInlineMarks { block_id: BlockId, range: DocSpan },
     /// Reading the styles of a selection for the format bar. It writes nothing; the answer is
     /// `SelectionMarks` (`features/ambre-spec-prose-toolbar.md`).
-    ReadMarks     { anchor: (BlockId, u32), focus: (BlockId, u32) },
+    ReadMarks     { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
     /// One presence mark applied over a whole selection, or removed, in one commit: one
     /// gesture of the format bar is one undo item (`PROSE-UI-192`).
-    FormatSelection { anchor: (BlockId, u32), focus: (BlockId, u32), key: String, apply: bool },
+    FormatSelection { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset), key: MarkKey,
+                      action: MarkAction },
 
     // -- Block structure --
     /// `init` is a typed per-type initializer: it carries the attributes the block type needs
     /// at creation, so no handler invents a default a follow-up command must correct. A type
     /// with a richer creation surface keeps its own command below.
-    InsertBlock   { parent_id: Option<TreeID>, after_id: Option<TreeID>,
-                    init: BlockInit, style_id: Option<String> },
-    DeleteBlock   { block_id: TreeID },
-    MoveBlock     { block_id: TreeID, new_parent: Option<TreeID>, after_id: Option<TreeID> },
-    SetBlockStyle { block_id: TreeID, style_id: String },
+    InsertBlock   { parent_id: Option<BlockId>, after_id: Option<BlockId>,
+                    init: BlockInit, style_id: Option<StyleId> },
+    DeleteBlock   { block_id: BlockId },
+    MoveBlock     { block_id: BlockId, new_parent: Option<BlockId>, after_id: Option<BlockId> },
+    SetBlockStyle { block_id: BlockId, style_id: StyleId },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
-    SetHeadingLevel { block_id: TreeID, level: Option<HeadingLevel> },
-    SetCodeLang     { block_id: TreeID, lang: String },
+    SetHeadingLevel { block_id: BlockId, level: Option<HeadingLevel> },
+    SetCodeLang     { block_id: BlockId, lang: Option<CodeLang> },
     /// The command is coarse and the storage is per property: the handler writes only what
     /// changed (`PROSE-FEAT-025`, `features/ambre-spec-prose-inline-styles.md`).
-    SetParagraphStyle { block_id: TreeID, style: ParagraphStyle },
+    SetParagraphStyle { block_id: BlockId, style: ParagraphStyle },
 
     // -- Lists (`features/ambre-spec-prose-lists.md`). An item is created by `InsertBlock`
     // carrying `BlockInit::ListItem`, like every other block type. --
-    SetListStyle   { block_id: TreeID, style: ListStyle },
-    IndentList     { block_id: TreeID },
-    UnindentList   { block_id: TreeID },
+    SetListStyle   { block_id: BlockId, style: ListStyle },
+    IndentList     { block_id: BlockId },
+    UnindentList   { block_id: BlockId },
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
     /// A table of `rows` by `cols`, one empty paragraph per cell.
-    InsertTable      { parent_id: Option<TreeID>, after_id: Option<TreeID>, rows: RowCount, cols: ColCount },
-    InsertTableRow   { table_id: TreeID, after_row: Option<TreeID> },
-    DeleteTableRow   { row_id: TreeID },
+    InsertTable      { parent_id: Option<BlockId>, after_id: Option<BlockId>, rows: RowCount,
+                       cols: ColCount },
+    InsertTableRow   { table_id: BlockId, after_row: Option<BlockId> },
+    DeleteTableRow   { row_id: BlockId },
     /// `at_col` is the index the new column takes; `None` width takes the document default
     /// (`PROSE-FEAT-232`).
-    InsertTableCol   { table_id: TreeID, at_col: Col, width: Option<Pt> },
-    DeleteTableCol   { table_id: TreeID, col_index: Col },
-    ResizeTableCol   { table_id: TreeID, col_index: Col, width: Pt },
-    MergeTableCells  { table_id: TreeID, start: CellPos, end: CellPos },
-    UnmergeTableCell { cell_id: TreeID },
-    SetCellStyle     { cell_id: TreeID, bg: Option<u32>, valign: Option<VAlign>,
+    InsertTableCol   { table_id: BlockId, at_col: Col, width: Option<Pt> },
+    DeleteTableCol   { table_id: BlockId, col_index: Col },
+    ResizeTableCol   { table_id: BlockId, col_index: Col, width: Pt },
+    MergeTableCells  { table_id: BlockId, start: CellPos, end: CellPos },
+    UnmergeTableCell { cell_id: BlockId },
+    SetCellStyle     { cell_id: BlockId, bg: Option<Rgb>, valign: Option<VAlign>,
                        border: Option<CellBorder>, padding: Option<Pt> },
     /// Tab and Shift-Tab; past the last cell, a row is appended (`PROSE-FEAT-251`).
-    StepTableCell    { cell_id: TreeID, backwards: bool },
+    StepTableCell    { cell_id: BlockId, direction: StepDirection },
 
     // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --
-    InsertToc       { parent_id: Option<TreeID>, after_id: Option<TreeID>,
-                      max_level: HeadingLevel, numbered: bool },
-    UpdateTocConfig { block_id: TreeID, max_level: HeadingLevel, numbered: bool },
+    InsertToc       { parent_id: Option<BlockId>, after_id: Option<BlockId>,
+                      max_level: HeadingLevel, numbered: TocNumbering },
+    UpdateTocConfig { block_id: BlockId, max_level: HeadingLevel, numbered: TocNumbering },
+
+    // -- The pages the view holds (`features/ambre-spec-prose-viewport.md`). Neither writes. --
+    ShowPages { first: PageIndex, last: PageIndex },
+    ShowBlock { block_id: BlockId },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
     /// The view sends it once a run of changes stops; it writes nothing.
     CountWords,
 
-    // -- Pictures (`features/ambre-spec-prose-images.md`) --
-    InsertImage      { parent_id: Option<TreeID>, after_id: Option<TreeID>,
-                       content_hash: String, alt: String, width_px: u32, height_px: u32 },
-    /// `lock_aspect` keeps the intrinsic ratio; the dispatcher validates and clamps
-    /// (`PROSE-FEAT-058`, `PROSE-FEAT-059`).
-    ResizeImage      { block_id: TreeID, width_px: u32, height_px: u32, lock_aspect: bool },
-    SetImageAlign    { block_id: TreeID, align: ImageAlign },
-    SetImageAlt      { block_id: TreeID, alt: String },
-    SetImageCaption  { block_id: TreeID, caption: String },
-    /// Ask again for a blob whose download failed for good; the reader's own gesture is the
-    /// only path back (`PROSE-FEAT-057`).
-    RetryImageLoad   { block_id: TreeID },
+    // -- Clipboard (`features/ambre-spec-prose-clipboard.md`) --
+    /// Build the full-fidelity payload from the selection; the answer is the clipboard event.
+    CopyRange { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset) },
+    /// Insert what the clipboard held, in one commit: this application's own bytes first,
+    /// then the HTML, then the plain text (`PROSE-UI-042`).
+    Paste     { at: (BlockId, DocOffset), text: String, html: Option<String>,
+                payload: Option<ClipboardBytes> },
 
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
     // Each band is an ordinary block with a stable id in `meta`, so every text command above
-    // targets it directly and no band-specific variant exists.
-    SetHeaderEnabled      { enabled: bool },
-    SetFooterEnabled      { enabled: bool },
+    // targets it directly.
+    SetHeaderEnabled      { shown: BandState },
+    SetFooterEnabled      { shown: BandState },
+    SetDifferentFirstPage { first_page: FirstPage },
     /// `target` names the regular band or the first page's own (`PROSE-FEAT-067`).
-    InsertHeaderField     { field: HeaderField, target: HfTarget, pos: u32 },
-    InsertFooterField     { field: HeaderField, target: HfTarget, pos: u32 },
-    SetDifferentFirstPage { enabled: bool },
-
-    // -- Comments (`features/ambre-spec-prose-comments.md`) --
-    /// The author is stamped by the dispatcher from the session identity, never
-    /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
-    AddComment       { block_id: TreeID, range: (u32, u32), text: String, now: Timestamp },
-    /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: Uuid, text: String, now: Timestamp },
-    ResolveComment   { comment_id: Uuid },
-    /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
-    ReopenComment    { comment_id: Uuid },
-    DeleteComment    { comment_id: Uuid },
-    /// Deleting the opening reply deletes the thread (`PROSE-FEAT-081`).
-    DeleteReply      { comment_id: Uuid, reply_id: Uuid },
-    EditCommentReply { comment_id: Uuid, reply_id: Uuid, new_text: String },
-
-    // -- Track changes (`features/ambre-spec-prose-track-changes.md`) --
-    EnableTrackChanges   { enabled: bool },
-    AcceptSuggestion     { suggestion_id: Uuid },
-    RejectSuggestion     { suggestion_id: Uuid },
-    AcceptAllSuggestions,
-    RejectAllSuggestions,
-
-    // -- Footnotes and cross references --
-    InsertFootnote  { block_id: TreeID, pos: u32, note_text: String },
-    EditFootnote    { footnote_id: Uuid, new_text: String },
-    DeleteFootnote  { footnote_id: Uuid },
-    /// The reference stores the target's `TreeID` inside the mark's record
-    /// (`ambre-spec-prose-schema.md section 3`): the CRDT identity survives a move and a
-    /// concurrent edit, so a live reference is never stale. Interop maps it to the foreign
-    /// format's own anchor and back (`features/ambre-spec-prose-cross-references.md`).
-    InsertCrossRef  { block_id: TreeID, pos: u32, target_block_id: TreeID, kind: CrossRefKind },
+    InsertHeaderField     { field: HeaderField, target: HfTarget, pos: DocOffset },
+    InsertFooterField     { field: HeaderField, target: HfTarget, pos: DocOffset },
+    SetBandAlign          { block_id: BlockId, align: Align },
+    /// The view's wall clock, once a run of local changes stops (`PROSE-FEAT-066`).
+    StampModified         { now: Timestamp },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     FindStart  { query: FindQuery },
@@ -449,21 +442,41 @@ pub enum ProseCommand {
     ReplaceOne { replacement: String },
     ReplaceAll { replacement: String },
 
-    // -- Spell check (`features/ambre-spec-prose-spell-check.md`) --
-    SetSpellCheckLang     { lang: String },
-    AcceptSpellSuggestion { block_id: TreeID, range: (u32, u32), replacement: String },
-    /// Writes the reader's own dictionary, never the document.
-    AddToDictionary       { word: String },
+    // -- Footnotes --
+    InsertFootnote  { block_id: BlockId, pos: DocOffset, note_text: String },
+    EditFootnote    { footnote_id: FootnoteId, new_text: String },
+    DeleteFootnote  { footnote_id: FootnoteId },
 
-    // -- Clipboard (`features/ambre-spec-prose-clipboard.md`) --
-    /// Build the full-fidelity payload from the selection; the answer is the clipboard event.
-    CopySelection { anchor: (TreeID, u32), focus: (TreeID, u32) },
-    /// Paste an opaque Ambre payload back into the document.
-    PasteRich     { block_id: TreeID, pos: u32, payload: Vec<u8> },
+    // -- Comments (`features/ambre-spec-prose-comments.md`) --
+    /// The author is stamped by the dispatcher from the session identity, never
+    /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
+    AddComment       { block_id: BlockId, range: DocSpan, text: String, now: Timestamp },
+    /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
+    ReplyToComment   { comment_id: CommentId, text: String, now: Timestamp },
+    ResolveComment   { comment_id: CommentId },
+    /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
+    ReopenComment    { comment_id: CommentId },
+    DeleteComment    { comment_id: CommentId },
+    /// Deleting the opening reply deletes the thread (`PROSE-FEAT-081`).
+    DeleteReply      { comment_id: CommentId, reply_id: ReplyId },
+    EditCommentReply { comment_id: CommentId, reply_id: ReplyId, new_text: String },
 
-    // -- Interoperability (`features/ambre-spec-prose-import-export.md`) --
-    ImportDocument { format: ImportFormat, data: Vec<u8> },
-    ExportDocument { format: ExportFormat, options: ExportOptions },
+    // -- Track changes (`features/ambre-spec-prose-track-changes.md`) --
+    EnableTrackChanges   { mode: EditMode },
+    AcceptSuggestion     { suggestion_id: SuggestionId },
+    RejectSuggestion     { suggestion_id: SuggestionId },
+    AcceptAllSuggestions,
+    RejectAllSuggestions,
+
+    // -- Cross references (`features/ambre-spec-prose-cross-references.md`) --
+    /// The reference stores the target's `TreeID` inside the mark's record
+    /// (`ambre-spec-prose-schema.md section 3`): the CRDT identity survives a move and a
+    /// concurrent edit, so a live reference is never stale. Interop maps it to the foreign
+    /// format's own anchor and back.
+    InsertCrossRef  { block_id: BlockId, pos: DocOffset, target_block_id: BlockId,
+                      kind: CrossRefKind },
+    /// Bring the target into view; it writes nothing (`PROSE-UI-086`).
+    FollowCrossRef  { block_id: BlockId, pos: DocOffset },
 
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
     /// The handler builds the presence sample of section 3.D and returns it as the outcome's
@@ -475,21 +488,44 @@ pub enum ProseCommand {
     // any other mutation.
     Undo,
     Redo,
+
+    // -- Interoperability (`features/ambre-spec-prose-import-export.md`) --
+    ExportDocument { format: ExportFormat },
+    ImportDocument { format: ImportFormat, data: FileBytes },
+
+    // -- Not built: pictures (`features/ambre-spec-prose-images.md`) --
+    InsertImage      { parent_id: Option<BlockId>, after_id: Option<BlockId>,
+                       content_hash: ContentHash, alt: String, size: ImageSize },
+    /// `lock_aspect` keeps the intrinsic ratio; the dispatcher validates and clamps
+    /// (`PROSE-FEAT-058`, `PROSE-FEAT-059`).
+    ResizeImage      { block_id: BlockId, size: ImageSize, lock_aspect: bool },
+    SetImageAlign    { block_id: BlockId, align: ImageAlign },
+    SetImageAlt      { block_id: BlockId, alt: String },
+    SetImageCaption  { block_id: BlockId, caption: String },
+    /// Ask again for a blob whose download failed for good; the reader's own gesture is the
+    /// only path back (`PROSE-FEAT-057`).
+    RetryImageLoad   { block_id: BlockId },
+
+    // -- Not built: spell check (`features/ambre-spec-prose-spell-check.md`) --
+    SetSpellCheckLang     { lang: LangTag },
+    AcceptSpellSuggestion { block_id: BlockId, range: DocSpan, replacement: String },
+    /// Writes the reader's own dictionary, never the document.
+    AddToDictionary       { word: String },
 }
 
 /// The typed initializer for `InsertBlock`. Each variant carries exactly the creation
 /// attributes of its block type, so the handler writes the node's attribute map
 /// (`ambre-spec-prose-schema.md section 3`) with no stringly-typed path and no corrective
 /// follow-up command.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlockInit {
     Paragraph,
     /// The level is mandatory at creation, 1..=6.
     Heading   { level: HeadingLevel },
-    /// An empty language reads as plain.
-    CodeBlock { lang: String },
     /// The marker is mandatory at creation (`features/ambre-spec-prose-lists.md`).
     ListItem  { style: ListStyle },
+    /// No language reads as plain.
+    CodeBlock { lang: Option<CodeLang> },
     HRule,
     PageBreak,
 }
@@ -502,42 +538,60 @@ two places and leave the dispatch with a hole. `PROSE-UI-001` bans the second mo
 side.
 
 ```rust
-// ambre-prose/src/events.rs -- the content plane, in `ambre-bus`. Move on a link, no serde.
-#[derive(Debug, Clone)]
+// ambre_bus::app::prose -- the content plane, re-exported by `ambre-prose`. Move on a link,
+// no serde.
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProseEvent {
     // -- Engine --
+    /// A layout the Logic thread computed and shaped, whole. `SharedLayout` carries the version
+    /// that lets the view drop an older one (`PROSE-UI-006`, `PROSE-UI-016`,
+    /// `features/ambre-spec-prose-page-rendering.md section 2` declares the run).
+    LayoutShaped  { layout: SharedLayout },
     /// The confirmed change, local or imported. The bytes are the ones applied, never a
-    /// re-export (`PROSE-023`).
-    DocUpdated    { delta: Vec<u8> },
+    /// re-export (`PROSE-023`): a delta, or the snapshot an import adopted whole.
+    DocUpdated    { payload: LoroPayload },
+    /// What that change did to the text, in code points, for a view that holds no document
+    /// (`PROSE-UI-001`). The draft and the caret follow it.
+    TextChanged   { origin: ChangeOrigin, seq: TextChangeSeq, acked: TextAck,
+                    edits: Vec<TextEdit>, removed: Vec<BlockId> },
     /// The paragraph that parted, and the one that carries its tail. The view needs the new
     /// block's identity to leave the caret at its start (`PROSE-UI-141`): it cannot mint the
     /// id and it holds no document to read it from.
-    BlockSplit { source: BlockId, new_block: BlockId },
-    /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
-    /// `PROSE-060`). The bytes stay in the Logic thread's cache.
-    MediaArrived { content_hash: String, blocks: Vec<BlockId> },
-    /// A full-state read the schema gate refused (`SCHEMA-008`, `PROSE-097`).
-    DocumentRefused { reason: String },
-    /// The layout after a change. `version` lets the view drop an older one
-    /// (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`).
-    LayoutUpdated { layout: PageLayout, first_dirty_page: PageIndex, version: u64 },
-    /// Pre-shaped runs for the blocks that moved, aligned with the layout above
-    /// (`features/ambre-spec-prose-page-rendering.md section 2` declares the run).
-    RunsUpdated   { runs: Vec<(TreeID, Vec<ParleyRunData>)>, version: u64 },
+    BlockSplit    { source: BlockId, new_block: BlockId },
+    /// Every command sent before the `ProseCommand::Sync` it answers has landed.
+    Synced        { acked: TextAck },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
-    /// The clipboard payload built from the selection: a plain-text mirror and the opaque
-    /// Ambre bytes. The host performs the write (`features/ambre-spec-prose-clipboard.md`).
-    Clipboard     { text: String, ambre: Vec<u8> },
+    /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
+    /// `PROSE-060`). The bytes stay in the Logic thread's cache.
+    MediaArrived  { content_hash: ContentHash, blocks: Vec<BlockId> },
+    /// A full-state read the schema gate refused (`SCHEMA-008`, `PROSE-097`).
+    DocumentRefused { reason: String },
+    /// The clipboard payload built from the selection: a plain-text mirror, its HTML for
+    /// another editor, and the opaque Ambre bytes. The host performs the write
+    /// (`features/ambre-spec-prose-clipboard.md`).
+    Clipboard     { text: String, html: String, payload: ClipboardBytes },
     /// The marks of a selection, with the selection read (`PROSE-UI-057`).
-    SelectionMarks { anchor: (BlockId, u32), focus: (BlockId, u32), marks: ActiveMarks },
+    SelectionMarks { anchor: (BlockId, DocOffset), focus: (BlockId, DocOffset),
+                     marks: ActiveMarks },
+    /// Where the caret lands after an undo, a redo or a paste (`PROSE-UI-045`).
+    CaretPlaced   { block: BlockId, offset: DocOffset },
+    /// Bring a block into view, from its first page (`PROSE-UI-085`).
+    RevealBlock   { block: BlockId, page: PageIndex },
+    /// What the local history holds after a command that wrote (`UNDO-006`, `UNDO-009`).
+    UndoState     { can_undo: bool, can_redo: bool },
 
     // -- Features --
-    TocUpdated       { block_id: BlockId, toc: TableOfContents },
-    WordCountUpdated { count: WordCount },
-    FindResults      { matches: Vec<FindMatch>, current: usize },
-    FindUpdated      { current: usize },
-    SpellErrors      { block_id: TreeID, errors: Vec<SpellError> },
+    TocUpdated         { block_id: BlockId, toc: TableOfContents },
+    WordCountUpdated   { count: WordCount },
+    FindResults        { matches: Vec<FindMatch>, current: Option<MatchIndex> },
+    FindUpdated        { current: Option<MatchIndex> },
+    FootnotesUpdated   { notes: Vec<FootnoteEntry> },
+    CommentsUpdated    { threads: Vec<CommentThread> },
+    SuggestionsUpdated { mode: EditMode, suggestions: Vec<Suggestion> },
+    LinksUpdated       { links: Vec<LinkSpan> },
+    CrossRefsUpdated   { refs: Vec<ResolvedCrossRef> },
+    BandsUpdated       { bands: BandSet },
     /// A concurrent edit left a cell covered by a merge while it still holds content: masked,
     /// not destroyed (`features/ambre-spec-prose-tables.md`).
     MergeConflictDetected { cell_id: BlockId },
@@ -546,11 +600,15 @@ pub enum ProseEvent {
 
     // -- Interoperability --
     ImportCompleted { report: ConversionReport },
-    ImportProgress  { percent: u8 },
-    /// `mime` is the media type of `data`, so the view has one download path for every
-    /// format (`PROSE-IO-020`).
-    ExportReady     { format: ExportFormat, data: Vec<u8>, mime: &'static str,
+    /// The name obeys `DOCFILE-019` and `DOCFILE-020`; `media_type` types `data`, so the view
+    /// has one download path for every format (`PROSE-IO-020`).
+    ExportReady     { filename: ExportFilename, media_type: MediaType, data: FileBytes,
                       report: ConversionReport },
+
+    // -- Not built: the spell checker (`features/ambre-spec-prose-spell-check.md`) --
+    SpellErrors     { block_id: BlockId, errors: Vec<SpellError> },
+    // -- Not built: progress on a large file (`PROSE-IO-021`) --
+    ImportProgress  { percent: u8 },
     ExportProgress  { percent: u8 },
 
     // -- Failure --
@@ -559,7 +617,7 @@ pub enum ProseEvent {
 }
 
 /// One refusal, as the author is told about it.
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[error("{refused} refused: {reason}")]
 pub struct ProseError {
     /// The command, under the name `ProseCommand::name` gives it. A
@@ -598,11 +656,11 @@ Sync worker seals and sends. The event payload built from an arriving sample car
 /// Where a caret is on **this** replica: the block, and the absolute offset resolved
 /// against the document this peer holds. It is what a local command carries and what the
 /// view is handed; it is never what crosses the wire.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CursorPosition {
     pub block_id: BlockId,
-    pub offset:   u32,
-    pub anchor:   Option<(BlockId, u32)>,
+    pub offset:   DocOffset,
+    pub anchor:   Option<(BlockId, DocOffset)>,
 }
 
 /// The peer-authored sample. A position and a self-asserted, cosmetic name -- and
@@ -615,21 +673,21 @@ pub struct CursorPosition {
 /// resolves it to the same absolute position. The block is named beside the bytes, so a
 /// sample naming a block this peer does not hold is dropped without decoding the cursor
 /// (`PROSE-057`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PresencePayload {
     pub block_id:     BlockId,
     pub cursor:       EncodedCursor,          // the bytes `Cursor::encode` wrote
     pub anchor:       Option<(BlockId, EncodedCursor)>,
-    pub display_name: String,
+    pub display_name: Option<DisplayName>,
 }
 
 /// What the view is handed. No serde: it moves by value. No colour either: the view derives
 /// it from the `UserId`, so a collaborator keeps one colour across the three applications
 /// (`PRESENCE-004`).
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
     pub user_id:      UserId,
-    pub display_name: String,
+    pub display_name: Option<DisplayName>,
     pub position:     CursorPosition,
 }
 ```
@@ -671,49 +729,70 @@ View state, and no document content (`PROSE-UI-001`). Each field is owned by the
 comment names; the engine declares the struct and the rule, never the field's behaviour.
 
 ```rust
-// ambre-prose/src/ui/state.rs
+// ambre-prose/src/ui.rs
 
+#[derive(Clone, Debug, Default)]
 pub struct ProseUiState {
     // Handed over by the Logic thread
-    layout:          PageLayout,
-    /// Rebuilt from `layout` on every layout event (`features/ambre-spec-prose-viewport.md`).
-    page_column:     PageColumn,
+    /// The layout in force and the runs it carries, as last taken
+    /// (`features/ambre-spec-prose-page-rendering.md`).
+    shaped:          Arc<ShapedLayout>,
     /// An older layout is dropped (`features/ambre-spec-prose-page-rendering.md`).
-    layout_version:  u64,
-    /// Shaped runs per block, bounded (`features/ambre-spec-prose-page-rendering.md`).
-    run_cache:       RunCache,
+    layout_version:  LayoutVersion,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     remote_cursors:  Vec<RemoteCursor>,
-    toc:             TableOfContents,
-    /// At resolved positions (`features/ambre-spec-prose-comments.md`).
-    comments:        Vec<UiComment>,
-    /// Every pending suggestion and its spans, from `SuggestionsUpdated`
+    word_count:      WordCount,
+    tocs:            Vec<(BlockId, TableOfContents)>,
+    /// This peer's own search (`features/ambre-spec-prose-find-replace.md`).
+    find_matches:    Vec<FindMatch>,
+    find_current:    Option<MatchIndex>,
+    bands:           BandSet,
+    footnotes:       Vec<FootnoteEntry>,
+    /// Marked or orphaned (`features/ambre-spec-prose-comments.md`).
+    comments:        Vec<CommentThread>,
+    /// Every pending suggestion, and whether this session is suggesting
     /// (`features/ambre-spec-prose-track-changes.md`).
     suggestions:     Vec<Suggestion>,
+    edit_mode:       EditMode,
     /// Every run of a link mark and its target, from `LinksUpdated`
     /// (`features/ambre-spec-prose-selection.md`).
     links:           Vec<LinkSpan>,
-    /// Per block (`features/ambre-spec-prose-spell-check.md`).
-    spell_errors:    HashMap<TreeID, Vec<SpellError>>,
+    cross_refs:      Vec<ResolvedCrossRef>,
+    /// A file the Logic thread wrote, until the host hands it to the browser (`PROSE-IO-056`).
+    pending_export:  Option<ExportFile>,
 
     // Local, and never sent
     /// Scroll offset, size and zoom (`features/ambre-spec-prose-viewport.md`).
     viewport:        Viewport,
-    /// The caret, the selection, the drag anchor and the armed autoscroll velocity
+    /// Rebuilt from each layout taken (`features/ambre-spec-prose-viewport.md`).
+    column:          PageColumn,
+    /// The drawing state of the runs painted lately (`features/ambre-spec-prose-page-rendering.md`).
+    runs:            RunCache,
+    /// The caret and the selection's anchor, the side of a wrap the caret sits on, and the
+    /// column a run of vertical moves keeps (`features/ambre-spec-prose-selection.md`).
+    cursor:          Option<CursorPosition>,
+    caret_affinity:  Affinity,
+    x_goal:          Option<DocPx>,
+    /// A drag in flight, its last pointer and its autoscroll
     /// (`features/ambre-spec-prose-selection.md`).
-    cursor:          Option<TextCursor>,
-    selection:       Option<TextSelection>,
-    drag_anchor:     Option<(TreeID, u32)>,
-    autoscroll_v:    Option<f32>,
+    dragging:        Option<(BlockId, DocOffset)>,
+    drag_pointer:    Option<ViewPoint>,
+    autoscroll:      EdgeScroll,
+    /// A finger on the canvas, and the motion a flick left (`features/ambre-spec-prose-viewport.md`).
+    kinetic:         Kinetic,
     /// The optimistic echo (`features/ambre-spec-prose-text-editing.md`).
-    draft_buffer:    DraftBuffer,
-    toolbar:         ToolbarState,
-    slash_menu:      Option<SlashMenuState>,
-    ruler:           RulerState,
+    draft:           DraftBuffer,
+    /// The input method's text still being composed (`features/ambre-spec-prose-text-editing.md`).
+    composing:       String,
+    slash:           Option<SlashMenu>,
+    /* the bookkeeping of the send path and of the paint, which no feature document owns */
+
+    // Not built
+    /// Per block (`features/ambre-spec-prose-spell-check.md`).
+    spell_errors:    HashMap<BlockId, Vec<SpellError>>,
     /// The open thread and the panel's own scroll
     /// (`features/ambre-spec-prose-comments.md section 6`: nothing declares it).
     comment_panel:   CommentPanelState,
-    scroll_velocity: f32,
 }
 ```
 

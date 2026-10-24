@@ -71,9 +71,10 @@ status values are normative in `ambre-spec-template.md`.
 **Display shape** (`ambre-toile`, the chrome side):
 
 ```rust
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count:  u32,
-    pub bounds: Option<Bounds>,   // x, y, w, h in world units; None when nothing is selected
+    pub count:  ElementCount,
+    pub bounds: Option<Rect>,     // world units; None when nothing is selected
 }
 ```
 

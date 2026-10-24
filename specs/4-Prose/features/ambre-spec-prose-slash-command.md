@@ -96,32 +96,36 @@ it (`ambre-spec-ui.md section 2`).
 ```rust
 // ambre-prose/src/view/slash.rs -- published to the chrome component, never drawn on the canvas
 
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlashMenuState {
     /// Under the slash, in canvas space. `None` hides the menu.
     pub anchor:   Option<ViewPoint>,
     pub query:    String,
     /// The labels the query keeps (`PROSE-UI-194`).
-    pub items:    Vec<&'static str>,
-    pub selected: usize,
+    pub items:    SlashChoiceVec<&'static str>,
+    pub selected: SlashChoice,
 }
 
 /// What the view keeps while the menu is open. Never published, never written.
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct SlashMenu {
     /// The block the slash was typed in, and the offset of the slash itself. A remote edit
     /// moves the offset with the text (`PROSE-UI-193`).
-    origin:   (BlockId, u32),
+    origin:   Spot,
     query:    String,
-    selected: usize,
+    selected: SlashChoice,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlashItem {
     pub label:   &'static str,
     pub command: SlashCommand,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SlashCommand {
     Paragraph,
-    Heading(u8),
+    Heading(HeadingLevel),
     List(ListStyle),
     Table,
     Code,

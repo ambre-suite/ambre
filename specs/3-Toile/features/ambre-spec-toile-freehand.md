@@ -73,7 +73,7 @@ drawing kind, carrying its samples in one binary field
 
 ```rust
 /// One sampled point of a freehand stroke. 12 bytes, fixed layout.
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
     pub x: f32,
     pub y: f32,

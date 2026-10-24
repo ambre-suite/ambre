@@ -155,22 +155,24 @@ a note a peer moved meanwhile, and answers `NotesChanged` when the result differ
 the render thread owns none, so the slide event carries everything the camera pass needs:
 
 ```rust
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlideChange {
-    pub index:   usize,             // the new slide, 0-based
-    pub from:    FrameSnapshot,     // the previous slide's children, empty on entry
-    pub to:      FrameSnapshot,     // the new slide's children
-    pub to_rect: Option<Rect>,      // the camera fit target, None when the frame is gone
-    pub count:   usize,             // the deck length, for the panel counter
-    pub frame:   Option<ElementId>, // the note-edit target
-    pub notes:   String,            // that frame's notes, seeding the editor
+    pub position:   SlidePosition,     // the new slide, 0-based, and the deck length
+    pub from:       FrameSnapshot,     // the previous slide's children, empty on entry
+    pub to:         FrameSnapshot,     // the new slide's children
+    pub to_rect:    Option<Rect>,      // the camera fit target, None when the frame is gone
+    pub frame:      Option<ElementId>, // the note-edit target
+    pub notes:      String,            // that frame's notes, seeding the editor
+    pub transition: Duration,          // the deck's own length (`TOILE-FEAT-028`)
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SnapElement {
     pub id:       ElementId,
     pub bounds:   Rect,       // the unrotated element box, world space
-    pub rotation: f64,
-    pub opacity:  f32,
-    pub fill:     Option<u32>,
+    pub rotation: Radians,
+    pub opacity:  Opacity,
+    pub fill:     Option<Rgba>,
 }
 ```
 

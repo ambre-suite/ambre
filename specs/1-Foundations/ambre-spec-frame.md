@@ -102,10 +102,10 @@ any `DrawSurface`, so its host tests paint them on a recording surface.
 // inherent methods on each app view (for example ambre_trame::ui::TrameView),
 // dispatched by AppView's match arms:
 fn update(&mut self);                                   // drain inbound (link try_recv) -> dirty flags, no GPU
-fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
-fn paint_content(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
-fn paint_overlay(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
-fn resize(&mut self, width: u32, height: u32);
+fn plan_repaint(&mut self, now: PageTime, hud_tick: HudTick) -> RepaintPlan;
+fn paint_content<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
+fn paint_overlay<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
+fn resize(&mut self, size: CssSize);                    // logical pixels (`CANVAS-044`)
 fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls preventDefault()
 ```
 

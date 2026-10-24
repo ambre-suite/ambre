@@ -97,8 +97,15 @@ payload of `ambre-bus`:
 ```rust
 /// What crosses to the host, and back. `text` is the plain-text mirror every other
 /// application can read, `html` the formatted half other editors read, and `ambre` this
-/// application's own bytes, under its private type.
-pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<ClipboardBytes> }
+/// application's own bytes, under its private type. `form` says the user asked for the
+/// plain text alone.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClipboardBlob {
+    pub text:  String,
+    pub html:  Option<String>,
+    pub ambre: Option<ClipboardBytes>,
+    pub form:  PasteForm,
+}
 ```
 
 **The three steps of a copy.**
@@ -111,12 +118,14 @@ pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre
    keeps the payload in memory for a paste back into the same tab.
 
 ```rust
-/// Ask for the payload. `cut` deletes the source range after the copy (`PROSE-UI-044`).
-pub fn clipboard_write(&mut self, cut: bool) -> CopyOutcome;
+/// Ask the active view for the payload. `ClipboardWrite::Cut` deletes the source range after
+/// the copy (`PROSE-UI-044`).
+fn clipboard_write(&mut self, write: ClipboardWrite) -> CopyOutcome;
 /// The host calls this after each update: the payload to mirror, when one arrived.
 pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob>;
-/// A paste, with what the host read. `own_copy` says the host's token names this tab's copy.
-pub fn paste_clipboard(&mut self, blob: ClipboardBlob, own_copy: bool);
+/// A paste, with what the host read. `source` says whether the host's token names this
+/// tab's copy (`PasteSource::Own`) or not.
+fn paste_clipboard(&mut self, blob: ClipboardBlob, source: PasteSource);
 ```
 
 **The three outcomes of a paste** (`PROSE-UI-042`). The view sends every half it holds in one

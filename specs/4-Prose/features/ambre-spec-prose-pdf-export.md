@@ -81,7 +81,7 @@ pub fn export_pdf(
     /// Shaping needs a mutable context; it is threaded to the page driver, never to the surface.
     fonts:   &mut FontContext,
     options: &ExportOptions,
-) -> Result<(Vec<u8>, ConversionReport), InteropError> { /* ... */ }
+) -> Result<(FileBytes, ConversionReport), InteropError>;
 ```
 
 **Steps, per page** (the shared flow owns the draw and the assembly):

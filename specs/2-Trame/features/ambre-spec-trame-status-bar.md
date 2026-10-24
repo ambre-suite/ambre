@@ -64,11 +64,12 @@ status values are normative in `ambre-spec-template.md`.
 **Display shape** (`ambre-trame`, the chrome side):
 
 ```rust
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
     pub sum:       f64,
     pub avg:       f64,
-    pub count:     u64,   // non-empty cells
-    pub count_num: u64,   // numeric cells; zero hides sum, avg, min and max
+    pub count:     CellCount,   // non-empty cells
+    pub count_num: CellCount,   // numeric cells; zero hides sum, avg, min and max
     pub min:       f64,
     pub max:       f64,
 }

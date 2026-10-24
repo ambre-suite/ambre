@@ -115,23 +115,26 @@ status values are normative in `ambre-spec-template.md`.
 **The caret and the selection** (`ambre-prose`, UI thread):
 
 ```rust
-pub struct TextCursor {
-    pub block_id: TreeID,
-    pub offset:   u32,
-    /// Which side of a soft wrap the caret sits on.
-    pub affinity: CursorAffinity,
+/// The caret, and the fixed end of the selection when there is one (`ambre-bus`).
+pub struct CursorPosition {
+    pub block_id: BlockId,
+    pub offset:   DocOffset,
+    /// The fixed end, `None` for a collapsed caret. The caret is the moving end, and it
+    /// may precede the anchor (`PROSE-UI-039`).
+    pub anchor:   Option<(BlockId, DocOffset)>,
+}
+
+/// Which side of a soft wrap the caret sits on.
+pub enum Affinity { Downstream, Upstream }
+
+/// What the UI state keeps of the caret, beside the rest of the view.
+pub struct ProseUiState {
+    pub cursor:         Option<CursorPosition>,
+    pub caret_affinity: Affinity,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
-    pub x_goal:   Option<f32>,
+    x_goal:             Option<DocPx>,
+    /* the rest of the view */
 }
-
-pub struct TextSelection {
-    /// The fixed end.
-    pub anchor: (TreeID, u32),
-    /// The moving end; it may precede the anchor (`PROSE-UI-039`).
-    pub focus:  (TreeID, u32),
-}
-
-pub enum CursorAffinity { Before, After }
 ```
 
 **From a point to a position.** The viewport answers which page a screen point is on and where
@@ -140,8 +143,11 @@ block and an offset. It reads the shaped runs, never a fresh layout pass, which 
 answer for a culled block (`PROSE-UI-031`).
 
 ```rust
-/// The block and offset under a document position. `None` only for a layout with no page.
-pub fn hit_test(pos: DocPos, state: &ProseUiState) -> Option<(TreeID, u32)>;
+/// The block and offset under a canvas point. `None` only for a layout with no page.
+impl HitTest for ProseUiState {
+    type Target = (BlockId, DocOffset);
+    fn hit_test(&self, at: ViewPoint) -> Option<(BlockId, DocOffset)>;
+}
 ```
 
 | The point lands | The answer |
@@ -165,18 +171,25 @@ pub enum Direction {
     LineStart, LineEnd, DocStart, DocEnd,
 }
 
-/// Move the caret, or grow the selection to it when `extend`. Vertical moves cross wrapped
-/// lines, page breaks and block boundaries by walking the line boxes of the layout.
-pub fn move_cursor(state: &mut ProseUiState, dir: Direction, extend: bool);
+/// A place in the text: a block and a code-point offset.
+type Spot = (BlockId, DocOffset);
 
-/// The common tail of every move: place the caret, keep or clear the column, extend or
-/// collapse the selection (`PROSE-UI-036`), then reveal it (`PROSE-UI-035`). Never mutates
-/// the document.
-fn apply_caret(state: &mut ProseUiState, next: TextCursor, x_goal: Option<f32>, extend: bool);
+impl ProseUiState {
+    /// Move the caret, or grow the selection to it under `SelectionMode::Extend`. Vertical
+    /// moves cross wrapped lines, page breaks and block boundaries by walking the line
+    /// boxes of the layout.
+    pub fn move_cursor(&mut self, direction: Direction, mode: SelectionMode);
 
-/// After a local insertion, advance the caret in the same block. Clears the column, because a
-/// horizontal edit invalidates it, and reveals the caret through the same rule.
-pub fn advance_cursor(state: &mut ProseUiState, n: u32);
+    /// The common tail of every move: place the caret, keep or clear the column, extend or
+    /// collapse the selection (`PROSE-UI-036`), then reveal it (`PROSE-UI-035`). Never
+    /// mutates the document.
+    fn apply_caret(&mut self, next: Spot, affinity: Affinity, x_goal: Option<DocPx>,
+                   mode: SelectionMode);
+
+    /// After a local insertion, advance the caret in the same block. Clears the column,
+    /// because a horizontal edit invalidates it, and reveals the caret through the same rule.
+    fn advance_cursor(&mut self, n: DocCount);
+}
 ```
 
 Line start and line end honour the wrapped line under the caret and the caret's affinity at a
@@ -188,7 +201,7 @@ path can leave the caret off screen (`PROSE-UI-035`).
 ```rust
 /// Extend the drag to a pointer position. The anchor is the one captured on pointer-down
 /// (`PROSE-UI-037`); a pointer near the top or bottom edge arms the autoscroll.
-pub fn update_drag(&mut self, x: f32, y: f32);
+pub fn update_drag(&mut self, at: ViewPoint);
 
 /// One tick, once a frame: scroll by the armed speed, clamped (`PROSE-UI-025`), then
 /// re-resolve the last pointer so the selection follows the revealed text (`PROSE-UI-038`).

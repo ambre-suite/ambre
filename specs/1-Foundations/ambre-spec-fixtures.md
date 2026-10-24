@@ -166,8 +166,8 @@ pub struct FixtureManifest {
     /// back from the generated document rather than declared, so a manifest
     /// cannot name a version its artifact does not hold
     /// (`ambre-spec-schema-version.md`).
-    pub ambre_version: u8,
-    pub schema_version: u32,
+    pub ambre_version: ContainerVersion,
+    pub schema_version: SchemaVersion,
     /// BLAKE2b over the whole file, header included (`FIXTURE-011`). Hex, not
     /// 32 raw integers, which would defeat the readable diff this sidecar
     /// exists for.
@@ -230,7 +230,7 @@ pub trait FixtureGen {
     /// one is a bug, not a runtime condition. It **panics** rather than emit a
     /// half-built document -- a corpus that silently lost a merge is worse than
     /// a failed run.
-    fn build(&self) -> Vec<u8>;
+    fn build(&self) -> PlaintextContainer;
 }
 ```
 
@@ -246,13 +246,14 @@ is ever committed. The driver writes the sidecar; a generator has no method that
 
 impl DocState {
     /// Load a full Loro snapshot into a state, returning the display events the
-    /// application emits.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<AppEvent>;
+    /// application emits. The schema gate's verdict is a `Result`, not an event:
+    /// on a refusal the state is untouched (`SCHEMA-012`).
+    pub fn import_snapshot(&mut self, payload: &SnapshotBytes) -> Result<Vec<AppEvent>, SchemaError>;
 
     /// Lift the per-application `export_snapshot` to the enum. `LogicState`'s
     /// takes a `DocumentId` and needs a live registry entry, so it cannot serve
     /// the bare `DocState` the round trip quantifies over (`FIXTURE-013`).
-    pub fn export_snapshot(&self) -> Vec<u8>;
+    pub fn export_snapshot(&self) -> SnapshotBytes;
 }
 
 // ambre-logic -- fixture code, behind the `fixtures` feature
@@ -296,14 +297,15 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
 pub fn artifact_path(dir: &Path, name: &str) -> PathBuf;
 pub fn manifest_path(dir: &Path, name: &str) -> PathBuf;
 pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError>;
-pub fn manifest_for(gen: &dyn FixtureGen, bytes: &[u8], state: &DocState) -> FixtureManifest;
+pub fn manifest_for(generator: &dyn FixtureGen, bytes: &[u8]) -> Result<FixtureManifest, FixtureError>;
 pub fn digest_of(bytes: &[u8]) -> [u8; 32];
-pub fn write_fixture(dir: &Path, gen: &dyn FixtureGen) -> Result<FixtureManifest, FixtureError>;
-pub fn generate_into(dir: &Path, registry: &[&dyn FixtureGen]) -> Result<(), FixtureError>;
+pub fn write_fixture(generator: &dyn FixtureGen, dir: &Path) -> Result<FixtureManifest, FixtureError>;
+pub fn generate_into(registry: &[&dyn FixtureGen], dir: &Path) -> Result<Vec<FixtureManifest>, FixtureError>;
 
 /// Failures of the corpus, distinct from failures of the container.
 /// `DocFileError` stays the authority on malformed bytes; this wraps it and
 /// adds the conditions only a corpus has (`ambre-spec-docfile.md section 3`).
+#[derive(Debug, thiserror::Error)]
 pub enum FixtureError {
     /// No such artifact under the corpus root.
     NotFound { name: String },

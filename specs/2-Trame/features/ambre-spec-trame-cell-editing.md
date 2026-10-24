@@ -162,8 +162,8 @@ editor_text_drag: bool,                 // a pointer drag selecting text inside 
 
 ```rust
 pub struct CellEditor {
-    pub row: u32,
-    pub col: u32,
+    pub at: CellPos,
+    pub session: EditSessionId,   // the token the edit events echo
     pub(crate) core: TextEditor,  // the shared buffer, caret and selection (`TRAME-UI-050`)
 }
 ```
@@ -206,13 +206,15 @@ keyed by the two corners of the range it covers:
 pub enum ValidationKind {
     List(Vec<String>),                                   // a fixed value set
     ListRange(String),                                   // the values of a range, as an A1 reference
-    NumberRange { min: f64, max: f64, inclusive: bool },
+    NumberRange { min: f64, max: f64, bounds: RangeBounds },
     NumberInteger,
     DateRange { min: Option<DateSerial>, max: Option<DateSerial> },
-    TextLength { min: Option<u32>, max: Option<u32> },
+    TextLength { min: Option<CharCount>, max: Option<CharCount> },
     Regex(String),
     Formula(String),                                     // must return TRUE
 }
+
+pub enum RangeBounds { Exclusive, Inclusive }            // `Exclusive` by default
 
 pub enum ValidationOnInvalid {
     Reject,   // block the write (`TRAME-FEAT-020`)

@@ -108,10 +108,11 @@ declared in `ambre-spec-toile-schema.md section 3`, under the `board` register.
 **The camera** (`ambre-toile`):
 
 ```rust
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ViewportTransform {
-    pub center: Point,   // the world point under the screen centre
-    pub zoom:   f64,     // screen pixels per world unit, clamped 0.1 ..= 10.0
-    pub size:   Size,    // the canvas, in physical pixels
+    pub center: Point,       // the world point under the screen centre
+    pub zoom:   ZoomFactor,  // screen pixels per world unit, clamped 0.1 ..= 10.0
+    pub size:   Size,        // the canvas, in physical pixels
 }
 ```
 

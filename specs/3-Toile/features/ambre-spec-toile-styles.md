@@ -99,13 +99,13 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 separate from the fill, because on a note the fill is the card:
 
 ```rust
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ElementStyle {
-    pub fill:       Option<Rgba>,  // 0xRRGGBBAA; None = no fill
+    pub fill:       Option<Rgba>,  // None = no fill
     pub stroke:     Option<Rgba>,
-    pub stroke_w:   f32,
-    pub opacity:    f32,           // 0.0 ..= 1.0
-    pub corner:     f32,           // corner radius
+    pub stroke_w:   StyleLength,
+    pub opacity:    Opacity,       // 0.0 ..= 1.0
+    pub corner:     StyleLength,   // corner radius
     pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,
     pub text_color: Option<Rgba>,  // None = the kind's default ink

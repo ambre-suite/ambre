@@ -96,6 +96,7 @@ the selection is. The view publishes a state and the element renders it
 ```rust
 // ambre-prose/src/view/toolbar.rs -- published to the chrome component, never drawn on the canvas
 
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ToolbarState {
     /// The top-centre of the selection's first line, in view pixels. `None` hides the bar.
     pub anchor: Option<ViewPoint>,
@@ -106,6 +107,7 @@ pub struct ToolbarState {
 // ambre-bus/src/app/prose.rs -- read by `ProseCommand::ReadMarks`,
 // answered by `ProseEvent::SelectionMarks` with the selection it describes
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ActiveMarks {
     pub bold:          TriState,
     pub italic:        TriState,
@@ -113,10 +115,11 @@ pub struct ActiveMarks {
     pub strikethrough: TriState,
     pub code:          TriState,
     /// The address, when the whole selection carries one link and the same one.
-    pub link:          Option<String>,
+    pub link:          Option<LinkUrl>,
 }
 
-pub enum TriState { Off, On, Mixed }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TriState { #[default] Off, On, Mixed }
 ```
 
 **Three states, not two.** A selection covering formatted and unformatted text is neither on nor

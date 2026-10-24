@@ -79,7 +79,8 @@ element kinds and connectors; the encoding is that document's section 2.
 **Command** (`ambre-bus`): `Reorder { node, to }`, one undo item. The target is absolute or relative:
 
 ```rust
-pub enum ZTarget { Front, Back, Forward, Backward, Index(usize) }
+#[derive(Clone, Copy, Debug)]
+pub enum ZTarget { Front, Back, Forward, Backward, Index(ZOrderIndex) }
 ```
 
 **Steps, when a node is reordered:**

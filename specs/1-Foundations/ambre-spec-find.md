@@ -101,7 +101,10 @@ other features own, which is why one replace-all is one undo item rather than on
 ```rust
 /// The query and its refinements. What "whole" means -- a whole cell, a whole
 /// word -- is each application's, and the option set is theirs to widen.
-pub struct FindQuery { pub query: String, pub match_case: bool }
+pub struct FindQuery { pub query: String, pub options: FindOptions }
+
+/// Each application declares its own, and every one opens on the case.
+pub struct FindOptions { pub case: CaseMatch, /* the application's own refinements */ }
 ```
 
 **Steps, when a query arrives.** The same walk everywhere; step 2 is the application's own order.

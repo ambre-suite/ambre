@@ -93,14 +93,19 @@ statement about the format rather than about this feature.
 **The styles:**
 
 ```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ListStyle {
     Bullet,
     Ordered(OrderedStyle),
     /// The checkbox, and whether it is ticked.
-    Todo(bool),
+    Todo(TodoMark),
 }
 
-pub enum OrderedStyle { Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TodoMark { #[default] Open, Done }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderedStyle { Decimal = 0, LowerAlpha = 1, UpperAlpha = 2, LowerRoman = 3, UpperRoman = 4 }
 ```
 
 **The ordinal, and where a run ends.** Numbering is scoped to an unbroken run of neighbouring
@@ -109,8 +114,9 @@ a paragraph, a bullet, a checkbox, or an ordered item numbered differently. A li
 interrupted and resumes starts again at one (`PROSE-FEAT-026`).
 
 ```rust
-/// The one-based ordinal of an ordered item within its run (`PROSE-FEAT-002`).
-pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> u32;
+/// The one-based ordinal of an ordered item within its run (`PROSE-FEAT-002`); `None` for
+/// a block that is not an ordered item.
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>;
 
 /// How deep an item sits in its list, counting the items above it in the parent chain
 /// (`PROSE-005`). A top-level item is at depth zero.

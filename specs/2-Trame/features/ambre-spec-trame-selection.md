@@ -80,9 +80,10 @@ selection, and what the local user then holds.
 **View state.** One field of `TrameUiState`:
 
 ```rust
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Selection {
-    pub anchor: (u32, u32),    // the fixed corner the user set (`TRAME-UI-030`)
-    pub active: (u32, u32),    // the moving corner: cursor, editor and format target
+    pub anchor: CellPos,       // the fixed corner the user set (`TRAME-UI-030`)
+    pub active: CellPos,       // the moving corner: cursor, editor and format target
     pub extra: Vec<CellRect>,  // rectangles already committed with the modifier
     pub kind: SelKind,         // Cells, or a whole-axis band (`TRAME-UI-033`)
 }
@@ -135,7 +136,7 @@ is the anchor, and the two shapes it sits in.
 pub struct PresencePayload {
     pub anchor:       CellAnchor,
     pub selection:    Option<(CellAnchor, CellAnchor)>,  // top-left, bottom-right
-    pub display_name: String,                            // cosmetic (`PRESENCE-004`)
+    pub display_name: Option<DisplayName>,               // cosmetic (`PRESENCE-004`)
 }
 
 /// A cell anchor that survives a structural change: the row and column **uids**
@@ -151,12 +152,11 @@ pub struct CellAnchor {
 /// (`PRESENCE-006`); the positions are the anchors resolved against the `SheetIndex`.
 pub struct RemoteCursorPayload {
     pub user_id:      UserId,
-    pub display_name: String,
-    pub color:        u32,
+    pub display_name: Option<DisplayName>,
+    pub color:        Color,
     pub sheet_id:     SheetId,
-    pub row:          u32,
-    pub col:          u32,
-    pub selection:    Option<(u32, u32, u32, u32)>,
+    pub at:           CellPos,
+    pub selection:    Option<CellRect>,
 }
 ```
 

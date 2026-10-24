@@ -98,7 +98,13 @@ writes the catalogue (`MURMURE-286`).
 
 ```rust
 pub struct PersonalGroupId(Uuid);       // minted by the user's client
-pub enum SidebarGroup { Category(CategoryId), Personal(PersonalGroupId), Private, Direct, ToJoin }
+pub enum SidebarGroup {
+    Category { space: SpaceId, category: Option<CategoryId> },
+    Personal(PersonalGroupId),          // not built: joins with the personal sidebar
+    Private,
+    Direct,
+    ToJoin,
+}
 ```
 
 **A bookmark is personal, and a pin is shared.** A bookmark names the channel, the segment and the

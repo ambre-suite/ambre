@@ -92,10 +92,10 @@ the model builds a step, so an application reads one and never computes its own 
 pub struct ScrollStep { /* x and y, private */ }
 
 /// One pointer's pan, then the motion its release left.
-pub struct Kinetic { /* the press and the motion, private */ }
+pub struct Kinetic { /* the press, the motion and a trackpad glide, private */ }
 
 /// What a release leaves: a tap at the press point, a motion, or nothing.
-pub enum Release { Tap { x: f32, y: f32 }, Fling, Rest }
+pub enum Release { Tap { at: ViewPoint }, Fling, Rest }
 
 /// The speed a drag held at `at` scrolls a view of length `extent` at: `EdgeSpeed::at`.
 pub struct EdgeSpeed(/* private */);

@@ -92,27 +92,30 @@ unit (`TRAME-016`).
 **Shapes** (`ambre-bus`, plus the private record in `logic/styles.rs`):
 
 ```rust
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellStyle {
     pub underline: bool,
     pub strikethrough: bool,
     pub h_align: HAlign,          // Auto | Left | Center | Right
     pub v_align: VAlign,          // Top | Middle | Bottom
     pub wrap: bool,
-    pub fg: Option<u32>,          // 0xRRGGBB; None = the theme default
-    pub bg: Option<u32>,          // 0xRRGGBB; None = transparent
-    pub font: Option<String>,
+    pub fg: Option<Rgb>,          // None = the theme default
+    pub bg: Option<Rgb>,          // None = transparent
+    pub font: Option<FontFamily>,
     pub size: Option<FontSize>,   // points, stored as a whole `u16`
     pub format: CellFormat,       // `features/ambre-spec-trame-number-formats.md`
-    pub decimals: Option<u8>,
+    pub decimals: Option<Decimals>,
     pub borders: Borders,         // four independent Option<CellBorder> edges
 }
 
-struct StyleRecord {              // what the register actually holds
-    bold: bool,                   // bold and italic ride here, not in CellStyle
-    italic: bool,
-    style: CellStyle,
+#[derive(Serialize, Deserialize, Default)]
+pub(super) struct StyleRecord {   // what the register actually holds
+    pub(super) bold: bool,        // bold and italic ride here, not in CellStyle
+    pub(super) italic: bool,
+    pub(super) style: CellStyle,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct StylePatch {           // one toolbar control, one sparse edit
     pub bold: Option<bool>,
     pub italic: Option<bool>,
@@ -121,12 +124,13 @@ pub struct StylePatch {           // one toolbar control, one sparse edit
     pub h_align: Option<HAlign>,
     pub v_align: Option<VAlign>,
     pub wrap: Option<bool>,
-    pub fg: Option<Option<u32>>,       // None leaves, Some(None) clears, Some(Some) sets
-    pub bg: Option<Option<u32>>,
-    pub font: Option<Option<String>>,
+    pub fg: Option<Option<Rgb>>,       // None leaves, Some(None) clears, Some(Some) sets
+    pub bg: Option<Option<Rgb>>,
+    pub font: Option<Option<FontFamily>>,
     pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
-    pub decimals: Option<Option<u8>>,
+    pub decimals: Option<Option<Decimals>>,
+    pub decimals_step: Option<DecimalsStep>, // added to each cell's own count (`TRAME-105`)
     pub border: Option<BorderEdit>,    // a preset and a pen, resolved per cell
 }
 ```
@@ -164,10 +168,10 @@ pub enum CondFormatKind {
     Contains(String), StartsWith(String),
     Formula(String),                          // relative to the cell tested (`TRAME-FEAT-019`)
     IsEmpty, IsNotEmpty, IsError,
-    ColorScale2 { min_color: u32, max_color: u32 },
-    ColorScale3 { min_color: u32, mid_color: u32, max_color: u32 },
-    DataBar { color: u32 },
-    TopN(u32), BottomN(u32), TopNPercent(Percent), // 0 to 100, unrounded (`TRAME-239`, `TRAME-240`)
+    ColorScale2 { min_color: Rgb, max_color: Rgb },
+    ColorScale3 { min_color: Rgb, mid_color: Rgb, max_color: Rgb },
+    DataBar { color: Rgb },
+    TopN(RankCount), BottomN(RankCount), TopNPercent(Percent), // 0 to 100, unrounded (`TRAME-239`, `TRAME-240`)
 }
 ```
 

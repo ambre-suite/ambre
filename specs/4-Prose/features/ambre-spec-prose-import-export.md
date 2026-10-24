@@ -153,7 +153,7 @@ the intermediate form into bytes. Neither half knows the other (`PROSE-IO-044`),
 touches the document (`PROSE-IO-009`, `PROSE-IO-045`).
 
 ```text
-Import:  bytes -> reader -> ProseIr -> command builder -> Vec<ProseCommand> -> the document
+Import:  bytes -> reader -> ProseIr -> command builder -> Vec<ImportOp> -> the document
 Export:  the document -> document walk -> ProseIr -> writer -> bytes
 ```
 
@@ -165,89 +165,64 @@ shared header, so it passes through no intermediate form and loses nothing (`PRO
 serialized:
 
 ```rust
+// ambre-prose/src/interop/mod.rs
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ProseIr {
-    pub meta:     IrMeta,
-    pub blocks:   Vec<IrBlock>,
-    pub styles:   Vec<IrStyle>,
-    /// Comment threads, out of band from the blocks: a run carries the thread id.
-    pub comments: Vec<IrComment>,
+    pub meta:      IrMeta,
+    pub blocks:    Vec<IrBlock>,
+    /// The footnote bodies, in the order of their ordinals.
+    pub footnotes: Vec<IrFootnote>,
 }
 
+/// What the document carries beside its blocks. A flag says a construct is present, for a
+/// writer that has no syntax for it to report (`PROSE-IO-018`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct IrMeta {
-    pub title:        Option<String>,
-    /// BCP 47.
-    pub lang:         Option<String>,
-    pub page:         Option<IrPage>,
-    /// The `first` variants are set only when the document uses a distinct first page.
-    pub header:       Option<IrHeaderFooter>,
-    pub header_first: Option<IrHeaderFooter>,
-    pub footer:       Option<IrHeaderFooter>,
-    pub footer_first: Option<IrHeaderFooter>,
+    pub title: Option<String>,
+    pub paged: bool,
+    pub bands: bool,
 }
 
-pub struct IrPage {
-    pub width_mm:         f32,
-    pub height_mm:        f32,
-    pub margin_top_mm:    f32,
-    pub margin_bottom_mm: f32,
-    pub margin_left_mm:   f32,
-    pub margin_right_mm:  f32,
-    pub orientation:      IrOrientation,
-}
-
-pub enum IrOrientation { Portrait, Landscape }
-
-/// One paragraph of runs plus its alignment. A dynamic field is a run, not a marker.
-pub struct IrHeaderFooter {
-    pub align: IrTextAlign,
-    pub runs:  Vec<IrRun>,
-}
-
-/// The four dynamic fields, mirroring the marks `f:pn`, `f:pc`, `f:dt` and `f:ti`.
-pub enum IrField { PageNumber, PageCount, Date, Title }
-
+/// One block. Depth is the nesting, never a number: the document derives it too.
+#[derive(Clone, Debug, PartialEq)]
 pub enum IrBlock {
-    Paragraph { style_id: Option<String>, para_style: IrParaStyle, runs: Vec<IrRun> },
-    Heading   { level: StoredLevel, numbered: bool, runs: Vec<IrRun> },
-    /// Depth is derived from the nesting, never stored: the document derives it too.
+    /// `styled`: a named style, or alignment, indents or spacing of its own.
+    Paragraph { styled: bool, runs: Vec<IrRun> },
+    /// The level is the stored one, unclamped (`PROSE-FEAT-091`).
+    Heading   { level: StoredLevel, runs: Vec<IrRun> },
     ListItem  { style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
-    Table     { col_widths_pt: Vec<f32>, style: IrTableStyle, rows: Vec<IrTableRow> },
+    /// `merged`: two or more cells are merged into one.
+    Table     { merged: bool, rows: Vec<IrTableRow> },
     CodeBlock { lang: Option<String>, text: String },
-    Image     { content_hash: Option<String>, src_url: Option<String>, alt: String,
-                width_px: Option<u32>, height_px: Option<u32>,
-                align: Option<IrImageAlign>, caption: Option<String> },
+    Image     { alt: String },
     PageBreak,
     HRule,
-    Toc       { max_level: u8, numbered: bool },
-    Footnote  { id: Uuid, runs: Vec<IrRun> },
+    Toc,
 }
 
-pub struct IrTableStyle {
-    /// Promotes the first row to a header row.
-    pub header_row:  bool,
-    pub banded_rows: bool,
-}
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IrTableRow { pub cells: Vec<IrTableCell> }
 
-pub struct IrTableRow {
-    pub cells: Vec<IrTableCell>,
-}
-
-pub enum IrCellVAlign { Top, Center, Bottom }
-
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IrTableCell {
-    pub rowspan:      u32,
-    pub colspan:      u32,
-    /// Colours are `0x00RRGGBB`, and the writer renders them `#rrggbb`.
-    pub bg:           Option<u32>,
-    pub borders:      bool,
-    pub border_color: Option<u32>,
-    pub padding_pt:   Option<f32>,
-    pub valign:       IrCellVAlign,
+    /// A fill, a border, a padding or a vertical alignment.
+    pub styled: bool,
     /// A reader may put anything here; the command builder lifts what the tree refuses
     /// (`PROSE-IO-026`).
-    pub blocks:       Vec<IrBlock>,
+    pub blocks: Vec<IrBlock>,
 }
 
+/// One footnote body. A run points at it by ordinal.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IrFootnote { pub ordinal: FootnoteOrdinal, pub runs: Vec<IrRun> }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrListStyle { Bullet, Ordered(IrOrderedStyle), Todo(TodoMark) }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrOrderedStyle { Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct IrRun {
     pub text:          String,
     pub bold:          bool,
@@ -257,128 +232,57 @@ pub struct IrRun {
     pub superscript:   bool,
     pub subscript:     bool,
     pub code:          bool,
-    /// Foreground, `0x00RRGGBB`: a run is always opaque.
-    pub color:         Option<u32>,
-    pub background:    Option<u32>,
-    pub font_size:     Option<f32>,
-    pub font_family:   Option<String>,
-    pub link:          Option<String>,
-    pub comment_id:    Option<Uuid>,
-    /// The suggested insertion and the suggested deletion, mirroring the marks `si` and `sd`.
-    pub suggest_ins:    Option<Uuid>,
-    pub suggest_del:    Option<Uuid>,
-    pub suggest_author: Option<String>,
-    /// Unix ms.
-    pub suggest_date:   Option<u64>,
-    pub footnote_ref:   Option<Uuid>,
-    /// Set inside a header or a footer alone.
-    pub field:          Option<IrField>,
-    pub cross_ref:      Option<(Uuid, IrCrossRefKind)>,
+    pub link:          Option<LinkUrl>,
+    /// A colour, a background, a size or a family.
+    pub styled:        bool,
+    pub comment:       bool,
+    pub suggestion:    bool,
+    pub cross_ref:     bool,
+    /// The ordinal of the footnote this run calls.
+    pub footnote_ref:  Option<FootnoteOrdinal>,
 }
-
-pub struct IrParaStyle {
-    pub align:          Option<IrTextAlign>,
-    pub indent_first:   Option<f32>,
-    pub indent_left:    Option<f32>,
-    pub indent_right:   Option<f32>,
-    pub space_before:   Option<f32>,
-    pub space_after:    Option<f32>,
-    /// The three modes the document stores (`features/ambre-spec-prose-inline-styles.md`).
-    pub line_height:    Option<LineHeight>,
-    pub keep_together:  bool,
-    pub keep_with_next: bool,
-}
-
-/// The character defaults a named style carries: formatting alone, and none of the
-/// content-bearing fields of a run.
-pub struct IrRunStyle {
-    pub bold:          Option<bool>,
-    pub italic:        Option<bool>,
-    pub underline:     Option<bool>,
-    pub strikethrough: Option<bool>,
-    pub superscript:   Option<bool>,
-    pub subscript:     Option<bool>,
-    pub font_family:   Option<String>,
-    pub font_size:     Option<f32>,
-    pub color:         Option<u32>,
-    pub background:    Option<u32>,
-}
-
-pub struct IrStyle {
-    pub id:         String,
-    pub name:       String,
-    pub para_style: IrParaStyle,
-    pub run_style:  IrRunStyle,
-}
-
-/// A thread. The commented range is the `cm` mark on the runs, never a field here.
-pub struct IrComment {
-    pub id:         Uuid,
-    pub resolved:   bool,
-    pub created_at: Timestamp,
-    /// The opening body first, then the replies.
-    pub replies:    Vec<IrReply>,
-}
-
-pub struct IrReply {
-    pub id:         Uuid,
-    pub author:     String,
-    pub created_at: Timestamp,
-    pub text:       String,
-}
-
-pub enum IrTextAlign { Left, Center, Right, Justify }
-
-pub enum IrImageAlign { Block, Left, Right, Center }
-
-pub enum IrListStyle { Bullet, Ordered(IrOrderedStyle), Todo(bool) }
-
-pub enum IrOrderedStyle { Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman }
-
-pub enum IrCrossRefKind { PageNumber, SectionNumber, CustomText(String) }
 ```
 
 **The report, and the two error kinds.** A report is what the user reads after a conversion that
 finished. An error is what a caller gets when no document could be produced at all:
 
 ```rust
+// ambre_bus::app::prose
+/// A conversion that produced nothing answers an `InteropError` instead: the two are never
+/// one type (`PROSE-IO-047`).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConversionReport {
     pub format:   ConversionFormat,
     pub warnings: Vec<ConversionWarning>,
-    /// Local failures the conversion recovered from.
-    pub errors:   Vec<ConversionError>,
 }
 
-pub enum ConversionFormat { Docx, Markdown, Pdf, Html, Ambre }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConversionFormat { Ambre, Markdown }
 
+/// The same construct lost twice is one warning with its count.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConversionWarning {
-    StyleNotMapped      { style_name: String, fallback: String },
-    FormattingLost      { description: String },
-    ImageNotResolved    { content_hash: String },
-    ImageNotFetched     { src_url: String },
-    BlockLifted         { from: &'static str, to: &'static str },
-    FeatureNotSupported { feature: String, format: ConversionFormat },
-}
-
-/// A recovered local failure, recorded in the report.
-pub enum ConversionError {
-    ParseFailed  { detail: String },
-    RenderFailed { detail: String },
+    /// A construct the format has no syntax for, dropped or approximated (`PROSE-IO-004`).
+    FeatureNotSupported { feature: UnsupportedFeature, format: ConversionFormat, count: u32 },
+    /// An element the reader does not recognise, its text kept where it has any
+    /// (`PROSE-IO-005`).
+    ElementDropped      { element: DroppedElement, count: u32 },
+    /// A block the tree refuses where the file put it, moved (`PROSE-IO-026`, `PROSE-IO-052`).
+    BlockLifted         { block: LiftedBlock, count: u32 },
 }
 
 /// The whole call failed and produced nothing.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum InteropError {
-    TruncatedHeader,
-    InvalidMagic,
-    UnsupportedVersion { found: u8 },
-    WrongDocType,
+    /// The bytes do not read as the format named.
     ParseFailed(String),
-    RenderFailed(String),
+    /// The file is larger than a conversion accepts.
+    TooLarge(ByteSize),
 }
 ```
 
-The two `ParseFailed` variants are homonyms on purpose: one is a paragraph the reader skipped, the
-other is a file it could not open.
+A warning names its construct from a closed list and carries a count, so a long file does not bury
+the user in repeats.
 
 **Steps, on an import:**
 
@@ -416,10 +320,23 @@ budget row rather than four, and what keeps a writer from reading the document (
 | `ProseEvent::ImportProgress`, `::ExportProgress` | Logic to UI | a percentage, past one megabyte (`PROSE-IO-021`) |
 
 ```rust
-pub enum ImportFormat { Ambre, Docx, Markdown, Html }
+// ambre_bus::app::prose. A reader or a writer adds its variant on the day it lands, so the
+// view never offers a format no code reads or writes: Word, HTML and the PDF join with their
+// Stories (`ambre-roadmap.md` E5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImportFormat { Markdown }
 
-pub enum ExportFormat { Ambre, Docx, Markdown, Pdf, Html }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportFormat {
+    /// The native file: the shared header over the document's own snapshot.
+    Ambre,
+    Markdown(MarkdownFlavor),
+}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkdownFlavor { Gfm, CommonMark }
+
+/// Not built: the options join `ExportDocument` with the first writer that reads one.
 pub struct ExportOptions {
     /// Gates the comment threads in the Word and the HTML writers (`PROSE-IO-022`).
     pub include_comments:      bool,
@@ -428,12 +345,9 @@ pub struct ExportOptions {
     /// Inline the stylesheet, for a mail client that drops a style block.
     pub html_inline_css:       bool,
     pub pdf_include_toc_links: bool,
-    /// BCP 47. Absent falls back to the document's own language, then to none.
-    pub pdf_language:          Option<String>,
-    pub markdown_flavor:       MarkdownFlavor,
+    /// Absent falls back to the document's own language, then to none.
+    pub pdf_language:          Option<LangTag>,
 }
-
-pub enum MarkdownFlavor { Gfm, CommonMark }
 ```
 
 The media type each format declares:

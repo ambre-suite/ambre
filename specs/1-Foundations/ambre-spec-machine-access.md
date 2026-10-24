@@ -174,7 +174,7 @@ pub struct InboxPost {
     pub post_id: [u8; 16],
     pub writer: PublicKey,
     pub sealed: Vec<u8>,
-    pub signature: [u8; 64],
+    pub signature: Signature,
 }
 ```
 

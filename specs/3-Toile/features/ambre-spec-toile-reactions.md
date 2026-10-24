@@ -112,15 +112,17 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 **The value** (`ambre-bus`):
 
 ```rust
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
-    pub kind: ReactionKind, // Emoji(String) or Vote(i32)
-    pub ts:   i64,          // display only
+    pub kind: ReactionKind, // an emoji or a vote
+    pub ts:   Timestamp,    // display only
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji:      Vec<(String, u32)>, // sorted, so the chip order is stable
-    pub vote_total: i64,
-    pub vote_count: u32,
+    pub emoji:      Vec<(Emoji, ReactionCount)>, // sorted, so the chip order is stable
+    pub vote_total: VoteTotal,
+    pub vote_count: VoteCount,
 }
 ```
 

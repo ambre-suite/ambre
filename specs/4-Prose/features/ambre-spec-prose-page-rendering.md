@@ -76,30 +76,35 @@ thread, to measure it. It keeps the result and hands it over by move with the la
 share one heap, so nothing is serialized.
 
 ```rust
-/// One shaped block: the shaper's layout, the code-point starts of its text,
-/// and its left indent. Free of any GPU or thread-bound handle (`PROSE-UI-113`).
+/// One shaped block: the shaper's layout broken into lines, the byte start of each code
+/// point of its text, and its left indent. Free of any GPU or thread-bound handle
+/// (`PROSE-UI-113`).
 pub struct ParleyRunData { /* private */ }
 
 impl ParleyRunData {
-    /// The code-point offset under a point of the run.
-    pub fn offset_at(&self, x: f32, y: f32) -> u32;
+    /// The code-point offset under a point of the run, from the run's top-left corner.
+    pub fn offset_at(&self, at: DocPoint) -> RunOffset;
     /// Where the caret sits for a code-point offset.
-    pub fn caret_box(&self, offset: u32) -> BoundingBox;
+    pub fn caret_box(&self, offset: RunOffset) -> BoundingBox;
     /// One box per line a code-point range covers.
-    pub fn range_boxes(&self, start: u32, end: u32) -> Vec<BoundingBox>;
+    pub fn range_boxes(&self, span: RunSpan) -> Vec<BoundingBox>;
 }
 
 /// A shared handle on one shaped block. Two handles are equal when they are one run.
+#[derive(Clone, Debug)]
 pub struct ShapedRun(Arc<ParleyRunData>);
 
 /// What the Logic thread hands the view: the page geometry of the document, and the
-/// blocks, runs and notes of the pages the view asked for (`PROSE-125`).
+/// blocks, runs, notes and tables of the pages the view asked for (`PROSE-125`).
+#[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
-    pub version: u64,
+    pub version: LayoutVersion,
     pub layout:  Arc<PageLayout>,
     pub blocks:  HashMap<TreeID, ShapedRun>,
-    pub notes:   HashMap<Uuid, ShapedRun>,
-    /* private: the flow order of every block, the pages carried, the two ends of the text */
+    pub notes:   HashMap<FootnoteId, ShapedRun>,
+    pub tables:  HashMap<TreeID, Arc<TableShape>>,
+    /* private: the cells, the flow order of every block, the pages carried, the two ends of
+       the text, the blocks each page shows */
 }
 ```
 
@@ -115,6 +120,7 @@ the drawing surface.
 pub struct RunCache { /* private */ }
 
 /// The colours a page is painted with, filled by the host from the theme tokens.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PagePalette {
     pub sheet: Color, pub sheet_border: Color, pub shadow: Color, pub text: Color,
     pub accent: Color, pub warning: Color, pub success: Color, pub error: Color,
@@ -123,8 +129,12 @@ pub struct PagePalette {
 impl ProseUiState {
     /// Paint the pages the canvas shows, and one more on each side.
     pub fn paint<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette);
+}
+
+impl HitTest for ProseUiState {
+    type Target = (BlockId, DocOffset);
     /// The block and the offset under a canvas point.
-    pub fn hit_test(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32)>;
+    fn hit_test(&self, at: ViewPoint) -> Option<(BlockId, DocOffset)>;
 }
 ```
 

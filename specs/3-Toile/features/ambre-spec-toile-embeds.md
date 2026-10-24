@@ -153,6 +153,7 @@ rotate, delete and reorder cost this feature nothing.
 
 ```rust
 /// One `doc_embed` of the current culled frame, projected for the launcher.
+#[derive(Clone, Debug, PartialEq)]
 pub struct VisibleEmbed {
     /// The board element carrying the reference: the focus and hit-test key.
     pub element: ElementId,
@@ -160,11 +161,15 @@ pub struct VisibleEmbed {
     /// child's own commands are addressed to.
     pub document_id: DocumentId,
     pub doc_type: DocType,
-    /// Where to paint, in physical screen pixels: the axis-aligned box of the
+    /// Where to paint, in screen pixels: the axis-aligned box of the
     /// element's quad.
     pub screen_rect: Rect,
-    /// The child's own canvas size in physical pixels.
+    /// The child's own canvas size in logical pixels: the element's world size
+    /// at the current zoom.
     pub child_size: Size,
+    /// Child pixels to screen pixels, so a rotated embed paints its child
+    /// rotated (`TOILE-UI-096`).
+    pub to_screen: Affine,
     /// View-local focus. Never CRDT: a peer's focus is not ours.
     pub focused: bool,
 }

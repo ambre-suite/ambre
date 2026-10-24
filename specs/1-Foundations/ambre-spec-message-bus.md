@@ -105,11 +105,11 @@ travels towards the downstream worker and an `Event` always flows back.
 
 | Flow | Type | Module | Variants |
 |---|---|---|---|
-| UI to Logic | `LogicCommand` | `logic.rs` | 9 |
-| Logic to UI | `UiEvent` | `ui.rs` | 16 |
-| Logic to Sync | `SyncCommand` | `command.rs` | 11 |
-| Sync to Logic | `LogicEvent` | `event.rs` | 18 |
-| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 35 / 37 |
+| UI to Logic | `LogicCommand` | `logic.rs` | 20 |
+| Logic to UI | `UiEvent` | `ui.rs` | 24 |
+| Logic to Sync | `SyncCommand` | `command.rs` | 39 |
+| Sync to Logic | `LogicEvent` | `event.rs` | 55 |
+| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 31 / 34 |
 
 ```rust
 pub enum LogicCommand {
@@ -125,7 +125,7 @@ pub struct RequestId(pub u64);
 ```
 
 The four envelopes and the service family are the contract. The variant lists are not restated
-here, because a second copy of thirty variants is a copy that drifts. They live in `crates/ambre-bus/src/`,
+here, because a second copy of two hundred variants is a copy that drifts. They live in `crates/ambre-bus/src/`,
 one module per row of the table above.
 
 **What stays on an envelope, and what joins the service family.**

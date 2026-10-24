@@ -119,6 +119,7 @@ carries nothing: see section 6.
 ```rust
 /// The result of the cascade for one run of text. Every field is a decided value: a caller
 /// draws from it and never looks further up (`PROSE-FEAT-020`, `PROSE-FEAT-177`).
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedStyle {
     pub bold:          bool,
     pub italic:        bool,
@@ -127,12 +128,11 @@ pub struct ResolvedStyle {
     pub superscript:   bool,
     pub subscript:     bool,
     pub code_inline:   bool,
-    pub color:         Option<u32>,
-    pub background:    Option<u32>,
-    /// In points.
-    pub font_size:     f32,
-    pub font_family:   Option<String>,
-    pub link:          Option<String>,
+    pub color:         Option<Rgba>,
+    pub background:    Option<Rgba>,
+    pub font_size:     FontSize,
+    pub font_family:   Option<FontFamily>,
+    pub link:          Option<LinkUrl>,
 }
 ```
 
@@ -145,26 +145,32 @@ rather than a tie-break on arrival order, both peers resolve the same style from
 **The paragraph's settings:**
 
 ```rust
+/// `None` leaves the property alone, never clears it.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ParagraphStyle {
-    pub align:          TextAlign,
-    pub indent_first:   f32,
-    pub indent_left:    f32,
-    pub indent_right:   f32,
-    pub space_before:   f32,
-    pub space_after:    f32,
-    pub line_height:    LineHeight,
+    pub align:          Option<Align>,
+    pub indent_first:   Option<Pt>,
+    pub indent_left:    Option<Pt>,
+    pub indent_right:   Option<Pt>,
+    pub space_before:   Option<Pt>,
+    pub space_after:    Option<Pt>,
+    pub line_height:    Option<LineHeight>,
     /// Read by pagination: a block that must not be split, and one that must not be
     /// parted from the next (`features/ambre-spec-prose-pagination.md`).
-    pub keep_together:  bool,
-    pub keep_with_next: bool,
+    pub keep_together:  Option<bool>,
+    pub keep_with_next: Option<bool>,
 }
 
-pub enum TextAlign { Left, Center, Right, Justify }
-pub enum LineHeight { Multiple(f32), Exact(f32), AtLeast(f32) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Align { Left = 0, Center = 1, Right = 2, Justify = 3 }
+
+/// The mode decides the unit of its number, so each mode carries its own.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LineHeight { Multiple(LineSpacingMultiple), Exact(Pt), AtLeast(Pt) }
 ```
 
-The command carries the whole set; the handler compares it against what is stored and writes only
-the keys that differ (`PROSE-FEAT-025`). The command stays coarse and the storage stays granular,
+The command carries every property, each optional; the handler compares what it names against
+what is stored and writes only the keys that differ (`PROSE-FEAT-025`). The command stays coarse and the storage stays granular,
 which is what lets two authors change two properties of one paragraph at once
 (`PROSE-FEAT-176`).
 
@@ -182,23 +188,24 @@ grammar is checked before the document is touched. A malformed value is refused 
 so no unparseable value ever reaches the format (`PROSE-FEAT-022`).
 
 ```rust
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarkValueError {
     /// A colour that is neither six nor eight hexadecimal digits behind a hash.
     BadColor(String),
     /// A size that is not finite, or outside one to 1 638 points.
     BadFontSize(String),
     /// A value supplied for a key that takes none, or missing for a key that requires one.
-    ArityMismatch { key: String },
+    ArityMismatch { key: MarkKey },
     /// A key the registry does not declare.
-    UnknownKey(String),
+    UnknownKey(MarkKey),
 }
 
 /// Parse a colour into red, green, blue and alpha packed in that order. The six-digit form
 /// is opaque, so the two spellings of one opaque colour parse to one value (`PROSE-FEAT-175`)
 /// and a round trip of the stored bytes is stable (`PROSE-FEAT-023`).
-fn parse_color(raw: &str) -> Result<u32, MarkValueError>;
+pub fn parse_color(raw: &str) -> Result<Rgba, MarkValueError>;
 /// Parse a size in points. The ceiling is the one the office formats round-trip.
-fn parse_font_size(raw: &str) -> Result<f32, MarkValueError>;
+pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError>;
 ```
 
 The refusal has to reach the author, and the event that carries it is not declared: see section 6.

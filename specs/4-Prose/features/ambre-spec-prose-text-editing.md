@@ -137,8 +137,9 @@ pub struct DraftBuffer { /* private: the entries in the order sent, and a genera
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
     /// One entry per keystroke sent (`PROSE-UI-138`).
-    pub fn push_str(&mut self, seq: TextAck, text: &str, block_id: &BlockId, pos: u32);
-    pub fn push_delete(&mut self, seq: TextAck, block_id: &BlockId, start: u32, end: u32);
+    pub fn push_str(&mut self, seq: TextAck, text: &str, block_id: &BlockId, pos: DocOffset);
+    pub fn push_delete(&mut self, seq: TextAck, block_id: &BlockId, start: DocOffset,
+                       end: DocOffset);
     /// The command numbered `seq` was taken as drawn (`PROSE-UI-005`).
     pub fn confirm(&mut self, seq: TextAck);
     /// A layout was taken: the confirmed entries leave.
@@ -222,10 +223,12 @@ receives them as input events and answers whether the host must swallow the key.
 
 ```rust
 /// One input as the host hands it over: a key, committed text, a press, a drag, a release, a
-/// pick in the slash menu, a composition's preview (`Compose`) or its committed text
-/// (`ComposeEnd`). No `web_sys` here: the shared text field captures the DOM events.
+/// drop, a pick in the slash menu, a composition's preview (`Compose`) or its committed text
+/// (`ComposeEnd`), a copy and a paste. No `web_sys` here: the shared text field captures the
+/// DOM events.
 pub enum ProseInput { Key { .. }, Text(String), Press { .. }, Drag { .. }, Release,
-                      SlashPick(usize), Compose(String), ComposeEnd(String) }
+                      Drop { .. }, SlashPick(SlashChoice), Compose(String),
+                      ComposeEnd(String), Copy(ClipboardWrite), Paste { .. } }
 
 impl ProseUiState {
     /// Act on one input. True when the host must swallow it. Held while a structural

@@ -136,7 +136,7 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 ```rust
 /// Grid positions of the rows the active filter hides. Derived from
 /// `filter_hidden_{sheet}` on every filter or structural change, never persisted.
-hidden_rows: HashSet<u32>,
+hidden_rows: HashSet<Row>,
 ```
 
 **Display shape.** A hidden row rides the viewport flagged, never dropped from it:

@@ -68,11 +68,11 @@ that precede the block in document order (`PROSE-FEAT-030`) and stored nowhere
 
 ```rust
 /// The section number of a heading, as one counter per level.
-pub fn compute_section_number(tree: &LoroMovableTree, heading_id: &TreeID) -> Vec<u32>;
+pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Vec<u32>;
 
 /// The stored level of a block, when it is a heading. Raw: the numbering reads
 /// `StoredLevel::clamped`, not this (`PROSE-FEAT-029`).
-fn heading_level_of(tree: &LoroMovableTree, id: &TreeID) -> Option<StoredLevel>;
+fn heading_level_of(tree: &LoroTree, id: &TreeID) -> Option<StoredLevel>;
 ```
 
 **A level out of range.** The format documents one to six, and an import is the only way in for a

@@ -74,13 +74,16 @@ each.
 **The state of an open channel.** Private fields, read through methods.
 
 ```rust
+#[derive(Debug)]
 pub struct ChannelState {
     channel_id: ChannelId,
     meta: Held,                          // a DocumentId and its LoroDoc
     active: Held,
     closing: Option<Held>,
-    loaded: HashMap<DocumentId, LoroDoc>, // final segments, on demand
+    loaded: HashMap<SegmentId, LoroDoc>, // final segments, on demand
     pending: HashMap<SegmentId, Vec<Arrival>>, // final segments asked for, still arriving
+    threads: HashMap<MessageId, Thread>, // the open threads, by their root
+    /* and the bookkeeping: sequences, the segment lifecycle, amendments, the seek */
 }
 ```
 
@@ -103,15 +106,22 @@ segment takes the path of an older one, and its messages replace the band. A clo
 the channel opened without has no place to load into, so the channel closes and opens again
 (`MURMURE-514`).
 
-Threads join the state with the threads Story.
+The open threads join the same state, keyed by their root (`features/ambre-spec-murmure-threads.md`).
 
 **The command surface.** One content-plane variant, `LogicCommand::Channel`, addressed to a channel
 (`BUS-027`). Each command arrives with the Story that builds it.
 
 ```rust
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MurmureCommand {
-    SendMessage { draft: MessageDraft, now: Timestamp },
+    SendMessage {
+        draft: MessageDraft,
+        attachments: Vec<Attachment>, // files the Sync worker answered uploaded (`MURMURE-132`)
+        now: Timestamp,
+        confirmed: Confirmation,      // the `@channel` the author confirmed (`MURMURE-231`)
+    },
     LoadOlder { segment: SegmentId },
+    /* one variant per operation, each in the feature document that builds it */
 }
 ```
 

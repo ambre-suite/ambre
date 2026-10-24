@@ -62,10 +62,20 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 pub enum CtxScope { Cell, Column, Row, Corner }
 
+#[derive(Clone, PartialEq)]
 pub enum MenuEntry {
-    // parameterless: no variant field a coordinate fits in
-    Item { command: CommandId, label: String, icon: Option<Icon>, shortcut: Option<KeyBinding> },
+    Item(MenuItem),
     Separator,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct MenuItem {
+    // parameterless: no field a coordinate fits in
+    command: CommandId,
+    label: String,
+    icon: Option<icondata::Icon>,
+    shortcut: Option<KeyBinding>,
+    disabled: bool,
 }
 ```
 

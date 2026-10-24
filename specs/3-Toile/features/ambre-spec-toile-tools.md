@@ -103,10 +103,12 @@ status values are normative in `ambre-spec-template.md`.
 **The tools** (`ambre-toile`):
 
 ```rust
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum Tool {
+    #[default]
     Select,             // move, resize, rotate, marquee
     Pen,                // a Bezier path built across clicks
-    Sticky(u32),        // click-drop a note in the armed colour
+    Sticky(Rgba),       // click-drop a note in the armed colour
     Shape(ShapeKind),   // drag a rectangle to size a rect, ellipse, triangle or line
     Connector,          // drag from one element anchor to another
     Draw,               // freehand: sample, stream, commit on release

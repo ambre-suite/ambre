@@ -113,18 +113,20 @@ signature says who wrote the envelope, the tag says under which key, and only th
 | 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |
 
 ```text
-update body = nonce (16 bytes) || summary marker (1 byte) || delta
+update body = nonce (16 bytes) || summary marker (1 byte) || summary, when the marker says so || delta
 ```
 
 ```rust
 pub struct UpdateBody {
     pub nonce: SessionNonce,                 // ambre-spec-op-authorship.md
-    pub delta: Vec<u8>,                      // a Loro update, opaque to the envelope
+    pub summary: Option<ActivitySummary>,    // ambre-spec-residency.md
+    pub delta: DeltaBytes,                   // a Loro update, opaque to the envelope
 }
 ```
 
-The marker is `0` today, for no summary, and any other value is refused. The summary of
-`ambre-spec-residency.md` takes the other values when it lands (`SYNC-144`).
+The marker is `0` for no summary and `1` for a summary of `ambre-spec-residency.md`, which then
+precedes the delta. Any other value is refused, and an opened summary reaches the Logic thread
+beside its delta (`SYNC-144`).
 
 **Two standalone objects take the same envelope.** A document name and a media blob travel outside
 any message. So they carry their own parts: the layout, the key identifier, the author key, the

@@ -82,15 +82,16 @@ status values are normative in `ambre-spec-template.md`.
 
 1. The machine has already evaluated every argument, so the stack holds values (`TRAME-050`).
 2. It pops the argument count the call recorded, in order, and builds the slice.
-3. It adds the ambient context: the recomputation clock, and the 1-based position of the cell being
-   computed (`TRAME-053`, `TRAME-054`).
+3. It adds the ambient context: the recomputation clock, and the position of the cell being
+   computed, which `ROW()` and `COLUMN()` answer 1-based (`TRAME-053`, `TRAME-054`).
 4. `call_builtin` matches the upper-cased name and returns one value, which the machine pushes back.
 
 ```rust
+#[derive(Clone, Copy)]
 pub struct FnCtx {
-    pub now_serial: DateSerial, // the recomputation clock, one instant per pass
-    pub cell_row: u32,     // 1-based position of the cell being computed; 0 means unknown
-    pub cell_col: u32,
+    pub now_serial: DateSerial,  // the recomputation clock, one instant per pass
+    pub cell_row: Option<Row>,   // the position of the cell being computed; None when unknown
+    pub cell_col: Option<Col>,
 }
 
 pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue;

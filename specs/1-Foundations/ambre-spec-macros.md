@@ -171,14 +171,14 @@ pub struct Macro {
     pub trigger: Option<Trigger>,
     pub publisher: Option<PublisherSignature>,
     pub integrator: PublicKey,
-    pub integrator_signature: [u8; 64],
+    pub integrator_signature: Signature,
 }
 
 /// A third party's signature over the source and its manifest.
 pub struct PublisherSignature {
     pub publisher: PublicKey,
     pub version: String,
-    pub signature: [u8; 64],
+    pub signature: Signature,
 }
 
 /// What a macro may reach beyond the document's commands.

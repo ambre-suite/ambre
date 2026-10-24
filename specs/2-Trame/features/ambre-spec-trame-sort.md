@@ -107,10 +107,14 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 **Key shape**, typed in `ambre-bus`:
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
-    pub col:       u32,   // index within the range: 0 is its first column
-    pub ascending: bool,
+    pub col:   ColCount,   // offset within the range: 0 is its first column
+    pub order: SortOrder,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortOrder { #[default] Ascending, Descending }
 ```
 
 **The type rank**, applied when two values differ in type (`TRAME-111`):

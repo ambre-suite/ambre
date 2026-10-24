@@ -77,7 +77,8 @@ A search touches no shared state, so this section carries no table
 
 ```rust
 /// Refinements, both local to the panel.
-pub struct FindOptions { pub match_case: bool, pub whole_word: bool }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FindOptions { pub case: CaseMatch, pub word: WordMatch }
 
 /// `hits` in paint order; `focus` is the element to recentre on.
 pub struct FindResults { pub hits: Vec<ElementId>, pub focus: Option<ElementId> }

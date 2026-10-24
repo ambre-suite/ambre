@@ -137,8 +137,9 @@ with the body and with a pinned style:
 
 ```rust
 pub struct InlineEditor {
-    /// The element being edited: its body is authoritative here until close.
-    id: ElementId,
+    /// What is being edited -- an element's body, a connector's label or a
+    /// frame's title: authoritative here until close.
+    target: EditTarget,
     /// The shared buffer, caret, selection and intent queue.
     core: ambre_canvas::TextEditor,
 }

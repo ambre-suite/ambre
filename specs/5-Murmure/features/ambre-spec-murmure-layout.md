@@ -120,8 +120,8 @@ pub enum MurmurePane {
     Members { channel: ChannelId },
 }
 pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
-pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<String>, pub entries: Vec<SidebarEntry> }
-pub struct SidebarEntry { pub channel: ChannelId, pub name: Option<String>, pub activity: Activity }
+pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<Name>, pub entries: Vec<SidebarEntry> }
+pub struct SidebarEntry { pub channel: ChannelId, pub name: Option<Name>, pub activity: Activity }
 pub enum SidebarGroup { Category { space: SpaceId, category: Option<CategoryId> }, Private, Direct, ToJoin }
 pub enum Activity { None, Some, Count { messages: UnreadCount, mentions: MentionCount } }
 ```

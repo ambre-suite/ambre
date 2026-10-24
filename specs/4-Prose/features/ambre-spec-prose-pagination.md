@@ -134,6 +134,8 @@ pub struct PageLayout {
     pub page_height:       DocPx,
     pub content_width:     DocPx,
     pub content_height:    DocPx,
+    pub margin_left:       DocPx,
+    pub margin_top:        DocPx,
     pub page_count:        PageCount,
     pub blocks:            Vec<BlockLayout>,
     pub header_height:     DocPx,
@@ -146,8 +148,8 @@ pub struct PageLayout {
     /// The scripts this document uses that no loaded face covered when it was measured
     /// (`PROSE-110`). Empty is the settled case.
     pub missing_scripts: ScriptSet,
-    pub header_runs:  PageRuns,
-    pub footer_runs:  PageRuns,
+    /// The bands as the document held them when this layout was taken.
+    pub bands:            doc::Bands,
 }
 
 /// Where one block, or one fragment of it, sits.
@@ -158,14 +160,14 @@ pub struct BlockLayout {
     /// `is_split`. The later fragments are in `continuation_heights`.
     pub height:      DocPx,
     pub page_start:  PageIndex,
-    pub y_in_page:   f32,
+    pub y_in_page:   DocPx,
     pub is_split:    bool,
-    /// Index of the first line carried by each page after `page_start`.
-    pub split_points: Vec<u32>,
+    /// The first line carried by each page after `page_start`.
+    pub split_points: Vec<BlockLine>,
     /// The height of each fragment after `page_start`, one per split point. A
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading margin
     /// (`PROSE-070`).
-    pub continuation_heights: Vec<f32>,
+    pub continuation_heights: Vec<DocPx>,
     /// The notes this block calls, each on the page its calling line took.
     pub notes:       Vec<FootnoteLayout>,
     /// The height the notes hold at the foot of the block's last page once it is placed.
@@ -174,24 +176,19 @@ pub struct BlockLayout {
 
 /// A footnote placed at the foot of a page.
 pub struct FootnoteLayout {
-    pub footnote_id:  Uuid,
+    pub footnote_id:  FootnoteId,
+    /// The block whose line calls the note.
+    pub block_id:     TreeID,
     /// Sequential across the whole document, assigned in pass 0.
-    pub ordinal:      u32,
+    pub ordinal:      FootnoteOrdinal,
     pub page:         PageIndex,
     pub height:       DocPx,
 }
 
-/// Header and footer runs. `Static` when the band carries no page-number field, so one
-/// shaped copy serves every page; `PerPage` only when a page number forces one per page.
-pub enum PageRuns {
-    Static(Vec<ParleyRunData>),
-    PerPage(Vec<Vec<ParleyRunData>>),
-}
-
 impl PageLayout {
-    /// The header runs for a page: the shared slice or the page's own. Empty out of range.
-    pub fn header_runs_for(&self, page: usize) -> &[ParleyRunData];
-    pub fn footer_runs_for(&self, page: usize) -> &[ParleyRunData];
+    /// The header and the footer drawn on a page, each with its block and its
+    /// alignment. `None` for a hidden side.
+    pub fn bands_on_page(&self, page: PageIndex) -> (Option<doc::Band>, Option<doc::Band>);
     /// Every fragment visible on a page, continuations of split blocks included.
     pub fn blocks_on_page(&self, page: PageIndex) -> impl Iterator<Item = &BlockLayout>;
     /// The notes at the foot of a page, in ordinal order. Empty where it carries none.
@@ -199,8 +196,9 @@ impl PageLayout {
 }
 ```
 
-`ParleyRunData` is declared in `features/ambre-spec-prose-page-rendering.md section 2`: pagination
-shapes, the renderer draws, and the shaped run is what crosses between them.
+A band names the block it draws, and `bands_on_page` answers which band a page shows. The
+renderer paints that block from its shaped runs, as `features/ambre-spec-prose-page-rendering.md
+section 2` declares them.
 
 **Pass 0 -- what is measured once per full recomputation.**
 

@@ -105,13 +105,14 @@ are how a peer says *not any more*: pointer off the board, highlighter lifted. T
 has not changed:
 
 ```rust
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
-    pub name:          Option<String>,       // the sender's display name, cosmetic (`PRESENCE-004`)
+    pub name:          Option<DisplayName>,  // the sender's display name, cosmetic (`PRESENCE-004`)
     pub cursor:        Option<Point>,        // world space; None = the pointer left the board
     pub selection:     Vec<ElementId>,       // the peer's selection, drawn as ghosts
     pub live_stroke:   Option<Vec<StrokePoint>>, // an in-flight stroke, before it commits
     pub laser:         Option<Point>,        // one highlighter point; None = lifted
-    pub present_slide: Option<usize>,        // the presenter's slide (see the presentation feature)
+    pub present_slide: Option<SlideIndex>,   // the presenter's slide (see the presentation feature)
 }
 ```
 

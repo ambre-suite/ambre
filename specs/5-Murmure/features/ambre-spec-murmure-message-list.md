@@ -134,9 +134,13 @@ the messages that cross the viewport plus a margin. The scroll anchor is a messa
 offset, so a load above keeps the anchor in place (`MURMURE-192`).
 
 ```rust
-pub struct ScrollAnchor { pub message: MessageRef, pub offset: PixelOffset }
-pub struct PixelOffset(f32);
-pub struct RowHeight(f32);
+// ambre-murmure/src/view.rs: where the list of a region rests
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Rest {
+    Latest,                                // on the latest row: a new message scrolls into view
+    Row { key: RowKey, anchor_y: ViewPx }, // a row at a height, which loads leave in place
+}
+pub enum RowKey { Message(MessageId), Band(SegmentId) }
 ```
 
 **Canvas and DOM.** The messages are canvas content, shaped by the text pipeline every application
@@ -211,6 +215,7 @@ Sync worker tells a missing key from a failure that may clear (`SYNC-173`). The 
 cause; the list names the remedy.
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unreadable {
     KeyNotReceived,         // the key chain did not reach the key of this segment
     BeforeHistoryBoundary,  // the member was invited without this history

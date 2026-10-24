@@ -90,6 +90,7 @@ the highlight and never reaches a scan (`FIND-005`). The *find options* are the 
 applies to its query. Trame widens the shared set to four, one enum per panel checkbox:
 
 ```rust
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FindOptions {
     pub case: CaseMatch,      // Insensitive | Sensitive
     pub extent: MatchExtent,  // Substring | WholeCell

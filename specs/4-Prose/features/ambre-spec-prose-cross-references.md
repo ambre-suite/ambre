@@ -80,14 +80,24 @@ rests on where none does.
 **The value is a record, not a joined string:**
 
 ```rust
-/// What the reference mark stores. Encoded as a length-prefixed record, hex in the
-/// mark's string value (`PROSE-FEAT-072`).
-pub struct CrossRefValue {
-    /// The target's own identity, never its text (`PROSE-FEAT-073`).
-    pub target_block_id: TreeID,
-    pub kind:            CrossRefKind,
+// ambre-prose/src/xref.rs
+/// What the reference mark stores: postcard prefixes a label with its length, and the bytes
+/// are written in hex in the mark's string value (`PROSE-FEAT-072`).
+#[derive(Serialize, Deserialize)]
+struct Record {
+    /// The target's own identity, never its text (`PROSE-FEAT-073`): the peer and the
+    /// counter of its `TreeID`.
+    peer:    PeerId,
+    counter: OpCounter,
+    kind:    CrossRefKind,
 }
 
+pub fn encode(target: TreeID, kind: &CrossRefKind) -> String;
+pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)>;
+
+// ambre_bus::app::prose. The variant's position is its stored code: a new kind is appended,
+// never inserted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CrossRefKind {
     /// The page the target starts on.
     PageNumber,

@@ -78,11 +78,11 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 pub struct SpellChecker {
     dict: zspell::Dictionary,
-    lang: String,
+    lang: LangTag,
 }
 
 pub struct SpellError {
-    pub range:       (u32, u32),
+    pub range:       DocSpan,
     pub word:        String,
     /// At most five.
     pub suggestions: Vec<String>,

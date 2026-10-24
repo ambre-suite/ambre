@@ -75,9 +75,9 @@ Absent means no link, and clearing removes the key rather than writing an empty 
 **The target shape** (`ambre-bus`):
 
 ```rust
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LinkTarget {
-    Url(String),      // a web address, opened sandboxed by the shell
+    Url(LinkUrl),     // a web address, opened sandboxed by the shell
     Frame(ElementId), // a frame on this board: the camera fits to it
     Document { document_id: DocumentId, doc_type: DocType },
 }

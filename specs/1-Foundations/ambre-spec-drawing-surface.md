@@ -118,9 +118,13 @@ and only the brush has one. A caller passes the render colour explicitly.
 
 ```rust
 // ambre-canvas/src/render -- wgpu backend, UI Thread
-pub struct WgpuSurface<'a> {
-    renderer: &'a mut QuadRenderer,
+pub struct WgpuSurface<'r> {
+    renderer: &'r mut QuadRenderer,
+    // held for `draw_image` alone: a picture is uploaded to a texture the first frame
+    device: &'r wgpu::Device,
+    queue: &'r wgpu::Queue,
     clip_stack: Vec<Rect>,  // clip applied CPU-side before push vertex
+    transform_stack: Vec<Affine>,  // composed model-to-screen, one per live push_transform
 }
 
 // ambre-pdf -- krilla backend, Logic thread, lazy-loaded

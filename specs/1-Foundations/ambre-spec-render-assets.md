@@ -79,15 +79,28 @@ keep the allocation where it is.
 
 **CRDT containers.** none. An asset is derived from the document, never stored in it.
 
-**The two font tiers.** One shape, two lifetimes. There is no third: a face of the machine is
+**The two font tiers.** One byte type, two lifetimes. There is no third: a face of the machine is
 never read, on any thread (`CANVAS-069`, `PDF-007`, `PROSE-114`).
 
 ```rust
-pub struct FontConfig {
-    /// Base fonts loaded via fetch() from the Ambre server (same origin)
-    pub base: Vec<FontData>,
-    /// Additional fonts loaded on demand (CJK, Arabic, Devanagari, color emoji...)
-    pub lazy: Vec<FontData>,
+// ambre-canvas/src/fonts.rs
+
+/// The base faces, fetched at startup from the same origin. A face that fails
+/// to fetch is logged and omitted.
+pub async fn fetch_base_font_faces() -> Vec<FontBytes>;
+
+/// The lazy scripts (`ambre-draw`), so the Logic thread classifies a codepoint
+/// without the graphics stack.
+pub enum LazyFont { Cjk, Arabic, Devanagari, Emoji }
+
+/// Which lazy scripts were requested, and the faces fetched since the last drain.
+pub struct LazyFontLoader { /* private: the requested set and the inbox */ }
+
+impl LazyFontLoader {
+    /// Start one fetch per lazy script seen for the first time in `text`.
+    pub fn observe(&mut self, text: &str);
+    /// Register the arrived faces and hand their bytes back, for the other threads.
+    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<FontBytes>;
 }
 ```
 

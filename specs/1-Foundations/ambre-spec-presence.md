@@ -169,7 +169,7 @@ use peniko::Color;
 /// saturation/lightness, so every peer color is vivid, legible on light and
 /// dark backgrounds, and distinct from its neighbours; the result is always
 /// fully opaque (callers apply per-element alpha themselves).
-pub fn peer_color(user_id: &UserId) -> Color { /* ... */ }
+pub fn peer_color(user_id: &UserId) -> Color;
 ```
 
 Seeding on the `UserId` newtype rather than on a raw `Uuid` keeps the type end to end through every
