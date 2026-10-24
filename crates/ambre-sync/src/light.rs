@@ -450,7 +450,7 @@ mod tests {
         let [LogicEvent::Activity { counters, .. }] = events.as_slice() else {
             panic!("expected the counters alone, got {events:?}");
         };
-        assert_eq!((counters.content, counters.mentions), (1, 1));
+        assert_eq!((counters.content.get(), counters.mentions.get()), (1, 1));
         assert_eq!(state.documents_len(), 0, "counting loaded the document");
         state.receive_update(
             Seq(10),
@@ -613,7 +613,7 @@ mod tests {
         let [LogicEvent::Activity { counters, .. }] = events.as_slice() else {
             panic!("expected the segment's counters, got {events:?}");
         };
-        assert_eq!(counters.mentions, 1);
+        assert_eq!(counters.mentions.get(), 1);
 
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         assert!(ws_rx.try_recv().is_err(), "a held segment is watched again");
@@ -667,7 +667,7 @@ mod tests {
         else {
             panic!("expected the thread's counters, got {events:?}");
         };
-        assert_eq!((*document_id, counters.mentions), (thread, 1));
+        assert_eq!((*document_id, counters.mentions.get()), (thread, 1));
         assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
     }
 
@@ -769,7 +769,7 @@ mod tests {
         else {
             panic!("expected the segment's counters, got {events:?}");
         };
-        assert_eq!((*document_id, counters.mentions), (segment, 1));
+        assert_eq!((*document_id, counters.mentions.get()), (segment, 1));
         assert_eq!(state.light_cursors(), vec![(segment, Seq(7))]);
 
         // The first live delta of a head gives it a cursor.
@@ -852,7 +852,7 @@ mod tests {
                     LogicEvent::Activity {
                         document_id,
                         counters,
-                    } => Some((document_id, counters.mentions)),
+                    } => Some((document_id, counters.mentions.get())),
                     _ => None,
                 })
                 .collect()
@@ -916,7 +916,7 @@ mod tests {
             drain(&rx)
                 .into_iter()
                 .filter_map(|event| match event {
-                    LogicEvent::Activity { counters, .. } => Some(counters.mentions),
+                    LogicEvent::Activity { counters, .. } => Some(counters.mentions.get()),
                     _ => None,
                 })
                 .collect()

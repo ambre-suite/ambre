@@ -766,6 +766,7 @@ fn download(filename: &str, media_type: &ambre_bus::MediaType, data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
@@ -910,11 +911,11 @@ mod tests {
         // The count as the page state holds it once the Logic thread's event
         // is applied. Decoding that event is Prose's own, and tested there.
         view.state.word_count = WordCount {
-            words: 12,
-            characters: 60,
-            characters_with_spaces: 71,
-            paragraphs: 1,
-            pages: 2,
+            words: WordTotal::new(12),
+            characters: GraphemeCount::new(60),
+            characters_with_spaces: GraphemeCount::new(71),
+            paragraphs: ParagraphCount::new(1),
+            pages: PageCount::new(2),
         };
         view.update();
         leptos::task::tick().await;

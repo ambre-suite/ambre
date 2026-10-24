@@ -15,7 +15,7 @@ use loro::{LoroDoc, LoroTree, TreeID};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc;
-use crate::events::WordCount;
+use crate::events::{GraphemeCount, ParagraphCount, WordCount, WordTotal};
 
 /// The four text tallies of the whole document, `pages` left at zero.
 ///
@@ -65,26 +65,22 @@ fn tally(text: &str, count: &mut WordCount) {
             visible += 1;
         }
     }
+    // A document past four billion clusters reads as the largest figure
+    // rather than wrapping: every tally holds at its top.
     count.words = count
         .words
-        .saturating_add(saturate(text.unicode_words().count()));
-    count.characters = count.characters.saturating_add(saturate(visible));
+        .plus(WordTotal::of_len(text.unicode_words().count()));
+    count.characters = count.characters.plus(GraphemeCount::of_len(visible));
     count.characters_with_spaces = count
         .characters_with_spaces
-        .saturating_add(saturate(clusters));
+        .plus(GraphemeCount::of_len(clusters));
     if visible == 0 {
         return;
     }
-    if count.paragraphs > 0 {
-        count.characters_with_spaces = count.characters_with_spaces.saturating_add(1);
+    if count.paragraphs > ParagraphCount::ZERO {
+        count.characters_with_spaces = count.characters_with_spaces.incremented();
     }
-    count.paragraphs = count.paragraphs.saturating_add(1);
-}
-
-/// A tally as the event carries it. A document past four billion clusters
-/// reads as the largest figure rather than wrapping.
-fn saturate(n: usize) -> u32 {
-    u32::try_from(n).unwrap_or(u32::MAX)
+    count.paragraphs = count.paragraphs.incremented();
 }
 
 #[cfg(test)]
@@ -133,18 +129,18 @@ mod tests {
         // joined from seven: two characters to the reader.
         let count =
             count_of(&["e\u{301}\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"]);
-        assert_eq!(count.characters, 2);
-        assert_eq!(count.characters_with_spaces, 2);
+        assert_eq!(count.characters.get(), 2);
+        assert_eq!(count.characters_with_spaces.get(), 2);
     }
 
     #[test]
     fn whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces() {
         let count = count_of(&["one two", "three\tfour"]);
-        assert_eq!(count.characters, 15);
+        assert_eq!(count.characters.get(), 15);
         // Two spaces, one tab, and the break between the two paragraphs.
-        assert_eq!(count.characters_with_spaces, 18);
-        assert_eq!(count.paragraphs, 2);
-        assert_eq!(count.words, 4);
+        assert_eq!(count.characters_with_spaces.get(), 18);
+        assert_eq!(count.paragraphs.get(), 2);
+        assert_eq!(count.words.get(), 4);
     }
 
     #[test]
@@ -152,14 +148,14 @@ mod tests {
         let count = count_of(&["-- ... well-known 3.14 !"]);
         // `well` and `known` split at the hyphen; the number is one word, and
         // the punctuation counts nothing.
-        assert_eq!(count.words, 3);
+        assert_eq!(count.words.get(), 3);
     }
 
     #[test]
     fn an_empty_paragraph_between_two_is_neither_a_paragraph_nor_a_break() {
         let count = count_of(&["a", "", "b"]);
-        assert_eq!(count.paragraphs, 2);
-        assert_eq!(count.characters_with_spaces, 3);
+        assert_eq!(count.paragraphs.get(), 2);
+        assert_eq!(count.characters_with_spaces.get(), 3);
     }
 
     #[test]
@@ -181,8 +177,8 @@ mod tests {
             text: "inside".to_owned(),
         });
         let count = compute_word_count(state.document());
-        assert_eq!(count.words, 2);
-        assert_eq!(count.paragraphs, 2);
+        assert_eq!(count.words.get(), 2);
+        assert_eq!(count.paragraphs.get(), 2);
     }
 
     #[test]

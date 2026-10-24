@@ -648,8 +648,8 @@ impl LogicState {
             return false;
         };
         let now = Counts {
-            unread: UnreadCount(counters.content),
-            mentions: MentionCount(counters.mentions),
+            unread: UnreadCount(counters.content.get()),
+            mentions: MentionCount(counters.mentions.get()),
         };
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is
@@ -2475,7 +2475,7 @@ mod tests {
     fn activity(content: u32) -> ambre_core::activity::ActivityCounters {
         ambre_core::activity::ActivityCounters {
             active: true,
-            content,
+            content: ambre_core::activity::ContentUpdates::new(content),
             ..Default::default()
         }
     }
@@ -2537,7 +2537,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: active.document_id(),
             counters: ambre_core::activity::ActivityCounters {
-                mentions: 1,
+                mentions: ambre_core::activity::MentionUpdates::new(1),
                 ..activity(2)
             },
         });
@@ -6369,7 +6369,7 @@ mod tests {
             state.handle_logic_event(LogicEvent::Activity {
                 document_id: thread,
                 counters: ambre_core::activity::ActivityCounters {
-                    mentions: 1,
+                    mentions: ambre_core::activity::MentionUpdates::new(1),
                     ..activity(2)
                 },
             });
@@ -6417,7 +6417,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: thread,
             counters: ambre_core::activity::ActivityCounters {
-                mentions: 1,
+                mentions: ambre_core::activity::MentionUpdates::new(1),
                 ..activity(0)
             },
         });

@@ -176,20 +176,35 @@ impl ActivitySummary {
     }
 }
 
+crate::define_tally! {
+    /// Updates of kind content.
+    pub struct ContentUpdates;
+    /// Updates of kind reaction.
+    pub struct ReactionUpdates;
+    /// Updates of kind edit.
+    pub struct EditUpdates;
+    /// Updates of any other kind.
+    pub struct OtherUpdates;
+    /// Updates that name this user, or every member.
+    pub struct MentionUpdates;
+}
+
 /// The activity a client counts for one document it does not hold
 /// (`RESID-004`). A few dozen bytes, whatever the document's size.
+///
+/// Each counter has its own type, so a reaction is never counted as content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ActivityCounters {
     /// Updates of kind content.
-    pub content: u32,
+    pub content: ContentUpdates,
     /// Updates of kind reaction.
-    pub reactions: u32,
+    pub reactions: ReactionUpdates,
     /// Updates of kind edit.
-    pub edits: u32,
+    pub edits: EditUpdates,
     /// Updates of any other kind.
-    pub other: u32,
+    pub other: OtherUpdates,
     /// Updates that name this user, or every member.
-    pub mentions: u32,
+    pub mentions: MentionUpdates,
     /// Something happened, counted or not (`RESID-015`).
     pub active: bool,
 }
@@ -203,15 +218,14 @@ impl ActivityCounters {
         let Some(summary) = summary else {
             return;
         };
-        let counter = match summary.kind {
-            ActivityKind::Content => &mut self.content,
-            ActivityKind::Reaction => &mut self.reactions,
-            ActivityKind::Edit => &mut self.edits,
-            ActivityKind::Other => &mut self.other,
-        };
-        *counter = counter.saturating_add(1);
+        match summary.kind {
+            ActivityKind::Content => self.content = self.content.incremented(),
+            ActivityKind::Reaction => self.reactions = self.reactions.incremented(),
+            ActivityKind::Edit => self.edits = self.edits.incremented(),
+            ActivityKind::Other => self.other = self.other.incremented(),
+        }
         if summary.mentions_all || me.is_some_and(|me| summary.mentions.contains(&me)) {
-            self.mentions = self.mentions.saturating_add(1);
+            self.mentions = self.mentions.incremented();
         }
     }
 }
@@ -280,9 +294,9 @@ mod tests {
         assert_eq!(
             counters,
             ActivityCounters {
-                content: 2,
-                reactions: 1,
-                mentions: 2,
+                content: ContentUpdates::new(2),
+                reactions: ReactionUpdates::new(1),
+                mentions: MentionUpdates::new(2),
                 active: true,
                 ..ActivityCounters::default()
             }

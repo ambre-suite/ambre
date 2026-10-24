@@ -159,7 +159,7 @@ impl ProseState {
     /// the four tallies alone (`PROSE-FEAT-126`, `PROSE-FEAT-127`).
     pub(super) fn stamp_pages(&mut self) {
         if let Some(paginator) = self.paginator.as_ref() {
-            self.word_count.pages = paginator.layout().page_count.get();
+            self.word_count.pages = paginator.layout().page_count;
         }
     }
 
@@ -541,7 +541,7 @@ mod tests {
         show(&mut view, &outcome.display);
         let text = compute_word_count(state.document());
         assert_eq!(view.word_count.words, text.words);
-        assert_eq!(view.word_count.words, 3);
+        assert_eq!(view.word_count.words.get(), 3);
         assert_eq!(view.word_count.characters, text.characters);
         assert_eq!(
             view.word_count.characters_with_spaces,
@@ -556,8 +556,8 @@ mod tests {
         append(&mut state, BlockInit::Paragraph, "one");
         append(&mut state, BlockInit::PageBreak, "");
         append(&mut state, BlockInit::Paragraph, "two");
-        let pages = state.paginate(&[]).page_count.get();
-        assert!(pages >= 2);
+        let pages = state.paginate(&[]).page_count;
+        assert!(pages.get() >= 2);
         assert_eq!(state.word_count().pages, pages);
         let outcome = state.handle_command(ProseCommand::CountWords);
         let reported = outcome.display.iter().find_map(|event| match event {
@@ -576,7 +576,7 @@ mod tests {
             pos: DocOffset::ZERO,
             text: "words".to_owned(),
         });
-        let pages = state.paginate(&[]).page_count.get();
+        let pages = state.paginate(&[]).page_count;
         // An edit that adds a page, and no layout taken since.
         append(&mut state, BlockInit::PageBreak, "");
         append(&mut state, BlockInit::Paragraph, "more");

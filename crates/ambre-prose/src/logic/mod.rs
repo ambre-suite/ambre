@@ -347,7 +347,7 @@ impl ProseState {
         } else {
             paginator.reflow_text(&self.doc, &dirty)
         };
-        self.word_count.pages = layout.page_count.get();
+        self.word_count.pages = layout.page_count;
         layout
     }
 

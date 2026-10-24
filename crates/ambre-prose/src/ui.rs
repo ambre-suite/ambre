@@ -899,11 +899,11 @@ impl StatusFigures {
 pub fn status_figures(count: &WordCount) -> StatusFigures {
     let plural = |n: u32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     StatusFigures {
-        words: plural(count.words, "word", "words"),
-        characters: plural(count.characters, "character", "characters"),
+        words: plural(count.words.get(), "word", "words"),
+        characters: plural(count.characters.get(), "character", "characters"),
         with_spaces: format!("{} with spaces", count.characters_with_spaces),
-        paragraphs: plural(count.paragraphs, "paragraph", "paragraphs"),
-        pages: plural(count.pages, "page", "pages"),
+        paragraphs: plural(count.paragraphs.get(), "paragraph", "paragraphs"),
+        pages: plural(count.pages.get(), "page", "pages"),
     }
 }
 
@@ -938,11 +938,11 @@ mod tests {
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {
-            words: 12,
-            characters: 1,
-            characters_with_spaces: 70,
-            paragraphs: 3,
-            pages: 1,
+            words: crate::events::WordTotal::new(12),
+            characters: crate::events::GraphemeCount::new(1),
+            characters_with_spaces: crate::events::GraphemeCount::new(70),
+            paragraphs: crate::events::ParagraphCount::new(3),
+            pages: crate::events::PageCount::new(1),
         };
         assert_eq!(
             super::status_figures(&count).labels(),

@@ -771,21 +771,30 @@ pub struct CellBorder {
     pub color: Rgb,
 }
 
+ambre_core::define_tally! {
+    /// A number of words, as Unicode word boundaries split the text.
+    pub struct WordTotal;
+    /// A number of grapheme clusters: the characters a reader counts.
+    pub struct GraphemeCount;
+    /// A number of paragraphs that hold a visible character.
+    pub struct ParagraphCount;
+}
+
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
 ///
 /// Four are tallies of the text. The fifth is read off the layout, and each
 /// half is refreshed by its own trigger.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words: u32,
+    pub words: WordTotal,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters: u32,
+    pub characters: GraphemeCount,
     /// The same clusters, whitespace and paragraph breaks included
     /// (`PROSE-FEAT-121`).
-    pub characters_with_spaces: u32,
-    pub paragraphs: u32,
+    pub characters_with_spaces: GraphemeCount,
+    pub paragraphs: ParagraphCount,
     /// From the layout, never from the tally (`PROSE-FEAT-038`).
-    pub pages: u32,
+    pub pages: PageCount,
 }
 
 /// What a format command does to one presence mark over a selection.

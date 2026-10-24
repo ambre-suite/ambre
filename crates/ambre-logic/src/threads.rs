@@ -201,8 +201,8 @@ impl LogicState {
         let Some(watched) = self.watched_threads.get_mut(&thread) else {
             return false;
         };
-        let named = MentionCount(counters.mentions) > watched.mentions;
-        watched.mentions = MentionCount(counters.mentions);
+        let named = MentionCount(counters.mentions.get()) > watched.mentions;
+        watched.mentions = MentionCount(counters.mentions.get());
         let channel_id = watched.channel_id;
         let mark = match self.closed_channels.get(&channel_id) {
             Some(closed) => closed.mark(channel_id, self.thread_mentions(channel_id)),

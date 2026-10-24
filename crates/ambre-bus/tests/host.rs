@@ -655,8 +655,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::Activity {
             document_id: doc,
             counters: ambre_core::activity::ActivityCounters {
-                content: 1,
-                mentions: 2,
+                content: ambre_core::activity::ContentUpdates::new(1),
+                mentions: ambre_core::activity::MentionUpdates::new(2),
                 ..Default::default()
             },
         },

@@ -295,11 +295,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | fie
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.characters | field | u32	math	word-count tallies
-ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.characters_with_spaces | field | u32	math	word-count tallies
-ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.pages | field | u32	math	word-count tallies
-ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.paragraphs | field | u32	math	word-count tallies
-ambre-bus | src/app/prose.rs | crate::app::prose | WordCount.words | field | u32	math	word-count tallies
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontFamily as From<String>>::from(label) | param | String	newtype-inner	FontFamily constructor or accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Anchor::Free.u | field | f32	math	board geometry, style metric, opacity or pressure
@@ -1134,11 +1129,6 @@ ambre-core | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::as_bytes() | ret | &[u8]	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::new(bytes) | param | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityCounters.active | field | bool	generic	fact flag in a record, selects no mode
-ambre-core | src/activity.rs | crate::activity | ActivityCounters.content | field | u32	math	per-kind counters
-ambre-core | src/activity.rs | crate::activity | ActivityCounters.edits | field | u32	math	per-kind counters
-ambre-core | src/activity.rs | crate::activity | ActivityCounters.mentions | field | u32	math	per-kind counters
-ambre-core | src/activity.rs | crate::activity | ActivityCounters.other | field | u32	math	per-kind counters
-ambre-core | src/activity.rs | crate::activity | ActivityCounters.reactions | field | u32	math	per-kind counters
 ambre-core | src/activity.rs | crate::activity | ActivityKind::byte() | ret | u8	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityKind::of(byte) | param | u8	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivitySummary.mentions_all | field | bool	generic	fact flag in a record, selects no mode
@@ -2357,8 +2347,6 @@ ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | Stri
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/comment.rs | crate::comment | reply_at(index) | param | usize	math	count, size or local index
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
-ambre-prose | src/count.rs | crate::count | saturate() | ret | u32	math	count, size or local index
-ambre-prose | src/count.rs | crate::count | saturate(n) | param | usize	math	count, size or local index
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	newtype-inner	the spelling of BodyKey, a body root name
@@ -3794,7 +3782,7 @@ ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.fill | field | boo
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.font_family | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.font_size | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.italic | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.opacity | field | bool	math	local state flag or value, not a mode selector
+ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.opacity | field | bool	generic	a fact, selects no mode: whether the selection mixes opacities
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.strikethrough | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke_w | field | bool	math	local state flag or value, not a mode selector

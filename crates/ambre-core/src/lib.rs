@@ -79,6 +79,7 @@ pub mod serde_enums;
 pub mod serde_id;
 pub mod span;
 pub mod status;
+pub mod tally;
 pub mod text_offset;
 /// Lengths and angles, one type per unit and per pixel space.
 pub mod unit;

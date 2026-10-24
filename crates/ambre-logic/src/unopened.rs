@@ -293,7 +293,7 @@ mod tests {
         drain(&sync);
         let message = ActivityCounters {
             active: true,
-            content: 1,
+            content: ambre_core::activity::ContentUpdates::new(1),
             ..ActivityCounters::default()
         };
         state.handle_logic_event(LogicEvent::Activity {
