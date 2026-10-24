@@ -7,7 +7,9 @@
 //! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
-use ambre_bus::app::prose::{ConversionFormat, ConversionReport, HeadingLevel, InteropError};
+use ambre_bus::app::prose::{
+    ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
+};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use super::{
@@ -163,10 +165,10 @@ impl Reader {
                     *style = IrListStyle::Todo(crate::events::TodoMark::done_if(done));
                 }
             }
-            Event::FootnoteReference(_) => self.warnings.dropped("footnote"),
-            Event::Html(_) | Event::InlineHtml(_) => self.warnings.dropped("HTML"),
+            Event::FootnoteReference(_) => self.warnings.dropped(DroppedElement::Footnote),
+            Event::Html(_) | Event::InlineHtml(_) => self.warnings.dropped(DroppedElement::Html),
             Event::InlineMath(text) | Event::DisplayMath(text) => {
-                self.warnings.dropped("math");
+                self.warnings.dropped(DroppedElement::Math);
                 self.text(&text, Inline::Plain);
             }
         }
@@ -226,17 +228,17 @@ impl Reader {
             Tag::TableCell => self.leaf = Some(Leaf::Cell),
             Tag::BlockQuote(_) => {
                 self.flush();
-                self.warnings.dropped("block quote");
+                self.warnings.dropped(DroppedElement::BlockQuote);
                 self.frames.push(Frame::Transparent);
             }
             Tag::FootnoteDefinition(_) => {
                 self.flush();
-                self.warnings.dropped("footnote");
+                self.warnings.dropped(DroppedElement::Footnote);
                 self.frames.push(Frame::Dropped);
             }
             Tag::HtmlBlock => {
                 self.flush();
-                self.warnings.dropped("HTML");
+                self.warnings.dropped(DroppedElement::Html);
                 self.frames.push(Frame::Dropped);
             }
             Tag::Emphasis => self.italic += 1,
@@ -246,12 +248,12 @@ impl Reader {
                 .links
                 .push(ambre_core::LinkUrl::new(dest_url.to_string())),
             Tag::Image { .. } => {
-                self.warnings.dropped("image");
+                self.warnings.dropped(DroppedElement::Image);
                 self.image += 1;
             }
             _ => {
                 self.flush();
-                self.warnings.dropped("unknown block");
+                self.warnings.dropped(DroppedElement::UnknownBlock);
                 self.frames.push(Frame::Transparent);
             }
         }
@@ -420,7 +422,7 @@ impl Reader {
             } = frame
             {
                 if is_item && depth >= MAX_LIST_DEPTH {
-                    self.warnings.dropped("list nesting deeper than 16");
+                    self.warnings.dropped(DroppedElement::DeepList);
                     trailing.push(block);
                     return;
                 }
@@ -550,7 +552,7 @@ mod tests {
             .warnings
             .iter()
             .filter_map(|w| match w {
-                ConversionWarning::ElementDropped { element, .. } => Some(*element),
+                ConversionWarning::ElementDropped { element, .. } => Some(element.label()),
                 _ => None,
             })
             .collect();

@@ -5,6 +5,7 @@ use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
+use ambre_commands::{Key, Modifiers};
 use ambre_core::{DocPoint, DocPx, ViewPoint};
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
@@ -723,17 +724,18 @@ impl TrameView {
             }
             InputEvent::Key {
                 key,
-                ctrl,
-                meta,
-                shift,
-                alt,
-                ..
+                mods:
+                    Modifiers {
+                        primary,
+                        alt,
+                        shift,
+                    },
             } => {
                 // Ctrl/Cmd+Enter fills the whole selection with the typed value;
                 // Ctrl/Cmd+A selects the whole buffer; other command chords
                 // (Ctrl/Cmd+X) fall through to the chrome keymap.
-                if *ctrl || *meta {
-                    if key == "Enter" {
+                if *primary {
+                    if *key == Key::Enter {
                         // Deferred: the fill reads the buffer after the paint flush.
                         // `edit_dirty` schedules that paint (else it would wait for
                         // the blink tick).
@@ -741,7 +743,7 @@ impl TrameView {
                         self.edit_dirty = true;
                         return true;
                     }
-                    if matches!(key.as_str(), "a" | "A") {
+                    if *key == Key::Char('a') {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.select_all();
                         }
@@ -750,10 +752,10 @@ impl TrameView {
                     }
                     return false;
                 }
-                match key.as_str() {
+                match *key {
                     // Alt+Enter inserts a newline (multi-line cell); a bare Enter
                     // commits and moves down (spreadsheet convention).
-                    "Enter" if *alt => {
+                    Key::Enter if *alt => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.newline();
                         }
@@ -763,23 +765,23 @@ impl TrameView {
                     // Enter / Tab commit and move (spreadsheet). The commit is
                     // deferred to the paint flush so the queued edits are applied
                     // before the buffer is read (`trame-cell-editing`).
-                    "Enter" => {
+                    Key::Enter => {
                         self.pending_commit =
                             Some(PendingCommit::Nav(RowDelta::new(1), ColDelta::ZERO));
                         self.edit_dirty = true;
                         true
                     }
-                    "Tab" => {
+                    Key::Tab => {
                         self.pending_commit =
                             Some(PendingCommit::Nav(RowDelta::ZERO, ColDelta::new(1)));
                         self.edit_dirty = true;
                         true
                     }
-                    "Escape" => {
+                    Key::Escape => {
                         self.cancel_edit();
                         true
                     }
-                    "Backspace" => {
+                    Key::Backspace => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.backspace();
                         }
@@ -789,7 +791,7 @@ impl TrameView {
                     // Delete removes the selection, else the char after the caret.
                     // Shift+Delete is "cut": let it fall through so the browser
                     // fires the `cut` clipboard event the host listens for.
-                    "Delete" if !*shift => {
+                    Key::Delete if !*shift => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.delete_forward();
                         }
@@ -797,7 +799,7 @@ impl TrameView {
                         true
                     }
                     // Shift extends the selection; a bare arrow collapses it.
-                    "ArrowLeft" => {
+                    Key::ArrowLeft => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift {
                                 ed.extend_left()
@@ -808,7 +810,7 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
-                    "ArrowRight" => {
+                    Key::ArrowRight => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift {
                                 ed.extend_right()
@@ -819,7 +821,7 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
-                    "Home" => {
+                    Key::Home => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift {
                                 ed.extend_home()
@@ -830,7 +832,7 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
-                    "End" => {
+                    Key::End => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift {
                                 ed.extend_end()
@@ -844,14 +846,14 @@ impl TrameView {
                     // Up/Down move the caret between lines inside the edit (a
                     // multi-line cell); Shift extends the selection. Cell nav by
                     // arrows only applies when NOT editing.
-                    "ArrowUp" => {
+                    Key::ArrowUp => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift { ed.extend_up() } else { ed.move_up() }
                         }
                         self.reset_blink();
                         true
                     }
-                    "ArrowDown" => {
+                    Key::ArrowDown => {
                         if let Some(ed) = self.editor.as_mut() {
                             if *shift {
                                 ed.extend_down()

@@ -110,7 +110,9 @@ impl ClipKind {
             Self::Todo(done) => BlockInit::ListItem {
                 style: ListStyle::Todo(*done),
             },
-            Self::Code(lang) => BlockInit::CodeBlock { lang: lang.clone() },
+            Self::Code(lang) => BlockInit::CodeBlock {
+                lang: ambre_bus::app::prose::CodeLang::new(lang.clone()),
+            },
         }
     }
 }
@@ -574,7 +576,7 @@ mod tests {
         let code = append(
             &mut state,
             BlockInit::CodeBlock {
-                lang: "rust".to_owned(),
+                lang: ambre_bus::app::prose::CodeLang::new("rust"),
             },
             "a < b && c",
         );

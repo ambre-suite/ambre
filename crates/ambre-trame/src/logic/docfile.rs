@@ -107,7 +107,7 @@ impl TrameState {
         // Same tail as a snapshot restore: rebuild the derived caches and reseed
         // the formula engine so formula cells evaluate instead of showing their
         // source (`sync::import_snapshot`).
-        let events = self.reseed_after_merge("import_ambre_plaintext", &order);
+        let events = self.reseed_after_merge(super::sync::MergeOrigin::Plaintext, &order);
         Ok((header.document_id, events))
     }
 }

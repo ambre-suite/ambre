@@ -135,9 +135,7 @@ impl SlashCommand {
                 rows: TABLE_ROWS,
                 cols: TABLE_COLS,
             },
-            Self::Code => after(BlockInit::CodeBlock {
-                lang: String::new(),
-            }),
+            Self::Code => after(BlockInit::CodeBlock { lang: None }),
             Self::Rule => after(BlockInit::HRule),
             Self::PageBreak => after(BlockInit::PageBreak),
             Self::Toc => ProseCommand::InsertToc {

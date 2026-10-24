@@ -65,7 +65,7 @@ pub(super) fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind,
 pub struct ChannelRow {
     /// Absent for a direct message.
     pub space_id: Option<ambre_core::SpaceId>,
-    pub is_public: bool,
+    pub visibility: ambre_core::Visibility,
     /// Absent only for a channel whose `meta` was never registered.
     pub meta_id: Option<ambre_core::MetaId>,
 }
@@ -88,7 +88,7 @@ pub async fn get_channel(
         let meta_id: Option<uuid::Uuid> = r.try_get("meta_id")?;
         Ok(ChannelRow {
             space_id: space_id.map(uuid_row_to_id),
-            is_public: r.try_get("is_public")?,
+            visibility: ambre_core::Visibility::public_if(r.try_get("is_public")?),
             meta_id: meta_id.map(uuid_row_to_id),
         })
     })
@@ -155,7 +155,7 @@ pub struct MemberChannelRow {
     pub id: ambre_core::ChannelId,
     /// `None` for a direct message.
     pub space_id: Option<ambre_core::SpaceId>,
-    pub is_public: bool,
+    pub visibility: ambre_core::Visibility,
     pub meta_id: ambre_core::MetaId,
     /// The name sealed beside `meta`, if any (`SRV-219`).
     pub name_enc: Option<ambre_core::SealedName>,
@@ -207,7 +207,7 @@ pub async fn list_member_channels(
             Ok(MemberChannelRow {
                 id: uuid_row_to_id(r.try_get("id")?),
                 space_id: space_id.map(uuid_row_to_id),
-                is_public: r.try_get("is_public")?,
+                visibility: ambre_core::Visibility::public_if(r.try_get("is_public")?),
                 meta_id: ambre_core::MetaId::from_document(uuid_row_to_id(
                     r.try_get("document_id")?,
                 )),
@@ -264,7 +264,7 @@ pub async fn member_role(
 pub struct NewChannel {
     pub channel_id: ambre_core::ChannelId,
     pub space_id: ambre_core::SpaceId,
-    pub is_public: bool,
+    pub visibility: ambre_core::Visibility,
     pub meta_id: ambre_core::MetaId,
     pub segment_id: ambre_core::SegmentId,
 }
@@ -285,7 +285,7 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
     )
     .bind(channel)
     .bind(space)
-    .bind(new.is_public)
+    .bind(new.visibility == ambre_core::Visibility::Public)
     .execute(&mut *tx)
     .await?;
     let (space_id, is_public): (Option<uuid::Uuid>, bool) =
@@ -296,7 +296,7 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
     let conflict = || AppError::Conflict {
         detail: "the channel or one of its documents is already registered".into(),
     };
-    if space_id != Some(space) || is_public != new.is_public {
+    if space_id != Some(space) || ambre_core::Visibility::public_if(is_public) != new.visibility {
         return Err(conflict());
     }
     for (document, kind) in [

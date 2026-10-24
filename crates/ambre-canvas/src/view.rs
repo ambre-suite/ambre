@@ -14,6 +14,7 @@
 // target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
+use ambre_commands::{Key, Modifiers};
 use ambre_core::{PageMillis, ViewPoint};
 use ambre_draw::{Color, Rect};
 
@@ -104,28 +105,28 @@ impl PointerButton {
 /// A raw input event forwarded from the DOM by the host's event listeners.
 #[derive(Clone)]
 pub enum InputEvent {
+    /// A key pressed, as the set of keys a chord can name, and the modifiers
+    /// held. The host folds the command key into `primary`
+    /// (`UI-THREAD-028`), and drops a key the set does not model.
     Key {
-        key: String,
-        ctrl: bool,
-        alt: bool,
-        shift: bool,
-        meta: bool,
+        key: Key,
+        mods: Modifiers,
     },
     /// A key released. A view that arms a mode on a held key disarms it here.
     /// A flag raised by a press and lowered by nothing outlives the gesture
     /// (`TOILE-UI-256`).
     KeyUp {
-        key: String,
+        key: Key,
     },
-    /// `shift` / `ctrl` carry the modifier state at press time. The grid can
-    /// then distinguish a plain click (single select), Shift+click (extend the
+    /// `mods` carries the modifier state at press time. The grid can then
+    /// distinguish a plain click (single select), Shift+click (extend the
     /// range) and Ctrl+click (add a disjoint range). On macOS the Cmd key is
-    /// folded into `ctrl` by the host so the same disjoint-select gesture works.
+    /// folded into `primary` by the host so the same disjoint-select gesture
+    /// works.
     PointerDown {
         at: ViewPoint,
         button: PointerButton,
-        shift: bool,
-        ctrl: bool,
+        mods: Modifiers,
     },
     PointerMove {
         at: ViewPoint,
@@ -133,9 +134,10 @@ pub enum InputEvent {
     PointerUp {
         at: ViewPoint,
         button: PointerButton,
-        /// Modifier state at *release* time (Cmd folded into ctrl). Autofill
-        /// reads Ctrl here, not at grab time, so toggling it mid-drag counts.
-        ctrl: bool,
+        /// Modifier state at *release* time (Cmd folded into `primary`).
+        /// Autofill reads Ctrl here, not at grab time, so toggling it mid-drag
+        /// counts.
+        mods: Modifiers,
     },
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.

@@ -2135,11 +2135,19 @@ fn a_copy_leaves_the_document_unchanged() {
 /// to the text path.
 #[test]
 fn a_printable_character_is_not_a_key() {
-    for name in ["a", "A", "Z", "é", " ", "1", "="] {
+    use ambre_commands::Key;
+    for key in [
+        Key::char('a'),
+        Key::char('Z'),
+        Key::char('é'),
+        Key::Space,
+        Key::char('1'),
+        Key::char('='),
+    ] {
         assert_eq!(
-            ProseKey::from_name(name, ambre_commands::Modifiers::NONE),
+            ProseKey::from_key(key, ambre_commands::Modifiers::NONE),
             None,
-            "{name:?}"
+            "{key:?}"
         );
     }
 }
@@ -2626,19 +2634,9 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
 
 // -- History ----------------------------------------------------------------
 
-/// The key name a browser reports for a chord, as the host hands it over.
-fn key_name(chord: ambre_commands::KeyBinding) -> String {
-    match chord.key {
-        ambre_commands::Key::Char(c) if chord.mods.shift => c.to_ascii_uppercase().to_string(),
-        ambre_commands::Key::Char(c) => c.to_string(),
-        other => panic!("a history chord is a letter, not {other:?}"),
-    }
-}
-
 /// Press one chord the way the host hands it over, and return what it sent.
 fn press_chord(rig: &mut Rig, chord: ambre_commands::KeyBinding) -> Vec<ProseCommand> {
-    let key =
-        ProseKey::from_name(&key_name(chord), chord.mods).expect("the view decodes the chord");
+    let key = ProseKey::from_key(chord.key, chord.mods).expect("the view decodes the chord");
     let before = rig.sent.len();
     assert!(rig.key(key, chord.mods.shift, chord.mods.primary));
     rig.sent[before..].to_vec()

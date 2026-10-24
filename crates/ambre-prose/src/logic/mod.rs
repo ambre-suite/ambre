@@ -665,7 +665,7 @@ impl ProseState {
             ProseCommand::IndentList { block_id } => self.indent_list(&tree_id(block_id)),
             ProseCommand::UnindentList { block_id } => self.unindent_list(&tree_id(block_id)),
             ProseCommand::SetCodeLang { block_id, lang } => {
-                self.set_code_lang(&tree_id(block_id), &lang)
+                self.set_code_lang(&tree_id(block_id), lang.as_ref())
             }
             ProseCommand::SetParagraphStyle { block_id, style } => {
                 self.set_paragraph_style(&tree_id(block_id), &style)

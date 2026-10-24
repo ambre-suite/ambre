@@ -31,6 +31,7 @@ use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_draw::{Affine, Point, Rect, Size};
 
 use ambre_canvas::InputEvent;
+use ambre_commands::Key;
 
 use super::viewport::ViewportTransform;
 
@@ -261,7 +262,7 @@ where
     F: Fn(Point) -> bool,
 {
     match ev {
-        InputEvent::Key { key, .. } => key != "Escape",
+        InputEvent::Key { key, .. } => *key != Key::Escape,
         // A release follows its press: the child that took the key takes it.
         InputEvent::KeyUp { .. } => true,
         // Typing has no position at all: it follows focus, as a caret does.
@@ -1431,6 +1432,7 @@ mod web_embed_tests {
 #[cfg(test)]
 mod routing_tests {
     use ambre_canvas::InputEvent;
+    use ambre_commands::{Key, Modifiers};
     use ambre_draw::{Point, Rect};
 
     use super::routes_to_child;
@@ -1468,13 +1470,7 @@ mod routing_tests {
     /// would trap the user inside.
     #[test]
     fn escape_never_reaches_the_child() {
-        let ev = InputEvent::Key {
-            key: "Escape".to_owned(),
-            ctrl: false,
-            shift: false,
-            alt: false,
-            meta: false,
-        };
+        let ev = InputEvent::Key { key: Key::Escape, mods: Modifiers::NONE };
         for at in [Point::new(50.0, 25.0), Point::new(400.0, 400.0)] {
             assert!(!routes_to_child(&ev, at, quad()));
         }
@@ -1489,13 +1485,7 @@ mod routing_tests {
             InputEvent::Text {
                 text: "a".to_owned(),
             },
-            InputEvent::Key {
-                key: "Enter".to_owned(),
-                ctrl: false,
-                shift: false,
-                alt: false,
-                meta: false,
-            },
+            InputEvent::Key { key: Key::Enter, mods: Modifiers::NONE },
         ] {
             assert!(routes_to_child(&ev, outside, quad()));
         }
@@ -1506,12 +1496,7 @@ mod routing_tests {
     #[test]
     fn a_pointer_event_is_bound_by_its_own_position() {
         let far = Point::new(400.0, 400.0);
-        let down = |x, y| InputEvent::PointerDown {
-            at: ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y)),
-            button: ambre_canvas::PointerButton::Primary,
-            shift: false,
-            ctrl: false,
-        };
+        let down = |x, y| InputEvent::PointerDown { at: ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y)), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE };
         // The pointer's own coordinates decide, not `last_pointer`.
         assert!(routes_to_child(&down(50.0, 25.0), far, quad()));
         assert!(!routes_to_child(

@@ -247,9 +247,13 @@ where
                     "pointerdown" => InputEvent::PointerDown {
                         at,
                         button: ambre_canvas::PointerButton::from_dom(event.button()),
-                        shift: event.shift_key(),
-                        // Fold Cmd (macOS) into ctrl so disjoint-select works there.
-                        ctrl: event.ctrl_key() || event.meta_key(),
+                        // Cmd (macOS) folds into primary, so disjoint-select works there.
+                        mods: ambre_chrome::commands::Modifiers::from_event(
+                            event.ctrl_key(),
+                            event.alt_key(),
+                            event.shift_key(),
+                            event.meta_key(),
+                        ),
                     },
                     "pointermove" => InputEvent::PointerMove { at },
                     // The browser took a mouse gesture over: it ends where
@@ -261,7 +265,12 @@ where
                         } else {
                             ambre_canvas::PointerButton::from_dom(event.button())
                         },
-                        ctrl: event.ctrl_key() || event.meta_key(),
+                        mods: ambre_chrome::commands::Modifiers::from_event(
+                            event.ctrl_key(),
+                            event.alt_key(),
+                            event.shift_key(),
+                            event.meta_key(),
+                        ),
                     },
                     _ => return,
                 };

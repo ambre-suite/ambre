@@ -99,12 +99,19 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                         && (event.ctrl_key() || event.meta_key())
                         && event.key().eq_ignore_ascii_case("v"),
                 );
+                // A key the chord set does not model reaches no view, and
+                // keeps its default (`UI-THREAD-028`).
+                let Some(key) = ambre_chrome::commands::Key::from_dom(&event.key()) else {
+                    return;
+                };
                 let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
-                    key: event.key(),
-                    ctrl: event.ctrl_key(),
-                    alt: event.alt_key(),
-                    shift: event.shift_key(),
-                    meta: event.meta_key(),
+                    key,
+                    mods: ambre_chrome::commands::Modifiers::from_event(
+                        event.ctrl_key(),
+                        event.alt_key(),
+                        event.shift_key(),
+                        event.meta_key(),
+                    ),
                 });
                 // A key left unconsumed keeps its default, so its character
                 // reaches the buffer (`CHROME-062`).
@@ -131,9 +138,9 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
                     return;
                 }
-                host_c
-                    .borrow_mut()
-                    .handle_input(&InputEvent::KeyUp { key: event.key() });
+                if let Some(key) = ambre_chrome::commands::Key::from_dom(&event.key()) {
+                    host_c.borrow_mut().handle_input(&InputEvent::KeyUp { key });
+                }
             },
         );
         document
@@ -419,8 +426,8 @@ mod tests {
     impl PipeHost for Recorder {
         fn handle_input(&mut self, ev: &InputEvent) -> bool {
             self.inputs.push(match ev {
-                InputEvent::Key { key, .. } => format!("key {key}"),
-                InputEvent::KeyUp { key } => format!("up {key}"),
+                InputEvent::Key { key, .. } => format!("key {key:?}"),
+                InputEvent::KeyUp { key } => format!("up {key:?}"),
                 InputEvent::Text { text } => format!("text {text}"),
                 InputEvent::CompositionUpdate { text } => format!("preview {text}"),
                 InputEvent::CompositionEnd { text } => format!("commit {text}"),

@@ -10,6 +10,34 @@ use ambre_core::schema::SchemaError;
 
 use super::*;
 
+/// What a merge came in as. The log lines name it, so a failed import says
+/// which path drew it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MergeOrigin {
+    /// One remote delta.
+    Delta,
+    /// A remote snapshot.
+    Snapshot,
+    /// A batch of remote deltas.
+    Batch,
+    /// A snapshot imported from storage.
+    Import,
+    /// The plaintext of an `.ambre` file.
+    Plaintext,
+}
+
+impl std::fmt::Display for MergeOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Delta => "apply_remote",
+            Self::Snapshot => "apply_remote_snapshot",
+            Self::Batch => "apply_remote_batch",
+            Self::Import => "import_snapshot",
+            Self::Plaintext => "import_ambre_plaintext",
+        })
+    }
+}
+
 /// Write the registry entry of `peer` under its own origin, which the undo
 /// manager excludes (`AUTHOR-009`). Answers the PeerID's counter past the
 /// entry, or `None` when the engine refused the write.
@@ -101,7 +129,7 @@ impl TrameState {
     /// path merges the ops, reseeds the formula engine, and tells the UI to
     /// re-fetch.
     pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<TrameEvent> {
-        self.import_and_reseed(LoroPayloadRef::Delta(payload), "apply_remote")
+        self.import_and_reseed(LoroPayloadRef::Delta(payload), MergeOrigin::Delta)
     }
 
     /// Apply a snapshot whose contents are trusted the way a remote delta is
@@ -111,7 +139,7 @@ impl TrameState {
         &mut self,
         payload: &ambre_core::SnapshotBytes,
     ) -> Vec<TrameEvent> {
-        self.import_and_reseed(LoroPayloadRef::Snapshot(payload), "apply_remote_snapshot")
+        self.import_and_reseed(LoroPayloadRef::Snapshot(payload), MergeOrigin::Snapshot)
     }
 
     /// Apply a remote ephemeral (presence) payload and return presence events.
@@ -170,7 +198,7 @@ impl TrameState {
             std::borrow::Cow::Owned(bytes) => Some(ambre_core::SnapshotBytes::new(bytes)),
         };
         let snapshot = migrated.as_ref().unwrap_or(payload);
-        Ok(self.import_and_reseed(LoroPayloadRef::Snapshot(snapshot), "import_snapshot"))
+        Ok(self.import_and_reseed(LoroPayloadRef::Snapshot(snapshot), MergeOrigin::Import))
     }
 
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
@@ -192,7 +220,7 @@ impl TrameState {
     pub(super) fn import_and_reseed(
         &mut self,
         payload: LoroPayloadRef<'_>,
-        origin: &str,
+        origin: MergeOrigin,
     ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
         if !self.merge_payload(payload, origin) {
@@ -212,18 +240,18 @@ impl TrameState {
         let order = self.sheet_order_ids();
         let mut merged_any = false;
         for payload in payloads {
-            merged_any |= self.merge_payload(LoroPayloadRef::Delta(payload), "apply_remote_batch");
+            merged_any |= self.merge_payload(LoroPayloadRef::Delta(payload), MergeOrigin::Batch);
         }
         if !merged_any {
             return Vec::new();
         }
-        self.reseed_after_merge("apply_remote_batch", &order)
+        self.reseed_after_merge(MergeOrigin::Batch, &order)
     }
 
     /// Merge one decrypted Loro payload into the live document, returning whether
     /// it actually imported (non-empty and accepted). Does NOT reseed: callers
     /// batch the reseed over one or many merges via [`reseed_after_merge`].
-    fn merge_payload(&mut self, payload: LoroPayloadRef<'_>, origin: &str) -> bool {
+    fn merge_payload(&mut self, payload: LoroPayloadRef<'_>, origin: MergeOrigin) -> bool {
         let payload = payload.as_bytes();
         if payload.is_empty() {
             return false;
@@ -242,7 +270,7 @@ impl TrameState {
     /// order before the merge, which a deleted active sheet falls back from.
     pub(super) fn reseed_after_merge(
         &mut self,
-        origin: &str,
+        origin: MergeOrigin,
         order: &[SheetId],
     ) -> Vec<TrameEvent> {
         // A peer may have deleted the sheet this reader is on (`TRAME-075`).

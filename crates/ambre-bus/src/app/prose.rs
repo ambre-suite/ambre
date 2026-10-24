@@ -467,6 +467,31 @@ impl std::fmt::Display for HeadingLevel {
     }
 }
 
+/// The language a code block is marked as. A tag is never empty: a block
+/// with no language reads as plain and carries `None`, so the empty string
+/// is never a language.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CodeLang(String);
+
+impl CodeLang {
+    /// The tag `text` names, `None` for the empty text, which reads as plain.
+    pub fn new(text: impl Into<String>) -> Option<Self> {
+        let text = text.into();
+        (!text.is_empty()).then_some(Self(text))
+    }
+
+    /// The tag as written.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The text a block stores for `lang`: the tag, or the empty text of a
+    /// plain block.
+    pub fn stored(lang: Option<&Self>) -> &str {
+        lang.map_or("", Self::as_str)
+    }
+}
+
 /// The typed initializer of `InsertBlock`.
 ///
 /// Each variant carries exactly the creation attributes of its block type. The
@@ -485,9 +510,9 @@ pub enum BlockInit {
     ListItem {
         style: ListStyle,
     },
-    /// An empty language reads as plain.
+    /// `None` reads as plain.
     CodeBlock {
-        lang: String,
+        lang: Option<CodeLang>,
     },
     HRule,
     PageBreak,
@@ -1307,9 +1332,10 @@ pub enum ProseCommand {
         block_id: BlockId,
         level: Option<HeadingLevel>,
     },
+    /// `None` sets the block back to plain.
     SetCodeLang {
         block_id: BlockId,
-        lang: String,
+        lang: Option<CodeLang>,
     },
 
     // -- Lists (`features/ambre-spec-prose-lists.md`) --
@@ -1712,16 +1738,189 @@ impl ConversionReport {
 pub enum ConversionWarning {
     /// A construct the format has no syntax for, dropped or approximated.
     FeatureNotSupported {
-        feature: &'static str,
+        feature: UnsupportedFeature,
         format: ConversionFormat,
         count: u32,
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
-    ElementDropped { element: &'static str, count: u32 },
+    ElementDropped {
+        element: DroppedElement,
+        count: u32,
+    },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
-    BlockLifted { block: &'static str, count: u32 },
+    BlockLifted { block: LiftedBlock, count: u32 },
+}
+
+/// A construct a format has no syntax for, the subject of a [`ConversionWarning::FeatureNotSupported`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnsupportedFeature {
+    PageFormat,
+    HeaderAndFooter,
+    ParagraphFormatting,
+    HeadingLevel,
+    MergedCells,
+    Image,
+    PageBreak,
+    TableOfContents,
+    TodoItem,
+    ListNumbering,
+    CellFormatting,
+    Table,
+    ColumnWidths,
+    HeadingInCell,
+    ListInCell,
+    BlockInCell,
+    ParagraphsInCell,
+    Footnote,
+    Underline,
+    Superscript,
+    Subscript,
+    Strikethrough,
+    Styling,
+    Comment,
+    Suggestion,
+    CrossReference,
+}
+
+impl UnsupportedFeature {
+    /// The words the user reads for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::PageFormat => "page format",
+            Self::HeaderAndFooter => "header and footer",
+            Self::ParagraphFormatting => "paragraph formatting",
+            Self::HeadingLevel => "heading level outside 1 to 6",
+            Self::MergedCells => "merged cells",
+            Self::Image => "image",
+            Self::PageBreak => "page break",
+            Self::TableOfContents => "table of contents",
+            Self::TodoItem => "to-do item",
+            Self::ListNumbering => "list numbering style",
+            Self::CellFormatting => "cell formatting",
+            Self::Table => "table",
+            Self::ColumnWidths => "column widths",
+            Self::HeadingInCell => "heading in a table cell",
+            Self::ListInCell => "list in a table cell",
+            Self::BlockInCell => "block in a table cell",
+            Self::ParagraphsInCell => "several paragraphs in a table cell",
+            Self::Footnote => "footnote",
+            Self::Underline => "underline",
+            Self::Superscript => "superscript",
+            Self::Subscript => "subscript",
+            Self::Strikethrough => "strikethrough",
+            Self::Styling => "colour, size or font",
+            Self::Comment => "comment",
+            Self::Suggestion => "suggestion",
+            Self::CrossReference => "cross reference",
+        }
+    }
+}
+
+impl fmt::Display for UnsupportedFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// An element a reader does not recognise, the subject of a [`ConversionWarning::ElementDropped`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DroppedElement {
+    Footnote,
+    Html,
+    Math,
+    BlockQuote,
+    Image,
+    UnknownBlock,
+    DeepList,
+    TableOfContents,
+}
+
+impl DroppedElement {
+    /// The words the user reads for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnote",
+            Self::Html => "HTML",
+            Self::Math => "math",
+            Self::BlockQuote => "block quote",
+            Self::Image => "image",
+            Self::UnknownBlock => "unknown block",
+            Self::DeepList => "list nesting deeper than 16",
+            Self::TableOfContents => "table of contents",
+        }
+    }
+}
+
+impl fmt::Display for DroppedElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// The kind of block a [`ConversionWarning::BlockLifted`] moved. The three table types read as one table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LiftedBlock {
+    Paragraph,
+    Heading,
+    ListItem,
+    Table,
+    CodeBlock,
+    Image,
+    PageBreak,
+    Rule,
+    TableOfContents,
+}
+
+impl LiftedBlock {
+    /// The words the user reads for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Paragraph => "paragraph",
+            Self::Heading => "heading",
+            Self::ListItem => "list item",
+            Self::Table => "table",
+            Self::CodeBlock => "code block",
+            Self::Image => "image",
+            Self::PageBreak => "page break",
+            Self::Rule => "rule",
+            Self::TableOfContents => "table of contents",
+        }
+    }
+}
+
+impl fmt::Display for LiftedBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// Why a find was refused, the reason a [`ProseRefusal::FindRefused`] carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FindRefusal {
+    RegexUnbuilt,
+    NoSearch,
+}
+
+impl FindRefusal {
+    /// The words the user reads for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::RegexUnbuilt => "the regular-expression search is not built",
+            Self::NoSearch => "no search is open",
+        }
+    }
+}
+
+impl fmt::Display for FindRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
 }
 
 /// Why a conversion produced nothing (`PROSE-IO-010`, `PROSE-IO-047`).
@@ -2107,7 +2306,7 @@ pub enum ProseRefusal {
     /// A search or a replacement with no search open, or a query this build
     /// cannot run.
     #[error("{0}")]
-    FindRefused(&'static str),
+    FindRefused(FindRefusal),
     /// A footnote asked for in a header or a footer (`PROSE-FEAT-071`).
     #[error("a header or a footer cannot hold a footnote")]
     FootnoteInBand,

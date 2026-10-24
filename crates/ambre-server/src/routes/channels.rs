@@ -135,7 +135,7 @@ pub async fn list_member_channels(
             MemberChannelJson {
                 channel_id: row.id,
                 space_id: row.space_id,
-                visibility: ambre_core::Visibility::public_if(row.is_public),
+                visibility: row.visibility,
                 meta_id: row.meta_id,
                 name_enc: row.name_enc,
                 doc_key_enc: row.doc_key_enc,
@@ -304,7 +304,7 @@ pub async fn create_channel(
     let new = db::NewChannel {
         channel_id: req.channel_id,
         space_id: req.space_id,
-        is_public: req.visibility == ambre_core::Visibility::Public,
+        visibility: req.visibility,
         meta_id: req.meta_id,
         segment_id: req.segment_id,
     };
@@ -320,7 +320,7 @@ pub async fn create_channel(
     let space_role = db::member_role(&state.db, &space, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if new.is_public && !space_role.can_write_document() {
+    if new.visibility == ambre_core::Visibility::Public && !space_role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     for document_id in [meta, segment] {
@@ -331,7 +331,7 @@ pub async fn create_channel(
         }
     }
     db::register_channel(&state.db, &new).await?;
-    tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.is_public, "channel registered");
+    tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.visibility == ambre_core::Visibility::Public, "channel registered");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -846,7 +846,7 @@ pub async fn delete_channel(
         .await?
         .ok_or(AppError::Forbidden)?;
     let meta_id = channel.meta_id.ok_or(AppError::Forbidden)?;
-    let space_owner = match channel.space_id.filter(|_| channel.is_public) {
+    let space_owner = match channel.space_id.filter(|_| channel.visibility == ambre_core::Visibility::Public) {
         Some(space_id) => {
             db::member_role(&state.db, &space_id.document_id(), &auth.user_id).await?
                 == Some(Role::Owner)
@@ -958,7 +958,7 @@ async fn joinable(
 ) -> Result<Joinable, AppError> {
     let channel = db::get_channel(&state.db, channel_id)
         .await?
-        .filter(|c| c.is_public)
+        .filter(|c| c.visibility == ambre_core::Visibility::Public)
         .ok_or(AppError::Forbidden)?;
     let (Some(space_id), Some(meta_id)) = (channel.space_id, channel.meta_id) else {
         return Err(AppError::Forbidden);
@@ -1377,7 +1377,7 @@ mod tests {
             .await
             .expect("query")
             .expect("registered");
-        assert!(held.is_public);
+        assert_eq!(held.visibility, ambre_core::Visibility::Public);
         assert_eq!(held.space_id, Some(space));
         assert_eq!(held.meta_id, Some(channel.meta));
         let listed = db::list_channel_documents(&state.db, &channel.id)
@@ -2064,7 +2064,7 @@ mod tests {
             .expect("query")
             .expect("the channel");
         assert_eq!(held.space_id, Some(space));
-        assert!(!held.is_public);
+        assert_eq!(held.visibility, ambre_core::Visibility::Private);
         assert_eq!(held.meta_id, Some(channel.meta));
         assert_eq!(member_ids(&state, channel.meta.document_id()).await, [vera]);
         assert_eq!(
@@ -2448,7 +2448,7 @@ mod tests {
             db::get_channel(&state.db, &channel.id)
                 .await
                 .expect("query")
-                .is_some_and(|c| c.is_public)
+                .is_some_and(|c| c.visibility == ambre_core::Visibility::Public)
         );
         for document in [meta, channel.segment.document_id()] {
             assert!(exists(&state, document).await);
@@ -2610,7 +2610,7 @@ mod tests {
             .expect("query")
             .expect("the channel exists");
         assert_eq!(channel.space_id, None);
-        assert!(!channel.is_public);
+        assert_eq!(channel.visibility, ambre_core::Visibility::Private);
         for who in [alice, bob, carol] {
             assert_eq!(role_on(&state, meta, who).await, Some(Role::Editor));
         }

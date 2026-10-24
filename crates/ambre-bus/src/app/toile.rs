@@ -2210,8 +2210,8 @@ pub enum ToileError {
     NoSuchElement(ElementId),
     #[error("connector {} not found", .0.as_str())]
     NoSuchConnector(ConnectorId),
-    #[error("{kind} cannot be created via CreateElement")]
-    NotCreatable { kind: &'static str },
+    #[error("{} cannot be created via CreateElement", .kind.type_tag())]
+    NotCreatable { kind: ElementKind },
     #[error("InitContent does not match the requested element kind")]
     ContentKindMismatch,
     #[error("an element needs a finite size that is not empty")]

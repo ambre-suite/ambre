@@ -62,22 +62,16 @@ fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Opt
             .map(|p| ViewPoint::new(ViewPx::new(p.x as f32), ViewPx::new(p.y as f32)))
     };
     Some(match ev {
-        InputEvent::PointerDown {
-            at,
-            button,
-            shift,
-            ctrl,
-        } => InputEvent::PointerDown {
+        InputEvent::PointerDown { at, button, mods } => InputEvent::PointerDown {
             at: map(at)?,
             button: *button,
-            shift: *shift,
-            ctrl: *ctrl,
+            mods: *mods,
         },
         InputEvent::PointerMove { at } => InputEvent::PointerMove { at: map(at)? },
-        InputEvent::PointerUp { at, button, ctrl } => InputEvent::PointerUp {
+        InputEvent::PointerUp { at, button, mods } => InputEvent::PointerUp {
             at: map(at)?,
             button: *button,
-            ctrl: *ctrl,
+            mods: *mods,
         },
         InputEvent::DoubleClick { at } => InputEvent::DoubleClick { at: map(at)? },
         // Non-positional events carry no coordinates to rewrite.
@@ -721,6 +715,7 @@ mod tests {
     use ambre_bus::app::toile::ElementId;
     use ambre_bus::{DocType, DocumentId};
     use ambre_canvas::InputEvent;
+    use ambre_chrome::commands::{Key, Modifiers};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
     use ambre_toile::ui::embed::VisibleEmbed;
@@ -741,20 +736,11 @@ mod tests {
 
     fn pointers() -> Vec<InputEvent> {
         vec![
-            InputEvent::PointerDown {
-                at: pointer(5.0, 6.0),
-                button: ambre_canvas::PointerButton::Primary,
-                shift: false,
-                ctrl: false,
-            },
+            InputEvent::PointerDown { at: pointer(5.0, 6.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
             InputEvent::PointerMove {
                 at: pointer(5.0, 6.0),
             },
-            InputEvent::PointerUp {
-                at: pointer(5.0, 6.0),
-                button: ambre_canvas::PointerButton::Primary,
-                ctrl: false,
-            },
+            InputEvent::PointerUp { at: pointer(5.0, 6.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
             InputEvent::DoubleClick {
                 at: pointer(5.0, 6.0),
             },
@@ -794,17 +780,10 @@ mod tests {
     /// cannot map a point hands them over unchanged.
     #[wasm_bindgen_test]
     fn a_key_a_character_a_composition_and_a_wheel_reach_the_child_verbatim() {
-        let key = InputEvent::Key {
-            key: "a".to_owned(),
-            ctrl: true,
-            alt: false,
-            shift: true,
-            meta: false,
-        };
+        let key = InputEvent::Key { key: Key::char('a'), mods: Modifiers::PRIMARY_SHIFT };
         assert!(matches!(
             remap_with(&key, |_| None),
-            Some(InputEvent::Key { key, ctrl: true, alt: false, shift: true, meta: false })
-                if key == "a"
+            Some(InputEvent::Key { key: Key::Char('a'), mods: Modifiers::PRIMARY_SHIFT })
         ));
         let text = InputEvent::Text {
             text: "é".to_owned(),

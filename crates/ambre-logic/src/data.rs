@@ -107,7 +107,13 @@ impl LogicState {
             return;
         };
         let id = RequestId::next();
-        self.pending_seals.insert(id, (document_id, filename));
+        self.pending_seals.insert(
+            id,
+            crate::PendingSeal {
+                document_id,
+                filename,
+            },
+        );
         self.send_to_sync(SyncCommand::Rest {
             id,
             cmd: RestCommand::SealDocFile {
@@ -130,7 +136,11 @@ impl LogicState {
             RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
             _ => return false,
         };
-        let Some((document_id, filename)) = self.pending_seals.remove(&id) else {
+        let Some(crate::PendingSeal {
+            document_id,
+            filename,
+        }) = self.pending_seals.remove(&id)
+        else {
             return false;
         };
         let Some(doc) = self.docs.get(&document_id) else {
@@ -149,7 +159,9 @@ impl LogicState {
     /// ended): an answer that arrives afterwards has nowhere to go.
     pub(crate) fn forget_pending_seals(&mut self, document_id: Option<DocumentId>) {
         match document_id {
-            Some(document_id) => self.pending_seals.retain(|_, (d, _)| *d != document_id),
+            Some(document_id) => self
+                .pending_seals
+                .retain(|_, seal| seal.document_id != document_id),
             None => self.pending_seals.clear(),
         }
     }

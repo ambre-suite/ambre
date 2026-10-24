@@ -22,7 +22,8 @@ use ambre_core::FootnoteId;
 use loro::{LoroValue, TreeID};
 
 use ambre_bus::app::prose::{
-    BlockInit, BlockType, ExportFormat, ImportFormat, ListStyle, OrderedStyle,
+    BlockInit, BlockType, DroppedElement, ExportFormat, ImportFormat, LiftedBlock, ListStyle,
+    OrderedStyle,
 };
 
 use super::ProseState;
@@ -131,7 +132,7 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
         depth -= 1;
     }
     if depth < chain.len() {
-        warnings.lifted(type_name(kind));
+        warnings.lifted(lifted_block(kind));
     }
     // The walk always seeds `chain` with the root, so it is never empty.
     let chain = chain.get(..depth).unwrap_or_default();
@@ -148,7 +149,7 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
         }
         IrBlock::CodeBlock { lang, text } => {
             let init = BlockInit::CodeBlock {
-                lang: lang.clone().unwrap_or_default(),
+                lang: lang.clone().and_then(ambre_bus::app::prose::CodeLang::new),
             };
             push(ops, parent, init, &[IrRun::plain(text.clone())]);
         }
@@ -197,8 +198,8 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
         }
         // No reader lands these yet: an image needs its bytes, and a table of
         // contents is a block of the document's own.
-        IrBlock::Image { .. } => warnings.dropped("image"),
-        IrBlock::Toc => warnings.dropped("table of contents"),
+        IrBlock::Image { .. } => warnings.dropped(DroppedElement::Image),
+        IrBlock::Toc => warnings.dropped(DroppedElement::TableOfContents),
     }
 }
 
@@ -244,17 +245,17 @@ fn ir_type(block: &IrBlock) -> BlockType {
     }
 }
 
-fn type_name(kind: BlockType) -> &'static str {
+fn lifted_block(kind: BlockType) -> LiftedBlock {
     match kind {
-        BlockType::Paragraph => "paragraph",
-        BlockType::Heading => "heading",
-        BlockType::ListItem => "list item",
-        BlockType::Table | BlockType::TableRow | BlockType::TableCell => "table",
-        BlockType::CodeBlock => "code block",
-        BlockType::Image => "image",
-        BlockType::PageBreak => "page break",
-        BlockType::HRule => "rule",
-        BlockType::Toc => "table of contents",
+        BlockType::Paragraph => LiftedBlock::Paragraph,
+        BlockType::Heading => LiftedBlock::Heading,
+        BlockType::ListItem => LiftedBlock::ListItem,
+        BlockType::Table | BlockType::TableRow | BlockType::TableCell => LiftedBlock::Table,
+        BlockType::CodeBlock => LiftedBlock::CodeBlock,
+        BlockType::Image => LiftedBlock::Image,
+        BlockType::PageBreak => LiftedBlock::PageBreak,
+        BlockType::HRule => LiftedBlock::Rule,
+        BlockType::Toc => LiftedBlock::TableOfContents,
     }
 }
 
@@ -649,7 +650,9 @@ mod tests {
     use super::*;
     use crate::events::{BlockId, ProseCommand, tree_id};
     use crate::view::tests::append;
-    use ambre_bus::app::prose::{ConversionWarning, InteropError, MarkdownFlavor};
+    use ambre_bus::app::prose::{
+        ConversionWarning, InteropError, MarkdownFlavor, UnsupportedFeature,
+    };
 
     fn document() -> ProseState {
         ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built")
@@ -745,7 +748,7 @@ mod tests {
             warnings.iter().any(|w| matches!(
                 w,
                 ConversionWarning::FeatureNotSupported {
-                    feature: "cell formatting",
+                    feature: UnsupportedFeature::CellFormatting,
                     count: 1,
                     ..
                 }
@@ -831,7 +834,7 @@ mod tests {
         assert!(report.warnings.iter().any(|w| matches!(
             w,
             ConversionWarning::BlockLifted {
-                block: "code block",
+                block: LiftedBlock::CodeBlock,
                 ..
             }
         )));
@@ -889,7 +892,7 @@ mod tests {
         assert!(warnings.iter().any(|w| matches!(
             w,
             ConversionWarning::FeatureNotSupported {
-                feature: "page format",
+                feature: UnsupportedFeature::PageFormat,
                 ..
             }
         )));

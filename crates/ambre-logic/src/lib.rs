@@ -866,7 +866,7 @@ struct LogicState {
     ///
     /// Cleared with the document that owns it, so a seal outlived by its
     /// document answers nothing rather than downloading into a closed tab.
-    pending_seals: HashMap<RequestId, (DocumentId, String)>,
+    pending_seals: HashMap<RequestId, PendingSeal>,
     /// Every font face the Main thread has fetched and shipped over
     /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
@@ -894,6 +894,13 @@ struct LogicState {
     /// The documents whose unsent change the browser refuses to store. While
     /// any is, no local edit is taken (`RESID-018`).
     store_full: HashSet<DocumentId>,
+}
+
+/// A sealed export waiting for the Sync worker's bytes: the document it
+/// belongs to, and the name of the file the download will carry.
+struct PendingSeal {
+    document_id: DocumentId,
+    filename: String,
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).

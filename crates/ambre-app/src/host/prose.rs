@@ -607,32 +607,24 @@ impl ProseView {
     /// to the host.
     fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
         Some(match ev {
-            InputEvent::Key {
-                key,
-                ctrl,
-                alt,
-                shift,
-                meta,
-            } if !alt => {
-                let mods = Modifiers::from_event(*ctrl, false, *shift, *meta);
-                ProseInput::Key {
-                    key: ProseKey::from_name(key, mods)?,
-                    mods,
-                }
-            }
+            InputEvent::Key { key, mods } if !mods.alt => ProseInput::Key {
+                key: ProseKey::from_key(*key, *mods)?,
+                mods: *mods,
+            },
             InputEvent::Text { text } => ProseInput::Text(text.clone()),
             InputEvent::CompositionUpdate { text } => ProseInput::Compose(text.clone()),
             InputEvent::CompositionEnd { text } => ProseInput::ComposeEnd(text.clone()),
             InputEvent::PointerDown {
                 at,
                 button: ambre_canvas::PointerButton::Primary,
-                shift,
-                ctrl,
-                ..
+                mods,
             } => ProseInput::Press {
                 at: *at,
-                // The canvas folds `Cmd` into `ctrl`.
-                mods: Modifiers::from_event(*ctrl, false, *shift, false),
+                // The host folds `Cmd` into `primary`; a press reads no Alt.
+                mods: Modifiers {
+                    alt: false,
+                    ..*mods
+                },
                 now_ms: self.now_ms,
             },
             InputEvent::PointerMove { at } => ProseInput::Drag { at: *at },
@@ -824,12 +816,7 @@ mod tests {
         if let Some(body) = document.body() {
             let _ = body.focus();
         }
-        let _ = view.handle_input(&InputEvent::PointerDown {
-            at: pointer(300.0, 200.0),
-            button: ambre_canvas::PointerButton::Primary,
-            shift: false,
-            ctrl: false,
-        });
+        let _ = view.handle_input(&InputEvent::PointerDown { at: pointer(300.0, 200.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE });
         let focused = document.active_element().expect("a focused element");
         assert!(
             focused.is_same_node(Some(pipe.element())),

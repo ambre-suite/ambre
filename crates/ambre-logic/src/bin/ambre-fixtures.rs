@@ -210,20 +210,18 @@ fn workspace_root() -> Result<PathBuf, FixtureError> {
     }
 }
 
-/// The commit the figures describe, or `unknown` when git does not answer.
+/// The commit the figures describe, or `None` when git does not answer.
 ///
 /// A baseline with no commit is still a baseline. The rule is about the
 /// machine, so a checkout without git yields a poorer record, not a refusal.
-fn head_commit() -> String {
+fn head_commit() -> Option<fixtures::CommitHash> {
     std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
         .filter(|out| out.status.success())
         .and_then(|out| String::from_utf8(out.stdout).ok())
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown".to_owned())
+        .and_then(|s| fixtures::CommitHash::new(s.trim()).ok())
 }
 
 /// Copy one artifact into `frozen/`, then run the retention pass. The cap holds

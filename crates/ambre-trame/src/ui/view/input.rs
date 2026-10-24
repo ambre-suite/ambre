@@ -3,7 +3,7 @@
 
 use super::*;
 use ambre_canvas::PointerButton;
-use ambre_commands::{Modifiers, SelectionMode};
+use ambre_commands::{Key, Modifiers, SelectionMode};
 use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::Release;
 
@@ -62,9 +62,9 @@ impl TrameView {
             }
             // Release: emit the fill, grow the selection over the filled range,
             // and clear the drag/preview.
-            InputEvent::PointerUp { ctrl, .. } if self.fill_drag.is_some() => {
+            InputEvent::PointerUp { mods, .. } if self.fill_drag.is_some() => {
                 self.drag_point = None;
-                self.end_fill_drag(Modifiers::from_event(*ctrl, false, false, false));
+                self.end_fill_drag(*mods);
                 true
             }
             // A press on a header strip (`trame-headers`) acts by zone. The body does
@@ -75,8 +75,7 @@ impl TrameView {
             InputEvent::PointerDown {
                 at,
                 button: PointerButton::Primary,
-                shift,
-                ..
+                mods: Modifiers { shift, .. },
             } if self.fill_drag.is_none() && self.state.header_hit(*at).is_some() => {
                 let Some(hit) = self.state.header_hit(*at) else {
                     return false;
@@ -180,14 +179,13 @@ impl TrameView {
             InputEvent::PointerDown {
                 at,
                 button: PointerButton::Primary,
-                shift,
-                ctrl,
+                mods: Modifiers { primary, shift, .. },
             } => {
                 self.text_input.focus();
                 if let Some(at) = self.state.cell_at(*at) {
                     if *shift {
                         self.extend_cell(at);
-                    } else if *ctrl {
+                    } else if *primary {
                         self.disjoin_cell(at);
                     } else {
                         self.select_cell(at);
@@ -344,12 +342,14 @@ impl TrameView {
             }
             InputEvent::Key {
                 key,
-                ctrl,
-                meta,
-                alt,
-                shift,
+                mods:
+                    Modifiers {
+                        primary: chord,
+                        alt,
+                        shift,
+                    },
             } => {
-                let chord = *ctrl || *meta; // Ctrl (or Cmd on macOS) jump modifier.
+                // `primary` is Ctrl, or Cmd on macOS: the jump modifier.
                 // Shift extends the selection range across navigation keys
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
                 let ext = if *shift {
@@ -357,29 +357,29 @@ impl TrameView {
                 } else {
                     SelectionMode::Move
                 };
-                match key.as_str() {
-                    "ArrowUp" => self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext),
-                    "ArrowDown" => self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext),
-                    "ArrowLeft" => self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext),
-                    "ArrowRight" => self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext),
+                match *key {
+                    Key::ArrowUp => self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext),
+                    Key::ArrowDown => self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext),
+                    Key::ArrowLeft => self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext),
+                    Key::ArrowRight => self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext),
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
                     // (convention, `trame-selection`). These always collapse the
                     // selection: Shift is the reverse-direction modifier here, not
                     // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
-                    "Tab" if !chord => {
+                    Key::Tab if !*chord => {
                         let step = ColDelta::new(if *shift { -1 } else { 1 });
                         self.nav_move(RowDelta::ZERO, step, SelectionMode::Move)
                     }
-                    "Enter" if !chord => {
+                    Key::Enter if !*chord => {
                         let step = RowDelta::new(if *shift { -1 } else { 1 });
                         self.nav_move(step, ColDelta::ZERO, SelectionMode::Move)
                     }
                     // Page Down / Up move by a full viewport height.
-                    "PageDown" | "PageUp" => {
+                    Key::PageDown | Key::PageUp => {
                         let page =
                             RowDelta::from_count(self.state.viewport_rows.max(RowCount::ONE));
-                        let step = if key == "PageUp" {
+                        let step = if *key == Key::PageUp {
                             page.reversed()
                         } else {
                             page
@@ -387,21 +387,21 @@ impl TrameView {
                         self.nav_move(step, ColDelta::ZERO, ext)
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    "Home" if chord => self.nav_goto(CellPos::ORIGIN, ext),
-                    "Home" => self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext),
+                    Key::Home if *chord => self.nav_goto(CellPos::ORIGIN, ext),
+                    Key::Home => self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext),
                     // End: last cell with content in the row; Ctrl+End: bottom-right
                     // of the used (cached) range. With Shift the range grows to that
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
                     // Best-effort -- the UI thread has no used-range model, so it
                     // scans its local cache (`trame-grid-viewport`).
-                    "End" if chord => {
+                    Key::End if *chord => {
                         let at = self
                             .state
                             .last_content_cell()
                             .unwrap_or(self.state.active_cell());
                         self.nav_goto(at, ext)
                     }
-                    "End" => {
+                    Key::End => {
                         let row = self.state.active_row();
                         let col = self
                             .state
@@ -411,24 +411,24 @@ impl TrameView {
                     }
                     // Escape clears the marching-ants clipboard marquee (`trame-clipboard`),
                     // if any; otherwise it is not ours.
-                    "Escape" if self.state.clipboard_anchor.take().is_some() => {
+                    Key::Escape if self.state.clipboard_anchor.take().is_some() => {
                         self.cut_pending = false;
                         self.edit_dirty = true;
                         true
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
                     // the native `cut` clipboard event the host services (`trame-clipboard`).
-                    "Delete" if *shift => false,
+                    Key::Delete if *shift => false,
                     // Delete / Backspace clear the active cell.
-                    "Delete" | "Backspace" => self.clear_active_cell(),
+                    Key::Delete | Key::Backspace => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
-                    "F2" => {
+                    Key::F(2) => {
                         let seed = self.cell_seed(self.state.active_cell());
                         self.begin_edit(seed);
                         true
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
-                    "t" | "T" if *alt => {
+                    Key::Char('t') if *alt => {
                         self.text_pass = match self.text_pass {
                             TextPass::Shapes => TextPass::WithText,
                             TextPass::WithText => TextPass::Shapes,
@@ -533,17 +533,8 @@ impl TrameView {
     pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) {
         if let Release::Tap { at } = self.scroll.release(now_ms) {
             for ev in [
-                InputEvent::PointerDown {
-                    at,
-                    button: PointerButton::Primary,
-                    shift: false,
-                    ctrl: false,
-                },
-                InputEvent::PointerUp {
-                    at,
-                    button: PointerButton::Primary,
-                    ctrl: false,
-                },
+                InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE },
+                InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE },
             ] {
                 self.handle_input(&ev);
             }

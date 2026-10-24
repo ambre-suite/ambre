@@ -55,9 +55,9 @@ pub(crate) struct TofuPrompt {
 
 impl TofuPrompt {
     /// The email the prompt shows under the name, for an invitation alone.
-    fn email(&self) -> Option<&str> {
+    fn email(&self) -> Option<&ambre_bus::Email> {
         match &self.purpose {
-            Purpose::Invite { email, .. } => Some(email.as_str()),
+            Purpose::Invite { email, .. } => Some(email),
             Purpose::Direct { .. } | Purpose::Channel { .. } => None,
         }
     }
@@ -170,7 +170,8 @@ pub(crate) fn TofuDialog(
                     .map(|p| {
                         let changed = p.changed;
                         let direct = matches!(p.purpose, Purpose::Direct { .. });
-                        let email = p.email().map(str::to_owned);
+                        // The address leaves its type only at the text node.
+                        let email = p.email().map(ToString::to_string);
                         let fp_copy = p.fingerprint.clone();
                         let confirm_p = p.clone();
                         view! {

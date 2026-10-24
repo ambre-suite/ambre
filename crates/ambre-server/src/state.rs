@@ -36,9 +36,6 @@ pub struct AppState {
 /// and presigned URLs, and OIDC provider configuration.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// Base URL of this server, used for redirect callbacks (OIDC).
-    #[allow(dead_code)]
-    pub base_url: String,
     /// Access-token (JWT) lifetime in seconds (default 15 min). Short: it is not
     /// revocable before expiry, so the window of a leaked token is bounded.
     pub access_ttl_secs: ambre_core::Seconds,
@@ -180,7 +177,6 @@ message_limit!(
 impl Default for Config {
     fn default() -> Self {
         Self {
-            base_url: "http://localhost:3000".into(),
             access_ttl_secs: ambre_core::Seconds(900),
             refresh_ttl_secs: ambre_core::Seconds(30 * 24 * 3600),
             presigned_url_ttl_secs: ambre_core::Seconds(900),

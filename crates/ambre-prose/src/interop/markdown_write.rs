@@ -9,7 +9,7 @@
 
 use std::fmt::Write as _;
 
-use ambre_bus::app::prose::{ConversionFormat, ConversionReport, MarkdownFlavor};
+use ambre_bus::app::prose::{ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature};
 
 use crate::numbering::ListOrdinal;
 
@@ -24,10 +24,10 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
         warnings: Warnings::new(ConversionFormat::Markdown),
     };
     if ir.meta.paged {
-        writer.warnings.unsupported("page format");
+        writer.warnings.unsupported(UnsupportedFeature::PageFormat);
     }
     if ir.meta.bands {
-        writer.warnings.unsupported("header and footer");
+        writer.warnings.unsupported(UnsupportedFeature::HeaderAndFooter);
     }
     writer.blocks(&ir.blocks, "");
     if writer.flavor == MarkdownFlavor::Gfm {
@@ -91,7 +91,7 @@ impl Writer {
         match block {
             IrBlock::Paragraph { styled, runs } => {
                 if *styled {
-                    self.warnings.unsupported("paragraph formatting");
+                    self.warnings.unsupported(UnsupportedFeature::ParagraphFormatting);
                 }
                 let text = self.inline(runs);
                 self.line(indent, &escape_line_start(&text));
@@ -101,7 +101,7 @@ impl Writer {
                 // syntax spells one to six.
                 let spelled = level.clamped();
                 if spelled.get() != level.get() {
-                    self.warnings.unsupported("heading level outside 1 to 6");
+                    self.warnings.unsupported(UnsupportedFeature::HeadingLevel);
                 }
                 let text = self.inline(runs);
                 let hashes = "#".repeat(usize::from(spelled.get()));
@@ -118,22 +118,22 @@ impl Writer {
             }
             IrBlock::Table { merged, rows } => {
                 if *merged {
-                    self.warnings.unsupported("merged cells");
+                    self.warnings.unsupported(UnsupportedFeature::MergedCells);
                 }
                 self.table(rows, indent);
             }
             IrBlock::Image { .. } => {
                 // The picture lives encrypted in the document and has no
                 // address a Markdown file could name.
-                self.warnings.unsupported("image");
+                self.warnings.unsupported(UnsupportedFeature::Image);
             }
             IrBlock::PageBreak => {
-                self.warnings.unsupported("page break");
+                self.warnings.unsupported(UnsupportedFeature::PageBreak);
                 self.line(indent, "---");
             }
             IrBlock::HRule => self.line(indent, "---"),
             IrBlock::Toc => {
-                self.warnings.unsupported("table of contents");
+                self.warnings.unsupported(UnsupportedFeature::TableOfContents);
                 self.line(indent, "<!-- toc -->");
             }
             IrBlock::ListItem { .. } => {}
@@ -166,12 +166,12 @@ impl Writer {
                 format!("- [{}] ", if done.is_done() { 'x' } else { ' ' })
             }
             IrListStyle::Todo(_) => {
-                self.warnings.unsupported("to-do item");
+                self.warnings.unsupported(UnsupportedFeature::TodoItem);
                 "- ".to_owned()
             }
             IrListStyle::Ordered(ordered) => {
                 if ordered != IrOrderedStyle::Decimal {
-                    self.warnings.unsupported("list numbering style");
+                    self.warnings.unsupported(UnsupportedFeature::ListNumbering);
                 }
                 let marker = format!("{}. ", run.ordinal);
                 run.ordinal = run.ordinal.next();
@@ -209,13 +209,13 @@ impl Writer {
     fn table(&mut self, rows: &[IrTableRow], indent: &str) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
             if cell.styled {
-                self.warnings.unsupported("cell formatting");
+                self.warnings.unsupported(UnsupportedFeature::CellFormatting);
             }
         }
         if self.flavor != MarkdownFlavor::Gfm {
             // No table syntax: each cell lands as a paragraph of its own
             // (`PROSE-IO-061`).
-            self.warnings.unsupported("table");
+            self.warnings.unsupported(UnsupportedFeature::Table);
             for row in rows {
                 for cell in &row.cells {
                     self.blocks(&cell.blocks, indent);
@@ -228,7 +228,7 @@ impl Writer {
             return;
         }
         // A pipe table sizes its columns to the reader's screen.
-        self.warnings.unsupported("column widths");
+        self.warnings.unsupported(UnsupportedFeature::ColumnWidths);
         for (index, row) in rows.iter().enumerate() {
             let mut line = String::from("|");
             for col in 0..cols {
@@ -255,24 +255,24 @@ impl Writer {
             match block {
                 IrBlock::Paragraph { styled, runs } => {
                     if *styled {
-                        self.warnings.unsupported("paragraph formatting");
+                        self.warnings.unsupported(UnsupportedFeature::ParagraphFormatting);
                     }
                     parts.push(self.inline(runs));
                 }
                 IrBlock::Heading { runs, .. } => {
-                    self.warnings.unsupported("heading in a table cell");
+                    self.warnings.unsupported(UnsupportedFeature::HeadingInCell);
                     parts.push(self.inline(runs));
                 }
                 IrBlock::ListItem { runs, .. } => {
-                    self.warnings.unsupported("list in a table cell");
+                    self.warnings.unsupported(UnsupportedFeature::ListInCell);
                     parts.push(self.inline(runs));
                 }
-                _ => self.warnings.unsupported("block in a table cell"),
+                _ => self.warnings.unsupported(UnsupportedFeature::BlockInCell),
             }
         }
         if parts.iter().filter(|part| !part.is_empty()).count() > 1 {
             self.warnings
-                .unsupported("several paragraphs in a table cell");
+                .unsupported(UnsupportedFeature::ParagraphsInCell);
         }
         parts.retain(|part| !part.is_empty());
         parts.join(" ")
@@ -315,7 +315,7 @@ impl Writer {
                 if self.flavor == MarkdownFlavor::Gfm {
                     let _ = write!(out, "[^{ordinal}]");
                 } else {
-                    self.warnings.unsupported("footnote");
+                    self.warnings.unsupported(UnsupportedFeature::Footnote);
                 }
             }
         }
@@ -345,15 +345,15 @@ impl Writer {
     }
 
     fn lost_marks(&mut self, run: &IrRun) {
-        let lost: [(bool, &'static str); 8] = [
-            (run.underline, "underline"),
-            (run.superscript, "superscript"),
-            (run.subscript, "subscript"),
-            (run.strikethrough && self.flavor != MarkdownFlavor::Gfm, "strikethrough"),
-            (run.styled, "colour, size or font"),
-            (run.comment, "comment"),
-            (run.suggestion, "suggestion"),
-            (run.cross_ref, "cross reference"),
+        let lost: [(bool, UnsupportedFeature); 8] = [
+            (run.underline, UnsupportedFeature::Underline),
+            (run.superscript, UnsupportedFeature::Superscript),
+            (run.subscript, UnsupportedFeature::Subscript),
+            (run.strikethrough && self.flavor != MarkdownFlavor::Gfm, UnsupportedFeature::Strikethrough),
+            (run.styled, UnsupportedFeature::Styling),
+            (run.comment, UnsupportedFeature::Comment),
+            (run.suggestion, UnsupportedFeature::Suggestion),
+            (run.cross_ref, UnsupportedFeature::CrossReference),
         ];
         for (on, feature) in lost {
             if on {
@@ -491,7 +491,7 @@ mod tests {
             .warnings
             .iter()
             .filter_map(|w| match w {
-                ConversionWarning::FeatureNotSupported { feature, .. } => Some(*feature),
+                ConversionWarning::FeatureNotSupported { feature, .. } => Some(feature.label()),
                 _ => None,
             })
             .collect()
@@ -654,9 +654,9 @@ mod tests {
             [
                 "page format",
                 "header and footer",
-                "underline",
-                "colour, size or font",
-                "comment",
+                UnsupportedFeature::Underline,
+                UnsupportedFeature::Styling,
+                UnsupportedFeature::Comment,
                 "page break",
                 "table of contents"
             ]

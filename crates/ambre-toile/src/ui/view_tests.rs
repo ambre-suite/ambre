@@ -92,14 +92,8 @@ impl Rig {
         });
     }
 
-    fn key(&mut self, key: &str, ctrl: bool, shift: bool) -> bool {
-        self.view.handle_input(&InputEvent::Key {
-            key: key.to_owned(),
-            ctrl,
-            alt: false,
-            shift,
-            meta: false,
-        })
+    fn key(&mut self, key: Key, mods: Modifiers) -> bool {
+        self.view.handle_input(&InputEvent::Key { key, mods })
     }
 
     fn input(&mut self, ev: InputEvent) -> bool {
@@ -113,20 +107,11 @@ impl Rig {
     }
 
     fn press(&mut self, (x, y): (f64, f64)) {
-        self.input(InputEvent::PointerDown {
-            at: pointer(x, y),
-            button: PointerButton::Primary,
-            shift: false,
-            ctrl: false,
-        });
+        self.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::NONE });
     }
 
     fn release(&mut self, (x, y): (f64, f64)) {
-        self.input(InputEvent::PointerUp {
-            at: pointer(x, y),
-            button: PointerButton::Primary,
-            ctrl: false,
-        });
+        self.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::NONE });
     }
 
     /// A press and a release at the world point (x, y), with no move between.
@@ -277,7 +262,7 @@ fn an_untouched_editor_closes_without_a_write() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     assert!(rig.view.editor.is_some(), "the editor opened");
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none(), "the editor closed");
     assert!(rig.sent().is_empty(), "and wrote nothing");
@@ -297,7 +282,7 @@ fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
     rig.view
         .plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle);
     assert!(rig.view.pipe_typing(), "an open editor takes the keys");
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     rig.view
         .plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle);
@@ -317,7 +302,7 @@ fn a_double_click_keeps_the_body_and_a_close_writes_it_once() {
     rig.input(InputEvent::Text {
         text: "?".to_owned(),
     });
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     // The caret sat at the end: the keystrokes extend the body, and the two
@@ -541,9 +526,9 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
 fn the_undo_chords_reach_the_logic_thread() {
     let mut rig = Rig::new();
     rig.sent();
-    assert!(rig.key("z", true, false));
-    assert!(rig.key("Z", true, true));
-    assert!(rig.key("y", true, false));
+    assert!(rig.key(Key::char('z'), Modifiers::PRIMARY));
+    assert!(rig.key(Key::char('z'), Modifiers::PRIMARY_SHIFT));
+    assert!(rig.key(Key::char('y'), Modifiers::PRIMARY));
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::Undo, ToileCommand::Redo, ToileCommand::Redo]
@@ -555,7 +540,7 @@ fn escape_leaves_the_scope_and_clears_the_selection_in_one_press() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.view.group_scope = Some(eid("g"));
-    assert!(rig.key("Escape", false, false));
+    assert!(rig.key(Key::Escape, Modifiers::NONE));
     assert!(rig.view.selection.is_empty());
     assert_eq!(rig.view.group_scope, None);
 }
@@ -565,7 +550,7 @@ fn the_ungroup_chord_sends_one_command_over_the_selection() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
     rig.marquee((-20.0, -20.0), (600.0, 300.0));
     rig.sent();
-    assert!(rig.key("G", true, true));
+    assert!(rig.key(Key::char('g'), Modifiers::PRIMARY_SHIFT));
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::UngroupElements { groups }] if groups == &[eid("a"), eid("b")]
@@ -700,7 +685,7 @@ fn a_cut_whose_copy_went_nowhere_deletes_nothing() {
 #[test]
 fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    assert!(rig.key("a", true, false));
+    assert!(rig.key(Key::char('a'), Modifiers::PRIMARY));
     rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
     rig.sent();
     assert_eq!(
@@ -724,7 +709,7 @@ fn each_select_all_asks_for_the_board_as_it_is_now() {
     assert!(rig.view.selection.is_empty(), "an unasked answer selected");
 
     for board in [vec![eid("a")], vec![eid("a"), eid("new")]] {
-        assert!(rig.key("a", true, false));
+        assert!(rig.key(Key::char('a'), Modifiers::PRIMARY));
         assert!(
             rig.sent()
                 .iter()
@@ -741,12 +726,12 @@ fn each_select_all_asks_for_the_board_as_it_is_now() {
 #[test]
 fn a_selection_change_before_the_select_all_answer_wins() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    assert!(rig.key("a", true, false));
-    assert!(rig.key("Escape", false, false));
+    assert!(rig.key(Key::char('a'), Modifiers::PRIMARY));
+    assert!(rig.key(Key::Escape, Modifiers::NONE));
     rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
     assert!(rig.view.selection.is_empty(), "the answer undid the Escape");
 
-    assert!(rig.key("a", true, false));
+    assert!(rig.key(Key::char('a'), Modifiers::PRIMARY));
     rig.click(A.x1 + 400.0, A.y1 + 400.0);
     rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
     assert!(rig.view.selection.is_empty(), "the answer undid the click");
@@ -799,7 +784,7 @@ fn a_paste_into_an_open_editor_inserts_the_text() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     rig.view.paste_clipboard(clip(B), PasteSource::Foreign);
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(matches!(
         rig.sent().as_slice(),
@@ -822,8 +807,14 @@ fn a_printable_key_in_an_editor_is_not_consumed() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    for key in ["a", "Z", "é", " ", "1"] {
-        assert!(!rig.key(key, false, false), "{key:?} was consumed");
+    for key in [
+        Key::char('a'),
+        Key::char('Z'),
+        Key::char('é'),
+        Key::Space,
+        Key::char('1'),
+    ] {
+        assert!(!rig.key(key, Modifiers::NONE), "{key:?} was consumed");
     }
 }
 
@@ -851,7 +842,7 @@ fn the_pipe_follows_the_caret_inside_the_element() {
     rig.paint();
     let later = rig.view.caret_drawn.expect("the editor drew a caret");
     assert!(later.x0 > first.x0, "the caret moved right: {later:?}");
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert_eq!(rig.view.caret_drawn, None, "the editor closed");
 }
@@ -919,13 +910,7 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
 #[test]
 fn the_board_editor_drives_the_shared_core() {
     use ambre_canvas::TextEditor;
-    let key = |key: &str, alt: bool, shift: bool| InputEvent::Key {
-        key: key.to_owned(),
-        ctrl: false,
-        alt,
-        shift,
-        meta: false,
-    };
+    let key = |key: Key, mods: Modifiers| InputEvent::Key { key, mods };
     let text = |s: &str| InputEvent::Text { text: s.to_owned() };
     let left = |select: ambre_canvas::Extend, word: ambre_canvas::Stride| EditIntent::Left {
         select,
@@ -938,54 +923,48 @@ fn the_board_editor_drives_the_shared_core() {
     let corpus: Vec<(InputEvent, EditIntent)> = vec![
         (text(" ab cd"), EditIntent::Insert(" ab cd".to_owned())),
         (
-            key("ArrowLeft", false, false),
+            key(Key::ArrowLeft, Modifiers::NONE),
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char),
         ),
         (
-            key("ArrowLeft", false, true),
+            key(Key::ArrowLeft, Modifiers::SHIFT),
             left(ambre_canvas::Extend::Select, ambre_canvas::Stride::Char),
         ),
-        (key("Backspace", false, false), EditIntent::Backspace),
+        (key(Key::Backspace, Modifiers::NONE), EditIntent::Backspace),
         (
-            key("ArrowLeft", true, false),
+            key(Key::ArrowLeft, Modifiers::ALT),
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Word),
         ),
         (
-            key("ArrowRight", true, true),
+            key(Key::ArrowRight, Modifiers { primary: false, alt: true, shift: true }),
             right(ambre_canvas::Extend::Select, ambre_canvas::Stride::Word),
         ),
         (text("X"), EditIntent::Insert("X".to_owned())),
         (
-            key("Home", false, false),
+            key(Key::Home, Modifiers::NONE),
             EditIntent::LineStart {
                 select: ambre_canvas::Extend::Move,
             },
         ),
-        (key("Delete", false, false), EditIntent::Delete),
+        (key(Key::Delete, Modifiers::NONE), EditIntent::Delete),
         (
-            key("End", false, true),
+            key(Key::End, Modifiers::SHIFT),
             EditIntent::LineEnd {
                 select: ambre_canvas::Extend::Select,
             },
         ),
         (
-            key("ArrowRight", false, false),
+            key(Key::ArrowRight, Modifiers::NONE),
             right(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char),
         ),
         (
-            key("Home", false, true),
+            key(Key::Home, Modifiers::SHIFT),
             EditIntent::LineStart {
                 select: ambre_canvas::Extend::Select,
             },
         ),
         (
-            InputEvent::Key {
-                key: "a".to_owned(),
-                ctrl: true,
-                alt: false,
-                shift: false,
-                meta: false,
-            },
+            InputEvent::Key { key: Key::char('a'), mods: Modifiers::PRIMARY },
             EditIntent::SelectAll,
         ),
         (text("new"), EditIntent::Insert("new".to_owned())),
@@ -994,7 +973,7 @@ fn the_board_editor_drives_the_shared_core() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.key("End", false, false);
+    rig.key(Key::End, Modifiers::NONE);
     rig.paint();
     let style = rig.view.editor.as_ref().expect("open").style().clone();
     let mut core = TextEditor::new("hi", style);
@@ -1128,7 +1107,7 @@ fn a_fatal_event_latches_the_page_and_silences_the_view() {
     rig.view.update();
     assert!(rig.view.fatal, "the view is inert");
     assert!(ambre_canvas::fatal_message().is_some(), "the page is told");
-    rig.key("z", true, false);
+    rig.key(Key::char('z'), Modifiers::PRIMARY);
     assert!(rig.sent().is_empty(), "an inert view sends nothing");
 }
 
@@ -1242,7 +1221,7 @@ fn leaving_the_caption_editor_sends_the_caption() {
     let mut rig = with_arrow(&[]);
     rig.double_click(200.0, 300.0);
     rig.type_text("!");
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     assert!(matches!(
@@ -1258,7 +1237,7 @@ fn leaving_the_caption_editor_sends_the_caption() {
 fn an_untouched_caption_editor_sends_nothing() {
     let mut rig = with_arrow(&[]);
     rig.double_click(200.0, 300.0);
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(rig.view.editor.is_none());
     assert!(
@@ -1502,7 +1481,7 @@ fn an_element_without_a_body_opens_no_editor() {
     assert_eq!(rig.view.selection, [eid("s")]);
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.key("x", false, false);
+    rig.key(Key::char('x'), Modifiers::NONE);
     assert!(rig.view.editor.is_none());
 }
 
@@ -1514,10 +1493,10 @@ fn a_typed_character_opens_the_editor_and_replaces_the_body() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.sent();
-    assert!(!rig.key("x", false, false), "the key reaches the text pipe");
+    assert!(!rig.key(Key::char('x'), Modifiers::NONE), "the key reaches the text pipe");
     assert_eq!(editing(&rig), Some(eid("a")));
     rig.type_text("x");
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     assert!(matches!(
         writes(rig.sent()).as_slice(),
@@ -1531,7 +1510,7 @@ fn a_typed_character_opens_the_editor_and_replaces_the_body() {
 fn the_space_bar_opens_no_editor() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
-    assert!(rig.key(" ", false, false), "space is the board's");
+    assert!(rig.key(Key::Space, Modifiers::NONE), "space is the board's");
     assert!(rig.view.editor.is_none());
 }
 
@@ -1545,15 +1524,15 @@ fn a_key_over_anything_but_one_note_opens_no_editor() {
         DisplayNode::Element(sticky("b", B)),
         DisplayNode::Element(shape("s", Rect::new(0.0, 200.0, 100.0, 260.0))),
     ]);
-    rig.key("x", false, false);
+    rig.key(Key::char('x'), Modifiers::NONE);
     assert!(rig.view.editor.is_none(), "nothing selected");
     rig.marquee((-20.0, -20.0), (600.0, 150.0));
     assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
-    rig.key("x", false, false);
+    rig.key(Key::char('x'), Modifiers::NONE);
     assert!(rig.view.editor.is_none(), "two notes");
     rig.click(50.0, 230.0);
     assert_eq!(rig.view.selection, [eid("s")]);
-    rig.key("x", false, false);
+    rig.key(Key::char('x'), Modifiers::NONE);
     assert!(rig.view.editor.is_none(), "a shape");
 }
 
@@ -1571,7 +1550,7 @@ fn a_close_writes_the_body_once_and_keeps_the_element_selected() {
         rig.type_text(ch);
         rig.paint();
     }
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     rig.frame();
     assert!(rig.view.editor.is_none());
@@ -1990,7 +1969,7 @@ fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
     for _ in 0..3 {
         assert!(plan(&mut rig).1, "the editor keeps the overlay live");
     }
-    rig.key("Escape", false, false);
+    rig.key(Key::Escape, Modifiers::NONE);
     rig.paint();
     plan(&mut rig);
 
@@ -2059,17 +2038,8 @@ fn linked_to_a_frame() -> Rig {
 
 fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
-    rig.input(InputEvent::PointerDown {
-        at: pointer(x, y),
-        button: PointerButton::Primary,
-        shift: false,
-        ctrl: true,
-    });
-    rig.input(InputEvent::PointerUp {
-        at: pointer(x, y),
-        button: PointerButton::Primary,
-        ctrl: true,
-    });
+    rig.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::PRIMARY });
+    rig.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::PRIMARY });
 }
 
 /// Whether `sent` is the one fit request a jump to the frame "f" makes.
@@ -2171,7 +2141,7 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
     rig.frame();
     rig.sent();
     let jumped = rig.view.cam;
-    assert!(rig.key("z", true, false));
+    assert!(rig.key(Key::char('z'), Modifiers::PRIMARY));
     assert!(matches!(rig.sent().as_slice(), [ToileCommand::Undo]));
     assert_eq!(rig.view.cam, jumped, "the camera stays on the frame");
 }
@@ -2179,17 +2149,8 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
 /// A right press and release at the world point (x, y).
 fn right_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
-    rig.input(InputEvent::PointerDown {
-        at: pointer(x, y),
-        button: PointerButton::Secondary,
-        shift: false,
-        ctrl: false,
-    });
-    rig.input(InputEvent::PointerUp {
-        at: pointer(x, y),
-        button: PointerButton::Secondary,
-        ctrl: false,
-    });
+    rig.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Secondary, mods: Modifiers::NONE });
+    rig.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Secondary, mods: Modifiers::NONE });
 }
 
 /// `TOILE-UI-048`, `TOILE-UI-135`, `TOILE-UI-136`: a right-click on a
@@ -2235,18 +2196,9 @@ fn a_right_click_on_nothing_clears_the_selection() {
 /// The key event the keymap binds to `id`, as the host would deliver it.
 fn chord_of(id: CommandId) -> InputEvent {
     let binding = crate::ui::commands::chord(id).expect("the id announces a chord");
-    let key = match binding.key {
-        ambre_commands::Key::Char(c) if binding.mods.shift => c.to_ascii_uppercase().to_string(),
-        ambre_commands::Key::Char(c) => c.to_string(),
-        ambre_commands::Key::Delete => "Delete".to_owned(),
-        other => panic!("no board chord decodes {other:?}"),
-    };
     InputEvent::Key {
-        key,
-        ctrl: binding.mods.primary,
-        alt: binding.mods.alt,
-        shift: binding.mods.shift,
-        meta: false,
+        key: binding.key,
+        mods: binding.mods,
     }
 }
 
@@ -2388,7 +2340,7 @@ fn a_space_drag_pans_in_any_tool_and_starts_no_gesture() {
         let mut rig = Rig::with_stickies(&[("a", A)]);
         rig.view.set_tool(tool);
         let cam = rig.view.cam;
-        assert!(rig.key(" ", false, false));
+        assert!(rig.key(Key::Space, Modifiers::NONE));
         drag(&mut rig, (50.0, 50.0), (150.0, 90.0));
         assert_ne!(rig.view.cam, cam, "{tool:?}: the drag did not pan");
         assert!(rig.view.selection.is_empty(), "{tool:?}: the drag selected");
@@ -2865,16 +2817,16 @@ fn a_presentation_takes_no_edit() {
     rig.click(350.0, 50.0);
     assert!(rig.view.selection.is_empty(), "a click selects nothing");
     rig.view.selection = vec![eid("a")];
-    rig.key("Delete", false, false);
-    rig.key("z", true, false);
-    rig.key("d", true, false);
+    rig.key(Key::Delete, Modifiers::NONE);
+    rig.key(Key::char('z'), Modifiers::PRIMARY);
+    rig.key(Key::char('d'), Modifiers::PRIMARY);
     rig.double_click(50.0, 50.0);
     assert!(rig.view.editor.is_none(), "no editor opens");
     assert!(rig.sent().is_empty(), "a presentation sent an edit");
     assert_eq!(rig.view.selection, [eid("a")], "the delete was refused");
 
     rig.answer(ToileEvent::PresentModeChanged(PresentMode::Editing));
-    rig.key("Delete", false, false);
+    rig.key(Key::Delete, Modifiers::NONE);
     assert!(matches!(
         rig.sent().as_slice(),
         [ToileCommand::DeleteElements { .. }]
@@ -2983,12 +2935,7 @@ fn a_busy_board_takes_no_input() {
     assert!(rig.view.is_busy());
     let at = rig.screen(50.0, 50.0);
     assert!(
-        rig.input(InputEvent::PointerDown {
-            at: pointer(at.0, at.1),
-            button: PointerButton::Primary,
-            shift: false,
-            ctrl: false
-        }),
+        rig.input(InputEvent::PointerDown { at: pointer(at.0, at.1), button: PointerButton::Primary, mods: Modifiers::NONE }),
         "the refusal consumes the event"
     );
     rig.release(at);

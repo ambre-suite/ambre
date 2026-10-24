@@ -76,13 +76,77 @@ pub struct BenchBaseline {
     pub machine: String,
 
     /// The commit the run covered, so a later reader knows which tree the
-    /// figures describe.
-    pub commit: String,
+    /// figures describe. `None` is a checkout git did not answer for, written
+    /// `unknown` in the file.
+    #[serde(with = "unknown_commit")]
+    pub commit: Option<CommitHash>,
 
     /// One entry per benchmark: its `criterion` id, and the mean in nanoseconds.
     /// Nanoseconds because that is what `criterion` reports, and a converted
     /// figure is one more thing to get wrong.
     pub measurements: Vec<BenchMeasurement>,
+}
+
+/// A git commit id, abbreviated or full: 4 to 40 lowercase hexadecimal digits.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CommitHash(String);
+
+/// A text that is no commit id: too short, too long, or not lowercase hex.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0:?} is not a commit id")]
+pub struct InvalidCommitHash(pub String);
+
+impl CommitHash {
+    /// The id `text` spells.
+    ///
+    /// # Errors
+    /// [`InvalidCommitHash`] when `text` is not 4 to 40 lowercase hex digits.
+    pub fn new(text: &str) -> Result<Self, InvalidCommitHash> {
+        let hex = text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        if hex && (4..=40).contains(&text.len()) {
+            Ok(Self(text.to_owned()))
+        } else {
+            Err(InvalidCommitHash(text.to_owned()))
+        }
+    }
+
+    /// The id as git prints it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for CommitHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// The file form of a baseline's commit: the id, or `unknown` for none.
+mod unknown_commit {
+    use super::CommitHash;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    const UNKNOWN: &str = "unknown";
+
+    pub(super) fn serialize<S: Serializer>(
+        commit: &Option<CommitHash>,
+        out: S,
+    ) -> Result<S::Ok, S::Error> {
+        out.serialize_str(commit.as_ref().map_or(UNKNOWN, CommitHash::as_str))
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        input: D,
+    ) -> Result<Option<CommitHash>, D::Error> {
+        let text = String::deserialize(input)?;
+        if text == UNKNOWN {
+            return Ok(None);
+        }
+        CommitHash::new(&text)
+            .map(Some)
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 /// One benchmark's mean, as `criterion` estimated it.

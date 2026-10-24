@@ -8,7 +8,7 @@
 
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
-use ambre_commands::{ClipboardWrite, Modifiers, SelectionMode};
+use ambre_commands::{ClipboardWrite, Key, Modifiers, SelectionMode};
 use ambre_core::{StepDirection, ViewPoint, ViewPx};
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
@@ -50,27 +50,27 @@ pub enum ProseKey {
 }
 
 impl ProseKey {
-    /// The key a browser key name stands for under the chord's modifiers.
+    /// The key a pressed key stands for under the chord's modifiers.
     /// `None` for a key the view leaves to the host.
     #[must_use]
-    pub fn from_name(name: &str, mods: Modifiers) -> Option<Self> {
+    pub fn from_key(key: Key, mods: Modifiers) -> Option<Self> {
         let ctrl = mods.primary;
-        Some(match name {
-            "ArrowLeft" => Self::Left,
-            "ArrowRight" => Self::Right,
-            "ArrowUp" => Self::Up,
-            "ArrowDown" => Self::Down,
-            "Home" => Self::Home,
-            "End" => Self::End,
-            "PageUp" => Self::PageUp,
-            "PageDown" => Self::PageDown,
-            "Backspace" => Self::Backspace,
-            "Delete" => Self::Delete,
-            "Enter" => Self::Enter,
-            "Escape" => Self::Escape,
-            "a" | "A" if ctrl => Self::SelectAll,
-            "z" | "Z" if ctrl => Self::Undo,
-            "y" | "Y" if ctrl => Self::Redo,
+        Some(match key {
+            Key::ArrowLeft => Self::Left,
+            Key::ArrowRight => Self::Right,
+            Key::ArrowUp => Self::Up,
+            Key::ArrowDown => Self::Down,
+            Key::Home => Self::Home,
+            Key::End => Self::End,
+            Key::PageUp => Self::PageUp,
+            Key::PageDown => Self::PageDown,
+            Key::Backspace => Self::Backspace,
+            Key::Delete => Self::Delete,
+            Key::Enter => Self::Enter,
+            Key::Escape => Self::Escape,
+            Key::Char('a') if ctrl => Self::SelectAll,
+            Key::Char('z') if ctrl => Self::Undo,
+            Key::Char('y') if ctrl => Self::Redo,
             _ => return None,
         })
     }

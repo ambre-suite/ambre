@@ -75,7 +75,7 @@ use super::viewport::ViewportTransform;
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId, Modifiers};
+use ambre_commands::{ClipboardWrite, CommandId, Key, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -1670,12 +1670,7 @@ impl ToileView {
             self.kinetic.press(at, now_ms);
             return true;
         }
-        self.handle_input(&InputEvent::PointerDown {
-            at,
-            button: PointerButton::Primary,
-            shift: false,
-            ctrl: false,
-        })
+        self.handle_input(&InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE })
     }
 
     /// A finger moved: a panning finger drags the board past the tap slop,
@@ -1701,25 +1696,12 @@ impl ToileView {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
                 if let Release::Tap { at } = self.kinetic.release(now_ms) {
-                    self.handle_input(&InputEvent::PointerDown {
-                        at,
-                        button: PointerButton::Primary,
-                        shift: false,
-                        ctrl: false,
-                    });
-                    self.handle_input(&InputEvent::PointerUp {
-                        at,
-                        button: PointerButton::Primary,
-                        ctrl: false,
-                    });
+                    self.handle_input(&InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE });
+                    self.handle_input(&InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE });
                 }
                 true
             }
-            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
-                at,
-                button: PointerButton::Primary,
-                ctrl: false,
-            }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE }),
             None => false,
         }
     }
@@ -1733,11 +1715,7 @@ impl ToileView {
                 self.kinetic.cancel();
                 true
             }
-            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
-                at: view_point(self.last_pointer),
-                button: PointerButton::Primary,
-                ctrl: false,
-            }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp { at: view_point(self.last_pointer), button: PointerButton::Primary, mods: Modifiers::NONE }),
             None => false,
         }
     }
@@ -1797,25 +1775,17 @@ impl ToileView {
                 *delta,
                 Modifiers::from_event(*ctrl_key, false, false, false),
             ),
-            InputEvent::PointerDown {
-                at,
-                button,
-                shift,
-                ctrl,
-            } => {
+            InputEvent::PointerDown { at, button, mods } => {
                 let screen = on_screen(*at);
                 self.last_pointer = screen;
                 if *button == PointerButton::Primary {
-                    self.follow_link_under(
-                        screen,
-                        Modifiers::from_event(*ctrl, false, *shift, false),
-                    );
+                    self.follow_link_under(screen, *mods);
                 }
                 true
             }
             InputEvent::PointerMove { at } => self.handle_pointer_move(on_screen(*at)),
             InputEvent::PointerUp { at, .. } => self.handle_pointer_up(on_screen(*at)),
-            InputEvent::KeyUp { key } => self.handle_key_up(key),
+            InputEvent::KeyUp { key } => self.handle_key_up(*key),
             InputEvent::DoubleClick { .. } => true,
             InputEvent::Key { .. }
             | InputEvent::Text { .. }
@@ -2988,8 +2958,8 @@ impl ToileView {
     /// pan, and the release gives the board back to its tool (`TOILE-UI-256`).
     /// A pan already under the pointer is ended with it, so the drag does not
     /// outlive the key that started it.
-    fn handle_key_up(&mut self, key: &str) -> bool {
-        if !matches!(key, " " | "Spacebar") {
+    fn handle_key_up(&mut self, key: Key) -> bool {
+        if key != Key::Space {
             return false;
         }
         self.space_down = false;
@@ -3004,7 +2974,7 @@ impl ToileView {
     /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
     /// clipboard events (Phase A). Returns `true` when the key was consumed (host
     /// `preventDefault`).
-    fn handle_key(&mut self, key: &str, mods: Modifiers) -> bool {
+    fn handle_key(&mut self, key: Key, mods: Modifiers) -> bool {
         let cmd = mods.primary;
         let shift = mods.shift;
         // Command chords first, so a bare-key fallthrough never shadows them.
@@ -3012,18 +2982,18 @@ impl ToileView {
             match key {
                 // Undo / redo (`toile-undo`). Ctrl+Shift+Z and
                 // Ctrl+Y both redo.
-                "z" | "Z" if shift => {
+                Key::Char('z') if shift => {
                     self.send_edit(ToileCommand::Redo);
                 }
-                "z" | "Z" => {
+                Key::Char('z') => {
                     self.send_edit(ToileCommand::Undo);
                 }
-                "y" | "Y" => {
+                Key::Char('y') => {
                     self.send_edit(ToileCommand::Redo);
                 }
                 // Duplicate the selection with a small diagonal nudge
                 // (`toile-undo`).
-                "d" | "D" if !self.selection.is_empty() => {
+                Key::Char('d') if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::DuplicateElements {
                         ids: self.selection.clone(),
                         delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
@@ -3032,19 +3002,19 @@ impl ToileView {
                 // Group / ungroup the selection (`toile-groups`).
                 // One command for the whole selection, so one undo item
                 // (`TOILE-094`).
-                "g" | "G" if shift => {
+                Key::Char('g') if shift => {
                     if let Some(cmd) = super::menu::ungroup_chord(&self.selection) {
                         self.send_edit(cmd);
                     }
                 }
-                "g" | "G" if !self.selection.is_empty() => {
+                Key::Char('g') if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::GroupElements {
                         ids: self.selection.clone(),
                     });
                 }
                 // Local select-all over every displayed element (connectors are
                 // selected with their endpoints, not directly).
-                "a" | "A" => self.select_all(),
+                Key::Char('a') => self.select_all(),
                 _ => return false,
             }
             self.needs_full = true;
@@ -3056,8 +3026,7 @@ impl ToileView {
         // is excluded (it pans). The character is NOT consumed, so the textarea
         // still emits the `input` event that inserts it over the selected-all
         // body in the now-open editor.
-        if key.chars().count() == 1
-            && key != " "
+        if matches!(key, Key::Char(_))
             && let Some(id) = self.single_editable_selection()
         {
             self.open_editor(id);
@@ -3065,11 +3034,11 @@ impl ToileView {
             return false;
         }
         match key {
-            " " | "Spacebar" => {
+            Key::Space => {
                 self.space_down = true;
                 true
             }
-            "Escape" => {
+            Key::Escape => {
                 // Leaving a focused embed is the whole action: the board's
                 // selection survives. Escape steps out one level at a time rather
                 // than also clearing what was selected (`toile-embeds`).
@@ -3107,7 +3076,7 @@ impl ToileView {
                 self.needs_full = true;
                 true
             }
-            "Delete" | "Backspace" => {
+            Key::Delete | Key::Backspace => {
                 if !self.selection.is_empty() {
                     let ids = std::mem::take(&mut self.selection);
                     self.send_edit(ToileCommand::DeleteElements { ids });
@@ -3120,12 +3089,14 @@ impl ToileView {
             }
             // Nudge the selection by 1 world unit (10 with Shift),
             // `toile-elements`.
-            "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" if !self.selection.is_empty() => {
+            Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
+                if !self.selection.is_empty() =>
+            {
                 let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL };
                 let delta = match key {
-                    "ArrowUp" => Vec2::new(0.0, -step),
-                    "ArrowDown" => Vec2::new(0.0, step),
-                    "ArrowLeft" => Vec2::new(-step, 0.0),
+                    Key::ArrowUp => Vec2::new(0.0, -step),
+                    Key::ArrowDown => Vec2::new(0.0, step),
+                    Key::ArrowLeft => Vec2::new(-step, 0.0),
                     _ => Vec2::new(step, 0.0),
                 };
                 self.send_edit(ToileCommand::MoveElements {
@@ -3505,13 +3476,7 @@ impl ToileView {
                 self.push_intent(EditIntent::ComposeEnd(text.clone()));
                 Some(true)
             }
-            InputEvent::Key {
-                key,
-                ctrl,
-                alt,
-                shift,
-                meta,
-            } => Some(self.edit_key(key, Modifiers::from_event(*ctrl, *alt, *shift, *meta))),
+            InputEvent::Key { key, mods } => Some(self.edit_key(*key, *mods)),
             // The editor holds no key across frames, so a release means nothing
             // to it. Normal handling runs, where the board lowers its pan flag.
             InputEvent::KeyUp { .. } => None,
@@ -3558,13 +3523,13 @@ impl ToileView {
     /// Editing key map. Returns `true` when consumed (host `preventDefault`).
     /// Character-producing keys return `false` so the browser still emits the
     /// `input` event that lands as `InputEvent::Text` (the actual insertion).
-    fn edit_key(&mut self, key: &str, mods: Modifiers) -> bool {
+    fn edit_key(&mut self, key: Key, mods: Modifiers) -> bool {
         let cmd = mods.primary;
         let shift = mods.shift;
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
         if cmd {
             match key {
-                "a" | "A" => {
+                Key::Char('a') => {
                     self.push_intent(EditIntent::SelectAll);
                     return true;
                 }
@@ -3575,28 +3540,28 @@ impl ToileView {
         }
         let word = ambre_canvas::Stride::word_if(mods.alt); // Alt+Arrow = word motion (Ctrl is reserved for chords).
         match key {
-            "Escape" => self.request_close_editor(),
-            "Enter" => self.push_intent(EditIntent::Newline),
-            "Backspace" => self.push_intent(EditIntent::Backspace),
-            "Delete" => self.push_intent(EditIntent::Delete),
-            "ArrowLeft" => self.push_intent(EditIntent::Left {
+            Key::Escape => self.request_close_editor(),
+            Key::Enter => self.push_intent(EditIntent::Newline),
+            Key::Backspace => self.push_intent(EditIntent::Backspace),
+            Key::Delete => self.push_intent(EditIntent::Delete),
+            Key::ArrowLeft => self.push_intent(EditIntent::Left {
                 select: ambre_canvas::Extend::select_if(shift),
                 word,
             }),
-            "ArrowRight" => self.push_intent(EditIntent::Right {
+            Key::ArrowRight => self.push_intent(EditIntent::Right {
                 select: ambre_canvas::Extend::select_if(shift),
                 word,
             }),
-            "ArrowUp" => self.push_intent(EditIntent::Up {
+            Key::ArrowUp => self.push_intent(EditIntent::Up {
                 select: ambre_canvas::Extend::select_if(shift),
             }),
-            "ArrowDown" => self.push_intent(EditIntent::Down {
+            Key::ArrowDown => self.push_intent(EditIntent::Down {
                 select: ambre_canvas::Extend::select_if(shift),
             }),
-            "Home" => self.push_intent(EditIntent::LineStart {
+            Key::Home => self.push_intent(EditIntent::LineStart {
                 select: ambre_canvas::Extend::select_if(shift),
             }),
-            "End" => self.push_intent(EditIntent::LineEnd {
+            Key::End => self.push_intent(EditIntent::LineEnd {
                 select: ambre_canvas::Extend::select_if(shift),
             }),
             // A character key: do NOT consume, so the textarea emits `input` and
@@ -4142,26 +4107,13 @@ impl ToileView {
                 *delta,
                 Modifiers::from_event(*ctrl_key, false, false, false),
             ),
-            InputEvent::PointerDown {
-                at,
-                button,
-                shift,
-                ctrl,
-            } => self.handle_pointer_down(
-                on_screen(*at),
-                *button,
-                Modifiers::from_event(*ctrl, false, *shift, false),
-            ),
+            InputEvent::PointerDown { at, button, mods } => {
+                self.handle_pointer_down(on_screen(*at), *button, *mods)
+            }
             InputEvent::PointerMove { at } => self.handle_pointer_move(on_screen(*at)),
             InputEvent::PointerUp { at, .. } => self.handle_pointer_up(on_screen(*at)),
-            InputEvent::Key {
-                key,
-                ctrl,
-                alt,
-                shift,
-                meta,
-            } => self.handle_key(key, Modifiers::from_event(*ctrl, *alt, *shift, *meta)),
-            InputEvent::KeyUp { key } => self.handle_key_up(key),
+            InputEvent::Key { key, mods } => self.handle_key(*key, *mods),
+            InputEvent::KeyUp { key } => self.handle_key_up(*key),
             InputEvent::DoubleClick { at } => self.handle_double_click(on_screen(*at)),
             InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }

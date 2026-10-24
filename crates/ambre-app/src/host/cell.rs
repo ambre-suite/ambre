@@ -13,6 +13,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_chrome::commands::{Key, Modifiers};
 
 /// The listeners a cell takes its input from, on its own canvas. The canvas
 /// takes the focus, so its keys reach its own view (the Murmure message list
@@ -463,12 +464,15 @@ fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, ViewPoint)> {
 /// The input event a DOM event on a cell carries, in the cell's own pixels.
 fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     if let Some(key) = event.dyn_ref::<web_sys::KeyboardEvent>() {
+        // A key the chord set does not model is no input of the cell.
         return Some(InputEvent::Key {
-            key: key.key(),
-            ctrl: key.ctrl_key(),
-            alt: key.alt_key(),
-            shift: key.shift_key(),
-            meta: key.meta_key(),
+            key: Key::from_dom(&key.key())?,
+            mods: Modifiers::from_event(
+                key.ctrl_key(),
+                key.alt_key(),
+                key.shift_key(),
+                key.meta_key(),
+            ),
         });
     }
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
@@ -483,26 +487,30 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     }
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
     let at = super::offset_of(pointer);
-    let ctrl = pointer.ctrl_key() || pointer.meta_key();
+    let mods = Modifiers::from_event(
+        pointer.ctrl_key(),
+        pointer.alt_key(),
+        pointer.shift_key(),
+        pointer.meta_key(),
+    );
     Some(match event.type_().as_str() {
         "pointerdown" => InputEvent::PointerDown {
             at,
             button: ambre_canvas::PointerButton::from_dom(pointer.button()),
-            shift: pointer.shift_key(),
-            ctrl,
+            mods,
         },
         "pointermove" => InputEvent::PointerMove { at },
         "pointerup" => InputEvent::PointerUp {
             at,
             button: ambre_canvas::PointerButton::from_dom(pointer.button()),
-            ctrl,
+            mods,
         },
         // The browser took the gesture over: it ends where it was, as a
         // release (`KINETIC-010`).
         "pointercancel" => InputEvent::PointerUp {
             at,
             button: ambre_canvas::PointerButton::Primary,
-            ctrl,
+            mods,
         },
         _ => return None,
     })
@@ -825,12 +833,7 @@ mod tests {
         let (top, bottom) = (first.bounds.top.get(), last.bounds.bottom.get());
         let mut view = bound.view.borrow_mut();
         for input in [
-            InputEvent::PointerDown {
-                at: pointer(0.0, f64::from(top)),
-                button: ambre_canvas::PointerButton::Primary,
-                shift: false,
-                ctrl: false,
-            },
+            InputEvent::PointerDown { at: pointer(0.0, f64::from(top)), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
             InputEvent::PointerMove {
                 at: pointer(299.0, f64::from(bottom - 1.0)),
             },
@@ -880,12 +883,7 @@ mod tests {
                 AppView::Murmure(v) => field_of(v, 200.0),
                 _ => unreachable!(),
             };
-            content.handle_input(&InputEvent::PointerDown {
-                at: pointer(cx, cy),
-                button: ambre_canvas::PointerButton::Primary,
-                shift: false,
-                ctrl: false,
-            });
+            content.handle_input(&InputEvent::PointerDown { at: pointer(cx, cy), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE });
         };
         let mut cells = Cells::default();
         let size = size_backing_store(&canvas).unwrap();
@@ -918,13 +916,7 @@ mod tests {
         cells.settle(&mut content);
         assert!(!content.takes_text(), "the content's field let them go");
         assert_eq!(cells.route(&typed), Some(true), "the cell takes the text");
-        let key = InputEvent::Key {
-            key: "a".to_owned(),
-            ctrl: false,
-            alt: false,
-            shift: false,
-            meta: false,
-        };
+        let key = InputEvent::Key { key: Key::char('a'), mods: Modifiers::NONE };
         assert!(cells.route(&key).is_some(), "and the keys");
 
         press_content(&mut content);
@@ -934,12 +926,7 @@ mod tests {
 
         canvas.dispatch_event(&down).unwrap();
         assert!(cells.typist().is_some());
-        let press = InputEvent::PointerDown {
-            at: pointer(10.0, 10.0),
-            button: ambre_canvas::PointerButton::Primary,
-            shift: false,
-            ctrl: false,
-        };
+        let press = InputEvent::PointerDown { at: pointer(10.0, 10.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE };
         assert_eq!(cells.route(&press), None, "the press is the content's");
         assert!(cells.typist().is_none(), "a press on the content takes it");
         assert!(!view.borrow().takes_text());

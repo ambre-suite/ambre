@@ -190,7 +190,10 @@ impl ProseState {
             BlockInit::Heading { level } => {
                 attrs(doc::AttrKey::Level, i64::from(level.get()).into())
             }
-            BlockInit::CodeBlock { lang } => attrs(doc::AttrKey::Lang, lang.as_str().into()),
+            BlockInit::CodeBlock { lang } => attrs(
+                doc::AttrKey::Lang,
+                ambre_bus::app::prose::CodeLang::stored(lang.as_ref()).into(),
+            ),
             BlockInit::ListItem { style } => {
                 let map = doc::attrs_at(&node)
                     .ok_or(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused))?;
@@ -382,11 +385,16 @@ impl ProseState {
     }
 
     /// Set a code block's language. An empty value reads as plain.
-    pub(super) fn set_code_lang(&mut self, id: &TreeID, lang: &str) -> ProseOutcome {
+    pub(super) fn set_code_lang(
+        &mut self,
+        id: &TreeID,
+        lang: Option<&ambre_bus::app::prose::CodeLang>,
+    ) -> ProseOutcome {
         if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::CodeBlock) {
             return Self::err_no_block(id);
         }
-        self.write_attr(id, doc::AttrKey::Lang, lang.into())
+        let stored = ambre_bus::app::prose::CodeLang::stored(lang);
+        self.write_attr(id, doc::AttrKey::Lang, stored.into())
     }
 
     /// Write one attribute of a live block.

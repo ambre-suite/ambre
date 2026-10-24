@@ -12,6 +12,8 @@ ron   = "0.8"
 
 [dependencies]
 ambre-bus  = { path = "../ambre-bus" }
+# The keys and modifiers an input event carries (`Key`, `Modifiers`).
+ambre-commands = { path = "../ambre-commands" }
 # The pixel spaces a plan and a size are typed in (`ViewPx`, `CssPx`).
 ambre-core = { path = "../ambre-core" }
 ambre-draw = { path = "../ambre-draw" }

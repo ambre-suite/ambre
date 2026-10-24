@@ -7,7 +7,7 @@
 //! block's text is indexed in (`PROSE-045`).
 
 use ambre_bus::app::find::{MatchCount, MatchIndex};
-use ambre_bus::app::prose::DocSpan;
+use ambre_bus::app::prose::{DocSpan, FindRefusal};
 use ambre_core::StepDirection;
 use loro::TreeID;
 
@@ -97,9 +97,7 @@ impl ProseState {
     /// (`PROSE-FEAT-151`).
     pub(super) fn find_start(&mut self, query: FindQuery) -> ProseOutcome {
         if query.pattern == crate::events::PatternKind::Regex {
-            return ProseOutcome::refused(ProseRefusal::FindRefused(
-                "the regular-expression search is not built",
-            ));
+            return ProseOutcome::refused(ProseRefusal::FindRefused(FindRefusal::RegexUnbuilt));
         }
         let matches = self.find_all(&query);
         let current = (!matches.is_empty()).then_some(MatchIndex::ZERO);
@@ -240,7 +238,7 @@ impl ProseState {
     }
 
     fn err_no_search() -> ProseOutcome {
-        ProseOutcome::refused(ProseRefusal::FindRefused("no search is open"))
+        ProseOutcome::refused(ProseRefusal::FindRefused(FindRefusal::NoSearch))
     }
 
     /// The open query, for a test.
@@ -494,7 +492,7 @@ mod tests {
         let walked = state.handle_command(ProseCommand::FindNext);
         assert!(matches!(
             walked.display.as_slice(),
-            [ProseEvent::Error(e)] if e.reason == ProseRefusal::FindRefused("no search is open")
+            [ProseEvent::Error(e)] if e.reason == ProseRefusal::FindRefused(FindRefusal::NoSearch)
         ));
     }
 

@@ -103,6 +103,8 @@ pub enum Key {
     PageDown,
     /// Function key F1..=F24.
     F(u8),
+    /// The key that opens a context menu, beside the right Alt.
+    ContextMenu,
 }
 
 impl Key {
@@ -132,6 +134,7 @@ impl Key {
             "End" => Self::End,
             "PageUp" => Self::PageUp,
             "PageDown" => Self::PageDown,
+            "ContextMenu" => Self::ContextMenu,
             other => {
                 // Function keys "F1".."F24".
                 if let Some(n) = other.strip_prefix('F').and_then(|d| d.parse::<u8>().ok()) {
@@ -226,6 +229,7 @@ impl core::fmt::Display for KeyBinding {
             Key::PageUp => f.write_str("PageUp"),
             Key::PageDown => f.write_str("PageDown"),
             Key::F(n) => write!(f, "F{n}"),
+            Key::ContextMenu => f.write_str("Menu"),
         }
     }
 }

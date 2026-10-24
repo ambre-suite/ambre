@@ -23,7 +23,8 @@
 use std::path::{Path, PathBuf};
 
 use ambre_logic::fixtures::{
-    BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR, REGISTRY,
+    BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR, CommitHash,
+    REGISTRY,
     baselines_in, corpus_root,
 };
 
@@ -143,14 +144,14 @@ fn a_blank_machine_is_not_a_named_machine() {
     }];
     let named = BenchBaseline {
         machine: "Ryzen 7 5800X, 32 GB, Linux 6.18".to_owned(),
-        commit: "abc1234".to_owned(),
+        commit: CommitHash::new("abc1234").ok(),
         measurements: measurements.clone(),
     };
     assert!(named.names_its_machine());
     for blank in ["", "   ", "\t"] {
         let unnamed = BenchBaseline {
             machine: blank.to_owned(),
-            commit: "abc1234".to_owned(),
+            commit: CommitHash::new("abc1234").ok(),
             measurements: measurements.clone(),
         };
         assert!(
@@ -169,7 +170,7 @@ fn a_blank_machine_is_not_a_named_machine() {
 fn a_baseline_round_trips_through_its_file() {
     let baseline = BenchBaseline {
         machine: "Ryzen 7 5800X, 32 GB, Linux 6.18".to_owned(),
-        commit: "abc1234".to_owned(),
+        commit: CommitHash::new("abc1234").ok(),
         measurements: vec![BenchMeasurement {
             id: "toile_viewport/toile/bench_board_50k".to_owned(),
             mean_ns: ambre_core::Nanos(5_062_900_000),

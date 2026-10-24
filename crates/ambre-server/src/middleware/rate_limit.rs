@@ -48,8 +48,18 @@ static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 /// produce an identical member. One `ZADD` would clobber the other,
 /// undercounting the shared window. A fresh random id per boot removes that
 /// overlap.
-static INSTANCE_ID: std::sync::LazyLock<String> =
-    std::sync::LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
+static INSTANCE_ID: std::sync::LazyLock<InstanceId> =
+    std::sync::LazyLock::new(|| InstanceId(uuid::Uuid::new_v4()));
+
+/// The random id of one server boot. It prints as 32 hex digits, the form a
+/// sorted-set member carries.
+struct InstanceId(uuid::Uuid);
+
+impl std::fmt::Display for InstanceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.simple().fmt(f)
+    }
+}
 
 /// The bucket a request counts against: its caller when it signs in, its
 /// peer address otherwise (`SRV-019`, `SRV-094`).

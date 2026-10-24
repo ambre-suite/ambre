@@ -15,7 +15,8 @@ pub mod markdown_read;
 pub mod markdown_write;
 
 use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, ConversionWarning, FootnoteOrdinal,
+    ConversionFormat, ConversionReport, ConversionWarning, DroppedElement, FootnoteOrdinal,
+    LiftedBlock, UnsupportedFeature,
 };
 
 use crate::doc::StoredLevel;
@@ -171,7 +172,7 @@ impl Warnings {
     }
 
     /// A construct the format has no syntax for (`PROSE-IO-004`).
-    pub fn unsupported(&mut self, feature: &'static str) {
+    pub fn unsupported(&mut self, feature: UnsupportedFeature) {
         let format = self.format;
         for warning in &mut self.list {
             if let ConversionWarning::FeatureNotSupported {
@@ -193,7 +194,7 @@ impl Warnings {
     }
 
     /// An element the reader does not recognise (`PROSE-IO-005`).
-    pub fn dropped(&mut self, element: &'static str) {
+    pub fn dropped(&mut self, element: DroppedElement) {
         for warning in &mut self.list {
             if let ConversionWarning::ElementDropped {
                 element: known,
@@ -210,7 +211,7 @@ impl Warnings {
     }
 
     /// A block moved out of a parent that refuses it (`PROSE-IO-052`).
-    pub fn lifted(&mut self, block: &'static str) {
+    pub fn lifted(&mut self, block: LiftedBlock) {
         for warning in &mut self.list {
             if let ConversionWarning::BlockLifted {
                 block: known,
@@ -244,9 +245,11 @@ pub fn report_message(report: &ConversionReport) -> Option<String> {
         .iter()
         .map(|warning| {
             let (what, count) = match warning {
-                ConversionWarning::FeatureNotSupported { feature, count, .. } => (*feature, *count),
-                ConversionWarning::ElementDropped { element, count } => (*element, *count),
-                ConversionWarning::BlockLifted { block, count } => (*block, *count),
+                ConversionWarning::FeatureNotSupported { feature, count, .. } => {
+                    (feature.label(), *count)
+                }
+                ConversionWarning::ElementDropped { element, count } => (element.label(), *count),
+                ConversionWarning::BlockLifted { block, count } => (block.label(), *count),
             };
             if count > 1 {
                 format!("{what} ({count})")
@@ -279,9 +282,9 @@ mod tests {
             report_message(&Warnings::new(ConversionFormat::Markdown).report()),
             None
         );
-        warnings.unsupported("underline");
-        warnings.unsupported("underline");
-        warnings.dropped("HTML");
+        warnings.unsupported(UnsupportedFeature::Underline);
+        warnings.unsupported(UnsupportedFeature::Underline);
+        warnings.dropped(DroppedElement::Html);
         assert_eq!(
             report_message(&warnings.report()).as_deref(),
             Some("not kept: underline (2), HTML")

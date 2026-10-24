@@ -63,9 +63,7 @@ impl ToileState {
         // Group and Drawing are not creatable here: a group is born via
         // GroupElements, a stroke via CommitStroke.
         if matches!(kind, ElementKind::Group | ElementKind::Drawing) {
-            return Err(ToileError::NotCreatable {
-                kind: kind.type_tag(),
-            });
+            return Err(ToileError::NotCreatable { kind });
         }
         if !content_matches(kind, &content) {
             return Err(ToileError::ContentKindMismatch);
