@@ -1060,9 +1060,7 @@ fn anchor_point(b: Rect, a: Anchor) -> Point {
         Anchor::Left => Point::new(b.x0, c.y),
         Anchor::Right => Point::new(b.x1, c.y),
         Anchor::Center => c,
-        Anchor::Free { u, v } => {
-            Point::new(b.x0 + u as f64 * b.width(), b.y0 + v as f64 * b.height())
-        }
+        Anchor::Free { u, v } => Point::new(u.along(b.x0, b.x1), v.along(b.y0, b.y1)),
     }
 }
 

@@ -13,7 +13,7 @@ use crate::logic::command::{ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
-    StrokePoint,
+    StrokePoint, UnitFraction,
 };
 
 use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
@@ -334,8 +334,16 @@ pub(super) fn decode_anchor(s: &str) -> Anchor {
         _ => {
             let mut it = s.split(':');
             if it.next() == Some("f") {
-                let u = it.next().and_then(|x| x.parse().ok()).unwrap_or(0.5);
-                let v = it.next().and_then(|x| x.parse().ok()).unwrap_or(0.5);
+                // A fraction that does not parse, or falls off the side,
+                // reads as the middle.
+                let mut fraction = || {
+                    it.next()
+                        .and_then(|x| x.parse().ok())
+                        .and_then(UnitFraction::new)
+                        .unwrap_or(UnitFraction::HALF)
+                };
+                let u = fraction();
+                let v = fraction();
                 Anchor::Free { u, v }
             } else {
                 Anchor::Center
@@ -438,4 +446,27 @@ pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, ambre
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     let rect = Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H));
     (rect, ambre_core::Radians::new(read(ElementKey::Rot)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A free anchor reads back as it was written, and a fraction off the
+    /// side reads as the middle rather than outside the box.
+    #[test]
+    fn a_free_anchor_reads_back_and_a_fraction_off_the_side_reads_as_the_middle() {
+        let quarter = UnitFraction::new(0.25).expect("a fraction of the side");
+        let free = Anchor::Free {
+            u: quarter,
+            v: UnitFraction::HALF,
+        };
+        assert_eq!(encode_anchor(free), "f:0.25:0.5");
+        assert_eq!(decode_anchor("f:0.25:0.5"), free);
+        let off = Anchor::Free {
+            u: UnitFraction::HALF,
+            v: UnitFraction::HALF,
+        };
+        assert_eq!(decode_anchor("f:1.5:NaN"), off);
+    }
 }

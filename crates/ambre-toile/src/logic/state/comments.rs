@@ -44,7 +44,7 @@ use ambre_core::CharCount;
 
 use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
-    ToileEvent, ToileOutcome, Viewport,
+    ThreadMessageIndex, ToileEvent, ToileOutcome, Viewport,
 };
 use crate::logic::model::{ElementId, ThreadId};
 
@@ -165,7 +165,7 @@ impl ToileState {
     pub(super) fn edit_comment(
         &mut self,
         thread: &ThreadId,
-        message: usize,
+        message: ThreadMessageIndex,
         delta: &TextDelta,
     ) -> ToileOutcome {
         let Some(me) = self.my_user_id else {
@@ -364,9 +364,13 @@ impl ToileState {
 
     /// The map of one message, addressed by its position in the list. An
     /// out-of-range index yields `None`.
-    fn message_map(&self, thread: &ThreadId, index: usize) -> Option<Fields<MessageKey>> {
+    fn message_map(
+        &self,
+        thread: &ThreadId,
+        index: ThreadMessageIndex,
+    ) -> Option<Fields<MessageKey>> {
         self.message_list(thread)?
-            .get(index)?
+            .get(index.to_usize())?
             .into_container()
             .ok()?
             .into_map()

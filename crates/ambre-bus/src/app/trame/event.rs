@@ -355,6 +355,26 @@ pub struct FilterViewId(pub String);
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct CondFormatId(pub String);
 
+/// Where a conditional-formatting rule falls in evaluation order: the
+/// smaller is evaluated first, and the first rule that matches wins
+/// (`trame-cell-styles`). It orders rules and counts nothing.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+pub struct CondFormatPriority(i64);
+
+impl CondFormatPriority {
+    /// The rank `rank`, negative ranks first.
+    #[must_use]
+    pub const fn new(rank: i64) -> Self {
+        Self(rank)
+    }
+
+    /// The rank itself.
+    #[must_use]
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
 ambre_core::define_index! {
     /// A place in the sheet tab strip, 0-based from the left. It orders the
     /// tabs and names no sheet.

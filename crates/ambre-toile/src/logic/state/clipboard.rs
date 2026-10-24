@@ -9,7 +9,8 @@ use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::command::{
-    ClipConnector, ClipElement, ClipMembership, ClipboardPayload, ToileEvent, ToileOutcome,
+    ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipSlotVec, ClipboardPayload,
+    ToileEvent, ToileOutcome,
 };
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
@@ -61,17 +62,18 @@ impl ToileState {
                 order.push(id.clone());
             }
         }
-        let slot_of: HashMap<ElementId, usize> = order
+        let slot_of: HashMap<ElementId, ClipSlot> = order
             .iter()
             .cloned()
             .enumerate()
-            .map(|(i, id)| (id, i))
+            .map(|(i, id)| (id, ClipSlot::from_usize(i)))
             .collect();
 
         let mut elements = Vec::with_capacity(order.len());
         let mut membership = Vec::new();
         let mut origin: Option<Rect> = None;
         for (slot, id) in order.iter().enumerate() {
+            let slot = ClipSlot::from_usize(slot);
             // `notes` reads as a plain string through the deep value. Writing
             // it back as one makes a frame whose notes are a scalar register,
             // so it is skipped here and carried beside the fields
@@ -92,7 +94,7 @@ impl ToileState {
             let notes = self.is_frame(id).then(|| self.notes(id));
             elements.push(ClipElement { fields, notes });
             // Group / frame membership -> child slots (captured children only).
-            let child_slots: Vec<usize> = self
+            let child_slots: Vec<ClipSlot> = self
                 .children_of(id)
                 .iter()
                 .filter_map(|c| slot_of.get(c).copied())
@@ -155,7 +157,7 @@ impl ToileState {
         }
         // Mint every fresh id up front so membership / connectors can remap slots
         // to new ids before anything is written.
-        let new_ids: Vec<ElementId> = (0..payload.elements.len())
+        let new_ids: ClipSlotVec<ElementId> = (0..payload.elements.len())
             .map(|_| self.mint_element_id())
             .collect();
         let new_conns: Vec<ConnectorId> = (0..payload.connectors.len())
@@ -164,7 +166,7 @@ impl ToileState {
 
         let elems = self.doc.get_map(Root::Elements.as_str());
         let layers = self.doc.get_movable_list(Root::Layers.as_str());
-        let mut created = Vec::with_capacity(new_ids.len());
+        let mut created = Vec::with_capacity(new_ids.len().to_usize());
         // `new_ids` and `new_conns` are minted one per payload entry. A slot
         // the payload names past them is a malformed paste, and it is skipped.
         for (id, clip) in new_ids.iter().zip(&payload.elements) {

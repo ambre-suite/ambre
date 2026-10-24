@@ -13,6 +13,7 @@
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
 use std::collections::BTreeMap;
+use std::fmt;
 
 use ambre_core::DocType;
 use ambre_core::DocumentId;
@@ -765,8 +766,62 @@ pub struct StrokePoint {
 // Connector anchoring (`toile-connectors`)
 // =============================================================================
 
-/// Where a connector attaches on an element's AABB. `Free` is a normalized
-/// `(u, v)` in `0.0 ..= 1.0` from the top-left.
+/// A fraction of a box's side, from 0 at its top or left edge to 1 at the
+/// other. Anything else, NaN included, is refused.
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Serialize, Deserialize)]
+#[serde(try_from = "f32", into = "f32")]
+pub struct UnitFraction(f32);
+
+impl UnitFraction {
+    /// The middle of the side.
+    pub const HALF: Self = Self(0.5);
+
+    /// The fraction `value`, `None` outside `0.0 ..= 1.0`.
+    #[must_use]
+    pub fn new(value: f32) -> Option<Self> {
+        (0.0..=1.0).contains(&value).then_some(Self(value))
+    }
+
+    /// The fraction itself.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+
+    /// The point this fraction of the way from `start` to `end`.
+    #[must_use]
+    pub fn along(self, start: f64, end: f64) -> f64 {
+        start + f64::from(self.0) * (end - start)
+    }
+}
+
+impl fmt::Display for UnitFraction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+/// The error of a fraction outside `0.0 ..= 1.0`.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("a fraction of a side lies in 0..=1, not {0}")]
+pub struct InvalidUnitFraction(pub f32);
+
+impl TryFrom<f32> for UnitFraction {
+    type Error = InvalidUnitFraction;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        Self::new(value).ok_or(InvalidUnitFraction(value))
+    }
+}
+
+impl From<UnitFraction> for f32 {
+    fn from(fraction: UnitFraction) -> Self {
+        fraction.0
+    }
+}
+
+/// Where a connector attaches on an element's AABB. `Free` is a fraction of
+/// the box's width and height, from the top-left.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Anchor {
     Top,
@@ -774,7 +829,7 @@ pub enum Anchor {
     Left,
     Right,
     Center,
-    Free { u: f32, v: f32 },
+    Free { u: UnitFraction, v: UnitFraction },
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -867,13 +922,42 @@ pub struct ClipElement {
     pub notes: Option<String>,
 }
 
+ambre_core::define_index! {
+    /// A message's place in its comment thread, 0 for the opening message. It
+    /// means nothing outside that thread.
+    pub struct ThreadMessageIndex(u32);
+    /// A number of messages in one thread.
+    pub struct ThreadMessageCount;
+    /// The signed gap between two messages of one thread.
+    pub struct ThreadMessageDelta(i64);
+    /// A run of messages of one thread.
+    pub struct ThreadMessageSpan;
+    /// A list indexed by message of one thread.
+    pub struct ThreadMessageVec;
+}
+
+ambre_core::define_index! {
+    /// The rank of an element in one clipboard payload: its place in
+    /// [`ClipboardPayload::elements`]. It means nothing outside that payload.
+    pub struct ClipSlot(u32);
+    /// A number of elements in one clipboard payload.
+    pub struct ClipSlotCount;
+    /// The signed gap between two clip slots.
+    pub struct ClipSlotDelta(i64);
+    /// A run of clip slots.
+    pub struct ClipSlotSpan;
+    /// A list indexed by clip slot, such as the fresh id of each pasted
+    /// element.
+    pub struct ClipSlotVec;
+}
+
 /// A connector captured with both endpoints remapped to element slot indices.
 /// A connector whose partner was not copied is never captured (it would dangle),
 /// so both slots always resolve.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipConnector {
-    pub from_slot: usize,
-    pub to_slot: usize,
+    pub from_slot: ClipSlot,
+    pub to_slot: ClipSlot,
     /// Non-endpoint scalar fields (anchors, path type, arrows).
     pub fields: Vec<(String, ClipValue)>,
 }
@@ -881,8 +965,8 @@ pub struct ClipConnector {
 /// Group / frame membership remapped from ids to element slot indices.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipMembership {
-    pub parent_slot: usize,
-    pub child_slots: Vec<usize>,
+    pub parent_slot: ClipSlot,
+    pub child_slots: Vec<ClipSlot>,
 }
 
 /// Self-contained, id-free snapshot of a selection produced by `CopyElements`
@@ -959,6 +1043,19 @@ impl MediaRef {
     }
 }
 
+ambre_core::define_index! {
+    /// A place in the board's z-order, 0 at the back.
+    pub struct ZOrderIndex(u32);
+    /// A number of places in the z-order.
+    pub struct ZOrderCount;
+    /// The signed gap between two places in the z-order.
+    pub struct ZOrderDelta(i64);
+    /// A run of places in the z-order.
+    pub struct ZOrderSpan;
+    /// A list indexed by place in the z-order.
+    pub struct ZOrderVec;
+}
+
 /// Z-order target for `Reorder` (`toile-z-order`).
 #[derive(Clone, Copy, Debug)]
 pub enum ZTarget {
@@ -966,7 +1063,7 @@ pub enum ZTarget {
     Back,
     Forward,
     Backward,
-    Index(usize),
+    Index(ZOrderIndex),
 }
 
 /// Which endpoint of a connector to retarget.
@@ -1673,7 +1770,7 @@ pub enum ToileCommand {
     /// rejected no-op.
     EditComment {
         thread: ThreadId,
-        message: usize,
+        message: ThreadMessageIndex,
         delta: TextDelta,
     },
     /// Resolve `thread`, or reopen it. Idempotent and convergent, and it

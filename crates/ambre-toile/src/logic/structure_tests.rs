@@ -9,7 +9,8 @@ use kurbo::{Point, Rect, Size, Vec2};
 use loro::LoroValue;
 
 use crate::logic::command::{
-    DisplayNode, InitContent, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
+    DisplayNode, InitContent, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZOrderIndex,
+    ZTarget,
 };
 use crate::logic::index::Viewport;
 use crate::logic::model::{
@@ -602,9 +603,9 @@ fn each_target_resolves_and_the_others_keep_their_order() {
     assert_eq!(order(&st), nodes(&[&c, &a, &d, &b]));
     reorder(&mut st, &d, ZTarget::Backward);
     assert_eq!(order(&st), nodes(&[&c, &d, &a, &b]));
-    reorder(&mut st, &c, ZTarget::Index(99));
+    reorder(&mut st, &c, ZTarget::Index(ZOrderIndex::new(99)));
     assert_eq!(order(&st), nodes(&[&d, &a, &b, &c]));
-    reorder(&mut st, &b, ZTarget::Index(1));
+    reorder(&mut st, &b, ZTarget::Index(ZOrderIndex::new(1)));
     assert_eq!(order(&st), nodes(&[&d, &b, &a, &c]));
 }
 
@@ -619,7 +620,7 @@ fn a_reorder_to_its_own_place_writes_nothing() {
         (&b, ZTarget::Forward),
         (&a, ZTarget::Back),
         (&a, ZTarget::Backward),
-        (&a, ZTarget::Index(0)),
+        (&a, ZTarget::Index(ZOrderIndex::new(0))),
     ] {
         let out = reorder(&mut st, id, to);
         assert!(out.update.is_none(), "{to:?}");

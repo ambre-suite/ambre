@@ -18,7 +18,7 @@ use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
     PresentFocus, PresentMode, Reaction, ReactionKind, SlideIndex, Sources, StatsRequestKind,
-    TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
+    TextDelta, ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
@@ -5238,7 +5238,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let da = a
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: 0,
+            message: ThreadMessageIndex::ZERO,
             delta: insert_notes(0, "AAA"),
         })
         .update
@@ -5246,7 +5246,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let db = b
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: 0,
+            message: ThreadMessageIndex::ZERO,
             delta: insert_notes(0, "BBB"),
         })
         .update
@@ -5284,7 +5284,7 @@ fn editing_another_authors_message_is_refused() {
 
     let out = b.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: 0,
+        message: ThreadMessageIndex::ZERO,
         delta: insert_notes(0, "hijacked"),
     });
     assert!(
@@ -5524,7 +5524,7 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
     // Correct the middle message: insert the missing letter.
     st.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: 1,
+        message: ThreadMessageIndex::new(1),
         delta: TextDelta {
             at: CharOffset::new(3),
             delete: CharCount::ZERO,

@@ -297,18 +297,12 @@ ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	new
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontFamily as From<String>>::from(label) | param | String	newtype-inner	FontFamily constructor or accessor
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
-ambre-bus | src/app/toile.rs | crate::app::toile | Anchor::Free.u | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | Anchor::Free.v | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | AutoLayout.gap | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | AutoLayout.padding | field | [f64;4]	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.from_slot | field | usize	math	slot index into the clipboard element list
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.to_slot | field | usize	math	slot index into the clipboard element list
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.notes | field | Option<String>	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipMembership.child_slots | field | Vec<usize>	math	slot index into the clipboard element list
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipMembership.parent_slot | field | usize	math	slot index into the clipboard element list
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Bin.0 | field | Vec<u8>	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Bool.0 | field | bool	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::F64.0 | field | f64	newtype-inner	clipboard field value variant
@@ -381,7 +375,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	m
 ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditComment.message | field | usize	math	index of a message in its thread
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.query | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ImportFigma.bytes | field | Vec<u8>	generic	imported file bytes / decoded pixels
@@ -421,12 +414,18 @@ ambre-bus | src/app/toile.rs | crate::app::toile | AddressError::message() | ret
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::parse(text) | param | &str	free-text	address text the user typed or the document holds, checked into a WebAddress
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
-ambre-bus | src/app/toile.rs | crate::app::toile | ZTarget::Index.0 | field | usize	math	z-order index
+ambre-bus | src/app/toile.rs | crate::app::toile | <UnitFraction as TryFrom<f32>>::try_from(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/toile.rs | crate::app::toile | InvalidUnitFraction.0 | field | f32	newtype-inner	the refused value an error reports
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along() | ret | f64	math	kurbo world coordinate the fraction lands on
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(end) | param | f64	math	kurbo world coordinates of the box edges the fraction runs between
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(start) | param | f64	math	kurbo world coordinates of the box edges the fraction runs between
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
@@ -441,7 +440,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::UpdateCondFormat.priority | field | i64	math	rule priority order
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <SheetId as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId.0 | field | String	newtype-inner	id newtype
@@ -483,6 +481,9 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Undo
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::UndoState.can_undo | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.1 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::BottomN.0 | field | u32	math	top/bottom N count
@@ -3467,8 +3468,6 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() |
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | PREVIEW_CHARS | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::create_comment(body) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::edit_comment(message) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::message_map(index) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::reply_comment(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::resolve_thread(resolved) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::seed_thread(anchor) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder

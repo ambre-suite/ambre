@@ -880,7 +880,7 @@ pub enum TrameCommand {
         range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
-        priority: i64,
+        priority: CondFormatPriority,
     },
 
     /// Replace the rule identified by `id` on `sheet_id` (`trame-cell-styles`).
@@ -892,7 +892,7 @@ pub enum TrameCommand {
         range: CellRect,
         rule: CondFormatKind,
         style: CondStyle,
-        priority: i64,
+        priority: CondFormatPriority,
     },
 
     /// Remove the conditional-formatting rule `id` from `sheet_id`

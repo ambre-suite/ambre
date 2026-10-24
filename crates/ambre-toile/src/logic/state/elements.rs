@@ -574,7 +574,7 @@ impl ToileState {
             ZTarget::Back => 0,
             ZTarget::Forward => (from_idx + 1).min(last),
             ZTarget::Backward => from_idx.saturating_sub(1),
-            ZTarget::Index(i) => i.min(last),
+            ZTarget::Index(i) => i.to_usize().min(last),
         };
         if to_idx == from_idx {
             return ToileOutcome::display_only(Vec::new());
