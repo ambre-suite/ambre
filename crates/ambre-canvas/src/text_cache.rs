@@ -330,9 +330,9 @@ impl Default for TextCache {
 }
 
 impl TextCache {
-    /// An empty cache. It shapes in logical pixels, at a display scale of 1:
-    /// a layout reasons in logical coordinates, and the density is applied
-    /// when the frame is drawn (`CANVAS-032`).
+    /// An empty cache. It shapes in logical pixels, at a display scale of 1.
+    /// A layout reasons in logical coordinates, and the frame applies the
+    /// density when it draws (`CANVAS-032`).
     #[must_use]
     pub fn new() -> Self {
         Self {

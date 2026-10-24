@@ -315,8 +315,8 @@ impl Kinetic {
         now_ms: ambre_core::PageTime,
     ) -> ScrollStep {
         self.motion = None;
-        // The wheel delta is already in screen pixels, and a view pixel is a
-        // CSS pixel in size (`CANVAS-032`): the step takes it one for one.
+        // The wheel delta is already in screen pixels. A view pixel is a CSS
+        // pixel in size (`CANVAS-032`), so the step takes it one for one.
         let moved =
             ambre_core::ViewVector::new(ViewPx::new(delta.dx.get()), ViewPx::new(delta.dy.get()));
         let step = ScrollStep {
