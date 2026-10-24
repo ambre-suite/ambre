@@ -29,7 +29,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-071` | `CONC` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | `ambre_trame::logic::tests::group11::two_peers_adding_a_sheet_keep_both` | none | verified |
 | `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | `ambre_trame::logic::convergence_tests::concurrent_tab_moves_converge_on_one_order` | none | verified |
 | `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | `ambre_trame::logic::tests::group11::two_peers_deleting_the_last_two_sheets_keep_one` -- both read the default sheet, and the merge writes nothing | none | verified |
-| `TRAME-235` | `OBS` | A name the document already holds MUST be shown and resolved as stored, even one `TRAME-234` refuses. | this spec section 5 | `ambre_trame::logic::tests::group3::a_stored_name_the_rule_refuses_is_read_as_stored` | none | verified |
+| `TRAME-235` | `OBS` | A stored name `TRAME-234` refuses MUST be shown and resolved as `Sheet` followed by its tab's position. | this spec section 5 | `ambre_trame::logic::tests::group3::a_stored_name_the_rule_refuses_reads_as_its_fallback` -- the tab, a formula naming it, and a stored name claiming first | none | verified |
+| `TRAME-241` | `INV` | Reading a stored name `TRAME-234` refuses MUST leave it in the document until a rename replaces it. | this spec section 5 | `ambre_trame::logic::tests::group3::a_stored_name_the_rule_refuses_reads_as_its_fallback` -- the document after the read, and after the rename | none | verified |
 | `TRAME-236` | `INV` | A formula's sheet qualifier MUST resolve whatever its case. | this spec section 5 | `ambre_trame::logic::tests::group3::a_qualifier_resolves_whatever_its_case`; `ambre_trame::formula::render::tests::an_apostrophe_in_a_name_round_trips` -- a name with an inner apostrophe | none | verified |
 
 ### 1.2 Add a sheet
@@ -81,7 +82,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 22 `verified`. What holds is each gesture on one peer, and what it leaves
+* **Verification.** 23 `verified`. What holds is each gesture on one peer, and what it leaves
   alone. Three concurrent cases hold too: two adds (`TRAME-071`), a delete under a reader
   (`TRAME-075`), and two deletes of the last two sheets (`TRAME-077`).
 
@@ -171,7 +172,8 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
 | The order is a list, and the names are a map | one container holding both | the order is the thing two users move, and a list move is a first-class operation that converges. The name is the thing two users overwrite, and a map entry is the unit that elects |
 | Per-sheet containers are named by the id, not nested | one container per sheet holding every sub-container | a sheet's cells can be dropped in one pass, and a name collision between two sheets is impossible |
 | A workbook whose map holds no sheet reads the default one, and its first edit stores it | each peer re-inserting a sheet when a merge leaves none | a merge would write. A reader cannot write, so it would read an empty workbook. Two peers would each push the sheet on the order list and converge on a duplicate. The read costs nothing and is the same on every peer (`TRAME-077`) |
-| A stored name the rule refuses is read as stored | repairing it on read, by cutting it and replacing its refused characters | a formula and a defined name that spell the stored name would stop resolving, and two peers that repair differently would show two labels (`TRAME-235`) |
+| A stored name the rule refuses reads as `Sheet` and its tab's position | showing it as stored | a tab would carry a name no rename could give, and a formula could not always spell it back (`TRAME-235`) |
+| The fallback is a read, and the document keeps the stored name | repairing it on read, by cutting it and replacing its refused characters | a reader cannot write, and two peers that repair at once would each write a fix and elect one at random. A rename is the one write that fixes the name (`TRAME-241`) |
 | A qualifier resolves whatever its case | resolving the exact spelling only | uniqueness ignores case, so a case-folded qualifier names one sheet at most, and Excel resolves it the same way (`TRAME-236`) |
 | Deleting a sheet breaks its references | resolving the reference to empty, as a deleted row does | a formula pointing at deleted data has no right answer, and inventing one hides the deletion from the reader |
 | Delete is the one sheet operation a reference can feel | rewriting the name token in every dependent formula on rename, as Excel does | a rename changes a label the reader sees and a reorder changes the strip, so neither touches the dependency graph; only a delete removes a `sheet_id`. Excel's rename-rewrite carries the same hazard as its row-insert rewrite -- two concurrent rewrites of one formula converge on a third -- and binding to the id leaves `#REF!` meaning one thing (`TRAME-009`) |

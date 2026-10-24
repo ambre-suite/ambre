@@ -1039,38 +1039,62 @@ fn concurrent_names_differing_in_case_read_apart() {
     assert_ne!(names[0], names[1], "two tabs read apart: {names:?}");
 }
 
-/// A name the document already holds is read as stored, even one the rule
-/// of a rename refuses (`TRAME-235`). Its tab shows it, and a formula still
-/// names it.
+/// A stored name the rule refuses reads as the fallback `Sheet<n>`, `n` its
+/// tab's position, and the document keeps the name it holds (`TRAME-235`).
+/// The fallback is a name like any other: a formula resolves it, it never
+/// takes the name another sheet stores, and a rename stores the fix.
 #[test]
-fn a_stored_name_the_rule_refuses_is_read_as_stored() {
+fn a_stored_name_the_rule_refuses_reads_as_its_fallback() {
     let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("Data"),
+    });
+    let s1 = second_sheet_id(&state);
     let stored = "Q1:Q2 [draft] of the year two thousand";
-    let _ = state
-        .doc
-        .get_map(crate::logic::Root::Sheets.as_str())
-        .insert("s0", stored);
+    let sheets = state.doc.get_map(crate::logic::Root::Sheets.as_str());
+    let _ = sheets.insert(s1.as_str(), stored);
     state.doc.commit();
     state.reseed_engine();
-    assert_eq!(tab_names(&state), vec![stored]);
-    state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
-        text: "7".to_owned(),
-    });
+    assert_eq!(tab_names(&state), vec!["Sheet1", "Sheet2"]);
+    let held = |state: &TrameState| match state
+        .doc
+        .get_map(crate::logic::Root::Sheets.as_str())
+        .get(s1.as_str())
+    {
+        Some(loro::ValueOrContainer::Value(loro::LoroValue::String(s))) => s.to_string(),
+        other => panic!("expected the stored name, got {other:?}"),
+    };
+    assert_eq!(held(&state), stored, "the read leaves the document as it was");
+
     let evts = state.handle_command(TrameCommand::SetCellText {
         row: Row::new(1),
         col: Col::new(0),
-        text: format!("='{stored}'!A1*2"),
+        text: "=Sheet2!A1*2".to_owned(),
     });
     assert!(
         !evts
             .display
             .iter()
             .any(|e| matches!(e, TrameEvent::Error { .. })),
-        "the formula names the stored sheet"
+        "the formula names the fallback"
     );
-    assert_eq!(read_raw(&mut state, 1, 0), format!("='{stored}'!A1*2"));
+    assert_eq!(read_raw(&mut state, 1, 0), "=Sheet2!A1*2");
+
+    let _ = sheets.insert("s0", "Sheet2");
+    state.doc.commit();
+    state.reseed_engine();
+    assert_eq!(
+        tab_names(&state),
+        vec!["Sheet2", "Sheet2 (2)"],
+        "a stored name claims before a fallback"
+    );
+
+    state.handle_command(TrameCommand::RenameSheet {
+        sheet_id: s1.clone(),
+        name: crate::test_support::sheet("Q1 draft"),
+    });
+    assert_eq!(held(&state), "Q1 draft", "a rename stores the fix");
+    assert_eq!(tab_names(&state), vec!["Sheet2", "Q1 draft"]);
 }
 
 /// A formula qualifier resolves whatever its case, as two names differing

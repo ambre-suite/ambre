@@ -294,8 +294,10 @@ impl TrameState {
     /// the first free ` (n)` suffix. The result depends on the document alone,
     /// so every peer reads the same.
     ///
-    /// A stored name is read as stored, even one the rule of a rename refuses
-    /// (`TRAME-235`). A value that is not text reads as the sheet id.
+    /// A stored name the rule of a rename refuses reads as `Sheet<n>`, `n` the
+    /// position of its tab, and the document keeps what it holds until a
+    /// rename (`TRAME-235`). The stored names claim first, then the fallbacks,
+    /// then the clashes. A value that is not text reads as the sheet id.
     pub(super) fn sheet_names(&self) -> HashMap<SheetId, SheetName> {
         let mut stored: Vec<(SheetId, SheetName)> =
             match self.doc.get_map(Root::Sheets.as_str()).get_value() {
@@ -316,16 +318,30 @@ impl TrameState {
             stored.push((default_sheet(), SheetName::default()));
         }
         stored.sort();
+        let (stored, refused): (Vec<_>, Vec<_>) =
+            stored.into_iter().partition(|(_, name)| name.obeyed());
         let mut taken: HashSet<SheetNameKey> = HashSet::new();
-        let mut names = HashMap::with_capacity(stored.len());
-        // Stored names claim first, so a suffixed name never takes one a later
-        // sheet stores as is.
+        let mut names = HashMap::with_capacity(stored.len() + refused.len());
+        // Stored names claim first, so neither a fallback nor a suffixed name
+        // takes one a later sheet stores as is.
         let mut clashing = Vec::new();
         for (id, name) in stored {
             if taken.insert(name.key()) {
                 names.insert(id, name);
             } else {
                 clashing.push((id, name));
+            }
+        }
+        if !refused.is_empty() {
+            let order = self.sheet_order_ids();
+            for (id, _) in refused {
+                let position = order.iter().position(|o| *o == id).unwrap_or(order.len());
+                let fallback = SheetName::numbered(position + 1);
+                if taken.insert(fallback.key()) {
+                    names.insert(id, fallback);
+                } else {
+                    clashing.push((id, fallback));
+                }
             }
         }
         for (id, name) in clashing {

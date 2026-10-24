@@ -92,9 +92,10 @@ pub enum SheetNameRefusal {
 /// sheet by its id, never by it.
 ///
 /// [`SheetName::new`] holds the rule a create or a rename obeys (`TRAME-234`).
-/// [`SheetName::stored`] is the read policy: a name the document already
-/// holds is kept as stored, whatever the rule says (`TRAME-235`). Uniqueness
-/// compares [`SheetName::key`], which ignores case (`TRAME-078`).
+/// [`SheetName::stored`] wraps a name a formula or the document holds, and
+/// [`SheetName::numbered`] is the fallback a stored name the rule refuses
+/// reads as (`TRAME-235`). Uniqueness compares [`SheetName::key`], which
+/// ignores case (`TRAME-078`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SheetName(String);
 
@@ -134,13 +135,25 @@ impl SheetName {
         Ok(Self(text.to_owned()))
     }
 
-    /// The name a document or a formula already holds, kept verbatim
-    /// (`TRAME-235`). An older build, a concurrent peer or an import may have
-    /// stored a name the rule refuses. Its tab still shows it, and a formula
-    /// still resolves it. Only a create or a rename goes through
-    /// [`SheetName::new`].
+    /// The name a document or a formula already holds, kept verbatim. An
+    /// older build, a concurrent peer or an import may have stored a name the
+    /// rule refuses; [`SheetName::obeyed`] tells which. Only a create or a
+    /// rename goes through [`SheetName::new`].
     pub fn stored(text: String) -> Self {
         Self(text)
+    }
+
+    /// Whether this name obeys the rule of a create or a rename as it is
+    /// spelled, spaces included (`TRAME-234`).
+    pub fn obeyed(&self) -> bool {
+        Self::new(&self.0).is_ok_and(|name| name.0 == self.0)
+    }
+
+    /// The name `Sheet<n>`, the fallback a stored name the rule refuses reads
+    /// as, `n` the position of its tab from 1 (`TRAME-235`). It obeys the
+    /// rule for any `n`.
+    pub fn numbered(n: usize) -> Self {
+        Self(format!("Sheet{n}"))
     }
 
     pub fn as_str(&self) -> &str {
@@ -171,7 +184,7 @@ impl SheetName {
 /// The name of the sheet a new workbook holds, `Sheet1`.
 impl Default for SheetName {
     fn default() -> Self {
-        Self("Sheet1".to_owned())
+        Self::numbered(1)
     }
 }
 
