@@ -2926,13 +2926,9 @@ ambre-protocol | src/ws.rs | crate::ws | CloseCode.0 | field | u16	newtype-inner
 ambre-protocol | src/ws.rs | crate::ws | CloseCode::get() | ret | u16	newtype-inner	CloseCode field or accessor
 ambre-protocol | src/ws.rs | crate::ws | CloseCode::new(raw) | param | u16	newtype-inner	the raw code a close frame carries, checked by the fallible constructor
 ambre-protocol | src/ws.rs | crate::ws | CloseCode::reason() | ret | Option<&'static str>	free-text	the reason text a close frame carries beside its code
-ambre-server | src/compaction.rs | crate::compaction | CHECK_EVERY | const | u64	math	period in deltas
-ambre-server | src/compaction.rs | crate::compaction | SEGMENT_SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
-ambre-server | src/compaction.rs | crate::compaction | SNAPSHOT_THRESHOLD | const | u64	math	delta count threshold
 ambre-server | src/compaction.rs | crate::compaction | past_threshold() | ret | bool	generic	predicate result
-ambre-server | src/compaction.rs | crate::compaction | past_threshold(threshold) | param | u64	math	threshold count
 ambre-server | src/compaction.rs | crate::compaction | should_ask() | ret | bool	generic	predicate result
-ambre-server | src/compaction.rs | crate::compaction | threshold_of() | ret | u64	math	threshold count
+ambre-server | src/compaction.rs | crate::compaction | is_checked() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | ChannelRow.is_public | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | CommitRow.live | field | bool	math	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | FoldCommitRow.live | field | bool	math	named state or style flag, local

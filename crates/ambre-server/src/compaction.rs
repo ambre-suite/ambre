@@ -10,30 +10,40 @@ use crate::{db, redis_ops};
 
 /// The deltas past a document's served snapshot at which the relay asks for a
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
-pub const SNAPSHOT_THRESHOLD: u64 = 500;
+pub const SNAPSHOT_THRESHOLD: db::DeltaCount = db::DeltaCount(500);
 
 /// The threshold of a Murmure segment, whose cold open replays its deltas one
 /// by one (`ambre-spec-budgets.md section 6`, the active segment row). A
 /// crossing is seen at most `CHECK_EVERY - 1` deltas late, so the ask leaves
 /// before the 250th delta past the snapshot (the Murmure segments spec).
-pub const SEGMENT_SNAPSHOT_THRESHOLD: u64 = 250 - CHECK_EVERY;
+pub const SEGMENT_SNAPSHOT_THRESHOLD: db::DeltaCount = db::DeltaCount(250 - CHECK_EVERY.0);
 
 /// How often, in deltas, the write path compares a document to the threshold.
 /// The numbers of a document are consecutive, so one write in this many reads
 /// the horizon, and no crossing goes unseen.
-const CHECK_EVERY: u64 = 32;
+const CHECK_EVERY: db::DeltaCount = db::DeltaCount(32);
 
 /// How long one request stands before the relay may ask again. A client that
 /// never answers is asked again on the next crossing past it.
 const ASK_TTL: ambre_core::Seconds = ambre_core::Seconds(300);
 
 /// Whether the history past `horizon` at delta `seq` reaches `threshold`.
-pub fn past_threshold(seq: ambre_core::Seq, horizon: ambre_core::Seq, threshold: u64) -> bool {
-    seq.0.saturating_sub(horizon.0) >= threshold
+pub fn past_threshold(
+    seq: ambre_core::Seq,
+    horizon: ambre_core::Seq,
+    threshold: db::DeltaCount,
+) -> bool {
+    db::DeltaCount(seq.0.saturating_sub(horizon.0)) >= threshold
+}
+
+/// Whether delta `seq` is one the write path compares to the threshold: one
+/// in every `CHECK_EVERY`.
+fn is_checked(seq: ambre_core::Seq) -> bool {
+    seq.0.is_multiple_of(CHECK_EVERY.0)
 }
 
 /// The threshold of a document: a Murmure segment's own, or the default.
-async fn threshold_of(state: &AppState, document_id: &ambre_core::DocumentId) -> u64 {
+async fn threshold_of(state: &AppState, document_id: &ambre_core::DocumentId) -> db::DeltaCount {
     match db::channel_document_kind(&state.db, document_id).await {
         Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
         Ok(_) => SNAPSHOT_THRESHOLD,
@@ -51,7 +61,7 @@ pub async fn should_ask(
     document_id: &ambre_core::DocumentId,
     seq: ambre_core::Seq,
 ) -> bool {
-    if !seq.0.is_multiple_of(CHECK_EVERY) {
+    if !is_checked(seq) {
         return false;
     }
     let horizon = match db::served_horizon(&state.db, document_id).await {
@@ -81,7 +91,7 @@ pub fn ask_when_due(
     seq: ambre_core::Seq,
     writer: &mpsc::Sender<crate::payload::Payload>,
 ) {
-    if !seq.0.is_multiple_of(CHECK_EVERY) {
+    if !is_checked(seq) {
         return;
     }
     let state = Arc::clone(state);
@@ -105,23 +115,24 @@ mod tests {
     #[test]
     fn the_history_past_the_served_snapshot_decides() {
         let threshold = SNAPSHOT_THRESHOLD;
+        let at = threshold.0;
         assert!(!past_threshold(
-            ambre_core::Seq(threshold - 1),
+            ambre_core::Seq(at - 1),
             ambre_core::Seq(0),
             threshold
         ));
         assert!(past_threshold(
-            ambre_core::Seq(threshold),
+            ambre_core::Seq(at),
             ambre_core::Seq(0),
             threshold
         ));
         assert!(!past_threshold(
-            ambre_core::Seq(threshold + 10),
+            ambre_core::Seq(at + 10),
             ambre_core::Seq(20),
             threshold
         ));
         assert!(past_threshold(
-            ambre_core::Seq(threshold + 20),
+            ambre_core::Seq(at + 20),
             ambre_core::Seq(20),
             threshold
         ));
@@ -137,9 +148,9 @@ mod tests {
     /// by the 250th delta past its snapshot, wherever the snapshot fell.
     #[test]
     fn a_segment_is_asked_before_its_250th_delta() {
-        for horizon in 0..CHECK_EVERY {
+        for horizon in 0..CHECK_EVERY.0 {
             let seen = (horizon + 1..)
-                .filter(|seq| seq.is_multiple_of(CHECK_EVERY))
+                .filter(|&seq| is_checked(ambre_core::Seq(seq)))
                 .find(|&seq| {
                     past_threshold(
                         ambre_core::Seq(seq),
@@ -364,11 +375,12 @@ mod db_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_writer_is_asked_once_past_the_threshold(pool: sqlx::PgPool) {
         let (state, doc) = setup(pool).await;
-        let below = CHECK_EVERY * (SNAPSHOT_THRESHOLD / CHECK_EVERY);
+        let every = CHECK_EVERY.0;
+        let below = every * (SNAPSHOT_THRESHOLD.0 / every);
         assert!(!should_ask(&state, &doc, ambre_core::Seq(below)).await);
-        let due = below + CHECK_EVERY;
+        let due = below + every;
         assert!(should_ask(&state, &doc, ambre_core::Seq(due)).await);
-        assert!(!should_ask(&state, &doc, ambre_core::Seq(due + CHECK_EVERY)).await);
+        assert!(!should_ask(&state, &doc, ambre_core::Seq(due + every)).await);
         // Only a served snapshot moves the horizon.
         let covered = i64::try_from(due).unwrap();
         let sid = snapshot(&state, &doc, &ALICE, covered).await;
