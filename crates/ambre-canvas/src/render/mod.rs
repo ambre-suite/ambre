@@ -27,6 +27,7 @@
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
 use crate::density::{DevicePx, DeviceSize};
+use ambre_core::ViewPx;
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
 
@@ -67,16 +68,16 @@ struct GlyphVertex {
     color: [f32; 4],
 }
 
-/// One axis-aligned glyph quad in screen pixels, and the box of the atlas it
-/// samples.
+/// One axis-aligned glyph quad in view pixels, and the box of the atlas it
+/// samples. The lengths are unwrapped into the `f32` of `GlyphVertex` alone.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct GlyphQuad {
     /// The left edge.
-    x: f32,
+    x: ViewPx,
     /// The top edge.
-    y: f32,
-    width: f32,
-    height: f32,
+    y: ViewPx,
+    width: ViewPx,
+    height: ViewPx,
     /// The texture coordinate of the top-left corner.
     uv_min: [f32; 2],
     /// The texture coordinate of the bottom-right corner.

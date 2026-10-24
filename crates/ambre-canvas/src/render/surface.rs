@@ -48,16 +48,16 @@ fn split_linear(t: Affine) -> Option<(f64, Affine)> {
     Some((scale, unit))
 }
 
-/// A glyph bitmap's box in logical pixels, the `f32` the quad takes. The four
-/// are floats of one unit side by side, so each is named.
+/// A glyph bitmap's box in view pixels, the unit the quad takes. The four
+/// are lengths of one unit side by side, so each is named.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct GlyphBox {
     /// From the pen to the bitmap's left edge.
-    left_bearing: f32,
+    left_bearing: ViewPx,
     /// From the baseline up to the bitmap's top edge.
-    top_bearing: f32,
-    width: f32,
-    height: f32,
+    top_bearing: ViewPx,
+    width: ViewPx,
+    height: ViewPx,
 }
 
 /// A glyph bitmap's logical box. The bitmap has one texel per device pixel.
@@ -66,10 +66,10 @@ struct GlyphBox {
 fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> GlyphBox {
     let density = density.get() as f32;
     GlyphBox {
-        left_bearing: slot.bearing_left as f32 / density,
-        top_bearing: slot.bearing_top as f32 / density,
-        width: slot.pixel_width as f32 / density,
-        height: slot.pixel_height as f32 / density,
+        left_bearing: ViewPx::new(slot.bearing_left as f32 / density),
+        top_bearing: ViewPx::new(slot.bearing_top as f32 / density),
+        width: ViewPx::new(slot.pixel_width as f32 / density),
+        height: ViewPx::new(slot.pixel_height as f32 / density),
     }
 }
 
@@ -132,7 +132,12 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     // Rotated run: corners = origin + linear * local offset. A rotated run
     // carries no cell clip, so it skips the trim below.
     if let Some(linear) = at.linear {
-        let (bl, bt, w, h) = (bl as f64, bt as f64, sw as f64, sh as f64);
+        let (bl, bt, w, h) = (
+            f64::from(bl.get()),
+            f64::from(bt.get()),
+            f64::from(sw.get()),
+            f64::from(sh.get()),
+        );
         let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
         let corners = local.map(|(ox, oy)| {
             let v = linear * Point::new(ox, oy);
@@ -143,7 +148,10 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     }
 
     // Bitmap top-left in screen space. The top bearing points up, so subtract.
-    let (x0, y0) = (origin.x as f32 + bl, origin.y as f32 - bt);
+    let (x0, y0) = (
+        ViewPx::new(origin.x as f32) + bl,
+        ViewPx::new(origin.y as f32) - bt,
+    );
     let (x1, y1) = (x0 + sw, y0 + sh);
     let Some(clip) = at.clip else {
         let quad = GlyphQuad {
@@ -160,10 +168,10 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     // A glyph straddling the clip is trimmed and its UVs remapped. Drawn whole,
     // an overflowing cell's last glyph spills into its neighbour.
     let (cx0, cy0, cx1, cy1) = (
-        clip.x0 as f32,
-        clip.y0 as f32,
-        clip.x1 as f32,
-        clip.y1 as f32,
+        ViewPx::new(clip.x0 as f32),
+        ViewPx::new(clip.y0 as f32),
+        ViewPx::new(clip.x1 as f32),
+        ViewPx::new(clip.y1 as f32),
     );
     if x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 {
         return;
@@ -729,7 +737,7 @@ mod tests {
         assert_eq!(batches.quads.len(), 1, "the glyph past the clip is dropped");
         let quad = batches.quads[0].0;
         assert_eq!(
-            [quad.x, quad.y, quad.width, quad.height],
+            [quad.x, quad.y, quad.width, quad.height].map(ViewPx::get),
             [10.0, 0.0, 5.0, 10.0]
         );
     }
@@ -793,19 +801,19 @@ mod tests {
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), ratio(2.0)),
             GlyphBox {
-                left_bearing: 1.0,
-                top_bearing: 12.0,
-                width: 10.0,
-                height: 15.0,
+                left_bearing: ViewPx::new(1.0),
+                top_bearing: ViewPx::new(12.0),
+                width: ViewPx::new(10.0),
+                height: ViewPx::new(15.0),
             }
         );
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), DevicePixelRatio::ONE),
             GlyphBox {
-                left_bearing: 2.0,
-                top_bearing: 24.0,
-                width: 20.0,
-                height: 30.0,
+                left_bearing: ViewPx::new(2.0),
+                top_bearing: ViewPx::new(24.0),
+                width: ViewPx::new(20.0),
+                height: ViewPx::new(30.0),
             }
         );
     }

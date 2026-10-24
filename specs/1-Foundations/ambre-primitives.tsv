@@ -3922,12 +3922,8 @@ ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | S
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	generic	generic codec/parser/bytes API
 ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.height | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.width | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.x | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.y | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-core | src/unit.rs | crate::unit | ViewSpeedVector::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
 ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	free-text	header text a message row draws
 ambre-murmure | src/list.rs | crate::list | HeaderWords.time | field | String	free-text	header text a message row draws
@@ -3971,10 +3967,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::as_f6
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::is_zero() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphBox.height | field | f32	math	GPU vertex arithmetic like its GlyphQuad siblings: a glyph bitmap's logical box, private to render/surface.rs
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphBox.left_bearing | field | f32	math	GPU vertex arithmetic like its GlyphQuad siblings: a glyph bitmap's logical box, private to render/surface.rs
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphBox.top_bearing | field | f32	math	GPU vertex arithmetic like its GlyphQuad siblings: a glyph bitmap's logical box, private to render/surface.rs
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphBox.width | field | f32	math	GPU vertex arithmetic like its GlyphQuad siblings: a glyph bitmap's logical box, private to render/surface.rs
 ambre-chrome | src/font.rs | crate::font | DEFAULT_LABEL | const | &str	free-text	UI label of the picker entry that names no family
 ambre-chrome | src/font.rs | crate::font | FamilyChoice.css | field | &'static str	foreign-api	the CSS font-family stack the browser previews the entry in
 ambre-chrome | src/font.rs | crate::font | FamilyChoice::label() | ret | &'static str	free-text	the closed set's display label

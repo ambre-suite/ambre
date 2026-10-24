@@ -983,30 +983,33 @@ impl QuadRenderer {
             uv_min,
             uv_max,
         } = quad;
-        if w <= 0.0 || h <= 0.0 {
+        if w <= ViewPx::ZERO || h <= ViewPx::ZERO {
             return;
         }
+        // The vertex buffer takes the bare `f32`: the sums are made in view
+        // pixels first, so each corner rounds as it did.
+        let (x0, y0, x1, y1) = (x.get(), y.get(), (x + w).get(), (y + h).get());
         let c = color_f32(color);
         let b = self.active_batches_mut();
         let base = b.glyph_vertices.len() as u32;
         b.glyph_vertices.extend_from_slice(&[
             GlyphVertex {
-                pos: [x, y],
+                pos: [x0, y0],
                 uv: [uv_min[0], uv_min[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x + w, y],
+                pos: [x1, y0],
                 uv: [uv_max[0], uv_min[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x + w, y + h],
+                pos: [x1, y1],
                 uv: [uv_max[0], uv_max[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x, y + h],
+                pos: [x0, y1],
                 uv: [uv_min[0], uv_max[1]],
                 color: c,
             },
@@ -1028,30 +1031,33 @@ impl QuadRenderer {
             uv_min,
             uv_max,
         } = quad;
-        if w <= 0.0 || h <= 0.0 {
+        if w <= ViewPx::ZERO || h <= ViewPx::ZERO {
             return;
         }
+        // The vertex buffer takes the bare `f32`: the sums are made in view
+        // pixels first, so each corner rounds as it did.
+        let (x0, y0, x1, y1) = (x.get(), y.get(), (x + w).get(), (y + h).get());
         let c = [0.0, 0.0, 0.0, 1.0];
         let b = self.active_batches_mut();
         let base = b.color_glyph_vertices.len() as u32;
         b.color_glyph_vertices.extend_from_slice(&[
             GlyphVertex {
-                pos: [x, y],
+                pos: [x0, y0],
                 uv: [uv_min[0], uv_min[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x + w, y],
+                pos: [x1, y0],
                 uv: [uv_max[0], uv_min[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x + w, y + h],
+                pos: [x1, y1],
                 uv: [uv_max[0], uv_max[1]],
                 color: c,
             },
             GlyphVertex {
-                pos: [x, y + h],
+                pos: [x0, y1],
                 uv: [uv_min[0], uv_max[1]],
                 color: c,
             },
