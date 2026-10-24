@@ -115,6 +115,25 @@ pub struct TextEditorStyle {
     pub strikethrough: bool,
 }
 
+/// Whether a draw of the editor shows its caret bar: the phase of the blink
+/// the caller keeps on a timer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Caret {
+    /// The bar is drawn.
+    Shown,
+    /// The bar is not drawn: the blink is in its off phase, or the editor is
+    /// not focused.
+    Hidden,
+}
+
+impl Caret {
+    /// The caret shown when `visible` holds, hidden otherwise.
+    #[must_use]
+    pub const fn shown_if(visible: bool) -> Self {
+        if visible { Self::Shown } else { Self::Hidden }
+    }
+}
+
 /// One range of the buffer drawn in a look of its own, over the pinned style.
 /// The host pins the spans as it pins the style, and the core keeps none of
 /// its own (`CANVAS-042`).
@@ -702,7 +721,7 @@ impl TextEditor {
 
     /// Draw the selection band, glyphs and caret at `origin` (screen space). The
     /// editor's local coordinates are offset by `origin`. `selection` is the base
-    /// selection tint, drawn at 30% alpha behind the text. `show_caret` gates the
+    /// selection tint, drawn at 30% alpha behind the text. `caret` gates the
     /// blinking caret bar, which the caller toggles on a timer. The caret takes
     /// the style colour, not a theme caret. The body ink is fixed, such as a
     /// sticky's dark ink on a light card, so a theme caret could be invisible
@@ -719,7 +738,7 @@ impl TextEditor {
         surface: &mut S,
         origin: Point,
         selection: Color,
-        show_caret: bool,
+        caret: Caret,
     ) {
         let dx = origin.x;
         let dy = origin.y;
@@ -800,7 +819,9 @@ impl TextEditor {
         }
 
         // Caret bar (blinking: only on the "on" half of the cycle).
-        if show_caret && let Some(bb) = self.caret_local() {
+        if caret == Caret::Shown
+            && let Some(bb) = self.caret_local()
+        {
             surface.fill_path(&rect_path(offset_box(bb, dx, dy)), &brush);
         }
     }
@@ -1099,7 +1120,12 @@ mod tests {
         let selection = Color::from_rgba8(0, 0, 255, 255);
         let mut surface = RecordingSurface::new();
         surface.push_transform(Affine::rotate(0.5));
-        ed.render(&mut surface, Point::new(10.0, 20.0), selection, true);
+        ed.render(
+            &mut surface,
+            Point::new(10.0, 20.0),
+            selection,
+            Caret::Shown,
+        );
         surface.pop_transform();
 
         let band = selection.with_alpha(0.30);
@@ -1395,7 +1421,7 @@ mod tests {
             &mut surface,
             Point::new(0.0, 0.0),
             Color::from_rgba8(0, 0, 255, 255),
-            false,
+            Caret::Hidden,
         );
         let glyphs = |c: Color| {
             surface.count(|op| matches!(op, DrawOp::Glyphs { color: Some(k), .. } if *k == c))
@@ -1427,7 +1453,12 @@ mod tests {
         assert_eq!(ed.text(), "ab");
         assert_eq!(ed.spans(), pinned, "the core moved a span");
         let mut surface = ambre_draw::testing::RecordingSurface::new();
-        ed.render(&mut surface, Point::new(0.0, 0.0), style().color, true);
+        ed.render(
+            &mut surface,
+            Point::new(0.0, 0.0),
+            style().color,
+            Caret::Shown,
+        );
         assert_eq!(ed.caret().map(ByteOffset::get), Some(2));
     }
 }

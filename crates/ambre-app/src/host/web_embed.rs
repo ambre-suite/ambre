@@ -90,7 +90,12 @@ impl WebFrames {
             // Until the embed is entered the frame lets the pointer through, so
             // the board's own move and resize stay reachable. Entering it hands
             // the page its events directly (`TOILE-UI-091`, `TOILE-UI-324`).
-            layer_click_through(&frame, e.focused);
+            let input = if e.focused {
+                PointerInput::Taken
+            } else {
+                PointerInput::FallsThrough
+            };
+            set_pointer_input(&frame, input);
             place(&frame, e);
         }
     }
@@ -111,17 +116,28 @@ fn mount(layer: &web_sys::HtmlElement) -> Option<web_sys::HtmlIFrameElement> {
     // The page is laid out at the element's world size and moved by a matrix, so
     // the transform must scale about the frame's own corner.
     let _ = style.set_property("transform-origin", "0 0");
-    layer_click_through(&frame, false);
+    set_pointer_input(&frame, PointerInput::FallsThrough);
     layer.append_child(&frame).ok()?;
     Some(frame)
 }
 
-/// Whether this frame takes pointer events, or lets them fall through to the
+/// What a frame does with a pointer event over it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PointerInput {
+    /// The frame takes it: the page inside is focused.
+    Taken,
+    /// It falls through to the canvas beneath.
+    FallsThrough,
+}
+
+/// Let this frame take pointer events, or let them fall through to the
 /// canvas beneath it.
-fn layer_click_through(frame: &web_sys::HtmlIFrameElement, takes_input: bool) {
-    let _ = frame
-        .style()
-        .set_property("pointer-events", if takes_input { "auto" } else { "none" });
+fn set_pointer_input(frame: &web_sys::HtmlIFrameElement, input: PointerInput) {
+    let value = match input {
+        PointerInput::Taken => "auto",
+        PointerInput::FallsThrough => "none",
+    };
+    let _ = frame.style().set_property("pointer-events", value);
 }
 
 /// Size and place one frame. The size is the element's world size, in CSS

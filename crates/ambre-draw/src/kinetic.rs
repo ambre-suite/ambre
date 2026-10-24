@@ -9,6 +9,8 @@
 
 use ambre_core::{CssVector, PageMillis, ViewPoint, ViewPx};
 
+use crate::wheel::WheelDeltaMode;
+
 /// How far a pointer may move, in screen pixels, and still be a tap.
 pub const TAP_SLOP_PX: f32 = 8.0;
 /// How long a press held inside the slop lasts before it is a long press
@@ -52,9 +54,10 @@ pub const EDGE_GAIN: f32 = 1.0 / 80.0;
 ///
 /// ```
 /// use ambre_draw::kinetic::Kinetic;
+/// use ambre_draw::wheel::WheelDeltaMode;
 /// use ambre_core::{CssPx, CssVector};
 /// let delta = CssVector::new(CssPx::ZERO, CssPx::new(30.0));
-/// let step = Kinetic::default().wheel(delta, true, ambre_core::PageTime(0.0));
+/// let step = Kinetic::default().wheel(delta, WheelDeltaMode::Line, ambre_core::PageTime(0.0));
 /// assert_eq!(step.y(), ambre_core::ViewPx::new(30.0));
 /// ```
 ///
@@ -303,11 +306,12 @@ impl Kinetic {
     /// A wheel event, already in screen pixels. The answer is the step the
     /// view takes now, one for one. A notch stops any motion and never starts
     /// one; a glide feeds a speed the motion starts from once the glide
-    /// pauses (`KINETIC-002`, `KINETIC-009`). `stepped` marks a line or page delta mode.
+    /// pauses (`KINETIC-002`, `KINETIC-009`). `mode` is the unit the event came
+    /// in: a line or a page is a notch.
     pub fn wheel(
         &mut self,
         delta: CssVector,
-        stepped: bool,
+        mode: WheelDeltaMode,
         now_ms: ambre_core::PageTime,
     ) -> ScrollStep {
         let (dx, dy) = (delta.dx.get(), delta.dy.get());
@@ -316,7 +320,7 @@ impl Kinetic {
             x: ViewPx::new(dx),
             y: ViewPx::new(dy),
         };
-        if stepped || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
+        if mode.is_step() || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
             self.glide = None;
             return step;
         }
@@ -624,7 +628,11 @@ mod tests {
                 y: ViewPx::new(12.0),
             };
             assert_eq!(
-                kinetic.wheel(px(0.0, 12.0), false, ambre_core::PageTime(t)),
+                kinetic.wheel(
+                    px(0.0, 12.0),
+                    WheelDeltaMode::Pixel,
+                    ambre_core::PageTime(t)
+                ),
                 step
             );
         }
@@ -649,15 +657,27 @@ mod tests {
             y: ViewPx::new(100.0),
         };
         assert_eq!(
-            kinetic.wheel(px(0.0, 100.0), false, ambre_core::PageTime(130.0)),
+            kinetic.wheel(
+                px(0.0, 100.0),
+                WheelDeltaMode::Pixel,
+                ambre_core::PageTime(130.0)
+            ),
             notch
         );
         assert!(!kinetic.moving());
         assert_eq!(kinetic.tick(ambre_core::PageTime(300.0)), None);
-        kinetic.wheel(px(0.0, 3.0), true, ambre_core::PageTime(400.0));
+        kinetic.wheel(
+            px(0.0, 3.0),
+            WheelDeltaMode::Line,
+            ambre_core::PageTime(400.0),
+        );
         assert_eq!(kinetic.tick(ambre_core::PageTime(600.0)), None);
         // A glide that dies out slowly leaves no motion.
-        kinetic.wheel(px(0.0, 0.5), false, ambre_core::PageTime(700.0));
+        kinetic.wheel(
+            px(0.0, 0.5),
+            WheelDeltaMode::Pixel,
+            ambre_core::PageTime(700.0),
+        );
         assert_eq!(kinetic.tick(ambre_core::PageTime(800.0)), None);
     }
 

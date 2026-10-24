@@ -3647,7 +3647,8 @@ impl ToileView {
                 if target.connector().is_some() {
                     render::paint_label_plate(surface, sb, palette);
                 }
-                ed.render(surface, origin, palette, caret_on && !self.edit_closing);
+                let caret = ambre_canvas::Caret::shown_if(caret_on && !self.edit_closing);
+                ed.render(surface, origin, palette, caret);
                 if rotated {
                     surface.pop_transform();
                 }

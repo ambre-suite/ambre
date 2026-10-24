@@ -44,8 +44,7 @@ pub fn pan_by_wheel(
     mode: WheelDeltaMode,
     now_ms: ambre_core::PageTime,
 ) {
-    let stepped = mode != WheelDeltaMode::Pixel;
-    let step = kinetic.wheel(delta, stepped, now_ms);
+    let step = kinetic.wheel(delta, mode, now_ms);
     move_view(cam, step);
 }
 
@@ -182,7 +181,7 @@ mod tests {
         // A notch is a step one for one: 30 px down.
         let step = Kinetic::default().wheel(
             CssVector::new(CssPx::ZERO, CssPx::new(30.0)),
-            true,
+            WheelDeltaMode::Line,
             ambre_bus::PageTime(0.0),
         );
         for zoom in [0.25, 1.0, 4.0] {

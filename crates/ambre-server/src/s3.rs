@@ -347,16 +347,29 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
     let mut cycle: u32 = 0;
 
     loop {
-        let reconcile = cycle == 0;
+        let kind = if cycle == 0 {
+            Cycle::Reconciling
+        } else {
+            Cycle::Plain
+        };
         cycle = (cycle + 1) % RECONCILE_EVERY;
-        crate::supervise::contained("flusher cycle", flush_cycle(&state, reconcile)).await;
+        crate::supervise::contained("flusher cycle", flush_cycle(&state, kind)).await;
     }
+}
+
+/// Whether a flusher cycle starts with the reconciliation of the dirty set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Cycle {
+    /// The reconciliation is due: the cycle runs it first.
+    Reconciling,
+    /// The cycle only flushes.
+    Plain,
 }
 
 /// One flusher cycle: the reconciliation when it is due, the wait, then every
 /// dirty document's flush and the pass over unfinished deletes.
-async fn flush_cycle(state: &crate::state::AppState, reconcile: bool) {
-    if reconcile {
+async fn flush_cycle(state: &crate::state::AppState, kind: Cycle) {
+    if kind == Cycle::Reconciling {
         reconcile_dirty_set(state).await;
     }
 

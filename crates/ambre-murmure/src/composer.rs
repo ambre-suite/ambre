@@ -1516,7 +1516,12 @@ impl Composer {
         self.origin = ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(inner.0 + shift));
         let origin = Point::new(SPACE_8.into(), (inner.0 + shift).into());
         surface.push_clip(rect(SPACE_4, inner.0, width - SPACE_4, inner.1));
-        editor.render(surface, origin, palette.selection, self.focused);
+        editor.render(
+            surface,
+            origin,
+            palette.selection,
+            ambre_canvas::Caret::shown_if(self.focused),
+        );
         // A quote's rule and a list's dots, in the indent of their lines.
         if let (Some(layout), Some(marks)) = (editor.layout(), self.marks.get(&shown)) {
             let text = editor.text();

@@ -53,7 +53,7 @@ impl ProseUiState {
         let dy = delta.to_px(line, CssVector::new(page, page)).dy;
         let step = self
             .kinetic
-            .wheel(CssVector::new(CssPx::ZERO, dy), delta.is_step(), now_ms);
+            .wheel(CssVector::new(CssPx::ZERO, dy), delta.mode(), now_ms);
         self.scroll_by(step);
     }
 

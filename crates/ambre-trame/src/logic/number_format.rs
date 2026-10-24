@@ -216,7 +216,11 @@ fn render_number(tokens: &[Token], value: f64) -> String {
     };
     let is_digit = |t: &&Token| matches!(t, Token::Zero | Token::Hash);
     let frac_places = frac_tokens.iter().filter(is_digit).count();
-    let grouped = int_tokens.contains(&Token::Comma);
+    let thousands = if int_tokens.contains(&Token::Comma) {
+        Thousands::Grouped
+    } else {
+        Thousands::Plain
+    };
     // One rounding, at the precision the pattern shows.
     let fixed = format!("{:.*}", frac_places, value.abs());
     let (int_digits, frac_digits) = fixed.split_once('.').unwrap_or((fixed.as_str(), ""));
@@ -226,11 +230,21 @@ fn render_number(tokens: &[Token], value: f64) -> String {
     if value < 0.0 && fixed.chars().any(|c| c.is_ascii_digit() && c != '0') {
         out.push('-');
     }
-    out.push_str(&place_integer(int_tokens, int_digits, grouped));
+    out.push_str(&place_integer(int_tokens, int_digits, thousands));
     if point.is_some() {
         out.push_str(&place_fraction(frac_tokens, frac_digits));
     }
     out
+}
+
+/// How the integer part shows its thousands: a comma in the pattern groups
+/// them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Thousands {
+    /// A comma between each group of three digits.
+    Grouped,
+    /// The digits run on.
+    Plain,
 }
 
 /// Fill the integer placeholders from the right. The leftmost one takes every
@@ -238,7 +252,7 @@ fn render_number(tokens: &[Token], value: f64) -> String {
 /// placeholders stay in place, which is how `(000) 000-0000` renders a phone
 /// number. The thousands comma groups the digits when no literal sits among
 /// the placeholders.
-fn place_integer(tokens: &[Token], digits: &str, grouped: bool) -> String {
+fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands) -> String {
     let placeholders = tokens
         .iter()
         .filter(|t| matches!(t, Token::Zero | Token::Hash))
@@ -288,7 +302,7 @@ fn place_integer(tokens: &[Token], digits: &str, grouped: bool) -> String {
     }
     out.reverse();
     let joined: String = out.concat();
-    if grouped && !interleaved {
+    if thousands == Thousands::Grouped && !interleaved {
         group_thousands(&joined)
     } else {
         joined

@@ -71,9 +71,12 @@ pub fn draw_edit<S: DrawSurface>(
     // Content-coloured field over the underlying cell + active border interior.
     surface.fill_rect(field, palette.content_bg);
     // Selection band + glyphs (incl. IME preedit) + blinking caret.
-    editor
-        .core
-        .render(surface, origin, palette.selection, caret_visible);
+    editor.core.render(
+        surface,
+        origin,
+        palette.selection,
+        ambre_canvas::Caret::shown_if(caret_visible),
+    );
     surface.pop_clip();
     let caret = editor.core.caret_local()?;
     Some(Rect::new(

@@ -27,6 +27,7 @@ use ambre_canvas::{
 use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
 use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
+use ambre_draw::wheel::WheelDeltaMode;
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::{
@@ -492,9 +493,11 @@ impl MurmureView {
     /// `pages`. The model takes it as a wheel step of a page (`MURMURE-504`).
     fn page(&mut self, pages: f32) {
         let now_ms = (self.reads.now_ms)();
-        let step = self
-            .kinetic
-            .wheel(down(CssPx::new(pages * self.list_height())), true, now_ms);
+        let step = self.kinetic.wheel(
+            down(CssPx::new(pages * self.list_height())),
+            WheelDeltaMode::Page,
+            now_ms,
+        );
         self.scroll_by(step);
     }
 
@@ -900,7 +903,9 @@ impl MurmureView {
             return;
         };
         let now_ms = (self.reads.now_ms)();
-        let step = self.kinetic.wheel(down(CssPx::new(over)), true, now_ms);
+        let step = self
+            .kinetic
+            .wheel(down(CssPx::new(over)), WheelDeltaMode::Page, now_ms);
         self.scroll_by(step);
     }
 
@@ -1018,9 +1023,9 @@ impl MurmureView {
         };
         if over != ViewPx::ZERO {
             let now_ms = (self.reads.now_ms)();
-            let step = self
-                .kinetic
-                .wheel(down(CssPx::new(over.get())), true, now_ms);
+            let step =
+                self.kinetic
+                    .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now_ms);
             self.scroll_by(step);
         }
     }
@@ -1623,7 +1628,7 @@ impl MurmureView {
                 let page = CssPx::new(self.list_height());
                 let px = delta.to_px(CssVector::new(line, line), CssVector::new(page, page));
                 let now_ms = (self.reads.now_ms)();
-                let step = self.kinetic.wheel(down(px.dy), delta.is_step(), now_ms);
+                let step = self.kinetic.wheel(down(px.dy), delta.mode(), now_ms);
                 self.scroll_by(step);
                 return true;
             }

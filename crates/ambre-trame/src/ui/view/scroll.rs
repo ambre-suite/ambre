@@ -49,7 +49,7 @@ impl GridScroll {
         // `KINETIC-009`).
         let step = self
             .kinetic
-            .wheel(delta.to_px(line, page), delta.is_step(), now_ms);
+            .wheel(delta.to_px(line, page), delta.mode(), now_ms);
         self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {

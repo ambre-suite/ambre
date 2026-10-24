@@ -214,17 +214,16 @@ impl InlineEditor {
 
     /// Draw the selection band, glyphs and caret over the element (screen space).
     /// `origin` is the element's top-left screen corner + padding; the editor's
-    /// local coordinates are offset by it. `show_caret` gates the blinking caret
+    /// local coordinates are offset by it. `caret` gates the blinking caret
     /// bar (the caller toggles it on a timer,). Call after [`flush`](Self::flush).
     pub fn render<S: DrawSurface>(
         &mut self,
         surface: &mut S,
         origin: Point,
         palette: &Palette,
-        show_caret: bool,
+        caret: ambre_canvas::Caret,
     ) {
-        self.core
-            .render(surface, origin, palette.selection, show_caret);
+        self.core.render(surface, origin, palette.selection, caret);
     }
 }
 

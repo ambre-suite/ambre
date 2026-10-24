@@ -36,6 +36,13 @@ impl WheelDeltaMode {
             _ => Self::Pixel,
         }
     }
+
+    /// Whether a delta in this unit is a discrete step, a line or a page,
+    /// rather than a pixel glide. A step never starts a coast (`KINETIC-009`).
+    #[must_use]
+    pub const fn is_step(self) -> bool {
+        !matches!(self, Self::Pixel)
+    }
 }
 
 /// One wheel event's deltas, in the unit the browser gave them.
@@ -71,8 +78,8 @@ impl WheelDelta {
     /// Whether the delta is a discrete step, a line or a page, rather than a
     /// pixel glide. A step never starts a coast (`KINETIC-009`).
     #[must_use]
-    pub fn is_step(self) -> bool {
-        self.mode != WheelDeltaMode::Pixel
+    pub const fn is_step(self) -> bool {
+        self.mode.is_step()
     }
 
     /// The delta in CSS pixels, given what one line and one page are worth on
