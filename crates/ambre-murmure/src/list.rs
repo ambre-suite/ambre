@@ -490,7 +490,10 @@ pub fn from_bottom(
 ) -> Vec<(ListRow, ViewPx)> {
     let mut shown = Vec::new();
     let mut bottom = height;
-    for i in ListRowSpan::from_count(ListRow::ZERO, count).into_iter().rev() {
+    for i in ListRowSpan::from_count(ListRow::ZERO, count)
+        .into_iter()
+        .rev()
+    {
         if bottom <= ViewPx::ZERO {
             break;
         }
@@ -1119,7 +1122,7 @@ pub(crate) mod tests {
         let mut root = message(UserId::new(), ambre_bus::Timestamp(0), "root");
         let head = |replies| ThreadHead {
             document: DocumentId::new(),
-            replies,
+            replies: ambre_bus::ReplyCount::new(replies),
             last_replier: None,
         };
         root.thread = Some(head(0));
@@ -1182,7 +1185,12 @@ pub(crate) mod tests {
     /// below move nothing on screen (`MURMURE-190`).
     #[test]
     fn a_window_on_a_row_keeps_it_in_place_as_rows_arrive_below() {
-        let rested = window(ListRowCount::new(10), px(100.0), Some((ListRow::new(3), px(-5.0))), |_| px(20.0));
+        let rested = window(
+            ListRowCount::new(10),
+            px(100.0),
+            Some((ListRow::new(3), px(-5.0))),
+            |_| px(20.0),
+        );
         let expected = [
             (3, -5.0),
             (4, 15.0),
@@ -1194,7 +1202,12 @@ pub(crate) mod tests {
         assert_eq!(tops(&rested), expected);
         assert_eq!(rested.anchor, Some((ListRow::new(3), px(-5.0))));
         assert!(!rested.oldest && !rested.latest);
-        let grown = window(ListRowCount::new(12), px(100.0), Some((ListRow::new(3), px(-5.0))), |_| px(20.0));
+        let grown = window(
+            ListRowCount::new(12),
+            px(100.0),
+            Some((ListRow::new(3), px(-5.0))),
+            |_| px(20.0),
+        );
         assert_eq!(grown, rested);
     }
 
@@ -1202,21 +1215,42 @@ pub(crate) mod tests {
     /// the next message scrolls into view (`MURMURE-189`).
     #[test]
     fn a_window_past_the_bottom_rests_on_the_latest_row() {
-        let rested = window(ListRowCount::new(10), px(100.0), Some((ListRow::new(8), px(0.0))), |_| px(20.0));
+        let rested = window(
+            ListRowCount::new(10),
+            px(100.0),
+            Some((ListRow::new(8), px(0.0))),
+            |_| px(20.0),
+        );
         assert_eq!(rested.anchor, None);
         assert_eq!(tops(&rested).first(), Some(&(5, 0.0)));
         assert_eq!(tops(&rested).last(), Some(&(9, 80.0)));
         assert!(rested.latest);
-        let flush = window(ListRowCount::new(10), px(100.0), Some((ListRow::new(5), px(0.0))), |_| px(20.0));
+        let flush = window(
+            ListRowCount::new(10),
+            px(100.0),
+            Some((ListRow::new(5), px(0.0))),
+            |_| px(20.0),
+        );
         assert_eq!(
             flush.anchor, None,
             "a last row flush with the bottom rests there"
         );
         assert_eq!(
-            window(ListRowCount::new(10), px(100.0), Some((ListRow::new(10), px(0.0))), |_| px(20.0)).anchor,
+            window(
+                ListRowCount::new(10),
+                px(100.0),
+                Some((ListRow::new(10), px(0.0))),
+                |_| px(20.0)
+            )
+            .anchor,
             None
         );
-        let short = window(ListRowCount::new(2), px(100.0), Some((ListRow::new(0), px(0.0))), |_| px(20.0));
+        let short = window(
+            ListRowCount::new(2),
+            px(100.0),
+            Some((ListRow::new(0), px(0.0))),
+            |_| px(20.0),
+        );
         assert_eq!(
             tops(&short),
             [(0, 60.0), (1, 80.0)],
@@ -1228,11 +1262,21 @@ pub(crate) mod tests {
     /// The oldest row pulled down past the top rests at the top.
     #[test]
     fn a_window_past_the_top_rests_the_oldest_row_at_the_top() {
-        let rested = window(ListRowCount::new(10), px(100.0), Some((ListRow::new(1), px(30.0))), |_| px(20.0));
+        let rested = window(
+            ListRowCount::new(10),
+            px(100.0),
+            Some((ListRow::new(1), px(30.0))),
+            |_| px(20.0),
+        );
         assert_eq!(rested.anchor, Some((ListRow::new(0), px(0.0))));
         assert_eq!(tops(&rested).last(), Some(&(4, 80.0)));
         assert!(rested.oldest && !rested.latest);
-        let short = window(ListRowCount::new(4), px(100.0), Some((ListRow::new(1), px(30.0))), |_| px(20.0));
+        let short = window(
+            ListRowCount::new(4),
+            px(100.0),
+            Some((ListRow::new(1), px(30.0))),
+            |_| px(20.0),
+        );
         assert_eq!(
             short.anchor, None,
             "a list shorter than the viewport rests on its latest"
@@ -1244,13 +1288,23 @@ pub(crate) mod tests {
     #[test]
     fn a_window_measures_only_the_rows_it_reaches_once_each() {
         let mut measured = Vec::new();
-        let rested = window(ListRowCount::new(10_000), px(100.0), Some((ListRow::new(5_000), px(0.0))), |i| {
-            measured.push(i.get());
-            px(20.0)
-        });
+        let rested = window(
+            ListRowCount::new(10_000),
+            px(100.0),
+            Some((ListRow::new(5_000), px(0.0))),
+            |i| {
+                measured.push(i.get());
+                px(20.0)
+            },
+        );
         assert_eq!(measured, [5_000, 5_001, 5_002, 5_003, 5_004]);
         assert_eq!(rested.rows.len(), 5);
-        let flung = window(ListRowCount::new(10_000), px(100.0), Some((ListRow::new(5_000), px(-45.0))), |_| px(20.0));
+        let flung = window(
+            ListRowCount::new(10_000),
+            px(100.0),
+            Some((ListRow::new(5_000), px(-45.0))),
+            |_| px(20.0),
+        );
         assert_eq!(flung.anchor, Some((ListRow::new(5_002), px(-5.0))));
     }
 

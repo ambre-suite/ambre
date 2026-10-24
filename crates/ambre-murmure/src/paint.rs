@@ -1211,7 +1211,11 @@ pub(crate) mod tests {
         let RowBounds { top, bottom } = painted.focus.expect("the focused row is on screen");
         assert_eq!((ring.y0, ring.y1), (surface_px(top), surface_px(bottom)));
         assert!(top >= ViewPx::ZERO && bottom <= ViewPx::new(300.0) && bottom > top);
-        assert_eq!(painted.bottom, Some(ListRow::new(99)), "the latest row is the last one");
+        assert_eq!(
+            painted.bottom,
+            Some(ListRow::new(99)),
+            "the latest row is the last one"
+        );
         let body = runs(&surface, LIGHT.cell_text);
         assert!(body.iter().any(|&(y, _)| y > ring.y0 && y < ring.y1));
         let (surface, painted) = paint_from(focused(ListRow::new(3)), 300.0);
@@ -1361,7 +1365,10 @@ pub(crate) mod tests {
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert!(tall(&painted) > tall(&plain), "the chips take room");
-        assert_eq!(painted.chip, Some((ListRow::ZERO, Emoji::from("\u{1F44D}"))));
+        assert_eq!(
+            painted.chip,
+            Some((ListRow::ZERO, Emoji::from("\u{1F44D}")))
+        );
         let fills = |color: Color| -> Vec<Rect> {
             surface
                 .ops()

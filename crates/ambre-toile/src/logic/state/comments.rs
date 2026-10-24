@@ -46,8 +46,8 @@ use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
     ThreadMessageIndex, ToileEvent, ToileOutcome, Viewport,
 };
-use ambre_bus::app::toile::ThreadMessageCount;
 use crate::logic::model::{ElementId, ThreadId};
+use ambre_bus::app::toile::ThreadMessageCount;
 
 use super::ToileState;
 use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry, root_map};

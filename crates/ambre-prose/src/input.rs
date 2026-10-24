@@ -570,7 +570,8 @@ impl ProseUiState {
     fn pick(
         &mut self,
         index: crate::view::slash::SlashChoice,
-        send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
         let Some(menu) = self.slash.take() else {
             return false;
         };

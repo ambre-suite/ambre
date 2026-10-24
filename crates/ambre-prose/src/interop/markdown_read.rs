@@ -528,7 +528,11 @@ mod tests {
                     vec![item(IrListStyle::Bullet, "inner", Vec::new())]
                 ),
                 item(decimal, "two", Vec::new()),
-                item(IrListStyle::Todo(crate::events::TodoMark::Done), "done", Vec::new()),
+                item(
+                    IrListStyle::Todo(crate::events::TodoMark::Done),
+                    "done",
+                    Vec::new()
+                ),
             ]
         );
     }

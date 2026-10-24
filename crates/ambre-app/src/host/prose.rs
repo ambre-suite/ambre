@@ -816,7 +816,11 @@ mod tests {
         if let Some(body) = document.body() {
             let _ = body.focus();
         }
-        let _ = view.handle_input(&InputEvent::PointerDown { at: pointer(300.0, 200.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE });
+        let _ = view.handle_input(&InputEvent::PointerDown {
+            at: pointer(300.0, 200.0),
+            button: ambre_canvas::PointerButton::Primary,
+            mods: Modifiers::NONE,
+        });
         let focused = document.active_element().expect("a focused element");
         assert!(
             focused.is_same_node(Some(pipe.element())),

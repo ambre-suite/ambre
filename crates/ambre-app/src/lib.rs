@@ -2084,12 +2084,23 @@ mod fan_out_tests {
         let board = DocumentId::new();
         let (tx, rx) = conduit::local::<UiEvent>(4);
         routes.borrow_mut().entry(child).or_default().push(tx);
-        assert_eq!(child_of(&routes, &status(child, LinkState::Connected)), Some(child));
-        assert_eq!(child_of(&routes, &status(board, LinkState::Connected)), None);
+        assert_eq!(
+            child_of(&routes, &status(child, LinkState::Connected)),
+            Some(child)
+        );
+        assert_eq!(
+            child_of(&routes, &status(board, LinkState::Connected)),
+            None
+        );
 
         // The embed leaves the frame: its view, and with it the receiver, drop.
         drop(rx);
-        send_to_child(&routes, &backlog, child, status(child, LinkState::Connected));
+        send_to_child(
+            &routes,
+            &backlog,
+            child,
+            status(child, LinkState::Connected),
+        );
         assert!(
             routes.borrow()[&child].is_empty(),
             "the dead view kept its slot"

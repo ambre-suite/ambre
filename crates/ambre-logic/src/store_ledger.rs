@@ -259,7 +259,9 @@ impl StoreLedger {
     /// Whether the document carries a change the relay has not acknowledged.
     #[must_use]
     pub fn unsent(&self, id: DocumentId) -> bool {
-        self.residency.get(id).is_some_and(|held| held.unsent == Delivery::Unsent)
+        self.residency
+            .get(id)
+            .is_some_and(|held| held.unsent == Delivery::Unsent)
     }
 
     /// The bytes every copy costs together.

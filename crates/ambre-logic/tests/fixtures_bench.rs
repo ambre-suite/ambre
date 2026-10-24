@@ -23,9 +23,8 @@
 use std::path::{Path, PathBuf};
 
 use ambre_logic::fixtures::{
-    BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR, CommitHash,
-    REGISTRY,
-    baselines_in, corpus_root,
+    BASELINE_DIR, BENCH_DIR, BENCH_REGISTRY, BenchBaseline, BenchMeasurement, CORPUS_DIR,
+    CommitHash, REGISTRY, baselines_in, corpus_root,
 };
 
 /// The workspace root, derived from the corpus root the loader already resolves.

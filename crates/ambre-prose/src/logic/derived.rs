@@ -74,7 +74,12 @@ impl ProseState {
         let level = i64::from(max_level.get());
         let written = attrs
             .insert(doc::AttrKey::MaxLevel, LoroValue::I64(level))
-            .and_then(|()| attrs.insert(doc::AttrKey::Numbered, LoroValue::Bool(numbered.is_numbered())));
+            .and_then(|()| {
+                attrs.insert(
+                    doc::AttrKey::Numbered,
+                    LoroValue::Bool(numbered.is_numbered()),
+                )
+            });
         if let Err(e) = written {
             return Self::err_write(e);
         }
@@ -508,7 +513,7 @@ mod tests {
             let tree = doc::blocks(state.document());
             assert_eq!(
                 doc::toc_settings(&tree, &tree_id(toc)),
-                Some(settings(read, false))
+                Some(settings(read, TocNumbering::Plain))
             );
         }
     }

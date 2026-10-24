@@ -106,7 +106,10 @@ pub enum Screened {
     /// The draft mentions the channel, which holds this many members, past
     /// [`CONFIRM_CHANNEL_PAST`]. Nothing is sent before the author confirms
     /// (`MURMURE-231`). The draft comes back to be held.
-    Confirm { members: MemberCount, draft: MessageDraft },
+    Confirm {
+        members: MemberCount,
+        draft: MessageDraft,
+    },
 }
 
 /// Screen `draft` against `members`, the users of its channel. `None` before

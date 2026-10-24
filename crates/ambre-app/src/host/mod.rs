@@ -838,7 +838,9 @@ mod tests {
         assert_eq!(blob.text, "a\tb");
         assert_eq!(blob.html.as_deref(), Some("<p>a</p>"));
         assert_eq!(
-            blob.ambre.as_ref().map(ambre_core::ClipboardBytes::as_bytes),
+            blob.ambre
+                .as_ref()
+                .map(ambre_core::ClipboardBytes::as_bytes),
             Some(&bytes[..])
         );
         assert_eq!(

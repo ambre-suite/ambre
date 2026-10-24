@@ -436,7 +436,11 @@ pub(crate) async fn space_admin_of_public_meta(
         return Ok(false);
     };
     let is_meta = channel.meta_id.map(|m| m.document_id()) == Some(*document_id);
-    let (true, true, Some(space)) = (channel.visibility == ambre_core::Visibility::Public, is_meta, channel.space_id) else {
+    let (true, true, Some(space)) = (
+        channel.visibility == ambre_core::Visibility::Public,
+        is_meta,
+        channel.space_id,
+    ) else {
         return Ok(false);
     };
     let role = db::member_role(&state.db, &space.document_id(), user).await?;

@@ -259,7 +259,8 @@ impl ProseState {
         html: Option<&str>,
         bytes: Option<&ambre_core::ClipboardBytes>,
     ) -> ProseOutcome {
-        if let Some(Ok(payload)) = bytes.map(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()))
+        if let Some(Ok(payload)) =
+            bytes.map(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()))
             && payload.magic == MAGIC
         {
             return self.paste_blocks(at, payload);
@@ -624,7 +625,9 @@ mod tests {
         else {
             panic!("a copy answers with the clipboard");
         };
-        let paste = |state: &mut ProseState, html: Option<&str>, payload: Option<ambre_core::ClipboardBytes>| {
+        let paste = |state: &mut ProseState,
+                     html: Option<&str>,
+                     payload: Option<ambre_core::ClipboardBytes>| {
             let target = append(state, BlockInit::Paragraph, "");
             state.handle_command(ProseCommand::Paste {
                 at: (target, DocOffset::ZERO),
@@ -636,7 +639,11 @@ mod tests {
         };
         assert_eq!(paste(&mut state, Some("<p>html</p>"), Some(payload)), "own");
         assert_eq!(
-            paste(&mut state, Some("<p>html</p>"), Some(ambre_core::ClipboardBytes::new(b"foreign".to_vec()))),
+            paste(
+                &mut state,
+                Some("<p>html</p>"),
+                Some(ambre_core::ClipboardBytes::new(b"foreign".to_vec()))
+            ),
             "html"
         );
         assert_eq!(paste(&mut state, Some("<script>x</script>"), None), "plain");

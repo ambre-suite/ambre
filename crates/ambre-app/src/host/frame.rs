@@ -735,11 +735,19 @@ mod tests {
 
     fn pointers() -> Vec<InputEvent> {
         vec![
-            InputEvent::PointerDown { at: pointer(5.0, 6.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
+            InputEvent::PointerDown {
+                at: pointer(5.0, 6.0),
+                button: ambre_canvas::PointerButton::Primary,
+                mods: Modifiers::NONE,
+            },
             InputEvent::PointerMove {
                 at: pointer(5.0, 6.0),
             },
-            InputEvent::PointerUp { at: pointer(5.0, 6.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
+            InputEvent::PointerUp {
+                at: pointer(5.0, 6.0),
+                button: ambre_canvas::PointerButton::Primary,
+                mods: Modifiers::NONE,
+            },
             InputEvent::DoubleClick {
                 at: pointer(5.0, 6.0),
             },
@@ -779,10 +787,16 @@ mod tests {
     /// cannot map a point hands them over unchanged.
     #[wasm_bindgen_test]
     fn a_key_a_character_a_composition_and_a_wheel_reach_the_child_verbatim() {
-        let key = InputEvent::Key { key: Key::char('a'), mods: Modifiers::PRIMARY_SHIFT };
+        let key = InputEvent::Key {
+            key: Key::char('a'),
+            mods: Modifiers::PRIMARY_SHIFT,
+        };
         assert!(matches!(
             remap_with(&key, |_| None),
-            Some(InputEvent::Key { key: Key::Char('a'), mods: Modifiers::PRIMARY_SHIFT })
+            Some(InputEvent::Key {
+                key: Key::Char('a'),
+                mods: Modifiers::PRIMARY_SHIFT
+            })
         ));
         let text = InputEvent::Text {
             text: "é".to_owned(),
@@ -906,7 +920,10 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_late_face_reaches_the_logic_thread_as_a_base_face_does() {
         let (to_logic, from_ui) = ambre_bus::conduit::local(1);
-        assert!(send_faces(&to_logic, vec![ambre_core::FontBytes::new(vec![1, 2, 3])]));
+        assert!(send_faces(
+            &to_logic,
+            vec![ambre_core::FontBytes::new(vec![1, 2, 3])]
+        ));
         assert!(
             !send_faces(&to_logic, vec![ambre_core::FontBytes::new(vec![4])]),
             "a full channel took the face"

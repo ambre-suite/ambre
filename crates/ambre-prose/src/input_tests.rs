@@ -1196,14 +1196,12 @@ fn a_target_that_could_run_code_is_held_back() {
 /// A document whose one page carries a header and a footer, each with text.
 fn banded() -> (Rig, BlockId, BlockId) {
     let mut rig = Rig::new(&["the body of the page"]);
-    rig.outbox
-        .push(ProseCommand::SetHeaderEnabled {
-            shown: crate::events::BandState::On,
-        });
-    rig.outbox
-        .push(ProseCommand::SetFooterEnabled {
-            shown: crate::events::BandState::On,
-        });
+    rig.outbox.push(ProseCommand::SetHeaderEnabled {
+        shown: crate::events::BandState::On,
+    });
+    rig.outbox.push(ProseCommand::SetFooterEnabled {
+        shown: crate::events::BandState::On,
+    });
     rig.deliver();
     let bands = rig.logic.bands();
     let header = bands.header.expect("the header block");
@@ -2269,11 +2267,16 @@ fn a_plain_paste_carries_the_text_alone() {
         ambre: None,
         form,
     };
-    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(ambre_core::PasteForm::Rich), PasteSource::Own) else {
+    let ProseInput::Paste { rich, .. } = rig
+        .ui
+        .paste_input(read(ambre_core::PasteForm::Rich), PasteSource::Own)
+    else {
         panic!("a paste");
     };
     assert!(rich.is_some(), "the ordinary paste serves the kept payload");
-    let input = rig.ui.paste_input(read(ambre_core::PasteForm::Plain), PasteSource::Own);
+    let input = rig
+        .ui
+        .paste_input(read(ambre_core::PasteForm::Plain), PasteSource::Own);
     assert!(matches!(
         &input,
         ProseInput::Paste { text, html: None, rich: None } if text == "hello"

@@ -763,7 +763,7 @@ mod tests {
             ambre: Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])),
             ..ambre_bus::ClipboardBlob::default()
         };
-        let (item, _) = publish_item(
+        let super::Published { item, .. } = publish_item(
             &blob,
             &ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
             clipboard_item,
@@ -788,7 +788,10 @@ mod tests {
         {
             let host = rig.host.borrow();
             assert_eq!(host.pastes.len(), 1, "the read answers");
-            assert_eq!(host.pastes[0].0.ambre, Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])));
+            assert_eq!(
+                host.pastes[0].0.ambre,
+                Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3]))
+            );
             assert_eq!(
                 host.pastes[0].1,
                 PasteSource::Own,

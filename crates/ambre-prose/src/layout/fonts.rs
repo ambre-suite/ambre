@@ -96,7 +96,10 @@ mod tests {
 
     #[test]
     fn a_family_no_face_carries_still_resolves_to_a_shipped_one() {
-        assert_eq!(resolve_label("No Face Named This 12345"), BundledFamily::Sans);
+        assert_eq!(
+            resolve_label("No Face Named This 12345"),
+            BundledFamily::Sans
+        );
         assert_eq!(resolve_label("Serif"), BundledFamily::Serif);
     }
 

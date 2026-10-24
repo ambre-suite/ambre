@@ -1074,7 +1074,7 @@ mod properties {
                 Some(head) => head.to_vec(),
                 None => return Ok(()),
             };
-            place_tail(&blocks, BlockIndex::from_usize(from), &mut cursor, &mut placed);
+            place_tail(&blocks, crate::layout::measure::BlockIndex::from_usize(from), &mut cursor, &mut placed);
             prop_assert_eq!(placed, full.blocks);
             prop_assert_eq!(PageCount::through(cursor.page), full.page_count);
         }

@@ -34,8 +34,8 @@ use loro::LoroValue;
 
 use crate::ToileError;
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
-use ambre_bus::app::toile::ReactionCount;
 use crate::logic::model::{ElementId, TargetId};
+use ambre_bus::app::toile::ReactionCount;
 
 use super::ToileState;
 use super::names::{ReactionKey, Root};
@@ -161,7 +161,8 @@ impl ToileState {
         &self,
         visible: &HashSet<ElementId>,
     ) -> BTreeMap<TargetId, ReactionTally> {
-        let mut emoji: BTreeMap<TargetId, BTreeMap<ambre_bus::Emoji, ReactionCount>> = BTreeMap::new();
+        let mut emoji: BTreeMap<TargetId, BTreeMap<ambre_bus::Emoji, ReactionCount>> =
+            BTreeMap::new();
         let mut tallies: BTreeMap<TargetId, ReactionTally> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {

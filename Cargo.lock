@@ -114,6 +114,7 @@ name = "ambre-canvas"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-commands",
  "ambre-core",
  "ambre-draw",
  "bytemuck",
@@ -152,6 +153,9 @@ dependencies = [
 [[package]]
 name = "ambre-commands"
 version = "0.1.0"
+dependencies = [
+ "ambre-core",
+]
 
 [[package]]
 name = "ambre-core"

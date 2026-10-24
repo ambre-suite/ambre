@@ -447,7 +447,7 @@ type StyleView = (
     bool,
     Option<Rgb>,
     Option<Rgb>,
-    Option<String>,
+    Option<ambre_core::FontFamily>,
     Option<ambre_core::FontSize>,
     Borders,
 );

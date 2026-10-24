@@ -1672,7 +1672,11 @@ impl ToileView {
             self.kinetic.press(at, now_ms);
             return true;
         }
-        self.handle_input(&InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE })
+        self.handle_input(&InputEvent::PointerDown {
+            at,
+            button: PointerButton::Primary,
+            mods: Modifiers::NONE,
+        })
     }
 
     /// A finger moved: a panning finger drags the board past the tap slop,
@@ -1698,12 +1702,24 @@ impl ToileView {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
                 if let Release::Tap { at } = self.kinetic.release(now_ms) {
-                    self.handle_input(&InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE });
-                    self.handle_input(&InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE });
+                    self.handle_input(&InputEvent::PointerDown {
+                        at,
+                        button: PointerButton::Primary,
+                        mods: Modifiers::NONE,
+                    });
+                    self.handle_input(&InputEvent::PointerUp {
+                        at,
+                        button: PointerButton::Primary,
+                        mods: Modifiers::NONE,
+                    });
                 }
                 true
             }
-            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
+                at,
+                button: PointerButton::Primary,
+                mods: Modifiers::NONE,
+            }),
             None => false,
         }
     }
@@ -1717,7 +1733,11 @@ impl ToileView {
                 self.kinetic.cancel();
                 true
             }
-            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp { at: view_point(self.last_pointer), button: PointerButton::Primary, mods: Modifiers::NONE }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
+                at: view_point(self.last_pointer),
+                button: PointerButton::Primary,
+                mods: Modifiers::NONE,
+            }),
             None => false,
         }
     }

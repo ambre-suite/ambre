@@ -833,7 +833,11 @@ mod tests {
         let (top, bottom) = (first.bounds.top.get(), last.bounds.bottom.get());
         let mut view = bound.view.borrow_mut();
         for input in [
-            InputEvent::PointerDown { at: pointer(0.0, f64::from(top)), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE },
+            InputEvent::PointerDown {
+                at: pointer(0.0, f64::from(top)),
+                button: ambre_canvas::PointerButton::Primary,
+                mods: Modifiers::NONE,
+            },
             InputEvent::PointerMove {
                 at: pointer(299.0, f64::from(bottom - 1.0)),
             },
@@ -883,7 +887,11 @@ mod tests {
                 AppView::Murmure(v) => field_of(v, 200.0),
                 _ => unreachable!(),
             };
-            content.handle_input(&InputEvent::PointerDown { at: pointer(cx, cy), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE });
+            content.handle_input(&InputEvent::PointerDown {
+                at: pointer(cx, cy),
+                button: ambre_canvas::PointerButton::Primary,
+                mods: Modifiers::NONE,
+            });
         };
         let mut cells = Cells::default();
         let size = size_backing_store(&canvas).unwrap();
@@ -916,7 +924,10 @@ mod tests {
         cells.settle(&mut content);
         assert!(!content.takes_text(), "the content's field let them go");
         assert_eq!(cells.route(&typed), Some(true), "the cell takes the text");
-        let key = InputEvent::Key { key: Key::char('a'), mods: Modifiers::NONE };
+        let key = InputEvent::Key {
+            key: Key::char('a'),
+            mods: Modifiers::NONE,
+        };
         assert!(cells.route(&key).is_some(), "and the keys");
 
         press_content(&mut content);
@@ -926,7 +937,11 @@ mod tests {
 
         canvas.dispatch_event(&down).unwrap();
         assert!(cells.typist().is_some());
-        let press = InputEvent::PointerDown { at: pointer(10.0, 10.0), button: ambre_canvas::PointerButton::Primary, mods: Modifiers::NONE };
+        let press = InputEvent::PointerDown {
+            at: pointer(10.0, 10.0),
+            button: ambre_canvas::PointerButton::Primary,
+            mods: Modifiers::NONE,
+        };
         assert_eq!(cells.route(&press), None, "the press is the content's");
         assert!(cells.typist().is_none(), "a press on the content takes it");
         assert!(!view.borrow().takes_text());

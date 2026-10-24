@@ -73,7 +73,13 @@ pub fn SelectionToolbar(
         if let Some(m) = model.get() {
             text_color.set(m.base.text_color);
             // A family the picker does not offer shows the "Default" entry.
-            font_family.set(m.base.font.family.clone().filter(|f| f.picker_label().is_some()));
+            font_family.set(
+                m.base
+                    .font
+                    .family
+                    .clone()
+                    .filter(|f| f.picker_label().is_some()),
+            );
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight.is_bold());
             italic.set(m.base.font.italic);

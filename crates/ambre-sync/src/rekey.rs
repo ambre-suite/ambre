@@ -257,7 +257,9 @@ impl Rekey {
     /// payment (`RESID-009`). A refused delta never settles: the relay lacks
     /// an edit this client holds.
     pub(crate) fn settled(&self) -> bool {
-        self.sent.is_empty() && self.waiting.is_empty() && self.rotation != Rotation::Paying
+        self.sent.is_empty()
+            && self.waiting.is_empty()
+            && self.rotation != Rotation::Paying
             && !self.refused
     }
 

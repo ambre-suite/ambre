@@ -93,8 +93,8 @@ mod unread_tests;
 pub use channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FOLD_DELAY_MS, FinalSnapshot,
     FoldSnapshot, Linked, MessageCount, Named, Relocated, Replay, Replied, SEGMENT_BYTES,
-    SEGMENT_MESSAGES,
-    SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, Successor, ThreadLinked, ThreadTarget,
+    SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, SeekStep, Sent, Settled, Successor, ThreadLinked,
+    ThreadTarget,
 };
 pub use delta::{JSON_SCHEMA_VERSION, JsonSchemaVersion, Refusal, Signer};
 pub use error::MurmureError;

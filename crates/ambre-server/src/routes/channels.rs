@@ -846,7 +846,10 @@ pub async fn delete_channel(
         .await?
         .ok_or(AppError::Forbidden)?;
     let meta_id = channel.meta_id.ok_or(AppError::Forbidden)?;
-    let space_owner = match channel.space_id.filter(|_| channel.visibility == ambre_core::Visibility::Public) {
+    let space_owner = match channel
+        .space_id
+        .filter(|_| channel.visibility == ambre_core::Visibility::Public)
+    {
         Some(space_id) => {
             db::member_role(&state.db, &space_id.document_id(), &auth.user_id).await?
                 == Some(Role::Owner)

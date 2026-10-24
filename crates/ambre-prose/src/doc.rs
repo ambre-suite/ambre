@@ -708,10 +708,9 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
             let code = u8::try_from(read_i64(&attrs, AttrKey::Spelling)?).ok()?;
             OrderedStyle::from_code(code).map(ListStyle::Ordered)
         }
-        2 => Some(ListStyle::Todo(crate::events::TodoMark::done_if(read_bool(
-            &attrs,
-            AttrKey::Ticked,
-        )?))),
+        2 => Some(ListStyle::Todo(crate::events::TodoMark::done_if(
+            read_bool(&attrs, AttrKey::Ticked)?,
+        ))),
         _ => None,
     }
 }

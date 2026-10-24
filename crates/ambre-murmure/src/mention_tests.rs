@@ -347,7 +347,9 @@ fn a_mention_of_a_non_member_is_no_mark() {
 #[test]
 fn an_at_channel_past_the_threshold_waits_for_confirmation() {
     let all = draft("@channel", vec![at(MentionTarget::Channel, 0..8)]);
-    let members: Vec<UserId> = (0..=CONFIRM_CHANNEL_PAST.get()).map(|_| UserId::new()).collect();
+    let members: Vec<UserId> = (0..=CONFIRM_CHANNEL_PAST.get())
+        .map(|_| UserId::new())
+        .collect();
     let at_threshold = &members[..members.len() - 1];
     assert_eq!(
         screen(

@@ -584,9 +584,7 @@ impl ToileState {
                 message,
                 delta,
             } => self.edit_comment(&thread, message, &delta),
-            ToileCommand::ResolveThread { thread, state } => {
-                self.resolve_thread(&thread, state)
-            }
+            ToileCommand::ResolveThread { thread, state } => self.resolve_thread(&thread, state),
             ToileCommand::ReadComments { thread } => self.read_comments(thread.as_ref()),
             ToileCommand::BooleanOp { op, ids, sources } => self.boolean_op(op, &ids, sources),
             ToileCommand::ReadDeck => self.read_deck(),

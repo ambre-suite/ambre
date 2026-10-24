@@ -216,7 +216,9 @@ pub enum TrameEvent {
     /// rewritten `replaced` cells (`trame-find-replace`). Paired with a
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
-    ReplaceDone { replaced: crate::app::find::MatchCount },
+    ReplaceDone {
+        replaced: crate::app::find::MatchCount,
+    },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
     /// because the destination overlaps a protected range the current user may

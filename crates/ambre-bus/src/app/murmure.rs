@@ -725,7 +725,10 @@ pub enum MurmureEvent {
     /// The draft mentions the whole channel, which holds `members` members.
     /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
-    ConfirmChannelMention { members: ambre_core::MemberCount, held: HeldSend },
+    ConfirmChannelMention {
+        members: ambre_core::MemberCount,
+        held: HeldSend,
+    },
     /// A member reported the snapshot of `segment` as false, and the relay
     /// dropped it. The view names its author and the reporter; `None` for a
     /// key no member holds any more (`MURMURE-239`).

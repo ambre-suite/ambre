@@ -197,7 +197,10 @@ mod tests {
             None,
             "a collapsed one"
         );
-        assert_eq!(none.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)), None);
+        assert_eq!(
+            none.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)),
+            None
+        );
     }
 
     /// `MURMURE-426`: a copy puts each message under its author and its

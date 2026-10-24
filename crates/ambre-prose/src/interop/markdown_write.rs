@@ -9,7 +9,9 @@
 
 use std::fmt::Write as _;
 
-use ambre_bus::app::prose::{ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature};
+use ambre_bus::app::prose::{
+    ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature,
+};
 
 use crate::numbering::ListOrdinal;
 
@@ -27,7 +29,9 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
         writer.warnings.unsupported(UnsupportedFeature::PageFormat);
     }
     if ir.meta.bands {
-        writer.warnings.unsupported(UnsupportedFeature::HeaderAndFooter);
+        writer
+            .warnings
+            .unsupported(UnsupportedFeature::HeaderAndFooter);
     }
     writer.blocks(&ir.blocks, "");
     if writer.flavor == MarkdownFlavor::Gfm {
@@ -91,7 +95,8 @@ impl Writer {
         match block {
             IrBlock::Paragraph { styled, runs } => {
                 if *styled {
-                    self.warnings.unsupported(UnsupportedFeature::ParagraphFormatting);
+                    self.warnings
+                        .unsupported(UnsupportedFeature::ParagraphFormatting);
                 }
                 let text = self.inline(runs);
                 self.line(indent, &escape_line_start(&text));
@@ -133,7 +138,8 @@ impl Writer {
             }
             IrBlock::HRule => self.line(indent, "---"),
             IrBlock::Toc => {
-                self.warnings.unsupported(UnsupportedFeature::TableOfContents);
+                self.warnings
+                    .unsupported(UnsupportedFeature::TableOfContents);
                 self.line(indent, "<!-- toc -->");
             }
             IrBlock::ListItem { .. } => {}
@@ -209,7 +215,8 @@ impl Writer {
     fn table(&mut self, rows: &[IrTableRow], indent: &str) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
             if cell.styled {
-                self.warnings.unsupported(UnsupportedFeature::CellFormatting);
+                self.warnings
+                    .unsupported(UnsupportedFeature::CellFormatting);
             }
         }
         if self.flavor != MarkdownFlavor::Gfm {
@@ -255,7 +262,8 @@ impl Writer {
             match block {
                 IrBlock::Paragraph { styled, runs } => {
                     if *styled {
-                        self.warnings.unsupported(UnsupportedFeature::ParagraphFormatting);
+                        self.warnings
+                            .unsupported(UnsupportedFeature::ParagraphFormatting);
                     }
                     parts.push(self.inline(runs));
                 }
@@ -349,7 +357,10 @@ impl Writer {
             (run.underline, UnsupportedFeature::Underline),
             (run.superscript, UnsupportedFeature::Superscript),
             (run.subscript, UnsupportedFeature::Subscript),
-            (run.strikethrough && self.flavor != MarkdownFlavor::Gfm, UnsupportedFeature::Strikethrough),
+            (
+                run.strikethrough && self.flavor != MarkdownFlavor::Gfm,
+                UnsupportedFeature::Strikethrough,
+            ),
             (run.styled, UnsupportedFeature::Styling),
             (run.comment, UnsupportedFeature::Comment),
             (run.suggestion, UnsupportedFeature::Suggestion),
@@ -570,7 +581,11 @@ mod tests {
                 "two",
                 Vec::new(),
             ),
-            item(IrListStyle::Todo(crate::events::TodoMark::Done), "done", Vec::new()),
+            item(
+                IrListStyle::Todo(crate::events::TodoMark::Done),
+                "done",
+                Vec::new(),
+            ),
         ]);
         let (text, _) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(text, "1. one\n   - inner\n2. two\n\n- [x] done\n");
@@ -654,9 +669,9 @@ mod tests {
             [
                 "page format",
                 "header and footer",
-                UnsupportedFeature::Underline,
-                UnsupportedFeature::Styling,
-                UnsupportedFeature::Comment,
+                UnsupportedFeature::Underline.label(),
+                UnsupportedFeature::Styling.label(),
+                UnsupportedFeature::Comment.label(),
                 "page break",
                 "table of contents"
             ]

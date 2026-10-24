@@ -388,7 +388,9 @@ impl TrameView {
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
                     Key::Home if *chord => self.nav_goto(CellPos::ORIGIN, ext),
-                    Key::Home => self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext),
+                    Key::Home => {
+                        self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext)
+                    }
                     // End: last cell with content in the row; Ctrl+End: bottom-right
                     // of the used (cached) range. With Shift the range grows to that
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
@@ -533,8 +535,16 @@ impl TrameView {
     pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) {
         if let Release::Tap { at } = self.scroll.release(now_ms) {
             for ev in [
-                InputEvent::PointerDown { at, button: PointerButton::Primary, mods: Modifiers::NONE },
-                InputEvent::PointerUp { at, button: PointerButton::Primary, mods: Modifiers::NONE },
+                InputEvent::PointerDown {
+                    at,
+                    button: PointerButton::Primary,
+                    mods: Modifiers::NONE,
+                },
+                InputEvent::PointerUp {
+                    at,
+                    button: PointerButton::Primary,
+                    mods: Modifiers::NONE,
+                },
             ] {
                 self.handle_input(&ev);
             }

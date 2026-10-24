@@ -235,7 +235,10 @@ pub enum CommentIntent {
     /// Append a message to an open thread.
     Reply { thread: ThreadId, body: String },
     /// Resolve a thread, or reopen it.
-    Resolve { thread: ThreadId, state: ThreadState },
+    Resolve {
+        thread: ThreadId,
+        state: ThreadState,
+    },
     /// Open a thread from the board-wide list, bringing the camera to its anchor
     /// (`TOILE-UI-309`).
     Focus {

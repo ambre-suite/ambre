@@ -102,7 +102,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     let owner = Owner::new();
     owner.set();
     let stats = SelStats {
-        count: 3,
+        count: ambre_bus::app::toile::ElementCount::new(3),
         bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.5, 60.0);
@@ -157,7 +157,7 @@ fn single_selection_shows_count_without_bounds() {
     owner.set();
     // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
-        count: 1,
+        count: ambre_bus::app::toile::ElementCount::new(1),
         bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.0, 60.0);

@@ -102,7 +102,9 @@ impl TrameState {
 
     /// The reply to an empty replace: nothing replaced.
     pub(super) fn replace_nothing() -> TrameOutcome {
-        TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: MatchCount::ZERO }])
+        TrameOutcome::display_only(vec![TrameEvent::ReplaceDone {
+            replaced: MatchCount::ZERO,
+        }])
     }
 
     /// Replace every match of `query` with `replacement` across the active sheet

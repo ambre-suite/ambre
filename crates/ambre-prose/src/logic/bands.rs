@@ -16,8 +16,8 @@ use loro::TreeID;
 
 use crate::doc;
 use crate::events::{
-    Align, BandSet, BandState, BlockType, FirstPage, HeaderField, HfTarget, ProseEvent, ProseOutcome, ProseRefusal,
-    block_id,
+    Align, BandSet, BandState, BlockType, FirstPage, HeaderField, HfTarget, ProseEvent,
+    ProseOutcome, ProseRefusal, block_id,
 };
 
 use super::ProseState;
@@ -61,7 +61,9 @@ impl ProseState {
     /// Show or hide one side. The block it names is left alone, so showing it
     /// again brings its text back (`PROSE-FEAT-167`, `PROSE-FEAT-168`).
     pub(super) fn set_side_enabled(&mut self, side: Side, shown: BandState) -> ProseOutcome {
-        if shown.is_on() && let Err(outcome) = self.ensure_side(side) {
+        if shown.is_on()
+            && let Err(outcome) = self.ensure_side(side)
+        {
             return outcome;
         }
         let (regular, _) = side.registers();

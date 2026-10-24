@@ -182,8 +182,8 @@ fn rect_to_screen(b: Rect, w2s: &Affine) -> Rect {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, ElementId, ElementKind, ElementStyle, ReactionCount, ShapeKind,
-        Viewport,
+        DisplayElement, DisplayGeom, ElementId, ElementKind, ElementStyle, ReactionCount,
+        ShapeKind, Viewport,
     };
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};

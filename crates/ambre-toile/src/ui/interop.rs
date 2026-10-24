@@ -103,8 +103,14 @@ mod message_tests {
 
     #[test]
     fn a_clean_import_reports_its_count() {
-        assert_eq!(import_message(ElementCount::new(1), &[]), "Imported 1 element");
-        assert_eq!(import_message(ElementCount::new(12), &[]), "Imported 12 elements");
+        assert_eq!(
+            import_message(ElementCount::new(1), &[]),
+            "Imported 1 element"
+        );
+        assert_eq!(
+            import_message(ElementCount::new(12), &[]),
+            "Imported 12 elements"
+        );
     }
 
     #[test]

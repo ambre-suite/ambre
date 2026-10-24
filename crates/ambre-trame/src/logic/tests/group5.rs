@@ -398,7 +398,7 @@ fn status_bar_total_matches_sum_under_a_filter() {
     });
     assert_eq!(read_cell(&mut state, 0, 3), "3");
     assert_eq!(*sum, 3.0);
-    assert_eq!(*count, 3);
+    assert_eq!(count.get(), 3);
 }
 
 /// An edit outside the filtered column writes nothing to the hidden set

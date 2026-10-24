@@ -107,11 +107,19 @@ impl Rig {
     }
 
     fn press(&mut self, (x, y): (f64, f64)) {
-        self.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::NONE });
+        self.input(InputEvent::PointerDown {
+            at: pointer(x, y),
+            button: PointerButton::Primary,
+            mods: Modifiers::NONE,
+        });
     }
 
     fn release(&mut self, (x, y): (f64, f64)) {
-        self.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::NONE });
+        self.input(InputEvent::PointerUp {
+            at: pointer(x, y),
+            button: PointerButton::Primary,
+            mods: Modifiers::NONE,
+        });
     }
 
     /// A press and a release at the world point (x, y), with no move between.
@@ -938,7 +946,14 @@ fn the_board_editor_drives_the_shared_core() {
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Word),
         ),
         (
-            key(Key::ArrowRight, Modifiers { primary: false, alt: true, shift: true }),
+            key(
+                Key::ArrowRight,
+                Modifiers {
+                    primary: false,
+                    alt: true,
+                    shift: true,
+                },
+            ),
             right(ambre_canvas::Extend::Select, ambre_canvas::Stride::Word),
         ),
         (text("X"), EditIntent::Insert("X".to_owned())),
@@ -966,7 +981,10 @@ fn the_board_editor_drives_the_shared_core() {
             },
         ),
         (
-            InputEvent::Key { key: Key::char('a'), mods: Modifiers::PRIMARY },
+            InputEvent::Key {
+                key: Key::char('a'),
+                mods: Modifiers::PRIMARY,
+            },
             EditIntent::SelectAll,
         ),
         (text("new"), EditIntent::Insert("new".to_owned())),
@@ -1495,7 +1513,10 @@ fn a_typed_character_opens_the_editor_and_replaces_the_body() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
     rig.sent();
-    assert!(!rig.key(Key::char('x'), Modifiers::NONE), "the key reaches the text pipe");
+    assert!(
+        !rig.key(Key::char('x'), Modifiers::NONE),
+        "the key reaches the text pipe"
+    );
     assert_eq!(editing(&rig), Some(eid("a")));
     rig.type_text("x");
     rig.key(Key::Escape, Modifiers::NONE);
@@ -2040,8 +2061,16 @@ fn linked_to_a_frame() -> Rig {
 
 fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
-    rig.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::PRIMARY });
-    rig.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Primary, mods: Modifiers::PRIMARY });
+    rig.input(InputEvent::PointerDown {
+        at: pointer(x, y),
+        button: PointerButton::Primary,
+        mods: Modifiers::PRIMARY,
+    });
+    rig.input(InputEvent::PointerUp {
+        at: pointer(x, y),
+        button: PointerButton::Primary,
+        mods: Modifiers::PRIMARY,
+    });
 }
 
 /// Whether `sent` is the one fit request a jump to the frame "f" makes.
@@ -2057,7 +2086,7 @@ fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
 /// board no longer holds.
 fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
     ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
-        count: ElementCount::new(u32::from(bounds.is_some())),
+        count: ambre_bus::app::toile::ElementCount::new(u32::from(bounds.is_some())),
         bounds,
         kind: StatsRequestKind::Fit,
     })
@@ -2151,8 +2180,16 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
 /// A right press and release at the world point (x, y).
 fn right_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
-    rig.input(InputEvent::PointerDown { at: pointer(x, y), button: PointerButton::Secondary, mods: Modifiers::NONE });
-    rig.input(InputEvent::PointerUp { at: pointer(x, y), button: PointerButton::Secondary, mods: Modifiers::NONE });
+    rig.input(InputEvent::PointerDown {
+        at: pointer(x, y),
+        button: PointerButton::Secondary,
+        mods: Modifiers::NONE,
+    });
+    rig.input(InputEvent::PointerUp {
+        at: pointer(x, y),
+        button: PointerButton::Secondary,
+        mods: Modifiers::NONE,
+    });
 }
 
 /// `TOILE-UI-048`, `TOILE-UI-135`, `TOILE-UI-136`: a right-click on a
@@ -2937,7 +2974,11 @@ fn a_busy_board_takes_no_input() {
     assert!(rig.view.is_busy());
     let at = rig.screen(50.0, 50.0);
     assert!(
-        rig.input(InputEvent::PointerDown { at: pointer(at.0, at.1), button: PointerButton::Primary, mods: Modifiers::NONE }),
+        rig.input(InputEvent::PointerDown {
+            at: pointer(at.0, at.1),
+            button: PointerButton::Primary,
+            mods: Modifiers::NONE
+        }),
         "the refusal consumes the event"
     );
     rig.release(at);

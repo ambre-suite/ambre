@@ -95,7 +95,10 @@ mod tests {
     #[test]
     fn multi_element_shows_count_and_bounds() {
         // Union rect (10,20)->(50,80): x=10 y=20 w=40 h=60.
-        let s = SelStats::from_reply(ElementCount::new(3), Some(Rect::new(10.0, 20.0, 50.0, 80.0)));
+        let s = SelStats::from_reply(
+            ElementCount::new(3),
+            Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
+        );
         assert_eq!(count_label(&s).as_deref(), Some("3 elements"));
         assert_eq!(bounds_label(&s).as_deref(), Some("x 10  y 20  w 40  h 60"),);
     }

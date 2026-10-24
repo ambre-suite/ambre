@@ -920,10 +920,7 @@ mod tests {
     #[test]
     fn family_labels_map_to_registered_faces() {
         assert_eq!(face_of(Some("Serif")), "DejaVu Serif");
-        assert_eq!(
-            face_of(Some("Monospace")),
-            "DejaVu Sans Mono"
-        );
+        assert_eq!(face_of(Some("Monospace")), "DejaVu Sans Mono");
         // Sans / Default / None / any unknown label fall back to the bundled sans.
         assert_eq!(face_of(Some("Sans")), "Noto Sans");
         assert_eq!(face_of(Some("Default")), "Noto Sans");
@@ -942,9 +939,6 @@ mod tests {
         // Routing every family through this single authority never demotes a
         // genuine serif/mono face to the sans fallback.
         assert_eq!(face_of(Some("DejaVu Serif")), "DejaVu Serif");
-        assert_eq!(
-            face_of(Some("DejaVu Sans Mono")),
-            "DejaVu Sans Mono"
-        );
+        assert_eq!(face_of(Some("DejaVu Sans Mono")), "DejaVu Sans Mono");
     }
 }

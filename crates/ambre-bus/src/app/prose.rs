@@ -982,7 +982,11 @@ impl FirstPage {
     /// [`FirstPage::OwnBands`] when the document's setting says so.
     #[must_use]
     pub fn own_if(own: bool) -> Self {
-        if own { Self::OwnBands } else { Self::SameAsRest }
+        if own {
+            Self::OwnBands
+        } else {
+            Self::SameAsRest
+        }
     }
 
     /// The setting as the document stores it.
@@ -1223,7 +1227,11 @@ impl TocNumbering {
     /// [`TocNumbering::Numbered`] when the block's stored switch is on.
     #[must_use]
     pub fn numbered_if(numbered: bool) -> Self {
-        if numbered { Self::Numbered } else { Self::Plain }
+        if numbered {
+            Self::Numbered
+        } else {
+            Self::Plain
+        }
     }
 
     /// The switch as the block stores it.
@@ -1744,10 +1752,7 @@ pub enum ConversionWarning {
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
-    ElementDropped {
-        element: DroppedElement,
-        count: u32,
-    },
+    ElementDropped { element: DroppedElement, count: u32 },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
     BlockLifted { block: LiftedBlock, count: u32 },

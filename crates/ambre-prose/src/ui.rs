@@ -26,9 +26,9 @@ use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
-    BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan, PageIndex,
-    ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
-    TextEdit, WordCount,
+    BandSet, BlockId, ChangeOrigin, CommentThread, CursorPosition, FindMatch, FootnoteEntry,
+    LinkSpan, PageIndex, ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion,
+    TableOfContents, TextEdit, WordCount,
 };
 use crate::layout::run::LayoutVersion;
 use crate::layout::run::{RunOffset, ShapedLayout, ShapedRun};

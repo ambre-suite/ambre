@@ -372,8 +372,9 @@ impl Reader {
                         ClipKind::Bullet | ClipKind::Ordered(_) | ClipKind::Todo(_)
                     )
                 {
-                    open.kind =
-                        ClipKind::Todo(crate::events::TodoMark::done_if(attr(attrs, "checked").is_some()));
+                    open.kind = ClipKind::Todo(crate::events::TodoMark::done_if(
+                        attr(attrs, "checked").is_some(),
+                    ));
                 }
             }
             "code" if self.pre > 0 => {
