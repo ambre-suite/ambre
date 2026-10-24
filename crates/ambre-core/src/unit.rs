@@ -237,9 +237,9 @@ define_length! {
     /// the zoom into view pixels.
     ///
     /// A view length and a board length are both floats. A reach of four view
-    /// pixels taken as four board units picks wrong at every zoom but 1, so
-    /// the camera's named conversion stands between the two. The `f64` is the
-    /// one kurbo measures a board in.
+    /// pixels taken as four board units picks wrong at every zoom but 1. The
+    /// camera's named conversion stands between the two. The `f64` is the one
+    /// kurbo measures a board in.
     BoardLength(f64)
 }
 
