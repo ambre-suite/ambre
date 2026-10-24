@@ -372,7 +372,7 @@ impl DrawSurface for WgpuSurface<'_> {
                 font_data,
                 raster,
                 &coords,
-                glyph.id as u16,
+                GlyphId::new(glyph.id as u16),
             ) {
                 Some(s) => s,
                 None => continue,
@@ -777,8 +777,11 @@ mod tests {
     /// screen is drawn on the new one.
     #[test]
     fn a_density_change_asks_for_a_new_raster() {
-        use super::super::atlas::GlyphKey;
-        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, 1.0, ratio(density)));
+        use super::super::atlas::{FontId, GlyphKey};
+        let key = |density| {
+            let size = raster_size(14.0, 1.0, ratio(density));
+            GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
+        };
         assert_ne!(key(1.0), key(2.0));
         assert_ne!(key(1.25), key(1.5));
         assert_eq!(key(2.0), key(2.0));

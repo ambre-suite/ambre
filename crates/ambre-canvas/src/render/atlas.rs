@@ -24,21 +24,61 @@ const ATLAS_SIZE: u32 = 2048;
 // 1-pixel padding between glyphs prevents bilinear bleed at atlas boundaries.
 const ATLAS_PAD: u32 = 1;
 
+/// The font a glyph is drawn from: the id of its registered blob, stable for
+/// as long as the blob lives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) struct FontId(u64);
+
+impl FontId {
+    /// The font of the blob whose id is `blob_id`.
+    pub(super) const fn of_blob(blob_id: u64) -> Self {
+        Self(blob_id)
+    }
+}
+
+/// A glyph's index in its font, as the shaper names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GlyphId(u16);
+
+impl GlyphId {
+    /// The glyph at `index` in its font.
+    pub const fn new(index: u16) -> Self {
+        Self(index)
+    }
+
+    /// The index Swash renders.
+    const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+/// A raster size quantized to a hundredth of a device pixel, so it can be
+/// hashed. Two sizes closer than that share a raster.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct RasterSizeKey(u32);
+
+impl RasterSizeKey {
+    /// The key of a raster `size` device pixels high.
+    fn of(size: f32) -> Self {
+        Self((size * 100.0) as u32)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct GlyphKey {
-    font_id: u64, // Blob::id() -- stable identifier per registered font
-    glyph_id: u16,
-    size_x100: u32, // font_size * 100 to avoid floats in hash key
+    font: FontId,
+    glyph: GlyphId,
+    size: RasterSizeKey,
 }
 
 impl GlyphKey {
     /// The key of a raster at `raster_size`, the size in device pixels. A
     /// raster made for one density is never found for another (`CANVAS-034`).
-    pub(super) fn new(font_id: u64, glyph_id: u16, raster_size: f32) -> Self {
+    pub(super) fn new(font: FontId, glyph: GlyphId, raster_size: f32) -> Self {
         Self {
-            font_id,
-            glyph_id,
-            size_x100: (raster_size * 100.0) as u32,
+            font,
+            glyph,
+            size: RasterSizeKey::of(raster_size),
         }
     }
 }
@@ -140,8 +180,31 @@ pub struct GlyphAtlas {
     scale_cx: swash::scale::ScaleContext,
 }
 
-/// One queued texture upload: `(x, y, w, h, bytes)`.
-type Upload = (u32, u32, u32, u32, Vec<u8>);
+/// A rectangle of texels in an atlas: its top-left corner and its size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TexelRect {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+}
+
+/// One queued texture upload: the bytes and the texels they fill.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Upload {
+    rect: TexelRect,
+    bytes: Vec<u8>,
+}
+
+impl Upload {
+    /// The upload of `bytes` into a `w` by `h` box at `(x, y)`.
+    fn at(x: u32, y: u32, w: u32, h: u32, bytes: Vec<u8>) -> Self {
+        Self {
+            rect: TexelRect { x, y, w, h },
+            bytes,
+        }
+    }
+}
 
 /// One glyph as the rasterizer returned it, before it is packed.
 pub(super) struct Raster {
@@ -270,7 +333,7 @@ impl GlyphCache {
                     };
                     cached.slot.uv_min = [ax as f32 * inv, ay as f32 * inv];
                     cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
-                    pending.push((ax, ay, bmp.w, bmp.h, bmp.data.clone()));
+                    pending.push(Upload::at(ax, ay, bmp.w, bmp.h, bmp.data.clone()));
                     survivors.insert(key, cached);
                 }
             }
@@ -351,7 +414,7 @@ impl GlyphCache {
             is_color,
         };
 
-        pending.push((ax, ay, w, h, data.clone()));
+        pending.push(Upload::at(ax, ay, w, h, data.clone()));
         self.cache.insert(
             key,
             CachedGlyph {
@@ -454,9 +517,9 @@ impl GlyphAtlas {
         font_data: &parley::FontData,
         font_size: f32,
         normalized_coords: &[swash::NormalizedCoord],
-        glyph_id: u16,
+        glyph: GlyphId,
     ) -> Option<AtlasSlot> {
-        let key = GlyphKey::new(font_data.data.id(), glyph_id, font_size);
+        let key = GlyphKey::new(FontId::of_blob(font_data.data.id()), glyph, font_size);
 
         if let Some(slot) = self.glyphs.lookup(&key) {
             return Some(slot);
@@ -469,7 +532,7 @@ impl GlyphAtlas {
             font_ref,
             font_size,
             normalized_coords,
-            glyph_id,
+            glyph,
         )?;
         self.glyphs.insert(key, raster)
     }
@@ -478,12 +541,12 @@ impl GlyphAtlas {
     pub fn flush_uploads(&mut self, queue: &wgpu::Queue) {
         let (pending, color_pending) = self.glyphs.take_uploads();
         // R8 mask atlas: 1 byte/px.
-        for (x, y, w, h, data) in pending {
-            upload_glyph(queue, &self.texture, x, y, w, h, 1, data);
+        for upload in pending {
+            upload_glyph(queue, &self.texture, upload, 1);
         }
         // RGBA color atlas: 4 bytes/px.
-        for (x, y, w, h, data) in color_pending {
-            upload_glyph(queue, &self.color_texture, x, y, w, h, 4, data);
+        for upload in color_pending {
+            upload_glyph(queue, &self.color_texture, upload, 4);
         }
     }
 }
@@ -498,7 +561,7 @@ pub(super) fn rasterize(
     font: swash::FontRef<'_>,
     size: f32,
     normalized_coords: &[swash::NormalizedCoord],
-    glyph_id: u16,
+    glyph: GlyphId,
 ) -> Option<Raster> {
     // Source order: an embedded colour bitmap (CBDT emoji), then a colour
     // outline (COLR), then the plain outline. `Format::Alpha` only governs how
@@ -515,7 +578,7 @@ pub(super) fn rasterize(
             .size(size)
             .normalized_coords(normalized_coords)
             .build(),
-        glyph_id,
+        glyph.get(),
     )?;
     Some(Raster {
         w: image.placement.width,
@@ -527,23 +590,17 @@ pub(super) fn rasterize(
     })
 }
 
-/// Upload one rasterized glyph bitmap to `texture` at `(x, y)`.
+/// Upload one rasterized glyph bitmap to `texture`, over its texel rectangle.
 ///
 /// `bpp` is 1 (R8 coverage mask) or 4 (RGBA color). WebGL2 (via the wgpu GL
 /// backend) requires `bytes_per_row` to be a multiple of 4 for
 /// `texSubImage2D`. The R8 path pads each row up to that alignment. The RGBA
 /// path is already a multiple of 4 (`w * 4`), so it uploads as-is.
-#[allow(clippy::too_many_arguments)]
-fn upload_glyph(
-    queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-    bpp: u32,
-    data: Vec<u8>,
-) {
+fn upload_glyph(queue: &wgpu::Queue, texture: &wgpu::Texture, upload: Upload, bpp: u32) {
+    let Upload {
+        rect: TexelRect { x, y, w, h },
+        bytes: data,
+    } = upload;
     let row_bytes = w * bpp;
     let aligned_bpr = (row_bytes + 3) & !3;
     let upload_data: Vec<u8> = if aligned_bpr == row_bytes {
@@ -595,7 +652,7 @@ mod tests {
     }
 
     fn key(glyph: u16) -> GlyphKey {
-        GlyphKey::new(7, glyph, 16.0)
+        GlyphKey::new(FontId::of_blob(7), GlyphId::new(glyph), 16.0)
     }
 
     /// The pixel origin of a slot in an atlas of side `size`.
@@ -609,7 +666,7 @@ mod tests {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let bytes = std::fs::read(format!("{dir}{file}")).expect("a shipped face");
         let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
-        let glyph = font.charmap().map(ch);
+        let glyph = GlyphId::new(font.charmap().map(ch));
         let mut scale_cx = swash::scale::ScaleContext::new();
         rasterize(&mut scale_cx, font, size, &[], glyph).expect("a raster")
     }
@@ -677,7 +734,7 @@ mod tests {
         assert_eq!((again.uv_min, again.uv_max), (slot.uv_min, slot.uv_max));
         assert!(cache.lookup(&key(2)).is_none());
         let (masks, colors) = cache.take_uploads();
-        assert_eq!(masks, vec![(0, 0, 4, 4, vec![9; 16])]);
+        assert_eq!(masks, vec![Upload::at(0, 0, 4, 4, vec![9; 16])]);
         assert!(colors.is_empty());
         assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
     }
@@ -714,7 +771,7 @@ mod tests {
         assert_eq!(origin(hot, 16), (0, 0), "the most recent goes first");
         assert_eq!(origin(warm, 16), (5, 0));
         let (masks, _) = cache.take_uploads();
-        let bytes: Vec<u8> = masks.iter().map(|upload| upload.4[0]).collect();
+        let bytes: Vec<u8> = masks.iter().map(|upload| upload.bytes[0]).collect();
         assert_eq!(bytes, [3, 2], "both are uploaded again, from their bitmaps");
         assert_eq!(cache.size, 16, "the atlas repacks and never grows");
     }
@@ -747,7 +804,7 @@ mod tests {
         let expected: Vec<u8> = (0..25).collect();
         assert_eq!(
             masks,
-            vec![(x, y, 5, 5, expected)],
+            vec![Upload::at(x, y, 5, 5, expected)],
             "its own bitmap, at its new place"
         );
     }
@@ -818,6 +875,6 @@ mod tests {
         assert_eq!(origin(mask_slot, 32), (0, 0), "each atlas packs alone");
         let (masks, colors) = cache.take_uploads();
         assert_eq!((masks.len(), colors.len()), (1, 1));
-        assert_eq!(colors[0].4.len(), 64, "four bytes a pixel");
+        assert_eq!(colors[0].bytes.len(), 64, "four bytes a pixel");
     }
 }

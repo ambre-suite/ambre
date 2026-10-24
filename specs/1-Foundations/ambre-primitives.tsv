@@ -785,7 +785,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_min | f
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | CachedGlyph.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::ensure_color_atlas() | ret | bool	generic	predicate result
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::get_or_rasterize(font_size) | param | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::get_or_rasterize(glyph_id) | param | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::new_color_texture(size) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphBitmap.data | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphBitmap.h | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -798,11 +797,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache.size | fi
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::color_atlas_due() | ret | bool	generic	predicate result
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::compact::KEEP_FRAMES | const | u64	math	eviction age in frames, local to the atlas compaction
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::new(size) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey.font_id | field | u64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey.glyph_id | field | u16	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey.size_x100 | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey::new(font_id) | param | u64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey::new(glyph_id) | param | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphKey::new(raster_size) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.data | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.h | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -818,15 +812,25 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocat
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocate(h) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::allocate(w) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | ShelfPacker::new(atlas_size) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload | alias | (u32,u32,u32,u32,Vec<u8>)	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | rasterize(glyph_id) | param | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | rasterize(size) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(bpp) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(data) | param | Vec<u8>	generic	bytes
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(h) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(w) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(x) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | upload_glyph(y) | param | u32	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId.0 | field | u64	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | FontId::of_blob(blob_id) | param | u64	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId.0 | field | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) | param | u16	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey.0 | field | u32	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey::of(size) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.h | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.w | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.x | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.y | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(bytes) | param | Vec<u8>	generic	raw texel bytes the GPU copies
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(h) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(w) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(x) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(y) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.pixels | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -2366,9 +2370,7 @@ ambre-prose | src/doc.rs | crate::doc | Bands::holds() | ret | bool	generic	inde
 ambre-prose | src/doc.rs | crate::doc | BodyKey.0 | field | String	newtype-inner	the body root name BodyKey types
 ambre-prose | src/doc.rs | crate::doc | BodyKey::as_str() | ret | &str	foreign-api	the body root name, for the Loro call that opens it
 ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | DEFAULT_LINE_HEIGHT | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | DocDefaults.font_family | field | String	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | DocDefaults.line_height | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
@@ -4449,7 +4451,6 @@ ambre-prose | src/band.rs | crate::band | CivilDate::month() | ret | u32	newtype
 ambre-prose | src/band.rs | crate::band | CivilDate::year() | ret | i64	newtype-inner	a component of the civil-date type, the proleptic Gregorian year
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_target_geometry() | ret | Option<(Point,f32,Rect,ambre_core::Radians)>	math	geometry, layout, count or size local to the algorithm
-ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::Multiple.0 | field | f32	math	a multiple of the font size, a bare ratio with no unit
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::from_stored(value) | param | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::stored_value() | ret | f32	newtype-inner	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-canvas | src/density.rs | crate::density | DevicePx.0 | field | i32	newtype-inner	the inside of the device pixel newtype, signed because a buffer shift is
@@ -4476,6 +4477,11 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regi
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 | field | f32	newtype-inner	the refused value an error reports
+ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the frame counts kept per probe, as the f64 samples percentiles takes
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.samples | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the durations kept per probe, in milliseconds, as the f64 samples percentiles takes
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field | u64	newtype-inner	newtype inner, accessor or constructor

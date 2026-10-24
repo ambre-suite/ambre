@@ -38,7 +38,7 @@ mod mipmap;
 mod renderer;
 mod surface;
 
-pub use atlas::{AtlasSlot, GlyphAtlas};
+pub use atlas::{AtlasSlot, GlyphAtlas, GlyphId};
 pub use renderer::{ContentRepaint, OverlayRepaint, QuadRenderer};
 pub use surface::WgpuSurface;
 // ============================================================================

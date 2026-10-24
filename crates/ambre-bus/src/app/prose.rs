@@ -536,12 +536,61 @@ impl LineHeightMode {
     }
 }
 
+/// A line height as a multiple of the font size: a bare ratio, finite and
+/// above zero. A zero or negative multiple would stack every line on one.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct LineSpacingMultiple(f32);
+
+impl LineSpacingMultiple {
+    /// Single spacing.
+    pub const SINGLE: Self = Self(1.0);
+    /// One and a half lines, the seeded default.
+    pub const ONE_AND_HALF: Self = Self(1.5);
+
+    /// The multiple `ratio`, `None` unless it is finite and above zero.
+    #[must_use]
+    pub fn new(ratio: f32) -> Option<Self> {
+        (ratio.is_finite() && ratio > 0.0).then_some(Self(ratio))
+    }
+
+    /// The bare ratio a layout engine reads.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
+
+impl fmt::Display for LineSpacingMultiple {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+/// The error of a line-height multiple that is not finite and above zero.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("a line-height multiple is finite and above zero, not {0}")]
+pub struct InvalidLineSpacingMultiple(pub f32);
+
+impl TryFrom<f32> for LineSpacingMultiple {
+    type Error = InvalidLineSpacingMultiple;
+
+    fn try_from(ratio: f32) -> Result<Self, Self::Error> {
+        Self::new(ratio).ok_or(InvalidLineSpacingMultiple(ratio))
+    }
+}
+
+impl From<LineSpacingMultiple> for f32 {
+    fn from(multiple: LineSpacingMultiple) -> Self {
+        multiple.0
+    }
+}
+
 /// One line-height setting. The mode decides the unit of its number, so each
 /// mode carries its own.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LineHeight {
-    /// A multiple of the font size, a bare ratio.
-    Multiple(f32),
+    /// A multiple of the font size.
+    Multiple(LineSpacingMultiple),
     /// An exact height.
     Exact(Pt),
     /// A floor on the height.
@@ -549,14 +598,15 @@ pub enum LineHeight {
 }
 
 impl LineHeight {
-    /// The setting a stored mode and number read as.
+    /// The setting a stored mode and number read as. `None` for a multiple
+    /// that is not finite and above zero.
     #[must_use]
-    pub fn from_stored(mode: LineHeightMode, value: f32) -> Self {
-        match mode {
-            LineHeightMode::Multiple => Self::Multiple(value),
+    pub fn from_stored(mode: LineHeightMode, value: f32) -> Option<Self> {
+        Some(match mode {
+            LineHeightMode::Multiple => Self::Multiple(LineSpacingMultiple::new(value)?),
             LineHeightMode::Exact => Self::Exact(Pt::new(value)),
             LineHeightMode::AtLeast => Self::AtLeast(Pt::new(value)),
-        }
+        })
     }
 
     /// The mode the store writes.
@@ -573,7 +623,7 @@ impl LineHeight {
     #[must_use]
     pub fn stored_value(self) -> f32 {
         match self {
-            Self::Multiple(factor) => factor,
+            Self::Multiple(factor) => factor.get(),
             Self::Exact(height) | Self::AtLeast(height) => height.get(),
         }
     }

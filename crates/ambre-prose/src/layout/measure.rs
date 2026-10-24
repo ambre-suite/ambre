@@ -169,9 +169,9 @@ impl EffectiveStyle {
 /// applied by [`Measurer::shape`], which has the measured line to compare.
 fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> LineHeight {
     match paragraph.line_height {
-        None => LineHeight::FontSizeRelative(defaults.line_height),
+        None => LineHeight::FontSizeRelative(defaults.line_height.get()),
         Some(height) => match height {
-            StoredLineHeight::Multiple(factor) => LineHeight::FontSizeRelative(factor),
+            StoredLineHeight::Multiple(factor) => LineHeight::FontSizeRelative(factor.get()),
             StoredLineHeight::Exact(points) => LineHeight::Absolute(points.to_doc_px().get()),
             StoredLineHeight::AtLeast(_) => LineHeight::MetricsRelative(1.0),
         },

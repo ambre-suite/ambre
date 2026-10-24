@@ -20,7 +20,7 @@ use loro::{
 
 use ambre_bus::app::prose::{
     Align, BlockType, DocCount, DocOffset, DocSpan, HeadingLevel, LineHeight, LineHeightMode,
-    ListStyle, OrderedStyle, ParagraphStyle, StyleId,
+    LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle, StyleId,
 };
 
 // -----------------------------------------------------------------------------
@@ -1020,7 +1020,7 @@ fn read_line_height(node: &Fields<NodeKey>) -> Option<LineHeight> {
         .ok()
         .and_then(LineHeightMode::from_code)?;
     let value = read_f64(&map, LineHeightKey::Value)?;
-    Some(LineHeight::from_stored(mode, value as f32))
+    LineHeight::from_stored(mode, value as f32)
 }
 
 // -----------------------------------------------------------------------------
@@ -1067,7 +1067,7 @@ const DEFAULT_MARGIN: Mm = Mm::new(20.0);
 /// because a string constant in this module is read as a schema key
 /// (`SCHEMA-018`).
 const DEFAULT_FONT_SIZE: FontSize = FontSize::from_whole_points(11);
-const DEFAULT_LINE_HEIGHT: f32 = 1.5;
+const DEFAULT_LINE_HEIGHT: LineSpacingMultiple = LineSpacingMultiple::ONE_AND_HALF;
 
 /// The page format a document declares, in millimetres.
 ///
@@ -1108,7 +1108,7 @@ pub struct DocDefaults {
     pub font_family: String,
     pub font_size: FontSize,
     /// A multiple of the font size, never an absolute length.
-    pub line_height: f32,
+    pub line_height: LineSpacingMultiple,
 }
 
 impl Default for DocDefaults {
@@ -1136,11 +1136,6 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
     else {
         return fallback;
     };
-    let read = |key: DefaultsKey, default: f32| -> f32 {
-        read_f32(&defaults, key)
-            .filter(|number| number.is_finite() && *number > 0.0)
-            .unwrap_or(default)
-    };
     DocDefaults {
         font_family: read_string(&defaults, DefaultsKey::FontFamily)
             .filter(|name| !name.is_empty())
@@ -1149,7 +1144,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
             .filter(|number| *number > 0.0)
             .and_then(FontSize::new)
             .unwrap_or(fallback.font_size),
-        line_height: read(DefaultsKey::LineHeight, fallback.line_height),
+        line_height: read_f32(&defaults, DefaultsKey::LineHeight)
+            .and_then(LineSpacingMultiple::new)
+            .unwrap_or(fallback.line_height),
     }
 }
 
@@ -1266,7 +1263,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
         .insert(DefaultsKey::FontSizePt, f64::from(text.font_size.points()))
         .ok()?;
     defaults
-        .insert(DefaultsKey::LineHeight, f64::from(text.line_height))
+        .insert(DefaultsKey::LineHeight, f64::from(text.line_height.get()))
         .ok()?;
     // The two registers no seeded key belongs to are opened all the same, so
     // every peer addresses one container rather than minting a rival one.

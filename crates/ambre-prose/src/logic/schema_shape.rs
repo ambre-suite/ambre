@@ -30,8 +30,8 @@ use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
 use crate::doc;
 use crate::events::HeadingLevel;
 use crate::events::{
-    Align, BlockInit, CellBorder, LineHeight, ListStyle, OrderedStyle, ParagraphStyle,
-    ProseCommand, VAlign, tree_id,
+    Align, BlockInit, CellBorder, LineHeight, LineSpacingMultiple, ListStyle, OrderedStyle,
+    ParagraphStyle, ProseCommand, VAlign, tree_id,
 };
 use crate::logic::ProseState;
 use crate::schema::{MIGRATIONS, SCHEMA_VERSION};
@@ -355,7 +355,7 @@ pub(super) fn document_of_every_key() -> ProseState {
             indent_right: Some(ambre_core::Pt::new(3.0)),
             space_before: Some(ambre_core::Pt::new(4.0)),
             space_after: Some(ambre_core::Pt::new(5.0)),
-            line_height: Some(LineHeight::Multiple(1.5)),
+            line_height: Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF)),
             keep_together: Some(true),
             keep_with_next: Some(true),
         },
