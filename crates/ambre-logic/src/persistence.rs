@@ -569,7 +569,6 @@ impl PersistenceStore {
     /// Resolves to an empty list when there is none or the read failed.
     pub fn load_deltas(&self, document_id: DocumentId) -> oneshot::Receiver<Vec<SealedRowBytes>> {
         let (tx, rx) = answer();
-        let key = IdbKey::document(document_id);
         let request = self
             .db
             .transaction_with_str(IdbStore::Deltas.name())
@@ -670,7 +669,6 @@ impl PersistenceStore {
         document_id: DocumentId,
     ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, SessionNonce)>> {
         let (tx, rx) = answer();
-        let key = IdbKey::document(document_id);
         let request = self
             .db
             .transaction_with_str(IdbStore::Sessions.name())
