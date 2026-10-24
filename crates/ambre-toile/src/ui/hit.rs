@@ -14,22 +14,29 @@ use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementId}
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
-use super::viewport::ViewportTransform;
+use ambre_core::ViewPx;
+
+use super::viewport::{BoardLength, MIN_ZOOM, ViewportTransform};
 
 /// The screen distance within which a pointer reaches a thin stroke's
 /// outline. Keeps hair-thin lines and open paths clickable (`TOILE-UI-225`).
-pub(crate) const PICK_PX: f64 = 4.0;
+pub(crate) const PICK_PX: ViewPx = ViewPx::new(4.0);
 
 /// [`PICK_PX`] in world units under `cam`: the reach of a pointer at this
-/// zoom. Every pointer hit test takes it, so the reach holds on screen.
-pub fn pick_floor(cam: &ViewportTransform) -> f64 {
-    PICK_PX / cam.zoom.get().max(super::viewport::MIN_ZOOM.get())
+/// zoom. Every pointer hit test takes it, so the reach holds on screen. A zoom
+/// below the camera's floor reads as the floor.
+pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
+    let floored = ViewportTransform {
+        zoom: if cam.zoom < MIN_ZOOM { MIN_ZOOM } else { cam.zoom },
+        ..*cam
+    };
+    floored.to_board(PICK_PX)
 }
 
 /// Exact hit-test of one element against a world-space point. `pick` is the
 /// floor of a stroke's reach, in world units (see [`pick_floor`]). `false`
 /// for a `Group` (it paints nothing; selection resolves through membership,).
-pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: f64) -> bool {
+pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: BoardLength) -> bool {
     if elem.locked {
         return false;
     }
@@ -45,9 +52,9 @@ pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: f64) -> bool {
         | DisplayGeom::DocEmbed { .. } => elem.bounds.contains(local),
         DisplayGeom::Ellipse => ellipse_contains(elem.bounds, local),
         DisplayGeom::Triangle => path_contains(&triangle_path(elem.bounds), local),
-        DisplayGeom::Path(p) => path_hit(p, local, stroke_reach(elem.style.stroke_w, pick)),
+        DisplayGeom::Path(p) => path_hit(p, local, stroke_reach(stroke_width(&elem.style), pick)),
         DisplayGeom::Stroke(pts) => {
-            polyline_hit(pts, local, stroke_reach(elem.style.stroke_w, pick))
+            polyline_hit(pts, local, stroke_reach(stroke_width(&elem.style), pick))
         }
         DisplayGeom::Group => false,
     }
@@ -89,13 +96,19 @@ pub use super::walk::triangle_path;
 
 /// How far from its outline a stroke of width `stroke_w` is hit: half its
 /// width, and never less than the pointer's reach `pick`.
-pub(crate) fn stroke_reach(stroke_w: f32, pick: f64) -> f64 {
-    (stroke_w as f64 / 2.0).max(pick)
+pub(crate) fn stroke_reach(stroke_w: BoardLength, pick: BoardLength) -> BoardLength {
+    (stroke_w / 2.0).max(pick)
+}
+
+/// The stroke width of a style, as a board length. The style keeps the `f32`
+/// the bus and the document store carry.
+pub(crate) fn stroke_width(style: &ambre_bus::app::toile::ElementStyle) -> BoardLength {
+    BoardLength::new(f64::from(style.stroke_w))
 }
 
 /// A closed path hits on fill; either open or closed also hits within `tol`
 /// of its outline.
-fn path_hit(path: &BezPath, local: Point, tol: f64) -> bool {
+fn path_hit(path: &BezPath, local: Point, tol: BoardLength) -> bool {
     if path_contains(path, local) {
         return true;
     }
@@ -107,22 +120,25 @@ fn path_contains(path: &BezPath, local: Point) -> bool {
     path.contains(local)
 }
 
-/// Minimum distance from `local` to any segment of `path` (world units).
-pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> f64 {
-    path.segments()
-        .map(|seg| seg.nearest(local, 1e-3).distance_sq)
-        .fold(f64::INFINITY, f64::min)
-        .sqrt()
+/// Minimum distance from `local` to any segment of `path`.
+pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> BoardLength {
+    BoardLength::new(
+        path.segments()
+            .map(|seg| seg.nearest(local, 1e-3).distance_sq)
+            .fold(f64::INFINITY, f64::min)
+            .sqrt(),
+    )
 }
 
 /// A polyline (freehand stroke) hits within `tol` of any of its segments.
-fn polyline_hit(pts: &[Point], local: Point, tol: f64) -> bool {
+fn polyline_hit(pts: &[Point], local: Point, tol: BoardLength) -> bool {
+    let within = |d: f64| BoardLength::new(d) <= tol;
     match pts {
         [] => false,
-        [only] => only.distance(local) <= tol,
+        [only] => within(only.distance(local)),
         _ => pts
             .windows(2)
-            .any(|w| matches!(w, &[a, b] if point_segment_distance(local, a, b) <= tol)),
+            .any(|w| matches!(w, &[a, b] if within(point_segment_distance(local, a, b)))),
     }
 }
 
@@ -141,7 +157,11 @@ fn point_segment_distance(p: Point, a: Point, b: Point) -> f64 {
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last
 /// element that passes `exact_hit` wins (first hit walking front-to-back).
 /// `pick` is the pointer's reach in world units (see [`pick_floor`]).
-pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point, pick: f64) -> Option<ElementId> {
+pub fn hit_topmost(
+    nodes: &[DisplayNode],
+    world_pt: Point,
+    pick: BoardLength,
+) -> Option<ElementId> {
     nodes
         .iter()
         .rev()
@@ -203,7 +223,7 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
                 // counts as a touch. So does the element center inside the rect.
                 let c = b.center();
                 // The box's own geometry decides, with no pointer reach.
-                rect.contains(c) || exact_hit(e, c, 0.0)
+                rect.contains(c) || exact_hit(e, c, BoardLength::ZERO)
             } else {
                 false
             }

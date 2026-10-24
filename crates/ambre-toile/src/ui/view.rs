@@ -1648,7 +1648,7 @@ impl ToileView {
     }
 
     /// The pick floor in world units at the current zoom (`TOILE-UI-225`).
-    fn pick(&self) -> f64 {
+    fn pick(&self) -> super::viewport::BoardLength {
         super::hit::pick_floor(&self.cam)
     }
 
@@ -1966,7 +1966,7 @@ impl ToileView {
         let Some(path) = arrow::path_of(&self.display, &id) else {
             return false;
         };
-        let tol = arrow::HANDLE_R / self.cam.zoom.get();
+        let tol = self.cam.to_board(arrow::HANDLE_R);
         let Some(end) = arrow::handle_at(path, world, tol) else {
             return false;
         };

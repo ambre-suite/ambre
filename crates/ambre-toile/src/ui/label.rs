@@ -66,7 +66,11 @@ pub fn label_rect(path: &BezPath) -> Option<Rect> {
 /// tolerance, or anywhere inside the caption box of an arrow that carries one.
 /// `pick` is the world reach of the screen pick floor (`hit::pick_floor`).
 /// Nodes are back-to-front, so the walk runs in reverse.
-pub fn connector_at(nodes: &[DisplayNode], world_pt: Point, pick: f64) -> Option<ConnectorId> {
+pub fn connector_at(
+    nodes: &[DisplayNode],
+    world_pt: Point,
+    pick: super::viewport::BoardLength,
+) -> Option<ConnectorId> {
     nodes
         .iter()
         .rev()
@@ -75,7 +79,7 @@ pub fn connector_at(nodes: &[DisplayNode], world_pt: Point, pick: f64) -> Option
             DisplayNode::Element(_) => None,
         })
         .find(|c| {
-            let tol = super::hit::stroke_reach(c.style.stroke_w, pick);
+            let tol = super::hit::stroke_reach(super::hit::stroke_width(&c.style), pick);
             if super::hit::path_outline_distance(&c.path, world_pt) <= tol {
                 return true;
             }
@@ -89,7 +93,12 @@ mod tests {
     use ambre_bus::app::toile::{DisplayConnector, ElementStyle, EndCaps};
 
     use super::*;
-    use crate::ui::hit::PICK_PX as PICK;
+    use crate::ui::viewport::{BoardLength, ViewportTransform};
+
+    /// The pointer's reach under a camera at zoom 1.
+    fn pick() -> BoardLength {
+        crate::ui::hit::pick_floor(&ViewportTransform::default())
+    }
 
     fn line(a: (f64, f64), b: (f64, f64)) -> BezPath {
         let mut p = BezPath::new();
@@ -144,10 +153,10 @@ mod tests {
     fn a_click_on_the_line_picks_the_arrow() {
         let nodes = vec![conn("c1", line((0.0, 0.0), (100.0, 0.0)), "")];
         assert_eq!(
-            connector_at(&nodes, Point::new(50.0, 1.0), PICK),
+            connector_at(&nodes, Point::new(50.0, 1.0), pick()),
             Some(ConnectorId("c1".into()))
         );
-        assert_eq!(connector_at(&nodes, Point::new(50.0, 40.0), PICK), None);
+        assert_eq!(connector_at(&nodes, Point::new(50.0, 40.0), pick()), None);
     }
 
     /// A caption is part of its arrow's click target. A click on the words picks
@@ -157,13 +166,13 @@ mod tests {
         let far = Point::new(50.0, 10.0); // clear of the line, inside the box
         let captioned = vec![conn("c1", line((0.0, 0.0), (100.0, 0.0)), "owns")];
         assert_eq!(
-            connector_at(&captioned, far, PICK),
+            connector_at(&captioned, far, pick()),
             Some(ConnectorId("c1".into()))
         );
         // The same box on an uncaptioned arrow is not a target: an empty
         // caption paints nothing, so nothing there is clickable.
         let bare = vec![conn("c1", line((0.0, 0.0), (100.0, 0.0)), "")];
-        assert_eq!(connector_at(&bare, far, PICK), None);
+        assert_eq!(connector_at(&bare, far, pick()), None);
     }
 
     /// Two arrows overlapping at a point: the later one in the paint order wins,
@@ -175,7 +184,7 @@ mod tests {
             conn("over", line((0.0, 0.0), (100.0, 0.0)), ""),
         ];
         assert_eq!(
-            connector_at(&nodes, Point::new(50.0, 0.0), PICK),
+            connector_at(&nodes, Point::new(50.0, 0.0), pick()),
             Some(ConnectorId("over".into()))
         );
     }

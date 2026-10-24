@@ -568,7 +568,7 @@ pub struct ToolMachine {
     cursor: Point,
     /// The pick floor in world units at the press (`hit::pick_floor`). The
     /// release reuses it, so a gesture picks under one reach.
-    pick: f64,
+    pick: super::viewport::BoardLength,
 }
 
 impl Default for ToolMachine {
@@ -587,7 +587,7 @@ impl ToolMachine {
             pen_dragging: false,
             laser: None,
             cursor: Point::ZERO,
-            pick: super::hit::PICK_PX,
+            pick: super::hit::pick_floor(&ViewportTransform::default()),
         }
     }
 

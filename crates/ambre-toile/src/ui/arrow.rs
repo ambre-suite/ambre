@@ -13,13 +13,16 @@ use ambre_bus::app::toile::{
     ConnectorId, DisplayNode, DisplayViewport, ElementId, End, NodeId, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
+use ambre_core::ViewPx;
 use ambre_draw::{BezPath, Point};
 use kurbo::ParamCurve;
+
+use super::viewport::BoardLength;
 
 /// Endpoint handle radius in screen pixels. The grab tolerance is this radius
 /// taken back into world units, so a handle stays equally easy to hit at every
 /// zoom.
-pub const HANDLE_R: f64 = 5.0;
+pub const HANDLE_R: ViewPx = ViewPx::new(5.0);
 
 /// The two ends of a routed arrow in world space: where it starts, where it
 /// ends. `None` for an empty path.
@@ -32,10 +35,10 @@ pub fn endpoints(path: &BezPath) -> Option<(Point, Point)> {
 
 /// Which endpoint handle `world` grabs, within `tol` world units. The nearer
 /// handle wins when both are in range, so a zero-length arrow still answers.
-pub fn handle_at(path: &BezPath, world: Point, tol: f64) -> Option<End> {
+pub fn handle_at(path: &BezPath, world: Point, tol: BoardLength) -> Option<End> {
     let (from, to) = endpoints(path)?;
     let (df, dt) = (from.distance(world), to.distance(world));
-    if df.min(dt) > tol {
+    if BoardLength::new(df.min(dt)) > tol {
         return None;
     }
     Some(if df <= dt { End::From } else { End::To })
@@ -51,7 +54,7 @@ pub fn retarget_on_release(
     endpoint: End,
     display: &DisplayViewport,
     world: Point,
-    pick: f64,
+    pick: BoardLength,
 ) -> Option<ToileCommand> {
     let to = super::hit::hit_topmost(&display.nodes, world, pick)?;
     let bounds = super::tool::element_bounds(display, &to)?;
@@ -177,9 +180,9 @@ mod tests {
     #[test]
     fn a_press_grabs_the_nearer_end() {
         let p = line((0.0, 0.0), (100.0, 0.0));
-        assert_eq!(handle_at(&p, Point::new(2.0, 1.0), 6.0), Some(End::From));
-        assert_eq!(handle_at(&p, Point::new(98.0, 1.0), 6.0), Some(End::To));
-        assert_eq!(handle_at(&p, Point::new(50.0, 0.0), 6.0), None);
+        assert_eq!(handle_at(&p, Point::new(2.0, 1.0), BoardLength::new(6.0)), Some(End::From));
+        assert_eq!(handle_at(&p, Point::new(98.0, 1.0), BoardLength::new(6.0)), Some(End::To));
+        assert_eq!(handle_at(&p, Point::new(50.0, 0.0), BoardLength::new(6.0)), None);
     }
 
     /// A re-aim released over a shape moves the dragged end there, on the side
@@ -195,7 +198,7 @@ mod tests {
             End::To,
             &display,
             Point::new(50.0, 98.0),
-            crate::ui::hit::PICK_PX,
+            crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default()),
         );
         match cmd {
             Some(ToileCommand::RetargetConnector {
@@ -257,7 +260,7 @@ mod tests {
                 End::From,
                 &display,
                 Point::new(500.0, 500.0),
-                crate::ui::hit::PICK_PX,
+                crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default()),
             )
             .is_none()
         );
