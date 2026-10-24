@@ -2033,7 +2033,7 @@ mod tests {
     // --- The members of a space, and their presence ---
 
     use ambre_bus::{MemberInfo, MemberView, Presence, RequestId, RestCommand};
-    use ambre_murmure::PRESENCE_EXPIRY_MS;
+    use ambre_murmure::PRESENCE_EXPIRY;
 
     /// The member list of the last members event the view got.
     fn last_members(shown: &[UiEvent]) -> Option<Vec<MemberView>> {
@@ -2303,11 +2303,11 @@ mod tests {
                 },
             });
         };
-        tick(&mut state, PRESENCE_EXPIRY_MS.0);
+        tick(&mut state, PRESENCE_EXPIRY.0);
         assert!(last_members(&drain(&ui)).is_none(), "Bob is still online");
         assert_eq!(samples(&drain(&sync)).len(), 1);
 
-        tick(&mut state, PRESENCE_EXPIRY_MS.0 + 1);
+        tick(&mut state, PRESENCE_EXPIRY.0 + 1);
         let members = last_members(&drain(&ui)).expect("a member list");
         assert_eq!(members[0].presence, Presence::Offline);
         assert_eq!(samples(&drain(&sync)).len(), 1);

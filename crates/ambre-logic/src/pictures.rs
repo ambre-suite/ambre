@@ -28,11 +28,11 @@ const MAX_SIZE: ImageSize = ImageSize::new(4096, 4096);
 const MAX_ALLOC: ByteSize = ByteSize(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
 /// the frames that fit (`ambre-spec-budgets.md section 6`).
-pub(crate) const PICTURE_BYTES: ByteSize = ByteSize(8 * 1024 * 1024);
-/// A frame delay at or under this plays at [`SLOW_DELAY_MS`], as browsers do:
+pub(crate) const PICTURE_MAX_SIZE: ByteSize = ByteSize(8 * 1024 * 1024);
+/// A frame delay at or under this plays at [`SLOW_DELAY`], as browsers do:
 /// a file that asks for none would otherwise spin.
-const FAST_DELAY_MS: Millis = Millis(10);
-const SLOW_DELAY_MS: Millis = Millis(100);
+const FAST_DELAY: Millis = Millis(10);
+const SLOW_DELAY: Millis = Millis(100);
 
 impl LogicState {
     /// Fetch the image `media_ref`, stored under `document_id`, for the view
@@ -113,13 +113,13 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                 let (numer, denom) = frame.delay().numer_denom_ms();
                 let pixels = scale(frame.into_buffer(), size);
                 let after = held.saturating_add(ByteSize::of_len(pixels.len()));
-                if !frames.is_empty() && after > PICTURE_BYTES {
+                if !frames.is_empty() && after > PICTURE_MAX_SIZE {
                     break;
                 }
                 held = after;
                 frames.push(PictureFrame {
                     pixels,
-                    delay_ms: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
+                    delay: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
                 });
             }
             (!frames.is_empty()).then_some(Picture { size, frames })
@@ -134,7 +134,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                 size,
                 frames: vec![PictureFrame {
                     pixels: scale(image, size),
-                    delay_ms: ambre_core::Millis(0),
+                    delay: ambre_core::Millis(0),
                 }],
             })
         }
@@ -168,8 +168,8 @@ fn scale(image: RgbaImage, size: ImageSize) -> Vec<u8> {
 }
 
 fn delay(ms: Millis) -> Millis {
-    if ms <= FAST_DELAY_MS {
-        SLOW_DELAY_MS
+    if ms <= FAST_DELAY {
+        SLOW_DELAY
     } else {
         ms
     }
@@ -218,7 +218,7 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.delay_ms == ambre_core::Millis(70))
+                .all(|f| f.delay == ambre_core::Millis(70))
         );
         assert!(
             picture
@@ -228,7 +228,7 @@ mod tests {
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&gif(2, (8, 8), 0)).expect("a GIF");
-        assert!(spinning.frames.iter().all(|f| f.delay_ms == SLOW_DELAY_MS));
+        assert!(spinning.frames.iter().all(|f| f.delay == SLOW_DELAY));
     }
 
     /// A still image is one frame, and a small one keeps its size. A file
@@ -255,9 +255,9 @@ mod tests {
     #[test]
     fn an_animation_past_the_bound_keeps_the_frames_that_fit() {
         let frame = 480 * 320 * 4;
-        let fit = PICTURE_BYTES.as_len() / frame;
+        let fit = PICTURE_MAX_SIZE.as_len() / frame;
         let picture = decode(&gif(fit + 3, (480, 320), 50)).expect("a GIF");
         assert_eq!(picture.frames.len(), fit);
-        assert!(picture.bytes() <= PICTURE_BYTES);
+        assert!(picture.bytes() <= PICTURE_MAX_SIZE);
     }
 }
