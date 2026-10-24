@@ -379,9 +379,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:
-  # leptos CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned
-  # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std` for
-  # multi-threaded wasm. The crates it covers are listed in the `justfile`.
+  # leptos CSR + DOM) under headless Chrome via `cargo test` and
+  # `wasm-bindgen-test-runner`. The pinned nightly + rust-src
+  # (rust-toolchain.toml) supply `-Z build-std` for multi-threaded wasm. The crates it covers are listed in the `justfile`.
   # ---------------------------------------------------------------------------
   test-wasm:
     runs-on: ubuntu-latest
@@ -397,10 +397,19 @@ jobs:
           # Only the default branch writes caches; feature branches restore
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install wasm-pack
+      # The test runner must be the `wasm-bindgen` version Cargo.lock pins: it
+      # refuses a module another version wrote. The runner image ships Chrome
+      # and a matching `chromedriver` on PATH, which the recipe falls back to.
+      - name: wasm-bindgen version from Cargo.lock
+        id: wasm_bindgen
+        run: |
+          version=$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install wasm-bindgen-test-runner
         uses: taiki-e/install-action@v2
         with:
-          tool: wasm-pack
+          tool: wasm-bindgen@${{ steps.wasm_bindgen.outputs.version }}
       # Clippy on the wasm target: the code host clippy never reads holds the
       # panic lints too (`ARCH-028`). Before the tests, so a lint fails fast.
       # The recipe also checks the Logic and app wasm test targets.

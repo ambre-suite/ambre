@@ -11,13 +11,13 @@
 #   ./run_tests.sh            # lint + native + db + wasm (default: full suite)
 #   ./run_tests.sh native     # host tier only (no docker, no .env needed)
 #   ./run_tests.sh db         # db tier only (services + .env)
-#   ./run_tests.sh wasm       # wasm tier only (needs wasm-pack + Chrome)
+#   ./run_tests.sh wasm       # wasm tier only (needs wasm-bindgen-test-runner + Chrome)
 #   ./run_tests.sh lint       # fmt + clippy only
 #   KEEP_SERVICES=1 ./run_tests.sh   # leave the docker services running at the end
 #
 # The wasm tier (`cfg(target_arch = "wasm32")` chrome tests, Epic ET) runs the
-# Trame Leptos UI tests under headless Chrome via `wasm-pack`; it is `-Z
-# build-std`-heavy, so it comes last in the full suite.
+# Leptos UI tests under headless Chrome via `wasm-bindgen-test-runner`; it is
+# `-Z build-std`-heavy, so it comes last in the full suite.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -65,11 +65,14 @@ run_db() {
 
 run_wasm() {
     echo ">> test-wasm (chrome / Leptos UI, headless Chrome)"
-    # wasm-pack drives wasm-bindgen-test-runner; without it the tier cannot run
-    # (same contract as the db tier needing docker). Fail with an actionable hint.
-    if ! command -v wasm-pack >/dev/null 2>&1; then
-        echo "ERROR: wasm-pack not found; install it with 'cargo install wasm-pack'" >&2
-        echo "       (the wasm tier also needs a Chrome/Chromium binary on PATH)" >&2
+    # cargo runs each test module through wasm-bindgen-test-runner; without it
+    # the tier cannot run (same contract as the db tier needing docker). Fail
+    # with an actionable hint naming the version Cargo.lock pins.
+    if ! command -v wasm-bindgen-test-runner >/dev/null 2>&1; then
+        version=$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
+        echo "ERROR: wasm-bindgen-test-runner not found; install it with" >&2
+        echo "       'cargo install wasm-bindgen-cli --version ${version}'" >&2
+        echo "       (the wasm tier also needs Chrome and its chromedriver, see CHROMEDRIVER)" >&2
         exit 1
     fi
     just test-wasm

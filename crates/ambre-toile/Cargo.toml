@@ -98,7 +98,7 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 
 # DOM tests for the Toile chrome (Epic `ET`, `ambre-spec-testing.md`
 # "wasm" tier): leptos CSR + real `document`, run via
-# `wasm-pack test --headless --chrome crates/ambre-toile` (`just test-wasm`).
+# `wasm-bindgen-test-runner` in headless Chrome (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 web-sys = { workspace = true }

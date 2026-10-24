@@ -144,8 +144,8 @@ pub fn booted_kind(route: &Route) -> DocType {
 
 // -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`, so even this pure path<->Route
-// mapping is only reachable on the wasm target. These run under node via the
-// `wasm-bindgen-test-runner` (`wasm-pack test`); no DOM/browser needed.
+// mapping is only reachable on the wasm target. These run in the browser the
+// crate's lib test configures (`just test-wasm`), and need no DOM.
 #[cfg(test)]
 mod tests {
     use super::*;

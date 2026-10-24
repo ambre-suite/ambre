@@ -660,8 +660,7 @@ fn sign_in_panel(
 // -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`, so the launcher chrome is only
 // reachable on the wasm target. These mount the type picker into a real headless
-// Chrome document and drive it through `web-sys`, run via `wasm-pack test
-// --headless --chrome crates/ambre-app` (`just test-wasm`).
+// Chrome document and drive it through `web-sys` (`just test-wasm`).
 #[cfg(test)]
 mod tests {
     use super::*;

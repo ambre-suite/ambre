@@ -72,7 +72,7 @@ proptest = { workspace = true }
 
 # Leptos UI tests (Epic `ET`, `ambre-spec-testing.md`): the chrome is
 # `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the
-# wasm target via `wasm-pack test --headless --chrome` (`just test-wasm`). These
+# wasm target in headless Chrome (`just test-wasm`). These
 # dev-deps let the integration test name the chrome's public types directly
 # (ambre-bus events, the leptos signals, ambre-chrome stores, the perf snapshot).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

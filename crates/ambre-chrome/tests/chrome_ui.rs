@@ -3,8 +3,7 @@
 //!
 //! The chrome components are leptos CSR built on `web-sys`/`wasm-bindgen`: the
 //! reactive store and the mounted DOM only exist on the wasm target. So these run
-//! under the `wasm-bindgen-test-runner`, wrapped by `wasm-pack test --headless
-//! --chrome crates/ambre-chrome` (`just test-wasm`).
+//! under the `wasm-bindgen-test-runner` in headless Chrome (`just test-wasm`).
 //!
 //! Two belts (mirrors the trame chrome suite):
 //!   - the **reactive belt** -- `CommandStates` over real leptos signals, no DOM;

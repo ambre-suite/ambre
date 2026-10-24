@@ -1037,7 +1037,7 @@ fn request_database(event: &web_sys::Event) -> Option<IdbDatabase> {
 }
 
 // ============================================================================
-// wasm tests (headless Chrome via `wasm-pack test`). Exercise the two paths the
+// wasm tests (headless Chrome, `just test-wasm`). Exercise the two paths the
 // TOFU store adds (`ambre-spec-key-verification.md`, CHROME-053) that a native
 // test cannot reach. One is the trusted_keys roundtrip. The other is the
 // upgrade to the next version, which must add trusted_keys WITHOUT a

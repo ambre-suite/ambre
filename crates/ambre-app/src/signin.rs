@@ -135,7 +135,7 @@ fn take_pending_state() -> Option<ambre_core::OidcState> {
 
 // -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`; these run in headless Chrome
-// through `wasm-pack test --headless --chrome crates/ambre-app`.
+// through `just test-wasm`.
 #[cfg(test)]
 mod tests {
     use super::*;

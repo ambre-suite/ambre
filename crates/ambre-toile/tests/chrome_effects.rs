@@ -3,7 +3,7 @@
 //! An effect runs on the next tick, so each test here is async and awaits
 //! `leptos::task::tick()`. They live apart from `chrome_ui`: there a tick
 //! would also run the effects of earlier tests, whose owners are gone.
-//! They run under `wasm-pack test --headless --chrome crates/ambre-toile`
+//! They run under `wasm-bindgen-test-runner` in headless Chrome
 //! (`just test-wasm`). On the host target the whole file is empty.
 #![cfg(target_arch = "wasm32")]
 #![allow(

@@ -2,7 +2,7 @@
 //! (`features/ambre-spec-prose-comments.md section 4`).
 //!
 //! The chrome is wasm-only Leptos, so these tests run under
-//! `wasm-pack test --headless --chrome crates/ambre-prose` (`just test-wasm`).
+//! `wasm-bindgen-test-runner` in headless Chrome (`just test-wasm`).
 //! On the host target the whole file is empty.
 #![cfg(target_arch = "wasm32")]
 #![allow(

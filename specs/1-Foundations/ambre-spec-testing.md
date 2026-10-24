@@ -131,7 +131,7 @@ serves, and what an allowlist line means.
 | :--- | :--- | :--- | :--- |
 | **host** | `just test-native` | the default tier. Pure logic, zero external dependency. The Logic thread, the Sync pipeline, every formula and CRDT handler, and the render feed | fast |
 | **db** | `just test-db` | `ambre-server` integration behind the Cargo feature `db`. `docker compose up postgres redis minio`, then `#[sqlx::test]` per test | medium |
-| **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `wasm-pack test --headless --chrome` | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
+| **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `cargo test --target wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, in headless Chrome | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
 | **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`). A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
@@ -280,7 +280,7 @@ run the same command.
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, and the primitive gate |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, minio started by a step, with `--features db` |
-| `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `wasm-pack test --headless --chrome` |
+| `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
 | `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |

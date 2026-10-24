@@ -3,8 +3,8 @@
 //!
 //! The chrome (`ambre_toile::chrome`) is `cfg(target_arch = "wasm32")` -- leptos
 //! CSR + DOM (`web-sys`/`wasm-bindgen`) that does not compile on the host. So its
-//! tests run under the wasm target via the `wasm-bindgen-test-runner`, wrapped by
-//! `wasm-pack test --headless --chrome crates/ambre-toile` (`just test-wasm`).
+//! tests run under the wasm target via the `wasm-bindgen-test-runner`, in
+//! headless Chrome (`just test-wasm`).
 //!
 //! The pure models are host-tested in `ui::{status,menu,menu_bar,palette}`; this
 //! belt mounts the real components and asserts the composed DOM plus input:

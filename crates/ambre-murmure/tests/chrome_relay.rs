@@ -2,8 +2,7 @@
 //! (`features/ambre-spec-murmure-layout.md`).
 //!
 //! The chrome is wasm-only Leptos, so these tests run under
-//! `wasm-pack test --headless --chrome crates/ambre-murmure --test chrome_relay`
-//! (`just test-wasm`). On the host target the whole file is empty.
+//! `wasm-bindgen-test-runner` in headless Chrome (`just test-wasm`). On the host target the whole file is empty.
 #![cfg(target_arch = "wasm32")]
 #![allow(
     clippy::unwrap_used,

@@ -163,8 +163,19 @@ test-browser:
     cargo build -p ambre-server
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
 
-# `wasm-pack` drives `wasm-bindgen-test-runner`; the pinned nightly + rust-src
-# (rust-toolchain.toml) supply `-Z build-std`.
+# `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
+# named as the target's runner; the pinned nightly + rust-src
+# (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of
+# `wasm-bindgen` that Cargo.lock pins: the runner refuses a module another
+# version wrote. `cargo install wasm-bindgen-cli --version <that version>`.
+#
+# The driver is headless Chrome. `CHROMEDRIVER` names its chromedriver when set,
+# and `chromedriver` on PATH otherwise: left unset, the runner would take the
+# first driver it finds, and it tries geckodriver first.
+# `WASM_BINDGEN_TEST_WEBDRIVER_JSON` may name a capabilities file, for example a
+# Chrome binary off the default path. `WASM_BINDGEN_TEST_ONLY_WEB` skips a test
+# module not configured for the browser, so no test runs under Node.
+wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner CHROMEDRIVER="${CHROMEDRIVER:-chromedriver}" WASM_BINDGEN_TEST_ONLY_WEB=1'
 
 # wasm tier: cfg(wasm32) surfaces under headless Chrome.
 #
@@ -191,16 +202,15 @@ test-browser:
 # debuginfo shrinks it to ~10 MB and the tests load instantly; stack traces are
 # irrelevant for these assertion-only UI tests.
 test-wasm:
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-trame
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-chrome
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-toile
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-trame
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-chrome
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-toile
     # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome test alone.
-    # `wasm-pack` builds the lib test target anyway; the crate root empties it on wasm.
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-prose --test chrome_panel
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
     # The Murmure unit tests are host-only too: the chrome relay test alone.
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-murmure --test chrome_relay
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-logic
-    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-app
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-app
 
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.

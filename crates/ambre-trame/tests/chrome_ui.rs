@@ -3,8 +3,8 @@
 //!
 //! The chrome (`ambre_trame::chrome`) is `cfg(target_arch = "wasm32")` -- leptos
 //! CSR + DOM (`web-sys`/`wasm-bindgen`) that does not compile on the host. So its
-//! tests run under the wasm target via the `wasm-bindgen-test-runner`, wrapped by
-//! `wasm-pack test --headless --chrome crates/ambre-trame` (`just test-wasm`).
+//! tests run under the wasm target via the `wasm-bindgen-test-runner`, in
+//! headless Chrome (`just test-wasm`).
 //!
 //! Two belts, per the story's DoD:
 //!   - the **reactive / presentation belt** -- the pure inbound-event mirrors
