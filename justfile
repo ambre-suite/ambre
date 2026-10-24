@@ -351,7 +351,8 @@ prose:
 # `--base` to name another revision. A section binds only from the first release
 # on: while no `git tag` matches `v[0-9]*`, no peer holds a document written
 # under any section, so this reads no base and holds the pairing of each freeze
-# with its belt alone (`SCHEMA-019`).
+# with its belt alone (`SCHEMA-019`). A shallow clone with no tag at all cannot
+# tell a release from none, so this refuses it: run `git fetch --tags --force`.
 
 # append-only schema freezes: a released shape section never moves.
 schema-freeze:

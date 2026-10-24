@@ -165,6 +165,28 @@ def released() -> list[str]:
     return done.stdout.split()
 
 
+def shallow() -> bool:
+    """Whether the repository is a shallow clone, which may lack every tag."""
+    done = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return done.stdout.strip() == "true"
+
+
+def tagless() -> bool:
+    """Whether the repository carries no tag of any pattern."""
+    done = subprocess.run(
+        ["git", "tag", "--list"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return not done.stdout.split()
+
+
 # `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
 # `SCHEMA_VERSION_ABSENT` are not a stamped number.
 STAMP = re.compile(
@@ -268,6 +290,15 @@ def main() -> int:
 
     tags = released()
     if not tags:
+        if shallow() and tagless():
+            print(
+                "ERROR: a shallow clone with no tag cannot tell a release from "
+                "none, so no section is checked and nothing is proved. Fetch the "
+                "tags first with `git fetch --tags --force`, and CI sets "
+                "`fetch-tags: true` on the checkout step.",
+                file=sys.stderr,
+            )
+            return 1
         return prerelease(args.check)
     print(f"mode: released ({len(tags)} tags match `{RELEASE_TAG}`), "
           "every published section is append-only")

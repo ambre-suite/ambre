@@ -10,7 +10,8 @@ like any other.
 
 A section binds only from the first release tag on. Each repository test runs
 in both modes, so an edit refused once a release ships passes before it, and a
-freeze parted from its belt is refused in both.
+freeze parted from its belt is refused in both. A shallow clone with no tag is
+refused, since it cannot tell a release from none.
 
 The pairing of a freeze with its belt is tested on a tree alone, since no
 revision comes into it. The section reader is tested on text alone. The rest runs against a real
@@ -221,6 +222,87 @@ class PrereleaseTest(RepositoryTest):
 
     TAG = None
     BOUND = 0
+
+
+class ShallowTest(unittest.TestCase):
+    """The release read from a shallow clone, which may carry no tag at all.
+
+    A shallow clone with no tag cannot tell a release from none, so it is
+    refused. The same clone holding a release tag binds the sections. A full
+    clone with no tag is pre-release, as it reads.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.origin = Path(self.tmp.name) / "origin"
+        self.origin.mkdir()
+        belt(self.origin, "ambre-x", version=1)
+        frozen(self.origin, "ambre-x")
+        git(self.origin, "init", "-q", "-b", "main")
+        git(self.origin, "config", "user.email", "t@example.com")
+        git(self.origin, "config", "user.name", "t")
+        git(self.origin, "add", "-A")
+        git(self.origin, "commit", "-qm", "freeze v1")
+        self.was = schema_freeze.ROOT
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        schema_freeze.ROOT = self.was
+        self.tmp.cleanup()
+
+    def edit(self, text: str) -> None:
+        """One commit on the origin that rewrites its shape file."""
+        shape(self.origin, "ambre-x", text)
+        git(self.origin, "add", "-A")
+        git(self.origin, "commit", "-qm", "edit")
+
+    def clone(self, depth: int | None) -> None:
+        """A clone of the origin, shallow when `depth` is set, and read."""
+        root = Path(self.tmp.name) / "clone"
+        args = ["clone", "-q", "--no-tags"]
+        if depth is not None:
+            args += [f"--depth={depth}"]
+        git(Path(self.tmp.name), *args, self.origin.as_uri(), str(root))
+        schema_freeze.ROOT = root
+
+    def run_check(self) -> int:
+        argv = sys.argv
+        sys.argv = ["schema_freeze.py", "--check", "--base", "HEAD~1"]
+        try:
+            return schema_freeze.main()
+        finally:
+            sys.argv = argv
+
+    def test_a_shallow_clone_without_tags_is_refused(self):
+        # The appended section is free in both modes, so only the missing
+        # tags can refuse.
+        self.edit(HEADER + V1 + V2)
+        self.clone(depth=2)
+        self.assertTrue(schema_freeze.shallow())
+        self.assertEqual(self.run_check(), 1)
+
+    def test_a_shallow_clone_with_a_release_tag_binds(self):
+        self.edit(HEADER + V1.replace("i64", "f64"))
+        self.clone(depth=2)
+        git(schema_freeze.ROOT, "tag", "v1.0.0")
+        self.assertTrue(schema_freeze.shallow())
+        self.assertEqual(self.run_check(), 1)
+
+    def test_a_shallow_clone_with_a_release_tag_lets_an_append_pass(self):
+        # The twin of the test above: the clone runs, so the refusal there is
+        # the edited section, not the shallow clone.
+        self.edit(HEADER + V1 + V2)
+        self.clone(depth=2)
+        git(schema_freeze.ROOT, "tag", "v1.0.0")
+        self.assertEqual(self.run_check(), 0)
+
+    def test_a_full_clone_without_tags_runs_pre_release(self):
+        # The edited section would bind once released: exit 0 proves the
+        # pre-release mode ran.
+        self.edit(HEADER + V1.replace("i64", "f64"))
+        self.clone(depth=None)
+        self.assertFalse(schema_freeze.shallow())
+        self.assertEqual(self.run_check(), 0)
 
 
 class BeltTest(unittest.TestCase):

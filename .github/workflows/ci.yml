@@ -33,10 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The whole history: the base branch for `schema-freeze`, and each freeze
-      # commit for `freeze-provenance`.
+      # commit for `freeze-provenance`. The tags too: `schema-freeze` reads a
+      # release tag to bind the sections, and refuses a shallow clone with none.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          fetch-tags: true
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
