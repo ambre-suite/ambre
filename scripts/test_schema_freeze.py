@@ -39,7 +39,10 @@ def belt(root: Path, crate: str, version: int = 1, missing: str | None = None) -
     each frozen file. `missing` names a belt left out."""
     src = root / "crates" / crate / "src"
     src.mkdir(parents=True, exist_ok=True)
-    body = f"pub const SCHEMA_VERSION: u32 = {version};\n"
+    body = (
+        "pub const SCHEMA_VERSION: SchemaVersion = "
+        f"SchemaVersion::new({version});\n"
+    )
     for name in schema_freeze.FREEZES.values():
         if name != missing:
             body += f"fn {name}() {{}}\n"
@@ -257,7 +260,7 @@ class BeltTest(unittest.TestCase):
         src.mkdir(parents=True)
         (src / "schema.rs").write_text(
             'pub const SCHEMA_VERSION_KEY: &str = "schema_version";\n'
-            "pub const SCHEMA_VERSION_ABSENT: u32 = 0;\n"
+            "pub const SCHEMA_VERSION_ABSENT: SchemaVersion = SchemaVersion(0);\n"
         )
         self.assertEqual(self.findings(), [])
 
