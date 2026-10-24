@@ -819,19 +819,20 @@ mod tests {
             paint(v);
             v.last_painted().unwrap().rows
         };
-        let [(_, top, _), .., (_, _, bottom)] = rows.as_slice() else {
+        let [first, .., last] = rows.as_slice() else {
             panic!("two rows: {rows:?}");
         };
+        let (top, bottom) = (first.bounds.top.get(), last.bounds.bottom.get());
         let mut view = bound.view.borrow_mut();
         for input in [
             InputEvent::PointerDown {
-                at: pointer(0.0, f64::from(*top)),
+                at: pointer(0.0, f64::from(top)),
                 button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             },
             InputEvent::PointerMove {
-                at: pointer(299.0, f64::from(*bottom - 1.0)),
+                at: pointer(299.0, f64::from(bottom - 1.0)),
             },
         ] {
             view.handle_input(&input);
