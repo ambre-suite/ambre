@@ -26,7 +26,7 @@
 
 use ambre_bus::app::toile::{FontFamily, FontSizeChoice};
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_core::Rgba;
+use ambre_core::{FontSize, Rgba};
 
 use super::icons;
 use crate::ui::commands as registry;
@@ -97,11 +97,11 @@ pub fn SelectionToolbar(
             f.as_deref().unwrap_or_default(),
         )));
     });
-    // Size: the shared dropdown speaks whole points (`Option<u16>`, `None` =
+    // Size: the shared dropdown speaks sizes (`Option<FontSize>`, `None` =
     // auto), which is the choice the style holds.
-    let size_current = Signal::derive(move || font_size.get().whole_points());
-    let on_size = Callback::new(move |p: Option<u16>| {
-        let v = FontSizeChoice::from_whole_points(p);
+    let size_current = Signal::derive(move || font_size.get().as_fixed());
+    let on_size = Callback::new(move |p: Option<FontSize>| {
+        let v = FontSizeChoice::picked(p);
         font_size.set(v);
         on_style.run(StyleEdit::Size(v));
     });

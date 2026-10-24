@@ -30,7 +30,7 @@ use std::time::Duration;
 use ambre_bus::app::toile::{ElementStyle, FontFamily, FontSizeChoice};
 use ambre_chrome::commands::CommandId;
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
-use ambre_core::Rgba;
+use ambre_core::{FontSize, Rgba};
 use leptos::prelude::*;
 
 use crate::ui::floatbar::StyleEdit;
@@ -123,11 +123,11 @@ pub fn StyleInspector(
             f.as_deref().unwrap_or_default(),
         )));
     });
-    // Size: the shared dropdown speaks whole points (`Option<u16>`, `None` =
+    // Size: the shared dropdown speaks sizes (`Option<FontSize>`, `None` =
     // auto), which is the choice the style holds.
-    let size_current = Signal::derive(move || font_size.get().whole_points());
-    let on_size = Callback::new(move |p: Option<u16>| {
-        let size = FontSizeChoice::from_whole_points(p);
+    let size_current = Signal::derive(move || font_size.get().as_fixed());
+    let on_size = Callback::new(move |p: Option<FontSize>| {
+        let size = FontSizeChoice::picked(p);
         font_size.set(size);
         commit(StyleEdit::Size(size));
     });

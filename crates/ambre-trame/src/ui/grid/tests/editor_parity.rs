@@ -38,7 +38,7 @@ fn style() -> TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: false,
         family: "Sans".to_owned(),
-        base_size: 16.0,
+        base_size: ambre_core::DocPx::new(16.0),
         color: Color::from_rgba8(0, 0, 0, 255),
         underline: false,
         strikethrough: false,

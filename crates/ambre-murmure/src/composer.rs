@@ -131,7 +131,7 @@ fn body_style(color: Color) -> TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: false,
         family: FAMILY.to_owned(),
-        base_size: FONT_BODY,
+        base_size: ambre_core::DocPx::new(FONT_BODY),
         color,
         underline: false,
         strikethrough: false,

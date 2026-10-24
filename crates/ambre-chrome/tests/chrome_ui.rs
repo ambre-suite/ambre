@@ -29,6 +29,7 @@ use ambre_chrome::{
     ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
 };
 use ambre_commands::CommandId;
+use ambre_core::FontSize;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -671,12 +672,12 @@ async fn a_toast_leaves_the_focus_where_it_was() {
 fn font_size_select_lists_presets_plus_auto_entry() {
     let owner = Owner::new();
     owner.set();
-    let picked = RwSignal::new(Some(999u16));
+    let picked = RwSignal::new(Some(FontSize::from_whole_points(999)));
     let root = mount_in_container(move || {
         view! {
             <FontSizeSelect
-                current=Signal::derive(|| Some(12u16))
-                on_pick=Callback::new(move |p: Option<u16>| picked.set(p))
+                current=Signal::derive(|| Some(FontSize::from_whole_points(12)))
+                on_pick=Callback::new(move |p: Option<FontSize>| picked.set(p))
                 auto_label="Auto"
             />
         }

@@ -106,7 +106,7 @@ pub struct TextEditorStyle {
     pub weight: ambre_core::FontWeight,
     pub italic: bool,
     pub family: String,
-    pub base_size: f32,
+    pub base_size: ambre_core::DocPx,
     pub color: Color,
     /// Draw a 1px underline under the body (`TOILE-UI-187`). Pinned from the
     /// host element's style so the in-edit body matches the committed look.
@@ -185,7 +185,7 @@ impl TextEditor {
     /// Open an editor seeded with `text` and the pinned `style`. The caret is
     /// placed at the end of the seeded body on the first flush (Trame parity).
     pub fn new(text: &str, style: TextEditorStyle) -> Self {
-        let mut editor = PlainEditor::<Brush>::new(style.base_size);
+        let mut editor = PlainEditor::<Brush>::new(style.base_size.get());
         editor.set_text(text);
         editor.set_alignment(Alignment::Start);
         Self {
@@ -543,7 +543,7 @@ impl TextEditor {
     fn base_styles(&self, zoom: f64) -> [StyleProperty<'static, Brush>; 5] {
         let face = registered_family_name(Some(self.style.family.as_str()));
         [
-            StyleProperty::FontSize(self.style.base_size * zoom as f32),
+            StyleProperty::FontSize(self.style.base_size.get() * zoom as f32),
             StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight.get()))),
             StyleProperty::FontStyle(if self.style.italic {
                 FontStyle::Italic
@@ -880,7 +880,7 @@ mod tests {
             weight: ambre_core::FontWeight::REGULAR,
             italic: false,
             family: "Sans".to_owned(),
-            base_size: 16.0,
+            base_size: ambre_core::DocPx::new(16.0),
             color: Color::from_rgba8(0, 0, 0, 255),
             underline: false,
             strikethrough: false,

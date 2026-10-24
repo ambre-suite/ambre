@@ -165,9 +165,8 @@ pub fn FormatBar(
         // size.
         <FontPopover style=style on_style=on_style />
         <FontSizeSelect
-            current=Signal::derive(move || style.size.get().map(FontSize::whole_points))
-            on_pick=Callback::new(move |p: Option<u16>| {
-                let size = p.map(FontSize::from_whole_points);
+            current=Signal::derive(move || style.size.get())
+            on_pick=Callback::new(move |size: Option<FontSize>| {
                 on_style.run(StylePatch { size: Some(size), ..Default::default() });
             })
             auto_label="Default"

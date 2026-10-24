@@ -724,7 +724,6 @@ ambre-canvas | src/editor.rs | crate::editor | TextEditor::selected_text() | ret
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::set_text(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::text() | ret | String	free-text	text, label or message
-ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.base_size | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.family | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.italic | field | bool	math	named state or style flag, local
 ambre-canvas | src/editor.rs | crate::editor | TextEditorStyle.strikethrough | field | bool	math	named state or style flag, local
@@ -1066,10 +1065,7 @@ ambre-chrome | src/dialog.rs | crate::dialog | ModalHold::new(set) | param | imp
 ambre-chrome | src/font.rs | crate::font | FONT_FAMILIES | const | &[(&str,&str)]	free-text	UI text/label const
 ambre-chrome | src/font.rs | crate::font | FontPicker(current) | param | Signal<Option<String>>	free-text	text, label or user content
 ambre-chrome | src/font.rs | crate::font | FontPicker(on_pick) | param | Callback<Option<String>>	free-text	text, label or user content
-ambre-chrome | src/format.rs | crate::format | FONT_SIZES | const | &[u16]	math	local count/index/counter
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(auto_label) | param | &'static str	free-text	text, label or user content
-ambre-chrome | src/format.rs | crate::format | FontSizeSelect(current) | param | Signal<Option<u16>>	math	local count/index/counter
-ambre-chrome | src/format.rs | crate::format | FontSizeSelect(on_pick) | param | Callback<Option<u16>>	math	local count/index/counter
 ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	math	state flag/predicate
@@ -3666,7 +3662,6 @@ ambre-toile | src/ui/deck.rs | crate::ui::deck | deck_label() | ret | String	fre
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::committed_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::flush(wrap_w) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(base_size) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::opened_text() | ret | &str	free-text	label, message or user text

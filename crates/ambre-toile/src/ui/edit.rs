@@ -88,7 +88,11 @@ impl InlineEditor {
         // Size: the one the board draws, sticky auto-size and the free text
         // default included, so the body keeps its height under edit
         // (`TOILE-UI-188`).
-        let base_size = super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
+        let base_size = ambre_core::DocPx::new(super::walk::sticky_or_style_font_size(
+            host,
+            &elem.style,
+            elem.bounds,
+        ));
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
@@ -115,7 +119,7 @@ impl InlineEditor {
             weight: font.weight,
             italic: font.italic,
             family: font.family.label().to_owned(),
-            base_size: super::label::LABEL_FONT_SIZE,
+            base_size: ambre_core::DocPx::new(super::label::LABEL_FONT_SIZE),
             color: palette.cell_text,
             underline: false,
             strikethrough: false,
@@ -131,7 +135,12 @@ impl InlineEditor {
     /// Open the editor on a frame's title (`TOILE-261`). `base_size` is world
     /// units and the paint applies the zoom, so the caller hands the size the
     /// band reads at the current camera.
-    pub fn open_frame_title(id: ElementId, title: &str, base_size: f32, palette: &Palette) -> Self {
+    pub fn open_frame_title(
+        id: ElementId,
+        title: &str,
+        base_size: ambre_core::DocPx,
+        palette: &Palette,
+    ) -> Self {
         let font = ElementStyle::default().font;
         let style = TextEditorStyle {
             weight: font.weight,
@@ -256,11 +265,16 @@ mod tests {
     #[test]
     fn the_editor_opens_on_a_frames_title() {
         let id = ElementId("f".to_owned());
-        let editor = InlineEditor::open_frame_title(id.clone(), "Agenda", 14.0, palette());
+        let editor = InlineEditor::open_frame_title(
+            id.clone(),
+            "Agenda",
+            ambre_core::DocPx::new(14.0),
+            palette(),
+        );
         assert_eq!(editor.target().frame_title(), Some(&id));
         assert_eq!(editor.target().element(), None);
         assert_eq!(editor.target().connector(), None);
-        assert_eq!(editor.style().base_size, 14.0);
+        assert_eq!(editor.style().base_size.get(), 14.0);
         // Nothing to commit until the user types: an edit that leaves the title
         // as it was writes no rename (`TOILE-250`).
         assert_eq!(editor.committed_text(), None);
@@ -271,7 +285,12 @@ mod tests {
     /// so the placeholder never reaches the document.
     #[test]
     fn an_untouched_placeholder_commits_nothing() {
-        let editor = InlineEditor::open_frame_title(ElementId("f".to_owned()), "", 14.0, palette());
+        let editor = InlineEditor::open_frame_title(
+            ElementId("f".to_owned()),
+            "",
+            ambre_core::DocPx::new(14.0),
+            palette(),
+        );
         assert_eq!(editor.committed_text(), None);
     }
 
@@ -313,7 +332,7 @@ mod tests {
         let drawn =
             super::super::walk::sticky_or_style_font_size(TextHost::Text, &e.style, e.bounds);
         let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
-        assert_eq!(editor.style().base_size, drawn);
+        assert_eq!(editor.style().base_size.get(), drawn);
         assert_eq!(drawn, 16.0);
     }
 }

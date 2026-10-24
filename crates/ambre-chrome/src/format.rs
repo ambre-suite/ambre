@@ -5,7 +5,7 @@
 // elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
 //
 //   FontSizeSelect -- the point-size dropdown (a curated preset list + an "unset"
-//                     entry), value-agnostic (`Option<u16>`, `None` = the unset /
+//                     entry), value-agnostic (`Option<FontSize>`, `None` = the unset /
 //                     auto entry). The caller maps `None` to its own meaning
 //                     (Trame: the body default; Toile: auto-size to the card).
 //   FormatToggle   -- a single pressed-state toolbar button (bold / italic /
@@ -25,13 +25,24 @@
 // appears. It relies on `on:change` instead.
 // ============================================================================
 
-use ambre_core::{CssPoint, CssPx};
+use ambre_core::{CssPoint, CssPx, FontSize};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
 /// The point sizes offered by [`FontSizeSelect`], shared by both apps so the cell
 /// and element size pickers list the very same steps.
-pub const FONT_SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
+pub const FONT_SIZES: &[FontSize] = &[
+    FontSize::from_whole_points(8),
+    FontSize::from_whole_points(9),
+    FontSize::from_whole_points(10),
+    FontSize::from_whole_points(11),
+    FontSize::from_whole_points(12),
+    FontSize::from_whole_points(14),
+    FontSize::from_whole_points(16),
+    FontSize::from_whole_points(18),
+    FontSize::from_whole_points(24),
+    FontSize::from_whole_points(36),
+];
 
 /// The shared font-size dropdown. `current` is the active explicit size (`None` =
 /// unset -> the `auto_label` entry is selected). `on_pick` receives the chosen size
@@ -39,8 +50,8 @@ pub const FONT_SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
 /// ("Auto" for Toile's card auto-size, "Default" for Trame's body default).
 #[component]
 pub fn FontSizeSelect(
-    current: Signal<Option<u16>>,
-    on_pick: Callback<Option<u16>>,
+    current: Signal<Option<FontSize>>,
+    on_pick: Callback<Option<FontSize>>,
     #[prop(default = "Auto")] auto_label: &'static str,
 ) -> impl IntoView {
     view! {
@@ -48,20 +59,27 @@ pub fn FontSizeSelect(
             class="ambre-font-size"
             aria-label="Font size"
             // The unset entry has an empty value, so `None` selects it.
-            prop:value=move || current.get().map(|s| s.to_string()).unwrap_or_default()
+            prop:value=move || {
+                current.get().map(|s| s.whole_points().to_string()).unwrap_or_default()
+            }
             // NOTE: unlike the toggle buttons, a native <select> must NOT
             // preventDefault on mousedown. Doing so suppresses the browser's own
             // opening of the option list, so the dropdown never appears. The pick is
             // committed by on:change, which fires regardless of focus movement.
             on:change=move |ev| {
                 // An empty value (the unset entry) parses to `None`.
-                on_pick.run(event_target_value(&ev).parse::<u16>().ok());
+                let points = event_target_value(&ev).parse::<u16>().ok();
+                on_pick.run(points.map(FontSize::from_whole_points));
             }
         >
             <option value="">{auto_label}</option>
             {FONT_SIZES
                 .iter()
-                .map(|&s| view! { <option value=s.to_string()>{s.to_string()}</option> })
+                .map(|s| {
+                    let points = s.whole_points().to_string();
+                    let label = points.clone();
+                    view! { <option value=points>{label}</option> }
+                })
                 .collect_view()}
         </select>
     }

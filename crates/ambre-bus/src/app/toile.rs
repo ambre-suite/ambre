@@ -393,14 +393,18 @@ impl FontSizeChoice {
         (size.points() > 0.0).then_some(Self(Some(size)))
     }
 
+    /// The choice a size picker holds: `None` is automatic, and so is a
+    /// zero, which no picker lists.
+    #[must_use]
+    pub fn picked(size: Option<FontSize>) -> Self {
+        size.and_then(Self::fixed).unwrap_or(Self::AUTO)
+    }
+
     /// The choice a whole-point picker holds: `None` is automatic, and so is
     /// a zero, which no picker lists.
     #[must_use]
     pub fn from_whole_points(points: Option<u16>) -> Self {
-        points
-            .map(FontSize::from_whole_points)
-            .and_then(Self::fixed)
-            .unwrap_or(Self::AUTO)
+        Self::picked(points.map(FontSize::from_whole_points))
     }
 
     /// The named size, or `None` when the size is automatic.

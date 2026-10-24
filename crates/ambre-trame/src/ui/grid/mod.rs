@@ -134,7 +134,7 @@ impl CellEditor {
             weight: ambre_core::FontWeight::REGULAR,
             italic: false,
             family: "Sans".to_owned(),
-            base_size: BODY_SIZE,
+            base_size: ambre_core::DocPx::new(BODY_SIZE),
             color: Color::from_rgba8(0, 0, 0, 255),
             underline: false,
             strikethrough: false,
