@@ -17,6 +17,7 @@ use std::fmt;
 
 use ambre_core::DocType;
 use ambre_core::DocumentId;
+pub use ambre_core::FontFamily;
 use ambre_core::FontSize;
 use ambre_core::Rgba;
 use ambre_core::UserId;
@@ -202,78 +203,6 @@ impl ShapeKind {
 // =============================================================================
 // Style register -- one LWW binary per element (`toile-styles`)
 // =============================================================================
-
-/// The family of a Toile text body, with one spelling per bundled family.
-///
-/// A family the picker offers reads as its variant, whatever spelling wrote
-/// it, so two elements on one face compare equal. A name the picker does not
-/// offer, such as one an imported file carried, is kept as `Other`. The type
-/// travels and is stored as its label.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
-pub enum FontFamily {
-    /// The default face, the bundled sans.
-    #[default]
-    Sans,
-    Serif,
-    Mono,
-    /// A family no bundled face is named for, kept as written.
-    Other(String),
-}
-
-impl FontFamily {
-    /// The family `label` names. The picker's labels, the CSS generics and
-    /// the bundled face names all read as their family; a blank label reads
-    /// as the default.
-    #[must_use]
-    pub fn from_label(label: &str) -> Self {
-        match label {
-            "" | "Default" | "Sans" | "sans-serif" | "Noto Sans" => Self::Sans,
-            "Serif" | "serif" | "DejaVu Serif" => Self::Serif,
-            "Monospace" | "monospace" | "DejaVu Sans Mono" => Self::Mono,
-            other => Self::Other(other.to_owned()),
-        }
-    }
-
-    /// The label the family is stored under, and the one the renderer
-    /// resolves to a face. The default keeps the CSS generic it was always
-    /// stored as, so a board written before reads the same bytes.
-    #[must_use]
-    pub fn label(&self) -> &str {
-        match self {
-            Self::Sans => "sans-serif",
-            Self::Other(name) => name,
-            known => known.picker_label().unwrap_or_default(),
-        }
-    }
-
-    /// The label the font picker shows for the family, or `None` for a
-    /// family it does not offer.
-    #[must_use]
-    pub fn picker_label(&self) -> Option<&'static str> {
-        match self {
-            Self::Sans => Some("Sans"),
-            Self::Serif => Some("Serif"),
-            Self::Mono => Some("Monospace"),
-            Self::Other(_) => None,
-        }
-    }
-}
-
-impl From<String> for FontFamily {
-    fn from(label: String) -> Self {
-        Self::from_label(&label)
-    }
-}
-
-impl From<FontFamily> for String {
-    fn from(family: FontFamily) -> Self {
-        match family {
-            FontFamily::Other(name) => name,
-            known => known.label().to_owned(),
-        }
-    }
-}
 
 /// Font attributes for sticky / text bodies. `underline` / `strikethrough` are
 /// the text decorations, and they match Trame's cell font attributes. The shared
@@ -2519,24 +2448,6 @@ mod tests {
             postcard::from_bytes::<PresencePayload>(&bytes).unwrap(),
             named
         );
-    }
-
-    #[test]
-    fn every_spelling_of_a_family_reads_as_it_and_stores_one() {
-        for label in ["", "Default", "Sans", "sans-serif", "Noto Sans"] {
-            assert_eq!(FontFamily::from_label(label), FontFamily::Sans, "{label:?}");
-        }
-        assert_eq!(FontFamily::from_label("serif"), FontFamily::Serif);
-        assert_eq!(FontFamily::from_label("Monospace"), FontFamily::Mono);
-        let other = FontFamily::from_label("Comic Sans MS");
-        assert_eq!(other.picker_label(), None);
-        assert_eq!(other.label(), "Comic Sans MS");
-        let bytes = postcard::to_allocvec(&FontFamily::Sans).unwrap();
-        assert_eq!(bytes, postcard::to_allocvec("sans-serif").unwrap());
-        for family in [FontFamily::Sans, FontFamily::Serif, FontFamily::Mono, other] {
-            let bytes = postcard::to_allocvec(&family).unwrap();
-            assert_eq!(postcard::from_bytes::<FontFamily>(&bytes).unwrap(), family);
-        }
     }
 
     /// `TOILE-UI-281`: whatever zoom a producer writes, the culling rectangle

@@ -31,7 +31,8 @@ use crate::fonts::LazyFontLoader;
 /// mapping lives. The canvas renderers, the inline editors and the Prose
 /// paginator all reach the same face for one label (`CANVAS-017`).
 pub fn registered_family_name(label: Option<&str>) -> &'static str {
-    ambre_draw::resolve_family(label).face_name()
+    let family = label.map(ambre_core::FontFamily::from_label).unwrap_or_default();
+    ambre_draw::resolve_family(&family).face_name()
 }
 
 // -----------------------------------------------------------------------------

@@ -14,6 +14,8 @@
 // still waiting for a face.
 // ============================================================================
 
+use ambre_core::FontFamily;
+
 /// One of the families the application ships (`PROSE-108`, `CANVAS-017`).
 ///
 /// A document writes a family label as free text and nothing checks it. The
@@ -40,26 +42,23 @@ impl BundledFamily {
     }
 }
 
-/// Resolve a family label to a shipped face, reading nothing but the label.
+/// Resolve a family to a shipped face, reading nothing but the family.
 ///
 /// This is the whole of family resolution in the workspace (`CANVAS-017`). It
-/// never consults a font context, so two peers resolve one label alike even
+/// never consults a font context, so two peers resolve one family alike even
 /// when their contexts hold different faces (`PROSE-108`).
 ///
-/// A face name maps to itself, which makes the mapping idempotent: a caller
-/// may route an already-resolved family through here again.
+/// A face name reads as its family ([`FontFamily::from_label`]), which makes
+/// the mapping idempotent: a caller may route an already-resolved face through
+/// here again. A family no face ships for lands on the shipped sans, because an
+/// unmatched name handed to the shaper would produce no glyphs at all, which
+/// measures as an empty block.
 #[must_use]
-pub fn resolve_family(label: Option<&str>) -> BundledFamily {
-    let Some(label) = label else {
-        return BundledFamily::Sans;
-    };
-    match label {
-        "Serif" | "DejaVu Serif" | "serif" => BundledFamily::Serif,
-        "Monospace" | "DejaVu Sans Mono" | "monospace" => BundledFamily::Mono,
-        // Sans, Default, the CSS generics and every unknown label land on the
-        // shipped sans. An unmatched label handed to the shaper would produce
-        // no glyphs at all, which measures as an empty block.
-        _ => BundledFamily::Sans,
+pub fn resolve_family(family: &FontFamily) -> BundledFamily {
+    match family {
+        FontFamily::Serif => BundledFamily::Serif,
+        FontFamily::Mono => BundledFamily::Mono,
+        FontFamily::Sans | FontFamily::Other(_) => BundledFamily::Sans,
     }
 }
 
@@ -255,7 +254,13 @@ pub fn sealed_font_context() -> parley::FontContext {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::FontFamily;
+
     use super::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};
+
+    fn resolve_label(label: &str) -> BundledFamily {
+        resolve_family(&FontFamily::from_label(label))
+    }
 
     #[test]
     fn a_face_name_resolves_to_itself() {
@@ -264,21 +269,21 @@ mod tests {
             BundledFamily::Serif,
             BundledFamily::Mono,
         ] {
-            assert_eq!(resolve_family(Some(family.face_name())), family);
+            assert_eq!(resolve_label(family.face_name()), family);
         }
     }
 
     #[test]
     fn an_unknown_label_lands_on_the_shipped_sans() {
-        assert_eq!(resolve_family(Some("Comic Sans MS")), BundledFamily::Sans);
-        assert_eq!(resolve_family(None), BundledFamily::Sans);
+        assert_eq!(resolve_label("Comic Sans MS"), BundledFamily::Sans);
+        assert_eq!(resolve_family(&FontFamily::default()), BundledFamily::Sans);
     }
 
     #[test]
     fn the_toolbar_labels_reach_their_face() {
-        assert_eq!(resolve_family(Some("Serif")), BundledFamily::Serif);
-        assert_eq!(resolve_family(Some("Monospace")), BundledFamily::Mono);
-        assert_eq!(resolve_family(Some("Sans")), BundledFamily::Sans);
+        assert_eq!(resolve_label("Serif"), BundledFamily::Serif);
+        assert_eq!(resolve_label("Monospace"), BundledFamily::Mono);
+        assert_eq!(resolve_label("Sans"), BundledFamily::Sans);
     }
 
     #[test]

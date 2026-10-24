@@ -74,6 +74,7 @@ pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).
 pub mod schema;
+pub mod secret;
 pub mod seq;
 /// Serde adapters for enum serialization as lowercase strings.
 pub mod serde_enums;
@@ -116,7 +117,7 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
-pub use font::{FontSize, FontWeight, InvalidFontSize, InvalidFontWeight};
+pub use font::{FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight};
 pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
@@ -135,6 +136,7 @@ pub use name::{
 };
 pub use object_key::ObjectKey;
 pub use passphrase::Passphrase;
+pub use secret::SecretString;
 pub use payload::{
     DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
     PlaintextContainer, SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes,

@@ -20,7 +20,7 @@ use parley::FontContext;
 /// contexts hold.
 #[must_use]
 pub fn resolve(label: &str) -> BundledFamily {
-    ambre_draw::resolve_family(Some(label))
+    ambre_draw::resolve_family(&ambre_core::FontFamily::from_label(label))
 }
 
 /// The scripts this text asks for that `font_cx` cannot cover (`PROSE-110`).

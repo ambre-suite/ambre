@@ -100,49 +100,9 @@ impl<'de> Deserialize<'de> for SecretBytes {
     }
 }
 
-/// Secret UTF-8 material (the 24-word BIP39 recovery phrase) travelling across
-/// the IPC boundary. Same guarantees as [`SecretBytes`], wrapping
-/// [`Zeroizing<String>`] and exposing the text through [`Deref`] to `str`.
-#[derive(Clone, Default)]
-pub struct SecretString(Zeroizing<String>);
-
-impl SecretString {
-    /// Wrap an owned string as a zeroizing secret.
-    pub fn new(s: String) -> Self {
-        Self(Zeroizing::new(s))
-    }
-}
-
-impl From<String> for SecretString {
-    fn from(s: String) -> Self {
-        Self::new(s)
-    }
-}
-
-impl Deref for SecretString {
-    type Target = str;
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for SecretString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SecretString([redacted; {} bytes])", self.0.len())
-    }
-}
-
-impl Serialize for SecretString {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.as_str().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SecretString {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self::new(String::deserialize(deserializer)?))
-    }
-}
+/// Secret UTF-8 material, the recovery phrase, lives in `ambre-core` so a
+/// crate that cannot depend on the bus holds it too.
+pub use ambre_core::SecretString;
 
 // -----------------------------------------------------------------------------
 // RequestId -- request/response correlation token
