@@ -15,7 +15,7 @@ impl TrameUiState {
         ambre_core::ZoomFactor::positive(2.0),
     ];
 
-    pub fn new(canvas_width: f64, canvas_height: f64) -> Self {
+    pub fn new(canvas_width: SurfacePx, canvas_height: SurfacePx) -> Self {
         let mut s = Self {
             top_row: Row::ZERO,
             left_col: Col::ZERO,
@@ -49,7 +49,7 @@ impl TrameUiState {
 
     /// Update canvas dimensions and recompute the visible range.
     #[allow(dead_code)]
-    pub fn resize(&mut self, width: f64, height: f64) {
+    pub fn resize(&mut self, width: SurfacePx, height: SurfacePx) {
         self.canvas_width = width;
         self.canvas_height = height;
         self.recompute_viewport_dims();
@@ -58,22 +58,21 @@ impl TrameUiState {
     /// Bottom edge (logical px) of the scrollable grid area. The sheet-tab strip
     /// moved to DOM chrome (`SheetTabs`), so the grid now fills the full canvas
     /// height. The DOM strip occupies its own shell row outside this surface.
-    pub fn grid_bottom(&self) -> f64 {
+    pub fn grid_bottom(&self) -> SurfacePx {
         self.canvas_height.max(self.header_h())
     }
 
     fn recompute_viewport_dims(&mut self) {
-        let grid_h = (self.grid_bottom() - self.header_h()).max(0.0);
-        let grid_w = (self.canvas_width - self.header_w()).max(0.0);
+        let grid_h = (self.grid_bottom() - self.header_h()).max(SurfacePx::ZERO);
+        let grid_w = (self.canvas_width - self.header_w()).max(SurfacePx::ZERO);
+        let (row_h, col_w) = (self.scaled(ROW_HEIGHT), self.scaled(COL_WIDTH));
         // ceil() already accounts for the partially-visible row/col at the edge.
         // No +1 needed: viewport_rows is the count of rows that start within the
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows =
-            RowCount::new((grid_h / (f64::from(ROW_HEIGHT.get()) * self.zoom.get())).ceil() as u32);
-        self.viewport_cols =
-            ColCount::new((grid_w / (f64::from(COL_WIDTH.get()) * self.zoom.get())).ceil() as u32);
+        self.viewport_rows = RowCount::new((grid_h / row_h).ceil() as u32);
+        self.viewport_cols = ColCount::new((grid_w / col_w).ceil() as u32);
     }
 
     /// Set the grid zoom factor (clamped to the preset range), keeping the

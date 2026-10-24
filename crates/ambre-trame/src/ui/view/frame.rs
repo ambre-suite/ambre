@@ -379,13 +379,13 @@ impl TrameView {
                     .round() as i32;
                 let dx_px = (-(dc as f64) * f64::from(COL_WIDTH.get()) * self.state.zoom.get())
                     .round() as i32;
-                let w = self.state.canvas_width;
+                let w = self.state.canvas_width.get();
                 // Bottom edge of the cell area (now the full canvas: the sheet-tab
                 // strip moved to DOM chrome, so it no longer reserves a band here).
-                let h = self.state.grid_bottom();
+                let h = self.state.grid_bottom().get();
                 // Top of the scrollable cell area: below the formula bar band
                 // (`trame-cell-editing`) and the column-header strip.
-                let hh = self.state.header_h();
+                let hh = self.state.header_h().get();
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
                 let abs_dy = dy_px.unsigned_abs();
@@ -394,7 +394,7 @@ impl TrameView {
                 } else {
                     // Strip = the area of the destination offscreen exposed by
                     // the shift, restricted to the cell area.
-                    let hw = self.state.header_w();
+                    let hw = self.state.header_w().get();
                     let strip = if dy_px > 0 {
                         Rect::new(hw, hh, w, hh + dy_px as f64)
                     } else if dy_px < 0 {
@@ -564,7 +564,10 @@ impl TrameView {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.state.resize(width as f64, height as f64);
+        self.state.resize(
+            ambre_core::SurfacePx::new(f64::from(width)),
+            ambre_core::SurfacePx::new(f64::from(height)),
+        );
         self.needs_full = true;
     }
 

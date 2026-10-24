@@ -37,12 +37,8 @@ impl GridScroll {
         now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
-        let z = grid.zoom.get();
-        let px = |v: f64| CssPx::new(v as f32);
-        let line = CssVector::new(
-            px(f64::from(COL_WIDTH.get()) * z),
-            px(f64::from(ROW_HEIGHT.get()) * z),
-        );
+        let px = |v: SurfacePx| CssPx::new(v.get() as f32);
+        let line = CssVector::new(px(grid.scaled(COL_WIDTH)), px(grid.scaled(ROW_HEIGHT)));
         let page = CssVector::new(px(grid.canvas_width), px(grid.canvas_height));
         // The shared model applies the step one for one, and lets a trackpad
         // glide coast once it pauses; a notch never coasts (`KINETIC-002`,
@@ -166,7 +162,7 @@ mod tests {
     use super::*;
 
     fn grid() -> TrameUiState {
-        TrameUiState::new(1200.0, 800.0)
+        TrameUiState::new(SurfacePx::new(1200.0), SurfacePx::new(800.0))
     }
 
     /// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the

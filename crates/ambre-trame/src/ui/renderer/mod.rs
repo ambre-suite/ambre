@@ -53,8 +53,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         hidden_rows: &state.hidden_rows,
         // Header strips zoom with the grid: pass the already-scaled sizes (the
         // layout multiplies only the content-area metrics by `zoom`).
-        header_width: SurfacePx::new(state.header_w()),
-        header_height: SurfacePx::new(state.header_h()),
+        header_width: state.header_w(),
+        header_height: state.header_h(),
         top: 0.0,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
@@ -62,9 +62,9 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         row_heights: &state.row_heights,
         origin_col: state.left_col,
         origin_row: state.top_row,
-        width: state.canvas_width,
+        width: state.canvas_width.get(),
         // The grid stops above the bottom sheet-tab strip (`trame-sheets`).
-        height: state.grid_bottom(),
+        height: state.grid_bottom().get(),
         total_cols: TOTAL_COLS,
         total_rows: TOTAL_ROWS,
         zoom: state.zoom,
@@ -119,18 +119,20 @@ impl CellSpan {
 
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
+    let (x0, x1) = (SurfacePx::new(strip.x0), SurfacePx::new(strip.x1));
+    let (y0, y1) = (SurfacePx::new(strip.y0), SurfacePx::new(strip.y1));
     let cells_top = state.header_h();
     // Walk the variable column widths from the scroll origin: skip columns wholly
     // left of the strip, then extend until the strip's right edge is covered.
     let mut col_start = state.left_col;
     let mut cx = state.header_w();
-    while col_start < LAST_COL && cx + state.col_width_of(col_start) <= strip.x0 {
+    while col_start < LAST_COL && cx + state.col_width_of(col_start) <= x0 {
         cx += state.col_width_of(col_start);
         col_start = col_start.next();
     }
     let mut col_end = col_start;
     let mut ex = cx;
-    while col_end < TOTAL_COLS.as_end() && ex < strip.x1 {
+    while col_end < TOTAL_COLS.as_end() && ex < x1 {
         ex += state.col_width_of(col_end);
         col_end = col_end.next();
     }
@@ -146,7 +148,7 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
             continue;
         }
         let h = state.row_height_of(row_start);
-        if cy + h <= strip.y0 {
+        if cy + h <= y0 {
             cy += h;
             row_start = row_start.next();
         } else {
@@ -155,7 +157,7 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     }
     let mut row_end = row_start;
     let mut ey = cy;
-    while row_end < TOTAL_ROWS.as_end() && ey < strip.y1 {
+    while row_end < TOTAL_ROWS.as_end() && ey < y1 {
         if !state.is_row_hidden(row_end) {
             ey += state.row_height_of(row_end);
         }
@@ -192,7 +194,7 @@ mod tests {
     /// A view state large enough to expose several rows/cols, with the given
     /// cells pre-populated in the cache.
     fn fixture(cells: &[(u32, u32, &str)]) -> TrameUiState {
-        let mut state = TrameUiState::new(800.0, 600.0);
+        let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 CellPos::new(Row::new(row), Col::new(col)),
@@ -310,7 +312,7 @@ mod tests {
             state.row_heights.insert(Row::new(5), ambre_core::DocPx::new(44.0));
             state.hidden_rows = vec![Row::new(9)];
             state.dirty_cells.insert(CellPos::new(Row::new(2), Col::new(2)));
-            state.resize(width, height);
+            state.resize(SurfacePx::new(width), SurfacePx::new(height));
             state.set_zoom(ambre_core::ZoomFactor::positive(zoom));
             state.left_col = Col::new(left_col);
             state.top_row = Row::new(top_row);
@@ -322,10 +324,10 @@ mod tests {
             );
 
             let cell_area = Rect::new(
-                state.header_w(),
-                state.header_h(),
-                state.canvas_width,
-                state.grid_bottom(),
+                state.header_w().get(),
+                state.header_h().get(),
+                state.canvas_width.get(),
+                state.grid_bottom().get(),
             );
             let region = cells::sheet_camera(&state)
                 .inverse()
@@ -413,7 +415,7 @@ mod tests {
                     HEADER_WIDTH.get(),
                     HEADER_HEIGHT.get(),
                     800.0,
-                    state.grid_bottom(),
+                    state.grid_bottom().get(),
                 ),
                 color: palette.content_pending,
             }),
@@ -842,16 +844,16 @@ mod tests {
             );
             let (x0, x1, y0, y1) = match kind {
                 SelKind::Cols => (
-                    state.col_x(Col::new(1)),
-                    state.col_x(Col::new(2)) + state.col_width_of(Col::new(2)),
+                    state.col_x(Col::new(1)).get(),
+                    state.col_x(Col::new(2)).get() + state.col_width_of(Col::new(2)).get(),
                     0.0,
-                    state.header_h(),
+                    state.header_h().get(),
                 ),
                 _ => (
                     0.0,
-                    state.header_w(),
-                    state.row_y(Row::new(1)),
-                    state.row_y(Row::new(2)) + state.row_height_of(Row::new(2)),
+                    state.header_w().get(),
+                    state.row_y(Row::new(1)).get(),
+                    state.row_y(Row::new(2)).get() + state.row_height_of(Row::new(2)).get(),
                 ),
             };
             assert_eq!(

@@ -4233,16 +4233,10 @@ ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(
 ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_pixel_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_width_of() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::col_x() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::filter_button_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_h() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::header_w() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::range_pixel_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_height_of() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::row_y() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.bold | field | bool	generic	independent state or style flag, not a mode selector
@@ -4261,23 +4255,13 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | par
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | RESIZE_BAND | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Col.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | ResizePreview::Row.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::band_contains() | ret | bool	generic	predicate result
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::is_multi() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.canvas_width | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::grid_bottom() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_height) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::new(canvas_width) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resize(height) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::resize(width) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_zoom() | ret | bool	generic	predicate or did-it-change return

@@ -4,7 +4,7 @@
 use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{Modifiers, SelectionMode};
-use ambre_core::{DocPx, ViewPoint, ViewPx};
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::Release;
 
 impl TrameView {
@@ -703,7 +703,9 @@ impl TrameView {
     /// live vertical guide at the pointer x.
     pub(crate) fn arm_col_resize(&mut self, c: Col, x: ViewPx) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
-        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(f64::from(x.get())));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(
+            crate::ui::grid::on_grid(x),
+        ));
         self.set_cursor(GridCursor::ColResize);
         self.edit_dirty = true;
     }
@@ -711,7 +713,9 @@ impl TrameView {
     /// Arm a row resize from a press on row `r`'s bottom border.
     pub(crate) fn arm_row_resize(&mut self, r: Row, y: ViewPx) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
-        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(f64::from(y.get())));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(
+            crate::ui::grid::on_grid(y),
+        ));
         self.set_cursor(GridCursor::RowResize);
         self.edit_dirty = true;
     }
@@ -719,18 +723,20 @@ impl TrameView {
     /// Move the live resize guide to the pointer, clamped so the dragged
     /// column/row never shrinks below its minimum.
     pub(crate) fn update_resize_preview(&mut self, at: ViewPoint) {
-        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
+        let (x, y) = (
+            crate::ui::grid::on_grid(at.x),
+            crate::ui::grid::on_grid(at.y),
+        );
         match self.resize_drag {
             Some(HeaderHit::ColBorder(c)) => {
                 // The guide is in logical px, so the minimum width is the base
                 // clamp scaled by the current zoom.
-                let min_x = self.state.col_x(c)
-                    + f64::from(crate::ui::grid::MIN_COL_WIDTH.get()) * self.state.zoom.get();
+                let min_x = self.state.col_x(c) + self.state.scaled(crate::ui::grid::MIN_COL_WIDTH);
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
             }
             Some(HeaderHit::RowBorder(r)) => {
-                let min_y = self.state.row_y(r)
-                    + f64::from(crate::ui::grid::MIN_ROW_HEIGHT.get()) * self.state.zoom.get();
+                let min_y =
+                    self.state.row_y(r) + self.state.scaled(crate::ui::grid::MIN_ROW_HEIGHT);
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y.max(min_y)));
             }
             _ => {}
@@ -754,16 +760,19 @@ impl TrameView {
                 // The guide is in logical (zoomed) px; the stored width is BASE
                 // px (zoom-independent content). Divide the on-screen extent
                 // back out by the zoom before persisting.
-                let width = DocPx::new(((px - self.state.col_x(c)) / self.state.zoom.get()) as f32)
+                let width = self
+                    .state
+                    .unscaled(px - self.state.col_x(c))
                     .max(crate::ui::grid::MIN_COL_WIDTH);
                 for col in self.resize_target_cols(c) {
                     self.send_resize_col(col, width);
                 }
             }
             (HeaderHit::RowBorder(r), crate::ui::grid::ResizePreview::Row(py)) => {
-                let height =
-                    DocPx::new(((py - self.state.row_y(r)) / self.state.zoom.get()) as f32)
-                        .max(crate::ui::grid::MIN_ROW_HEIGHT);
+                let height = self
+                    .state
+                    .unscaled(py - self.state.row_y(r))
+                    .max(crate::ui::grid::MIN_ROW_HEIGHT);
                 for row in self.resize_target_rows(r) {
                     self.send_resize_row(row, height);
                 }

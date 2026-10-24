@@ -10,7 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
-use ambre_core::{DocPx, Rgb, SurfacePx};
+use ambre_core::{DocPx, Rgb, SurfacePx, ViewPx};
 use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
@@ -42,7 +42,7 @@ pub use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
 /// Half-width (logical px) of the grab band straddling a header boundary that
 /// arms a resize drag (`trame-resize`). A press within +/- this of a column's right
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
-pub const RESIZE_BAND: f64 = 4.0;
+pub const RESIZE_BAND: SurfacePx = SurfacePx::new(4.0);
 
 const PADDING_ROWS: RowCount = RowCount::new(20);
 
@@ -311,8 +311,8 @@ pub enum HeaderHit {
 /// for a row resize.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ResizePreview {
-    Col(f64),
-    Row(f64),
+    Col(SurfacePx),
+    Row(SurfacePx),
 }
 
 impl Default for Selection {
@@ -478,8 +478,8 @@ pub struct TrameUiState {
     pub viewport_cols: ColCount,
 
     /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
-    pub canvas_width: f64,
-    pub canvas_height: f64,
+    pub canvas_width: SurfacePx,
+    pub canvas_height: SurfacePx,
 
     /// Application zoom factor for the grid (1.0 = 100%). Scales cells, the
     /// row/col header strips and the cell font together (`trame-status-bar`).
@@ -594,3 +594,14 @@ pub const FILTER_BUTTON_SIZE: f64 = 13.0;
 
 #[cfg(test)]
 mod tests;
+
+/// The grid surface's pixel under view coordinate `v`. The surface's top-left
+/// corner is the canvas's, so the two spaces differ only in precision.
+pub(crate) fn on_grid(v: ViewPx) -> SurfacePx {
+    v.on_surface(SurfacePx::ZERO)
+}
+
+/// The view coordinate of grid surface pixel `s`: the inverse of [`on_grid`].
+pub(crate) fn in_view(s: SurfacePx) -> ViewPx {
+    s.in_view(SurfacePx::ZERO)
+}

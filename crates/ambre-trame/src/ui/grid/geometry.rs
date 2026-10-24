@@ -2,7 +2,9 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
-use ambre_core::{ViewPoint, ViewPx};
+use ambre_core::{SurfacePx, ViewPoint, ViewPx};
+
+use super::{in_view, on_grid};
 use ambre_draw::HitTest;
 use ambre_draw::kinetic::EdgeSpeed;
 
@@ -55,34 +57,44 @@ impl TrameUiState {
         v
     }
 
+    /// The document length `len` on the grid surface, scaled by the current
+    /// [`zoom`](Self::zoom).
+    pub fn scaled(&self, len: DocPx) -> SurfacePx {
+        SurfacePx::new(f64::from(len.get()) * self.zoom.get())
+    }
+
+    /// The document length that `len` on the grid surface shows at the
+    /// current [`zoom`](Self::zoom): the inverse of [`scaled`](Self::scaled).
+    pub fn unscaled(&self, len: SurfacePx) -> DocPx {
+        DocPx::new((len.get() / self.zoom.get()) as f32)
+    }
+
     /// Width (logical px) of column `col`: its resized entry, else [`COL_WIDTH`].
-    pub fn col_width_of(&self, col: Col) -> f64 {
-        let width = self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH);
-        f64::from(width.get()) * self.zoom.get()
+    pub fn col_width_of(&self, col: Col) -> SurfacePx {
+        self.scaled(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH))
     }
 
     /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
-    pub fn row_height_of(&self, row: Row) -> f64 {
-        let height = self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT);
-        f64::from(height.get()) * self.zoom.get()
+    pub fn row_height_of(&self, row: Row) -> SurfacePx {
+        self.scaled(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT))
     }
 
     /// Width (logical px) of the fixed row-number strip on the left, scaled by
     /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
-    pub fn header_w(&self) -> f64 {
-        (HEADER_WIDTH * self.zoom.get()).get()
+    pub fn header_w(&self) -> SurfacePx {
+        HEADER_WIDTH * self.zoom.get()
     }
 
     /// Height (logical px) of the fixed column-letter strip on top, scaled by
     /// the current [`zoom`](Self::zoom).
-    pub fn header_h(&self) -> f64 {
-        (HEADER_HEIGHT * self.zoom.get()).get()
+    pub fn header_h(&self) -> SurfacePx {
+        HEADER_HEIGHT * self.zoom.get()
     }
 
     /// X of column `col`'s left edge relative to the canvas, summing the variable
     /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
     /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
-    pub fn col_x(&self, col: Col) -> f64 {
+    pub fn col_x(&self, col: Col) -> SurfacePx {
         let mut x = self.header_w();
         if col >= self.left_col {
             for c in ColSpan::new(self.left_col, col) {
@@ -99,7 +111,7 @@ impl TrameUiState {
     /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
     /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
     /// rows, `trame-shared-filter`). Mirrors `GridLayout::row_top`.
-    pub fn row_y(&self, row: Row) -> f64 {
+    pub fn row_y(&self, row: Row) -> SurfacePx {
         let cells_top = self.header_h();
         let mut y = cells_top;
         if row >= self.top_row {
@@ -122,7 +134,7 @@ impl TrameUiState {
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
     pub fn col_at_x(&self, x: ViewPx) -> Option<Col> {
-        let px = f64::from(x.get());
+        let px = on_grid(x);
         if px < self.header_w() {
             return None;
         }
@@ -145,7 +157,7 @@ impl TrameUiState {
     /// column count (drop at the end).
     pub fn col_drop_slot(&self, x: ViewPx) -> Option<Col> {
         let col = self.col_at_x(x)?;
-        let px = f64::from(x.get());
+        let px = on_grid(x);
         let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
         Some(if px >= mid { col.next() } else { col })
     }
@@ -155,7 +167,7 @@ impl TrameUiState {
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
     pub fn row_drop_slot(&self, y: ViewPx) -> Option<Row> {
         let row = self.row_at_y(y)?;
-        let py = f64::from(y.get());
+        let py = on_grid(y);
         let mid = self.row_y(row) + self.row_height_of(row) / 2.0;
         Some(if py >= mid { row.next() } else { row })
     }
@@ -164,7 +176,7 @@ impl TrameUiState {
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
     pub fn row_at_y(&self, y: ViewPx) -> Option<Row> {
-        let py = f64::from(y.get());
+        let py = on_grid(y);
         if py < self.header_h() {
             return None;
         }
@@ -185,33 +197,37 @@ impl TrameUiState {
     /// nearest edge cell when the pointer has left the cell area. A drag past
     /// an edge keeps reaching the cells the scroll brings in.
     pub fn drag_cell_at(&self, at: ViewPoint) -> Option<CellPos> {
-        let x = f64::from(at.x.get()).clamp(
+        let last_pixel = SurfacePx::new(1.0);
+        let x = on_grid(at.x).clamp(
             self.header_w(),
-            (self.canvas_width - 1.0).max(self.header_w()),
+            (self.canvas_width - last_pixel).max(self.header_w()),
         );
-        let y = f64::from(at.y.get()).clamp(
+        let y = on_grid(at.y).clamp(
             self.header_h(),
-            (self.grid_bottom() - 1.0).max(self.header_h()),
+            (self.grid_bottom() - last_pixel).max(self.header_h()),
         );
-        self.cell_at(ViewPoint::new(ViewPx::new(x as f32), ViewPx::new(y as f32)))
+        self.cell_at(ViewPoint::new(in_view(x), in_view(y)))
     }
 
     /// The speed a drag held at `at` scrolls the grid at, in logical
     /// pixels per millisecond on each axis (`KINETIC-007`). Each edge is the
     /// cell area's, past the header strips; zero away from them.
     pub fn edge_scroll_speed(&self, at: ViewPoint) -> (EdgeSpeed, EdgeSpeed) {
-        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
+        let (x, y) = (on_grid(at.x), on_grid(at.y));
         let (left, top) = (self.header_w(), self.header_h());
+        let at = |offset: SurfacePx, extent: SurfacePx| {
+            EdgeSpeed::at(offset.get() as f32, extent.get() as f32)
+        };
         (
-            EdgeSpeed::at((x - left) as f32, (self.canvas_width - left) as f32),
-            EdgeSpeed::at((y - top) as f32, (self.grid_bottom() - top) as f32),
+            at(x - left, self.canvas_width - left),
+            at(y - top, self.grid_bottom() - top),
         )
     }
 
     /// The cell at logical pixel `at`, or `None` if the point is in a
     /// header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
     pub fn cell_at(&self, at: ViewPoint) -> Option<CellPos> {
-        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
+        let (x, y) = (on_grid(at.x), on_grid(at.y));
         let cells_top = self.header_h();
         if x < self.header_w() || y < cells_top {
             return None;
@@ -258,9 +274,9 @@ impl TrameUiState {
     /// boundary) take priority over the body so a grab on the edge resizes rather
     /// than selects. Variable-metric aware (walks the per-axis widths/heights).
     pub fn header_hit(&self, at: ViewPoint) -> Option<HeaderHit> {
-        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
-        let in_col_strip = (0.0..self.header_h()).contains(&y);
-        let in_row_strip = (0.0..self.header_w()).contains(&x);
+        let (x, y) = (on_grid(at.x), on_grid(at.y));
+        let in_col_strip = (SurfacePx::ZERO..self.header_h()).contains(&y);
+        let in_row_strip = (SurfacePx::ZERO..self.header_w()).contains(&x);
         // Top-left corner -> select-all.
         if in_col_strip && in_row_strip {
             return Some(HeaderHit::Corner);
@@ -354,7 +370,7 @@ impl TrameUiState {
         if y + rh <= cells_top || y >= self.grid_bottom() {
             return None;
         }
-        Some((x, y, cw, rh))
+        Some((x.get(), y.get(), cw.get(), rh.get()))
     }
 
     /// Screen pixel rect (x, y, w, h) covering the cells of `rect`, clipped to
@@ -376,7 +392,7 @@ impl TrameUiState {
         // top (its successors have already collapsed up onto it).
         let y_bot = self.row_y(last.row)
             + if self.is_row_hidden(last.row) {
-                0.0
+                SurfacePx::ZERO
             } else {
                 self.row_height_of(last.row)
             };
@@ -389,7 +405,7 @@ impl TrameUiState {
         if cx2 <= cx1 || cy2 <= cy1 {
             return None;
         }
-        Some((cx1, cy1, cx2 - cx1, cy2 - cy1))
+        Some((cx1.get(), cy1.get(), (cx2 - cx1).get(), (cy2 - cy1).get()))
     }
 
     /// Grow `rect` so it fully contains every merged block it intersects. A merge

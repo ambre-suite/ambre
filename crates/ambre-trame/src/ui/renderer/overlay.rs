@@ -329,14 +329,14 @@ pub fn draw_overlay<S: DrawSurface>(
                 let x1 = (state.col_x(c2) + state.col_width_of(c2)).min(state.canvas_width);
                 // Band over the grid body, and the header tint over the strip.
                 (
-                    x0,
-                    x1,
-                    state.header_h(),
-                    state.grid_bottom(),
-                    x0,
-                    x1,
+                    x0.get(),
+                    x1.get(),
+                    state.header_h().get(),
+                    state.grid_bottom().get(),
+                    x0.get(),
+                    x1.get(),
                     0.0,
-                    state.header_h(),
+                    state.header_h().get(),
                 )
             }
             _ => {
@@ -347,14 +347,14 @@ pub fn draw_overlay<S: DrawSurface>(
                 let y0 = state.row_y(r1).max(state.header_h());
                 let y1 = (state.row_y(r2) + state.row_height_of(r2)).min(state.grid_bottom());
                 (
-                    state.header_w(),
-                    state.canvas_width,
-                    y0,
-                    y1,
+                    state.header_w().get(),
+                    state.canvas_width.get(),
+                    y0.get(),
+                    y1.get(),
                     0.0,
-                    state.header_w(),
-                    y0,
-                    y1,
+                    state.header_w().get(),
+                    y0.get(),
+                    y1.get(),
                 )
             }
         };
@@ -459,15 +459,17 @@ pub fn draw_overlay<S: DrawSurface>(
     //        prospective boundary while a header border is dragged.
     match state.resize_preview {
         Some(grid::ResizePreview::Col(x)) => {
+            let (x, bottom) = (x.get(), state.grid_bottom().get());
             surface.stroke_line(
-                ambre_draw::Line::new((x, layout.top), (x, state.grid_bottom())),
+                ambre_draw::Line::new((x, layout.top), (x, bottom)),
                 palette.selection,
                 1.0,
             );
         }
         Some(grid::ResizePreview::Row(y)) => {
+            let (y, right) = (y.get(), state.canvas_width.get());
             surface.stroke_line(
-                ambre_draw::Line::new((0.0, y), (state.canvas_width, y)),
+                ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
                 1.0,
             );
@@ -480,17 +482,17 @@ pub fn draw_overlay<S: DrawSurface>(
     //            dragged to a new position (Excel-style reorder preview).
     match state.reorder_preview {
         Some(grid::AxisPos::Col(i)) => {
-            let x = state.col_x(i);
+            let (x, bottom) = (state.col_x(i).get(), state.grid_bottom().get());
             surface.stroke_line(
-                ambre_draw::Line::new((x, layout.top), (x, state.grid_bottom())),
+                ambre_draw::Line::new((x, layout.top), (x, bottom)),
                 palette.selection,
                 2.5,
             );
         }
         Some(grid::AxisPos::Row(i)) => {
-            let y = state.row_y(i);
+            let (y, right) = (state.row_y(i).get(), state.canvas_width.get());
             surface.stroke_line(
-                ambre_draw::Line::new((0.0, y), (state.canvas_width, y)),
+                ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
                 2.5,
             );
@@ -502,14 +504,14 @@ pub fn draw_overlay<S: DrawSurface>(
     match state.insert_hint {
         // ColInsert(i) inserts left of column i, that is, at column i's left edge.
         Some(grid::HeaderHit::ColInsert(i)) => {
-            let bx = state.col_x(i);
+            let bx = state.col_x(i).get();
             // At the top of the column separator: the pill hugs the header's top
             // edge rather than floating in its centre.
             let cy = layout.top + BADGE_RADIUS + 1.0;
             draw_insert_badge(surface, bx, cy, palette.selection, palette.content_bg);
         }
         Some(grid::HeaderHit::RowInsert(i)) => {
-            let by = state.row_y(i);
+            let by = state.row_y(i).get();
             // At the left of the row separator: the pill hugs the row header's
             // left edge.
             let cx = BADGE_RADIUS + 1.0;

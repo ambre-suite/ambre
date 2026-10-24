@@ -890,7 +890,7 @@ impl Rig {
 
     /// The right edge of column `c` on screen.
     fn col_edge(&self, c: u32) -> f64 {
-        self.view.state.col_x(Col::new(c)) + self.view.state.col_width_of(Col::new(c))
+        self.view.state.col_x(Col::new(c)).get() + self.view.state.col_width_of(Col::new(c)).get()
     }
 }
 
@@ -925,7 +925,8 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
         "sent {sent:?}"
     );
     // The row strip: the boundary under row 3, in the left half.
-    let y = rig.view.state.row_y(Row::new(3)) + rig.view.state.row_height_of(Row::new(3));
+    let y =
+        rig.view.state.row_y(Row::new(3)).get() + rig.view.state.row_height_of(Row::new(3)).get();
     assert_eq!(
         rig.view.state.header_hit(pointer(2.0, y)),
         Some(crate::ui::grid::HeaderHit::RowInsert(Row::new(4)))
@@ -969,12 +970,12 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         rig.frame();
         rig.sent();
         let edge = rig.col_edge(1);
-        let y = rig.view.state.header_h() * 0.8;
+        let y = rig.view.state.header_h().get() * 0.8;
         assert_eq!(
             rig.view.state.header_hit(pointer(edge, y)),
             Some(crate::ui::grid::HeaderHit::ColBorder(Col::new(1)))
         );
-        let c_before = rig.view.state.col_x(Col::new(2));
+        let c_before = rig.view.state.col_x(Col::new(2)).get();
         rig.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
@@ -982,7 +983,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             ctrl: false,
         });
         // 200 base pixels, drawn at this zoom.
-        let target = rig.view.state.col_x(Col::new(1)) + 200.0 * zoom;
+        let target = rig.view.state.col_x(Col::new(1)).get() + 200.0 * zoom;
         rig.view.handle_input(&InputEvent::PointerMove {
             at: pointer(target, y),
         });
@@ -1012,10 +1013,10 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             Some(&ambre_core::DocPx::new(200.0))
         );
         assert_eq!(
-            rig.view.state.col_x(Col::new(2)),
-            rig.view.state.col_x(Col::new(1)) + 200.0 * zoom
+            rig.view.state.col_x(Col::new(2)).get(),
+            rig.view.state.col_x(Col::new(1)).get() + 200.0 * zoom
         );
-        assert_ne!(rig.view.state.col_x(Col::new(2)), c_before);
+        assert_ne!(rig.view.state.col_x(Col::new(2)).get(), c_before);
     }
 }
 
@@ -1028,7 +1029,7 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     rig.frame();
     rig.sent();
     let edge = rig.col_edge(0);
-    let y = rig.view.state.header_h() * 0.8;
+    let y = rig.view.state.header_h().get() * 0.8;
     assert!(rig.view.handle_input(&InputEvent::DoubleClick {
         at: pointer(edge, y)
     }));
@@ -1153,7 +1154,7 @@ fn a_wheel_delta_lands_once_and_keeps_its_remainder() {
     assert!(rig.wheel(3.0, 1, false));
     assert_eq!(rig.top(), 3, "three lines are three rows");
     let row = f64::from(ROW_HEIGHT.get());
-    let page = (rig.view.state.canvas_height / row) as u32;
+    let page = (rig.view.state.canvas_height.get() / row) as u32;
     assert!(rig.wheel(1.0, 2, false));
     assert_eq!(rig.top(), 3 + page, "a page is a screen of rows");
     let at = rig.top();
@@ -1215,7 +1216,7 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
         shift: false,
         ctrl: false,
     });
-    let below = rig.view.state.canvas_height + 40.0;
+    let below = rig.view.state.canvas_height.get() + 40.0;
     rig.view.handle_input(&InputEvent::PointerMove {
         at: pointer(px, below),
     });
@@ -1275,26 +1276,32 @@ impl Rig {
     fn cell_mid(&self, row: u32, col: u32) -> (f64, f64) {
         let s = &self.view.state;
         (
-            s.col_x(Col::new(col)) + s.col_width_of(Col::new(col)) / 2.0,
-            s.row_y(Row::new(row)) + s.row_height_of(Row::new(row)) / 2.0,
+            s.col_x(Col::new(col)).get() + s.col_width_of(Col::new(col)).get() / 2.0,
+            s.row_y(Row::new(row)).get() + s.row_height_of(Row::new(row)).get() / 2.0,
         )
     }
 
     /// The centre of column `col`'s header body.
     fn col_header_mid(&self, col: u32) -> (f64, f64) {
-        (self.cell_mid(0, col).0, self.view.state.header_h() / 2.0)
+        (
+            self.cell_mid(0, col).0,
+            self.view.state.header_h().get() / 2.0,
+        )
     }
 
     /// The centre of row `row`'s header body.
     fn row_header_mid(&self, row: u32) -> (f64, f64) {
-        (self.view.state.header_w() / 2.0, self.cell_mid(row, 0).1)
+        (
+            self.view.state.header_w().get() / 2.0,
+            self.cell_mid(row, 0).1,
+        )
     }
 
     /// The centre of the corner above the row headers.
     fn corner_mid(&self) -> (f64, f64) {
         (
-            self.view.state.header_w() / 2.0,
-            self.view.state.header_h() / 2.0,
+            self.view.state.header_w().get() / 2.0,
+            self.view.state.header_h().get() / 2.0,
         )
     }
 
@@ -1324,7 +1331,7 @@ fn a_right_click_scopes_the_menu_to_its_target() {
         (rig.row_header_mid(3), CtxScope::Row),
         (rig.corner_mid(), CtxScope::Corner),
         (
-            (rig.col_edge(1), rig.view.state.header_h() / 2.0),
+            (rig.col_edge(1), rig.view.state.header_h().get() / 2.0),
             CtxScope::Column,
         ),
     ];
@@ -1488,14 +1495,14 @@ impl Rig {
     /// Drag the boundary right of column 1 to `width` pixels.
     fn drag_col_1_to(&mut self, width: f64) {
         let edge = self.col_edge(1);
-        let y = self.view.state.header_h() * 0.8;
+        let y = self.view.state.header_h().get() * 0.8;
         self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
-        let target = self.view.state.col_x(Col::new(1)) + width;
+        let target = self.view.state.col_x(Col::new(1)).get() + width;
         self.view.handle_input(&InputEvent::PointerMove {
             at: pointer(target, y),
         });
@@ -1513,11 +1520,11 @@ impl Rig {
 fn a_refused_resize_leaves_the_width() {
     let mut rig = Rig::new();
     rig.frame();
-    let before = rig.view.state.col_x(Col::new(2));
+    let before = rig.view.state.col_x(Col::new(2)).get();
     rig.lose_logic();
     rig.drag_col_1_to(200.0);
     assert_eq!(rig.view.state.col_widths.get(&COL_1), None);
-    assert_eq!(rig.view.state.col_x(Col::new(2)), before);
+    assert_eq!(rig.view.state.col_x(Col::new(2)).get(), before);
 }
 
 /// `TRAME-UI-125` and `BUS-018`: a cut whose paste never left keeps its

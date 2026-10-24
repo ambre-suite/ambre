@@ -4,6 +4,7 @@
 use super::super::{COL_WIDTH, PADDING_COLS, PADDING_ROWS, ROW_HEIGHT};
 use super::*;
 use crate::TrameCommand;
+use ambre_core::SurfacePx;
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
 fn cell(row: u32, col: u32, filtered: bool) -> DisplayCell {
@@ -51,7 +52,7 @@ fn window(cmd: TrameCommand) -> (u32, u32, u32, u32) {
 /// hidden row far above the screen stretches nothing.
 #[test]
 fn a_scroll_requests_the_screen_and_a_bounded_padding() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.on_viewport_data(answer(0, (0..300).map(|row| cell(row, 0, true)).collect()));
     assert!(state.scroll_by(RowDelta::new(1_000), ColDelta::new(0)));
     let (row_start, row_end, col_start, col_end) = window(state.scroll_viewport_cmd());
@@ -76,7 +77,7 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
 /// `TRAME-UI-024`: after a request the cache holds no cell outside its window.
 #[test]
 fn a_scroll_evicts_every_cell_outside_the_window() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.on_viewport_data(answer(0, vec![cell(0, 0, false), cell(0, 200, false)]));
     state.on_viewport_data(answer(1, vec![cell(5_000, 0, false)]));
     assert!(state.scroll_by(RowDelta::new(5_000), ColDelta::new(0)));
@@ -97,7 +98,7 @@ fn a_scroll_evicts_every_cell_outside_the_window() {
 /// `TRAME-UI-145`: a scroll moves the origin and nothing the user selected.
 #[test]
 fn a_scroll_keeps_the_active_cell_and_the_selection() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.selection = Selection {
         anchor: CellPos::new(Row::new(2), Col::new(1)),
         active: CellPos::new(Row::new(4), Col::new(3)),
@@ -119,7 +120,7 @@ fn a_scroll_keeps_the_active_cell_and_the_selection() {
 /// default, not as the size the axis held before.
 #[test]
 fn a_default_size_in_an_answer_clears_the_stored_one() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     let sized = |version, width: f64, height: f64| TrameEvent::ViewportData {
         version,
         row_start: Row::new(3),
@@ -129,12 +130,12 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
         cells: vec![],
     };
     state.on_viewport_data(sized(ambre_bus::ViewportVersion(0), 200.0, 45.0));
-    assert_eq!(state.col_width_of(Col::new(2)), 200.0);
-    assert_eq!(state.row_height_of(Row::new(3)), 45.0);
+    assert_eq!(state.col_width_of(Col::new(2)).get(), 200.0);
+    assert_eq!(state.row_height_of(Row::new(3)).get(), 45.0);
     let (width, height) = (f64::from(COL_WIDTH.get()), f64::from(ROW_HEIGHT.get()));
     state.on_viewport_data(sized(ambre_bus::ViewportVersion(1), width, height));
-    assert_eq!(state.col_width_of(Col::new(2)), width);
-    assert_eq!(state.row_height_of(Row::new(3)), height);
+    assert_eq!(state.col_width_of(Col::new(2)).get(), width);
+    assert_eq!(state.row_height_of(Row::new(3)).get(), height);
     assert!(
         !state.col_widths.contains_key(&Col::new(2))
             && !state.row_heights.contains_key(&Row::new(3))
@@ -145,7 +146,7 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
 /// the user put it.
 #[test]
 fn an_answer_does_not_move_the_scroll_origin() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     assert!(state.scroll_by(RowDelta::new(120), ColDelta::new(7)));
     let origin = (state.top_row, state.left_col);
     state.on_viewport_data(answer(

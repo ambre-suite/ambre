@@ -51,7 +51,10 @@ impl TrameView {
             busy_pub,
             to_logic,
             from_logic,
-            state: TrameUiState::new(canvas_width, canvas_height),
+            state: TrameUiState::new(
+                ambre_core::SurfacePx::new(canvas_width),
+                ambre_core::SurfacePx::new(canvas_height),
+            ),
             text_input,
             anchor,
             last_anchor: None,

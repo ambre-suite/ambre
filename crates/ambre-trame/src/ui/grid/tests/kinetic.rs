@@ -1,6 +1,7 @@
 // The grid on the shared kinetic scroll (`TRAME-UI-175`).
 
 use super::*;
+use ambre_core::SurfacePx;
 
 /// The canvas point at `(x, y)`.
 fn view_point(x: f64, y: f64) -> ambre_core::ViewPoint {
@@ -15,7 +16,7 @@ fn view_point(x: f64, y: f64) -> ambre_core::ViewPoint {
 /// scrolls nothing.
 #[test]
 fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     let (sx, sy) = state.edge_scroll_speed(pointer(400.0, 300.0));
     assert_eq!((sx.get(), sy.get()), (0.0, 0.0));
@@ -39,7 +40,7 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
 #[test]
 fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
-    let mut state = TrameUiState::new(800.0, 600.0);
+    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     assert!(state.set_zoom(ambre_core::ZoomFactor::positive(2.0)));
     for (row, col) in [(10, 3), (12, 4)] {

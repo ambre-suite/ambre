@@ -48,8 +48,8 @@ pub(crate) fn sheet_camera(state: &TrameUiState) -> Affine {
     let axes = sheet_axes(state);
     let zoom = state.zoom.get();
     Affine::translate((
-        state.header_w() - zoom * axes.col_x(state.left_col).get(),
-        state.header_h() - zoom * axes.row_y(state.top_row).get(),
+        state.header_w().get() - zoom * axes.col_x(state.left_col).get(),
+        state.header_h().get() - zoom * axes.row_y(state.top_row).get(),
     )) * Affine::scale(zoom)
 }
 
@@ -78,12 +78,12 @@ pub fn draw_cells<S: DrawSurface>(
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
-    let w = state.canvas_width;
-    let h = state.grid_bottom();
+    let w = state.canvas_width.get();
+    let h = state.grid_bottom().get();
 
     // Cell area = canvas minus the formula bar band + fixed header strip
     // (top/left) and the bottom sheet-tab strip.
-    let cell_area = Rect::new(state.header_w(), state.header_h(), w, h);
+    let cell_area = Rect::new(state.header_w().get(), state.header_h().get(), w, h);
     // The base fill under the cells differs by repaint kind:
     //  - Full (strip_rect == None): the grey "pending" veil, the first-load cue
     //    shown until the initial ViewportData lands.
