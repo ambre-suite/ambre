@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
-use ambre_core::KnownMediaType;
+use ambre_core::{ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
 
@@ -63,9 +63,15 @@ pub fn opens_as(media_type: &MediaType) -> Option<KnownMediaType> {
     KnownMediaType::of(media_type).filter(|known| OPENS.contains(known))
 }
 
-/// The name a fetched file saves under.
-pub fn download_name(file: &Attachment) -> String {
-    file.name.clone()
+/// The stem a fetched file saves under when its name leaves nothing.
+const FALLBACK_STEM: &str = "attachment";
+
+/// The name a fetched file saves under. The sender's file system gave the
+/// name, so it is another user's input. It loses every path step and every
+/// character a host refuses, and fits the bound (`DOCFILE-019`,
+/// `DOCFILE-020`).
+pub fn download_name(file: &Attachment) -> ExportFilename {
+    ExportFilename::from_received(&file.name, FALLBACK_STEM)
 }
 
 /// A file whose upload the relay has not answered yet.

@@ -64,8 +64,8 @@ spec that names a file cites them, and restates neither.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `DOCFILE-019` | `INV` | A file name the suite writes MUST NOT hold a path separator or a control character, nor be `.` or `..`. | this spec section 4 | `ambre_core::export_file::tests::a_path_separator_is_refused`; `::a_control_character_is_refused`; `::a_folder_reference_is_refused`; `::an_empty_name_is_refused`; `::a_plain_name_is_taken_as_written` -- the checked constructor; `::a_title_loses_what_a_host_refuses`; `::a_title_of_dots_takes_the_fallback` -- a name derived from a title passes the same check; type-level -- every event that hands a written file to the browser carries an `ExportFilename`, which only these two paths build | none | verified |
-| `DOCFILE-020` | `INV` | A file name the suite writes MUST fit 255 bytes, its extension whole. | this spec section 4 | `ambre_core::export_file::tests::a_name_past_the_bound_is_refused` -- the checked constructor at the bound and one byte past it; `::a_long_title_is_cut_and_keeps_its_extension` -- a two-byte character repeated past the bound, cut on a character boundary | none | verified |
+| `DOCFILE-019` | `INV` | A file name the suite writes MUST NOT hold a path separator or a control character, nor be `.` or `..`. | this spec section 4 | `ambre_core::export_file::tests::a_path_separator_is_refused`; `::a_control_character_is_refused`; `::a_folder_reference_is_refused`; `::an_empty_name_is_refused`; `::a_plain_name_is_taken_as_written` -- the checked constructor; `::a_title_loses_what_a_host_refuses`; `::a_title_of_dots_takes_the_fallback` -- a name derived from a title passes the same check; `::a_received_name_keeps_its_last_step`; `ambre_murmure::uploads::tests::a_received_name_saves_inside_the_download_folder` -- a name another user sent passes it too; type-level -- every event that hands a written file to the browser carries an `ExportFilename`, which only these three paths build | none | verified |
+| `DOCFILE-020` | `INV` | A file name the suite writes MUST fit 255 bytes, its extension whole. | this spec section 4 | `ambre_core::export_file::tests::a_name_past_the_bound_is_refused` -- the checked constructor at the bound and one byte past it; `::a_long_title_is_cut_and_keeps_its_extension` -- a two-byte character repeated past the bound, cut on a character boundary; `::a_long_received_name_keeps_its_extension` -- the same cut on a name another user sent | none | verified |
 
 * **Budget.** none, and `ambre-spec-budgets.md` records that: the container adds a 22-byte write,
   a 22-byte parse, and a few dozen bytes in `ambre-core`, shared rather than duplicated.
@@ -382,6 +382,7 @@ seal and in `src/landing.rs` for an open.
 |---|---|
 | save a document to a file | the current state is written at the current version, whatever version it was opened from |
 | export a document whose title holds a separator or a control character | the file is named from the title without them, and a title of dots alone takes the application's own stem (`DOCFILE-019`) |
+| save a file another user sent, under a name with a path or a control character | the file keeps the last step of the name without them, and its extension when that is letters and digits (`DOCFILE-019`, `DOCFILE-020`) |
 | open a file | the header decides the application, then that application fills an empty state |
 | open a file another application wrote | the bytes are routed to that application, with no prompt and no conversion |
 | open a file no application claims | one error naming the type byte, and no partial document |

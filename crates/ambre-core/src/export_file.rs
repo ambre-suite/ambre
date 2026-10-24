@@ -119,6 +119,38 @@ impl ExportFilename {
         Self(format!("{stem}.{suffix}"))
     }
 
+    /// The longest extension a received name keeps.
+    const MAX_EXTENSION: ByteSize = ByteSize(16);
+
+    /// The name a file another user sent saves under, from the `name` its
+    /// sender gave it.
+    ///
+    /// The name is untrusted input, so it obeys the rules of
+    /// [`from_title`](Self::from_title). A path keeps its last step alone. An
+    /// extension of letters and digits survives whole; any other stays in the
+    /// stem. A name that leaves nothing takes the `fallback` stem.
+    #[must_use]
+    pub fn from_received(name: &str, fallback: &'static str) -> Self {
+        let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+        let (stem, extension) = match base.rsplit_once('.') {
+            Some((stem, extension)) if is_kept_extension(extension) => (stem, Some(extension)),
+            _ => (base, None),
+        };
+        // The stem's room: the bound, less the dot and the extension.
+        let room = Self::MAX_SIZE
+            .as_len()
+            .saturating_sub(extension.map_or(0, |extension| extension.len() + 1));
+        let stem = [stem, fallback, Self::FALLBACK_STEM]
+            .into_iter()
+            .map(|text| clean_stem(text, room))
+            .find(|stem| !stem.is_empty())
+            .unwrap_or_else(|| Self::FALLBACK_STEM.to_owned());
+        match extension {
+            Some(extension) => Self(format!("{stem}.{extension}")),
+            None => Self(stem),
+        }
+    }
+
     /// The name, for the browser call that saves the file under it.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -158,6 +190,15 @@ fn clean_stem(text: &str, room: usize) -> String {
     } else {
         stem
     }
+}
+
+/// Whether a received name's `extension` survives whole: letters and digits
+/// alone, at most [`ExportFilename::MAX_EXTENSION`] bytes. No such extension
+/// holds a character a host refuses.
+fn is_kept_extension(extension: &str) -> bool {
+    !extension.is_empty()
+        && ByteSize::of_len(extension.len()) <= ExportFilename::MAX_EXTENSION
+        && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 /// The bytes of a file crossing an import or an export. They are what the
@@ -298,6 +339,38 @@ mod tests {
         let name = ExportFilename::from_title(&title, "x", ExportExtension::Markdown);
         assert!(ByteSize::of_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
         assert!(name.as_str().ends_with(".md"));
+        assert!(ExportFilename::new(name.as_str()).is_ok());
+    }
+
+    /// `DOCFILE-019`: a received name keeps the last step of its path and
+    /// loses what a host refuses; a name of dots takes the fallback stem.
+    #[test]
+    fn a_received_name_keeps_its_last_step() {
+        let cases = [
+            ("../../.ssh/authorized_keys", "authorized_keys"),
+            ("..\\..\\boot.ini", "boot.ini"),
+            ("..", "attachment"),
+            ("a/..", "attachment"),
+            ("a\0b\nc.pdf", "abc.pdf"),
+            ("notes.tar.gz", "notes.tar.gz"),
+            ("photo.j:pg", "photo.jpg"),
+            ("report.pdf", "report.pdf"),
+        ];
+        for (sent, saved) in cases {
+            let name = ExportFilename::from_received(sent, "attachment");
+            assert_eq!(name.as_str(), saved, "sent as {sent:?}");
+            assert!(ExportFilename::new(name.as_str()).is_ok());
+        }
+    }
+
+    /// `DOCFILE-020`: a long received name is cut to the bound, and its
+    /// extension survives the cut whole.
+    #[test]
+    fn a_long_received_name_keeps_its_extension() {
+        let sent = format!("{}.pdf", "\u{e9}".repeat(400));
+        let name = ExportFilename::from_received(&sent, "attachment");
+        assert!(ByteSize::of_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
+        assert!(name.as_str().ends_with(".pdf"));
         assert!(ExportFilename::new(name.as_str()).is_ok());
     }
 
