@@ -7,7 +7,7 @@
 //! since only the layout knows which byte lies under it.
 
 use ambre_bus::{Timestamp, UserId};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint};
 
 use crate::list::{MessageList, RowKey, UNKNOWN_MEMBER};
 
@@ -32,12 +32,12 @@ pub struct Selecting {
     /// The selection the last paint resolved.
     pub selection: Option<TextSelection>,
     /// Where a press began, in the region's pixels: the anchor to come.
-    pub press: Option<(f32, f32)>,
+    pub press: Option<ViewPoint>,
     /// Where the drag is now: the focus to come.
-    pub drag: Option<(f32, f32)>,
+    pub drag: Option<ViewPoint>,
     /// Where a click or a tap that moved nothing landed: the paint looks for
     /// a link under it (`MURMURE-567`).
-    pub click: Option<(f32, f32)>,
+    pub click: Option<ViewPoint>,
 }
 
 impl TextSelection {

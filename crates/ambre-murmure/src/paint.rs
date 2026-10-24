@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
-    Layout, ParleyBrush, PositionedLayoutItem, Rect, Selection,
+    Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
 };
 
 use crate::list::{
@@ -103,7 +103,8 @@ pub struct Painted {
 impl Painted {
     /// The index of the row under the height `y`, `None` between rows or
     /// past them.
-    pub fn row_at(&self, y: f32) -> Option<usize> {
+    pub fn row_at(&self, y: ViewPx) -> Option<usize> {
+        let y = y.get();
         self.rows
             .iter()
             .find(|&&(_, top, bottom)| top <= y && y < bottom)
@@ -291,10 +292,11 @@ fn chip_at(
     cache: &mut TextCache,
     rows: &[(usize, f32, f32)],
     words: &HashMap<usize, (RowWords, bool)>,
-    (x, y): (f32, f32),
+    at: ViewPoint,
     width: f32,
     pics: Option<Pictured<'_>>,
 ) -> Option<(usize, Emoji)> {
+    let (x, y) = (at.x.get(), at.y.get());
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
@@ -375,7 +377,7 @@ fn chip_boxes(
     (boxes, y + line)
 }
 
-/// Paint the reaction chips of a row, their top-left at `(x, y)`. A chip
+/// Paint the reaction chips of a row, their top-left at `at`. A chip
 /// that holds `me` takes the accent (`MURMURE-137`).
 #[allow(clippy::too_many_arguments)]
 fn draw_chips<S: DrawSurface>(
@@ -383,13 +385,13 @@ fn draw_chips<S: DrawSurface>(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    (x, y): (f32, f32),
+    at: Point,
     width: f32,
     palette: &Palette,
     me: Option<UserId>,
 ) {
     let (boxes, _) = chips(font_cx, cache, row, width);
-    let (dx, dy) = (f64::from(x), f64::from(y));
+    let (dx, dy) = (at.x, at.y);
     for (reaction, b) in row.reactions.iter().zip(boxes) {
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         let mine = me.is_some_and(|me| reaction.users.contains(&me));
@@ -407,19 +409,19 @@ fn draw_chips<S: DrawSurface>(
     }
 }
 
-/// Paint the file chips of a row, their top-left at `(x, y)`, in the ink of
+/// Paint the file chips of a row, their top-left at `at`, in the ink of
 /// a link: a click fetches the file.
 fn draw_files<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    (x, y): (f32, f32),
+    at: Point,
     width: f32,
     palette: &Palette,
 ) {
     let (boxes, _) = file_chips(font_cx, cache, row, width);
-    let (dx, dy) = (f64::from(x), f64::from(y));
+    let (dx, dy) = (at.x, at.y);
     for (file, b) in row.files.iter().zip(boxes) {
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         surface.fill_rect(at, palette.header_bg);
@@ -438,10 +440,11 @@ fn file_at(
     cache: &mut TextCache,
     rows: &[(usize, f32, f32)],
     words: &HashMap<usize, (RowWords, bool)>,
-    (x, y): (f32, f32),
+    at: ViewPoint,
     width: f32,
     pics: Option<Pictured<'_>>,
 ) -> Option<Attachment> {
+    let (x, y) = (at.x.get(), at.y.get());
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
@@ -475,9 +478,10 @@ fn link_at(
     cache: &mut TextCache,
     rows: &[(usize, f32, f32)],
     words: &HashMap<usize, (RowWords, bool)>,
-    (x, y): (f32, f32),
+    at: ViewPoint,
     width: f32,
 ) -> Option<ambre_core::LinkUrl> {
+    let (x, y) = (at.x.get(), at.y.get());
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
@@ -508,9 +512,10 @@ fn spot_at(
     rows: &[(usize, f32, f32)],
     words: &HashMap<usize, (RowWords, bool)>,
     keys: &[RowKey],
-    (x, y): (f32, f32),
+    at: ViewPoint,
     width: f32,
 ) -> Option<Spot> {
+    let (x, y) = (at.x.get(), at.y.get());
     let &(i, top, _) = rows
         .iter()
         .find(|&&(_, top, tall)| y < top + tall)
@@ -720,14 +725,14 @@ fn previews_height(row: &RowWords, pics: Option<Pictured<'_>>) -> f32 {
     count * (SPACE_2 + PREVIEW_TALL)
 }
 
-/// Paint the previews of a row, their top-left at `(x, y)`. A decoded
+/// Paint the previews of a row, their top-left at `at`. A decoded
 /// picture draws the frame its clock reaches. One not decoded yet draws
 /// its box empty. `played` records each file and the next frame due.
 fn draw_previews<S: DrawSurface>(
     surface: &mut S,
     row: &RowWords,
     pics: Option<Pictured<'_>>,
-    (x, y): (f32, f32),
+    at: Point,
     width: f32,
     palette: &Palette,
     played: &mut Played,
@@ -735,7 +740,7 @@ fn draw_previews<S: DrawSurface>(
     let Some(pictured) = pics else {
         return;
     };
-    let (dx, dy) = (f64::from(x), f64::from(y));
+    let (dx, dy) = (at.x, at.y);
     for (file, b) in preview_boxes(row, pics, width) {
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         played.files.push(file.media_ref.clone());
@@ -816,11 +821,14 @@ fn draw_row<S: DrawSurface>(
     let body_tall = layout.height();
     draw_body(surface, layout, x, y, ink, palette);
     y += body_tall;
-    draw_previews(surface, row, pics, (x, y), width, palette, played);
+    let at = Point::new(f64::from(x), f64::from(y));
+    draw_previews(surface, row, pics, at, width, palette, played);
     y += previews_height(row, pics);
-    draw_files(surface, font_cx, cache, row, (x, y), width, palette);
+    let at = Point::new(f64::from(x), f64::from(y));
+    draw_files(surface, font_cx, cache, row, at, width, palette);
     y += file_chips(font_cx, cache, row, width).1;
-    draw_chips(surface, font_cx, cache, row, (x, y), width, palette, me);
+    let at = Point::new(f64::from(x), f64::from(y));
+    draw_chips(surface, font_cx, cache, row, at, width, palette, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
@@ -896,6 +904,11 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::list::tests::message;
+
+    /// The point of the list at `(x, y)`.
+    fn view_at((x, y): (f32, f32)) -> ViewPoint {
+        ViewPoint::new(ViewPx::new(x), ViewPx::new(y))
+    }
 
     /// The faces the page ships, read from the application's font folder.
     pub(crate) fn fonts() -> FontContext {
@@ -1160,7 +1173,7 @@ pub(crate) mod tests {
         let bottom = at.rows[0].2;
         let click = (SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0);
         let selecting = Selecting {
-            click: Some(click),
+            click: Some(view_at(click)),
             ..Selecting::default()
         };
         let shown = Shown {
@@ -1234,7 +1247,7 @@ pub(crate) mod tests {
 
         let bottom = at.rows[0].2;
         let selecting = Selecting {
-            click: Some((SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0)),
+            click: Some(view_at((SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0))),
             ..Selecting::default()
         };
         let shown = Shown {
@@ -1613,8 +1626,8 @@ pub(crate) mod tests {
             focus: None,
             selecting: Selecting {
                 selection: None,
-                press: Some(press),
-                drag: Some(drag),
+                press: Some(view_at(press)),
+                drag: Some(view_at(drag)),
                 click: None,
             },
             me: None,

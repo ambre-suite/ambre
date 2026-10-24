@@ -2093,7 +2093,6 @@ ambre-murmure | src/paint.rs | crate::paint | Painted.rest | field | Option<(usi
 ambre-murmure | src/paint.rs | crate::paint | Painted.rows | field | Vec<(usize,f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Painted.top | field | Option<(usize,f32)>	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Painted::row_at() | ret | Option<usize>	math	local count/index/counter
-ambre-murmure | src/paint.rs | crate::paint | Painted::row_at(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Pictured.still | field | bool	math	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | SELECTION_ALPHA | const | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | Shown.anchor | field | Option<(usize,f32)>	math	layout geometry in logical px
@@ -2103,7 +2102,6 @@ ambre-murmure | src/paint.rs | crate::paint | body_top() | ret | f32	math	layout
 ambre-murmure | src/paint.rs | crate::paint | body_top(line) | param | bool	math	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | body_top(top) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | body_top(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | chip_at((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | chip_at() | ret | Option<(usize,Emoji)>	math	local count/index/counter
 ambre-murmure | src/paint.rs | crate::paint | chip_at(rows) | param | &[(usize,f32,f32)]	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | chip_at(width) | param | f32	math	layout geometry in logical px
@@ -2117,18 +2115,14 @@ ambre-murmure | src/paint.rs | crate::paint | draw(x) | param | f32	math	layout 
 ambre-murmure | src/paint.rs | crate::paint | draw(y) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_body(x) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_body(y) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | draw_chips((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_chips(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | draw_files((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_files(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_line() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_line(top) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_line(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | draw_previews((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_previews(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_row(top) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | draw_row(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | file_at((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | file_at(rows) | param | &[(usize,f32,f32)]	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | file_at(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | file_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
@@ -2139,7 +2133,6 @@ ambre-murmure | src/paint.rs | crate::paint | header_height() | ret | f32	math	l
 ambre-murmure | src/paint.rs | crate::paint | header_height(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | line_height() | ret | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | line_height(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | link_at((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at(rows) | param | &[(usize,f32,f32)]	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | link_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
@@ -2154,7 +2147,6 @@ ambre-murmure | src/paint.rs | crate::paint | shape(bold) | param | bool	math	st
 ambre-murmure | src/paint.rs | crate::paint | shape(size) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | shape(width) | param | f32	math	layout geometry in logical px
-ambre-murmure | src/paint.rs | crate::paint | spot_at((x,y)) | param | (f32,f32)	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | spot_at(rows) | param | &[(usize,f32,f32)]	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | spot_at(width) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | spot_at(words) | param | &HashMap<usize,(RowWords,bool)>	math	local count/index/counter
@@ -2212,9 +2204,6 @@ ambre-murmure | src/search.rs | crate::search | folded_words() | ret | Vec<Strin
 ambre-murmure | src/search.rs | crate::search | folded_words(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | is_mark() | ret | bool	math	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | is_mark(c) | param | char	free-text	text, label or user content
-ambre-murmure | src/select.rs | crate::select | Selecting.click | field | Option<(f32,f32)>	math	layout geometry in logical px
-ambre-murmure | src/select.rs | crate::select | Selecting.drag | field | Option<(f32,f32)>	math	layout geometry in logical px
-ambre-murmure | src/select.rs | crate::select | Selecting.press | field | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::ordered() | ret | Option<((usize,ByteOffset),(usize,ByteOffset))>	math	count, size or local index

@@ -519,7 +519,7 @@ impl MurmureView {
         if self.on_jump(on_screen(at)) || self.in_composer(at.y) {
             return None;
         }
-        let i = self.last.as_ref()?.row_at(at.y.get())?;
+        let i = self.last.as_ref()?.row_at(at.y)?;
         let mut target = self.target_of_row(i)?;
         target.pressed = pressed.then_some(at);
         Some(target)
@@ -774,11 +774,7 @@ impl MurmureView {
     /// Ask again for the segment of the band under `y` at the last paint, if
     /// its cause may clear (`MURMURE-513`). Answers whether one was asked.
     fn retry_at(&self, y: ViewPx) -> bool {
-        let Some(i) = self
-            .last
-            .as_ref()
-            .and_then(|painted| painted.row_at(y.get()))
-        else {
+        let Some(i) = self.last.as_ref().and_then(|painted| painted.row_at(y)) else {
             return false;
         };
         self.retry_row(|_| Some(i))
@@ -963,7 +959,7 @@ impl MurmureView {
             }
             Some(at) if self.retry_at(at.y) => None,
             Some(at) => {
-                self.selecting.click = Some((at.x.get(), at.y.get()));
+                self.selecting.click = Some(at);
                 self.dirty = true;
                 Some(at)
             }
@@ -1556,7 +1552,7 @@ impl MurmureView {
                     (self.reads.act_on)(self.target_at(pointer, false));
                 } else if button == PointerButton::Primary && !self.on_jump(at) {
                     self.selecting = Selecting {
-                        press: Some((pointer.x.get(), pointer.y.get())),
+                        press: Some(pointer),
                         ..Selecting::default()
                     };
                     self.drag = Some(false);
@@ -1567,7 +1563,7 @@ impl MurmureView {
                 self.hover = Some(on_screen(at));
                 if let Some(moved) = self.drag.as_mut() {
                     *moved = true;
-                    self.selecting.drag = Some((at.x.get(), at.y.get()));
+                    self.selecting.drag = Some(at);
                     self.dirty = true;
                     self.drag_past_edge(at.y);
                 }
@@ -1577,7 +1573,7 @@ impl MurmureView {
                 self.hover = Some(at);
                 let drag = self.drag.take();
                 if drag == Some(true) {
-                    self.selecting.drag = Some((pointer.x.get(), pointer.y.get()));
+                    self.selecting.drag = Some(pointer);
                     self.dirty = true;
                     return false;
                 }
@@ -1593,7 +1589,7 @@ impl MurmureView {
                 // A click that moved nothing may land on a link, which the
                 // next paint finds under it (`MURMURE-567`).
                 if drag == Some(false) {
-                    self.selecting.click = Some((pointer.x.get(), pointer.y.get()));
+                    self.selecting.click = Some(pointer);
                     self.dirty = true;
                 }
             }
