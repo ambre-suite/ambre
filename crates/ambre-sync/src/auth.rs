@@ -71,7 +71,7 @@ impl SyncState {
                         let user_doc_key = DocumentKey::from_array(user_key);
                         let seed_bytes = match ambre_crypto::aead::open(
                             &ambre_core::Nonce(*nonce),
-                            ciphertext,
+                            &ambre_core::Ciphertext(ciphertext.to_vec()),
                             &ambre_core::Aad::of(b"ambre-master-seed"),
                             &user_doc_key,
                         ) {
@@ -369,7 +369,7 @@ impl SyncState {
                 let mut salt = [0u8; 32];
                 let wrapped = getrandom::fill(&mut salt)
                     .map_err(|e| format!("no CSPRNG for the account salt: {e}"))
-                    .map(|()| ambre_core::MasterKeySalt::new(salt.to_vec()))
+                    .map(|()| ambre_core::MasterKeySalt::from_array(salt))
                     .and_then(|salt| {
                         ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
                             .map(|user_key| (salt, user_key))

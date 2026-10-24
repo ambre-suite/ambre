@@ -1958,7 +1958,7 @@ mod handler_tests {
         )
         .bind(crate::db::id_to_uuid(keyless.id))
         .bind(vec![1u8; 56])
-        .bind(vec![2u8; 16])
+        .bind(vec![2u8; 32])
         .bind(vec![5u8; 32])
         .bind(vec![6u8; 32])
         .execute(&state.db)

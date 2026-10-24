@@ -92,7 +92,7 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
         &ambre_core::Email::from(email),
         &ambre_core::DisplayName::new("Test User").unwrap(),
         &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-        &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+        &ambre_core::MasterKeySalt::from_array([2u8; 32]),
         &ambre_core::PublicKey::from_array([3u8; 32]),
         &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
     )

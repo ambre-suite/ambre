@@ -36,7 +36,7 @@ fn bench_envelope(c: &mut Criterion) {
 }
 
 fn bench_argon2(c: &mut Criterion) {
-    let salt = ambre_core::MasterKeySalt::new(vec![0xAB; 32]);
+    let salt = ambre_core::MasterKeySalt::from_array([0xAB; 32]);
     c.bench_function("argon2id_derive", |b| {
         b.iter(|| {
             passphrase::derive_user_key(black_box(&pass("correct horse")), black_box(&salt))

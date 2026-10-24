@@ -98,5 +98,5 @@ pub fn open(
         aad,
         &sealed.commitment_tag,
     )?;
-    aead::open(&sealed.nonce, &sealed.ciphertext.0, aad, doc_key)
+    aead::open(&sealed.nonce, &sealed.ciphertext, aad, doc_key)
 }

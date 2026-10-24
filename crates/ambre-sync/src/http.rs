@@ -2568,7 +2568,7 @@ mod tests {
         assert!(owed.setup_owed());
         let stored = serde_json::json!({
             "master_key_enc": ambre_core::WrappedMasterKey::new(vec![1; 72]),
-            "master_key_salt": ambre_core::MasterKeySalt::new(vec![2; 32]),
+            "master_key_salt": ambre_core::MasterKeySalt::from_array([2; 32]),
         });
         let stored: MasterKeyResponse = serde_json::from_value(stored).unwrap();
         assert!(!stored.setup_owed());

@@ -1079,7 +1079,7 @@ mod tests {
             &ambre_core::Email::from(email),
             &ambre_core::DisplayName::new(display_name).unwrap(),
             &ambre_core::WrappedMasterKey::new([1; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2; 32]),
             &signing,
             &ambre_core::ExchangePublicKey::from_array([4; 32]),
         )

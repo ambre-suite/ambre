@@ -31,7 +31,8 @@ const LANES: u32 = 1;
 /// # Errors
 ///
 /// [`CryptoError::Argon2Failed`] when Argon2id refuses the parameters or the
-/// inputs. A `salt` under 8 bytes is the reachable case.
+/// inputs. A [`MasterKeySalt`](ambre_core::MasterKeySalt) holds its fixed
+/// width, so neither is reachable from a well-built salt.
 pub fn derive_user_key(
     passphrase: &ambre_core::Passphrase,
     salt: &ambre_core::MasterKeySalt,

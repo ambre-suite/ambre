@@ -427,12 +427,12 @@ fn kek_binds_peer_identity() {
 
 #[test]
 fn argon2_deterministic() {
-    let salt = MasterKeySalt::new(vec![0xAB; 32]);
+    let salt = MasterKeySalt::from_array([0xAB; 32]);
     let k1 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     let k2 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     assert_eq!(k1, k2);
 
-    let other_salt = MasterKeySalt::new(vec![0xCD; 32]);
+    let other_salt = MasterKeySalt::from_array([0xCD; 32]);
     let k3 = passphrase::derive_user_key(&pass("correct horse"), &other_salt).unwrap();
     assert_ne!(k1, k3);
 
@@ -630,7 +630,7 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
     // separation at all. Without it, a file on disk would carry the value that
     // unwraps the account's master key.
     let user =
-        passphrase::derive_user_key(&pass("correct horse"), &MasterKeySalt::new(vec![0xAB; 16]))
+        passphrase::derive_user_key(&pass("correct horse"), &MasterKeySalt::from_array([0xAB; 32]))
             .unwrap();
     let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
         .unwrap();
@@ -676,7 +676,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
     let (nonce, ciphertext) = aead::seal_file(plaintext, aad, &key).unwrap();
     assert_eq!(
-        aead::open_file(&nonce, &ciphertext.0, aad, &key).unwrap(),
+        aead::open_file(&nonce, &ciphertext, aad, &key).unwrap(),
         plaintext
     );
 
@@ -685,14 +685,14 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     // is the whole of "that passphrase does not open this file".
     let wrong = FileKey::from_passphrase(&pass("open sesa"), &salt).unwrap();
     assert_eq!(
-        aead::open_file(&nonce, &ciphertext.0, aad, &wrong),
+        aead::open_file(&nonce, &ciphertext, aad, &wrong),
         Err(CryptoError::AeadFailed)
     );
 
     // And the seal binds the header it covered: an edited salt, nonce or
     // lineage byte fails the tag rather than deriving quietly.
     assert_eq!(
-        aead::open_file(&nonce, &ciphertext.0, &Aad::of(b"the-sealed-headeR"), &key),
+        aead::open_file(&nonce, &ciphertext, &Aad::of(b"the-sealed-headeR"), &key),
         Err(CryptoError::AeadFailed)
     );
 }
@@ -716,11 +716,11 @@ fn a_document_key_sealed_under_another_opens_to_the_same_key() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
     let (nonce, sealed) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
     let opened =
-        aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer).unwrap();
+        aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer).unwrap();
     // The opened key reads what the original sealed.
     let (n, ct) = aead::seal(b"a message", &Aad::of(b""), &inner).unwrap();
     assert_eq!(
-        aead::open(&n, &ct.0, &Aad::of(b""), &opened).unwrap(),
+        aead::open(&n, &ct, &Aad::of(b""), &opened).unwrap(),
         b"a message"
     );
 }
@@ -729,10 +729,10 @@ fn a_document_key_sealed_under_another_opens_to_the_same_key() {
 fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
     let (nonce, sealed) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
-    let wrong_key = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &inner);
+    let wrong_key = aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &inner);
     assert_eq!(wrong_key.err(), Some(CryptoError::AeadFailed));
     // The aad binds the sealed key to one channel: moved to another, it fails.
-    let moved = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-2"), &outer);
+    let moved = aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-2"), &outer);
     assert_eq!(moved.err(), Some(CryptoError::AeadFailed));
 }
 
@@ -750,17 +750,17 @@ fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
     )
     .unwrap();
     let (key, anchor) =
-        aead::open_anchored_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer).unwrap();
+        aead::open_anchored_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer).unwrap();
     assert_eq!(key.as_bytes(), inner.as_bytes());
     assert_eq!(anchor, Some(EntryDigest([0x33; 32])));
 
     let (nonce, bare) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
     let (_, anchor) =
-        aead::open_anchored_key(&nonce, &bare.0, &Aad::of(b"channel-1"), &outer).unwrap();
+        aead::open_anchored_key(&nonce, &bare, &Aad::of(b"channel-1"), &outer).unwrap();
     assert_eq!(anchor, None);
 
     let (nonce, partial) = aead::seal(&[7; 48], &Aad::of(b"channel-1"), &outer).unwrap();
-    let partial = aead::open_anchored_key(&nonce, &partial.0, &Aad::of(b"channel-1"), &outer);
+    let partial = aead::open_anchored_key(&nonce, &partial, &Aad::of(b"channel-1"), &outer);
     assert_eq!(partial.err(), Some(CryptoError::InvalidKeyLength));
 }
 
@@ -768,6 +768,6 @@ fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
 fn a_sealed_value_that_is_no_key_is_refused() {
     let outer = DocumentKey::generate();
     let (nonce, sealed) = aead::seal(&[7; 16], &Aad::of(b"channel-1"), &outer).unwrap();
-    let short = aead::open_document_key(&nonce, &sealed.0, &Aad::of(b"channel-1"), &outer);
+    let short = aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer);
     assert_eq!(short.err(), Some(CryptoError::InvalidKeyLength));
 }

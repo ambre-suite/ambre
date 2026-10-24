@@ -1026,7 +1026,7 @@ pub(crate) fn unseal_channel_key(
         .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         &ambre_core::Nonce(*nonce),
-        ciphertext,
+        &ambre_core::Ciphertext(ciphertext.to_vec()),
         &channel_key_aad(channel_id),
         space_key,
     )?;
@@ -1357,7 +1357,7 @@ pub(crate) mod tests {
     fn same_key(a: &DocumentKey, b: &DocumentKey) -> bool {
         let (nonce, ct) =
             ambre_crypto::aead::seal(b"probe", &ambre_core::Aad::of(b""), a).expect("seal");
-        ambre_crypto::aead::open(&nonce, &ct.0, &ambre_core::Aad::of(b""), b).is_ok()
+        ambre_crypto::aead::open(&nonce, &ct, &ambre_core::Aad::of(b""), b).is_ok()
     }
 
     // --- The Murmure spaces spec: the sealed catalogue key and a self-join ---

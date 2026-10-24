@@ -64,7 +64,8 @@ pub async fn get_user(
                 .map(ambre_core::WrappedMasterKey::new),
             master_key_salt: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
-                .map(ambre_core::MasterKeySalt::new),
+                .map(decode_salt)
+                .transpose()?,
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
             exchange_pubkey: decode_opt_exchange_key(r.try_get("exchange_pubkey")?)?,
         })),
@@ -115,7 +116,8 @@ pub async fn get_user_by_email(
                 .map(ambre_core::WrappedMasterKey::new),
             master_key_salt: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
-                .map(ambre_core::MasterKeySalt::new),
+                .map(decode_salt)
+                .transpose()?,
             signing_pubkey: decode_opt_key(r.try_get("signing_pubkey")?)?,
             exchange_pubkey: decode_opt_exchange_key(r.try_get("exchange_pubkey")?)?,
         })),
@@ -164,7 +166,8 @@ pub async fn create_user(
             .map(ambre_core::WrappedMasterKey::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
-            .map(ambre_core::MasterKeySalt::new),
+            .map(decode_salt)
+            .transpose()?,
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     })
@@ -240,7 +243,8 @@ pub async fn upsert_user_from_oidc(
             .map(ambre_core::WrappedMasterKey::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
-            .map(ambre_core::MasterKeySalt::new),
+            .map(decode_salt)
+            .transpose()?,
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     };
@@ -300,7 +304,8 @@ pub async fn dev_upsert_user(
             .map(ambre_core::WrappedMasterKey::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
-            .map(ambre_core::MasterKeySalt::new),
+            .map(decode_salt)
+            .transpose()?,
         signing_pubkey: decode_opt_key(row.try_get("signing_pubkey")?)?,
         exchange_pubkey: decode_opt_exchange_key(row.try_get("exchange_pubkey")?)?,
     })
@@ -443,7 +448,7 @@ mod tests {
             &ambre_core::Email::from("alice@example.com"),
             &ambre_core::DisplayName::new("Alice").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
@@ -502,7 +507,7 @@ mod tests {
             &ambre_core::Email::from("DAVE@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([8u8; 32]),
             &ambre_core::PublicKey::from_array([7u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
         )
@@ -575,7 +580,7 @@ mod tests {
             &ambre_core::Email::from("bob@example.com"),
             &ambre_core::DisplayName::new("Bob").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
@@ -587,7 +592,7 @@ mod tests {
             &ambre_core::Email::from("BOB@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([8u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([8u8; 32]),
             &ambre_core::PublicKey::from_array([7u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
         )
@@ -606,7 +611,7 @@ mod tests {
             &ambre_core::Email::from("carol@example.com"),
             &ambre_core::DisplayName::new("Carol").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )

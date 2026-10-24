@@ -154,10 +154,76 @@ define_encoded! {
     lengths: [NONCE_LEN + KEY_LEN + TAG_LEN]
 }
 
-define_encoded! {
-    /// The salt the passphrase key of an account is derived with.
-    MasterKeySalt,
-    lengths: [32]
+/// The salt the passphrase key of an account is derived with.
+///
+/// Fixed at [`MasterKeySalt::LEN`] bytes, as [`FileSalt`](crate::FileSalt) is
+/// at its own width. A value of another width is refused when it is built,
+/// from the wire, a column or a caller, so a short salt never reaches the
+/// derivation at unlock. On the wire it is its URL-safe base64 text, and
+/// `Debug` prints the length alone.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MasterKeySalt([u8; MasterKeySalt::LEN]);
+
+/// A master-key salt was built from bytes of another width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a master-key salt is {} bytes", MasterKeySalt::LEN)]
+pub struct InvalidMasterKeySalt;
+
+impl MasterKeySalt {
+    /// The width of the salt, in bytes.
+    pub const LEN: usize = 32;
+
+    /// Wraps the salt bytes a CSPRNG drew.
+    pub const fn from_array(bytes: [u8; Self::LEN]) -> Self {
+        Self(bytes)
+    }
+
+    /// Reads the salt from bytes a column or a body carried.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidMasterKeySalt`] when `bytes` is not [`Self::LEN`] long.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self, InvalidMasterKeySalt> {
+        bytes.try_into().map(Self).map_err(|_| InvalidMasterKeySalt)
+    }
+
+    /// The salt bytes, for the KDF and for the column.
+    pub const fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The text the wire carries.
+    pub fn to_base64(&self) -> String {
+        URL_SAFE.encode(self.0)
+    }
+}
+
+impl std::fmt::Debug for MasterKeySalt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MasterKeySalt({} bytes)", self.0.len())
+    }
+}
+
+impl Serialize for MasterKeySalt {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_base64())
+    }
+}
+
+impl<'de> Deserialize<'de> for MasterKeySalt {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        let bytes = URL_SAFE
+            .decode(text.as_bytes())
+            .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
+        Self::from_slice(&bytes).map_err(|_| {
+            serde::de::Error::custom(format!(
+                "MasterKeySalt of {} bytes, not {}",
+                bytes.len(),
+                Self::LEN
+            ))
+        })
+    }
 }
 
 define_encoded! {
@@ -223,11 +289,22 @@ mod tests {
         }
         only::<WrappedDocKey>(WrappedDocKey::LENGTHS);
         only::<WrappedMasterKey>(WrappedMasterKey::LENGTHS);
-        only::<MasterKeySalt>(MasterKeySalt::LENGTHS);
+        only::<MasterKeySalt>(&[MasterKeySalt::LEN]);
         assert_eq!(WrappedDocKey::LENGTHS, [72, 104]);
         assert_eq!(WrappedMasterKey::LENGTHS, [72]);
-        assert_eq!(MasterKeySalt::LENGTHS, [32]);
+        assert_eq!(MasterKeySalt::LEN, 32);
         assert!(reads::<SealedName>(0) && reads::<SealedName>(SealedName::MAX_LEN));
+    }
+
+    /// A salt of any width but its own is refused when it is built, so a
+    /// short one never reaches the passphrase derivation at unlock.
+    #[test]
+    fn a_master_key_salt_of_another_width_is_refused_when_built() {
+        assert!(MasterKeySalt::from_slice(&[0xAB; 16]).is_err());
+        assert!(MasterKeySalt::from_slice(&[0xAB; 33]).is_err());
+        assert!(MasterKeySalt::from_slice(&[]).is_err());
+        let salt = MasterKeySalt::from_slice(&[0xAB; MasterKeySalt::LEN]).unwrap();
+        assert_eq!(salt, MasterKeySalt::from_array([0xAB; 32]));
     }
 
     /// `SRV-230`: a sealed name reads up to the longest name in four-byte

@@ -123,6 +123,12 @@ impl TryFrom<PgKey> for ambre_core::ExchangePublicKey {
     }
 }
 
+/// A stored master-key salt. Any length but [`ambre_core::MasterKeySalt::LEN`]
+/// is a decode error, as for [`decode_key`].
+fn decode_salt(bytes: Vec<u8>) -> Result<ambre_core::MasterKeySalt, sqlx::Error> {
+    ambre_core::MasterKeySalt::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+}
+
 /// A stored public key that may be `NULL`, as [`decode_key`] reads one.
 fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
     bytes.map(decode_key).transpose()
@@ -271,7 +277,7 @@ mod tests {
             &ambre_core::Email::from("snap@test.dev"),
             &ambre_core::DisplayName::new("Snap").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
@@ -342,7 +348,7 @@ mod tests {
             &ambre_core::Email::from("purge@test.dev"),
             &ambre_core::DisplayName::new("Purge").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )
@@ -423,7 +429,7 @@ mod tests {
             &ambre_core::Email::from("horizon@test.dev"),
             &ambre_core::DisplayName::new("Horizon").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::new([2u8; 16].to_vec()),
+            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
             &ambre_core::PublicKey::from_array([3u8; 32]),
             &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
         )

@@ -106,7 +106,7 @@ pub use docfile::{
 };
 pub use email::Email;
 pub use encoded::{
-    EncodedKeyLink, EncodedLogEntry, EscrowedKey, MasterKeySalt, SealedName, SealedShare,
+    EncodedKeyLink, EncodedLogEntry, EscrowedKey, InvalidMasterKeySalt, MasterKeySalt, SealedName, SealedShare,
     WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};

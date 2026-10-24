@@ -38,11 +38,11 @@ pub fn seal(
 /// wrong `aad`, or a modified ciphertext. Poly1305 cannot tell a caller which.
 pub fn open(
     nonce: &Nonce,
-    ciphertext: &[u8],
+    ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     key: &DocumentKey,
 ) -> Result<Vec<u8>, CryptoError> {
-    open_under(nonce, ciphertext, aad, key.as_bytes())
+    open_under(nonce, &ciphertext.0, aad, key.as_bytes())
 }
 
 /// Seals one passphrase-sealed `.ambre` file under its own [`FileKey`].
@@ -74,11 +74,11 @@ pub fn seal_file(
 /// [`CryptoError::AeadFailed`], for the reason the paragraph above states.
 pub fn open_file(
     nonce: &Nonce,
-    ciphertext: &[u8],
+    ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<Vec<u8>, CryptoError> {
-    open_under(nonce, ciphertext, aad, key.as_bytes())
+    open_under(nonce, &ciphertext.0, aad, key.as_bytes())
 }
 
 ambre_core::define_layout_version! {
@@ -186,7 +186,7 @@ pub fn seal_anchored_key(
 /// neither a key nor a key and an anchor.
 pub fn open_document_key(
     nonce: &Nonce,
-    ciphertext: &[u8],
+    ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<DocumentKey, CryptoError> {
@@ -201,11 +201,11 @@ pub fn open_document_key(
 /// Every error of [`open_document_key`].
 pub fn open_anchored_key(
     nonce: &Nonce,
-    ciphertext: &[u8],
+    ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
-    let plain = zeroize::Zeroizing::new(open_under(nonce, ciphertext, aad, outer.as_bytes())?);
+    let plain = zeroize::Zeroizing::new(open_under(nonce, &ciphertext.0, aad, outer.as_bytes())?);
     let (key, anchor) = match plain.len() {
         32 => (plain.get(..32), None),
         64 => (plain.get(..32), plain.get(32..)),

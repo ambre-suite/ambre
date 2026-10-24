@@ -73,7 +73,7 @@ impl SyncState {
         };
         match ambre_crypto::aead::open_file(
             &envelope.nonce,
-            &envelope.ciphertext.0,
+            &envelope.ciphertext,
             &envelope.aad(),
             &key,
         ) {

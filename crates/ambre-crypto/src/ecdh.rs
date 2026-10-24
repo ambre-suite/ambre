@@ -177,7 +177,7 @@ pub fn unwrap_anchored(
     let kek = derive_kek(&shared, peer_public, &own_pub);
     let bytes = Zeroizing::new(aead::open(
         &wrapped.nonce,
-        &wrapped.ciphertext.0,
+        &wrapped.ciphertext,
         &ambre_core::Aad::of(KEK_DOMAIN),
         &kek,
     )?);
