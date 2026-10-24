@@ -440,7 +440,13 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::Level => format!("at level {}", doc::heading_level_of(&tree, id)?),
         doc::AttrKey::Lang => format!("in {:?}", reader.code_lang_of(&block_id(*id))?),
         doc::AttrKey::Marker | doc::AttrKey::Spelling | doc::AttrKey::Ticked => {
-            format!("marked {:?}", doc::list_style_of(&tree, id)?)
+            // The frozen reading prints the checkbox as its stored bool.
+            match doc::list_style_of(&tree, id)? {
+                ambre_bus::app::prose::ListStyle::Todo(mark) => {
+                    format!("marked Todo({})", mark.is_done())
+                }
+                style => format!("marked {style:?}"),
+            }
         }
         doc::AttrKey::MaxLevel | doc::AttrKey::Numbered => {
             let toc = reader.table_of_contents(&block_id(*id))?;
@@ -575,7 +581,7 @@ fn formatting(style: &ResolvedStyle, mark: &str) -> Option<String> {
         "fg" => format!("ink {}", colour((*color)?)),
         "bg" => format!("highlight {}", colour((*background)?)),
         "fs" => format!("{font_size} pt"),
-        "ff" => format!("set in {:?}", font_family.as_ref()?),
+        "ff" => format!("set in {:?}", font_family.as_ref()?.label()),
         "a" => format!("links to {:?}", link.as_ref()?),
         _ => return None,
     })
