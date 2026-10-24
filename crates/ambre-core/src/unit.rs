@@ -424,7 +424,10 @@ mod tests {
         let zoom = ZoomFactor::positive(2.0);
         assert_eq!(DocPx::new(12.0).zoomed(zoom), ViewPx::new(24.0));
         assert_eq!(ViewPx::new(24.0).unzoomed(zoom), DocPx::new(12.0));
-        assert_eq!(DocPx::new(12.0).zoomed_on_surface(zoom), SurfacePx::new(24.0));
+        assert_eq!(
+            DocPx::new(12.0).zoomed_on_surface(zoom),
+            SurfacePx::new(24.0)
+        );
     }
 
     #[test]

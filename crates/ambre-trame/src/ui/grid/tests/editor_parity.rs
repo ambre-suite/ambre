@@ -87,10 +87,18 @@ fn intent(op: &Op) -> EditIntent {
             select: ambre_canvas::Extend::Select,
             word: ambre_canvas::Stride::Char,
         },
-        Op::Home => EditIntent::LineStart { select: ambre_canvas::Extend::Move },
-        Op::End => EditIntent::LineEnd { select: ambre_canvas::Extend::Move },
-        Op::ShiftHome => EditIntent::LineStart { select: ambre_canvas::Extend::Select },
-        Op::ShiftEnd => EditIntent::LineEnd { select: ambre_canvas::Extend::Select },
+        Op::Home => EditIntent::LineStart {
+            select: ambre_canvas::Extend::Move,
+        },
+        Op::End => EditIntent::LineEnd {
+            select: ambre_canvas::Extend::Move,
+        },
+        Op::ShiftHome => EditIntent::LineStart {
+            select: ambre_canvas::Extend::Select,
+        },
+        Op::ShiftEnd => EditIntent::LineEnd {
+            select: ambre_canvas::Extend::Select,
+        },
         Op::SelectAll => EditIntent::SelectAll,
     }
 }

@@ -21,7 +21,7 @@ use crate::logic::text_merge::merge_edits;
 
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_text_or_seed, locked, content_matches, expanded_aabb, stored_rect, stroke_aabb,
+    bin_of, body_text_or_seed, content_matches, expanded_aabb, locked, stored_rect, stroke_aabb,
 };
 use super::names::{ElementKey, Fields, Root};
 use super::{ToileState, write_edits};
@@ -295,10 +295,7 @@ impl ToileState {
             let Some(bounds) = self.bounds.get(id).copied() else {
                 continue; // an id nobody minted, or a stale selection
             };
-            if self
-                .element_map(id)
-                .is_some_and(|em| locked(&em))
-            {
+            if self.element_map(id).is_some_and(|em| locked(&em)) {
                 continue;
             }
             movable.push((id.clone(), bounds));
@@ -492,10 +489,9 @@ impl ToileState {
     fn holds_a_lock(&self, id: &ElementId) -> bool {
         let mut subtree = HashSet::new();
         self.collect_subtree(id, &mut subtree);
-        subtree.iter().any(|e| {
-            self.element_map(e)
-                .is_some_and(|em| locked(&em))
-        })
+        subtree
+            .iter()
+            .any(|e| self.element_map(e).is_some_and(|em| locked(&em)))
     }
 
     /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the

@@ -345,35 +345,51 @@ impl TextEditor {
     }
     /// Move the caret to the start of the line.
     pub fn move_home(&mut self) {
-        self.push(EditIntent::LineStart { select: Extend::Move });
+        self.push(EditIntent::LineStart {
+            select: Extend::Move,
+        });
     }
     /// Move the caret to the end of the line.
     pub fn move_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: Extend::Move });
+        self.push(EditIntent::LineEnd {
+            select: Extend::Move,
+        });
     }
     /// Extend the selection to the start of the line.
     pub fn extend_home(&mut self) {
-        self.push(EditIntent::LineStart { select: Extend::Select });
+        self.push(EditIntent::LineStart {
+            select: Extend::Select,
+        });
     }
     /// Extend the selection to the end of the line.
     pub fn extend_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: Extend::Select });
+        self.push(EditIntent::LineEnd {
+            select: Extend::Select,
+        });
     }
     /// Move the caret up one line.
     pub fn move_up(&mut self) {
-        self.push(EditIntent::Up { select: Extend::Move });
+        self.push(EditIntent::Up {
+            select: Extend::Move,
+        });
     }
     /// Move the caret down one line.
     pub fn move_down(&mut self) {
-        self.push(EditIntent::Down { select: Extend::Move });
+        self.push(EditIntent::Down {
+            select: Extend::Move,
+        });
     }
     /// Extend the selection up one line.
     pub fn extend_up(&mut self) {
-        self.push(EditIntent::Up { select: Extend::Select });
+        self.push(EditIntent::Up {
+            select: Extend::Select,
+        });
     }
     /// Extend the selection down one line.
     pub fn extend_down(&mut self) {
-        self.push(EditIntent::Down { select: Extend::Select });
+        self.push(EditIntent::Down {
+            select: Extend::Select,
+        });
     }
     /// Select the whole buffer.
     pub fn select_all(&mut self) {

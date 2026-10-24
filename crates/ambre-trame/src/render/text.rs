@@ -26,8 +26,15 @@ pub fn draw_text<S: DrawSurface>(
     if text.is_empty() {
         return;
     }
-    let layout: &Layout<ParleyBrush> =
-        cache.get_or_build(font_cx, text, font_size, max_width, align, ambre_canvas::Weight::Regular, ambre_canvas::Slant::Upright);
+    let layout: &Layout<ParleyBrush> = cache.get_or_build(
+        font_cx,
+        text,
+        font_size,
+        max_width,
+        align,
+        ambre_canvas::Weight::Regular,
+        ambre_canvas::Slant::Upright,
+    );
     let brush = Brush::Solid(color);
     draw_layout_runs(surface, layout, origin, &brush);
 }

@@ -161,7 +161,10 @@ enum Rest {
     Latest,
     /// With a row at a height, which rows loaded above or below leave in
     /// place (`MURMURE-192`).
-    Row { key: RowKey, anchor_y: ambre_core::ViewPx },
+    Row {
+        key: RowKey,
+        anchor_y: ambre_core::ViewPx,
+    },
 }
 
 /// The lists every region of the page reads, and a count of their changes.
@@ -179,8 +182,8 @@ enum ListOf {
     Thread(ChannelId, MessageId),
 }
 
-/// How the pointer reached a message: a click, which opens its actions
-/// where the menu falls, or a long press, which opens them at the finger.
+/// How the pointer reached a message. A click opens its actions where the
+/// menu falls, and a long press opens them at the finger.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Press {
     Click,
@@ -1489,7 +1492,9 @@ impl MurmureView {
                 .map_or(Rest::Latest, |(key, anchor_y)| Rest::Row { key, anchor_y });
         }
         let at_latest = painted.rest.is_none();
-        let at_oldest = painted.rest.is_some_and(|(i, y)| i == 0 && y >= ambre_core::ViewPx::ZERO);
+        let at_oldest = painted
+            .rest
+            .is_some_and(|(i, y)| i == 0 && y >= ambre_core::ViewPx::ZERO);
         let edge = if self.heading > 0.0 {
             at_latest
         } else {
@@ -2303,8 +2308,14 @@ mod tests {
         };
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut x_after = |text| {
-            let width =
-                crate::paint::shape(&mut font_cx, &mut cache, text, FONT_BODY, 284.0, ambre_canvas::Weight::Regular);
+            let width = crate::paint::shape(
+                &mut font_cx,
+                &mut cache,
+                text,
+                FONT_BODY,
+                284.0,
+                ambre_canvas::Weight::Regular,
+            );
             f64::from(SPACE_8 + width.width())
         };
         let on_link = (x_after("see si"), f64::from(second - SPACE_2 - 6.0));
@@ -3810,7 +3821,8 @@ mod tests {
         assert!(band > 0.0, "a channel region shows the composer");
         assert_eq!(page.view.list_height(), 400.0 - band);
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        page.view
+            .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4433,7 +4445,8 @@ mod tests {
     /// The glyph runs painted in the strip above the field.
     fn strip_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        page.view
+            .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4585,10 +4598,10 @@ mod tests {
                         "the reply stays in its thread"
                     );
                     assert_eq!(
-                    confirmed,
-                    ambre_bus::Confirmation::Unconfirmed,
-                    "a plain reply asks no confirmation"
-                );
+                        confirmed,
+                        ambre_bus::Confirmation::Unconfirmed,
+                        "a plain reply asks no confirmation"
+                    );
                     replies.push((root, draft.text, now.0));
                 }
                 MurmureCommand::SendMessage { .. } => panic!("a message in the channel"),
@@ -4884,7 +4897,8 @@ mod tests {
     /// Every run of glyphs the view paints, as glyph counts.
     fn glyph_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        page.view
+            .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -5283,7 +5297,8 @@ mod tests {
     /// a quote's rule and a list's dots.
     fn margin_marks(page: &mut Page) -> usize {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        page.view
+            .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -5370,7 +5385,8 @@ mod tests {
         shift_key(&mut page, "Enter");
         type_slowly(&mut page, "plain");
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        page.view
+            .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view

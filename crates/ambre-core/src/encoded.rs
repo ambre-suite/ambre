@@ -158,8 +158,8 @@ define_encoded! {
 ///
 /// Fixed at [`MasterKeySalt::LEN`] bytes, as [`FileSalt`](crate::FileSalt) is
 /// at its own width. A value of another width is refused when it is built,
-/// from the wire, a column or a caller, so a short salt never reaches the
-/// derivation at unlock. On the wire it is its URL-safe base64 text, and
+/// whether from the wire, a column or a caller. A short salt thus never reaches
+/// the derivation at unlock. On the wire it is its URL-safe base64 text, and
 /// `Debug` prints the length alone.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MasterKeySalt([u8; MasterKeySalt::LEN]);

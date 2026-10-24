@@ -877,10 +877,18 @@ impl Composer {
                 select: ambre_canvas::Extend::select_if(shift),
                 word,
             },
-            Key::ArrowUp => EditIntent::Up { select: ambre_canvas::Extend::select_if(shift) },
-            Key::ArrowDown => EditIntent::Down { select: ambre_canvas::Extend::select_if(shift) },
-            Key::Home => EditIntent::LineStart { select: ambre_canvas::Extend::select_if(shift) },
-            Key::End => EditIntent::LineEnd { select: ambre_canvas::Extend::select_if(shift) },
+            Key::ArrowUp => EditIntent::Up {
+                select: ambre_canvas::Extend::select_if(shift),
+            },
+            Key::ArrowDown => EditIntent::Down {
+                select: ambre_canvas::Extend::select_if(shift),
+            },
+            Key::Home => EditIntent::LineStart {
+                select: ambre_canvas::Extend::select_if(shift),
+            },
+            Key::End => EditIntent::LineEnd {
+                select: ambre_canvas::Extend::select_if(shift),
+            },
             _ => return false,
         };
         let edits = matches!(
@@ -891,9 +899,14 @@ impl Composer {
         self.saying = match intent {
             EditIntent::Newline => None,
             EditIntent::Backspace | EditIntent::Delete => Some((of, Say::Removed)),
-            EditIntent::Left { word: ambre_canvas::Stride::Word, .. } | EditIntent::Right { word: ambre_canvas::Stride::Word, .. } => {
-                Some((of, Say::Word))
+            EditIntent::Left {
+                word: ambre_canvas::Stride::Word,
+                ..
             }
+            | EditIntent::Right {
+                word: ambre_canvas::Stride::Word,
+                ..
+            } => Some((of, Say::Word)),
             EditIntent::Left { .. } | EditIntent::Right { .. } | EditIntent::SelectAll => {
                 Some((of, Say::Char))
             }
@@ -1447,7 +1460,14 @@ impl Composer {
         let strip = height - self.band;
         surface.fill_rect(rect(0.0, strip, width, height), palette.content_bg);
         if let Some(line) = typing {
-            let shaped = shape(font_cx, cache, line, FONT_UI, width - 2.0 * SPACE_8, ambre_canvas::Weight::Regular);
+            let shaped = shape(
+                font_cx,
+                cache,
+                line,
+                FONT_UI,
+                width - 2.0 * SPACE_8,
+                ambre_canvas::Weight::Regular,
+            );
             let at = ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(strip + SPACE_2));
             draw(surface, shaped, at, palette.header_text);
         }
@@ -1474,7 +1494,14 @@ impl Composer {
                     surface.fill_rect(square, palette.selection);
                 }
                 surface.stroke_rect(square, palette.cell_border, 1.0);
-                let words = shape(font_cx, cache, ALSO_IN_CHANNEL, FONT_UI, width, ambre_canvas::Weight::Regular);
+                let words = shape(
+                    font_cx,
+                    cache,
+                    ALSO_IN_CHANNEL,
+                    FONT_UI,
+                    width,
+                    ambre_canvas::Weight::Regular,
+                );
                 let label_y = row + (ALSO_PX - words.height()) / 2.0;
                 let label_x = SPACE_8 + BOX_PX + SPACE_4;
                 let chord_x = label_x + words.width() + SPACE_8;
@@ -1486,7 +1513,14 @@ impl Composer {
                 );
                 // Below the desktop width, no chord shows (`CHROME-057`).
                 if self.chords {
-                    let chord = shape(font_cx, cache, ALSO_CHORD, FONT_UI, width, ambre_canvas::Weight::Regular);
+                    let chord = shape(
+                        font_cx,
+                        cache,
+                        ALSO_CHORD,
+                        FONT_UI,
+                        width,
+                        ambre_canvas::Weight::Regular,
+                    );
                     draw(
                         surface,
                         chord,
@@ -1511,7 +1545,14 @@ impl Composer {
         let editor = self.drafts.get_mut(&shown);
         let empty = editor.as_ref().is_none_or(|e| e.text().is_empty()) && !self.composing;
         if empty {
-            let hint = shape(font_cx, cache, COMPOSER_HINT, FONT_BODY, width, ambre_canvas::Weight::Regular);
+            let hint = shape(
+                font_cx,
+                cache,
+                COMPOSER_HINT,
+                FONT_BODY,
+                width,
+                ambre_canvas::Weight::Regular,
+            );
             draw(
                 surface,
                 hint,
@@ -1583,7 +1624,14 @@ impl Composer {
         let chips: Vec<(String, bool)> = ready.chain(uploading).collect();
         let mut x = SPACE_8;
         for (index, (label, removable)) in chips.into_iter().enumerate() {
-            let words = shape(font_cx, cache, &label, FONT_UI, width, ambre_canvas::Weight::Regular);
+            let words = shape(
+                font_cx,
+                cache,
+                &label,
+                FONT_UI,
+                width,
+                ambre_canvas::Weight::Regular,
+            );
             let chip_w = words.width() + 2.0 * SPACE_4;
             if x + chip_w > width - SPACE_4 {
                 break;

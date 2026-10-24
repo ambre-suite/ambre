@@ -276,7 +276,11 @@ pub enum Host {
 impl Host {
     /// `ContentEditable` when the DOM's `isContentEditable` holds.
     pub fn content_editable_if(editable: bool) -> Self {
-        if editable { Host::ContentEditable } else { Host::Plain }
+        if editable {
+            Host::ContentEditable
+        } else {
+            Host::Plain
+        }
     }
 }
 

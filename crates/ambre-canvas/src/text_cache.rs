@@ -31,7 +31,9 @@ use crate::fonts::LazyFontLoader;
 /// mapping lives. The canvas renderers, the inline editors and the Prose
 /// paginator all reach the same face for one label (`CANVAS-017`).
 pub fn registered_family_name(label: Option<&str>) -> &'static str {
-    let family = label.map(ambre_core::FontFamily::from_label).unwrap_or_default();
+    let family = label
+        .map(ambre_core::FontFamily::from_label)
+        .unwrap_or_default();
     ambre_draw::resolve_family(&family).face_name()
 }
 
@@ -101,7 +103,11 @@ pub enum Slant {
 impl Slant {
     /// The italic face when `italic` holds, the upright one otherwise.
     pub fn italic_if(italic: bool) -> Self {
-        if italic { Slant::Italic } else { Slant::Upright }
+        if italic {
+            Slant::Italic
+        } else {
+            Slant::Upright
+        }
     }
 }
 
@@ -117,7 +123,11 @@ pub enum WordBreak {
 impl WordBreak {
     /// Within a word too when `wrap` holds, between words only otherwise.
     pub fn anywhere_if(wrap: bool) -> Self {
-        if wrap { WordBreak::Anywhere } else { WordBreak::Whole }
+        if wrap {
+            WordBreak::Anywhere
+        } else {
+            WordBreak::Whole
+        }
     }
 }
 
@@ -589,7 +599,15 @@ mod tests {
 
     /// Shape `text` through the cache and return its width and glyph count.
     fn shape(cache: &mut TextCache, cx: &mut FontContext, text: &str) -> (f32, usize) {
-        let layout = cache.get_or_build(cx, text, 14.0, 400.0, Alignment::Start, Weight::Regular, Slant::Upright);
+        let layout = cache.get_or_build(
+            cx,
+            text,
+            14.0,
+            400.0,
+            Alignment::Start,
+            Weight::Regular,
+            Slant::Upright,
+        );
         let glyphs = layout
             .lines()
             .flat_map(|line| line.items())
@@ -778,7 +796,15 @@ mod tests {
             Alignment::Justify,
         ];
         for align in all {
-            cache.get_or_build(&mut cx, &text, 14.0, 120.0, align, Weight::Regular, Slant::Upright);
+            cache.get_or_build(
+                &mut cx,
+                &text,
+                14.0,
+                120.0,
+                align,
+                Weight::Regular,
+                Slant::Upright,
+            );
         }
         assert_eq!(
             cache.cache_size(),
@@ -801,8 +827,15 @@ mod tests {
                 })
                 .last()
         };
-        let start =
-            last_x(cache.get_or_build(&mut cx, &text, 14.0, 120.0, Alignment::Start, Weight::Regular, Slant::Upright));
+        let start = last_x(cache.get_or_build(
+            &mut cx,
+            &text,
+            14.0,
+            120.0,
+            Alignment::Start,
+            Weight::Regular,
+            Slant::Upright,
+        ));
         let justified = last_x(cache.get_or_build(
             &mut cx,
             &text,

@@ -630,7 +630,9 @@ impl SyncState {
                 // latest one another member confirmed, and holds the latest one
                 // back until the replay is done (`AUTHOR-022`).
                 let mut held_snapshot = None;
-                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence == crate::Existence::OnRelay {
+                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
+                    == crate::Existence::OnRelay
+                {
                     let meta_url = crate::http::ApiRoot::of(url_scheme, &api_base)
                         .route(format!("/documents/{doc_id}/snapshot"));
                     match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
@@ -1780,7 +1782,7 @@ mod tests {
     }
 
     /// A relay that refuses the members request with a `4xx` refused the
-    /// open: asking again meets the same answer, so the open fails as
+    /// open. Asking again meets the same answer, so the open fails as
     /// refused, with the relay's code. A lost answer, or a `5xx`, stays
     /// transient (`SYNC-173`).
     #[test]
@@ -1933,7 +1935,12 @@ mod tests {
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
-        let doc_state = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
+        let doc_state = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Trame,
+            crate::Existence::OnRelay,
+        );
         let known_snapshot = doc_state.current_snapshot_id;
         state.documents.insert(document_id, doc_state);
         state.session_nonces.insert(document_id, TEST_NONCE);
@@ -2285,7 +2292,12 @@ mod tests {
         let doc = DocumentId::new();
         state.documents.insert(
             doc,
-            SyncDocumentState::new(doc, key.clone(), DocType::Murmure, crate::Existence::OnRelay),
+            SyncDocumentState::new(
+                doc,
+                key.clone(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
         );
         let parent = SnapshotId::new();
         state.receive_update(
@@ -2727,7 +2739,12 @@ mod tests {
         let local = DocumentId::new();
         state.documents.insert(
             local,
-            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, crate::Existence::LocalOnly),
+            SyncDocumentState::new(
+                local,
+                DocumentKey::generate(),
+                DocType::Trame,
+                crate::Existence::LocalOnly,
+            ),
         );
         for document_id in [local, DocumentId::new()] {
             state.handle_ws_message(WsServerMsg::Subscribed { document_id });

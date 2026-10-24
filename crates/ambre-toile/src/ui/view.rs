@@ -3596,10 +3596,18 @@ impl ToileView {
                 select: ambre_canvas::Extend::select_if(shift),
                 word,
             }),
-            "ArrowUp" => self.push_intent(EditIntent::Up { select: ambre_canvas::Extend::select_if(shift) }),
-            "ArrowDown" => self.push_intent(EditIntent::Down { select: ambre_canvas::Extend::select_if(shift) }),
-            "Home" => self.push_intent(EditIntent::LineStart { select: ambre_canvas::Extend::select_if(shift) }),
-            "End" => self.push_intent(EditIntent::LineEnd { select: ambre_canvas::Extend::select_if(shift) }),
+            "ArrowUp" => self.push_intent(EditIntent::Up {
+                select: ambre_canvas::Extend::select_if(shift),
+            }),
+            "ArrowDown" => self.push_intent(EditIntent::Down {
+                select: ambre_canvas::Extend::select_if(shift),
+            }),
+            "Home" => self.push_intent(EditIntent::LineStart {
+                select: ambre_canvas::Extend::select_if(shift),
+            }),
+            "End" => self.push_intent(EditIntent::LineEnd {
+                select: ambre_canvas::Extend::select_if(shift),
+            }),
             // A character key: do NOT consume, so the textarea emits `input` and
             // the char arrives as `InputEvent::Text`. Returning false also skips
             // the board shortcut handler (guarded by `editor.is_some()`).

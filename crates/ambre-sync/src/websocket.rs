@@ -1660,7 +1660,12 @@ mod tests {
         let id = DocumentId::new();
         state.documents.insert(
             id,
-            SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::LocalOnly),
+            SyncDocumentState::new(
+                id,
+                DocumentKey::generate(),
+                DocType::Prose,
+                crate::Existence::LocalOnly,
+            ),
         );
         (state, rx)
     }
@@ -1838,7 +1843,12 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
-        let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::OnRelay);
+        let mut doc = SyncDocumentState::new(
+            id,
+            DocumentKey::generate(),
+            DocType::Prose,
+            crate::Existence::OnRelay,
+        );
         doc.last_seq = Seq(7);
         state.documents.insert(id, doc);
         state
@@ -1891,7 +1901,12 @@ mod tests {
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
             let id = DocumentId::new();
-            let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Trame, crate::Existence::OnRelay);
+            let mut doc = SyncDocumentState::new(
+                id,
+                DocumentKey::generate(),
+                DocType::Trame,
+                crate::Existence::OnRelay,
+            );
             doc.last_seq = Seq(last);
             state.documents.insert(id, doc);
             cursors.insert(id, Seq(last));
@@ -1899,7 +1914,12 @@ mod tests {
         let local = DocumentId::new();
         state.documents.insert(
             local,
-            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, crate::Existence::LocalOnly),
+            SyncDocumentState::new(
+                local,
+                DocumentKey::generate(),
+                DocType::Trame,
+                crate::Existence::LocalOnly,
+            ),
         );
 
         let (tx, wire) = ambre_bus::conduit::unbounded();

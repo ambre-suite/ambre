@@ -58,8 +58,7 @@ where
             // Honour the master's full style (size, font, colour, alignment,
             // underline/strike) exactly like a plain cell, but always clipped to
             // and aligned within the span rect.
-            let avail =
-                (rect.width() - 2.0 * layout.pad_x().get()).max(0.0);
+            let avail = (rect.width() - 2.0 * layout.pad_x().get()).max(0.0);
             // True zoom: scale the glyph size with the grid (span metrics already
             // scale via `cell_rect`/`merge_rect`).
             let font_size = super::cell_font_px(content.size) * layout.zoom.get() as f32;

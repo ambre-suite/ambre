@@ -258,7 +258,8 @@ pub async fn create_document(
 
     let name_enc = req.name_enc;
     // Only a Murmure document is a space (`SRV-217`).
-    if req.space == ambre_core::DocumentScope::Space && req.doc_type != ambre_core::DocType::Murmure {
+    if req.space == ambre_core::DocumentScope::Space && req.doc_type != ambre_core::DocType::Murmure
+    {
         return Err(AppError::BadRequest("a space is a Murmure document".into()));
     }
     let client_id = req.document_id;
@@ -307,7 +308,9 @@ pub async fn create_document(
         )
         .await?;
         // An owner's retry registers the space it may have missed.
-        if req.space == ambre_core::DocumentScope::Space && doc.doc_type == ambre_core::DocType::Murmure {
+        if req.space == ambre_core::DocumentScope::Space
+            && doc.doc_type == ambre_core::DocType::Murmure
+        {
             db::register_space(&state.db, &ambre_core::SpaceId::from_document(doc_id)).await?;
         }
     }

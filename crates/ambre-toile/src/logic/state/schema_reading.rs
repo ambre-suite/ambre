@@ -397,7 +397,10 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 members.len()
             ))
         }
-        (ElementKey::Notes, _) => Some(format!("speaker notes {:?}", reader.notes(&id).unwrap_or_default())),
+        (ElementKey::Notes, _) => Some(format!(
+            "speaker notes {:?}",
+            reader.notes(&id).unwrap_or_default()
+        )),
         (ElementKey::Autolayout, _) => Some(layout_reading(&reader.auto_layout(&id)?)),
         _ => None,
     }

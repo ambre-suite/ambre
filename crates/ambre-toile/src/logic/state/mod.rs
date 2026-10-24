@@ -1054,9 +1054,7 @@ impl ToileState {
             .filter_map(|key| {
                 let id = ElementId(key.to_string());
                 let em = self.element_map(&id)?;
-                if codec::locked(&em)
-                    || codec::has_type(&em, ElementKind::Group)
-                {
+                if codec::locked(&em) || codec::has_type(&em, ElementKind::Group) {
                     None
                 } else {
                     Some(id)

@@ -34,7 +34,11 @@ pub enum Under {
 impl Under {
     /// `Grabbable` when `grabbable` holds, `Empty` otherwise.
     pub fn grabbable_if(grabbable: bool) -> Self {
-        if grabbable { Under::Grabbable } else { Under::Empty }
+        if grabbable {
+            Under::Grabbable
+        } else {
+            Under::Empty
+        }
     }
 }
 
@@ -103,9 +107,18 @@ mod tests {
     fn a_finger_pans_the_empty_board_and_grabs_or_draws_otherwise() {
         assert_eq!(finger_role(Tool::Hand, Under::Grabbable), FingerRole::Pans);
         assert_eq!(finger_role(Tool::Select, Under::Empty), FingerRole::Pans);
-        assert_eq!(finger_role(Tool::Select, Under::Grabbable), FingerRole::ActsAsMouse);
-        assert_eq!(finger_role(Tool::Pen, Under::Empty), FingerRole::ActsAsMouse);
-        assert_eq!(finger_role(Tool::Draw, Under::Empty), FingerRole::ActsAsMouse);
+        assert_eq!(
+            finger_role(Tool::Select, Under::Grabbable),
+            FingerRole::ActsAsMouse
+        );
+        assert_eq!(
+            finger_role(Tool::Pen, Under::Empty),
+            FingerRole::ActsAsMouse
+        );
+        assert_eq!(
+            finger_role(Tool::Draw, Under::Empty),
+            FingerRole::ActsAsMouse
+        );
     }
 
     /// `TOILE-UI-289`: a wheel turned down moves the content up, and one

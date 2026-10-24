@@ -1112,7 +1112,11 @@ fn a_named_frame_is_found_by_its_title() {
         name: "  Agenda  ".into(),
     });
     assert!(out.update.is_some(), "a name broadcasts a delta");
-    assert_eq!(st.frame_name(&frame).unwrap_or_default(), "Agenda", "the name is trimmed");
+    assert_eq!(
+        st.frame_name(&frame).unwrap_or_default(),
+        "Agenda",
+        "the name is trimmed"
+    );
     assert_eq!(find(&mut st, "agenda", opts, None).hits, vec![frame]);
 }
 
@@ -1198,7 +1202,11 @@ fn concurrent_names_converge_on_one_whole_name() {
     a.apply_remote(&db);
 
     let merged = a.frame_name(&frame).unwrap_or_default();
-    assert_eq!(merged, b.frame_name(&frame).unwrap_or_default(), "the two names diverged");
+    assert_eq!(
+        merged,
+        b.frame_name(&frame).unwrap_or_default(),
+        "the two names diverged"
+    );
     assert!(
         merged == "Agenda" || merged == "Roadmap",
         "a blend of the two: {merged:?}"
@@ -2691,7 +2699,11 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     peer.apply_remote(&da);
     st.apply_remote(&db);
     let merged = st.notes(&pasted[0]).unwrap_or_default();
-    assert_eq!(merged, peer.notes(&pasted[0]).unwrap_or_default(), "the notes diverged");
+    assert_eq!(
+        merged,
+        peer.notes(&pasted[0]).unwrap_or_default(),
+        "the notes diverged"
+    );
     assert!(
         merged.contains("A: ") && merged.contains("(B)"),
         "a rival container dropped one side: {merged:?}"
@@ -4147,11 +4159,18 @@ fn edit_notes_produces_delta_and_is_undoable() {
         base: "Intro slide".into(),
         delta: insert_notes(11, " -- talk track"),
     });
-    assert_eq!(st.notes(&f).unwrap_or_default(), "Intro slide -- talk track");
+    assert_eq!(
+        st.notes(&f).unwrap_or_default(),
+        "Intro slide -- talk track"
+    );
 
     // Each EditNotes is one undo item: undo drops the last splice only.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.notes(&f).unwrap_or_default(), "Intro slide", "one undo reverts one splice");
+    assert_eq!(
+        st.notes(&f).unwrap_or_default(),
+        "Intro slide",
+        "one undo reverts one splice"
+    );
     st.handle_command(ToileCommand::Redo);
     assert_eq!(
         st.notes(&f).unwrap_or_default(),
@@ -4275,7 +4294,11 @@ fn edit_notes_rejects_non_frame() {
             .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
         "notes on a non-frame report a ContentKindMismatch"
     );
-    assert_eq!(st.notes(&sticky), None, "no notes were written to the sticky");
+    assert_eq!(
+        st.notes(&sticky),
+        None,
+        "no notes were written to the sticky"
+    );
 
     // A missing element reports NoSuchElement.
     let out = st.handle_command(ToileCommand::EditNotes {
@@ -4328,7 +4351,11 @@ fn concurrent_notes_edits_converge() {
 
     // Char-CRDT convergence: identical final notes on both peers, and both edits
     // survived (no LWW loss of a rival container).
-    assert_eq!(a.notes(&f).unwrap_or_default(), b.notes(&f).unwrap_or_default(), "concurrent notes edits diverged");
+    assert_eq!(
+        a.notes(&f).unwrap_or_default(),
+        b.notes(&f).unwrap_or_default(),
+        "concurrent notes edits diverged"
+    );
     let merged = a.notes(&f).unwrap_or_default();
     assert!(
         merged.contains("AAA") && merged.contains("BBB"),

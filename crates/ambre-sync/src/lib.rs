@@ -1988,7 +1988,12 @@ mod seal_tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = DocumentId::new();
-        let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, crate::Existence::OnRelay);
+        let doc = SyncDocumentState::new(
+            id,
+            DocumentKey::generate(),
+            DocType::Prose,
+            crate::Existence::OnRelay,
+        );
         state.documents.insert(id, doc);
         state.session_nonces.insert(id, SessionNonce([1; 16]));
         let (tx, wire) = ambre_bus::conduit::unbounded();

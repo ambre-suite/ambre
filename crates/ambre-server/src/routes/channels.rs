@@ -1243,7 +1243,14 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let space = DocumentId::new();
-        let answer = create_as(&state, alice, space, ambre_core::DocType::Murmure, ambre_core::DocumentScope::Space).await;
+        let answer = create_as(
+            &state,
+            alice,
+            space,
+            ambre_core::DocType::Murmure,
+            ambre_core::DocumentScope::Space,
+        )
+        .await;
         assert_eq!(answer, StatusCode::OK);
         assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
         assert_eq!(member_ids(&state, space).await, [alice]);
@@ -1301,11 +1308,25 @@ mod tests {
         let (space, other) = (DocumentId::new(), DocumentId::new());
         let murmure = ambre_core::DocType::Murmure;
         assert_eq!(
-            create_as(&state, alice, space, murmure, ambre_core::DocumentScope::Space).await,
+            create_as(
+                &state,
+                alice,
+                space,
+                murmure,
+                ambre_core::DocumentScope::Space
+            )
+            .await,
             StatusCode::OK
         );
         assert_eq!(
-            create_as(&state, alice, other, murmure, ambre_core::DocumentScope::Personal).await,
+            create_as(
+                &state,
+                alice,
+                other,
+                murmure,
+                ambre_core::DocumentScope::Personal
+            )
+            .await,
             StatusCode::OK
         );
         grant(&state, space, bob, Role::Viewer).await;
@@ -1325,7 +1346,14 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let prose = DocumentId::new();
-        let answer = create_as(&state, alice, prose, ambre_core::DocType::Prose, ambre_core::DocumentScope::Space).await;
+        let answer = create_as(
+            &state,
+            alice,
+            prose,
+            ambre_core::DocType::Prose,
+            ambre_core::DocumentScope::Space,
+        )
+        .await;
         assert_eq!(answer, StatusCode::BAD_REQUEST);
         assert_eq!(member_ids(&state, prose).await, []);
         assert_eq!(spaces_of(&state, alice).await, []);
@@ -1809,7 +1837,14 @@ mod tests {
     async fn private_channel(state: &Arc<AppState>, creator: UserId, space: SpaceId) -> Channel {
         let channel = new_channel(state, creator).await;
         assert_eq!(
-            register_as(state, creator, space, &channel, ambre_core::Visibility::Private).await,
+            register_as(
+                state,
+                creator,
+                space,
+                &channel,
+                ambre_core::Visibility::Private
+            )
+            .await,
             StatusCode::NO_CONTENT
         );
         channel
@@ -2054,7 +2089,14 @@ mod tests {
 
         let stranger = new_channel(&state, mallory).await;
         assert_eq!(
-            register_as(&state, mallory, space, &stranger, ambre_core::Visibility::Private).await,
+            register_as(
+                &state,
+                mallory,
+                space,
+                &stranger,
+                ambre_core::Visibility::Private
+            )
+            .await,
             StatusCode::FORBIDDEN
         );
         let channel = private_channel(&state, alice, space).await;

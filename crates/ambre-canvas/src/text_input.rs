@@ -116,7 +116,11 @@ pub enum Typing {
 impl Typing {
     /// `Text` when `typing` holds, `Commands` otherwise.
     pub fn text_if(typing: bool) -> Self {
-        if typing { Typing::Text } else { Typing::Commands }
+        if typing {
+            Typing::Text
+        } else {
+            Typing::Commands
+        }
     }
 }
 

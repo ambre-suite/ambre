@@ -22,7 +22,7 @@ use crate::logic::stroke::smooth_stroke;
 use super::ToileState;
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_of, locked, connector_label, doc_type_from_tag, f64_of, kind_of, path_of,
+    bin_of, body_of, connector_label, doc_type_from_tag, f64_of, kind_of, locked, path_of,
     read_connector, rotation_of, stored_rect, str_of,
 };
 use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};

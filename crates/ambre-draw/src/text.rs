@@ -50,9 +50,9 @@ impl BundledFamily {
 ///
 /// A face name reads as its family ([`FontFamily::from_label`]), which makes
 /// the mapping idempotent: a caller may route an already-resolved face through
-/// here again. A family no face ships for lands on the shipped sans, because an
-/// unmatched name handed to the shaper would produce no glyphs at all, which
-/// measures as an empty block.
+/// here again. A family no face ships for lands on the shipped sans. An
+/// unmatched name handed to the shaper would produce no glyphs at all, and
+/// that measures as an empty block.
 #[must_use]
 pub fn resolve_family(family: &FontFamily) -> BundledFamily {
     match family {

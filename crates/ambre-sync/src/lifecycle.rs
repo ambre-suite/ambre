@@ -178,7 +178,8 @@ mod tests {
         let mut now = UnixMillis(0);
         let mut waits = Vec::new();
         for _ in 0..8 {
-            let Next::Wait { delay } = lifecycle.closed(CloseCode::new(1006), Demand::Needed, now, 0.0)
+            let Next::Wait { delay } =
+                lifecycle.closed(CloseCode::new(1006), Demand::Needed, now, 0.0)
             else {
                 panic!("a close backs off");
             };
@@ -221,7 +222,12 @@ mod tests {
         let mut lifecycle = Lifecycle::default();
         lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(Some(CloseCode::UNAUTHORIZED), Demand::Needed, UnixMillis(10), 0.0),
+            lifecycle.closed(
+                Some(CloseCode::UNAUTHORIZED),
+                Demand::Needed,
+                UnixMillis(10),
+                0.0
+            ),
             Next::Renew
         );
         assert_eq!(lifecycle.renewed(), Next::Open);
@@ -254,7 +260,12 @@ mod tests {
         let mut lifecycle = Lifecycle::default();
         lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.0);
         assert_eq!(
-            lifecycle.closed(Some(CloseCode::SETUP_REQUIRED), Demand::Needed, UnixMillis(0), 0.0),
+            lifecycle.closed(
+                Some(CloseCode::SETUP_REQUIRED),
+                Demand::Needed,
+                UnixMillis(0),
+                0.0
+            ),
             Next::SetupOwed
         );
         assert_eq!(

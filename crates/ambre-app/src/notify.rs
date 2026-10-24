@@ -115,9 +115,21 @@ mod tests {
     /// Murmure notifications spec). An unanswered one is asked once.
     #[wasm_bindgen_test]
     fn a_refused_permission_raises_nothing_and_an_open_one_is_asked_once() {
-        assert_eq!(act(NotificationPermission::Granted, Question::Asked), Act::Raise);
-        assert_eq!(act(NotificationPermission::Denied, Question::Unasked), Act::Nothing);
-        assert_eq!(act(NotificationPermission::Default, Question::Unasked), Act::Ask);
-        assert_eq!(act(NotificationPermission::Default, Question::Asked), Act::Nothing);
+        assert_eq!(
+            act(NotificationPermission::Granted, Question::Asked),
+            Act::Raise
+        );
+        assert_eq!(
+            act(NotificationPermission::Denied, Question::Unasked),
+            Act::Nothing
+        );
+        assert_eq!(
+            act(NotificationPermission::Default, Question::Unasked),
+            Act::Ask
+        );
+        assert_eq!(
+            act(NotificationPermission::Default, Question::Asked),
+            Act::Nothing
+        );
     }
 }

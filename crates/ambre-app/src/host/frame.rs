@@ -328,7 +328,9 @@ impl FrameHost {
             |child| {
                 child.update();
                 !matches!(
-                    child.plan_repaint(now_ms, ambre_canvas::HudTick::Idle).content,
+                    child
+                        .plan_repaint(now_ms, ambre_canvas::HudTick::Idle)
+                        .content,
                     ContentRepaint::Reuse
                 )
             },

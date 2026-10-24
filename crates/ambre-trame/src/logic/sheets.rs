@@ -295,8 +295,8 @@ impl TrameState {
     /// so every peer reads the same.
     ///
     /// A stored name the rule of a rename refuses reads as `Sheet<n>`, `n` the
-    /// position of its tab, and the document keeps what it holds until a
-    /// rename (`TRAME-235`). The stored names claim first, then the fallbacks,
+    /// position of its tab. The document keeps what it holds until a rename
+    /// (`TRAME-235`). The stored names claim first, then the fallbacks,
     /// then the clashes. A value that is not text reads as the sheet id.
     pub(super) fn sheet_names(&self) -> HashMap<SheetId, SheetName> {
         let mut stored: Vec<(SheetId, SheetName)> =

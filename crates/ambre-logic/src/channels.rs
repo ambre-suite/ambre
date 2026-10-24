@@ -1099,7 +1099,11 @@ impl LogicState {
             .iter()
             .map(|row| row.user_id)
             .collect();
-        match screen(draft.clone(), Some(&members), ambre_bus::Confirmation::Unconfirmed) {
+        match screen(
+            draft.clone(),
+            Some(&members),
+            ambre_bus::Confirmation::Unconfirmed,
+        ) {
             Screened::Send(_) => None,
             Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
                 members,

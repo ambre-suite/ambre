@@ -629,9 +629,11 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
     // the domain separates them, so this is the one assertion that shows the
     // separation at all. Without it, a file on disk would carry the value that
     // unwraps the account's master key.
-    let user =
-        passphrase::derive_user_key(&pass("correct horse"), &MasterKeySalt::from_array([0xAB; 32]))
-            .unwrap();
+    let user = passphrase::derive_user_key(
+        &pass("correct horse"),
+        &MasterKeySalt::from_array([0xAB; 32]),
+    )
+    .unwrap();
     let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
         .unwrap();
     assert_ne!(file.as_bytes(), &user);
@@ -715,8 +717,7 @@ fn the_sealed_header_widths_match_the_primitives() {
 fn a_document_key_sealed_under_another_opens_to_the_same_key() {
     let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
     let (nonce, sealed) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
-    let opened =
-        aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer).unwrap();
+    let opened = aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer).unwrap();
     // The opened key reads what the original sealed.
     let (n, ct) = aead::seal(b"a message", &Aad::of(b""), &inner).unwrap();
     assert_eq!(

@@ -284,7 +284,10 @@ impl ToileState {
             to: snap(to_idx),
             to_rect: slide(to_idx).and_then(|f| self.element_rect(f)),
             // A slide with no notes shows none.
-            notes: frame.as_ref().and_then(|f| self.notes(f)).unwrap_or_default(),
+            notes: frame
+                .as_ref()
+                .and_then(|f| self.notes(f))
+                .unwrap_or_default(),
             frame,
             transition: self.transition(),
         }

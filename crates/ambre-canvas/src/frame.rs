@@ -237,7 +237,15 @@ fn text_height(
     size: f32,
     width: f32,
 ) -> f64 {
-    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, crate::Weight::Regular, crate::Slant::Upright);
+    let layout = cache.get_or_build(
+        font_cx,
+        text,
+        size,
+        width,
+        Alignment::Center,
+        crate::Weight::Regular,
+        crate::Slant::Upright,
+    );
     f64::from(layout.height())
 }
 
@@ -256,7 +264,15 @@ fn draw_centered(
     if text.is_empty() {
         return;
     }
-    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, crate::Weight::Regular, crate::Slant::Upright);
+    let layout = cache.get_or_build(
+        font_cx,
+        text,
+        size,
+        width,
+        Alignment::Center,
+        crate::Weight::Regular,
+        crate::Slant::Upright,
+    );
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
@@ -378,10 +394,7 @@ mod tests {
             Tick::of(Health::Fatal, FatalScreen::Unpainted),
             Tick::PaintFatal
         );
-        assert_eq!(
-            Tick::of(Health::Fatal, FatalScreen::Painted),
-            Tick::Idle
-        );
+        assert_eq!(Tick::of(Health::Fatal, FatalScreen::Painted), Tick::Idle);
     }
 
     /// The terminal screen covers the whole surface and draws its title and

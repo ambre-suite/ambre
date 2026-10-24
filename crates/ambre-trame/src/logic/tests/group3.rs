@@ -1041,7 +1041,7 @@ fn concurrent_names_differing_in_case_read_apart() {
 
 /// A stored name the rule refuses reads as the fallback `Sheet<n>`, `n` its
 /// tab's position, and the document keeps the name it holds (`TRAME-235`).
-/// The fallback is a name like any other: a formula resolves it, it never
+/// The fallback is a name like any other. A formula resolves it, it never
 /// takes the name another sheet stores, and a rename stores the fix.
 #[test]
 fn a_stored_name_the_rule_refuses_reads_as_its_fallback() {
@@ -1064,7 +1064,11 @@ fn a_stored_name_the_rule_refuses_reads_as_its_fallback() {
         Some(loro::ValueOrContainer::Value(loro::LoroValue::String(s))) => s.to_string(),
         other => panic!("expected the stored name, got {other:?}"),
     };
-    assert_eq!(held(&state), stored, "the read leaves the document as it was");
+    assert_eq!(
+        held(&state),
+        stored,
+        "the read leaves the document as it was"
+    );
 
     let evts = state.handle_command(TrameCommand::SetCellText {
         row: Row::new(1),

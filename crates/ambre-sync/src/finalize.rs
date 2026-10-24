@@ -61,7 +61,12 @@ impl SyncState {
     /// Ask the relay for the finalize lease of `segment`.
     pub(crate) fn handle_take_finalize_lease(&self, channel_id: ChannelId, segment: SegmentId) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Failed, "no relay on this transport");
+            return self.finalize_failed(
+                channel_id,
+                segment,
+                ambre_core::FinalizeEnd::Failed,
+                "no relay on this transport",
+            );
         };
         let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
@@ -91,22 +96,47 @@ impl SyncState {
     ) {
         let document_id = segment.document_id();
         let Some(doc_state) = self.documents.get(&document_id) else {
-            return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Failed, "the segment is not open");
+            return self.finalize_failed(
+                channel_id,
+                segment,
+                ambre_core::FinalizeEnd::Failed,
+                "the segment is not open",
+            );
         };
         if doc_state.rekey.holds_refused() {
-            return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Withdrawn, "the relay refused an edit");
+            return self.finalize_failed(
+                channel_id,
+                segment,
+                ambre_core::FinalizeEnd::Withdrawn,
+                "the relay refused an edit",
+            );
         }
         if !doc_state.rekey.settled() {
-            return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Failed, "an edit is unanswered");
+            return self.finalize_failed(
+                channel_id,
+                segment,
+                ambre_core::FinalizeEnd::Failed,
+                "an edit is unanswered",
+            );
         }
         let upload = match self.snapshot_upload(document_id, payload, horizon) {
             Ok(upload) => upload,
             Err(message) => {
-                return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Failed, &message.to_string());
+                return self.finalize_failed(
+                    channel_id,
+                    segment,
+                    ambre_core::FinalizeEnd::Failed,
+                    &message.to_string(),
+                );
             }
         };
         let Some(tx) = self.event_tx.clone() else {
-            return self.finalize_failed(channel_id, segment, ambre_core::FinalizeEnd::Failed, "no relay on this transport");
+            return self.finalize_failed(
+                channel_id,
+                segment,
+                ambre_core::FinalizeEnd::Failed,
+                "no relay on this transport",
+            );
         };
         let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();

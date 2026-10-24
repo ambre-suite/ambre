@@ -253,7 +253,10 @@ mod tests {
     #[test]
     fn reduced_motion_holds_the_first_frame() {
         let gif = picture(&[100, 50], 4);
-        assert_eq!(frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Reduced), (0, None));
+        assert_eq!(
+            frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Reduced),
+            (0, None)
+        );
         assert_eq!(
             frame_at(&picture(&[0], 4), ambre_bus::PageTime(120.0), Motion::Full),
             (0, None)

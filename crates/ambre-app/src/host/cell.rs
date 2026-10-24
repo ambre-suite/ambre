@@ -974,7 +974,8 @@ mod tests {
         ));
         assert!(
             matches!(
-                page.plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle).content,
+                page.plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle)
+                    .content,
                 ContentRepaint::Full
             ),
             "the page keeps its own plan"
@@ -988,7 +989,8 @@ mod tests {
             ContentRepaint::Full
         ));
         assert!(matches!(
-            page.plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle).content,
+            page.plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle)
+                .content,
             ContentRepaint::Reuse
         ));
         assert_eq!(bound.size.get().logical(), CssSize::new(140, 80));

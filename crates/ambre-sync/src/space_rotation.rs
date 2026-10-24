@@ -217,8 +217,12 @@ mod tests {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let document_id = space_id.document_id();
-        let mut doc =
-            SyncDocumentState::new(document_id, space_key.clone(), DocType::Murmure, crate::Existence::OnRelay);
+        let mut doc = SyncDocumentState::new(
+            document_id,
+            space_key.clone(),
+            DocType::Murmure,
+            crate::Existence::OnRelay,
+        );
         doc.role = role;
         state.documents.insert(document_id, doc);
         state.space_rotations.insert(

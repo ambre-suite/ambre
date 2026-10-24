@@ -379,7 +379,12 @@ mod tests {
         state.user_id = Some(UserId::from_bytes([7; 16]));
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
-        let mut doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
+        let mut doc = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Trame,
+            crate::Existence::OnRelay,
+        );
         doc.last_seq = Seq(9);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
@@ -523,7 +528,12 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
-        let doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, crate::Existence::OnRelay);
+        let doc = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Trame,
+            crate::Existence::OnRelay,
+        );
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
         let echo = update(document_id, snapshot, &doc_key, None);
@@ -955,7 +965,12 @@ mod tests {
         let (mut state, rx, held, _, _) = released(ambre_bus::Seq(9));
         drain(&rx);
         let open = DocumentId::new();
-        let doc = SyncDocumentState::new(open, DocumentKey::generate(), DocType::Murmure, crate::Existence::OnRelay);
+        let doc = SyncDocumentState::new(
+            open,
+            DocumentKey::generate(),
+            DocType::Murmure,
+            crate::Existence::OnRelay,
+        );
         state.documents.insert(open, doc);
         for document_id in [held, open] {
             state.handle_ws_message(WsServerMsg::ThreadActivity { document_id });

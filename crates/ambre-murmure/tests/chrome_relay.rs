@@ -1413,7 +1413,9 @@ fn a_notice_opens_its_channel_at_its_message() {
         }
     );
     relay.pane.set(MurmurePane::ChannelList);
-    let closed = relay.notice(&news(direct, false), PageVisibility::Visible).expect("notifies");
+    let closed = relay
+        .notice(&news(direct, false), PageVisibility::Visible)
+        .expect("notifies");
     assert_eq!(closed.at, None);
     assert!(relay.open_at(direct, closed.at).is_none());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
@@ -1479,7 +1481,10 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
     });
     relay.pane.set(MurmurePane::ChannelList);
 
-    assert_eq!(relay.notice(&news(general, false), PageVisibility::Visible), None);
+    assert_eq!(
+        relay.notice(&news(general, false), PageVisibility::Visible),
+        None
+    );
     let mention = relay
         .notice(&news(general, true), PageVisibility::Visible)
         .expect("a mention notifies");
@@ -1492,7 +1497,10 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
         assert_eq!(message.channel_id, direct);
         assert_eq!(message.title, "New message from Bob");
     }
-    assert_eq!(relay.notice(&UiEvent::UpdateRequired, PageVisibility::Visible), None);
+    assert_eq!(
+        relay.notice(&UiEvent::UpdateRequired, PageVisibility::Visible),
+        None
+    );
 }
 
 /// The channel the user is reading notifies nothing. On a hidden page
@@ -1500,10 +1508,21 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
 #[wasm_bindgen_test]
 fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
     let (_owner, relay, direct) = shown_direct();
-    assert_eq!(relay.notice(&news(direct, true), PageVisibility::Visible), None);
-    assert!(relay.notice(&news(direct, true), PageVisibility::Hidden).is_some());
+    assert_eq!(
+        relay.notice(&news(direct, true), PageVisibility::Visible),
+        None
+    );
+    assert!(
+        relay
+            .notice(&news(direct, true), PageVisibility::Hidden)
+            .is_some()
+    );
     relay.pane.set(MurmurePane::ChannelList);
-    assert!(relay.notice(&news(direct, false), PageVisibility::Visible).is_some());
+    assert!(
+        relay
+            .notice(&news(direct, false), PageVisibility::Visible)
+            .is_some()
+    );
 }
 
 /// The `@` list shows its entries as options, the chosen one selected. A

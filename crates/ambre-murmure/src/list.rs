@@ -557,7 +557,8 @@ fn fill_down(
 fn at_bottom(count: usize, height: ViewPx, tall: &mut impl FnMut(usize) -> ViewPx) -> Window {
     let mut shown = from_bottom(count, height, &mut *tall);
     shown.reverse();
-    let rows: Vec<(usize, ViewPx, ViewPx)> = shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
+    let rows: Vec<(usize, ViewPx, ViewPx)> =
+        shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
     Window {
         oldest: rows.first().is_some_and(|r| r.0 == 0),
         latest: !rows.is_empty(),
@@ -1117,7 +1118,11 @@ pub(crate) mod tests {
 
     /// The indices and tops of a window's rows.
     fn tops(window: &Window) -> Vec<(usize, f32)> {
-        window.rows.iter().map(|&(i, top, _)| (i, top.get())).collect()
+        window
+            .rows
+            .iter()
+            .map(|&(i, top, _)| (i, top.get()))
+            .collect()
     }
 
     /// A length of the view.
@@ -1159,7 +1164,10 @@ pub(crate) mod tests {
             flush.anchor, None,
             "a last row flush with the bottom rests there"
         );
-        assert_eq!(window(10, px(100.0), Some((10, px(0.0))), |_| px(20.0)).anchor, None);
+        assert_eq!(
+            window(10, px(100.0), Some((10, px(0.0))), |_| px(20.0)).anchor,
+            None
+        );
         let short = window(2, px(100.0), Some((0, px(0.0))), |_| px(20.0));
         assert_eq!(
             tops(&short),

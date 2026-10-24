@@ -17,8 +17,8 @@
 // consumes the model types declared here.
 // ============================================================================
 
-use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport, ThreadId};
 use super::tool::Tool;
+use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport, ThreadId};
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
@@ -219,7 +219,11 @@ pub enum ThreadState {
 impl ThreadState {
     /// `Resolved` when `resolved` holds, `Open` otherwise.
     pub fn resolved_if(resolved: bool) -> Self {
-        if resolved { ThreadState::Resolved } else { ThreadState::Open }
+        if resolved {
+            ThreadState::Resolved
+        } else {
+            ThreadState::Open
+        }
     }
 }
 

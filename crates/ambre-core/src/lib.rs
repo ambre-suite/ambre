@@ -106,8 +106,8 @@ pub use docfile::{
 };
 pub use email::Email;
 pub use encoded::{
-    EncodedKeyLink, EncodedLogEntry, EscrowedKey, InvalidMasterKeySalt, MasterKeySalt, SealedName, SealedShare,
-    WrappedDocKey, WrappedMasterKey,
+    EncodedKeyLink, EncodedLogEntry, EscrowedKey, InvalidMasterKeySalt, MasterKeySalt, SealedName,
+    SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
@@ -136,7 +136,6 @@ pub use name::{
 };
 pub use object_key::ObjectKey;
 pub use passphrase::Passphrase;
-pub use secret::SecretString;
 pub use payload::{
     DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
     PlaintextContainer, SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes,
@@ -148,6 +147,7 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
 };
+pub use secret::SecretString;
 pub use seq::Seq;
 pub use span::{
     LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis,

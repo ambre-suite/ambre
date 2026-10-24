@@ -93,7 +93,11 @@ impl Outbox {
 
     /// The level the view publishes as its busy signal (`BUS-016`).
     pub fn load(&self) -> Load {
-        if self.is_busy() { Load::Busy } else { Load::Free }
+        if self.is_busy() {
+            Load::Busy
+        } else {
+            Load::Free
+        }
     }
 
     /// How many commands the outbox holds. For a test and a diagnostic.
