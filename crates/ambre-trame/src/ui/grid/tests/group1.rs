@@ -47,7 +47,7 @@ fn filter_button_hit_test_matches_drawn_rect() {
     );
     // A point well clear of any button misses.
     assert_eq!(
-        state.filter_button_at(pointer(bx + 400.0, by + h / 2.0)),
+        state.filter_button_at(pointer(button.x0 + 400.0, centre.y)),
         None
     );
 }
@@ -338,7 +338,7 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
     );
 
     // Hit-testing the interior of that cell returns it.
-    assert_eq!(state.cell_at(pointer(x + 5.0, y + 5.0)), Some(at(1, 1)));
+    assert_eq!(state.cell_at(pointer(cell.x0 + 5.0, cell.y0 + 5.0)), Some(at(1, 1)));
     // A point inside the tall row 0 / wide col 0 maps to (0, 0).
     assert_eq!(
         state.cell_at(pointer(

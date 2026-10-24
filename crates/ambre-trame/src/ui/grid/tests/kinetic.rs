@@ -19,12 +19,12 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
     state.scroll_by(RowDelta::new(10), ColDelta::new(3));
     let (sx, sy) = state.edge_scroll_speed(pointer(400.0, 300.0));
-    assert_eq!((sx.get(), sy.get()), (0.0, 0.0));
-    let down = state.edge_scroll_speed(pointer(400.0, 900.0)).1.get();
+    assert_eq!((sx.get().get(), sy.get().get()), (0.0, 0.0));
+    let down = state.edge_scroll_speed(pointer(400.0, 900.0)).1.get().get();
     assert!(down > 0.0, "{down}");
     // Over the header strips the grid scrolls back towards the origin.
     let (left, up) = state.edge_scroll_speed(pointer(1.0, 1.0));
-    let (left, up) = (left.get(), up.get());
+    let (left, up) = (left.get().get(), up.get().get());
     assert!(left < 0.0 && up < 0.0, "{left} {up}");
     // Past the edges the drag still points at a cell: the nearest one.
     assert_eq!(state.cell_at(pointer(1.0, 1.0)), None);

@@ -228,6 +228,6 @@ mod tests {
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         assert_eq!(edge_pan_speed(&cam, Point::new(400.0, 300.0)), still);
         let (sx, sy) = edge_pan_speed(&cam, Point::new(799.0, 2.0));
-        assert!(sx.get() > 0.0 && sy.get() < 0.0, "{sx:?} {sy:?}");
+        assert!(sx.get().get() > 0.0 && sy.get().get() < 0.0, "{sx:?} {sy:?}");
     }
 }

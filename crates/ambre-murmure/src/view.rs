@@ -1470,7 +1470,7 @@ impl MurmureView {
         self.rest = match (self.region, pane) {
             (Region::Channel, MurmurePane::Channel { at: Some(at), .. }) => Rest::Row {
                 key: RowKey::Message(at.message),
-                anchor_y: ambre_core::ViewPx::new(self.list_height() * AT_FRACTION),
+                anchor_y: self.list_height() * AT_FRACTION,
             },
             _ => Rest::Latest,
         };
