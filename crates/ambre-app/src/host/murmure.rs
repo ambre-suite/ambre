@@ -12,7 +12,7 @@ use ambre_canvas::TextInput;
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::drafts::{DraftRow, DraftShelf, DraftWrite, user_range};
-use ambre_murmure::uploads::opens_as;
+use ambre_murmure::uploads::{download_name, opens_as};
 use ambre_murmure::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
@@ -115,7 +115,7 @@ fn save_file(file: &Attachment, data: Vec<u8>) {
         .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
     if let Some(anchor) = anchor {
         anchor.set_href(&url);
-        anchor.set_download(&file.name);
+        anchor.set_download(download_name(file).as_str());
         anchor.click();
     }
     let _ = web_sys::Url::revoke_object_url(&url);

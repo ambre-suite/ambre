@@ -63,6 +63,11 @@ pub fn opens_as(media_type: &MediaType) -> Option<KnownMediaType> {
     KnownMediaType::of(media_type).filter(|known| OPENS.contains(known))
 }
 
+/// The name a fetched file saves under.
+pub fn download_name(file: &Attachment) -> String {
+    file.name.clone()
+}
+
 /// A file whose upload the relay has not answered yet.
 #[derive(Debug, Clone)]
 struct Pending {
@@ -216,6 +221,39 @@ mod tests {
             MediaType("image/png".to_owned()),
             ByteSize(10),
         )
+    }
+
+    /// A fetched file named `name`.
+    fn received(name: &str) -> Attachment {
+        Attachment {
+            media_ref: MediaRef::parse(HASH).expect("an address"),
+            name: name.to_owned(),
+            media_type: MediaType("application/pdf".to_owned()),
+            size: ByteSize(10),
+        }
+    }
+
+    /// `DOCFILE-019`, `DOCFILE-020`: a name another member sent never names a
+    /// place outside the download folder, and fits the bound. A safe extension
+    /// stays.
+    #[test]
+    fn a_received_name_saves_inside_the_download_folder() {
+        let long = format!("{}.pdf", "a".repeat(300));
+        let cases = [
+            ("../../.ssh/authorized_keys", "authorized_keys"),
+            ("..\\..\\boot.ini", "boot.ini"),
+            ("..", "attachment"),
+            ("a\u{0}b\nc.pdf", "abc.pdf"),
+            ("report.pdf", "report.pdf"),
+        ];
+        for (sent, saved) in cases {
+            let name = download_name(&received(sent));
+            assert_eq!(name.as_str(), saved, "sent as {sent:?}");
+            assert!(ambre_core::ExportFilename::new(name.as_str()).is_ok());
+        }
+        let name = download_name(&received(&long));
+        assert!(ambre_core::ExportFilename::new(name.as_str()).is_ok());
+        assert!(name.as_str().ends_with(".pdf"), "{}", name.as_str());
     }
 
     /// `MURMURE-132`: a file joins its draft once the relay answered, and the
