@@ -43,7 +43,7 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
         correlate: None,
     });
     batch.media.push(blob);
-    batch.report.imported = 1;
+    batch.report.imported = ambre_bus::app::toile::ElementCount::new(1);
     Ok(batch)
 }
 
@@ -140,7 +140,7 @@ mod tests {
         let batch = import_raster(&png, &Limits::default()).unwrap();
         assert_eq!(batch.commands.len(), 1);
         assert_eq!(batch.media.len(), 1);
-        assert_eq!(batch.report.imported, 1);
+        assert_eq!(batch.report.imported.get(), 1);
 
         let blob = &batch.media[0];
         assert_eq!(blob.size, ambre_core::ImageSize::new(64, 48));

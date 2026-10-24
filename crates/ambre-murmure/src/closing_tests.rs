@@ -27,7 +27,7 @@ fn draft(text: &str) -> MessageDraft {
 fn channel(size: usize) -> ChannelState {
     ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(size)
+        .with_segment_size(crate::MessageCount::of_len(size))
         .identify()
 }
 

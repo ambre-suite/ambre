@@ -100,7 +100,7 @@ pub fn CommentsPanel(
                                                 })
                                             >
                                                 <span class="ambre-comments-preview">{t.preview.clone()}</span>
-                                                <span class="ambre-comments-count">{t.messages.to_string()}</span>
+                                                <span class="ambre-comments-count">{t.messages.get().to_string()}</span>
                                                 {t.resolved.then(|| view! {
                                                     <span class="ambre-comments-resolved">"resolved"</span>
                                                 })}

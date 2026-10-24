@@ -731,7 +731,7 @@ fn thread_head(
         .collect();
     ThreadHead {
         document,
-        replies: u32::try_from(replies.len()).unwrap_or(u32::MAX),
+        replies: ambre_bus::ReplyCount::of_len(replies.len()),
         last_replier: replies.last().map(|reply| reply.author),
     }
 }

@@ -136,7 +136,7 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
 /// pattern, an unhandled node) so the user knows the import was lossy.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImportReport {
-    pub imported: usize,
+    pub imported: ambre_bus::app::toile::ElementCount,
     pub skipped: Vec<String>,
 }
 

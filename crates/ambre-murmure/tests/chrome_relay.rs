@@ -1282,13 +1282,13 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
             ChannelMatches {
                 channel_id: budget,
                 covered: vec![segment],
-                listed: 2,
+                listed: ambre_bus::SegmentCount::new(2),
                 matches: vec![SearchMatch { segment, message }],
             },
             ChannelMatches {
                 channel_id: zeta,
                 covered: vec![SegmentId::new()],
-                listed: 1,
+                listed: ambre_bus::SegmentCount::new(1),
                 matches: Vec::new(),
             },
         ],
@@ -1691,7 +1691,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let ask = |reply: Option<HeldReply>| UiEvent::Channel {
         channel_id: direct,
         event: MurmureEvent::ConfirmChannelMention {
-            members: 12,
+            members: ambre_core::MemberCount::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),

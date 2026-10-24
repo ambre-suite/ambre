@@ -10,7 +10,7 @@
 
 use super::*;
 use crate::formula::types::CellId;
-use ambre_bus::app::find::MatchIndex;
+use ambre_bus::app::find::{MatchCount, MatchIndex};
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
@@ -102,7 +102,7 @@ impl TrameState {
 
     /// The reply to an empty replace: nothing replaced.
     pub(super) fn replace_nothing() -> TrameOutcome {
-        TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: 0 }])
+        TrameOutcome::display_only(vec![TrameEvent::ReplaceDone { replaced: MatchCount::ZERO }])
     }
 
     /// Replace every match of `query` with `replacement` across the active sheet
@@ -140,7 +140,7 @@ impl TrameState {
                 .collect();
             for sheet_id in others {
                 let n = self.replace_in_other(&sheet_id, &needle, replacement, options);
-                if n > 0 {
+                if !n.is_zero() {
                     touched_other = true;
                     replaced += n;
                 }
@@ -172,14 +172,18 @@ impl TrameState {
         let at = self.active;
 
         let _ = self.undo_manager.group_start();
-        let replaced = u32::from(self.replace_active_cell(at, &needle, replacement, options));
+        let replaced = if self.replace_active_cell(at, &needle, replacement, options) {
+            MatchCount::ONE
+        } else {
+            MatchCount::ZERO
+        };
 
         // Recompute the match set so the UI can advance to (and highlight) the
         // next hit. After a successful replace the active cell no longer matches,
         // so `find_next` naturally lands on the following one.
         let next = self.find_next(query, options);
 
-        if replaced == 0 {
+        if replaced.is_zero() {
             // Nothing changed: just forward the advance (no commit needed).
             let mut display = next.display;
             display.push(TrameEvent::ReplaceDone { replaced });
@@ -198,8 +202,8 @@ impl TrameState {
         needle: &FoldedNeedle,
         replacement: &Replacement,
         options: FindOptions,
-    ) -> u32 {
-        let mut replaced = 0;
+    ) -> MatchCount {
+        let mut replaced = MatchCount::ZERO;
         for at in self
             .index
             .used_range()
@@ -207,7 +211,7 @@ impl TrameState {
             .flat_map(CellRect::cells)
         {
             if self.replace_active_cell(at, needle, replacement, options) {
-                replaced += 1;
+                replaced += MatchCount::ONE;
             }
         }
         replaced
@@ -265,9 +269,9 @@ impl TrameState {
         needle: &FoldedNeedle,
         replacement: &Replacement,
         options: FindOptions,
-    ) -> u32 {
+    ) -> MatchCount {
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
-            return 0;
+            return MatchCount::ZERO;
         };
         let index = self.build_sheet_index(sheet_id);
         let map = self
@@ -334,7 +338,7 @@ impl TrameState {
         }
         drop(lines);
         self.write_refusals.extend(refusals);
-        let count = edits.len() as u32;
+        let count = MatchCount::from_len(edits.len());
         for ((rl, cl), stored) in edits {
             match stored {
                 Some(text) => {

@@ -362,7 +362,7 @@ mod db_tests {
         .await
         .unwrap();
         let newer = snapshot(&state, &doc, &CAROL, 3).await;
-        let dropped = db::find_compactable_snapshots(&state.db, 1).await.unwrap();
+        let dropped = db::find_compactable_snapshots(&state.db, db::SnapshotCount::new(1)).await.unwrap();
         let ids: Vec<ambre_core::SnapshotId> = dropped.into_iter().map(|s| s.id).collect();
         assert!(!ids.contains(&reference));
         assert!(!ids.contains(&own));

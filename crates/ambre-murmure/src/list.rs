@@ -343,8 +343,8 @@ impl<'a> Row<'a> {
         };
         let replies = message
             .thread
-            .filter(|t| t.replies > 0)
-            .map(|t| match t.replies {
+            .filter(|t| t.replies > ambre_bus::ReplyCount::ZERO)
+            .map(|t| match t.replies.get() {
                 1 => "1 reply".to_owned(),
                 n => format!("{n} replies"),
             })
@@ -1038,7 +1038,7 @@ pub(crate) mod tests {
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
             document: DocumentId::new(),
-            replies: 2,
+            replies: ambre_bus::ReplyCount::new(2),
             last_replier: None,
         });
         let row = Row::Message {

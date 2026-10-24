@@ -92,7 +92,7 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
     }
-    batch.report.imported = batch.commands.len();
+    batch.report.imported = ambre_bus::app::toile::ElementCount::of_len(batch.commands.len());
     Ok(batch)
 }
 

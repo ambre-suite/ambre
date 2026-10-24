@@ -120,9 +120,14 @@ pub enum CondFormatKind {
     DataBar {
         color: Rgb,
     },
-    TopN(u32),
-    BottomN(u32),
+    TopN(RankCount),
+    BottomN(RankCount),
     TopNPercent(Percent),
+}
+
+ambre_core::define_tally! {
+    /// How many of the top or bottom values a rule marks.
+    pub struct RankCount;
 }
 
 /// Style applied when a conditional-formatting rule matches
@@ -159,8 +164,8 @@ pub enum ValidationKind {
         max: Option<DateSerial>,
     },
     TextLength {
-        min: Option<u32>,
-        max: Option<u32>,
+        min: Option<ambre_core::CharCount>,
+        max: Option<ambre_core::CharCount>,
     },
     Regex(String),
     /// Custom formula that must return `TRUE`.

@@ -989,7 +989,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
             .iter()
             .map(|m| (m.segment, m.message.text.clone()))
             .collect();
-        (answer.covered, answer.listed, matches)
+        (answer.covered, answer.listed.get(), matches)
     };
 
     let (covered, listed, matches) = found(&state);
@@ -1274,7 +1274,7 @@ fn a_closing_segment_not_held_blocks_the_next_close() {
     let Ok(Opening::Open(state)) = opening.ready(stored.active_id.document_id()) else {
         panic!("the active segment opens the channel");
     };
-    let mut state = (*state).with_segment_size(0);
+    let mut state = (*state).with_segment_size(crate::MessageCount::ZERO);
     assert_eq!(state.wants_close(), None);
 }
 
@@ -1282,7 +1282,7 @@ fn a_closing_segment_not_held_blocks_the_next_close() {
 #[test]
 fn a_channel_with_no_closing_segment_asks_to_close_at_the_size() {
     let (stored, _, _) = two_finals();
-    let mut state = open(&stored).with_segment_size(0);
+    let mut state = open(&stored).with_segment_size(crate::MessageCount::ZERO);
     assert_eq!(state.wants_close(), Some(stored.active_id));
 }
 

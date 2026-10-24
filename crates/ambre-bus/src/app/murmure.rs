@@ -546,6 +546,13 @@ pub struct MessageView {
     pub also_in_thread: Option<DocumentId>,
 }
 
+ambre_core::define_tally! {
+    /// How many replies a thread holds, deleted ones aside.
+    pub struct ReplyCount;
+    /// How many segments a channel lists.
+    pub struct SegmentCount;
+}
+
 /// What a root shows of its thread (`MURMURE-106`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ThreadHead {
@@ -553,7 +560,7 @@ pub struct ThreadHead {
     pub document: DocumentId,
     /// The replies the thread document holds, deleted ones aside. Zero
     /// until the document is held.
-    pub replies: u32,
+    pub replies: ReplyCount,
     /// The author of the latest reply, `None` until the document is held.
     pub last_replier: Option<UserId>,
 }
@@ -635,7 +642,7 @@ pub struct ChannelMatches {
     /// The segments searched: the ones the client holds, in list order.
     pub covered: Vec<SegmentId>,
     /// How many segments `meta` lists, searched or not.
-    pub listed: usize,
+    pub listed: SegmentCount,
     /// The matches, segment by segment in list order, each segment's in
     /// message order.
     pub matches: Vec<SearchMatch>,
@@ -702,7 +709,7 @@ pub enum MurmureEvent {
     /// The draft mentions the whole channel, which holds `members` members.
     /// Nothing was sent: the view asks the author, then sends `held` again
     /// confirmed (`MURMURE-231`).
-    ConfirmChannelMention { members: usize, held: HeldSend },
+    ConfirmChannelMention { members: ambre_core::MemberCount, held: HeldSend },
     /// A member reported the snapshot of `segment` as false, and the relay
     /// dropped it. The view names its author and the reporter; `None` for a
     /// key no member holds any more (`MURMURE-239`).

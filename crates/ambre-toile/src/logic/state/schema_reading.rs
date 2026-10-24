@@ -329,7 +329,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             let emoji: Vec<(&str, u32)> = tally
                 .emoji
                 .iter()
-                .map(|(emoji, count)| (emoji.as_str(), *count))
+                .map(|(emoji, count)| (emoji.as_str(), count.get()))
                 .collect();
             Some(format!(
                 "tallies {emoji:?}, {} votes summing {}",

@@ -861,13 +861,13 @@ fn the_pipe_follows_the_caret_inside_the_element() {
 /// for moves nothing (`FIND-004`).
 #[test]
 fn the_current_match_is_brought_into_view() {
-    use ambre_bus::app::toile::{FindResults, SelectionStats};
+    use ambre_bus::app::toile::{ElementCount, FindResults, SelectionStats};
     let far = Rect::new(1.0e6, 1.0e6, 1.0e6 + 100.0, 1.0e6 + 80.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     assert!(!rig.view.cam.visible_world().contains(far.center()));
     let stats = |kind| {
         ToileEvent::SelectionStats(SelectionStats {
-            count: 1,
+            count: ElementCount::new(1),
             bounds: Some(far),
             kind,
         })
@@ -1666,7 +1666,7 @@ fn a_rotated_note_keeps_its_rotation_while_edited() {
 /// selection are as they were before the search.
 #[test]
 fn a_find_step_recentres_without_a_zoom_or_a_selection() {
-    use ambre_bus::app::toile::{FindResults, SelectionStats};
+    use ambre_bus::app::toile::{ElementCount, FindResults, SelectionStats};
     let far = Rect::new(5000.0, 4000.0, 5100.0, 4080.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
@@ -1682,7 +1682,7 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
             if ids == &[eid("far")]
     ));
     rig.answer(ToileEvent::SelectionStats(SelectionStats {
-        count: 1,
+        count: ElementCount::new(1),
         bounds: Some(far),
         kind: StatsRequestKind::FindFocus,
     }));
@@ -2085,7 +2085,7 @@ fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
 /// board no longer holds.
 fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
     ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
-        count: u32::from(bounds.is_some()),
+        count: ElementCount::new(u32::from(bounds.is_some())),
         bounds,
         kind: StatsRequestKind::Fit,
     })
@@ -2581,9 +2581,12 @@ fn a_shared_board(peer: UserId) -> Rig {
     reactions.insert(
         eid("a"),
         ambre_bus::app::toile::ReactionTally {
-            emoji: vec![(ambre_bus::Emoji::from("+1"), 2)],
-            vote_total: 0,
-            vote_count: 0,
+            emoji: vec![(
+                ambre_bus::Emoji::from("+1"),
+                ambre_bus::app::toile::ReactionCount::new(2),
+            )],
+            vote_total: ambre_bus::app::toile::VoteTotal::ZERO,
+            vote_count: ambre_bus::app::toile::VoteCount::ZERO,
         },
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
@@ -2592,7 +2595,7 @@ fn a_shared_board(peer: UserId) -> Rig {
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: eid("t"),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: 1,
+            messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
             resolved: false,
         }],
         reactions,
@@ -2802,7 +2805,7 @@ fn a_thread_brings_the_camera_to_its_anchor() {
     assert!(asked, "the view asks for the anchor's box");
     rig.answer(ToileEvent::SelectionStats(
         ambre_bus::app::toile::SelectionStats {
-            count: 1,
+            count: ambre_bus::app::toile::ElementCount::new(1),
             bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
             kind: StatsRequestKind::CommentFocus,
         },

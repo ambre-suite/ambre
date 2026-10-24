@@ -71,6 +71,11 @@ pub struct UpdateRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+ambre_core::define_tally! {
+    /// How many snapshots of one document a compaction keeps.
+    pub struct SnapshotCount;
+}
+
 /// A number of delta rows in a document's inline tail.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeltaCount(pub u64);
@@ -812,7 +817,7 @@ pub struct CompactSnapshot {
 /// other (`SRV-131`).
 pub async fn find_compactable_snapshots(
     pool: &PgPool,
-    keep: i64,
+    keep: SnapshotCount,
 ) -> Result<Vec<CompactSnapshot>, AppError> {
     let rows = sqlx::query_as::<_, CompactSnapshot>(
         "WITH ranked AS (
@@ -828,7 +833,7 @@ pub async fn find_compactable_snapshots(
         )
         SELECT id, s3_key FROM ranked WHERE rn > $1 AND id NOT IN (SELECT id FROM held)",
     )
-    .bind(keep)
+    .bind(i64::from(keep.get()))
     .fetch_all(pool)
     .await?;
     Ok(rows)

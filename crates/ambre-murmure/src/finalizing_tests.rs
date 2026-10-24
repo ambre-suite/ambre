@@ -32,7 +32,7 @@ fn draft(text: &str) -> MessageDraft {
 fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
     let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(texts.len())
+        .with_segment_size(crate::MessageCount::of_len(texts.len()))
         .identify();
     let author = UserId::new();
     for text in texts {
@@ -347,7 +347,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
 fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, SnapshotBytes) {
     let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(2)
+        .with_segment_size(crate::MessageCount::new(2))
         .identify();
     let mut bob = peer_of(&alice);
     let segment = alice.active_id();

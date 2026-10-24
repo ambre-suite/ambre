@@ -344,7 +344,7 @@ impl Default for ElementStyle {
 /// title names a region of a board and is read in a one-line field, so nothing
 /// legible reaches this. The cut is what keeps an unbounded register out of a
 /// document every peer replicates.
-pub const FRAME_NAME_MAX: usize = 120;
+pub const FRAME_NAME_MAX: ambre_core::CharCount = ambre_core::CharCount::new(120);
 
 /// The default sticky-note card colour (RGBA): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
@@ -1113,7 +1113,69 @@ pub struct Reaction {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReactionKind {
     Emoji(crate::app::murmure::Emoji),
-    Vote(i32),
+    Vote(VoteWeight),
+}
+
+/// The signed weight one vote casts, for example `+1`, `-1` or a weighted
+/// ballot. It travels and is stored as the bare `i32` it was.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct VoteWeight(i32);
+
+impl VoteWeight {
+    /// A vote of weight `weight`.
+    pub const fn new(weight: i32) -> Self {
+        Self(weight)
+    }
+
+    /// The weight itself.
+    pub const fn get(self) -> i32 {
+        self.0
+    }
+}
+
+/// The sum of the vote weights cast on one target. A sum has no rank of its
+/// own: it only grows or shrinks by a weight, and is read or printed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct VoteTotal(i64);
+
+impl VoteTotal {
+    /// No vote cast.
+    pub const ZERO: Self = Self(0);
+
+    /// A sum of `total`.
+    pub const fn new(total: i64) -> Self {
+        Self(total)
+    }
+
+    /// The sum itself.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+
+    /// The sum with one more vote of `weight`, held at either end of `i64`.
+    #[must_use]
+    pub const fn plus(self, weight: VoteWeight) -> Self {
+        Self(self.0.saturating_add(weight.0 as i64))
+    }
+}
+
+/// Prints the bare sum, and honours the sign flag: `{:+}` prints `+3`.
+impl std::fmt::Display for VoteTotal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+ambre_core::define_tally! {
+    /// How many elements a selection, a board or an import holds.
+    pub struct ElementCount;
+    /// How many votes were cast on one target.
+    pub struct VoteCount;
+    /// How many users reacted to one target with one emoji.
+    pub struct ReactionCount;
 }
 
 /// Read-time tally derived from a target's reaction sub-map
@@ -1123,9 +1185,9 @@ pub enum ReactionKind {
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji: Vec<(crate::app::murmure::Emoji, u32)>,
-    pub vote_total: i64,
-    pub vote_count: u32,
+    pub emoji: Vec<(crate::app::murmure::Emoji, ReactionCount)>,
+    pub vote_total: VoteTotal,
+    pub vote_count: VoteCount,
 }
 
 // -----------------------------------------------------------------------------
@@ -1185,7 +1247,7 @@ pub struct CommentThread {
 pub struct CommentPin {
     pub thread: ThreadId,
     pub at: Point,
-    pub messages: u32,
+    pub messages: ThreadMessageCount,
     pub resolved: bool,
 }
 
@@ -1200,7 +1262,7 @@ pub struct CommentSummary {
     pub id: ThreadId,
     pub anchor: CommentAnchor,
     pub resolved: bool,
-    pub messages: u32,
+    pub messages: ThreadMessageCount,
     pub preview: String,
 }
 
@@ -2171,7 +2233,7 @@ pub enum StatsRequestKind {
 /// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
-    pub count: u32,
+    pub count: ElementCount,
     pub bounds: Option<Rect>,
     pub kind: StatsRequestKind,
 }
@@ -2304,7 +2366,7 @@ pub enum ToileEvent {
     /// importer left behind. The whole import is one undo item
     /// (`toile-import-export`).
     ImportReport {
-        imported: usize,
+        imported: ElementCount,
         skipped: Vec<String>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a

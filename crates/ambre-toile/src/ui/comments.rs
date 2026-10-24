@@ -45,8 +45,8 @@ pub fn pin_badge(pin: &CommentPin) -> String {
     if pin.resolved {
         return "v".to_string();
     }
-    match pin.messages {
-        0..=9 => pin.messages.to_string(),
+    match pin.messages.get() {
+        count @ 0..=9 => count.to_string(),
         _ => "9+".to_string(),
     }
 }
@@ -302,7 +302,7 @@ mod tests {
         CommentPin {
             thread: ElementId(id.to_owned()),
             at,
-            messages,
+            messages: ambre_bus::app::toile::ThreadMessageCount::new(messages),
             resolved,
         }
     }

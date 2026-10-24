@@ -170,7 +170,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         // refresh rides on the accompanying DataReset). `ui.rs` documents this
         // toast as the surface for ReplaceDone.
         TrameEvent::ReplaceDone { replaced } => {
-            toasts.info(format!("{replaced} cells replaced"));
+            toasts.info(format!("{} cells replaced", replaced.get()));
         }
         // Interop (`trame-import-export`): confirm an import/export finished (the
         // download itself is triggered canvas-side on ExportComplete).

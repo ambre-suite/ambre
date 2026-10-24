@@ -71,6 +71,7 @@ use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use ambre_bus::UserId;
+use ambre_bus::app::toile::ElementCount;
 use ambre_core::schema::SchemaError;
 use ambre_core::{HistoryStep, Rgba};
 
@@ -971,7 +972,7 @@ impl ToileState {
 
     fn selection_stats(&self, ids: &[ElementId], kind: StatsRequestKind) -> ToileOutcome {
         let mut union: Option<Rect> = None;
-        let mut count = 0u32;
+        let mut count = ElementCount::ZERO;
         // Empty ids = whole-board extent: the union of every element's bounds.
         // Used by the View -> Fit action (`toile-viewport`), which needs
         // the full board rect the UI does not hold (it sees only the culled
@@ -983,7 +984,7 @@ impl ToileState {
                     Some(u) => u.union(*r),
                     None => *r,
                 });
-                count += 1;
+                count = count.incremented();
             }
             return ToileOutcome::display_only(vec![ToileEvent::SelectionStats(SelectionStats {
                 count,
@@ -997,7 +998,7 @@ impl ToileState {
                     Some(u) => u.union(*r),
                     None => *r,
                 });
-                count += 1;
+                count = count.incremented();
             }
         }
         ToileOutcome::display_only(vec![ToileEvent::SelectionStats(SelectionStats {

@@ -6,7 +6,7 @@
 //! the text (`MURMURE-103`).
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
-use ambre_core::{ChannelId, CharOffset, CharSpan, UserId, char_len};
+use ambre_core::{ChannelId, CharOffset, CharSpan, MemberCount, UserId, char_len};
 use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
@@ -94,7 +94,7 @@ pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
 
 /// How many members a channel holds past which an `@channel` asks for
 /// confirmation (`ambre-spec-budgets.md section 6`).
-pub const CONFIRM_CHANNEL_PAST: usize = 10;
+pub const CONFIRM_CHANNEL_PAST: MemberCount = MemberCount::new(10);
 
 /// What a draft needs before it is sent, read against the members of its
 /// channel.
@@ -106,7 +106,7 @@ pub enum Screened {
     /// The draft mentions the channel, which holds this many members, past
     /// [`CONFIRM_CHANNEL_PAST`]. Nothing is sent before the author confirms
     /// (`MURMURE-231`). The draft comes back to be held.
-    Confirm { members: usize, draft: MessageDraft },
+    Confirm { members: MemberCount, draft: MessageDraft },
 }
 
 /// Screen `draft` against `members`, the users of its channel. `None` before
@@ -128,10 +128,10 @@ pub fn screen(
         .any(|mention| mention.target == MentionTarget::Channel);
     if all
         && confirmed == ambre_bus::Confirmation::Unconfirmed
-        && members.len() > CONFIRM_CHANNEL_PAST
+        && MemberCount::of_len(members.len()) > CONFIRM_CHANNEL_PAST
     {
         return Screened::Confirm {
-            members: members.len(),
+            members: MemberCount::of_len(members.len()),
             draft,
         };
     }

@@ -41,7 +41,9 @@ mod relocating;
 mod threading;
 
 pub use amending::{ChangeTarget, Linked};
-pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Successor};
+pub use closing::{
+    Closed, MessageCount, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Successor,
+};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
 pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
@@ -64,7 +66,7 @@ struct Held {
     created: Option<Created>,
     /// The message count at which an active segment next measures its
     /// snapshot against the byte bound. Zero measures at the first ask.
-    probe_at: usize,
+    probe_at: MessageCount,
 }
 
 impl Held {
@@ -75,7 +77,7 @@ impl Held {
             doc,
             session: None,
             created: None,
-            probe_at: 0,
+            probe_at: MessageCount::ZERO,
         }
     }
 
@@ -233,7 +235,7 @@ pub struct ChannelState {
     /// came with no number has no entry.
     sequences: HashMap<DocumentId, Sequence>,
     /// The messages past which the active segment asks to close.
-    segment_size: usize,
+    segment_size: MessageCount,
     /// The snapshot bytes past which the active segment asks to close.
     segment_bytes: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
@@ -913,7 +915,7 @@ impl ChannelState {
         ChannelMatches {
             channel_id: self.channel_id,
             covered,
-            listed: listed.len(),
+            listed: ambre_bus::SegmentCount::of_len(listed.len()),
             matches,
         }
     }
@@ -1997,7 +1999,7 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         // (`MURMURE-106`).
         thread: document_of(&map, MessageKey::Thread).map(|document| ThreadHead {
             document,
-            replies: 0,
+            replies: ambre_bus::ReplyCount::ZERO,
             last_replier: None,
         }),
         also_in_thread: document_of(&map, MessageKey::AlsoInThread),

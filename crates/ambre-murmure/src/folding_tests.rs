@@ -83,7 +83,7 @@ fn amended() -> Amended {
     let author = UserId::new();
     let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(3)
+        .with_segment_size(crate::MessageCount::new(3))
         .identify();
     for text in ["one", "two", "three"] {
         alice.send(&draft(text), author, NOW).expect("send");

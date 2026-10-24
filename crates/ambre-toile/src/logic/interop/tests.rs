@@ -48,7 +48,7 @@ fn rect_maps_to_shape_rect() {
         }
         other => panic!("expected Shape(Rect), got {other:?}"),
     }
-    assert_eq!(batch.report.imported, 1);
+    assert_eq!(batch.report.imported.get(), 1);
 }
 
 #[test]

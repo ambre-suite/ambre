@@ -459,8 +459,8 @@ pub struct SearchGroup {
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.
-fn segments(count: usize) -> String {
-    match count {
+fn segments(count: ambre_bus::SegmentCount) -> String {
+    match count.get() {
         1 => "1 segment".to_owned(),
         n => format!("{n} segments"),
     }
@@ -470,7 +470,9 @@ fn segments(count: usize) -> String {
 /// A result list states its coverage, matches or not (`MURMURE-149`).
 pub fn coverage(channels: &[ChannelMatches]) -> String {
     let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
-    let listed: usize = channels.iter().map(|c| c.listed).sum();
+    let listed = channels
+        .iter()
+        .fold(ambre_bus::SegmentCount::ZERO, |all, c| all.plus(c.listed));
     let open = match channels.len() {
         1 => "1 open channel".to_owned(),
         n => format!("{n} open channels"),

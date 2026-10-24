@@ -1298,7 +1298,7 @@ pub(crate) mod tests {
         gone.deleted = true;
         gone.thread = Some(ThreadHead {
             document: DocumentId::new(),
-            replies: 2,
+            replies: ambre_bus::ReplyCount::new(2),
             last_replier: None,
         });
         let mut list = MessageList::default();

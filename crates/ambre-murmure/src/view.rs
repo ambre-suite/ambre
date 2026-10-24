@@ -5015,7 +5015,7 @@ mod tests {
         let root = MessageView {
             thread: Some(ThreadHead {
                 document: thread,
-                replies: 1,
+                replies: ambre_bus::ReplyCount::new(1),
                 last_replier: Some(ada),
             }),
             ..message(ada, ambre_bus::Timestamp(0), "root")
@@ -5850,7 +5850,7 @@ mod tests {
         };
         let asked = AskedAll {
             channel,
-            members: 12,
+            members: ambre_core::MemberCount::new(12),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),

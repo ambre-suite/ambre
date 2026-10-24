@@ -177,7 +177,7 @@ fn replaced_count(out: &TrameOutcome) -> u32 {
     out.display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::ReplaceDone { replaced } => Some(*replaced),
+            TrameEvent::ReplaceDone { replaced } => Some(replaced.get()),
             _ => None,
         })
         .expect("a ReplaceDone")

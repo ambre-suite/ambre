@@ -30,8 +30,8 @@ use crate::chrome::commands::status_label;
 pub struct SelStats {
     pub sum: f64,
     pub avg: f64,
-    pub count: u64,
-    pub count_num: u64,
+    pub count: ambre_bus::app::trame::CellCount,
+    pub count_num: ambre_bus::app::trame::CellCount,
     pub min: f64,
     pub max: f64,
 }
@@ -60,7 +60,7 @@ pub fn StatusBar(
     let aggregates = move || {
         stats.get().map(|s| {
             // Numeric aggregates only when at least one number is selected.
-            let nums = (s.count_num > 0).then(|| {
+            let nums = (!s.count_num.is_zero()).then(|| {
                 view! {
                     <span class="stat">"Sum: " {fmt_num(s.sum)}</span>
                     <span class="stat">"Avg: " {fmt_num(s.avg)}</span>

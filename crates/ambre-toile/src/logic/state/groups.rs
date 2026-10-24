@@ -381,7 +381,7 @@ impl ToileState {
                 ToileError::ContentKindMismatch,
             )]);
         }
-        let name: String = name.trim().chars().take(FRAME_NAME_MAX).collect();
+        let name: String = name.trim().chars().take(FRAME_NAME_MAX.to_usize()).collect();
         if str_of(&fm, ElementKey::Name).unwrap_or_default() == name {
             return ToileOutcome::display_only(Vec::new());
         }

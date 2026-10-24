@@ -46,6 +46,7 @@ use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
     ThreadMessageIndex, ToileEvent, ToileOutcome, Viewport,
 };
+use ambre_bus::app::toile::ThreadMessageCount;
 use crate::logic::model::{ElementId, ThreadId};
 
 use super::ToileState;
@@ -278,7 +279,7 @@ impl ToileState {
                     id: thread.id,
                     anchor: thread.anchor,
                     resolved: thread.resolved,
-                    messages: thread.messages.len() as u32,
+                    messages: ThreadMessageCount::from_len(thread.messages.len()),
                     preview,
                 })
             })
@@ -325,7 +326,7 @@ impl ToileState {
                 Some(CommentPin {
                     thread: thread.id,
                     at,
-                    messages: thread.messages.len() as u32,
+                    messages: ThreadMessageCount::from_len(thread.messages.len()),
                     resolved: thread.resolved,
                 })
             })

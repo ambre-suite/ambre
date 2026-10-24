@@ -863,7 +863,7 @@ fn an_import_report_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let root = mount_notified(ToileEvent::ImportReport {
-        imported: 4,
+        imported: ambre_bus::app::toile::ElementCount::new(4),
         skipped: vec!["gradient".to_owned()],
     });
     let toast = root
@@ -1070,7 +1070,7 @@ fn summary(id: &str, preview: &str) -> CommentSummary {
         id: ElementId(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: false,
-        messages: 1,
+        messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
         preview: preview.to_owned(),
     }
 }

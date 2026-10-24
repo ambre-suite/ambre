@@ -23,6 +23,11 @@ impl MemberCount {
         Self(n)
     }
 
+    /// A count of `len` members, held at the top past 32 bits.
+    pub fn of_len(len: usize) -> Self {
+        Self(u32::try_from(len).unwrap_or(u32::MAX))
+    }
+
     /// The count itself.
     pub const fn get(self) -> u32 {
         self.0

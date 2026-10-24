@@ -241,8 +241,8 @@ fn status_bar_renders_label_and_aggregates() {
         let stats = RwSignal::new(Some(SelStats {
             sum: 6.0,
             avg: 2.0,
-            count: 3,
-            count_num: 3,
+            count: ambre_bus::app::trame::CellCount::new(3),
+            count_num: ambre_bus::app::trame::CellCount::new(3),
             min: 1.0,
             max: 3.0,
         }));
@@ -719,7 +719,7 @@ fn status_text(stats: Option<SelStats>) -> String {
 #[wasm_bindgen_test]
 fn a_selection_with_no_number_shows_no_numeric_aggregate() {
     let text = status_text(Some(SelStats {
-        count: 4,
+        count: ambre_bus::app::trame::CellCount::new(4),
         ..SelStats::default()
     }));
     assert!(text.contains("Count: 4"), "{text}");
@@ -729,8 +729,8 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
     let text = status_text(Some(SelStats {
         sum: 5.0,
         avg: 5.0,
-        count: 4,
-        count_num: 1,
+        count: ambre_bus::app::trame::CellCount::new(4),
+        count_num: ambre_bus::app::trame::CellCount::new(1),
         min: 5.0,
         max: 5.0,
     }));
@@ -747,8 +747,8 @@ fn an_aggregate_reads_whole_or_with_two_decimals() {
     let text = status_text(Some(SelStats {
         sum: 7.5,
         avg: 2.5,
-        count: 3,
-        count_num: 3,
+        count: ambre_bus::app::trame::CellCount::new(3),
+        count_num: ambre_bus::app::trame::CellCount::new(3),
         min: -2.0,
         max: 1.0 / 3.0,
     }));

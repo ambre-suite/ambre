@@ -740,7 +740,7 @@ fn selection_stats_spans_offscreen_elements() {
     });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
-            assert_eq!(s.count, 2);
+            assert_eq!(s.count.get(), 2);
             assert_eq!(s.bounds, Some(Rect::new(0.0, 0.0, 1010.0, 1010.0)));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
@@ -760,7 +760,7 @@ fn selection_stats_empty_ids_span_whole_board() {
     });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
-            assert_eq!(s.count, 2);
+            assert_eq!(s.count.get(), 2);
             assert_eq!(s.bounds, Some(Rect::new(0.0, 0.0, 540.0, 320.0)));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
@@ -776,7 +776,7 @@ fn selection_stats_empty_ids_on_empty_board_is_none() {
     });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
-            assert_eq!(s.count, 0);
+            assert_eq!(s.count.get(), 0);
             assert_eq!(s.bounds, None);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
@@ -790,7 +790,7 @@ fn stats_of(st: &mut ToileState, ids: Vec<ElementId>) -> (u32, Option<Rect>) {
         kind: StatsRequestKind::Band,
     });
     match &out.display[..] {
-        [ToileEvent::SelectionStats(s)] => (s.count, s.bounds),
+        [ToileEvent::SelectionStats(s)] => (s.count.get(), s.bounds),
         other => panic!("expected one SelectionStats, got {other:?}"),
     }
 }
@@ -1147,14 +1147,14 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
     assert!(out.update.is_none() && out.display.is_empty());
 
     // A title no document should carry is cut to the bound.
-    let long = "x".repeat(ambre_bus::app::toile::FRAME_NAME_MAX + 50);
+    let long = "x".repeat(ambre_bus::app::toile::FRAME_NAME_MAX.to_usize() + 50);
     st.handle_command(ToileCommand::RenameFrame {
         frame: frame.clone(),
         name: long,
     });
     assert_eq!(
         st.frame_name(&frame).unwrap_or_default().chars().count(),
-        ambre_bus::app::toile::FRAME_NAME_MAX
+        ambre_bus::app::toile::FRAME_NAME_MAX.to_usize()
     );
 
     // Anything that is not a frame is refused, and keeps its own body.
@@ -4509,7 +4509,7 @@ fn emoji(s: &str) -> Reaction {
 
 fn vote(w: i32) -> Reaction {
     Reaction {
-        kind: ReactionKind::Vote(w),
+        kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(w)),
         ts: ambre_bus::Timestamp(0),
     }
 }
@@ -4533,8 +4533,8 @@ fn react_add_change_remove_updates_tally() {
         reaction: Some(emoji("thumbsup")),
     });
     let tally = st.reaction_tally(&t);
-    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), 1)]);
-    assert_eq!(tally.vote_count, 0);
+    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), ambre_bus::app::toile::ReactionCount::new(1))]);
+    assert_eq!(tally.vote_count.get(), 0);
 
     // Change the same user's reaction: one entry per user, so it replaces (LWW on
     // the own key), never accumulates.
@@ -4547,7 +4547,7 @@ fn react_add_change_remove_updates_tally() {
         tally.emoji.is_empty(),
         "the emoji entry was replaced, not kept"
     );
-    assert_eq!((tally.vote_total, tally.vote_count), (1, 1));
+    assert_eq!((tally.vote_total.get(), tally.vote_count.get()), (1, 1));
     assert_eq!(st.my_reaction(&t), Some(vote(1)));
 
     // Remove the user's own entry.
@@ -4573,7 +4573,7 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
         .reactions
         .get(&t)
         .expect("tally present for reacted target");
-    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), 1)]);
+    assert_eq!(tally.emoji, vec![(ambre_bus::Emoji::from("thumbsup"), ambre_bus::app::toile::ReactionCount::new(1))]);
 
     // Deleting the target drops it from the derived map. Its orphan reaction
     // entries survive in the CRDT, and derivation skips them.
@@ -4886,7 +4886,7 @@ fn concurrent_reactions_distinct_users_converge() {
     assert_eq!(ta, b.reaction_tally(&t), "concurrent reactions diverged");
     assert_eq!(
         ta.emoji,
-        vec![(ambre_bus::Emoji::from("thumbsup"), 2)],
+        vec![(ambre_bus::Emoji::from("thumbsup"), ambre_bus::app::toile::ReactionCount::new(2))],
         "two distinct users must both count, no double-count"
     );
 }
@@ -4930,7 +4930,7 @@ fn same_user_two_devices_is_one_entry() {
         "same-user two-device tally diverged"
     );
     assert_eq!(
-        ta.vote_count, 1,
+        ta.vote_count.get(), 1,
         "two devices of one user is a single entry, not two votes"
     );
 }
@@ -4982,7 +4982,7 @@ fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
     );
     assert_eq!(
         st.reaction_tally(&far).emoji,
-        vec![(ambre_bus::Emoji::from("heart"), 1)],
+        vec![(ambre_bus::Emoji::from("heart"), ambre_bus::app::toile::ReactionCount::new(1))],
         "the board still holds the reaction out of view"
     );
 }
@@ -4994,8 +4994,8 @@ fn the_chips_of_a_target_keep_one_order() {
     let (one, t) = reacted_by(&[emoji("zebra"), emoji("apple"), emoji("zebra")]);
     let (other, u) = reacted_by(&[emoji("apple"), emoji("zebra"), emoji("zebra")]);
     let expected = vec![
-        (ambre_bus::Emoji::from("apple"), 1),
-        (ambre_bus::Emoji::from("zebra"), 2),
+        (ambre_bus::Emoji::from("apple"), ambre_bus::app::toile::ReactionCount::new(1)),
+        (ambre_bus::Emoji::from("zebra"), ambre_bus::app::toile::ReactionCount::new(2)),
     ];
 
     assert_eq!(one.reaction_tally(&t).emoji, expected);
@@ -5019,10 +5019,10 @@ fn the_chips_of_a_target_keep_one_order() {
 fn votes_fold_into_one_signed_total_and_one_count() {
     let (st, t) = reacted_by(&[vote(3), vote(-1), vote(-1), emoji("heart")]);
     let tally = st.reaction_tally(&t);
-    assert_eq!((tally.vote_total, tally.vote_count), (1, 3));
+    assert_eq!((tally.vote_total.get(), tally.vote_count.get()), (1, 3));
     assert_eq!(
         tally.emoji,
-        vec![(ambre_bus::Emoji::from("heart"), 1)],
+        vec![(ambre_bus::Emoji::from("heart"), ambre_bus::app::toile::ReactionCount::new(1))],
         "a vote is no chip"
     );
     assert_eq!(st.debug_viewport().reactions.get(&t), Some(&tally));
@@ -5030,7 +5030,7 @@ fn votes_fold_into_one_signed_total_and_one_count() {
     let (st, t) = reacted_by(&[vote(1), vote(-1)]);
     let tally = st.reaction_tally(&t);
     assert_eq!(
-        (tally.vote_total, tally.vote_count),
+        (tally.vote_total.get(), tally.vote_count.get()),
         (0, 2),
         "a zero total still counts its voters"
     );
@@ -5685,7 +5685,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
         .iter()
         .find(|p| p.thread == on_element)
         .expect("the anchored thread has a pin");
-    assert_eq!(element_pin.messages, 2);
+    assert_eq!(element_pin.messages.get(), 2);
     assert!(!element_pin.resolved);
     // The pin sits on the element it is about: its top-right corner.
     assert_eq!(element_pin.at, Point::new(90.0, 20.0));
@@ -5745,7 +5745,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
     };
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, t);
-    assert_eq!(rows[0].messages, 1);
+    assert_eq!(rows[0].messages.get(), 1);
     assert_eq!(rows[0].preview, "the body");
 
     // The whole thread, bodies included, only on an explicit read.

@@ -17,7 +17,12 @@ use crate::session::Session;
 
 /// The messages past which an active segment asks to close: the segment size
 /// row of `ambre-spec-budgets.md section 6`.
-pub const SEGMENT_MESSAGES: usize = 5000;
+pub const SEGMENT_MESSAGES: MessageCount = MessageCount::new(5000);
+
+ambre_core::define_tally! {
+    /// How many messages a segment holds, or holds before it asks to close.
+    pub struct MessageCount;
+}
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
@@ -65,7 +70,7 @@ pub struct Closed {
 impl ChannelState {
     /// This channel, with segments that ask to close past `messages`.
     #[must_use]
-    pub fn with_segment_size(mut self, messages: usize) -> Self {
+    pub fn with_segment_size(mut self, messages: MessageCount) -> Self {
         self.segment_size = messages;
         self
     }
@@ -91,7 +96,8 @@ impl ChannelState {
         if self.close_asked || self.closing.is_some() || self.successor.is_some() {
             return None;
         }
-        let messages = crate::schema::root_list(&self.active.doc, Root::Messages).len();
+        let messages =
+            MessageCount::of_len(crate::schema::root_list(&self.active.doc, Root::Messages).len());
         if !self.key_rotated && messages < self.segment_size && !self.passes_bytes(messages) {
             return None;
         }
@@ -108,7 +114,7 @@ impl ChannelState {
     /// An export costs milliseconds at 5000 messages, so it is not paid at
     /// each send. Each probe spaces the next by half the messages that would
     /// fill the bound at the mean size seen so far.
-    fn passes_bytes(&mut self, messages: usize) -> bool {
+    fn passes_bytes(&mut self, messages: MessageCount) -> bool {
         if messages < self.active.probe_at {
             return false;
         }
@@ -119,10 +125,11 @@ impl ChannelState {
         if bytes >= self.segment_bytes {
             return true;
         }
-        let per_message = (snapshot.len() / messages.max(1)).max(1);
+        let held = usize::try_from(messages.get()).unwrap_or(usize::MAX);
+        let per_message = (snapshot.len() / held.max(1)).max(1);
         let room = self.segment_bytes.saturating_sub(bytes).as_len();
         let step = (room / per_message / 2).max(1);
-        self.active.probe_at = messages + step;
+        self.active.probe_at = messages.plus(MessageCount::of_len(step));
         false
     }
 

@@ -619,8 +619,8 @@ fn selection_stats_aggregate_numeric_cells() {
             min,
             max,
         } => {
-            assert_eq!(*count, 4, "10/20/30/apple are non-empty");
-            assert_eq!(*count_num, 3, "only 10/20/30 are numeric");
+            assert_eq!(count.get(), 4, "10/20/30/apple are non-empty");
+            assert_eq!(count_num.get(), 3, "only 10/20/30 are numeric");
             assert_eq!(*sum, 60.0);
             assert_eq!(*avg, 20.0);
             assert_eq!(*min, 10.0);
@@ -688,8 +688,8 @@ fn selection_stats_covers_the_whole_band() {
             count_num,
             ..
         } => {
-            assert_eq!(*count, 2, "the off-screen row is tallied");
-            assert_eq!(*count_num, 2);
+            assert_eq!(count.get(), 2, "the off-screen row is tallied");
+            assert_eq!(count_num.get(), 2);
             assert_eq!(*sum, 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
@@ -732,8 +732,8 @@ fn selection_stats_totals_a_disjoint_selection() {
             count_num,
             ..
         } => {
-            assert_eq!(*count, 2, "both rectangles are tallied");
-            assert_eq!(*count_num, 2);
+            assert_eq!(count.get(), 2, "both rectangles are tallied");
+            assert_eq!(count_num.get(), 2);
             assert_eq!(*sum, 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),

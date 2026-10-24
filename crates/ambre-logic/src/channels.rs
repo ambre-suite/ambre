@@ -3543,11 +3543,11 @@ mod tests {
             panic!("one answer, got {shown:?}");
         };
         assert_eq!(query, "Budget");
-        let mut answered: Vec<(ChannelId, Vec<SegmentId>, usize, Vec<String>)> = channels
+        let mut answered: Vec<(ChannelId, Vec<SegmentId>, u32, Vec<String>)> = channels
             .iter()
             .map(|c| {
                 let texts = c.matches.iter().map(|m| m.message.text.clone()).collect();
-                (c.channel_id, c.covered.clone(), c.listed, texts)
+                (c.channel_id, c.covered.clone(), c.listed.get(), texts)
             })
             .collect();
         answered.sort_by_key(|(id, ..)| *id != first.0);
@@ -4303,7 +4303,7 @@ mod tests {
         signed_in(&mut state, alice);
         let (channel_id, active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
-        let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST)
+        let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST.get())
             .map(|_| member(UserId::new()))
             .collect();
         state.handle_logic_event(LogicEvent::MembersChanged {
@@ -4324,7 +4324,7 @@ mod tests {
             styles: Vec::new(),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            members: ambre_core::MemberCount::new(ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1),
             held: HeldSend {
                 draft: draft.clone(),
                 attachments: Vec::new(),
@@ -4364,7 +4364,7 @@ mod tests {
             }),
         };
         let asked = MurmureEvent::ConfirmChannelMention {
-            members: ambre_murmure::CONFIRM_CHANNEL_PAST + 1,
+            members: ambre_core::MemberCount::new(ambre_murmure::CONFIRM_CHANNEL_PAST.get() + 1),
             held,
         };
         assert_eq!(channel_events(&ui), [(channel_id, asked)]);
@@ -4379,7 +4379,7 @@ mod tests {
         let channel_id = ChannelId::new();
         let channel = ChannelState::create(channel_id, ChannelType::Public, None, NOW)
             .expect("create")
-            .with_segment_size(size);
+            .with_segment_size(ambre_murmure::MessageCount::of_len(size));
         let active = channel.active_id();
         state.hold_channel(channel);
         (channel_id, active)
@@ -5754,7 +5754,7 @@ mod tests {
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment, messages }
                     if *segment == active
-                        && messages[0].thread.is_some_and(|head| head.replies == 1))),
+                        && messages[0].thread.is_some_and(|head| head.replies.get() == 1))),
             "the root's head counts the reply, {shown:?}"
         );
     }
@@ -5842,7 +5842,7 @@ mod tests {
                 matches!(event,
                 MurmureEvent::Messages { segment, messages }
                     if *segment == active
-                        && messages[0].thread.is_some_and(|head| head.replies == 0))
+                        && messages[0].thread.is_some_and(|head| head.replies.get() == 0))
             });
             assert_eq!(counted, kind == "delete", "{kind}: {shown:?}");
         }

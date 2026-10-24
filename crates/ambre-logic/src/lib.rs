@@ -483,7 +483,7 @@ struct LiveDoc {
     /// `None` until this session saved one, since a delta only makes sense on
     /// top of a snapshot. A document freshly seeded holds a root block of its
     /// own, which a replay of deltas alone would duplicate.
-    logged: Option<usize>,
+    logged: Option<LoggedDeltas>,
     /// Starts `Role::Owner` because a document is materialised optimistically at
     /// `OpenDocument`, before Sync has fetched the members response. Edits route
     /// immediately, exactly as they did before this gate existed. The real role
@@ -648,7 +648,15 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
 /// How many deltas a document's local log holds before the next save folds
 /// them into a snapshot. A keystroke then costs a delta, not a whole export,
 /// while a restore never replays more than this many.
-const DELTAS_PER_SNAPSHOT: usize = 256;
+const DELTAS_PER_SNAPSHOT: LoggedDeltas = LoggedDeltas::new(256);
+
+mod logged {
+    ambre_core::define_tally! {
+        /// How many deltas a document's local log holds past its last snapshot.
+        pub struct LoggedDeltas;
+    }
+}
+use logged::LoggedDeltas;
 
 /// How many edits a document holds while it waits for its session identity
 /// (`ambre-spec-budgets.md` section 6). The wait is one message from the Sync
@@ -1003,15 +1011,20 @@ impl LogicState {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
-        let logged = doc.logged.map(|n| n + owed.deltas.len());
+        let logged = doc
+            .logged
+            .map(|n| n.plus(LoggedDeltas::of_len(owed.deltas.len())));
         let written = !owed.deltas.is_empty();
         let compact = owed.snapshot
             || match logged {
                 None => written,
-                Some(n) => n > DELTAS_PER_SNAPSHOT || (moment == AnswerFor::Closing && n > 0),
+                Some(n) => {
+                    n > DELTAS_PER_SNAPSHOT
+                        || (moment == AnswerFor::Closing && n > LoggedDeltas::ZERO)
+                }
             };
         if compact {
-            doc.logged = Some(0);
+            doc.logged = Some(LoggedDeltas::ZERO);
             let snapshot = doc.state.export_snapshot();
             self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
         } else {
@@ -1424,7 +1437,7 @@ mod pass_tests {
     fn a_long_log_is_folded_into_a_snapshot() {
         let mut rig = rig();
         let mut writes = rig.saved.clone();
-        for pos in 0..u32::try_from(DELTAS_PER_SNAPSHOT + 3).expect("small") {
+        for pos in 0..DELTAS_PER_SNAPSHOT.get() + 3 {
             rig.state.handle_logic_command(keystroke(&rig, pos));
             rig.state.answer_pass();
             writes.extend(

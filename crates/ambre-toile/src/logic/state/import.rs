@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::RestEvent;
+use ambre_bus::app::toile::ElementCount;
 use kurbo::Point;
 use loro::{LoroMap, LoroValue};
 
@@ -274,7 +275,7 @@ impl ToileState {
         self.doc.commit();
         self.undo.group_end();
         self.rebuild_caches();
-        report.imported = slot_ids.iter().filter(|s| s.is_some()).count();
+        report.imported = ElementCount::of_len(slot_ids.iter().filter(|s| s.is_some()).count());
         vec![
             self.viewport_event(),
             ToileEvent::ImportReport {
@@ -556,7 +557,7 @@ mod tests {
             ..Default::default()
         };
         let (report, outcome) = st.apply_import(batch);
-        assert_eq!(report.imported, 5);
+        assert_eq!(report.imported.get(), 5);
         assert_eq!(st.element_count(), 5);
         assert!(outcome.update.is_some(), "one CRDT delta is broadcast");
         assert!(
@@ -581,7 +582,7 @@ mod tests {
             ..Default::default()
         };
         let (report, _) = st.apply_import(batch);
-        assert_eq!(report.imported, 1);
+        assert_eq!(report.imported.get(), 1);
         // The one element carries the imported fill, not the default.
         let vp = st.derive_viewport();
         let fills: Vec<Option<Rgba>> = vp
@@ -613,7 +614,7 @@ mod tests {
             ..Default::default()
         };
         let (report, _) = st.apply_import(batch);
-        assert_eq!(report.imported, 3);
+        assert_eq!(report.imported.get(), 3);
         // Three rects plus two group elements.
         assert_eq!(st.element_count(), 5);
         // Still one undo group: a single Undo removes every element AND group.

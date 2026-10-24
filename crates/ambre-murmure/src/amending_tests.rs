@@ -502,7 +502,7 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
     let head = alice.messages(segment).expect("held")[0]
         .thread
         .expect("the root names its thread");
-    assert_eq!((head.document, head.replies), (thread, 1));
+    assert_eq!((head.document, head.replies.get()), (thread, 1));
     let raw = read_messages(
         alice.doc(segment.document_id()).expect("held"),
         alice.channel_id(),
@@ -536,7 +536,7 @@ fn another_member_finds_the_thread_of_a_locked_root() {
     let head = bob.messages(segment).expect("held")[0]
         .thread
         .expect("read over the root");
-    assert_eq!((head.document, head.replies), (thread, 0));
+    assert_eq!((head.document, head.replies.get()), (thread, 0));
     assert_eq!(bob.threads_to_open(), [thread]);
     assert_eq!(bob.reply_target(root, NOW), Ok(ThreadTarget::Write(thread)));
 }

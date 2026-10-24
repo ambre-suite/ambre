@@ -322,7 +322,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         (
             format!("reactions/{ANY}#vote"),
             hex(&encode(&Reaction {
-                kind: ReactionKind::Vote(2),
+                kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(2)),
                 ts: ambre_bus::Timestamp(3),
             })),
         ),

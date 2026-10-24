@@ -108,12 +108,13 @@ impl TrameState {
     /// numeric cells additionally feed `count_num`/`sum`/`min`/`max`. A read-only
     /// query: no CRDT delta.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
+        use ambre_bus::app::trame::CellCount;
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
-        let mut count: u64 = 0;
-        let mut count_num: u64 = 0;
+        let mut count = CellCount::ZERO;
+        let mut count_num = CellCount::ZERO;
         let mut sum = 0.0_f64;
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
@@ -126,21 +127,21 @@ impl TrameState {
             match v {
                 CellValue::Empty => {}
                 CellValue::Number(n) => {
-                    count += 1;
-                    count_num += 1;
+                    count = count.incremented();
+                    count_num = count_num.incremented();
                     sum += n;
                     min = min.min(n);
                     max = max.max(n);
                 }
-                _ => count += 1,
+                _ => count = count.incremented(),
             }
         }
-        let avg = if count_num > 0 {
-            sum / count_num as f64
+        let avg = if !count_num.is_zero() {
+            sum / count_num.as_f64()
         } else {
             0.0
         };
-        let (sum, min, max) = if count_num > 0 {
+        let (sum, min, max) = if !count_num.is_zero() {
             (sum, min, max)
         } else {
             (0.0, 0.0, 0.0)
