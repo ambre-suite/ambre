@@ -280,7 +280,7 @@ impl TrameView {
         let next = self
             .state
             .cell_pixel_rect(self.state.active_cell())
-            .map(|(x, y, w, _h)| Anchor { x: x + w / 2.0, y });
+            .map(|(x, y, w, _h)| view_point(ambre_draw::Point::new(x + w / 2.0, y)));
         if next != self.last_anchor {
             self.last_anchor = next;
             self.anchor.publish(next);
@@ -316,7 +316,9 @@ impl TrameView {
     /// there. The grid lays out in CSS px too (`CANVAS-032`).
     pub(crate) fn park_input_on(&self, at: CellPos) {
         if let Some((x, y, _, h)) = self.state.cell_pixel_rect(at) {
-            self.text_input.set_caret(x, y, h);
+            let height = ambre_core::ViewPx::new(h as f32);
+            self.text_input
+                .set_caret(view_point(ambre_draw::Point::new(x, y)), height);
         }
     }
 

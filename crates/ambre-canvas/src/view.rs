@@ -14,6 +14,7 @@
 // target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
+use ambre_core::ViewPoint;
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, OverlayRepaint, WheelDelta};
@@ -111,19 +112,16 @@ pub enum InputEvent {
     /// range) and Ctrl+click (add a disjoint range). On macOS the Cmd key is
     /// folded into `ctrl` by the host so the same disjoint-select gesture works.
     PointerDown {
-        x: f64,
-        y: f64,
+        at: ViewPoint,
         button: PointerButton,
         shift: bool,
         ctrl: bool,
     },
     PointerMove {
-        x: f64,
-        y: f64,
+        at: ViewPoint,
     },
     PointerUp {
-        x: f64,
-        y: f64,
+        at: ViewPoint,
         button: PointerButton,
         /// Modifier state at *release* time (Cmd folded into ctrl). Autofill
         /// reads Ctrl here, not at grab time, so toggling it mid-drag counts.
@@ -132,8 +130,7 @@ pub enum InputEvent {
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.
     DoubleClick {
-        x: f64,
-        y: f64,
+        at: ViewPoint,
     },
     /// Wheel / two-finger touchpad scroll. The delta keeps the unit the
     /// browser gave it: CSS pixels (`CANVAS-032`), lines or pages. The view

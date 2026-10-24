@@ -240,11 +240,10 @@ impl Bound {
                 Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
                     let Some(view) = view.upgrade() else { return };
                     // A finger pans the cell's view rather than pointing.
-                    if let Some((phase, x, y)) = touch_of(&event) {
+                    if let Some((phase, at)) = touch_of(&event) {
                         if view.borrow_mut().touch(
                             phase,
-                            x,
-                            y,
+                            at,
                             ambre_bus::PageTime(event.time_stamp()),
                         ) {
                             event.prevent_default();
@@ -437,7 +436,7 @@ fn plan_frame(
 
 /// The phase and the point of a finger on a cell, in its own pixels. `None`
 /// for a mouse, a pen or a wheel.
-fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, f32, f32)> {
+fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, ViewPoint)> {
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
     if pointer.pointer_type() != "touch" {
         return None;
@@ -449,7 +448,7 @@ fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, f32, f32)> {
         "pointercancel" => TouchPhase::Cancel,
         _ => return None,
     };
-    Some((phase, pointer.offset_x() as f32, pointer.offset_y() as f32))
+    Some((phase, super::offset_of(pointer)))
 }
 
 /// The input event a DOM event on a cell carries, in the cell's own pixels.
@@ -474,28 +473,25 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         });
     }
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
-    let (x, y) = (f64::from(pointer.offset_x()), f64::from(pointer.offset_y()));
+    let at = super::offset_of(pointer);
     let ctrl = pointer.ctrl_key() || pointer.meta_key();
     Some(match event.type_().as_str() {
         "pointerdown" => InputEvent::PointerDown {
-            x,
-            y,
+            at,
             button: ambre_canvas::PointerButton::from_dom(pointer.button()),
             shift: pointer.shift_key(),
             ctrl,
         },
-        "pointermove" => InputEvent::PointerMove { x, y },
+        "pointermove" => InputEvent::PointerMove { at },
         "pointerup" => InputEvent::PointerUp {
-            x,
-            y,
+            at,
             button: ambre_canvas::PointerButton::from_dom(pointer.button()),
             ctrl,
         },
         // The browser took the gesture over: it ends where it was, as a
         // release (`KINETIC-010`).
         "pointercancel" => InputEvent::PointerUp {
-            x,
-            y,
+            at,
             button: ambre_canvas::PointerButton::Primary,
             ctrl,
         },
@@ -624,6 +620,14 @@ mod tests {
                 .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
         });
         let _ = wasm_bindgen_futures::JsFuture::from(wait).await;
+    }
+
+    /// A pointer at canvas `(x, y)`, as the host hands it over.
+    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+        ambre_core::ViewPoint::new(
+            ambre_core::ViewPx::new(x as f32),
+            ambre_core::ViewPx::new(y as f32),
+        )
     }
 
     /// The thread is a canvas of its own, sized by its own cell (the Murmure
@@ -804,15 +808,13 @@ mod tests {
         let mut view = bound.view.borrow_mut();
         for input in [
             InputEvent::PointerDown {
-                x: 0.0,
-                y: f64::from(*top),
+                at: pointer(0.0, f64::from(*top)),
                 button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             },
             InputEvent::PointerMove {
-                x: 299.0,
-                y: f64::from(*bottom - 1.0),
+                at: pointer(299.0, f64::from(*bottom - 1.0)),
             },
         ] {
             view.handle_input(&input);
@@ -861,8 +863,7 @@ mod tests {
                 _ => unreachable!(),
             };
             content.handle_input(&InputEvent::PointerDown {
-                x: cx,
-                y: cy,
+                at: pointer(cx, cy),
                 button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
@@ -916,8 +917,7 @@ mod tests {
         canvas.dispatch_event(&down).unwrap();
         assert!(cells.typist().is_some());
         let press = InputEvent::PointerDown {
-            x: 10.0,
-            y: 10.0,
+            at: pointer(10.0, 10.0),
             button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,

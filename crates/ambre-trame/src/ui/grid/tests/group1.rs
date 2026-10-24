@@ -40,11 +40,14 @@ fn filter_button_hit_test_matches_drawn_rect() {
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(1)))
         .expect("button visible");
     assert_eq!(
-        state.filter_button_at(bx + w / 2.0, by + h / 2.0),
+        state.filter_button_at(pointer(bx + w / 2.0, by + h / 2.0)),
         Some(at(0, 1))
     );
     // A point well clear of any button misses.
-    assert_eq!(state.filter_button_at(bx + 400.0, by + h / 2.0), None);
+    assert_eq!(
+        state.filter_button_at(pointer(bx + 400.0, by + h / 2.0)),
+        None
+    );
 }
 
 /// The autofilter button scales with the grid zoom (it used to keep a fixed
@@ -108,27 +111,27 @@ fn axis_pointer_resolution_follows_variable_metrics() {
         .insert(Col::new(0), ambre_core::DocPx::new(160.0)); // col 0 widened
     // x just past the wide col 0 lands in col 1.
     assert_eq!(
-        state.col_at_x(super::super::HEADER_WIDTH + 160.0 + 5.0),
+        state.col_at_x(view_px(super::super::HEADER_WIDTH + 160.0 + 5.0)),
         Some(Col::new(1))
     );
     assert_eq!(
-        state.col_at_x(super::super::HEADER_WIDTH + 10.0),
+        state.col_at_x(view_px(super::super::HEADER_WIDTH + 10.0)),
         Some(Col::new(0))
     );
-    assert_eq!(state.col_at_x(0.0), None); // over the row-header strip
+    assert_eq!(state.col_at_x(view_px(0.0)), None); // over the row-header strip
 
     state
         .row_heights
         .insert(Row::new(0), ambre_core::DocPx::new(50.0));
     assert_eq!(
-        state.row_at_y(super::super::HEADER_HEIGHT + 50.0 + 5.0),
+        state.row_at_y(view_px(super::super::HEADER_HEIGHT + 50.0 + 5.0)),
         Some(Row::new(1))
     );
     assert_eq!(
-        state.row_at_y(super::super::HEADER_HEIGHT + 10.0),
+        state.row_at_y(view_px(super::super::HEADER_HEIGHT + 10.0)),
         Some(Row::new(0))
     );
-    assert_eq!(state.row_at_y(0.0), None);
+    assert_eq!(state.row_at_y(view_px(0.0)), None);
 }
 
 /// The insert "+" zone sits in the top/left sliver of a boundary band, the
@@ -139,12 +142,12 @@ fn header_boundary_splits_insert_and_resize() {
     let boundary = super::super::HEADER_WIDTH + f64::from(super::super::COL_WIDTH.get()); // col 0's right edge
     // Lower half -> resize col 0.
     assert_eq!(
-        state.header_hit(boundary, super::super::HEADER_HEIGHT * 0.8),
+        state.header_hit(pointer(boundary, super::super::HEADER_HEIGHT * 0.8)),
         Some(HeaderHit::ColBorder(Col::new(0)))
     );
     // Upper half -> insert left of col 1 (at this boundary).
     assert_eq!(
-        state.header_hit(boundary, 2.0),
+        state.header_hit(pointer(boundary, 2.0)),
         Some(HeaderHit::ColInsert(Col::new(1)))
     );
 }
@@ -155,42 +158,45 @@ fn header_boundary_splits_insert_and_resize() {
 fn header_hit_resolves_zones() {
     let state = TrameUiState::new(800.0, 600.0);
     // Top-left corner.
-    assert_eq!(state.header_hit(10.0, 10.0), Some(HeaderHit::Corner));
+    assert_eq!(
+        state.header_hit(pointer(10.0, 10.0)),
+        Some(HeaderHit::Corner)
+    );
     // Column 0 body: header strip, x mid-column 0 ([50, 130)).
     assert_eq!(
-        state.header_hit(super::super::HEADER_WIDTH + 30.0, 5.0),
+        state.header_hit(pointer(super::super::HEADER_WIDTH + 30.0, 5.0)),
         Some(HeaderHit::ColBody(Col::new(0)))
     );
     // Column 0 right border (~130), lower half of the band, arms a resize.
     assert_eq!(
-        state.header_hit(
+        state.header_hit(pointer(
             super::super::HEADER_WIDTH + f64::from(super::super::COL_WIDTH.get()),
             super::super::HEADER_HEIGHT * 0.8
-        ),
+        )),
         Some(HeaderHit::ColBorder(Col::new(0)))
     );
     // Row 1 body (rows start at HEADER_HEIGHT, each ROW_HEIGHT tall).
     assert_eq!(
-        state.header_hit(
+        state.header_hit(pointer(
             10.0,
             super::super::HEADER_HEIGHT + f64::from(super::super::ROW_HEIGHT.get()) + 5.0
-        ),
+        )),
         Some(HeaderHit::RowBody(Row::new(1)))
     );
     // Row 0 bottom border, right half of the band, resizes row 0.
     assert_eq!(
-        state.header_hit(
+        state.header_hit(pointer(
             super::super::HEADER_WIDTH * 0.8,
             super::super::HEADER_HEIGHT + f64::from(super::super::ROW_HEIGHT.get())
-        ),
+        )),
         Some(HeaderHit::RowBorder(Row::new(0)))
     );
     // A point in the grid body is not a header hit.
     assert_eq!(
-        state.header_hit(
+        state.header_hit(pointer(
             super::super::HEADER_WIDTH + 10.0,
             super::super::HEADER_HEIGHT + 10.0
-        ),
+        )),
         None
     );
 }
@@ -328,13 +334,13 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
     );
 
     // Hit-testing the interior of that cell returns it.
-    assert_eq!(state.cell_at(x + 5.0, y + 5.0), Some(at(1, 1)));
+    assert_eq!(state.cell_at(pointer(x + 5.0, y + 5.0)), Some(at(1, 1)));
     // A point inside the tall row 0 / wide col 0 maps to (0, 0).
     assert_eq!(
-        state.cell_at(
+        state.cell_at(pointer(
             super::super::HEADER_WIDTH + 100.0,
             super::super::HEADER_HEIGHT + 30.0
-        ),
+        )),
         Some(at(0, 0))
     );
 }
@@ -368,7 +374,7 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
     // A point inside cell (2, 2) at 200% maps back to it.
     let x = state.header_w() + f64::from(super::super::COL_WIDTH.get()) * 2.0 * 2.0 + 1.0;
     let y = state.header_h() + f64::from(super::super::ROW_HEIGHT.get()) * 2.0 * 2.0 + 1.0;
-    assert_eq!(state.cell_at(x, y), Some(at(2, 2)));
+    assert_eq!(state.cell_at(pointer(x, y)), Some(at(2, 2)));
 
     // The preset clamp rejects out-of-range factors.
     state.set_zoom(ambre_core::ZoomFactor::positive(99.0));

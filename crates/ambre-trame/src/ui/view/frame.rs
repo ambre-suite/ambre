@@ -532,8 +532,9 @@ impl TrameView {
             // The pipe leaves the cell's corner for the caret inside it, so
             // the IME popup follows the text being typed (`CHROME-007`).
             if let Some(caret) = caret {
+                let height = ambre_core::ViewPx::new(caret.height().max(1.0) as f32);
                 self.text_input
-                    .set_caret(caret.x0, caret.y0, caret.height().max(1.0));
+                    .set_caret(view_point(caret.origin()), height);
             }
             self.caret_drawn = caret;
 

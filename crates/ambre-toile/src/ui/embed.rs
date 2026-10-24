@@ -269,10 +269,12 @@ where
         | InputEvent::CompositionUpdate { .. }
         | InputEvent::CompositionEnd { .. } => true,
         InputEvent::Wheel { .. } => inside(last_pointer),
-        InputEvent::PointerDown { x, y, .. }
-        | InputEvent::PointerUp { x, y, .. }
-        | InputEvent::PointerMove { x, y }
-        | InputEvent::DoubleClick { x, y } => inside(Point::new(*x, *y)),
+        InputEvent::PointerDown { at, .. }
+        | InputEvent::PointerUp { at, .. }
+        | InputEvent::PointerMove { at }
+        | InputEvent::DoubleClick { at } => {
+            inside(Point::new(f64::from(at.x.get()), f64::from(at.y.get())))
+        }
     }
 }
 
@@ -1505,8 +1507,7 @@ mod routing_tests {
     fn a_pointer_event_is_bound_by_its_own_position() {
         let far = Point::new(400.0, 400.0);
         let down = |x, y| InputEvent::PointerDown {
-            x,
-            y,
+            at: ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y)),
             button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,

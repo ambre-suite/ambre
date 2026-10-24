@@ -143,6 +143,11 @@ const AT_FRACTION: f32 = 0.25;
 /// moves to show it: a rounding, not a scroll.
 const REVEAL_SLACK_PX: f32 = 0.5;
 
+/// The point `at` in the `f64` of the shapes the list hit-tests.
+fn on_screen(at: ViewPoint) -> Point {
+    Point::new(at.x.get().into(), at.y.get().into())
+}
+
 /// A step of `dy` pixels down the list, as the shared model takes a wheel.
 fn down(dy: CssPx) -> CssVector {
     CssVector::new(CssPx::ZERO, dy)
@@ -362,8 +367,8 @@ impl MurmureView {
     }
 
     /// Whether the height `y` falls in the composer's band.
-    fn in_composer(&self, y: f64) -> bool {
-        self.composer.band() > 0.0 && y as f32 >= self.list_height()
+    fn in_composer(&self, y: ViewPx) -> bool {
+        self.composer.band() > 0.0 && y.get() >= self.list_height()
     }
 
     /// The composer, for the page and for tests.
@@ -510,14 +515,13 @@ impl MurmureView {
     /// The message under `(x, y)` at the last paint, as the target of its
     /// actions. `pressed` keeps the point, where a long press opens them.
     /// `None` on a band, between rows, or on the control to the latest.
-    fn target_at(&self, x: f32, y: f32, pressed: bool) -> Option<MessageTarget> {
-        let at = Point::new(x.into(), y.into());
-        if self.on_jump(at) || self.in_composer(y.into()) {
+    fn target_at(&self, at: ViewPoint, pressed: bool) -> Option<MessageTarget> {
+        if self.on_jump(on_screen(at)) || self.in_composer(at.y) {
             return None;
         }
-        let i = self.last.as_ref()?.row_at(y)?;
+        let i = self.last.as_ref()?.row_at(at.y.get())?;
         let mut target = self.target_of_row(i)?;
-        target.pressed = pressed.then_some((x, y));
+        target.pressed = pressed.then_some((at.x.get(), at.y.get()));
         Some(target)
     }
 
@@ -769,8 +773,12 @@ impl MurmureView {
 
     /// Ask again for the segment of the band under `y` at the last paint, if
     /// its cause may clear (`MURMURE-513`). Answers whether one was asked.
-    fn retry_at(&self, y: f32) -> bool {
-        let Some(i) = self.last.as_ref().and_then(|painted| painted.row_at(y)) else {
+    fn retry_at(&self, y: ViewPx) -> bool {
+        let Some(i) = self
+            .last
+            .as_ref()
+            .and_then(|painted| painted.row_at(y.get()))
+        else {
             return false;
         };
         self.retry_row(|_| Some(i))
@@ -823,7 +831,8 @@ impl MurmureView {
     /// with no focus on screen, or on a band.
     fn target_of_focus(&self) -> Option<MessageTarget> {
         let (top, bottom) = self.last.as_ref()?.focus?;
-        let mut target = self.target_at(0.0, (top + bottom) / 2.0, false)?;
+        let middle = ViewPoint::new(ViewPx::ZERO, ViewPx::new((top + bottom) / 2.0));
+        let mut target = self.target_at(middle, false)?;
         target.pressed = Some((0.0, bottom));
         Some(target)
     }
@@ -900,15 +909,13 @@ impl MurmureView {
     }
 
     /// A finger went down: it stops any motion left.
-    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
-        self.kinetic
-            .press(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)), now_ms);
+    pub fn touch_down(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
+        self.kinetic.press(at, now_ms);
     }
 
     /// A finger moved: past the tap slop the list follows it. Answers
     /// whether the list moved.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
-        let at = ViewPoint::new(ViewPx::new(x), ViewPx::new(y));
+    pub fn touch_move(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) -> bool {
         let Some(step) = self.kinetic.sample(at, now_ms) else {
             return false;
         };
@@ -921,44 +928,44 @@ impl MurmureView {
     /// to the latest message presses it, and one on a band asks for its
     /// segment again (`MURMURE-513`). A tap in the composer puts its caret
     /// there and gives it the keys.
-    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
+    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) -> Option<ViewPoint> {
         let tap = match self.kinetic.release(now_ms) {
-            Release::Tap { at } => Some((at.x.get(), at.y.get())),
+            Release::Tap { at } => Some(at),
             Release::Fling | Release::Rest => None,
         };
         match tap {
-            Some((x, y)) if self.on_jump(Point::new(x.into(), y.into())) => {
+            Some(at) if self.on_jump(on_screen(at)) => {
                 self.rest_at_latest();
                 None
             }
-            Some((_, y)) if self.composer.on_also(y) => {
+            Some(at) if self.composer.on_also(at.y) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.toggle_also(of);
                     self.dirty = true;
                 }
                 None
             }
-            Some((x, y)) if self.composer.file_at(x, y).is_some() => {
-                if let (Some(of), Some(index)) = (self.writes_in(), self.composer.file_at(x, y)) {
+            Some(at) if self.composer.file_at(at).is_some() => {
+                if let (Some(of), Some(index)) = (self.writes_in(), self.composer.file_at(at)) {
                     self.composer.uploads_mut().remove(of, index);
                     self.dirty = true;
                 }
                 None
             }
-            Some((x, y)) if self.in_composer(y.into()) => {
+            Some(at) if self.in_composer(at.y) => {
                 if let Some(of) = self.writes_in() {
-                    self.composer.press(of, x, y);
+                    self.composer.press(of, at);
                     self.composer.release();
                     self.reads.pipe.focus();
                     self.dirty = true;
                 }
                 None
             }
-            Some((_, y)) if self.retry_at(y) => None,
-            Some((x, y)) => {
-                self.selecting.click = Some((x, y));
+            Some(at) if self.retry_at(at.y) => None,
+            Some(at) => {
+                self.selecting.click = Some((at.x.get(), at.y.get()));
                 self.dirty = true;
-                Some((x, y))
+                Some(at)
             }
             None => None,
         }
@@ -1006,15 +1013,18 @@ impl MurmureView {
 
     /// A drag past the top or the bottom edge scrolls the list by how far
     /// it passed.
-    fn drag_past_edge(&mut self, y: f32) {
-        let over = if y < 0.0 {
+    fn drag_past_edge(&mut self, y: ViewPx) {
+        let bottom = ViewPx::new(self.list_height());
+        let over = if y < ViewPx::ZERO {
             y
         } else {
-            (y - self.list_height()).max(0.0)
+            (y - bottom).max(ViewPx::ZERO)
         };
-        if over != 0.0 {
+        if over != ViewPx::ZERO {
             let now_ms = (self.reads.now_ms)();
-            let step = self.kinetic.wheel(down(CssPx::new(over)), true, now_ms);
+            let step = self
+                .kinetic
+                .wheel(down(CssPx::new(over.get())), true, now_ms);
             self.scroll_by(step);
         }
     }
@@ -1050,10 +1060,9 @@ impl MurmureView {
             self.scroll_by(step);
         }
         if let Some(at) = self.kinetic.held(now_ms) {
-            let (x, y) = (at.x.get(), at.y.get());
             // A finger held still: the actions of its message open where it
             // went down (`MURMURE-423`).
-            (self.reads.act_on)(self.target_at(x, y, true));
+            (self.reads.act_on)(self.target_at(at, true));
         }
         self.tick();
         // An edit asked from the actions of a message loads the channel's
@@ -1259,9 +1268,10 @@ impl MurmureView {
         );
         if let Some((x, y, tall)) = caret {
             // The input method opens where the caret is (`MURMURE-430`).
-            self.reads
-                .pipe
-                .set_caret(f64::from(x), f64::from(y), f64::from(tall.max(1.0)));
+            self.reads.pipe.set_caret(
+                ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
+                ViewPx::new(tall.max(1.0)),
+            );
         }
         self.list_mentions(caret.map(|(x, y, _)| ViewPoint::new(ViewPx::new(x), ViewPx::new(y))));
         // The format bar hangs over a selection, and leaves with it.
@@ -1528,8 +1538,12 @@ impl MurmureView {
             return consumed;
         }
         match *ev {
-            InputEvent::PointerDown { x, y, button, .. } => {
-                let at = Point::new(x, y);
+            InputEvent::PointerDown {
+                at: pointer,
+                button,
+                ..
+            } => {
+                let at = on_screen(pointer);
                 self.hover = Some(at);
                 // A press in the list gives the keys back to it.
                 if self.composer.focused() {
@@ -1539,31 +1553,31 @@ impl MurmureView {
                 if button == PointerButton::Secondary {
                     // The page's menu event follows, and opens the actions of
                     // the message found here (`MURMURE-422`).
-                    (self.reads.act_on)(self.target_at(x as f32, y as f32, false));
+                    (self.reads.act_on)(self.target_at(pointer, false));
                 } else if button == PointerButton::Primary && !self.on_jump(at) {
                     self.selecting = Selecting {
-                        press: Some((x as f32, y as f32)),
+                        press: Some((pointer.x.get(), pointer.y.get())),
                         ..Selecting::default()
                     };
                     self.drag = Some(false);
                     self.dirty = true;
                 }
             }
-            InputEvent::PointerMove { x, y } => {
-                self.hover = Some(Point::new(x, y));
+            InputEvent::PointerMove { at } => {
+                self.hover = Some(on_screen(at));
                 if let Some(moved) = self.drag.as_mut() {
                     *moved = true;
-                    self.selecting.drag = Some((x as f32, y as f32));
+                    self.selecting.drag = Some((at.x.get(), at.y.get()));
                     self.dirty = true;
-                    self.drag_past_edge(y as f32);
+                    self.drag_past_edge(at.y);
                 }
             }
-            InputEvent::PointerUp { x, y, .. } => {
-                let at = Point::new(x, y);
+            InputEvent::PointerUp { at: pointer, .. } => {
+                let at = on_screen(pointer);
                 self.hover = Some(at);
                 let drag = self.drag.take();
                 if drag == Some(true) {
-                    self.selecting.drag = Some((x as f32, y as f32));
+                    self.selecting.drag = Some((pointer.x.get(), pointer.y.get()));
                     self.dirty = true;
                     return false;
                 }
@@ -1573,13 +1587,13 @@ impl MurmureView {
                 }
                 // A click of the main button on a band asks for its segment
                 // again (`MURMURE-513`).
-                if drag == Some(false) && self.retry_at(y as f32) {
+                if drag == Some(false) && self.retry_at(pointer.y) {
                     return true;
                 }
                 // A click that moved nothing may land on a link, which the
                 // next paint finds under it (`MURMURE-567`).
                 if drag == Some(false) {
-                    self.selecting.click = Some((x as f32, y as f32));
+                    self.selecting.click = Some((pointer.x.get(), pointer.y.get()));
                     self.dirty = true;
                 }
             }
@@ -1636,41 +1650,38 @@ impl MurmureView {
             }
             // A press on the box under a thread's field checks it, and
             // leaves the keys where they were (`MURMURE-531`).
-            InputEvent::PointerDown { y, button, .. }
-                if button == PointerButton::Primary && self.composer.on_also(y as f32) =>
+            InputEvent::PointerDown { at, button, .. }
+                if button == PointerButton::Primary && self.composer.on_also(at.y) =>
             {
                 self.composer.toggle_also(channel);
             }
-            InputEvent::DoubleClick { y, .. } if self.composer.on_also(y as f32) => {}
+            InputEvent::DoubleClick { at } if self.composer.on_also(at.y) => {}
             // A press on a file of the draft takes it off (`MURMURE-132`).
-            InputEvent::PointerDown { x, y, button, .. }
-                if button == PointerButton::Primary
-                    && self.composer.file_at(x as f32, y as f32).is_some() =>
+            InputEvent::PointerDown { at, button, .. }
+                if button == PointerButton::Primary && self.composer.file_at(at).is_some() =>
             {
-                if let Some(index) = self.composer.file_at(x as f32, y as f32) {
+                if let Some(index) = self.composer.file_at(at) {
                     self.composer.uploads_mut().remove(channel, index);
                 }
             }
-            InputEvent::PointerDown { x, y, button, .. } if self.in_composer(y) => {
-                self.hover = Some(Point::new(x, y));
+            InputEvent::PointerDown { at, button, .. } if self.in_composer(at.y) => {
+                self.hover = Some(on_screen(at));
                 if button != PointerButton::Primary {
                     // No message is under the band.
                     (self.reads.act_on)(None);
                     return Some(false);
                 }
-                self.composer.press(channel, x as f32, y as f32);
+                self.composer.press(channel, at);
                 // The pipe takes the keys. The press is consumed, so the
                 // canvas does not take the focus back.
                 self.reads.pipe.focus();
             }
-            InputEvent::PointerMove { x, y }
-                if self.composer.drag_to(channel, x as f32, y as f32) =>
-            {
-                self.hover = Some(Point::new(x, y));
+            InputEvent::PointerMove { at } if self.composer.drag_to(channel, at) => {
+                self.hover = Some(on_screen(at));
             }
             InputEvent::PointerUp { .. } if self.composer.release() => {}
-            InputEvent::DoubleClick { x, y } if self.in_composer(y) => {
-                self.composer.word_at(channel, x as f32, y as f32);
+            InputEvent::DoubleClick { at } if self.in_composer(at.y) => {
+                self.composer.word_at(channel, at);
             }
             InputEvent::Key {
                 ref key,
@@ -1766,6 +1777,11 @@ mod tests {
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
+
+    /// The pointer at `x`, `y` of the view.
+    fn pointer(x: impl Into<f64>, y: impl Into<f64>) -> ViewPoint {
+        ViewPoint::new(ViewPx::new(x.into() as f32), ViewPx::new(y.into() as f32))
+    }
     use crate::commands::REPLY;
     use crate::composer::ALSO_PX;
     use crate::list::tests::message;
@@ -2161,8 +2177,7 @@ mod tests {
     fn mouse(view: &mut MurmureView, down: (f64, f64), up: (f64, f64)) {
         let (x, y) = down;
         let press = InputEvent::PointerDown {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
@@ -2171,11 +2186,10 @@ mod tests {
         assert!(view.drags_text());
         let (x, y) = up;
         if up != down {
-            view.handle_input(&InputEvent::PointerMove { x, y });
+            view.handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
         }
         let release = InputEvent::PointerUp {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             ctrl: false,
         };
@@ -2273,8 +2287,10 @@ mod tests {
 
         mouse(&mut page.view, on_link, on_link);
         frame_with_fonts(&mut page.view);
-        page.view
-            .touch_down(on_link.0 as f32, on_link.1 as f32, ambre_bus::PageTime(0.0));
+        page.view.touch_down(
+            pointer(on_link.0 as f32, on_link.1 as f32),
+            ambre_bus::PageTime(0.0),
+        );
         assert!(page.view.touch_up(ambre_bus::PageTime(50.0)).is_some());
         frame_with_fonts(&mut page.view);
         let opened = page.opened.borrow().clone();
@@ -2658,8 +2674,7 @@ mod tests {
         up(&mut page);
         let at = centre(&page.view);
         let click = InputEvent::PointerUp {
-            x: at.x,
-            y: at.y,
+            at: pointer(at.x, at.y),
             button: PointerButton::Primary,
             ctrl: false,
         };
@@ -2669,8 +2684,10 @@ mod tests {
 
         up(&mut page);
         let at = centre(&page.view);
-        page.view
-            .touch_down(at.x as f32, at.y as f32, ambre_bus::PageTime(100.0));
+        page.view.touch_down(
+            pointer(at.x as f32, at.y as f32),
+            ambre_bus::PageTime(100.0),
+        );
         assert_eq!(
             page.view.touch_up(ambre_bus::PageTime(150.0)),
             None,
@@ -2922,12 +2939,18 @@ mod tests {
     fn a_finger_drags_the_list_and_a_still_one_taps() {
         let (mut page, _, _) = long_channel(200);
         frame(&mut page.view);
-        page.view.touch_down(10.0, 100.0, ambre_bus::PageTime(0.0));
+        page.view
+            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime(0.0));
         assert!(
-            !page.view.touch_move(10.0, 102.0, ambre_bus::PageTime(10.0)),
+            !page
+                .view
+                .touch_move(pointer(10.0, 102.0), ambre_bus::PageTime(10.0)),
             "inside the slop"
         );
-        assert!(page.view.touch_move(10.0, 300.0, ambre_bus::PageTime(20.0)));
+        assert!(
+            page.view
+                .touch_move(pointer(10.0, 300.0), ambre_bus::PageTime(20.0))
+        );
         frame_at(&mut page.view, ambre_bus::PageTime(20.0));
         assert!(
             page.view.resting_on().is_some(),
@@ -2936,15 +2959,15 @@ mod tests {
         page.view.touch_cancel();
         assert!(!page.view.scrolling());
         page.view
-            .touch_down(10.0, 100.0, ambre_bus::PageTime(100.0));
+            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime(100.0));
         assert_eq!(
             page.view.touch_up(ambre_bus::PageTime(150.0)),
-            Some((10.0, 100.0))
+            Some(pointer(10.0, 100.0))
         );
         page.view
-            .touch_down(10.0, 100.0, ambre_bus::PageTime(200.0));
+            .touch_down(pointer(10.0, 100.0), ambre_bus::PageTime(200.0));
         page.view
-            .touch_move(10.0, 300.0, ambre_bus::PageTime(300.0));
+            .touch_move(pointer(10.0, 300.0), ambre_bus::PageTime(300.0));
         assert_eq!(page.view.touch_up(ambre_bus::PageTime(1_000.0)), None);
     }
 
@@ -2961,8 +2984,7 @@ mod tests {
 
     fn button(page: &mut Page, button: PointerButton, y: f32) -> bool {
         let ev = InputEvent::PointerDown {
-            x: 10.0,
-            y: y.into(),
+            at: pointer(10.0, y),
             button,
             shift: false,
             ctrl: false,
@@ -3018,8 +3040,7 @@ mod tests {
         let (mut page, channel, older) = banded(Unreadable::KeyNotReceived);
         let band_y = middle_of(&page.view, 0);
         let release = |y: f32| InputEvent::PointerUp {
-            x: 10.0,
-            y: y.into(),
+            at: pointer(10.0, y),
             button: PointerButton::Primary,
             ctrl: false,
         };
@@ -3032,7 +3053,8 @@ mod tests {
         assert!(!page.view.handle_input(&release(message_y)));
         assert!(retried(&page).is_empty(), "a message is no band");
 
-        page.view.touch_down(10.0, band_y, ambre_bus::PageTime(0.0));
+        page.view
+            .touch_down(pointer(10.0, band_y), ambre_bus::PageTime(0.0));
         assert_eq!(
             page.view.touch_up(ambre_bus::PageTime(50.0)),
             None,
@@ -3059,10 +3081,11 @@ mod tests {
     fn a_band_before_the_history_boundary_asks_for_nothing() {
         let (mut page, _, _) = banded(Unreadable::BeforeHistoryBoundary);
         let band_y = middle_of(&page.view, 0);
-        page.view.touch_down(10.0, band_y, ambre_bus::PageTime(0.0));
+        page.view
+            .touch_down(pointer(10.0, band_y), ambre_bus::PageTime(0.0));
         assert_eq!(
             page.view.touch_up(ambre_bus::PageTime(50.0)),
-            Some((10.0, band_y))
+            Some(pointer(10.0, band_y))
         );
         assert!(retried(&page).is_empty());
     }
@@ -3145,7 +3168,7 @@ mod tests {
         let _ = reads(&page);
 
         let y = middle_of(&thread_view, 0);
-        thread_view.touch_down(10.0, y, ambre_bus::PageTime(0.0));
+        thread_view.touch_down(pointer(10.0, y), ambre_bus::PageTime(0.0));
         frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS - 1.0));
         assert!(page.acted.borrow().is_empty(), "not yet held");
         frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS));
@@ -3273,7 +3296,9 @@ mod tests {
     fn the_region_follows_the_pointer_and_consumes_nothing() {
         let mut page = page();
         assert_eq!(page.view.hover(), None);
-        let ev = InputEvent::PointerMove { x: 3.0, y: 4.0 };
+        let ev = InputEvent::PointerMove {
+            at: pointer(3.0, 4.0),
+        };
         assert!(!page.view.handle_input(&ev));
         assert_eq!(page.view.hover(), Some(Point::new(3.0, 4.0)));
         assert_eq!(page.view.size(), (300.0, 400.0));
@@ -3291,7 +3316,7 @@ mod tests {
     /// A primary press in the composer's field, near the region's bottom,
     /// above the box of a thread.
     fn press_composer(page: &mut Page) -> bool {
-        let y = if page.view.composer().on_also(395.0) {
+        let y = if page.view.composer().on_also(ViewPx::new(395.0)) {
             395.0 - ALSO_PX
         } else {
             395.0
@@ -3302,16 +3327,14 @@ mod tests {
     /// A primary press and its release in the composer's band at `y`.
     fn press_at(page: &mut Page, y: f32) -> bool {
         let press = InputEvent::PointerDown {
-            x: 40.0,
-            y: y.into(),
+            at: pointer(40.0, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
         let consumed = page.view.handle_input(&press);
         let up = InputEvent::PointerUp {
-            x: 40.0,
-            y: y.into(),
+            at: pointer(40.0, y),
             button: PointerButton::Primary,
             ctrl: false,
         };
@@ -3504,18 +3527,22 @@ mod tests {
         frame_with_fonts(&mut page.view);
         let hit = (0..300)
             .flat_map(|x| (0..400).map(move |y| (x as f32, y as f32)))
-            .find(|&(x, y)| page.view.composer().file_at(x, y).is_some())
+            .find(|&(x, y)| page.view.composer().file_at(pointer(x, y)).is_some())
             .expect("the file shows in the composer");
         let press = InputEvent::PointerDown {
-            x: hit.0.into(),
-            y: hit.1.into(),
+            at: pointer(hit.0, hit.1),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         };
         page.view.handle_input(&press);
         frame_with_fonts(&mut page.view);
-        assert!(page.view.composer().file_at(hit.0, hit.1).is_none());
+        assert!(
+            page.view
+                .composer()
+                .file_at(pointer(hit.0, hit.1))
+                .is_none()
+        );
         assert!(press_composer(&mut page));
         assert!(type_text(&mut page, "see"));
         key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
@@ -4251,7 +4278,8 @@ mod tests {
     fn a_tap_in_the_band_focuses_the_composer() {
         let channel = ChannelId::new();
         let mut page = composing(channel);
-        page.view.touch_down(40.0, 395.0, ambre_bus::PageTime(0.0));
+        page.view
+            .touch_down(pointer(40.0, 395.0), ambre_bus::PageTime(0.0));
         assert_eq!(
             page.view.touch_up(ambre_bus::PageTime(50.0)),
             None,
@@ -4260,8 +4288,7 @@ mod tests {
         assert_eq!(page.view.reads.pipe.focus_requests(), 1);
         assert!(page.view.composer().focused());
         let press = InputEvent::PointerDown {
-            x: 40.0,
-            y: 20.0,
+            at: pointer(40.0, 20.0),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
@@ -4740,7 +4767,10 @@ mod tests {
         key(&mut page, "Enter", false, ambre_bus::PageTime(0.0));
         frame_with_fonts(&mut page.view);
         assert_eq!(copies(&page), [false], "the next reply stays");
-        assert!(!channel_view.composer().on_also(bottom), "no box there");
+        assert!(
+            !channel_view.composer().on_also(ViewPx::new(bottom)),
+            "no box there"
+        );
     }
 
     /// A tap on the box checks it too, and a second one unchecks it
@@ -4752,7 +4782,8 @@ mod tests {
         let of = DraftOf::Thread(channel, root);
         let bottom = page.view.size().1 - ALSO_PX / 2.0;
         for checked in [true, false] {
-            page.view.touch_down(10.0, bottom, ambre_bus::PageTime(0.0));
+            page.view
+                .touch_down(pointer(10.0, bottom), ambre_bus::PageTime(0.0));
             assert_eq!(
                 page.view.touch_up(ambre_bus::PageTime(20.0)),
                 None,

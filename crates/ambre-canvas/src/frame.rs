@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
+use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect};
 use parley::FontContext;
 
 use crate::render::{ContentRepaint, OverlayRepaint};
@@ -193,7 +193,16 @@ pub fn paint_fatal(
         (message, FONT_BODY, title_y + title_h + gap, BODY),
     ];
     for (text, size, y, color) in lines {
-        draw_centered(surface, font_cx, cache, text, size, column, (x, y), color);
+        draw_centered(
+            surface,
+            font_cx,
+            cache,
+            text,
+            size,
+            column,
+            Point::new(x, y),
+            color,
+        );
     }
 }
 
@@ -218,7 +227,7 @@ fn draw_centered(
     text: &str,
     size: f32,
     width: f32,
-    (x, y): (f64, f64),
+    origin: Point,
     color: Color,
 ) {
     if text.is_empty() {
@@ -231,7 +240,10 @@ fn draw_centered(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let at = (x + f64::from(run.offset()), y + f64::from(run.baseline()));
+            let at = (
+                origin.x + f64::from(run.offset()),
+                origin.y + f64::from(run.baseline()),
+            );
             surface.draw_glyphs(&run, &brush, Affine::translate(at));
         }
     }

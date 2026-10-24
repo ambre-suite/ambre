@@ -53,6 +53,30 @@ impl std::ops::Neg for DevicePx {
     }
 }
 
+/// Device pixels per CSS pixel: the display density.
+///
+/// A density is a positive, finite number. A value the browser gives that is
+/// not one reads as 1, so no buffer is sized by a zero or a NaN.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub(crate) struct DevicePixelRatio(f64);
+
+impl DevicePixelRatio {
+    /// One device pixel per CSS pixel.
+    pub(crate) const ONE: Self = Self(1.0);
+
+    /// The density `ratio`, or `None` when it is not a positive finite number.
+    #[must_use]
+    pub(crate) fn new(ratio: f64) -> Option<Self> {
+        (ratio.is_finite() && ratio > 0.0).then_some(Self(ratio))
+    }
+
+    /// The ratio, for the arithmetic that scales a length by it.
+    #[must_use]
+    pub(crate) const fn get(self) -> f64 {
+        self.0
+    }
+}
+
 /// A size of whole pixels, in the pixel space `P` names: [`CssSize`] or
 /// [`DeviceSize`]. The space is a type, so a CSS size never reaches a place
 /// that sizes the buffer.
@@ -89,7 +113,7 @@ pub type DeviceSize = PixelSize<DevicePx>;
 pub struct SurfaceSize {
     logical: CssSize,
     physical: DeviceSize,
-    density: f64,
+    density: DevicePixelRatio,
 }
 
 impl SurfaceSize {
@@ -98,21 +122,17 @@ impl SurfaceSize {
     pub const UNSIZED: SurfaceSize = SurfaceSize {
         logical: CssSize::new(300, 150),
         physical: DeviceSize::new(300, 150),
-        density: 1.0,
+        density: DevicePixelRatio::ONE,
     };
 
     /// A CSS box of `width` x `height` at `density`, or `None` when the box
     /// has no area. A density that is not a positive number reads as 1.
     #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
     pub(crate) fn new(width: u32, height: u32, density: f64) -> Option<Self> {
-        let density = if density.is_finite() && density > 0.0 {
-            density
-        } else {
-            1.0
-        };
+        let density = DevicePixelRatio::new(density).unwrap_or(DevicePixelRatio::ONE);
         let physical = DeviceSize::new(
-            (f64::from(width) * density).round() as u32,
-            (f64::from(height) * density).round() as u32,
+            (f64::from(width) * density.get()).round() as u32,
+            (f64::from(height) * density.get()).round() as u32,
         );
         if physical.width == 0 || physical.height == 0 {
             return None;
@@ -135,8 +155,8 @@ impl SurfaceSize {
     }
 
     /// Device pixels per CSS pixel.
-    pub(crate) fn density(&self) -> f32 {
-        self.density as f32
+    pub(crate) fn density(&self) -> DevicePixelRatio {
+        self.density
     }
 
     /// The view's plan on the drawing buffer: its scroll shift in device
@@ -147,7 +167,7 @@ impl SurfaceSize {
     /// the copy cannot. The plan then repaints in full rather than tear.
     pub fn on_device(&self, plan: RepaintPlan) -> RepaintPlan<DevicePx> {
         let whole = |v: ViewPx| {
-            let p = f64::from(v.get()) * self.density;
+            let p = f64::from(v.get()) * self.density.get();
             let r = p.round();
             ((p - r).abs() < 1e-6).then_some(DevicePx::new(r as i32))
         };
@@ -288,7 +308,9 @@ mod tests {
     #[test]
     fn an_unusable_density_reads_as_one() {
         for density in [0.0, -2.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(DevicePixelRatio::new(density), None);
             let size = SurfaceSize::new(300, 150, density).unwrap();
+            assert_eq!(size.density(), DevicePixelRatio::ONE);
             assert_eq!(size.physical(), DeviceSize::new(300, 150));
         }
         assert!(SurfaceSize::new(0, 150, 2.0).is_none());

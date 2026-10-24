@@ -130,6 +130,19 @@ fn view_point(screen: Point) -> ambre_core::ViewPoint {
     )
 }
 
+/// A point of the open editor's layout, from the `f64` the camera mapped it to.
+fn doc_point(local: Point) -> ambre_core::DocPoint {
+    ambre_core::DocPoint::new(
+        ambre_core::DocPx::new(local.x as f32),
+        ambre_core::DocPx::new(local.y as f32),
+    )
+}
+
+/// The screen point a pointer event names, in the `f64` the camera maps.
+fn on_screen(at: ambre_core::ViewPoint) -> Point {
+    Point::new(f64::from(at.x.get()), f64::from(at.y.get()))
+}
+
 /// The device a wheel event reads as (`toile-viewport`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum WheelDevice {
@@ -1635,9 +1648,9 @@ impl ToileView {
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
-    pub fn touch_down(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
         self.kinetic.stop();
-        let screen = Point::new(x, y);
+        let screen = on_screen(at);
         let world = self.cam.screen_to_world() * screen;
         let grabbable = self.element_at(world).is_some()
             || self
@@ -1648,12 +1661,11 @@ impl ToileView {
         self.finger = Some(role);
         if role == FingerRole::Pans {
             self.last_pointer = screen;
-            self.kinetic.press(view_point(screen), now_ms);
+            self.kinetic.press(at, now_ms);
             return true;
         }
         self.handle_input(&InputEvent::PointerDown {
-            x,
-            y,
+            at,
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
@@ -1662,38 +1674,35 @@ impl ToileView {
 
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
-    pub fn touch_move(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
         match self.finger {
             Some(FingerRole::Pans) => {
-                self.last_pointer = Point::new(x, y);
-                if let Some(step) = self.kinetic.sample(view_point(self.last_pointer), now_ms) {
+                self.last_pointer = on_screen(at);
+                if let Some(step) = self.kinetic.sample(at, now_ms) {
                     super::kinetic::move_view(&mut self.cam, step);
                     self.queue_viewport();
                 }
                 true
             }
-            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerMove { x, y }),
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerMove { at }),
             None => false,
         }
     }
 
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
-    pub fn touch_up(&mut self, x: f64, y: f64, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
                 if let Release::Tap { at } = self.kinetic.release(now_ms) {
-                    let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
                     self.handle_input(&InputEvent::PointerDown {
-                        x,
-                        y,
+                        at,
                         button: PointerButton::Primary,
                         shift: false,
                         ctrl: false,
                     });
                     self.handle_input(&InputEvent::PointerUp {
-                        x,
-                        y,
+                        at,
                         button: PointerButton::Primary,
                         ctrl: false,
                     });
@@ -1701,8 +1710,7 @@ impl ToileView {
                 true
             }
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 ctrl: false,
             }),
@@ -1719,15 +1727,11 @@ impl ToileView {
                 self.kinetic.cancel();
                 true
             }
-            Some(FingerRole::ActsAsMouse) => {
-                let at = self.last_pointer;
-                self.handle_input(&InputEvent::PointerUp {
-                    x: at.x,
-                    y: at.y,
-                    button: PointerButton::Primary,
-                    ctrl: false,
-                })
-            }
+            Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
+                at: view_point(self.last_pointer),
+                button: PointerButton::Primary,
+                ctrl: false,
+            }),
             None => false,
         }
     }
@@ -1743,8 +1747,7 @@ impl ToileView {
         };
         super::kinetic::move_view(&mut self.cam, step);
         self.queue_viewport();
-        let at = self.last_pointer;
-        self.handle_pointer_move(at.x, at.y);
+        self.handle_pointer_move(self.last_pointer);
     }
 
     /// Follow the link under a primary press, if any (`toile-links`). The badge
@@ -1789,13 +1792,12 @@ impl ToileView {
                 Modifiers::from_event(*ctrl_key, false, false, false),
             ),
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button,
                 shift,
                 ctrl,
             } => {
-                let screen = Point::new(*x, *y);
+                let screen = on_screen(*at);
                 self.last_pointer = screen;
                 if *button == PointerButton::Primary {
                     self.follow_link_under(
@@ -1805,8 +1807,8 @@ impl ToileView {
                 }
                 true
             }
-            InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
-            InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
+            InputEvent::PointerMove { at } => self.handle_pointer_move(on_screen(*at)),
+            InputEvent::PointerUp { at, .. } => self.handle_pointer_up(on_screen(*at)),
             InputEvent::KeyUp { key } => self.handle_key_up(key),
             InputEvent::DoubleClick { .. } => true,
             InputEvent::Key { .. }
@@ -1818,12 +1820,10 @@ impl ToileView {
 
     fn handle_pointer_down(
         &mut self,
-        x: f64,
-        y: f64,
+        screen: Point,
         button: PointerButton,
         mods: Modifiers,
     ) -> bool {
-        let screen = Point::new(x, y);
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
         // pipe (Trame parity, `trame-cell-editing`). After the user touches the
@@ -2771,8 +2771,7 @@ impl ToileView {
         }
     }
 
-    fn handle_pointer_move(&mut self, x: f64, y: f64) -> bool {
-        let screen = Point::new(x, y);
+    fn handle_pointer_move(&mut self, screen: Point) -> bool {
         self.last_pointer = screen;
         if let Some(prev) = self.panning {
             // A mouse held on the board drags it one for one and leaves no
@@ -2804,8 +2803,7 @@ impl ToileView {
         false
     }
 
-    fn handle_pointer_up(&mut self, x: f64, y: f64) -> bool {
-        let screen = Point::new(x, y);
+    fn handle_pointer_up(&mut self, screen: Point) -> bool {
         self.last_pointer = screen;
         // Consume any click-to-edit arming this release, whatever path is taken.
         let edit_candidate = self.click_edit_candidate.take();
@@ -2849,8 +2847,7 @@ impl ToileView {
         consumed
     }
 
-    fn handle_double_click(&mut self, x: f64, y: f64) -> bool {
-        let screen = Point::new(x, y);
+    fn handle_double_click(&mut self, screen: Point) -> bool {
         self.last_pointer = screen;
         let world = self.cam.screen_to_world() * screen;
         // Select tool: a double-click on a Sticky / Text element opens the inline
@@ -3500,29 +3497,23 @@ impl ToileView {
             // The editor holds no key across frames, so a release means nothing
             // to it. Normal handling runs, where the board lowers its pan flag.
             InputEvent::KeyUp { .. } => None,
-            InputEvent::PointerDown { x, y, .. } => {
-                self.last_pointer = Point::new(*x, *y);
-                match self.edit_local_point(Point::new(*x, *y)) {
+            InputEvent::PointerDown { at, .. } => {
+                self.last_pointer = on_screen(*at);
+                match self.edit_local_point(self.last_pointer) {
                     Some(local) => {
-                        self.push_intent(EditIntent::PointerDown {
-                            x: local.x as f32,
-                            y: local.y as f32,
-                        });
+                        self.push_intent(EditIntent::PointerDown(doc_point(local)));
                         self.edit_pointer_down = true;
                     }
                     None => self.request_close_editor(),
                 }
                 Some(true)
             }
-            InputEvent::PointerMove { x, y } => {
-                self.last_pointer = Point::new(*x, *y);
+            InputEvent::PointerMove { at } => {
+                self.last_pointer = on_screen(*at);
                 if self.edit_pointer_down
-                    && let Some(local) = self.edit_local_point(Point::new(*x, *y))
+                    && let Some(local) = self.edit_local_point(self.last_pointer)
                 {
-                    self.push_intent(EditIntent::PointerDrag {
-                        x: local.x as f32,
-                        y: local.y as f32,
-                    });
+                    self.push_intent(EditIntent::PointerDrag(doc_point(local)));
                     return Some(true);
                 }
                 Some(self.edit_pointer_down)
@@ -3532,12 +3523,9 @@ impl ToileView {
                 self.edit_pointer_down = false;
                 Some(was)
             }
-            InputEvent::DoubleClick { x, y } => {
-                match self.edit_local_point(Point::new(*x, *y)) {
-                    Some(local) => self.push_intent(EditIntent::WordAt {
-                        x: local.x as f32,
-                        y: local.y as f32,
-                    }),
+            InputEvent::DoubleClick { at } => {
+                match self.edit_local_point(on_screen(*at)) {
+                    Some(local) => self.push_intent(EditIntent::WordAt(doc_point(local))),
                     None => self.request_close_editor(),
                 }
                 Some(true)
@@ -3662,8 +3650,8 @@ impl ToileView {
                         origin.x + caret.x1,
                         origin.y + caret.y1,
                     );
-                    self.text_input
-                        .set_caret(spot.x0, spot.y0, spot.height().max(1.0));
+                    let height = ambre_core::ViewPx::new(spot.height().max(1.0) as f32);
+                    self.text_input.set_caret(view_point(spot.origin()), height);
                     self.caret_drawn = Some(spot);
                 }
             }
@@ -4104,12 +4092,12 @@ impl ToileView {
         if let Some(focused) = self.embed_focus.current().cloned()
             && self.route_to_child(ev, &focused)
         {
-            if let InputEvent::PointerDown { x, y, .. }
-            | InputEvent::PointerUp { x, y, .. }
-            | InputEvent::PointerMove { x, y }
-            | InputEvent::DoubleClick { x, y } = ev
+            if let InputEvent::PointerDown { at, .. }
+            | InputEvent::PointerUp { at, .. }
+            | InputEvent::PointerMove { at }
+            | InputEvent::DoubleClick { at } = ev
             {
-                self.last_pointer = Point::new(*x, *y);
+                self.last_pointer = on_screen(*at);
             }
             self.child_route = self.focused_child();
             return true;
@@ -4120,19 +4108,17 @@ impl ToileView {
                 Modifiers::from_event(*ctrl_key, false, false, false),
             ),
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button,
                 shift,
                 ctrl,
             } => self.handle_pointer_down(
-                *x,
-                *y,
+                on_screen(*at),
                 *button,
                 Modifiers::from_event(*ctrl, false, *shift, false),
             ),
-            InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
-            InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
+            InputEvent::PointerMove { at } => self.handle_pointer_move(on_screen(*at)),
+            InputEvent::PointerUp { at, .. } => self.handle_pointer_up(on_screen(*at)),
             InputEvent::Key {
                 key,
                 ctrl,
@@ -4141,7 +4127,7 @@ impl ToileView {
                 meta,
             } => self.handle_key(key, Modifiers::from_event(*ctrl, *alt, *shift, *meta)),
             InputEvent::KeyUp { key } => self.handle_key_up(key),
-            InputEvent::DoubleClick { x, y } => self.handle_double_click(*x, *y),
+            InputEvent::DoubleClick { at } => self.handle_double_click(on_screen(*at)),
             InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
             | InputEvent::CompositionEnd { .. } => false,

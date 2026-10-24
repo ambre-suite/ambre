@@ -12,6 +12,19 @@ use crate::test_support::{at, rect, span};
 use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
 use crate::{DisplayCell, TrameEvent};
 
+/// A pointer at logical `(x, y)`, as the canvas hands it over.
+fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+    ambre_core::ViewPoint::new(
+        ambre_core::ViewPx::new(x as f32),
+        ambre_core::ViewPx::new(y as f32),
+    )
+}
+
+/// A logical length along one axis, as the canvas hands it over.
+fn view_px(v: f64) -> ambre_core::ViewPx {
+    ambre_core::ViewPx::new(v as f32)
+}
+
 /// Seed a non-empty cell in the viewport cache (the rest of `CellData`
 /// defaulted), so the current-region helpers see it as data.
 fn put(state: &mut TrameUiState, row: u32, col: u32, text: &str) {

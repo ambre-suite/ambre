@@ -1631,7 +1631,9 @@ pub fn main() {
 
         // Mirror the view's published selection anchor into the chrome signal,
         // only on change so the floating toolbar repositions just when it moves.
-        let next = anchor_pub_pump.read().map(|a| (a.x, a.y));
+        let next = anchor_pub_pump
+            .read()
+            .map(|a| (f64::from(a.x.get()), f64::from(a.y.get())));
         if next != last_anchor {
             last_anchor = next;
             anchor_pos.set(next);

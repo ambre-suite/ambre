@@ -5,7 +5,7 @@ use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
-use ambre_core::DocPx;
+use ambre_core::{DocPoint, DocPx, ViewPoint};
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
 /// when the drop leaves it in place. `LoroMovableList::mov` takes the index
@@ -609,20 +609,21 @@ impl TrameView {
     /// Map a logical pointer position into the open editor's local (text-relative)
     /// frame, for a pointer intent the shared core resolves against its layout.
     /// Single-line: the local y is 0 (line 0), so only x carries information.
-    fn editor_local_point(&self, x: f64, _y: f64) -> Option<(f32, f32)> {
+    fn editor_local_point(&self, at: ViewPoint) -> Option<DocPoint> {
         let ed = self.editor.as_ref()?;
         let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.at)?;
         let pad = crate::render::CELL_PAD_X * self.state.zoom.get();
-        Some(((x - (cx + pad)).max(0.0) as f32, 0.0))
+        let x = (f64::from(at.x.get()) - (cx + pad)).max(0.0) as f32;
+        Some(DocPoint::new(DocPx::new(x), DocPx::ZERO))
     }
 
-    /// True when logical pixel `(x, y)` falls on the cell currently being
+    /// True when logical pixel `at` falls on the cell currently being
     /// edited -- the gate for in-cell mouse text selection vs. committing.
-    pub(crate) fn pointer_in_editor(&self, x: f64, y: f64) -> bool {
+    pub(crate) fn pointer_in_editor(&self, at: ViewPoint) -> bool {
         let Some(ed) = self.editor.as_ref() else {
             return false;
         };
-        self.state.cell_at(x, y) == Some(ed.at)
+        self.state.cell_at(at) == Some(ed.at)
     }
 
     /// Input routing while editing a cell.
@@ -654,16 +655,15 @@ impl TrameView {
             // A press inside the edited cell starts a mouse text selection; a
             // press outside commits and reselects the clicked cell.
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 ..
             } => {
-                if self.pointer_in_editor(*x, *y) {
-                    if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+                if self.pointer_in_editor(*at) {
+                    if let Some(local) = self.editor_local_point(*at)
                         && let Some(ed) = self.editor.as_mut()
                     {
-                        ed.point_down(lx, ly);
+                        ed.point_down(local);
                     }
                     self.editor_text_drag = true;
                     self.reset_blink();
@@ -674,17 +674,17 @@ impl TrameView {
                 self.pending_commit = Some(PendingCommit::Stay);
                 self.edit_dirty = true;
                 self.text_input.focus();
-                if let Some(at) = self.state.cell_at(*x, *y) {
+                if let Some(at) = self.state.cell_at(*at) {
                     self.select_cell(at);
                 }
                 true
             }
             // Drag inside the edited cell extends the text selection.
-            InputEvent::PointerMove { x, y } if self.editor_text_drag => {
-                if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+            InputEvent::PointerMove { at } if self.editor_text_drag => {
+                if let Some(local) = self.editor_local_point(*at)
                     && let Some(ed) = self.editor.as_mut()
                 {
-                    ed.point_drag(lx, ly);
+                    ed.point_drag(local);
                 }
                 self.reset_blink();
                 true
@@ -694,11 +694,11 @@ impl TrameView {
                 true
             }
             // Double-click inside the edited cell selects the word under it.
-            InputEvent::DoubleClick { x, y } if self.pointer_in_editor(*x, *y) => {
-                if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+            InputEvent::DoubleClick { at } if self.pointer_in_editor(*at) => {
+                if let Some(local) = self.editor_local_point(*at)
                     && let Some(ed) = self.editor.as_mut()
                 {
-                    ed.word_at(lx, ly);
+                    ed.word_at(local);
                 }
                 self.reset_blink();
                 true
@@ -707,15 +707,14 @@ impl TrameView {
             // DOM context menu opens on it. We don't preventDefault (the
             // `contextmenu` listener owns the menu).
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Secondary,
                 ..
             } => {
                 self.pending_commit = Some(PendingCommit::Stay);
                 self.edit_dirty = true;
                 self.text_input.focus();
-                if let Some(at) = self.state.cell_at(*x, *y) {
+                if let Some(at) = self.state.cell_at(*at) {
                     self.select_cell(at);
                 }
                 false

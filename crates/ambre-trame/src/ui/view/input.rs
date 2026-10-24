@@ -27,12 +27,11 @@ impl TrameView {
             // so there is one filter code path. Tested before the fill handle /
             // cells so the small button wins.
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 ..
-            } if self.fill_drag.is_none() && self.state.filter_button_at(*x, *y).is_some() => {
-                if let Some(at) = self.state.filter_button_at(*x, *y) {
+            } if self.fill_drag.is_none() && self.state.filter_button_at(*at).is_some() => {
+                if let Some(at) = self.state.filter_button_at(*at) {
                     self.text_input.focus();
                     self.select_cell(at);
                     self.filter_open.publish();
@@ -40,11 +39,10 @@ impl TrameView {
                 true
             }
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 ..
-            } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
+            } if self.fill_drag.is_none() && self.state.fill_handle_at(*at) => {
                 self.text_input.focus();
                 // A merged-cell source fills block by block (Excel behaviour), so
                 // capture the merge-expanded source and its block granularity.
@@ -57,8 +55,8 @@ impl TrameView {
             }
             // Dragging the handle grows the destination rectangle, locked to the
             // dominant axis (a fill handle never fills two directions at once).
-            InputEvent::PointerMove { x, y } if self.fill_drag.is_some() => {
-                self.drag_point = Some((*x, *y));
+            InputEvent::PointerMove { at } if self.fill_drag.is_some() => {
+                self.drag_point = Some(*at);
                 self.follow_drag();
                 true
             }
@@ -75,13 +73,12 @@ impl TrameView {
             // before the grid-cell press since headers sit outside the cell area
             // anyway.
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 shift,
                 ..
-            } if self.fill_drag.is_none() && self.state.header_hit(*x, *y).is_some() => {
-                let Some(hit) = self.state.header_hit(*x, *y) else {
+            } if self.fill_drag.is_none() && self.state.header_hit(*at).is_some() => {
+                let Some(hit) = self.state.header_hit(*at) else {
                     return false;
                 };
                 self.text_input.focus();
@@ -102,8 +99,8 @@ impl TrameView {
                     HeaderHit::Corner => self.select_all(),
                     // Resize bands / inline-insert affordance: handled in the
                     // resize-drag wiring (`trame-resize`, `trame-headers`).
-                    HeaderHit::ColBorder(c) => self.arm_col_resize(c, *x),
-                    HeaderHit::RowBorder(r) => self.arm_row_resize(r, *y),
+                    HeaderHit::ColBorder(c) => self.arm_col_resize(c, at.x),
+                    HeaderHit::RowBorder(r) => self.arm_row_resize(r, at.y),
                     HeaderHit::ColInsert(c) => self.insert_col_at(c),
                     HeaderHit::RowInsert(r) => self.insert_row_at(r),
                 }
@@ -111,15 +108,15 @@ impl TrameView {
             }
             // A header drag sweeps the whole-axis band to the column/row under the
             // cursor (even below/right of the header strip).
-            InputEvent::PointerMove { x, y } if self.axis_drag.is_some() => {
+            InputEvent::PointerMove { at } if self.axis_drag.is_some() => {
                 match self.axis_drag {
                     Some(SelKind::Cols) => {
-                        if let Some(c) = self.state.col_at_x(*x) {
+                        if let Some(c) = self.state.col_at_x(at.x) {
                             self.extend_axis(AxisPos::Col(c));
                         }
                     }
                     Some(SelKind::Rows) => {
-                        if let Some(r) = self.state.row_at_y(*y) {
+                        if let Some(r) = self.state.row_at_y(at.y) {
                             self.extend_axis(AxisPos::Row(r));
                         }
                     }
@@ -133,13 +130,13 @@ impl TrameView {
             }
             // Dragging a grabbed header moves the live insertion guide to the
             // boundary under the cursor (Excel-style reorder preview).
-            InputEvent::PointerMove { x, y } if self.reorder_drag.is_some() => {
+            InputEvent::PointerMove { at } if self.reorder_drag.is_some() => {
                 let Some(grabbed) = self.reorder_drag else {
                     return false;
                 };
                 let slot = match grabbed {
-                    AxisPos::Col(_) => self.state.col_drop_slot(*x).map(AxisPos::Col),
-                    AxisPos::Row(_) => self.state.row_drop_slot(*y).map(AxisPos::Row),
+                    AxisPos::Col(_) => self.state.col_drop_slot(at.x).map(AxisPos::Col),
+                    AxisPos::Row(_) => self.state.row_drop_slot(at.y).map(AxisPos::Row),
                 };
                 if let Some(slot) = slot
                     && self.state.reorder_preview != Some(slot)
@@ -157,8 +154,8 @@ impl TrameView {
             }
             // Dragging a header boundary moves the live guide line (`trame-resize`);
             // the release emits the resize and clears the preview.
-            InputEvent::PointerMove { x, y } if self.resize_drag.is_some() => {
-                self.update_resize_preview(*x, *y);
+            InputEvent::PointerMove { at } if self.resize_drag.is_some() => {
+                self.update_resize_preview(*at);
                 true
             }
             InputEvent::PointerUp { .. } if self.resize_drag.is_some() => {
@@ -167,13 +164,13 @@ impl TrameView {
             }
             // Double-click on a header boundary auto-fits the column/row to its
             // cached content (`trame-resize`).
-            InputEvent::DoubleClick { x, y }
+            InputEvent::DoubleClick { at }
                 if matches!(
-                    self.state.header_hit(*x, *y),
+                    self.state.header_hit(*at),
                     Some(HeaderHit::ColBorder(_) | HeaderHit::RowBorder(_))
                 ) =>
             {
-                match self.state.header_hit(*x, *y) {
+                match self.state.header_hit(*at) {
                     Some(HeaderHit::ColBorder(c)) => self.auto_fit_col(c),
                     Some(HeaderHit::RowBorder(r)) => self.auto_fit_row(r),
                     _ => {}
@@ -181,14 +178,13 @@ impl TrameView {
                 true
             }
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Primary,
                 shift,
                 ctrl,
             } => {
                 self.text_input.focus();
-                if let Some(at) = self.state.cell_at(*x, *y) {
+                if let Some(at) = self.state.cell_at(*at) {
                     if *shift {
                         self.extend_cell(at);
                     } else if *ctrl {
@@ -203,8 +199,8 @@ impl TrameView {
             }
             // Drag with the button held grows the live selection rectangle to the
             // cell under the cursor (mouse range selection).
-            InputEvent::PointerMove { x, y } if self.selecting_drag => {
-                self.drag_point = Some((*x, *y));
+            InputEvent::PointerMove { at } if self.selecting_drag => {
+                self.drag_point = Some(*at);
                 self.follow_drag();
                 true
             }
@@ -217,14 +213,14 @@ impl TrameView {
             // (`trame-resize`, `trame-autofill`). A header boundary shows the
             // col/row-resize cursor, a header body the select pointer, the fill handle
             // the crosshair, everything else the default. Pure feedback.
-            InputEvent::PointerMove { x, y } => {
-                let hit = self.state.header_hit(*x, *y);
+            InputEvent::PointerMove { at } => {
+                let hit = self.state.header_hit(*at);
                 let cursor = match hit {
                     Some(HeaderHit::ColBorder(_)) => GridCursor::ColResize,
                     Some(HeaderHit::RowBorder(_)) => GridCursor::RowResize,
                     Some(_) => GridCursor::Pointer,
-                    None if self.state.filter_button_at(*x, *y).is_some() => GridCursor::Pointer,
-                    None if self.state.fill_handle_at(*x, *y) => GridCursor::Crosshair,
+                    None if self.state.filter_button_at(*at).is_some() => GridCursor::Pointer,
+                    None if self.state.fill_handle_at(*at) => GridCursor::Crosshair,
                     None => GridCursor::Unset,
                 };
                 if cursor != self.hover_cursor {
@@ -260,12 +256,11 @@ impl TrameView {
             // keeps the existing selection -- the header menu still acts on it. We
             // don't preventDefault here; the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Secondary,
                 ..
-            } if self.state.header_hit(*x, *y).is_some() => {
-                let Some(hit) = self.state.header_hit(*x, *y) else {
+            } if self.state.header_hit(*at).is_some() => {
+                let Some(hit) = self.state.header_hit(*at) else {
                     return false;
                 };
                 self.text_input.focus();
@@ -295,8 +290,7 @@ impl TrameView {
             // context menu opens on it (standard spreadsheet behaviour). We don't
             // preventDefault here -- the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: PointerButton::Secondary,
                 ..
             } => {
@@ -304,7 +298,7 @@ impl TrameView {
                 // Right-click inside the current multi-cell selection keeps it, so
                 // a context menu can act on the range. Otherwise it collapses to
                 // the clicked cell, like a left click.
-                if let Some(at) = self.state.cell_at(*x, *y)
+                if let Some(at) = self.state.cell_at(*at)
                     && !self.state.selection.contains(at)
                 {
                     self.select_cell(at);
@@ -313,9 +307,9 @@ impl TrameView {
                 false
             }
             // Double-click opens an editor on the clicked cell's current text.
-            InputEvent::DoubleClick { x, y } => {
+            InputEvent::DoubleClick { at } => {
                 self.text_input.focus();
-                if let Some(at) = self.state.cell_at(*x, *y) {
+                if let Some(at) = self.state.cell_at(*at) {
                     self.select_cell(at);
                     let seed = self.cell_seed(at);
                     self.begin_edit(seed);
@@ -492,10 +486,10 @@ impl TrameView {
     /// Grow the held selection or fill preview to the cell the drag points
     /// at, the nearest edge cell once it leaves the cell area.
     fn follow_drag(&mut self) {
-        let Some((x, y)) = self.drag_point else {
+        let Some(point) = self.drag_point else {
             return;
         };
-        let Some(at) = self.state.drag_cell_at(x, y) else {
+        let Some(at) = self.state.drag_cell_at(point) else {
             return;
         };
         if let Some((src, block)) = self.fill_drag {
@@ -513,7 +507,7 @@ impl TrameView {
         let speed = self
             .drag_point
             .filter(|_| held)
-            .map(|(x, y)| self.state.edge_scroll_speed(x, y));
+            .map(|at| self.state.edge_scroll_speed(at));
         let outcome = self
             .scroll
             .edge(&mut self.state, speed, self.clock.now_ms());
@@ -524,14 +518,12 @@ impl TrameView {
 
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
-    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
-        self.scroll
-            .press(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)), now_ms);
+    pub fn touch_down(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
+        self.scroll.press(at, now_ms);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
-    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
-        let at = ViewPoint::new(ViewPx::new(x), ViewPx::new(y));
+    pub fn touch_move(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
         let outcome = self.scroll.pan(&mut self.state, at, now_ms);
         self.note_scroll(outcome);
     }
@@ -540,18 +532,15 @@ impl TrameView {
     /// click where it landed.
     pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) {
         if let Release::Tap { at } = self.scroll.release(now_ms) {
-            let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
             for ev in [
                 InputEvent::PointerDown {
-                    x,
-                    y,
+                    at,
                     button: PointerButton::Primary,
                     shift: false,
                     ctrl: false,
                 },
                 InputEvent::PointerUp {
-                    x,
-                    y,
+                    at,
                     button: PointerButton::Primary,
                     ctrl: false,
                 },
@@ -712,24 +701,25 @@ impl TrameView {
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the
     /// live vertical guide at the pointer x.
-    pub(crate) fn arm_col_resize(&mut self, c: Col, x: f64) {
+    pub(crate) fn arm_col_resize(&mut self, c: Col, x: ViewPx) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
-        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(f64::from(x.get())));
         self.set_cursor(GridCursor::ColResize);
         self.edit_dirty = true;
     }
 
     /// Arm a row resize from a press on row `r`'s bottom border.
-    pub(crate) fn arm_row_resize(&mut self, r: Row, y: f64) {
+    pub(crate) fn arm_row_resize(&mut self, r: Row, y: ViewPx) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
-        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(f64::from(y.get())));
         self.set_cursor(GridCursor::RowResize);
         self.edit_dirty = true;
     }
 
     /// Move the live resize guide to the pointer, clamped so the dragged
     /// column/row never shrinks below its minimum.
-    pub(crate) fn update_resize_preview(&mut self, x: f64, y: f64) {
+    pub(crate) fn update_resize_preview(&mut self, at: ViewPoint) {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         match self.resize_drag {
             Some(HeaderHit::ColBorder(c)) => {
                 // The guide is in logical px, so the minimum width is the base

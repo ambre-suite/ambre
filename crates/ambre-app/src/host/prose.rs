@@ -74,9 +74,6 @@ fn canvas_origin() -> CssPoint {
 
 /// A canvas point as the view takes it. The canvas reports its pointer in
 /// pixels from its own corner, which are the view's pixels.
-fn view_point(x: f32, y: f32) -> ViewPoint {
-    ViewPoint::new(ViewPx::new(x), ViewPx::new(y))
-}
 
 /// One open Prose document on the canvas.
 pub struct ProseView {
@@ -491,8 +488,9 @@ impl ProseView {
         // The input pipe follows the caret the paint just drew, so the IME
         // popup opens beside it (`CHROME-007`).
         if let Some(bar) = self.state.caret_drawn {
-            self.text_input
-                .set_caret(bar.x0, bar.y0, bar.height().max(1.0));
+            let at = ViewPoint::new(ViewPx::new(bar.x0 as f32), ViewPx::new(bar.y0 as f32));
+            let height = ViewPx::new(bar.height().max(1.0) as f32);
+            self.text_input.set_caret(at, height);
         }
         let painted = self.probe.painted(super::probe::now_ms());
         self.timeline.record(painted);
@@ -543,12 +541,11 @@ impl ProseView {
                 true
             }
             _ => {
-                if let InputEvent::PointerMove { x, y } = ev {
-                    let at = view_point(*x as f32, *y as f32);
-                    if self.state.hover(at) {
+                if let InputEvent::PointerMove { at } = ev {
+                    if self.state.hover(*at) {
                         self.publish_hover();
                     }
-                    let over_link = self.state.link_at(at).is_some();
+                    let over_link = self.state.link_at(*at).is_some();
                     if self.annotations.over_link.get_untracked() != over_link {
                         self.annotations.over_link.set(over_link);
                     }
@@ -609,21 +606,18 @@ impl ProseView {
             InputEvent::CompositionUpdate { text } => ProseInput::Compose(text.clone()),
             InputEvent::CompositionEnd { text } => ProseInput::ComposeEnd(text.clone()),
             InputEvent::PointerDown {
-                x,
-                y,
+                at,
                 button: ambre_canvas::PointerButton::Primary,
                 shift,
                 ctrl,
                 ..
             } => ProseInput::Press {
-                at: view_point(*x as f32, *y as f32),
+                at: *at,
                 // The canvas folds `Cmd` into `ctrl`.
                 mods: Modifiers::from_event(*ctrl, false, *shift, false),
                 now_ms: self.now_ms,
             },
-            InputEvent::PointerMove { x, y } => ProseInput::Drag {
-                at: view_point(*x as f32, *y as f32),
-            },
+            InputEvent::PointerMove { at } => ProseInput::Drag { at: *at },
             InputEvent::PointerUp {
                 button: ambre_canvas::PointerButton::Primary,
                 ..
@@ -686,17 +680,16 @@ impl ProseView {
     pub fn touch(
         &mut self,
         phase: super::TouchPhase,
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         now_ms: ambre_core::PageTime,
     ) -> bool {
         if self.fatal {
             return false;
         }
         match phase {
-            super::TouchPhase::Down => self.state.touch_start(view_point(x, y), now_ms),
+            super::TouchPhase::Down => self.state.touch_start(at, now_ms),
             super::TouchPhase::Move => {
-                if self.state.touch_move(view_point(x, y), now_ms) {
+                if self.state.touch_move(at, now_ms) {
                     self.state.hovered = None;
                     self.publish_hover();
                     self.publish_toolbar();
@@ -720,11 +713,8 @@ impl ProseView {
 
     /// Text dropped on the canvas: one insertion at the drop point
     /// (`PROSE-UI-204`).
-    pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
-        self.feed(&ProseInput::Drop {
-            at: view_point(x, y),
-            text,
-        })
+    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
+        self.feed(&ProseInput::Drop { at, text })
     }
 
     /// Another document of the same type: the state starts over, and the
@@ -776,6 +766,14 @@ mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// A pointer at canvas `(x, y)`, as the host hands it over.
+    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+        ambre_core::ViewPoint::new(
+            ambre_core::ViewPx::new(x as f32),
+            ambre_core::ViewPx::new(y as f32),
+        )
+    }
+
     /// `CHROME-102`: a press in the page gives the keyboard focus to the pipe,
     /// so the next keystroke reaches the document.
     #[wasm_bindgen_test]
@@ -809,8 +807,7 @@ mod tests {
             let _ = body.focus();
         }
         let _ = view.handle_input(&InputEvent::PointerDown {
-            x: 300.0,
-            y: 200.0,
+            at: pointer(300.0, 200.0),
             button: ambre_canvas::PointerButton::Primary,
             shift: false,
             ctrl: false,

@@ -220,16 +220,12 @@ where
 
         // Positions are CSS pixels, which is what a view lays out in
         // (`CANVAS-032`). A cancel carries no reliable position, so the last one stands in.
-        let mut last = (0.0, 0.0);
+        let mut last = ViewPoint::new(ViewPx::ZERO, ViewPx::ZERO);
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
                 let cancelled = event.type_() == "pointercancel";
-                let (x, y) = if cancelled {
-                    last
-                } else {
-                    (f64::from(event.offset_x()), f64::from(event.offset_y()))
-                };
-                last = (x, y);
+                let at = if cancelled { last } else { offset_of(&event) };
+                last = at;
                 // A finger pans the view rather than selecting.
                 if event.pointer_type() == "touch" && host_c.borrow().captures_pointer() {
                     let phase = match event.type_().as_str() {
@@ -240,31 +236,27 @@ where
                         _ => return,
                     };
                     let now = event.time_stamp();
-                    if host_c.borrow_mut().touch(
-                        phase,
-                        x as f32,
-                        y as f32,
-                        ambre_bus::PageTime(now),
-                    ) {
+                    if host_c
+                        .borrow_mut()
+                        .touch(phase, at, ambre_bus::PageTime(now))
+                    {
                         event.prevent_default();
                     }
                     return;
                 }
                 let ev = match event.type_().as_str() {
                     "pointerdown" => InputEvent::PointerDown {
-                        x,
-                        y,
+                        at,
                         button: ambre_canvas::PointerButton::from_dom(event.button()),
                         shift: event.shift_key(),
                         // Fold Cmd (macOS) into ctrl so disjoint-select works there.
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
-                    "pointermove" => InputEvent::PointerMove { x, y },
+                    "pointermove" => InputEvent::PointerMove { at },
                     // The browser took a mouse gesture over: it ends where
                     // it last was, as a release (`KINETIC-010`).
                     "pointerup" | "pointercancel" => InputEvent::PointerUp {
-                        x,
-                        y,
+                        at,
                         button: if cancelled {
                             ambre_canvas::PointerButton::Primary
                         } else {
@@ -322,9 +314,7 @@ where
             if text.is_empty() {
                 return;
             }
-            let x = event.offset_x() as f32;
-            let y = event.offset_y() as f32;
-            if host_c.borrow_mut().drop_text(x, y, text) {
+            if host_c.borrow_mut().drop_text(offset_of(&event), text) {
                 event.prevent_default();
             }
         });
@@ -345,8 +335,7 @@ where
         let cb =
             Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let ev = InputEvent::DoubleClick {
-                    x: f64::from(event.offset_x()),
-                    y: f64::from(event.offset_y()),
+                    at: offset_of(&event),
                 };
                 if host_c.borrow_mut().handle_input(&ev) {
                     event.prevent_default();

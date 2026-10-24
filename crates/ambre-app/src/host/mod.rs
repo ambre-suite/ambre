@@ -44,7 +44,7 @@ use ambre_canvas::{
     size_backing_store, start_raf_loop,
 };
 use ambre_chrome::commands::ClipboardWrite;
-use ambre_core::CanvasId;
+use ambre_core::{CanvasId, ViewPoint, ViewPx};
 use ambre_draw::{DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -155,6 +155,16 @@ impl ClipboardFormat {
 const HIDDEN_RELAY_PERIOD_MS: ambre_bus::Millis = ambre_bus::Millis(1000);
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
+/// Where a mouse, pointer or drag event landed on its canvas. The DOM
+/// reports the offset in whole CSS px, which a view lays out in
+/// (`CANVAS-032`).
+pub(crate) fn offset_of(event: &web_sys::MouseEvent) -> ViewPoint {
+    ViewPoint::new(
+        ViewPx::new(event.offset_x() as f32),
+        ViewPx::new(event.offset_y() as f32),
+    )
+}
+
 pub(crate) fn base64_encode(bytes: &[u8]) -> String {
     BASE64.encode(bytes)
 }
@@ -418,41 +428,38 @@ impl AppView {
     }
 
     /// Text dropped at a canvas point. Only Prose takes it.
-    fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+    fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
         match self {
             AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => false,
-            AppView::Prose(v) => v.drop_text(x, y, text),
+            AppView::Prose(v) => v.drop_text(at, text),
         }
     }
 
     /// A finger on the canvas. Every application takes it apart from the
     /// mouse.
-    fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
+    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now_ms: ambre_core::PageTime) -> bool {
         match self {
-            AppView::Toile(v) => {
-                let (x, y) = (f64::from(x), f64::from(y));
-                match phase {
-                    TouchPhase::Down => v.touch_down(x, y, now_ms),
-                    TouchPhase::Move => v.touch_move(x, y, now_ms),
-                    TouchPhase::Up => v.touch_up(x, y, now_ms),
-                    TouchPhase::Cancel => v.touch_cancel(),
-                }
-            }
+            AppView::Toile(v) => match phase {
+                TouchPhase::Down => v.touch_down(at, now_ms),
+                TouchPhase::Move => v.touch_move(at, now_ms),
+                TouchPhase::Up => v.touch_up(at, now_ms),
+                TouchPhase::Cancel => v.touch_cancel(),
+            },
             AppView::Trame(v) => {
                 match phase {
-                    TouchPhase::Down => v.touch_down(x, y, now_ms),
-                    TouchPhase::Move => v.touch_move(x, y, now_ms),
+                    TouchPhase::Down => v.touch_down(at, now_ms),
+                    TouchPhase::Move => v.touch_move(at, now_ms),
                     TouchPhase::Up => v.touch_up(now_ms),
                     TouchPhase::Cancel => v.touch_cancel(),
                 }
                 true
             }
-            AppView::Prose(v) => v.touch(phase, x, y, now_ms),
+            AppView::Prose(v) => v.touch(phase, at, now_ms),
             AppView::Murmure(v) => {
                 match phase {
-                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Down => v.touch_down(at, now_ms),
                     TouchPhase::Move => {
-                        v.touch_move(x, y, now_ms);
+                        v.touch_move(at, now_ms);
                     }
                     TouchPhase::Up => {
                         v.touch_up(now_ms);

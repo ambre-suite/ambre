@@ -2,6 +2,7 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::HitTest;
 use ambre_draw::kinetic::EdgeSpeed;
 
@@ -10,8 +11,8 @@ use ambre_draw::kinetic::EdgeSpeed;
 impl HitTest for TrameUiState {
     type Target = CellPos;
 
-    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<CellPos> {
-        self.cell_at(f64::from(at.x.get()), f64::from(at.y.get()))
+    fn hit_test(&self, at: ViewPoint) -> Option<CellPos> {
+        self.cell_at(at)
     }
 }
 
@@ -117,10 +118,11 @@ impl TrameUiState {
         y
     }
 
-    /// Absolute grid column whose band contains logical x `px` (>= the row
+    /// Absolute grid column whose band contains logical `x` (>= the row
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
-    pub fn col_at_x(&self, px: f64) -> Option<Col> {
+    pub fn col_at_x(&self, x: ViewPx) -> Option<Col> {
+        let px = f64::from(x.get());
         if px < self.header_w() {
             return None;
         }
@@ -135,31 +137,34 @@ impl TrameUiState {
         None
     }
 
-    /// Insertion slot for a column reorder drop at logical x `px`: the column
+    /// Insertion slot for a column reorder drop at logical `x`: the column
     /// index the grabbed column would land *before*. It snaps to the nearer
     /// vertical boundary: the left edge of the column under the cursor, or the
     /// next one past its midpoint. That last option keeps the final position
     /// reachable. `None` left of the grid. The returned index may equal the
     /// column count (drop at the end).
-    pub fn col_drop_slot(&self, px: f64) -> Option<Col> {
-        let col = self.col_at_x(px)?;
+    pub fn col_drop_slot(&self, x: ViewPx) -> Option<Col> {
+        let col = self.col_at_x(x)?;
+        let px = f64::from(x.get());
         let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
         Some(if px >= mid { col.next() } else { col })
     }
 
-    /// Insertion slot for a row reorder drop at logical y `py`: the row index
+    /// Insertion slot for a row reorder drop at logical `y`: the row index
     /// the grabbed row would land *above*. It snaps to the nearer horizontal
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
-    pub fn row_drop_slot(&self, py: f64) -> Option<Row> {
-        let row = self.row_at_y(py)?;
+    pub fn row_drop_slot(&self, y: ViewPx) -> Option<Row> {
+        let row = self.row_at_y(y)?;
+        let py = f64::from(y.get());
         let mid = self.row_y(row) + self.row_height_of(row) / 2.0;
         Some(if py >= mid { row.next() } else { row })
     }
 
-    /// Absolute *visible* grid row whose band contains logical y `py` (>= the
+    /// Absolute *visible* grid row whose band contains logical `y` (>= the
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
-    pub fn row_at_y(&self, py: f64) -> Option<Row> {
+    pub fn row_at_y(&self, y: ViewPx) -> Option<Row> {
+        let py = f64::from(y.get());
         if py < self.header_h() {
             return None;
         }
@@ -176,25 +181,26 @@ impl TrameUiState {
         None
     }
 
-    /// The cell a held drag points at: the cell under `(x, y)`, or the
+    /// The cell a held drag points at: the cell under `at`, or the
     /// nearest edge cell when the pointer has left the cell area. A drag past
     /// an edge keeps reaching the cells the scroll brings in.
-    pub fn drag_cell_at(&self, x: f64, y: f64) -> Option<CellPos> {
-        let x = x.clamp(
+    pub fn drag_cell_at(&self, at: ViewPoint) -> Option<CellPos> {
+        let x = f64::from(at.x.get()).clamp(
             self.header_w(),
             (self.canvas_width - 1.0).max(self.header_w()),
         );
-        let y = y.clamp(
+        let y = f64::from(at.y.get()).clamp(
             self.header_h(),
             (self.grid_bottom() - 1.0).max(self.header_h()),
         );
-        self.cell_at(x, y)
+        self.cell_at(ViewPoint::new(ViewPx::new(x as f32), ViewPx::new(y as f32)))
     }
 
-    /// The speed a drag held at `(x, y)` scrolls the grid at, in logical
+    /// The speed a drag held at `at` scrolls the grid at, in logical
     /// pixels per millisecond on each axis (`KINETIC-007`). Each edge is the
     /// cell area's, past the header strips; zero away from them.
-    pub fn edge_scroll_speed(&self, x: f64, y: f64) -> (EdgeSpeed, EdgeSpeed) {
+    pub fn edge_scroll_speed(&self, at: ViewPoint) -> (EdgeSpeed, EdgeSpeed) {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         let (left, top) = (self.header_w(), self.header_h());
         (
             EdgeSpeed::at((x - left) as f32, (self.canvas_width - left) as f32),
@@ -202,9 +208,10 @@ impl TrameUiState {
         )
     }
 
-    /// The cell at logical pixel `(x, y)`, or `None` if the point is in a
+    /// The cell at logical pixel `at`, or `None` if the point is in a
     /// header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
-    pub fn cell_at(&self, x: f64, y: f64) -> Option<CellPos> {
+    pub fn cell_at(&self, at: ViewPoint) -> Option<CellPos> {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         let cells_top = self.header_h();
         if x < self.header_w() || y < cells_top {
             return None;
@@ -245,12 +252,13 @@ impl TrameUiState {
         Some(CellPos::new(row, col))
     }
 
-    /// Resolve a pointer at logical `(x, y)` to a header zone
+    /// Resolve a pointer at logical `at` to a header zone
     /// (`trame-headers`), or `None` when the point is over the grid body (not a
     /// header strip). The resize bands (a +/- [`RESIZE_BAND`] zone around a
     /// boundary) take priority over the body so a grab on the edge resizes rather
     /// than selects. Variable-metric aware (walks the per-axis widths/heights).
-    pub fn header_hit(&self, x: f64, y: f64) -> Option<HeaderHit> {
+    pub fn header_hit(&self, at: ViewPoint) -> Option<HeaderHit> {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         let in_col_strip = (0.0..self.header_h()).contains(&y);
         let in_row_strip = (0.0..self.header_w()).contains(&x);
         // Top-left corner -> select-all.
@@ -473,9 +481,10 @@ impl TrameUiState {
         Some((x + w - s / 2.0, y + h - s / 2.0, s, s))
     }
 
-    /// True if `(x, y)` (device px) hits the fill handle, with a small tolerance
+    /// True if `at` (logical px) hits the fill handle, with a small tolerance
     /// margin so the ~7px square is easy to grab.
-    pub fn fill_handle_at(&self, x: f64, y: f64) -> bool {
+    pub fn fill_handle_at(&self, at: ViewPoint) -> bool {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         self.fill_handle_rect().is_some_and(|(hx, hy, w, h)| {
             let m = 2.0;
             x >= hx - m && x <= hx + w + m && y >= hy - m && y <= hy + h + m
@@ -556,9 +565,10 @@ impl TrameUiState {
     }
 
     /// Hit-test the autofilter button row: returns the header cell of the
-    /// button under `(x, y)` (device px), with a small tolerance margin. `None`
+    /// button under `at` (logical px), with a small tolerance margin. `None`
     /// when no button is hit (or no current region exists).
-    pub fn filter_button_at(&self, x: f64, y: f64) -> Option<CellPos> {
+    pub fn filter_button_at(&self, at: ViewPoint) -> Option<CellPos> {
+        let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         let region = self.current_region()?;
         let band_row = region.top_left.row;
         region.cols().into_iter().find_map(|col| {

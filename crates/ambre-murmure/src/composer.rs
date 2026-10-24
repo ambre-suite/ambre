@@ -35,8 +35,8 @@ use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, Modifiers};
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, HistoryStep, ViewPoint, byte_span_to_chars, byte_to_char,
-    char_len, char_span_to_bytes,
+    ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ZoomFactor,
+    byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
 };
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
@@ -444,7 +444,7 @@ pub struct Composer {
     /// The height of the band at the last paint, `0` with no channel.
     band: f32,
     /// Where the text of the field started at the last paint.
-    origin: (f32, f32),
+    origin: ViewPoint,
     /// The threads whose box asks for the reply in the channel too.
     also: HashSet<DraftOf>,
     /// The row of that box at the last paint, as its top and bottom.
@@ -505,8 +505,8 @@ impl Composer {
 
     /// The file whose chip the last paint drew under `(x, y)`, by its place
     /// in the files of the draft shown.
-    pub fn file_at(&self, x: f32, y: f32) -> Option<usize> {
-        let at = Point::new(x.into(), y.into());
+    pub fn file_at(&self, at: ViewPoint) -> Option<usize> {
+        let at = Point::new(at.x.get().into(), at.y.get().into());
         self.file_chips
             .iter()
             .find(|(chip, _)| chip.contains(at))
@@ -579,9 +579,9 @@ impl Composer {
     }
 
     /// Whether the height `y` falls on the row of the box at the last paint.
-    pub fn on_also(&self, y: f32) -> bool {
+    pub fn on_also(&self, y: ViewPx) -> bool {
         self.also_row
-            .is_some_and(|(top, bottom)| (top..bottom).contains(&y))
+            .is_some_and(|(top, bottom)| (top..bottom).contains(&y.get()))
     }
 
     /// Whether a key changed a draft since the last call. A move of the
@@ -1239,25 +1239,25 @@ impl Composer {
 
     /// A press at `(x, y)` in the band: the caret goes there, and a drag
     /// from it selects.
-    pub fn press(&mut self, of: DraftOf, x: f32, y: f32) {
-        let (dx, dy) = self.origin;
+    pub fn press(&mut self, of: DraftOf, at: ViewPoint) {
+        let at = self.in_field(at);
         // The field that takes the focus says its draft (`MURMURE-574`).
         if !self.focused {
             self.saying = Some((of, Say::Draft));
         }
         self.history(of).seal();
-        self.editor(of).point_down(x - dx, y - dy);
+        self.editor(of).point_down(at);
         self.dragging = true;
     }
 
     /// A pointer moved: a drag from the field extends the selection.
     /// Answers whether the composer held a drag.
-    pub fn drag_to(&mut self, of: DraftOf, x: f32, y: f32) -> bool {
+    pub fn drag_to(&mut self, of: DraftOf, at: ViewPoint) -> bool {
         if !self.dragging {
             return false;
         }
-        let (dx, dy) = self.origin;
-        self.editor(of).point_drag(x - dx, y - dy);
+        let at = self.in_field(at);
+        self.editor(of).point_drag(at);
         true
     }
 
@@ -1267,10 +1267,20 @@ impl Composer {
     }
 
     /// A double click in the field selects the word under it.
-    pub fn word_at(&mut self, of: DraftOf, x: f32, y: f32) {
-        let (dx, dy) = self.origin;
+    pub fn word_at(&mut self, of: DraftOf, at: ViewPoint) {
+        let at = self.in_field(at);
         self.history(of).seal();
-        self.editor(of).word_at(x - dx, y - dy);
+        self.editor(of).word_at(at);
+    }
+
+    /// The point `at` of the view in the field's own layout, which the list
+    /// draws at no zoom.
+    fn in_field(&self, at: ViewPoint) -> DocPoint {
+        let from = at - self.origin;
+        DocPoint::new(
+            from.dx.unzoomed(ZoomFactor::ONE),
+            from.dy.unzoomed(ZoomFactor::ONE),
+        )
     }
 
     /// Apply the edits since the last paint, and size the band for the
@@ -1492,7 +1502,7 @@ impl Composer {
         };
         surface.stroke_rect(field, edge, 1.0);
         let inner = (top + SPACE_4, height - SPACE_4);
-        self.origin = (SPACE_8, inner.0);
+        self.origin = ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(inner.0));
         let editor = self.drafts.get_mut(&shown);
         let empty = editor.as_ref().is_none_or(|e| e.text().is_empty()) && !self.composing;
         if empty {
@@ -1503,7 +1513,7 @@ impl Composer {
         // A draft taller than the field shows its last lines.
         let tall = editor.layout_height().unwrap_or(0.0);
         let shift = (inner.1 - inner.0 - tall).min(0.0);
-        self.origin = (SPACE_8, inner.0 + shift);
+        self.origin = ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(inner.0 + shift));
         let origin = Point::new(SPACE_8.into(), (inner.0 + shift).into());
         surface.push_clip(rect(SPACE_4, inner.0, width - SPACE_4, inner.1));
         editor.render(surface, origin, palette.selection, self.focused);

@@ -9,9 +9,9 @@
 
 use super::*;
 use crate::SurfaceSize;
-use crate::density::{CssSize, DevicePx, DeviceSize};
+use crate::density::{CssSize, DevicePixelRatio, DevicePx, DeviceSize};
 use ambre_core::ViewPx;
-use ambre_draw::{Color, ImageSource, Rect};
+use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -142,7 +142,7 @@ pub struct QuadRenderer {
     /// The buffer in device pixels, which an offscreen copy counts in.
     physical: DeviceSize,
     /// Device pixels per logical pixel, which a glyph is rasterized at.
-    density: f32,
+    density: DevicePixelRatio,
 }
 
 /// How much VRAM the uploaded pictures may hold together, mip chains included.
@@ -667,7 +667,7 @@ impl QuadRenderer {
             width: 1.0,
             height: 1.0,
             physical: DeviceSize::new(1, 1),
-            density: 1.0,
+            density: DevicePixelRatio::ONE,
         }
     }
 
@@ -738,7 +738,7 @@ impl QuadRenderer {
     }
 
     /// Device pixels per logical pixel for the frame being built.
-    pub(crate) fn density(&self) -> f32 {
+    pub(crate) fn density(&self) -> DevicePixelRatio {
         self.density
     }
 
@@ -797,7 +797,9 @@ impl QuadRenderer {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
-    pub fn push_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, color: Color, width: f32) {
+    pub fn push_line(&mut self, line: Line, color: Color, width: f32) {
+        let (x0, y0) = (line.p0.x as f32, line.p0.y as f32);
+        let (x1, y1) = (line.p1.x as f32, line.p1.y as f32);
         let dx = x1 - x0;
         let dy = y1 - y0;
         let len = dx.hypot(dy);

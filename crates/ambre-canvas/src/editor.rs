@@ -26,6 +26,7 @@
 // ============================================================================
 
 use ambre_bus::{ByteOffset, ByteSpan};
+use ambre_core::DocPoint;
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
     FontFamilyName, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,
@@ -78,20 +79,11 @@ pub enum EditIntent {
     },
     SelectAll,
     /// Place the caret at a local-space point (single click / drag start).
-    PointerDown {
-        x: f32,
-        y: f32,
-    },
+    PointerDown(DocPoint),
     /// Extend the selection to a local-space point (drag / shift-click).
-    PointerDrag {
-        x: f32,
-        y: f32,
-    },
+    PointerDrag(DocPoint),
     /// Select the word under a local-space point (double click).
-    WordAt {
-        x: f32,
-        y: f32,
-    },
+    WordAt(DocPoint),
     /// Live IME composition preview for this pass (replaces the previous).
     Compose(String),
     /// IME composition committed: finalize the preedit as real text.
@@ -348,16 +340,16 @@ impl TextEditor {
         self.push(EditIntent::ComposeEnd(text.to_owned()));
     }
     /// Place the caret at a local-space (text-relative) point (click / drag start).
-    pub fn point_down(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::PointerDown { x, y });
+    pub fn point_down(&mut self, at: DocPoint) {
+        self.push(EditIntent::PointerDown(at));
     }
     /// Extend the selection to a local-space point (drag / shift-click).
-    pub fn point_drag(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::PointerDrag { x, y });
+    pub fn point_drag(&mut self, at: DocPoint) {
+        self.push(EditIntent::PointerDrag(at));
     }
     /// Select the word at a local-space point (double click).
-    pub fn word_at(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::WordAt { x, y });
+    pub fn word_at(&mut self, at: DocPoint) {
+        self.push(EditIntent::WordAt(at));
     }
 
     /// Replace the whole buffer synchronously (no font context needed), caret
@@ -504,9 +496,11 @@ impl TextEditor {
                         }
                     }
                     EditIntent::SelectAll => drv.select_all(),
-                    EditIntent::PointerDown { x, y } => drv.move_to_point(x, y),
-                    EditIntent::PointerDrag { x, y } => drv.extend_selection_to_point(x, y),
-                    EditIntent::WordAt { x, y } => drv.select_word_at_point(x, y),
+                    EditIntent::PointerDown(at) => drv.move_to_point(at.x.get(), at.y.get()),
+                    EditIntent::PointerDrag(at) => {
+                        drv.extend_selection_to_point(at.x.get(), at.y.get());
+                    }
+                    EditIntent::WordAt(at) => drv.select_word_at_point(at.x.get(), at.y.get()),
                     EditIntent::Compose(s) => {
                         if s.is_empty() {
                             drv.clear_compose();
@@ -636,9 +630,9 @@ impl TextEditor {
             EditIntent::Down { select } => from.next_line(layout, select),
             EditIntent::LineStart { select } => held.line_start(layout, select),
             EditIntent::LineEnd { select } => held.line_end(layout, select),
-            EditIntent::PointerDown { x, y } => Selection::from_point(layout, x, y),
-            EditIntent::PointerDrag { x, y } => held.extend_to_point(layout, x, y),
-            EditIntent::WordAt { x, y } => Selection::word_from_point(layout, x, y),
+            EditIntent::PointerDown(at) => Selection::from_point(layout, at.x.get(), at.y.get()),
+            EditIntent::PointerDrag(at) => held.extend_to_point(layout, at.x.get(), at.y.get()),
+            EditIntent::WordAt(at) => Selection::word_from_point(layout, at.x.get(), at.y.get()),
             _ => return,
         };
         if matches!(intent, EditIntent::Up { .. } | EditIntent::Down { .. }) {
@@ -821,9 +815,9 @@ fn reads_geometry(intent: &EditIntent) -> bool {
             | EditIntent::Down { .. }
             | EditIntent::LineStart { .. }
             | EditIntent::LineEnd { .. }
-            | EditIntent::PointerDown { .. }
-            | EditIntent::PointerDrag { .. }
-            | EditIntent::WordAt { .. }
+            | EditIntent::PointerDown(_)
+            | EditIntent::PointerDrag(_)
+            | EditIntent::WordAt(_)
     )
 }
 
@@ -876,6 +870,10 @@ fn rect_path(r: Rect) -> BezPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn doc_point(x: f32, y: f32) -> DocPoint {
+        DocPoint::new(ambre_core::DocPx::new(x), ambre_core::DocPx::new(y))
+    }
 
     fn style() -> TextEditorStyle {
         TextEditorStyle {
@@ -1176,7 +1174,7 @@ mod tests {
             "End read the plain line"
         );
         let y = (sixteenth.y0 + sixteenth.y1) / 2.0;
-        ed.point_down(sixteenth.x0 as f32, y as f32);
+        ed.point_down(doc_point(sixteenth.x0 as f32, y as f32));
         ed.flush(&mut fcx, 1000.0, 1.0);
         assert_eq!(
             ed.caret().map(ByteOffset::get),
@@ -1210,7 +1208,7 @@ mod tests {
             "the zoomed indent moves the caret"
         );
         let y = (end.y0 + end.y1) / 2.0;
-        ed.point_down(25.0, y as f32);
+        ed.point_down(doc_point(25.0, y as f32));
         ed.flush(&mut fcx, 1000.0, 2.0);
         assert_eq!(
             ed.caret(),

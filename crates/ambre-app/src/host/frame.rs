@@ -57,41 +57,29 @@ pub(crate) fn send_faces(
 /// [`remap_for_child`] with the board's mapping supplied, so the rewrite is
 /// tested without a live view.
 fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Option<InputEvent> {
-    let map = |x: f64, y: f64| to_child(Point::new(x, y)).map(|p| (p.x, p.y));
+    let map = |at: &ViewPoint| {
+        to_child(Point::new(f64::from(at.x.get()), f64::from(at.y.get())))
+            .map(|p| ViewPoint::new(ViewPx::new(p.x as f32), ViewPx::new(p.y as f32)))
+    };
     Some(match ev {
         InputEvent::PointerDown {
-            x,
-            y,
+            at,
             button,
             shift,
             ctrl,
-        } => {
-            let (x, y) = map(*x, *y)?;
-            InputEvent::PointerDown {
-                x,
-                y,
-                button: *button,
-                shift: *shift,
-                ctrl: *ctrl,
-            }
-        }
-        InputEvent::PointerMove { x, y } => {
-            let (x, y) = map(*x, *y)?;
-            InputEvent::PointerMove { x, y }
-        }
-        InputEvent::PointerUp { x, y, button, ctrl } => {
-            let (x, y) = map(*x, *y)?;
-            InputEvent::PointerUp {
-                x,
-                y,
-                button: *button,
-                ctrl: *ctrl,
-            }
-        }
-        InputEvent::DoubleClick { x, y } => {
-            let (x, y) = map(*x, *y)?;
-            InputEvent::DoubleClick { x, y }
-        }
+        } => InputEvent::PointerDown {
+            at: map(at)?,
+            button: *button,
+            shift: *shift,
+            ctrl: *ctrl,
+        },
+        InputEvent::PointerMove { at } => InputEvent::PointerMove { at: map(at)? },
+        InputEvent::PointerUp { at, button, ctrl } => InputEvent::PointerUp {
+            at: map(at)?,
+            button: *button,
+            ctrl: *ctrl,
+        },
+        InputEvent::DoubleClick { at } => InputEvent::DoubleClick { at: map(at)? },
         // Non-positional events carry no coordinates to rewrite.
         other => other.clone(),
     })
@@ -386,8 +374,8 @@ impl FrameHost {
 
     /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
     /// takes it (`PROSE-UI-204`); answers whether it did.
-    pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
-        self.view.drop_text(x, y, text)
+    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
+        self.view.drop_text(at, text)
     }
 
     /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
@@ -395,11 +383,10 @@ impl FrameHost {
     pub fn touch(
         &mut self,
         phase: TouchPhase,
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         now_ms: ambre_core::PageTime,
     ) -> bool {
-        self.view.touch(phase, x, y, now_ms)
+        self.view.touch(phase, at, now_ms)
     }
 
     /// Whether a consumed press captures the pointer, so a drag keeps its
@@ -745,21 +732,31 @@ mod tests {
     fn pointers() -> Vec<InputEvent> {
         vec![
             InputEvent::PointerDown {
-                x: 5.0,
-                y: 6.0,
+                at: pointer(5.0, 6.0),
                 button: ambre_canvas::PointerButton::Primary,
                 shift: false,
                 ctrl: false,
             },
-            InputEvent::PointerMove { x: 5.0, y: 6.0 },
+            InputEvent::PointerMove {
+                at: pointer(5.0, 6.0),
+            },
             InputEvent::PointerUp {
-                x: 5.0,
-                y: 6.0,
+                at: pointer(5.0, 6.0),
                 button: ambre_canvas::PointerButton::Primary,
                 ctrl: false,
             },
-            InputEvent::DoubleClick { x: 5.0, y: 6.0 },
+            InputEvent::DoubleClick {
+                at: pointer(5.0, 6.0),
+            },
         ]
+    }
+
+    /// A pointer at canvas `(x, y)`, as the host hands it over.
+    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+        ambre_core::ViewPoint::new(
+            ambre_core::ViewPx::new(x as f32),
+            ambre_core::ViewPx::new(y as f32),
+        )
     }
 
     /// `TOILE-UI-328`: a pointer event the board cannot map into the child is
@@ -773,10 +770,13 @@ mod tests {
             );
         }
         // And a mappable one arrives in the child's space.
-        let moved = remap_with(&InputEvent::PointerMove { x: 5.0, y: 6.0 }, |p| {
-            Some(Point::new(p.x - 5.0, p.y - 6.0))
-        });
-        assert!(matches!(moved, Some(InputEvent::PointerMove { x, y }) if x == 0.0 && y == 0.0));
+        let moved = remap_with(
+            &InputEvent::PointerMove {
+                at: pointer(5.0, 6.0),
+            },
+            |p| Some(Point::new(p.x - 5.0, p.y - 6.0)),
+        );
+        assert!(matches!(moved, Some(InputEvent::PointerMove { at }) if at == pointer(0.0, 0.0)));
     }
 
     /// A key, a character, a composition step and a wheel reach

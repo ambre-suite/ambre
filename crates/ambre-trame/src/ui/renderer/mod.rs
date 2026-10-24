@@ -170,6 +170,13 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+        ambre_core::ViewPoint::new(
+            ambre_core::ViewPx::new(x as f32),
+            ambre_core::ViewPx::new(y as f32),
+        )
+    }
     // Header strip metrics: only the tests still reference the raw constants
     // (production code goes through `state.header_w()` / `header_h()`).
     use super::grid::{HEADER_HEIGHT, HEADER_WIDTH};
@@ -239,7 +246,10 @@ mod tests {
                     assert!((a - b).abs() < 1e-9, "({row}, {col}): hit {a} drawn {b}");
                 }
                 let centre = drawn.center();
-                assert_eq!(state.cell_at(centre.x, centre.y), Some(at(row, col)));
+                assert_eq!(
+                    state.cell_at(pointer(centre.x, centre.y)),
+                    Some(at(row, col))
+                );
                 checked += 1;
             }
         }

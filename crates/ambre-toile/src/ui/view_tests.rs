@@ -11,6 +11,14 @@ use ambre_bus::conduit::Receiver;
 use ambre_core::Rgba;
 use kurbo::Rect;
 
+/// A pointer at screen `(x, y)`, as the canvas hands it over.
+fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+    ambre_core::ViewPoint::new(
+        ambre_core::ViewPx::new(x as f32),
+        ambre_core::ViewPx::new(y as f32),
+    )
+}
+
 /// One board view and the far ends of its two channels.
 struct Rig {
     view: ToileView,
@@ -106,8 +114,7 @@ impl Rig {
 
     fn press(&mut self, (x, y): (f64, f64)) {
         self.input(InputEvent::PointerDown {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
@@ -116,8 +123,7 @@ impl Rig {
 
     fn release(&mut self, (x, y): (f64, f64)) {
         self.input(InputEvent::PointerUp {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             ctrl: false,
         });
@@ -135,13 +141,15 @@ impl Rig {
         let from = self.screen(from.0, from.1);
         let to = self.screen(to.0, to.1);
         self.press(from);
-        self.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+        self.input(InputEvent::PointerMove {
+            at: pointer(to.0, to.1),
+        });
         self.release(to);
     }
 
     fn double_click(&mut self, x: f64, y: f64) {
         let (x, y) = self.screen(x, y);
-        self.input(InputEvent::DoubleClick { x, y });
+        self.input(InputEvent::DoubleClick { at: pointer(x, y) });
     }
 
     /// Deliver a Logic-thread answer the way the host does: queued on the
@@ -1128,7 +1136,9 @@ fn drag(rig: &mut Rig, from: (f64, f64), to: (f64, f64)) {
     let from = rig.screen(from.0, from.1);
     let to = rig.screen(to.0, to.1);
     rig.press(from);
-    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    rig.input(InputEvent::PointerMove {
+        at: pointer(to.0, to.1),
+    });
     rig.release(to);
 }
 
@@ -1156,7 +1166,9 @@ fn a_connector_drag_writes_only_its_create() {
     let from = rig.screen(190.0, 60.0);
     let to = rig.screen(320.0, 60.0);
     rig.press(from);
-    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    rig.input(InputEvent::PointerMove {
+        at: pointer(to.0, to.1),
+    });
     assert!(rig.sent().is_empty(), "the preview is local");
     rig.release(to);
     assert!(matches!(
@@ -1312,7 +1324,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     let mut seen = Vec::new();
     for i in 1..4 {
         let (x, y) = rig.screen(i as f64 * 10.0, 0.0);
-        rig.input(InputEvent::PointerMove { x, y });
+        rig.input(InputEvent::PointerMove { at: pointer(x, y) });
         rig.view.plan_repaint(ambre_bus::PageTime(t), false);
         t += 16.0;
         seen.extend(live_strokes(&rig.sent()));
@@ -1757,34 +1769,34 @@ fn a_finger_pans_only_the_empty_board() {
     let empty = rig.screen(900.0, 600.0);
     assert!(
         rig.view
-            .touch_down(empty.0, empty.1, ambre_bus::PageTime(0.0))
+            .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(0.0))
     );
     assert_eq!(rig.view.finger, Some(FingerRole::Pans));
     let centre = rig.view.cam.center;
     rig.view
-        .touch_move(empty.0 - 60.0, empty.1, ambre_bus::PageTime(16.0));
+        .touch_move(pointer(empty.0 - 60.0, empty.1), ambre_bus::PageTime(16.0));
     rig.view
-        .touch_move(empty.0 - 120.0, empty.1, ambre_bus::PageTime(32.0));
+        .touch_move(pointer(empty.0 - 120.0, empty.1), ambre_bus::PageTime(32.0));
     assert!(rig.view.cam.center.x > centre.x, "the finger pans");
     rig.view.touch_cancel();
 
     let on_a = rig.screen(50.0, 50.0);
     rig.view
-        .touch_down(on_a.0, on_a.1, ambre_bus::PageTime(100.0));
+        .touch_down(pointer(on_a.0, on_a.1), ambre_bus::PageTime(100.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
         "an element is grabbed"
     );
     rig.view
-        .touch_up(on_a.0, on_a.1, ambre_bus::PageTime(110.0));
+        .touch_up(pointer(on_a.0, on_a.1), ambre_bus::PageTime(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
 
     let (x0, y0) = rig.screen(A.x0, A.y0);
     let (x1, y1) = rig.screen(A.x1, A.y1);
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
     rig.view
-        .touch_down(knob.x, knob.y, ambre_bus::PageTime(200.0));
+        .touch_down(pointer(knob.x, knob.y), ambre_bus::PageTime(200.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
@@ -1794,7 +1806,7 @@ fn a_finger_pans_only_the_empty_board() {
 
     rig.view.set_tool(Tool::Pen);
     rig.view
-        .touch_down(empty.0, empty.1, ambre_bus::PageTime(300.0));
+        .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(300.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
@@ -1812,8 +1824,7 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
         rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
         rig.press(rig.screen(50.0, 50.0));
         rig.input(InputEvent::PointerMove {
-            x: 1195.0,
-            y: 400.0,
+            at: pointer(1195.0, 400.0),
         });
         rig.view.plan_repaint(ambre_bus::PageTime(1000.0), false);
         let x = rig.view.cam.center.x;
@@ -1918,7 +1929,7 @@ fn a_frame_repaints_only_what_changed() {
     // A move paints the element at its override, in the content pass.
     rig.press(rig.screen(400.0, 50.0));
     let (x, y) = rig.screen(430.0, 80.0);
-    rig.input(InputEvent::PointerMove { x, y });
+    rig.input(InputEvent::PointerMove { at: pointer(x, y) });
     assert_eq!(plan(&mut rig), (true, true), "a move is content");
 }
 
@@ -1939,7 +1950,7 @@ fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
 
     rig.press(rig.screen(50.0, 50.0));
     let (x, y) = rig.screen(80.0, 70.0);
-    rig.input(InputEvent::PointerMove { x, y });
+    rig.input(InputEvent::PointerMove { at: pointer(x, y) });
     for _ in 0..3 {
         assert!(plan(&mut rig).1, "the gesture keeps the overlay live");
     }
@@ -2003,15 +2014,13 @@ fn linked_to_a_frame() -> Rig {
 fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
     rig.input(InputEvent::PointerDown {
-        x,
-        y,
+        at: pointer(x, y),
         button: PointerButton::Primary,
         shift: false,
         ctrl: true,
     });
     rig.input(InputEvent::PointerUp {
-        x,
-        y,
+        at: pointer(x, y),
         button: PointerButton::Primary,
         ctrl: true,
     });
@@ -2125,15 +2134,13 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
 fn right_click(rig: &mut Rig, x: f64, y: f64) {
     let (x, y) = rig.screen(x, y);
     rig.input(InputEvent::PointerDown {
-        x,
-        y,
+        at: pointer(x, y),
         button: PointerButton::Secondary,
         shift: false,
         ctrl: false,
     });
     rig.input(InputEvent::PointerUp {
-        x,
-        y,
+        at: pointer(x, y),
         button: PointerButton::Secondary,
         ctrl: false,
     });
@@ -2393,7 +2400,9 @@ fn the_bar_hides_during_a_move() {
     assert!(rig.view.float_bar_at((0.0, 0.0)).is_some(), "the bar shows");
     let (from, to) = (rig.screen(50.0, 50.0), rig.screen(90.0, 70.0));
     rig.press(from);
-    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    rig.input(InputEvent::PointerMove {
+        at: pointer(to.0, to.1),
+    });
     assert!(
         rig.view.float_bar_at((0.0, 0.0)).is_none(),
         "the bar follows the drag"
@@ -2693,7 +2702,7 @@ fn a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke() {
     rig.view.set_tool(Tool::Draw);
     rig.press(rig.screen(500.0, 500.0));
     let (x, y) = rig.screen(530.0, 500.0);
-    rig.input(InputEvent::PointerMove { x, y });
+    rig.input(InputEvent::PointerMove { at: pointer(x, y) });
     rig.frame();
     let samples: Vec<PresencePayload> = rig
         .sent()
@@ -2919,11 +2928,10 @@ fn a_busy_board_takes_no_input() {
     let at = rig.screen(50.0, 50.0);
     assert!(
         rig.input(InputEvent::PointerDown {
-            x: at.0,
-            y: at.1,
+            at: pointer(at.0, at.1),
             button: PointerButton::Primary,
             shift: false,
-            ctrl: false,
+            ctrl: false
         }),
         "the refusal consumes the event"
     );

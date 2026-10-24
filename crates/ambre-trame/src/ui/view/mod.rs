@@ -35,6 +35,15 @@ use super::renderer::{self, DrawStats};
 use crate::render::{CommitDirection, FormulaAction, TextPass};
 use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
 
+/// The grid's logical `point` as a canvas point. The grid walks its
+/// geometry in f64; the canvas reads the pointer in f32.
+fn view_point(point: ambre_draw::Point) -> ambre_core::ViewPoint {
+    ambre_core::ViewPoint::new(
+        ambre_core::ViewPx::new(point.x as f32),
+        ambre_core::ViewPx::new(point.y as f32),
+    )
+}
+
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
 
@@ -436,7 +445,7 @@ pub struct TrameView {
     /// it (`scroll.rs`).
     scroll: scroll::GridScroll,
     /// Where a held selection or fill drag last pointed.
-    drag_point: Option<(f64, f64)>,
+    drag_point: Option<ambre_core::ViewPoint>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste

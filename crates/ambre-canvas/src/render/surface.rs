@@ -6,6 +6,7 @@
 // ============================================================================
 
 use super::*;
+use crate::density::DevicePixelRatio;
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Point, Rect,
     Stroke,
@@ -32,8 +33,8 @@ const PATH_TOLERANCE_PX: f64 = 0.15;
 /// (`CANVAS-074`). The
 /// atlas keys a raster by this size. A density change therefore never draws a
 /// raster made for the previous screen (`CANVAS-034`).
-fn raster_size(font_size: f32, scale: f64, density: f32) -> f32 {
-    (f64::from(font_size) * scale) as f32 * density
+fn raster_size(font_size: f32, scale: f64, density: DevicePixelRatio) -> f32 {
+    (f64::from(font_size) * scale) as f32 * density.get() as f32
 }
 
 /// A transform's linear part split into its scale and the rest. The scale is
@@ -62,7 +63,8 @@ fn split_linear(t: Affine) -> Option<(f64, Affine)> {
 /// A glyph bitmap's logical box, as `(left bearing, top bearing, width,
 /// height)`. The bitmap has one texel per device pixel. So each is divided by
 /// the density and the glyph covers the same logical area on every screen.
-fn glyph_box(slot: &AtlasSlot, density: f32) -> (f32, f32, f32, f32) {
+fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> (f32, f32, f32, f32) {
+    let density = density.get() as f32;
     (
         slot.bearing_left as f32 / density,
         slot.bearing_top as f32 / density,
@@ -105,7 +107,7 @@ struct GlyphPlacement {
     /// The run's linear part when it is rotated; `None` draws axis-aligned.
     linear: Option<Affine>,
     /// Device pixels per logical pixel.
-    density: f32,
+    density: DevicePixelRatio,
     /// The active clip, which trims an axis-aligned glyph.
     clip: Option<Rect>,
     /// The run's colour, which tints a mask glyph.
@@ -217,7 +219,8 @@ impl<'r> WgpuSurface<'r> {
 
     /// The flattening tolerance in model units under `t`.
     fn tolerance(&self, t: Affine) -> f32 {
-        let scale = affine_scale(t) * f64::from(self.renderer.density());
+        // The ratio narrowed to f32 as a glyph reads it, as it always was.
+        let scale = affine_scale(t) * f64::from(self.renderer.density().get() as f32);
         (PATH_TOLERANCE_PX / scale.max(1e-6)) as f32
     }
 
@@ -315,14 +318,8 @@ impl DrawSurface for WgpuSurface<'_> {
                 y1 = y1.clamp(clip.y0, clip.y1);
             }
         }
-        self.renderer.push_line(
-            x0 as f32,
-            y0 as f32,
-            x1 as f32,
-            y1 as f32,
-            color,
-            width as f32,
-        );
+        self.renderer
+            .push_line(Line::new((x0, y0), (x1, y1)), color, width as f32);
     }
 
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
@@ -624,6 +621,10 @@ fn line_join(join: kurbo::Join) -> LineJoin {
 mod tests {
     use super::*;
 
+    fn ratio(r: f64) -> DevicePixelRatio {
+        DevicePixelRatio::new(r).expect("a positive density")
+    }
+
     /// The area a mesh covers, summed over its triangles, after checking
     /// every index names a vertex.
     fn area(mesh: &Mesh) -> f64 {
@@ -674,7 +675,7 @@ mod tests {
         let at = |linear| GlyphPlacement {
             origin: Point::new(0.0, 10.0),
             linear,
-            density: 1.0,
+            density: DevicePixelRatio::ONE,
             clip: None,
             color: red,
         };
@@ -697,7 +698,7 @@ mod tests {
         let at = |x| GlyphPlacement {
             origin: Point::new(x, 10.0),
             linear: None,
-            density: 1.0,
+            density: DevicePixelRatio::ONE,
             clip: Some(Rect::new(0.0, 0.0, 15.0, 20.0)),
             color: Color::BLACK,
         };
@@ -759,14 +760,14 @@ mod tests {
     /// stretched over twice its texels on a dense screen.
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
-        assert_eq!(raster_size(14.0, 1.0, 2.0), 28.0);
+        assert_eq!(raster_size(14.0, 1.0, ratio(2.0)), 28.0);
         // A bitmap of 20 x 30 device pixels at density 2.
         assert_eq!(
-            glyph_box(&slot(2, 24, 20, 30), 2.0),
+            glyph_box(&slot(2, 24, 20, 30), ratio(2.0)),
             (1.0, 12.0, 10.0, 15.0)
         );
         assert_eq!(
-            glyph_box(&slot(2, 24, 20, 30), 1.0),
+            glyph_box(&slot(2, 24, 20, 30), DevicePixelRatio::ONE),
             (2.0, 24.0, 20.0, 30.0)
         );
     }
@@ -777,7 +778,7 @@ mod tests {
     #[test]
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::GlyphKey;
-        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, 1.0, density));
+        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, 1.0, ratio(density)));
         assert_ne!(key(1.0), key(2.0));
         assert_ne!(key(1.25), key(1.5));
         assert_eq!(key(2.0), key(2.0));
@@ -788,8 +789,8 @@ mod tests {
     /// the zoom would apply twice.
     #[test]
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
-        assert_eq!(raster_size(14.0, 2.0, 1.0), 28.0);
-        assert_eq!(raster_size(14.0, 2.0, 2.0), 56.0);
+        assert_eq!(raster_size(14.0, 2.0, DevicePixelRatio::ONE), 28.0);
+        assert_eq!(raster_size(14.0, 2.0, ratio(2.0)), 56.0);
 
         let (scale, unit) =
             split_linear(Affine::translate((5.0, 7.0)) * Affine::scale(3.0) * Affine::rotate(0.5))

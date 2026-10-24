@@ -17,14 +17,12 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// A point in CSS pixels, relative to the canvas content cell's top-left, that
-/// the chrome can glue floating DOM UI to. Conventionally the horizontal centre
-/// and top edge of the selection, so a toolbar centres above it.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Anchor {
-    pub x: f64,
-    pub y: f64,
-}
+use ambre_core::ViewPoint;
+
+/// A point relative to the canvas content cell's top-left, that the chrome
+/// can glue floating DOM UI to. Conventionally the horizontal centre and top
+/// edge of the selection, so a toolbar centres above it.
+pub type Anchor = ViewPoint;
 
 /// One-slot signal: the view writes the current selection anchor (or `None` to
 /// hide), the chrome reads it from its per-frame pump. Cheap to clone (shared

@@ -12,6 +12,14 @@ use crate::test_support::{at, rect, span};
 use ambre_bus::conduit::Receiver;
 use ambre_draw::testing::RecordingSurface;
 
+/// A pointer at logical `(x, y)`, as the canvas hands it over.
+fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
+    ambre_core::ViewPoint::new(
+        ambre_core::ViewPx::new(x as f32),
+        ambre_core::ViewPx::new(y as f32),
+    )
+}
+
 const COL_0: Col = Col::new(0);
 const COL_1: Col = Col::new(1);
 const COL_2: Col = Col::new(2);
@@ -460,15 +468,13 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
         .expect("D4 is in view");
     let point = (x + 1.0, y + h / 2.0);
     rig.view.handle_input(&InputEvent::PointerDown {
-        x: point.0,
-        y: point.1,
+        at: pointer(point.0, point.1),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
     rig.view.handle_input(&InputEvent::PointerUp {
-        x: point.0,
-        y: point.1,
+        at: pointer(point.0, point.1),
         button: PointerButton::Primary,
         ctrl: false,
     });
@@ -870,15 +876,13 @@ impl Rig {
     /// Press and release the primary button at `(x, y)`.
     fn click(&mut self, x: f64, y: f64) {
         self.view.handle_input(&InputEvent::PointerDown {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             ctrl: false,
         });
@@ -903,7 +907,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
     // The boundary between B and C, in the upper half of the strip.
     let x = rig.col_edge(1);
     assert_eq!(
-        rig.view.state.header_hit(x, 2.0),
+        rig.view.state.header_hit(pointer(x, 2.0)),
         Some(crate::ui::grid::HeaderHit::ColInsert(Col::new(2)))
     );
     rig.click(x, 2.0);
@@ -923,7 +927,7 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
     // The row strip: the boundary under row 3, in the left half.
     let y = rig.view.state.row_y(Row::new(3)) + rig.view.state.row_height_of(Row::new(3));
     assert_eq!(
-        rig.view.state.header_hit(2.0, y),
+        rig.view.state.header_hit(pointer(2.0, y)),
         Some(crate::ui::grid::HeaderHit::RowInsert(Row::new(4)))
     );
     rig.click(2.0, y);
@@ -967,24 +971,23 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
         let edge = rig.col_edge(1);
         let y = rig.view.state.header_h() * 0.8;
         assert_eq!(
-            rig.view.state.header_hit(edge, y),
+            rig.view.state.header_hit(pointer(edge, y)),
             Some(crate::ui::grid::HeaderHit::ColBorder(Col::new(1)))
         );
         let c_before = rig.view.state.col_x(Col::new(2));
         rig.view.handle_input(&InputEvent::PointerDown {
-            x: edge,
-            y,
+            at: pointer(edge, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
         // 200 base pixels, drawn at this zoom.
         let target = rig.view.state.col_x(Col::new(1)) + 200.0 * zoom;
-        rig.view
-            .handle_input(&InputEvent::PointerMove { x: target, y });
+        rig.view.handle_input(&InputEvent::PointerMove {
+            at: pointer(target, y),
+        });
         rig.view.handle_input(&InputEvent::PointerUp {
-            x: target,
-            y,
+            at: pointer(target, y),
             button: PointerButton::Primary,
             ctrl: false,
         });
@@ -1026,10 +1029,9 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     rig.sent();
     let edge = rig.col_edge(0);
     let y = rig.view.state.header_h() * 0.8;
-    assert!(
-        rig.view
-            .handle_input(&InputEvent::DoubleClick { x: edge, y })
-    );
+    assert!(rig.view.handle_input(&InputEvent::DoubleClick {
+        at: pointer(edge, y)
+    }));
     rig.frame();
     let asked = rig.sent();
     assert!(
@@ -1097,8 +1099,7 @@ fn a_merged_fill_previews_whole_blocks() {
     rig.sent();
     let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
     rig.view.handle_input(&InputEvent::PointerDown {
-        x: hx + w / 2.0,
-        y: hy + h / 2.0,
+        at: pointer(hx + w / 2.0, hy + h / 2.0),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,
@@ -1115,7 +1116,8 @@ fn a_merged_fill_previews_whole_blocks() {
     // block that holds it.
     for (row, last) in [(2, 3), (3, 3), (4, 5)] {
         let (x, y) = mid(&rig, row);
-        rig.view.handle_input(&InputEvent::PointerMove { x, y });
+        rig.view
+            .handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
         assert_eq!(
             rig.view.state.fill_preview,
             Some(rect(0, 0, last, 0)),
@@ -1208,15 +1210,15 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
         .expect("B2 is in view");
     let (px, py) = (x + w / 2.0, y + h / 2.0);
     rig.view.handle_input(&InputEvent::PointerDown {
-        x: px,
-        y: py,
+        at: pointer(px, py),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
     let below = rig.view.state.canvas_height + 40.0;
-    rig.view
-        .handle_input(&InputEvent::PointerMove { x: px, y: below });
+    rig.view.handle_input(&InputEvent::PointerMove {
+        at: pointer(px, below),
+    });
     for step in 0..=20 {
         rig.clock.set(f64::from(step) * 16.0);
         rig.frame();
@@ -1225,7 +1227,7 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
     let CellPos { row, col: _ } = rig
         .view
         .state
-        .drag_cell_at(px, below)
+        .drag_cell_at(pointer(px, below))
         .expect("an edge cell");
     assert_eq!(
         rig.view.state.selection.anchor,
@@ -1242,15 +1244,13 @@ impl Rig {
     /// Press and release the secondary button at `(x, y)`.
     fn right_click(&mut self, x: f64, y: f64) {
         self.view.handle_input(&InputEvent::PointerDown {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Secondary,
             shift: false,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Secondary,
             ctrl: false,
         });
@@ -1259,15 +1259,13 @@ impl Rig {
     /// Press and release the primary button at `(x, y)` with Shift held.
     fn shift_click(&mut self, x: f64, y: f64) {
         self.view.handle_input(&InputEvent::PointerDown {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             shift: true,
             ctrl: false,
         });
         self.view.handle_input(&InputEvent::PointerUp {
-            x,
-            y,
+            at: pointer(x, y),
             button: PointerButton::Primary,
             ctrl: false,
         });
@@ -1492,18 +1490,17 @@ impl Rig {
         let edge = self.col_edge(1);
         let y = self.view.state.header_h() * 0.8;
         self.view.handle_input(&InputEvent::PointerDown {
-            x: edge,
-            y,
+            at: pointer(edge, y),
             button: PointerButton::Primary,
             shift: false,
             ctrl: false,
         });
         let target = self.view.state.col_x(Col::new(1)) + width;
-        self.view
-            .handle_input(&InputEvent::PointerMove { x: target, y });
+        self.view.handle_input(&InputEvent::PointerMove {
+            at: pointer(target, y),
+        });
         self.view.handle_input(&InputEvent::PointerUp {
-            x: target,
-            y,
+            at: pointer(target, y),
             button: PointerButton::Primary,
             ctrl: false,
         });
@@ -1577,19 +1574,18 @@ fn a_refused_fill_leaves_the_selection() {
     rig.sent();
     let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
     rig.view.handle_input(&InputEvent::PointerDown {
-        x: hx + w / 2.0,
-        y: hy + h / 2.0,
+        at: pointer(hx + w / 2.0, hy + h / 2.0),
         button: PointerButton::Primary,
         shift: false,
         ctrl: false,
     });
     let (x, y) = rig.cell_mid(3, 0);
-    rig.view.handle_input(&InputEvent::PointerMove { x, y });
+    rig.view
+        .handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
     assert_eq!(rig.view.state.fill_preview, Some(rect(0, 0, 3, 0)));
     rig.lose_logic();
     rig.view.handle_input(&InputEvent::PointerUp {
-        x,
-        y,
+        at: pointer(x, y),
         button: PointerButton::Primary,
         ctrl: false,
     });

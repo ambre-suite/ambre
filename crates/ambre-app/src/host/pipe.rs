@@ -846,7 +846,13 @@ mod tests {
     fn the_pipe_moves_by_a_transform_to_the_point_it_is_given() {
         let rig = Rig::new();
         load_pipe_rules(&rig.document);
-        rig.pipe.set_caret(40.0, 25.0, 18.0);
+        rig.pipe.set_caret(
+            ambre_core::ViewPoint::new(
+                ambre_core::ViewPx::new(40.0),
+                ambre_core::ViewPx::new(25.0),
+            ),
+            ambre_core::ViewPx::new(18.0),
+        );
         let style = rig.ta().style();
         assert_eq!(
             style.get_property_value("transform").ok().as_deref(),

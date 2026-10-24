@@ -153,7 +153,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
     let CellPos {
         row: hit_row,
         col: _,
-    } = state.cell_at(r4.0 + 1.0, r4.1 + 1.0).expect("hit");
+    } = state.cell_at(pointer(r4.0 + 1.0, r4.1 + 1.0)).expect("hit");
     assert_eq!(hit_row, Row::new(4));
 
     // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.
@@ -373,15 +373,15 @@ fn header_strip_starts_at_top_of_canvas() {
 
     // A point inside the header strip is not a cell.
     assert_eq!(
-        state.cell_at(100.0, super::super::HEADER_HEIGHT - 1.0),
+        state.cell_at(pointer(100.0, super::super::HEADER_HEIGHT - 1.0)),
         None
     );
     // The first cell starts just below the header strip.
     assert_eq!(
-        state.cell_at(
+        state.cell_at(pointer(
             super::super::HEADER_WIDTH + 1.0,
             super::super::HEADER_HEIGHT + 1.0
-        ),
+        )),
         Some(at(0, 0)),
     );
     // (0,0)'s pixel rect sits at the cell-area top-left.
@@ -416,7 +416,7 @@ fn scroll_requests_every_narrow_column_on_screen() {
             .insert(Row::new(row), ambre_core::DocPx::new(8.0));
     }
     let last_col_on_screen = state
-        .col_at_x(799.0)
+        .col_at_x(view_px(799.0))
         .expect("a column under the right edge");
     let last_row_on_screen = (0..200u32)
         .take_while(|&r| state.row_y(Row::new(r)) < state.grid_bottom())
