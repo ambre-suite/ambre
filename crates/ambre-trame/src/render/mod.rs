@@ -44,7 +44,7 @@ pub const BODY_SIZE: DocPx = DocPx::new(12.0);
 /// carries points, so an explicit size goes through [`FontSize::to_px`] as in
 /// every other view.
 #[must_use]
-pub fn cell_font_px(size: Option<FontSize>) -> DocPx {
+pub fn cell_font_size(size: Option<FontSize>) -> DocPx {
     size.map_or(BODY_SIZE, FontSize::to_px)
 }
 /// Header label font size (column letters + row numbers), before the zoom.

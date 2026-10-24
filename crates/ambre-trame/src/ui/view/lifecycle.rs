@@ -94,7 +94,7 @@ impl TrameView {
             edit_dirty: false,
             caret_on: true,
             caret_drawn: None,
-            last_blink_ms: ambre_bus::PageTime(0.0),
+            last_blink: ambre_bus::PageTime(0.0),
             pending_input_mark: None,
             clock,
             text_pass: TextPass::WithText,
@@ -293,8 +293,8 @@ impl TrameView {
     /// probe.
     pub(crate) fn reset_blink(&mut self) {
         self.caret_on = true;
-        let now = self.clock.now_ms();
-        self.last_blink_ms = now;
+        let now = self.clock.now();
+        self.last_blink = now;
         self.edit_dirty = true;
         // Arm the latency probe: timestamp now (~keydown), and drop a
         // `performance.mark` so the measure shows in the browser Performance panel.

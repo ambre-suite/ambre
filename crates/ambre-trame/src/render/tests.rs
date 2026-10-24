@@ -650,9 +650,9 @@ fn a_cell_size_in_points_lays_out_as_prose_lays_it_out() {
     // The bus carries points. Prose lays twelve points out at sixteen pixels
     // through `FontSize::to_px`, and a cell must not lay out twelve pixels.
     let twelve = ambre_core::FontSize::from_whole_points(12);
-    assert_eq!(cell_font_px(Some(twelve)), twelve.to_px());
-    assert_eq!(cell_font_px(Some(twelve)), DocPx::new(16.0));
+    assert_eq!(cell_font_size(Some(twelve)), twelve.to_px());
+    assert_eq!(cell_font_size(Some(twelve)), DocPx::new(16.0));
     // A cell with no size keeps the body default, which is its points laid out.
-    assert_eq!(cell_font_px(None), BODY_SIZE);
+    assert_eq!(cell_font_size(None), BODY_SIZE);
     assert_eq!(BODY_FONT.to_px(), BODY_SIZE);
 }

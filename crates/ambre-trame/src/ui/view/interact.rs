@@ -138,7 +138,7 @@ impl TrameView {
                     if at.row != r || data.text.is_empty() {
                         continue;
                     }
-                    let size = crate::render::cell_font_px(data.size);
+                    let size = crate::render::cell_font_size(data.size);
                     let lyt = text_cache.get_or_build_font(
                         font_cx,
                         &data.text,
@@ -889,7 +889,7 @@ pub(crate) fn fit_column_width(
         .iter()
         .filter(|cell| !cell.text.is_empty())
         .map(|cell| {
-            let size = crate::render::cell_font_px(cell.size);
+            let size = crate::render::cell_font_size(cell.size);
             text_cache
                 .get_or_build_font(
                     font_cx,

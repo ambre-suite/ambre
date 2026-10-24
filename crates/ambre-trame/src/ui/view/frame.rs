@@ -304,10 +304,10 @@ impl TrameView {
         // the overlay so it redraws. Costs one overlay redraw per ~530 ms; idle
         // (non-editing) frames never touch it.
         if self.editor.is_some() {
-            let now = self.clock.now_ms();
-            if now - self.last_blink_ms >= BLINK_MS {
+            let now = self.clock.now();
+            if now - self.last_blink >= BLINK_PERIOD {
                 self.caret_on = !self.caret_on;
-                self.last_blink_ms = now;
+                self.last_blink = now;
                 self.edit_dirty = true;
             }
         }
@@ -344,7 +344,7 @@ impl TrameView {
 
     pub fn plan_repaint(
         &mut self,
-        _now_ms: ambre_core::PageTime,
+        _now: ambre_core::PageTime,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
@@ -444,8 +444,8 @@ impl TrameView {
         // When the content layer is reused the renderer won't run; zero its HUD
         // sub-phase timings so they read 0 instead of stale values.
         if matches!(content, ContentRepaint::Reuse) {
-            self.draw_stats.bg_ms = ambre_core::PageMillis::ZERO;
-            self.draw_stats.cells_ms = ambre_core::PageMillis::ZERO;
+            self.draw_stats.background = ambre_core::PageMillis::ZERO;
+            self.draw_stats.cells = ambre_core::PageMillis::ZERO;
             self.draw_stats.cells_drawn = 0;
         }
 
@@ -509,15 +509,15 @@ impl TrameView {
         // with the view's sub-phase breakdown and the glyph-cache misses.
         self.perf_pub.publish(PerfSnapshot {
             fps: stats.fps,
-            frame_ms: stats.frame_ms,
-            drain_ms: stats.drain_ms,
-            draw_ms: stats.draw_ms,
-            gpu_ms: stats.gpu_ms,
-            bg_ms: self.draw_stats.bg_ms,
-            cells_ms: self.draw_stats.cells_ms,
-            hdrs_ms: self.draw_stats.hdrs_ms,
+            frame: stats.frame,
+            drain: stats.drain,
+            draw: stats.draw,
+            gpu: stats.gpu,
+            background: self.draw_stats.background,
+            cells: self.draw_stats.cells,
+            headers: self.draw_stats.headers,
             cells_drawn: self.draw_stats.cells_drawn,
-            input_lat_ms: self.draw_stats.input_latency_ms,
+            input_latency: self.draw_stats.input_latency,
             glyph_misses: text_cache.frame_misses as u32,
         });
 
@@ -550,7 +550,7 @@ impl TrameView {
             // panel; the duration also feeds the HUD (`inlat`). A 10 KB paste
             // travels the same Text path, so it is covered too.
             if let Some(t0) = self.pending_input_mark.take() {
-                self.draw_stats.input_latency_ms = self.clock.now_ms() - t0;
+                self.draw_stats.input_latency = self.clock.now() - t0;
                 performance_measure("ambre:input-to-caret", "ambre:input");
             }
         }

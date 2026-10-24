@@ -40,7 +40,7 @@ impl TestClock {
 }
 
 impl Clock for TestClock {
-    fn now_ms(&self) -> ambre_core::PageTime {
+    fn now(&self) -> ambre_core::PageTime {
         ambre_core::PageTime(self.0.get())
     }
 }
@@ -109,7 +109,7 @@ impl Rig {
     fn frame(&mut self) {
         self.view.update();
         self.view
-            .plan_repaint(self.clock.now_ms(), ambre_canvas::HudTick::Idle);
+            .plan_repaint(self.clock.now(), ambre_canvas::HudTick::Idle);
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
         let mut cache = TextCache::new();
@@ -185,10 +185,10 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
     rig.clock.set(1_000.0);
     rig.type_text("a");
     assert!(rig.view.caret_on);
-    rig.clock.set(1_000.0 + BLINK_MS.get() - 1.0);
+    rig.clock.set(1_000.0 + BLINK_PERIOD.get() - 1.0);
     rig.frame();
     assert!(rig.view.caret_on, "half a period has not passed");
-    rig.clock.set(1_000.0 + BLINK_MS.get());
+    rig.clock.set(1_000.0 + BLINK_PERIOD.get());
     rig.frame();
     assert!(!rig.view.caret_on, "half a period passed");
 }
@@ -375,7 +375,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
     rig.view.update();
     let idle = rig
         .view
-        .plan_repaint(rig.clock.now_ms(), ambre_canvas::HudTick::Idle);
+        .plan_repaint(rig.clock.now(), ambre_canvas::HudTick::Idle);
     assert!(
         matches!(idle.content, ContentRepaint::Reuse),
         "an idle frame reuses"
@@ -385,7 +385,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
     rig.view.update();
     let plan = rig
         .view
-        .plan_repaint(rig.clock.now_ms(), ambre_canvas::HudTick::Idle);
+        .plan_repaint(rig.clock.now(), ambre_canvas::HudTick::Idle);
     assert!(
         matches!(plan.content, ContentRepaint::Full),
         "{:?}",

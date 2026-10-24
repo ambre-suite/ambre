@@ -34,7 +34,7 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         delta: WheelDelta,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let px = |v: SurfacePx| CssPx::new(v.get() as f32);
@@ -45,7 +45,7 @@ impl GridScroll {
         // `KINETIC-009`).
         let step = self
             .kinetic
-            .wheel(delta.to_px(line, page), delta.mode(), now_ms);
+            .wheel(delta.to_px(line, page), delta.mode(), now);
         self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {
@@ -85,9 +85,9 @@ impl GridScroll {
     pub(crate) fn tick(
         &mut self,
         grid: &mut TrameUiState,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ScrollOutcome {
-        let Some(step) = self.kinetic.tick(now_ms) else {
+        let Some(step) = self.kinetic.tick(now) else {
             return ScrollOutcome::Idle;
         };
         self.accumulate(step);
@@ -104,9 +104,9 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ScrollOutcome {
-        let Some(step) = self.edge.tick(speed, now_ms) else {
+        let Some(step) = self.edge.tick(speed, now) else {
             return ScrollOutcome::Idle;
         };
         self.accumulate(step);
@@ -114,9 +114,9 @@ impl GridScroll {
     }
 
     /// A finger went down: it stops any motion left (`KINETIC-006`).
-    pub(crate) fn press(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
+    pub(crate) fn press(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
         self.stop();
-        self.kinetic.press(at, now_ms);
+        self.kinetic.press(at, now);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
@@ -124,9 +124,9 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         at: ViewPoint,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ScrollOutcome {
-        let Some(step) = self.kinetic.sample(at, now_ms) else {
+        let Some(step) = self.kinetic.sample(at, now) else {
             return ScrollOutcome::Idle;
         };
         self.accumulate(step);
@@ -134,8 +134,8 @@ impl GridScroll {
     }
 
     /// A finger lifted: a pan released with speed keeps moving.
-    pub(crate) fn release(&mut self, now_ms: ambre_core::PageTime) -> Release {
-        self.kinetic.release(now_ms)
+    pub(crate) fn release(&mut self, now: ambre_core::PageTime) -> Release {
+        self.kinetic.release(now)
     }
 
     /// The browser cancelled the finger: no click and no flick (`KINETIC-010`).

@@ -213,7 +213,7 @@ pub fn draw_overlay<S: DrawSurface>(
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
-    let t0 = clock.now_ms();
+    let t0 = clock.now();
 
     let layout = screen_layout(state);
 
@@ -400,7 +400,7 @@ pub fn draw_overlay<S: DrawSurface>(
         && let Some(range) = state.range_pixel_rect(rect)
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
-        let phase = (clock.now_ms().0 / 40.0) % MARCHING_PERIOD;
+        let phase = (clock.now().0 / 40.0) % MARCHING_PERIOD;
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
         dashed_h(
@@ -515,11 +515,11 @@ pub fn draw_overlay<S: DrawSurface>(
         }
         _ => {}
     }
-    let t_after_hdrs = clock.now_ms();
+    let t_after_hdrs = clock.now();
 
     // The perf HUD no longer paints here. Fps and frame timings are published
     // to the DOM status bar (`ambre_canvas::PerfPublisher`) and rendered as
     // plain text. We never shape debug glyphs on the GPU. Only the timing the
     // view feeds the snapshot is recorded.
-    stats.hdrs_ms = t_after_hdrs - t0;
+    stats.headers = t_after_hdrs - t0;
 }

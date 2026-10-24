@@ -100,17 +100,17 @@ pub fn draw_cells<S: DrawSurface>(
         None => (cell_area, palette.content_pending),
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
-        stats.bg_ms = ambre_core::PageMillis::ZERO;
-        stats.cells_ms = ambre_core::PageMillis::ZERO;
+        stats.background = ambre_core::PageMillis::ZERO;
+        stats.cells = ambre_core::PageMillis::ZERO;
         stats.cells_drawn = 0;
         return;
     }
 
-    let t0 = clock.now_ms();
+    let t0 = clock.now();
 
     // -- 1. Base fill over the strip (see `base_fill` above). -------------------
     surface.fill_rect(strip, base_fill);
-    let t_pending = clock.now_ms();
+    let t_pending = clock.now();
 
     // -- 2. The sheet's walk under the camera, over the strip's sheet region. --
     let camera = sheet_camera(state);
@@ -129,7 +129,7 @@ pub fn draw_cells<S: DrawSurface>(
     surface.push_transform(camera);
     walk.walk(&view, region, surface);
     surface.pop_transform();
-    let t_cells = clock.now_ms();
+    let t_cells = clock.now();
 
     // -- 3. UI-only layers tied to cell content (dirty veil + error marker). ---
     // These live on the persistent cells layer so they scroll with the data,
@@ -143,10 +143,10 @@ pub fn draw_cells<S: DrawSurface>(
         palette,
         rows_cols_in_strip(state, strip),
     );
-    let t_lines = clock.now_ms();
+    let t_lines = clock.now();
 
-    stats.bg_ms = (t_pending - t0) + (t_lines - t_cells);
-    stats.cells_ms = t_cells - t_pending;
+    stats.background = (t_pending - t0) + (t_lines - t_cells);
+    stats.cells = t_cells - t_pending;
     stats.cells_drawn = walk.cells_drawn;
 }
 

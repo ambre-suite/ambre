@@ -94,16 +94,16 @@ pub fn StatusBar(
                     let p = perf.get();
                     view! {
                         <div class="statusbar-perf-panel">
-                            <div>"frame " {format!("{:.1}", p.frame_ms.get())} " ms"</div>
-                            <div>"drain " {format!("{:.1}", p.drain_ms.get())}
-                                "  draw " {format!("{:.1}", p.draw_ms.get())}
-                                "  gpu " {format!("{:.1}", p.gpu_ms.get())}</div>
-                            <div>"bg " {format!("{:.2}", p.bg_ms.get())}
-                                "  cells " {format!("{:.2}", p.cells_ms.get())}
-                                "  hdrs " {format!("{:.2}", p.hdrs_ms.get())}</div>
+                            <div>"frame " {format!("{:.1}", p.frame.get())} " ms"</div>
+                            <div>"drain " {format!("{:.1}", p.drain.get())}
+                                "  draw " {format!("{:.1}", p.draw.get())}
+                                "  gpu " {format!("{:.1}", p.gpu.get())}</div>
+                            <div>"bg " {format!("{:.2}", p.background.get())}
+                                "  cells " {format!("{:.2}", p.cells.get())}
+                                "  hdrs " {format!("{:.2}", p.headers.get())}</div>
                             <div>"drawn " {p.cells_drawn.to_string()}
                                 "  miss " {p.glyph_misses.to_string()}
-                                "  inlat " {format!("{:.1}", p.input_lat_ms.get())} " ms"</div>
+                                "  inlat " {format!("{:.1}", p.input_latency.get())} " ms"</div>
                         </div>
                     }
                 }}

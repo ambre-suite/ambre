@@ -45,7 +45,7 @@ fn view_point(point: ambre_draw::Point) -> ambre_core::ViewPoint {
 }
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
-const BLINK_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
+const BLINK_PERIOD: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
 
 /// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
 /// through [`coalesce`](Self::coalesce), so the slot holds at most one request
@@ -396,14 +396,14 @@ pub struct TrameView {
     hover_cursor: GridCursor,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
     edit_dirty: bool,
-    /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
+    /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_PERIOD`, reset
     /// to `true` (solid) on any edit interaction, as platforms do.
     caret_on: bool,
     /// Where the last paint laid out the in-cell caret, in canvas pixels. The
     /// pipe sits there while a cell is edited (`CHROME-007`).
     caret_drawn: Option<ambre_draw::Rect>,
     /// The clock's time of the last blink toggle (or blink reset).
-    last_blink_ms: ambre_core::PageTime,
+    last_blink: ambre_core::PageTime,
     /// The clock's time of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn. This is the
     /// keydown->caret latency probe, against the keystroke-to-draft budget of

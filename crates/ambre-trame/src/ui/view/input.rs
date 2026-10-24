@@ -464,7 +464,7 @@ impl TrameView {
         }
         let outcome = self
             .scroll
-            .wheel(&mut self.state, delta, self.clock.now_ms());
+            .wheel(&mut self.state, delta, self.clock.now());
         self.note_scroll(outcome);
         true
     }
@@ -481,7 +481,7 @@ impl TrameView {
 
     /// Advance the kinetic motion by one frame, from `update`.
     pub(crate) fn step_momentum(&mut self) {
-        let outcome = self.scroll.tick(&mut self.state, self.clock.now_ms());
+        let outcome = self.scroll.tick(&mut self.state, self.clock.now());
         self.note_scroll(outcome);
     }
 
@@ -512,7 +512,7 @@ impl TrameView {
             .map(|at| self.state.edge_scroll_speed(at));
         let outcome = self
             .scroll
-            .edge(&mut self.state, speed, self.clock.now_ms());
+            .edge(&mut self.state, speed, self.clock.now());
         if matches!(self.note_scroll(outcome), ScrollOutcome::Moved) {
             self.follow_drag();
         }
@@ -520,20 +520,20 @@ impl TrameView {
 
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
-    pub fn touch_down(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
-        self.scroll.press(at, now_ms);
+    pub fn touch_down(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+        self.scroll.press(at, now);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
-    pub fn touch_move(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
-        let outcome = self.scroll.pan(&mut self.state, at, now_ms);
+    pub fn touch_move(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+        let outcome = self.scroll.pan(&mut self.state, at, now);
         self.note_scroll(outcome);
     }
 
     /// A finger lifted. A pan released with speed keeps moving; a tap is a
     /// click where it landed.
-    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) {
-        if let Release::Tap { at } = self.scroll.release(now_ms) {
+    pub fn touch_up(&mut self, now: ambre_core::PageTime) {
+        if let Release::Tap { at } = self.scroll.release(now) {
             for ev in [
                 InputEvent::PointerDown {
                     at,
