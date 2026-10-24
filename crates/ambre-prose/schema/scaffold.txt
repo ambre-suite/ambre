@@ -10,4 +10,4 @@
 # `SCHEMA_VERSION` and a new section below, never an edit to the section above.
 
 == v1
-dfa5754f1984ab76
+6d8b58b299d25161

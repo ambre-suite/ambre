@@ -55,8 +55,8 @@ use crate::logic::model::{
 use crate::logic::schema::{MIGRATIONS, SCHEMA_VERSION};
 
 use super::{
-    BoardKey, ConfigKey, ConnectorKey, ElementKey, Fields, MediaKey, MessageKey, Root, ThreadKey,
-    ToileState, root_map,
+    BoardKey, ConfigKey, ConnectorKey, ElementKey, MediaKey, MessageKey, Root, ThreadKey,
+    ToileState,
 };
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.

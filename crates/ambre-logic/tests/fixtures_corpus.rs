@@ -680,8 +680,12 @@ fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
     // Geometry is formatted shortest-round-trip, not rounded: a migration is not
     // supposed to move it at all.
     assert!(dump.contains("x=1"), "{dump}");
-    assert!(
-        !dump.contains("00000000000000"),
-        "an element id leaked into the dump:\n{dump}"
-    );
+    // An id is minted as `{peer:016x}_{counter:08x}`. A style register may
+    // hold a run of zero bytes, so the check names the peer, not the zeros.
+    for peer in [101_u64, 202] {
+        assert!(
+            !dump.contains(&format!("{peer:016x}_")),
+            "an element id leaked into the dump:\n{dump}"
+        );
+    }
 }

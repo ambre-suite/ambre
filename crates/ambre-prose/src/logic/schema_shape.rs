@@ -25,7 +25,7 @@ use ambre_bus::app::prose::MarkKey;
 use std::collections::BTreeSet;
 
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
+use loro::{ExportMode, LoroDoc, LoroValue, TreeID};
 
 use crate::doc;
 use crate::events::HeadingLevel;

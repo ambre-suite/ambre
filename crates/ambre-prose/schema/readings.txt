@@ -14,7 +14,7 @@
 # to the section above: a section is the record of what that version meant.
 
 == v1
-annots/*/anchor_block = "14@16115415824206179190" => on block 1
+annots/*/anchor_block = "14@7893500296005046625" => on block 1
 annots/*/anchor_end = 2 => to character 2
 annots/*/anchor_start = 1 => from character 1
 annots/*/author = "" => suggested by ""

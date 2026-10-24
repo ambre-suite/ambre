@@ -31,7 +31,7 @@ connectors/*/from = "0000000000000001_00000001" => starts at (10, 5) px
 connectors/*/from_anch = "r" => leaves by Right
 connectors/*/label = "edge" => captioned "edge"
 connectors/*/path_type = "s" => routed Straight as M10,5 L40,5
-connectors/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+connectors/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f00000000000000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font default 12 pt weight 400, ink none
 connectors/*/to = "0000000000000001_00000002" => ends at (40, 5) px
 connectors/*/to_anch = "l" => arrives by Left
 elements/*/autolayout = 00000000000000204000000000000010400000000000001040000000000000104000000000000010400000 => flows Horizontal, gap 8 px, padding [4.0, 4.0, 4.0, 4.0] px, aligned Start, sized Hug
@@ -51,8 +51,8 @@ elements/*/points = 0200000000000000000000803f0000803f0000803f0000803f => stroke
 elements/*/rot = 0 => turned 0 degrees
 elements/*/shape = "path" => kind Shape(Path)
 elements/*/shape = "rect" => kind Shape(Rect)
-elements/*/style = 0101ff95c2f70f00000000000000803f000000000a73616e732d73657269660000000090030000000000 => fill #fef08aff, stroke none 0 px, opacity 1, corner 0 px, font "sans-serif" 0 pt weight 400, ink none
-elements/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f000000000a73616e732d73657269660000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font "sans-serif" 12 pt weight 400, ink none
+elements/*/style = 0101ff95c2f70f00000000000000803f00000000000000000090030000000000 => fill #fef08aff, stroke none 0 px, opacity 1, corner 0 px, font default 0 pt weight 400, ink none
+elements/*/style = 0101ffffffff0f01ffe7cc99030000803f0000803f00000000000000404190030000000000 => fill #ffffffff, stroke #333333ff 1 px, opacity 1, corner 0 px, font default 12 pt weight 400, ink none
 elements/*/text = "hello" => shows "hello"
 elements/*/type = "doc_embed" => kind DocEmbed
 elements/*/type = "drawing" => kind Drawing

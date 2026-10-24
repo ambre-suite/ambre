@@ -42,11 +42,11 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    Fields, FilterKey, FilterRecord, MIGRATIONS, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
+    FilterKey, FilterRecord, MIGRATIONS, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
     default_sheet,
 };
 use crate::logic::styles::StyleRecord;
-use crate::model::{CellKey, Uid};
+use crate::model::Uid;
 use crate::{Col, Row};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.

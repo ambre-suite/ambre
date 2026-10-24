@@ -5,7 +5,7 @@
 //! where a key of another is expected. The spelling is the one the board
 //! stores, and a board therefore reads the same as before.
 
-use loro::{LoroDoc, LoroMap, LoroMovableList};
+use loro::{LoroDoc, LoroMap};
 
 use ambre_core::crdt::FieldKey;
 
@@ -163,12 +163,6 @@ ambre_core::crdt_names! {
 #[must_use]
 pub(crate) fn root_map(doc: &LoroDoc, root: Root) -> LoroMap {
     doc.get_map(root.as_str())
-}
-
-/// A root list of the board: `layers` or `presentation_order`.
-#[must_use]
-pub(crate) fn root_list(doc: &LoroDoc, root: Root) -> LoroMovableList {
-    doc.get_movable_list(root.as_str())
 }
 
 /// The `board` register.

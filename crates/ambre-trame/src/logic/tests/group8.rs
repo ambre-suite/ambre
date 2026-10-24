@@ -3,7 +3,6 @@
 // edit does to it (`TRAME-008`, `TRAME-171`, `TRAME-226` to `TRAME-230`).
 
 use super::*;
-use crate::logic::schema::{SheetContainer, SheetRoot};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {

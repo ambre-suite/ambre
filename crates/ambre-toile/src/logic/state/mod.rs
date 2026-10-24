@@ -85,9 +85,11 @@ use crate::logic::model::{
 use crate::logic::schema;
 use crate::logic::text_merge::Edit;
 
-pub(crate) use names::{BoardKey, ConnectorKey, ElementKey, Fields, Root, entry, root_list, root_map};
+pub(crate) use names::{BoardKey, ElementKey, Root};
 #[cfg(test)]
-pub(crate) use names::{ConfigKey, MediaKey, MessageKey, ThreadKey, board};
+pub(crate) use names::{
+    ConfigKey, ConnectorKey, Fields, MediaKey, MessageKey, ThreadKey, board, entry, root_map,
+};
 
 /// Per-document Toile engine.
 pub struct ToileState {

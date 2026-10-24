@@ -556,7 +556,11 @@ mod tests {
         assert_eq!(s.font.family, Some(FontFamily::Serif));
         StyleEdit::Font(None).apply_to(&mut s);
         assert_eq!(s.font.family, None, "the reset names no family");
-        assert_eq!(s.font.face(), &FontFamily::Sans, "and draws the default face");
+        assert_eq!(
+            s.font.face(),
+            &FontFamily::Sans,
+            "and draws the default face"
+        );
         StyleEdit::Font(Some(FontFamily::Sans)).apply_to(&mut s);
         assert_eq!(s.font.family, Some(FontFamily::Sans));
     }

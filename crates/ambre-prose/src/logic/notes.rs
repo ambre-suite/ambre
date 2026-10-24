@@ -139,10 +139,7 @@ impl ProseState {
 }
 
 /// A root paragraph marked as a note, holding `text`.
-fn write_note_block(
-    document: &loro::LoroDoc,
-    text: &str,
-) -> Result<TreeID, doc::WriteError> {
+fn write_note_block(document: &loro::LoroDoc, text: &str) -> Result<TreeID, doc::WriteError> {
     let block = doc::create_block(document, None, BlockType::Paragraph).ok_or(
         doc::WriteError::Refused(doc::RefusalCause::TreeRefusedNoteBlock),
     )?;
