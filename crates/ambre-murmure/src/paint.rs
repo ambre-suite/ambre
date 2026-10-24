@@ -36,7 +36,7 @@ const PLACEHOLDER_ASPECT: f32 = 4.0 / 3.0;
 #[derive(Clone, Copy)]
 pub struct Pictured<'a> {
     pub shelf: &'a Pictures,
-    pub now_ms: ambre_core::PageTime,
+    pub now: ambre_core::PageTime,
     /// The motion the user asks for: under reduced motion each picture
     /// shows its first frame (`MURMURE-130`).
     pub motion: crate::pictures::Motion,
@@ -45,7 +45,7 @@ pub struct Pictured<'a> {
 impl std::fmt::Debug for Pictured<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pictured")
-            .field("now_ms", &self.now_ms)
+            .field("now", &self.now)
             .field("motion", &self.motion)
             .finish_non_exhaustive()
     }
@@ -887,7 +887,7 @@ fn draw_previews<S: DrawSurface>(
             surface.stroke_rect(at, palette.header_border, 1.0);
             continue;
         };
-        let (index, next) = frame_at(picture, pictured.now_ms, pictured.motion);
+        let (index, next) = frame_at(picture, pictured.now, pictured.motion);
         let Some(frame) = picture.frames.get(index) else {
             continue;
         };
@@ -1469,7 +1469,7 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![carrying]);
         let mut shelf = Pictures::default();
-        let at = |shelf: &Pictures, now_ms, motion| {
+        let at = |shelf: &Pictures, now, motion| {
             let shown = Shown {
                 list: &list,
                 unread: None,
@@ -1479,7 +1479,7 @@ pub(crate) mod tests {
                 me: None,
                 pictures: Some(Pictured {
                     shelf,
-                    now_ms,
+                    now,
                     motion,
                 }),
             };
@@ -1505,9 +1505,9 @@ pub(crate) mod tests {
 
         shelf.begin_paint(crate::Region::Channel);
         assert!(shelf.want(&file.media_ref));
-        let frame = |delay_ms| PictureFrame {
+        let frame = |delay| PictureFrame {
             pixels: vec![0; 2 * 4],
-            delay_ms,
+            delay,
         };
         let gif = Picture {
             size: ambre_core::ImageSize::new(2, 1),

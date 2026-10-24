@@ -57,13 +57,13 @@ pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
 pub const COMPOSER_HINT: &str = "Write a message";
 
 /// The height of the field when it holds no line yet.
-const MIN_LINE_PX: ViewPx = ViewPx::new(FONT_BODY.get() + SPACE_4.get());
+const MIN_LINE_HEIGHT: ViewPx = ViewPx::new(FONT_BODY.get() + SPACE_4.get());
 
 /// The family of the composer's text, the one of the message bodies.
 const FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::Sans;
 
 /// The height of the strip that names who types, above the field.
-const TYPING_PX: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_4.get());
+const TYPING_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_4.get());
 
 /// The words beside the box under a thread's field (`MURMURE-531`).
 pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
@@ -73,10 +73,10 @@ pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
 pub const ALSO_CHORD: &str = "Alt+Enter";
 
 /// The height of the row of that box, under the field.
-pub(crate) const ALSO_PX: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
+pub(crate) const ALSO_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
 
 /// The height of the row of files over the field, while the draft has one.
-pub(crate) const FILES_PX: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
+pub(crate) const FILES_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
 
 /// What ends the chip of a file a press takes off the draft.
 const REMOVE_MARK: &str = "\u{d7}";
@@ -85,7 +85,7 @@ const REMOVE_MARK: &str = "\u{d7}";
 pub const UPLOADING: &str = "uploading";
 
 /// The side of the box.
-const BOX_PX: ViewPx = FONT_UI;
+const BOX_SIZE: ViewPx = FONT_UI;
 
 /// The caret the composer drew: its top-left and its height.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1432,13 +1432,13 @@ impl Composer {
                 ViewPx::ZERO
             }
         };
-        let most = (size.height / 2.0 - SPACE_4 * 2.0).max(MIN_LINE_PX);
-        self.band = TYPING_PX + tall.clamp(MIN_LINE_PX, most) + SPACE_4 * 2.0;
+        let most = (size.height / 2.0 - SPACE_4 * 2.0).max(MIN_LINE_HEIGHT);
+        self.band = TYPING_HEIGHT + tall.clamp(MIN_LINE_HEIGHT, most) + SPACE_4 * 2.0;
         if matches!(shown, DraftOf::Thread(..)) {
-            self.band += ALSO_PX;
+            self.band += ALSO_HEIGHT;
         }
         if self.has_files(shown) {
-            self.band += FILES_PX;
+            self.band += FILES_HEIGHT;
         }
         sent
     }
@@ -1475,26 +1475,26 @@ impl Composer {
             let at = ViewPoint::new(SPACE_8, strip + SPACE_2);
             draw(surface, shaped, at, palette.header_text);
         }
-        let mut top = strip + TYPING_PX;
+        let mut top = strip + TYPING_HEIGHT;
         // The files of the draft sit in a row over the field.
         self.file_chips.clear();
         if self.has_files(shown) {
             self.paint_files(surface, font_cx, cache, shown, top, width, palette);
-            top += FILES_PX;
+            top += FILES_HEIGHT;
         }
         // A thread's field leaves the row of its box under it.
         self.also_row = None;
         let height = match shown {
             DraftOf::Thread(..) => {
-                let row = height - ALSO_PX;
+                let row = height - ALSO_HEIGHT;
                 self.also_row = Some(RowBounds {
                     top: row,
                     bottom: height,
                 });
-                let side = surface_px(BOX_PX);
+                let side = surface_px(BOX_SIZE);
                 let (x, y) = (
                     surface_px(SPACE_8),
-                    surface_px(row + (ALSO_PX - BOX_PX) / 2.0),
+                    surface_px(row + (ALSO_HEIGHT - BOX_SIZE) / 2.0),
                 );
                 let square = Rect::new(x, y, x + side, y + side);
                 if self.also.contains(&shown) {
@@ -1509,8 +1509,8 @@ impl Composer {
                     width,
                     ambre_canvas::Weight::Regular,
                 );
-                let label_y = row + (ALSO_PX - text_height(words)) / 2.0;
-                let label_x = SPACE_8 + BOX_PX + SPACE_4;
+                let label_y = row + (ALSO_HEIGHT - text_height(words)) / 2.0;
+                let label_x = SPACE_8 + BOX_SIZE + SPACE_4;
                 let chord_x = label_x + text_width(words) + SPACE_8;
                 draw(
                     surface,
@@ -1653,7 +1653,7 @@ impl Composer {
             if x + chip_w > width - SPACE_4 {
                 break;
             }
-            let (y0, y1) = (top + SPACE_2, top + FILES_PX - SPACE_2);
+            let (y0, y1) = (top + SPACE_2, top + FILES_HEIGHT - SPACE_2);
             let chip = view_rect(x, y0, x + chip_w, y1);
             surface.fill_rect(chip, palette.header_bg);
             surface.stroke_rect(chip, palette.cell_border, 1.0);

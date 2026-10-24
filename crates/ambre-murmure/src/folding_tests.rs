@@ -20,7 +20,7 @@ use crate::schema::{MessageKey, Root};
 use crate::sequence::loro_part;
 use crate::session::next_peer;
 use crate::{
-    ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY_MS, FOLD_DELAY_MS, Replay, Signer,
+    ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY, FOLD_DELAY, Replay, Signer,
 };
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -265,31 +265,31 @@ fn the_fold_lease_is_asked_as_the_relay_says() {
     let base = 5_000;
     assert_eq!(alice.fold_lease_to_ask(at(base)), None, "the tick dates it");
     assert_eq!(
-        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY_MS.0)),
+        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY.0)),
         Some(segment)
     );
     alice.fold_failed(segment);
-    let base = base + FINALIZE_RETRY_MS.0;
+    let base = base + FINALIZE_RETRY.0;
     assert_eq!(alice.fold_lease_to_ask(at(base)), None);
     assert_eq!(
-        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY_MS.0)),
+        alice.fold_lease_to_ask(at(base + FINALIZE_RETRY.0)),
         None,
         "the delay doubled"
     );
     assert_eq!(
-        alice.fold_lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS.0)),
+        alice.fold_lease_to_ask(at(base + 2 * FINALIZE_RETRY.0)),
         Some(segment)
     );
 
     alice.fold_committed(segment);
-    let base = base + 2 * FINALIZE_RETRY_MS.0;
+    let base = base + 2 * FINALIZE_RETRY.0;
     assert_eq!(alice.fold_lease_to_ask(at(base)), None, "the tick dates it");
     assert_eq!(
-        alice.fold_lease_to_ask(at(base + FOLD_DELAY_MS.0 - 1)),
+        alice.fold_lease_to_ask(at(base + FOLD_DELAY.0 - 1)),
         None
     );
     assert_eq!(
-        alice.fold_lease_to_ask(at(base + FOLD_DELAY_MS.0)),
+        alice.fold_lease_to_ask(at(base + FOLD_DELAY.0)),
         Some(segment)
     );
 }
@@ -413,7 +413,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
     assert!(alice.fold_snapshot(NOW).expect("fold").is_none());
     assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
     assert_eq!(
-        alice.fold_lease_to_ask(at(FINALIZE_RETRY_MS.0)),
+        alice.fold_lease_to_ask(at(FINALIZE_RETRY.0)),
         Some(segment)
     );
 
@@ -427,7 +427,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
             expires_in: ambre_core::Millis(LEASE_MS),
         },
     );
-    let base = FINALIZE_RETRY_MS.0;
+    let base = FINALIZE_RETRY.0;
     assert!(alice.fold_snapshot(at(base)).expect("fold").is_none());
     assert_eq!(alice.fold_lease_to_ask(at(base + LEASE_MS - 1)), None);
     assert_eq!(

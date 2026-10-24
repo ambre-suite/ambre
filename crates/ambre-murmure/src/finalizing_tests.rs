@@ -10,7 +10,7 @@ use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
 use crate::session::next_peer;
-use crate::{ChannelState, ChannelType, FINALIZE_RETRY_MS, Order, Signer};
+use crate::{ChannelState, ChannelType, FINALIZE_RETRY, Order, Signer};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 const LEASE_MS: u64 = 30_000;
@@ -121,15 +121,15 @@ fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
     state.finalize_failed(closing);
     assert_eq!(state.lease_to_ask(at(5_000)), None, "the tick dates it");
     assert_eq!(
-        state.lease_to_ask(at(5_000 + FINALIZE_RETRY_MS.0)),
+        state.lease_to_ask(at(5_000 + FINALIZE_RETRY.0)),
         Some(closing)
     );
     state.finalize_failed(closing);
-    let base = 5_000 + FINALIZE_RETRY_MS.0;
+    let base = 5_000 + FINALIZE_RETRY.0;
     assert_eq!(state.lease_to_ask(at(base)), None);
-    assert_eq!(state.lease_to_ask(at(base + FINALIZE_RETRY_MS.0)), None);
+    assert_eq!(state.lease_to_ask(at(base + FINALIZE_RETRY.0)), None);
     assert_eq!(
-        state.lease_to_ask(at(base + 2 * FINALIZE_RETRY_MS.0)),
+        state.lease_to_ask(at(base + 2 * FINALIZE_RETRY.0)),
         Some(closing)
     );
 }

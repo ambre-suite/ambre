@@ -17,7 +17,7 @@ use ambre_core::{
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
-use super::finalizing::{FINALIZE_RETRY_MS, RETRY_DOUBLINGS};
+use super::finalizing::{FINALIZE_RETRY, RETRY_DOUBLINGS};
 use super::relocating::replay_of;
 use super::{ChannelState, Replay, content_of};
 use crate::error::MurmureError;
@@ -28,7 +28,7 @@ use crate::{mention, style};
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay
 /// holds. The relay answers sooner when a fold is owed earlier.
-pub const FOLD_DELAY_MS: Millis = Millis(7 * 24 * 60 * 60 * 1000);
+pub const FOLD_DELAY: Millis = Millis(7 * 24 * 60 * 60 * 1000);
 
 /// The fold of one final segment, as this client drives it.
 #[derive(Debug)]
@@ -189,7 +189,7 @@ impl ChannelState {
         if let Some(folding) = self.fold_step_of(segment) {
             folding.failures = 0;
             folding.step = Step::Due {
-                after: FOLD_DELAY_MS,
+                after: FOLD_DELAY,
                 at: None,
             };
         }
@@ -197,13 +197,13 @@ impl ChannelState {
 
     /// A lease request or a commit of `segment` failed, or the relay names
     /// other amendments than this copy holds. It is asked again past
-    /// [`FINALIZE_RETRY_MS`], doubled at each failure.
+    /// [`FINALIZE_RETRY`], doubled at each failure.
     pub fn fold_failed(&mut self, segment: SegmentId) {
         if let Some(folding) = self.fold_step_of(segment) {
             let doublings = folding.failures.min(RETRY_DOUBLINGS);
             folding.failures = folding.failures.saturating_add(1);
             folding.step = Step::Due {
-                after: FINALIZE_RETRY_MS.doubled(doublings),
+                after: FINALIZE_RETRY.doubled(doublings),
                 at: None,
             };
         }

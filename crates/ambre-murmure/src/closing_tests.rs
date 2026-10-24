@@ -133,7 +133,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
 #[test]
 fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
     const BYTES: ByteSize = ByteSize(16 * 1024);
-    let mut alice = channel(10_000).with_segment_bytes(BYTES);
+    let mut alice = channel(10_000).with_segment_snapshot_size(BYTES);
     let author = UserId::new();
     let mut sent = 0;
     loop {

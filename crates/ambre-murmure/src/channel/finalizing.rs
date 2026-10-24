@@ -17,7 +17,7 @@ use crate::schema::{self, Root, SegmentKey, SegmentState};
 
 /// The delay before a failed lease request or commit is asked again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const FINALIZE_RETRY_MS: Millis = Millis(2_000);
+pub const FINALIZE_RETRY: Millis = Millis(2_000);
 
 /// The doublings past which the delay stops growing: about half an hour.
 pub(super) const RETRY_DOUBLINGS: u32 = 10;
@@ -159,7 +159,7 @@ impl ChannelState {
     }
 
     /// A lease request or a commit of `segment` failed. It is asked again
-    /// past [`FINALIZE_RETRY_MS`], doubled at each failure.
+    /// past [`FINALIZE_RETRY`], doubled at each failure.
     pub fn finalize_failed(&mut self, segment: SegmentId) {
         if let Some(finalizing) = self.finalize_step(segment) {
             if matches!(finalizing.step, Step::Withdrawn) {
@@ -168,7 +168,7 @@ impl ChannelState {
             let doublings = finalizing.failures.min(RETRY_DOUBLINGS);
             finalizing.failures = finalizing.failures.saturating_add(1);
             finalizing.step = Step::Due {
-                after: FINALIZE_RETRY_MS.doubled(doublings),
+                after: FINALIZE_RETRY.doubled(doublings),
                 at: None,
             };
         }

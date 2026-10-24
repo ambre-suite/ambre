@@ -42,10 +42,10 @@ mod threading;
 
 pub use amending::{ChangeTarget, Linked};
 pub use closing::{
-    Closed, MessageCount, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Successor,
+    Closed, MessageCount, SEGMENT_SNAPSHOT_SIZE, SEGMENT_MESSAGES, SUCCESSOR_RETRY, Successor,
 };
-pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
-pub use folding::{FOLD_DELAY_MS, FoldSnapshot, Settled};
+pub use finalizing::{FINALIZE_RETRY, FinalSnapshot};
+pub use folding::{FOLD_DELAY, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
 pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 
@@ -237,7 +237,7 @@ pub struct ChannelState {
     /// The messages past which the active segment asks to close.
     segment_size: MessageCount,
     /// The snapshot bytes past which the active segment asks to close.
-    segment_bytes: ambre_core::ByteSize,
+    segment_snapshot_size: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
     close_asked: bool,
     /// Whether a rotation retired the key the active segment was opened
@@ -433,7 +433,7 @@ impl ChannelState {
             pending: HashMap::new(),
             sequences: HashMap::new(),
             segment_size: SEGMENT_MESSAGES,
-            segment_bytes: SEGMENT_BYTES,
+            segment_snapshot_size: SEGMENT_SNAPSHOT_SIZE,
             close_asked: false,
             key_rotated: false,
             successor: None,

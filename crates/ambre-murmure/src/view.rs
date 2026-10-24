@@ -47,7 +47,7 @@ use crate::paint::{Painted, Pictured, RowBounds, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
-use crate::watchers::TICK_MS;
+use crate::watchers::TICK_PERIOD;
 use crate::{MessageRef, MurmurePane, Region};
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the
@@ -64,7 +64,7 @@ pub struct PageReads {
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Timestamp) -> String>,
     /// The page's monotonic clock: the wheel and the pictures read it.
-    pub now_ms: Rc<dyn Fn() -> ambre_core::PageTime>,
+    pub now: Rc<dyn Fn() -> ambre_core::PageTime>,
     /// The user's wall clock: it dates a message, an edit, a reaction and a
     /// typing sample. The page's clock restarts at every load, so it never
     /// dates anything a peer reads.
@@ -145,7 +145,7 @@ const AT_FRACTION: f32 = 0.25;
 
 /// How far a focused row may pass an edge of the viewport before the list
 /// moves to show it: a rounding, not a scroll.
-const REVEAL_SLACK_PX: ViewPx = ViewPx::new(0.5);
+const REVEAL_SLACK: ViewPx = ViewPx::new(0.5);
 
 /// The size of a region, from the CSS pixels the page gives it. A view
 /// pixel is a CSS pixel in size (`CANVAS-032`).
@@ -542,11 +542,11 @@ impl MurmureView {
     /// Move the list by one viewport, towards the latest row for a positive
     /// `pages`. The model takes it as a wheel step of a page (`MURMURE-504`).
     fn page(&mut self, pages: f32) {
-        let now_ms = (self.reads.now_ms)();
+        let now = (self.reads.now)();
         let step = self.kinetic.wheel(
             down((self.list_height() * pages).on_page(CssPx::ZERO)),
             WheelDeltaMode::Page,
-            now_ms,
+            now,
         );
         self.scroll_by(step);
     }
@@ -948,31 +948,31 @@ impl MurmureView {
             return;
         };
         self.reveal = false;
-        let over = if top < -REVEAL_SLACK_PX {
+        let over = if top < -REVEAL_SLACK {
             top
-        } else if bottom > self.list_height() + REVEAL_SLACK_PX {
+        } else if bottom > self.list_height() + REVEAL_SLACK {
             (bottom - self.list_height()).min(top)
         } else {
             return;
         };
-        let now_ms = (self.reads.now_ms)();
+        let now = (self.reads.now)();
         let step = self.kinetic.wheel(
             down(over.on_page(CssPx::ZERO)),
             WheelDeltaMode::Page,
-            now_ms,
+            now,
         );
         self.scroll_by(step);
     }
 
     /// A finger went down: it stops any motion left.
-    pub fn touch_down(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
-        self.kinetic.press(at, now_ms);
+    pub fn touch_down(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+        self.kinetic.press(at, now);
     }
 
     /// A finger moved: past the tap slop the list follows it. Answers
     /// whether the list moved.
-    pub fn touch_move(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) -> bool {
-        let Some(step) = self.kinetic.sample(at, now_ms) else {
+    pub fn touch_move(&mut self, at: ViewPoint, now: ambre_core::PageTime) -> bool {
+        let Some(step) = self.kinetic.sample(at, now) else {
             return false;
         };
         self.scroll_by(step);
@@ -984,8 +984,8 @@ impl MurmureView {
     /// to the latest message presses it, and one on a band asks for its
     /// segment again (`MURMURE-513`). A tap in the composer puts its caret
     /// there and gives it the keys.
-    pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) -> Option<ViewPoint> {
-        let tap = match self.kinetic.release(now_ms) {
+    pub fn touch_up(&mut self, now: ambre_core::PageTime) -> Option<ViewPoint> {
+        let tap = match self.kinetic.release(now) {
             Release::Tap { at } => Some(at),
             Release::Fling | Release::Rest => None,
         };
@@ -1077,17 +1077,17 @@ impl MurmureView {
             (y - bottom).max(ViewPx::ZERO)
         };
         if over != ViewPx::ZERO {
-            let now_ms = (self.reads.now_ms)();
+            let now = (self.reads.now)();
             let step =
                 self.kinetic
-                    .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now_ms);
+                    .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now);
             self.scroll_by(step);
         }
     }
 
     pub fn plan_repaint(
         &mut self,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         _hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         let theme = self.theme_ctl.get();
@@ -1104,7 +1104,7 @@ impl MurmureView {
             self.dirty = true;
         }
         // A picture on screen reached its next frame (`MURMURE-136`).
-        if self.next_frame.is_some_and(|at| now_ms >= at) {
+        if self.next_frame.is_some_and(|at| now >= at) {
             self.dirty = true;
         }
         // Rows read back after a reload, or a loss, change what the composer
@@ -1114,12 +1114,12 @@ impl MurmureView {
             self.shelf_seen = shelved;
             self.dirty = true;
         }
-        if let Some(step) = self.kinetic.tick(now_ms)
+        if let Some(step) = self.kinetic.tick(now)
             && step.y() != ViewPx::ZERO
         {
             self.scroll_by(step);
         }
-        if let Some(at) = self.kinetic.held(now_ms) {
+        if let Some(at) = self.kinetic.held(now) {
             // A finger held still: the actions of its message open where it
             // went down (`MURMURE-423`).
             (self.reads.act_on)(self.target_at(at, Press::Held));
@@ -1263,7 +1263,7 @@ impl MurmureView {
                 me: (self.reads.me)(),
                 pictures: Some(Pictured {
                     shelf: &shelf,
-                    now_ms: (self.reads.now_ms)(),
+                    now: (self.reads.now)(),
                     motion: (self.reads.motion)(),
                 }),
             },
@@ -1441,9 +1441,9 @@ impl MurmureView {
             self.ticked = None;
             return;
         };
-        let now = (self.reads.now_ms)();
+        let now = (self.reads.now)();
         let due = self.ticked.is_none_or(|(ticked, at)| {
-            ticked != channel_id || now - at >= TICK_MS.to_page_millis()
+            ticked != channel_id || now - at >= TICK_PERIOD.to_page_millis()
         });
         if due {
             self.ticked = Some((channel_id, now));
@@ -1679,11 +1679,11 @@ impl MurmureView {
                 delta,
                 ctrl_key: false,
             } => {
-                let line = ambre_canvas::WHEEL_LINE_PX;
+                let line = ambre_canvas::WHEEL_LINE;
                 let page = self.list_height().on_page(CssPx::ZERO);
                 let px = delta.to_px(CssVector::new(line, line), CssVector::new(page, page));
-                let now_ms = (self.reads.now_ms)();
-                let step = self.kinetic.wheel(down(px.dy), delta.mode(), now_ms);
+                let now = (self.reads.now)();
+                let step = self.kinetic.wheel(down(px.dy), delta.mode(), now);
                 self.scroll_by(step);
                 return true;
             }
@@ -1822,7 +1822,7 @@ mod tests {
         MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
     use ambre_canvas::theme;
-    use ambre_draw::kinetic::LONG_PRESS_MS;
+    use ambre_draw::kinetic::LONG_PRESS;
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
@@ -1967,7 +1967,7 @@ mod tests {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| ambre_core::DisplayName::new("Ada").ok()),
             time_of: Rc::new(|_| "t".to_owned()),
-            now_ms: Rc::new(move || now.get()),
+            now: Rc::new(move || now.get()),
             // The wall clock follows the page's unless a test sets it, so a
             // step dates what it sends.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -2074,9 +2074,9 @@ mod tests {
         frame_at(view, ambre_bus::PageTime(0.0))
     }
 
-    fn frame_at(view: &mut MurmureView, now_ms: ambre_core::PageTime) -> bool {
+    fn frame_at(view: &mut MurmureView, now: ambre_core::PageTime) -> bool {
         view.update();
-        let plan = view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle);
+        let plan = view.plan_repaint(now, ambre_canvas::HudTick::Idle);
         let full = matches!(plan.content, ContentRepaint::Full);
         if full {
             let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new());
@@ -2511,9 +2511,9 @@ mod tests {
         assert!(page.view.resting_on().is_some(), "the list moved up");
     }
 
-    /// A wheel event at `now_ms`, `delta_mode` as the browser names it.
-    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now_ms: ambre_core::PageTime) -> bool {
-        page.clock.set(now_ms);
+    /// A wheel event at `now`, `delta_mode` as the browser names it.
+    fn wheel(page: &mut Page, dy: f64, delta_mode: u32, now: ambre_core::PageTime) -> bool {
+        page.clock.set(now);
         let ev = InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
                 0.0,
@@ -2687,9 +2687,9 @@ mod tests {
         assert!(!page.view.scrolling(), "the edge stops the motion");
     }
 
-    /// A key pressed at `now_ms`, with `mods` held.
-    fn key(page: &mut Page, key: Key, mods: Modifiers, now_ms: ambre_core::PageTime) -> bool {
-        page.clock.set(now_ms);
+    /// A key pressed at `now`, with `mods` held.
+    fn key(page: &mut Page, key: Key, mods: Modifiers, now: ambre_core::PageTime) -> bool {
+        page.clock.set(now);
         let ev = InputEvent::Key { key, mods };
         page.view.handle_input(&ev)
     }
@@ -3077,13 +3077,13 @@ mod tests {
         assert!(page.said.borrow().is_empty(), "the first list is not news");
 
         let clock = Rc::clone(&page.clock);
-        let press = |view: &mut MurmureView, key: Key, now_ms: ambre_core::PageTime| {
-            clock.set(now_ms);
+        let press = |view: &mut MurmureView, key: Key, now: ambre_core::PageTime| {
+            clock.set(now);
             let taken = view.handle_input(&InputEvent::Key {
                 key,
                 mods: Modifiers::NONE,
             });
-            frame_at(view, now_ms);
+            frame_at(view, now);
             taken
         };
         assert!(press(&mut view, Key::ArrowUp, ambre_bus::PageTime(10.0)));
@@ -3371,10 +3371,10 @@ mod tests {
         thread_view.touch_down(pointer(10.0, y), ambre_bus::PageTime(0.0));
         frame_at(
             &mut thread_view,
-            ambre_bus::PageTime(LONG_PRESS_MS.get() - 1.0),
+            ambre_bus::PageTime(LONG_PRESS.get() - 1.0),
         );
         assert!(page.acted.borrow().is_empty(), "not yet held");
-        frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS_MS.get()));
+        frame_at(&mut thread_view, ambre_bus::PageTime(LONG_PRESS.get()));
         let target = MessageTarget {
             channel,
             at: MessageAt::Thread(root.id),
@@ -3391,13 +3391,13 @@ mod tests {
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         assert_eq!(
-            thread_view.touch_up(ambre_bus::PageTime(LONG_PRESS_MS.get() + 100.0)),
+            thread_view.touch_up(ambre_bus::PageTime(LONG_PRESS.get() + 100.0)),
             None,
             "no tap"
         );
         frame_at(
             &mut thread_view,
-            ambre_bus::PageTime(LONG_PRESS_MS.get() + 200.0),
+            ambre_bus::PageTime(LONG_PRESS.get() + 200.0),
         );
         assert_eq!(page.acted.borrow().len(), 1, "said once");
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
@@ -3876,7 +3876,7 @@ mod tests {
 
         let frame = || PictureFrame {
             pixels: vec![0; 2 * 4],
-            delay_ms: ambre_core::Millis(100),
+            delay: ambre_core::Millis(100),
         };
         let gif = Picture {
             size: ambre_core::ImageSize::new(2, 1),
@@ -3914,7 +3914,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         let frame = || PictureFrame {
             pixels: vec![0; 4],
-            delay_ms: ambre_core::Millis(100),
+            delay: ambre_core::Millis(100),
         };
         let picture = Some(Picture {
             size: ambre_core::ImageSize::new(1, 1),
@@ -4781,11 +4781,11 @@ mod tests {
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
         page.clock
-            .set(ambre_bus::PageTime(TICK_MS.to_page_millis().get() - 1.0));
+            .set(ambre_bus::PageTime(TICK_PERIOD.to_page_millis().get() - 1.0));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 0, "inside the period");
         page.clock
-            .set(ambre_bus::PageTime(TICK_MS.to_page_millis().get()));
+            .set(ambre_bus::PageTime(TICK_PERIOD.to_page_millis().get()));
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "one period later");
 
@@ -4798,7 +4798,7 @@ mod tests {
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
         let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
         page.clock
-            .set(ambre_bus::PageTime(10.0 * TICK_MS.to_page_millis().get()));
+            .set(ambre_bus::PageTime(10.0 * TICK_PERIOD.to_page_millis().get()));
         frame(&mut thread_view);
         assert_eq!(samples(&page).1, 0, "the thread's region ticks nothing");
         page.pane.set(MurmurePane::ChannelList);

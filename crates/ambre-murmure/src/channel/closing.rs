@@ -26,11 +26,11 @@ ambre_core::define_tally! {
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
-pub const SEGMENT_BYTES: ByteSize = ByteSize(2 * 1024 * 1024);
+pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize(2 * 1024 * 1024);
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const SUCCESSOR_RETRY_MS: Millis = Millis(1_000);
+pub const SUCCESSOR_RETRY: Millis = Millis(1_000);
 
 /// The failures past which a successor is no longer fetched again.
 const SUCCESSOR_FAILURES: u32 = 5;
@@ -70,8 +70,8 @@ impl ChannelState {
     /// This channel, with segments that ask to close past `bytes` of
     /// snapshot.
     #[must_use]
-    pub fn with_segment_bytes(mut self, bytes: ByteSize) -> Self {
-        self.segment_bytes = bytes;
+    pub fn with_segment_snapshot_size(mut self, bytes: ByteSize) -> Self {
+        self.segment_snapshot_size = bytes;
         self
     }
 
@@ -114,12 +114,12 @@ impl ChannelState {
             return false;
         };
         let bytes = ByteSize::of_len(snapshot.len());
-        if bytes >= self.segment_bytes {
+        if bytes >= self.segment_snapshot_size {
             return true;
         }
         let held = usize::try_from(messages.get()).unwrap_or(usize::MAX);
         let per_message = (snapshot.len() / held.max(1)).max(1);
-        let room = self.segment_bytes.saturating_sub(bytes).as_len();
+        let room = self.segment_snapshot_size.saturating_sub(bytes).as_len();
         let step = (room / per_message / 2).max(1);
         self.active.probe_at = messages.plus(MessageCount::of_len(step));
         false
@@ -264,7 +264,7 @@ impl ChannelState {
 
     /// The successor that failed to open, to fetch again at `now`
     /// (`MURMURE-482`). Each failure doubles the delay from
-    /// [`SUCCESSOR_RETRY_MS`], and the fifth gives up. `None` while a
+    /// [`SUCCESSOR_RETRY`], and the fifth gives up. `None` while a
     /// successor is on its way, or before the delay ends.
     ///
     /// Messages still go to the active segment meanwhile, never to the
@@ -278,7 +278,7 @@ impl ChannelState {
             return None;
         }
         let Some(at) = retry.at else {
-            let delay = SUCCESSOR_RETRY_MS.doubled(retry.failures - 1);
+            let delay = SUCCESSOR_RETRY.doubled(retry.failures - 1);
             retry.at = Some(now.plus(delay));
             return None;
         };

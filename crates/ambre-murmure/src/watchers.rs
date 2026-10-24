@@ -4,27 +4,27 @@
 //! Both indicators ride the ephemerals of the channel's `meta` document
 //! (`MURMURE-121`), so they reach its members alone (`MURMURE-123`). The
 //! engine reads no clock. The view ticks an open channel every
-//! [`TICK_MS`], and each tick dates the samples heard since the tick before.
+//! [`TICK_PERIOD`], and each tick dates the samples heard since the tick before.
 
 use std::collections::HashMap;
 
 use ambre_bus::Timestamp;
 use ambre_core::{MessageId, Millis, UserId};
 
-use crate::{PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS};
+use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
 /// How often the view ticks an open channel, in milliseconds
 /// (`ambre-spec-budgets.md section 8`).
-pub const TICK_MS: Millis = Millis(1_000);
+pub const TICK_PERIOD: Millis = Millis(1_000);
 
 /// How often a member who keeps typing sends a typing sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const TYPING_REFRESH_MS: Millis = Millis(3_000);
+pub const TYPING_REFRESH: Millis = Millis(3_000);
 
 /// How long a typing sample keeps its member typing, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Two refresh periods: one for the
 /// tick that dates a sample, one for a sample lost on the way.
-pub const TYPING_EXPIRY_MS: Millis = TYPING_REFRESH_MS.times(2);
+pub const TYPING_EXPIRY: Millis = TYPING_REFRESH.times(2);
 
 /// The first byte of a channel sample. A space sample takes another tag, so
 /// neither reads as the other.
@@ -148,9 +148,9 @@ impl Watchers {
         };
         let (watching, typing) = (self.watching.len(), self.typing.len());
         self.typing
-            .retain(|_, (stamp, _)| fresh(stamp, TYPING_EXPIRY_MS));
+            .retain(|_, (stamp, _)| fresh(stamp, TYPING_EXPIRY));
         self.watching
-            .retain(|_, stamp| fresh(stamp, PRESENCE_EXPIRY_MS));
+            .retain(|_, stamp| fresh(stamp, PRESENCE_EXPIRY));
         self.watching.len() != watching || self.typing.len() != typing
     }
 
@@ -158,7 +158,7 @@ impl Watchers {
     /// or one refresh period since the last (`MURMURE-126`). Records it as
     /// sent when it is owed.
     pub fn owes_watching(&mut self, now: Timestamp) -> bool {
-        owed(&mut self.sent_watching, now, REFRESH_PERIOD_MS)
+        owed(&mut self.sent_watching, now, REFRESH_PERIOD)
     }
 
     /// Whether a keystroke at `now` owes a typing sample. The place is the
@@ -168,7 +168,7 @@ impl Watchers {
     pub fn owes_typing(&mut self, now: Timestamp, thread: Option<MessageId>) -> bool {
         let moved = self.sent_typing.is_some_and(|(_, place)| place != thread);
         let mut sent = self.sent_typing.map(|(at, _)| at).filter(|_| !moved);
-        let due = owed(&mut sent, now, TYPING_REFRESH_MS);
+        let due = owed(&mut sent, now, TYPING_REFRESH);
         if due {
             self.sent_typing = Some((now, thread));
         }
@@ -242,14 +242,14 @@ mod tests {
     fn typing_refreshes_while_it_lasts_and_expires_once_it_stops() {
         let mut watchers = ticked();
         assert!(watchers.owes_typing(T0, None), "the first keystroke sends");
-        assert!(!watchers.owes_typing(at(TYPING_REFRESH_MS.0 - 1), None));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS.0), None));
+        assert!(!watchers.owes_typing(at(TYPING_REFRESH.0 - 1), None));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH.0), None));
 
         let bob = UserId::new();
         assert!(watchers.heard(bob, Sample::Typing));
         assert_eq!(watchers.view(), (vec![bob], vec![bob]));
-        assert!(!watchers.tick(at(TYPING_EXPIRY_MS.0)), "within the expiry");
-        assert!(watchers.tick(at(TYPING_EXPIRY_MS.0 + 1)));
+        assert!(!watchers.tick(at(TYPING_EXPIRY.0)), "within the expiry");
+        assert!(watchers.tick(at(TYPING_EXPIRY.0 + 1)));
         assert_eq!(
             watchers.view(),
             (vec![bob], Vec::new()),
@@ -274,13 +274,13 @@ mod tests {
 
         assert!(watchers.left(carol));
         assert!(!watchers.left(carol));
-        assert!(!watchers.tick(at(PRESENCE_EXPIRY_MS.0)));
-        assert!(watchers.tick(at(PRESENCE_EXPIRY_MS.0 + 1)));
+        assert!(!watchers.tick(at(PRESENCE_EXPIRY.0)));
+        assert!(watchers.tick(at(PRESENCE_EXPIRY.0 + 1)));
         assert_eq!(watchers.view(), (Vec::new(), Vec::new()));
 
         assert!(watchers.owes_watching(T0));
-        assert!(!watchers.owes_watching(at(REFRESH_PERIOD_MS.0 - 1)));
-        assert!(watchers.owes_watching(at(REFRESH_PERIOD_MS.0)));
+        assert!(!watchers.owes_watching(at(REFRESH_PERIOD.0 - 1)));
+        assert!(watchers.owes_watching(at(REFRESH_PERIOD.0)));
     }
 
     // --- MURMURE-127 ---
@@ -333,7 +333,7 @@ mod tests {
         assert!(watchers.owes_typing(T0, None));
         assert!(watchers.owes_typing(at(1), Some(root)), "a new place");
         assert!(!watchers.owes_typing(at(2), Some(root)));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH_MS.0 + 1), Some(root)));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH.0 + 1), Some(root)));
         assert_eq!(Sample::typing(Some(root)), Sample::TypingIn(root));
         assert_eq!(Sample::typing(None), Sample::Typing);
     }

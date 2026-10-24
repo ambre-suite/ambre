@@ -17,7 +17,7 @@ use crate::Region;
 
 /// The bytes the page holds decoded (`ambre-spec-budgets.md section 6`).
 /// Past it, the pictures painted longest ago go, never one on screen.
-pub const PICTURES_BYTES: ByteSize = ByteSize(16 * 1024 * 1024);
+pub const PICTURES_MAX_SIZE: ByteSize = ByteSize(16 * 1024 * 1024);
 
 /// The types the Logic thread decodes for a preview. Any other file shows
 /// as its chip alone.
@@ -54,7 +54,7 @@ pub struct Pictures {
 
 impl Default for Pictures {
     fn default() -> Self {
-        Self::new(PICTURES_BYTES)
+        Self::new(PICTURES_MAX_SIZE)
     }
 }
 
@@ -169,26 +169,26 @@ pub enum Motion {
     Reduced,
 }
 
-/// The frame of `picture` its clock reaches at `now_ms`, and when the next
+/// The frame of `picture` its clock reaches at `now`, and when the next
 /// one is due. A still picture, or a paint under reduced motion, shows the
 /// first frame, and none is due (`MURMURE-130`).
 pub fn frame_at(
     picture: &Picture,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
     motion: Motion,
 ) -> (usize, Option<ambre_core::PageTime>) {
-    let total: u64 = picture.frames.iter().map(|f| f.delay_ms.0).sum();
+    let total: u64 = picture.frames.iter().map(|f| f.delay.0).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
         return (0, None);
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let at = now_ms.0.max(0.0) as u64 % total;
+    let at = now.0.max(0.0) as u64 % total;
     let mut until = 0;
     for (i, frame) in picture.frames.iter().enumerate() {
-        until += frame.delay_ms.0;
+        until += frame.delay.0;
         if at < until {
             let due = ambre_core::Millis(until - at).to_page_millis();
-            return (i, Some(now_ms.after(due)));
+            return (i, Some(now.after(due)));
         }
     }
     (0, None)
@@ -215,9 +215,9 @@ mod tests {
             size: ambre_core::ImageSize::new(1, 1),
             frames: delays
                 .iter()
-                .map(|&delay_ms| PictureFrame {
+                .map(|&delay| PictureFrame {
                     pixels: vec![0; bytes],
-                    delay_ms: ambre_core::Millis(u64::from(delay_ms)),
+                    delay: ambre_core::Millis(u64::from(delay)),
                 })
                 .collect(),
         }
