@@ -12,27 +12,27 @@ use ambre_core::{CssPx, CssVector, PageMillis, ViewPoint, ViewPx, ViewSpeed, Vie
 use crate::wheel::WheelDeltaMode;
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
-pub const TAP_SLOP_PX: ViewPx = ViewPx::new(8.0);
+pub const TAP_SLOP: ViewPx = ViewPx::new(8.0);
 /// How long a press held inside the slop lasts before it is a long press
 /// (`KINETIC-014`).
-pub const LONG_PRESS_MS: PageMillis = PageMillis::new(500.0);
+pub const LONG_PRESS: PageMillis = PageMillis::new(500.0);
 /// The window of samples the release speed is read over.
-pub const SAMPLE_MS: PageMillis = PageMillis::new(100.0);
+pub const SAMPLE_WINDOW: PageMillis = PageMillis::new(100.0);
 /// The time constant of the slowdown: the speed falls to about a third of
 /// itself over this time.
-pub const DECAY_MS: PageMillis = PageMillis::new(325.0);
+pub const DECAY: PageMillis = PageMillis::new(325.0);
 /// Below this speed, in screen pixels per millisecond, a release leaves no
 /// motion and a motion stops.
 pub const STOP_SPEED: ViewSpeed = ViewSpeed::new(0.02);
 /// The longest step one tick takes, so a stalled frame does not jump. It is
 /// private: a step is timed here alone (`KINETIC-013`).
-const MAX_STEP_MS: PageMillis = PageMillis::new(50.0);
+const MAX_STEP: PageMillis = PageMillis::new(50.0);
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
-pub const WHEEL_NOTCH_PX: CssPx = CssPx::new(40.0);
+pub const WHEEL_NOTCH: CssPx = CssPx::new(40.0);
 /// A pause between wheel events this long ends a glide.
-pub const WHEEL_GAP_MS: PageMillis = PageMillis::new(60.0);
+pub const WHEEL_GAP: PageMillis = PageMillis::new(60.0);
 /// A glide slower than this at its end, in screen pixels per millisecond,
 /// leaves no motion.
 pub const WHEEL_START_SPEED: ViewSpeed = ViewSpeed::new(0.05);
@@ -40,12 +40,12 @@ pub const WHEEL_START_SPEED: ViewSpeed = ViewSpeed::new(0.05);
 pub const WHEEL_BLEND: f32 = 0.8;
 
 /// How far from an edge a drag starts to scroll, in screen pixels.
-pub const EDGE_BAND_PX: ViewPx = ViewPx::new(32.0);
+pub const EDGE_BAND: ViewPx = ViewPx::new(32.0);
 /// How deep past the band the edge speed still grows, in screen pixels.
-pub const EDGE_DEPTH_PX: ViewPx = ViewPx::new(160.0);
+pub const EDGE_DEPTH: ViewPx = ViewPx::new(160.0);
 /// The span the edge speed covers its depth in: 1/80 px/ms for each pixel
 /// of depth, so 2 px/ms at most.
-pub const EDGE_SPAN_MS: PageMillis = PageMillis::new(80.0);
+pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
 
 /// How far the view moves, in screen pixels on each axis (`KINETIC-013`).
 ///
@@ -74,7 +74,7 @@ pub const EDGE_SPAN_MS: PageMillis = PageMillis::new(80.0);
 /// ```
 ///
 /// ```compile_fail
-/// let clamp = ambre_draw::kinetic::MAX_STEP_MS;
+/// let clamp = ambre_draw::kinetic::MAX_STEP;
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollStep {
@@ -133,7 +133,7 @@ impl EdgeSpeed {
 /// (`KINETIC-007`).
 #[derive(Clone, Debug, Default)]
 pub struct EdgeScroll {
-    last_ms: Option<ambre_core::PageTime>,
+    last_at: Option<ambre_core::PageTime>,
 }
 
 impl EdgeScroll {
@@ -142,15 +142,15 @@ impl EdgeScroll {
     pub fn tick(
         &mut self,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> Option<ScrollStep> {
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         let Some((sx, sy)) = speed.filter(|&s| s != still) else {
-            self.last_ms = None;
+            self.last_at = None;
             return None;
         };
-        let last = self.last_ms.replace(now_ms)?;
-        let elapsed = step_span(now_ms - last);
+        let last = self.last_at.replace(now)?;
+        let elapsed = step_span(now - last);
         Some(ScrollStep {
             x: sx.0.over(elapsed),
             y: sy.0.over(elapsed),
@@ -159,7 +159,7 @@ impl EdgeScroll {
 
     /// End the edge scroll: the drag ended.
     pub fn stop(&mut self) {
-        self.last_ms = None;
+        self.last_at = None;
     }
 }
 
@@ -187,7 +187,7 @@ pub struct Kinetic {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
     speed: ViewSpeedVector,
-    last_ms: ambre_core::PageTime,
+    last_at: ambre_core::PageTime,
 }
 
 #[derive(Clone, Debug)]
@@ -196,7 +196,7 @@ struct Pan {
     last: ViewPoint,
     panned: bool,
     /// When the pointer went down.
-    at_ms: ambre_core::PageTime,
+    pressed_at: ambre_core::PageTime,
     /// The press became a long press: it pans nothing and taps nothing.
     held: bool,
     /// Recent positions and their times, for the release speed.
@@ -207,30 +207,30 @@ struct Pan {
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
     speed: ViewSpeedVector,
-    last_ms: Option<ambre_core::PageTime>,
+    last_at: Option<ambre_core::PageTime>,
 }
 
 impl Kinetic {
     /// A pointer went down. It stops any motion left (`KINETIC-006`).
-    pub fn press(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
+    pub fn press(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
         self.motion = None;
         self.glide = None;
         self.pressed = Some(Pan {
             start: at,
             last: at,
             panned: false,
-            at_ms: now_ms,
+            pressed_at: now,
             held: false,
-            samples: vec![(now_ms, at)],
+            samples: vec![(now, at)],
         });
     }
 
-    /// Whether the press became a long press by `now_ms`: held inside the
+    /// Whether the press became a long press by `now`: held inside the
     /// slop past the delay. The answer is its press point, once. The press
     /// then pans nothing, and its release is no tap (`KINETIC-014`).
-    pub fn held(&mut self, now_ms: ambre_core::PageTime) -> Option<ViewPoint> {
+    pub fn held(&mut self, now: ambre_core::PageTime) -> Option<ViewPoint> {
         let pan = self.pressed.as_mut()?;
-        if pan.panned || pan.held || now_ms - pan.at_ms < LONG_PRESS_MS {
+        if pan.panned || pan.held || now - pan.pressed_at < LONG_PRESS {
             return None;
         }
         pan.held = true;
@@ -241,29 +241,29 @@ impl Kinetic {
     /// Past it, the answer is how far the view follows, in screen pixels.
     /// The content moves with the pointer, so it is the pointer's step
     /// reversed.
-    pub fn sample(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) -> Option<ScrollStep> {
+    pub fn sample(&mut self, at: ViewPoint, now: ambre_core::PageTime) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
         if pan.held {
             return None;
         }
         if !pan.panned {
             let moved = at - pan.start;
-            if moved.length() < TAP_SLOP_PX {
+            if moved.length() < TAP_SLOP {
                 return None;
             }
             pan.panned = true;
         }
         let step = ScrollStep::dragged(pan.last, at);
         pan.last = at;
-        pan.samples.push((now_ms, at));
+        pan.samples.push((now, at));
         pan.samples
-            .retain(|(sampled, _)| now_ms - *sampled <= SAMPLE_MS);
+            .retain(|(sampled, _)| now - *sampled <= SAMPLE_WINDOW);
         Some(step)
     }
 
     /// The pointer lifted. A pan released with speed leaves a motion, read
     /// over the last window of samples (`KINETIC-004`).
-    pub fn release(&mut self, now_ms: ambre_core::PageTime) -> Release {
+    pub fn release(&mut self, now: ambre_core::PageTime) -> Release {
         let Some(pan) = self.pressed.take() else {
             return Release::Rest;
         };
@@ -276,7 +276,7 @@ impl Kinetic {
         let mut recent = pan
             .samples
             .iter()
-            .filter(|(sampled, _)| now_ms - *sampled <= SAMPLE_MS);
+            .filter(|(sampled, _)| now - *sampled <= SAMPLE_WINDOW);
         let (Some(first), Some(last)) = (recent.next(), recent.next_back()) else {
             return Release::Rest;
         };
@@ -290,7 +290,7 @@ impl Kinetic {
         }
         self.motion = Some(Motion {
             speed,
-            last_ms: None,
+            last_at: None,
         });
         Release::Fling
     }
@@ -312,7 +312,7 @@ impl Kinetic {
         &mut self,
         delta: CssVector,
         mode: WheelDeltaMode,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ScrollStep {
         self.motion = None;
         // The wheel delta is already in screen pixels. A view pixel is a CSS
@@ -323,15 +323,15 @@ impl Kinetic {
             x: moved.dx,
             y: moved.dy,
         };
-        let notch = delta.dx.abs() >= WHEEL_NOTCH_PX || delta.dy.abs() >= WHEEL_NOTCH_PX;
+        let notch = delta.dx.abs() >= WHEEL_NOTCH || delta.dy.abs() >= WHEEL_NOTCH;
         if mode.is_step() || notch {
             self.glide = None;
             return step;
         }
         let speed = match self.glide {
-            Some(glide) if now_ms - glide.last_ms <= WHEEL_GAP_MS => {
+            Some(glide) if now - glide.last_at <= WHEEL_GAP => {
                 let dt =
-                    (now_ms - glide.last_ms).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
+                    (now - glide.last_at).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
                 let b = WHEEL_BLEND;
                 moved.per(dt).scaled(b) + glide.speed.scaled(1.0 - b)
             }
@@ -339,7 +339,7 @@ impl Kinetic {
         };
         self.glide = Some(Glide {
             speed,
-            last_ms: now_ms,
+            last_at: now,
         });
         step
     }
@@ -348,10 +348,10 @@ impl Kinetic {
     /// moves, each tick less than the one before; the first tick only starts
     /// the clock (`KINETIC-005`). The motion stops below the stop speed.
     /// A glide that paused past the gap launches its motion here.
-    pub fn tick(&mut self, now_ms: ambre_core::PageTime) -> Option<ScrollStep> {
+    pub fn tick(&mut self, now: ambre_core::PageTime) -> Option<ScrollStep> {
         if self.motion.is_none() {
             let glide = self.glide?;
-            if now_ms - glide.last_ms < WHEEL_GAP_MS {
+            if now - glide.last_at < WHEEL_GAP {
                 return Some(ScrollStep::ZERO);
             }
             self.glide = None;
@@ -360,20 +360,20 @@ impl Kinetic {
             }
             self.motion = Some(Motion {
                 speed: glide.speed,
-                last_ms: Some(now_ms),
+                last_at: Some(now),
             });
             return Some(ScrollStep::ZERO);
         }
         let motion = self.motion.as_mut()?;
-        let Some(last) = motion.last_ms.replace(now_ms) else {
+        let Some(last) = motion.last_at.replace(now) else {
             return Some(ScrollStep::ZERO);
         };
-        let elapsed = step_span(now_ms - last);
+        let elapsed = step_span(now - last);
         let step = ScrollStep {
             x: motion.speed.dx.over(elapsed),
             y: motion.speed.dy.over(elapsed),
         };
-        let decay = (-(elapsed / DECAY_MS)).exp();
+        let decay = (-(elapsed / DECAY)).exp();
         #[allow(clippy::cast_possible_truncation)]
         let decay = decay as f32;
         motion.speed = motion.speed.scaled(decay);
@@ -408,9 +408,9 @@ impl Kinetic {
 }
 
 /// The span one tick moves by: never negative, and never past
-/// [`MAX_STEP_MS`].
+/// [`MAX_STEP`].
 fn step_span(elapsed: PageMillis) -> PageMillis {
-    elapsed.clamp(PageMillis::ZERO, MAX_STEP_MS)
+    elapsed.clamp(PageMillis::ZERO, MAX_STEP)
 }
 
 /// The speed a drag held near an edge scrolls at, in screen pixels per
@@ -420,15 +420,15 @@ fn step_span(elapsed: PageMillis) -> PageMillis {
 /// on it. The speed is zero away from both edges. It grows with how deep
 /// the pointer sits in the band or past it, and stops growing further out.
 fn edge_speed(at: ViewPx, extent: ViewPx) -> ViewSpeed {
-    let far = extent - EDGE_BAND_PX;
-    let depth = if at < EDGE_BAND_PX {
-        at - EDGE_BAND_PX
+    let far = extent - EDGE_BAND;
+    let depth = if at < EDGE_BAND {
+        at - EDGE_BAND
     } else if at > far {
         at - far
     } else {
         ViewPx::ZERO
     };
-    depth.clamp(-EDGE_DEPTH_PX, EDGE_DEPTH_PX).per(EDGE_SPAN_MS)
+    depth.clamp(-EDGE_DEPTH, EDGE_DEPTH).per(EDGE_SPAN)
 }
 
 #[cfg(test)]
@@ -490,26 +490,26 @@ mod tests {
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get() - 1.0)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS.get() - 1.0)),
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get())),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS.get())),
             Some(pt(10.0, 20.0))
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get() + 100.0)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS.get() + 100.0)),
             None
         );
         assert_eq!(
             kinetic.sample(
                 pt(60.0, 90.0),
-                ambre_core::PageTime(LONG_PRESS_MS.get() + 120.0)
+                ambre_core::PageTime(LONG_PRESS.get() + 120.0)
             ),
             None
         );
         assert_eq!(
-            kinetic.release(ambre_core::PageTime(LONG_PRESS_MS.get() + 200.0)),
+            kinetic.release(ambre_core::PageTime(LONG_PRESS.get() + 200.0)),
             Release::Rest
         );
         assert!(!kinetic.moving());
@@ -521,11 +521,11 @@ mod tests {
                 .is_some()
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get())),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS.get())),
             None
         );
         assert_eq!(
-            Kinetic::default().held(ambre_core::PageTime(LONG_PRESS_MS.get())),
+            Kinetic::default().held(ambre_core::PageTime(LONG_PRESS.get())),
             None
         );
     }
@@ -595,7 +595,7 @@ mod tests {
             .expect("a step")
             .y()
             .get();
-        assert!(dy <= ViewSpeed::new(2.0).over(MAX_STEP_MS).get() + 1e-3);
+        assert!(dy <= ViewSpeed::new(2.0).over(MAX_STEP).get() + 1e-3);
     }
 
     /// `KINETIC-006`: a press or an edge the application met stops the
@@ -707,11 +707,11 @@ mod tests {
         let px = ViewPx::new;
         let extent = px(900.0);
         assert_eq!(edge_speed(px(400.0), extent), ViewSpeed::ZERO);
-        assert_eq!(edge_speed(EDGE_BAND_PX, extent), ViewSpeed::ZERO);
+        assert_eq!(edge_speed(EDGE_BAND, extent), ViewSpeed::ZERO);
         let (near, deeper) = (edge_speed(px(880.0), extent), edge_speed(px(890.0), extent));
         assert!(ViewSpeed::ZERO < near && near < deeper);
         assert!(edge_speed(px(10.0), extent) < ViewSpeed::ZERO);
-        let cap = EDGE_DEPTH_PX.per(EDGE_SPAN_MS);
+        let cap = EDGE_DEPTH.per(EDGE_SPAN);
         assert_eq!(cap, ViewSpeed::new(2.0));
         assert_eq!(edge_speed(px(5_000.0), extent), cap);
         assert_eq!(edge_speed(px(-5_000.0), extent), -cap);

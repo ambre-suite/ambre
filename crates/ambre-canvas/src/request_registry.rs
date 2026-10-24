@@ -33,20 +33,20 @@ pub trait RequestTag {
 /// A pending P3 request waiting for its `RestEvent` response.
 struct PendingEntry {
     /// Wall-clock deadline in milliseconds (`performance.now()` domain).
-    deadline_ms: ambre_bus::PageTime,
+    deadline: ambre_bus::PageTime,
 }
 
 /// Typed P3 request/response correlator for the UI thread.
 ///
 /// # Lifecycle
 ///
-/// 1. **Send** -- `registry.prepare(cmd, now_ms)` allocates a fresh `RequestId`,
+/// 1. **Send** -- `registry.prepare(cmd, now)` allocates a fresh `RequestId`,
 ///    records a `PendingEntry`, and returns a `LogicCommand::Rest` envelope
 ///    ready to forward to the Logic thread.
 /// 2. **Receive** -- when a `UiEvent::Rest { id, evt }` arrives, call
 ///    `registry.try_recv(id)` to check whether the id was pending. If so, the
 ///    caller should extract the expected variant from `evt`.
-/// 3. **Expire** -- call `registry.expire(now_ms)` once per frame to drop entries
+/// 3. **Expire** -- call `registry.expire(now)` once per frame to drop entries
 ///    whose deadline has passed.
 pub struct RequestRegistry<T: RequestTag> {
     pending: FxHashMap<RequestId, PendingEntry>,
@@ -76,23 +76,23 @@ impl<T: RequestTag> RequestRegistry<T> {
     /// timeout, and return the `LogicCommand::Rest` envelope ready to send
     /// downstream.
     ///
-    /// `now_ms` is a `performance.now()` timestamp in milliseconds.
-    pub fn prepare(&mut self, cmd: RestCommand, now_ms: ambre_bus::PageTime) -> LogicCommand {
-        self.prepare_with_timeout(cmd, now_ms, T::DEFAULT_TIMEOUT)
+    /// `now` is a `performance.now()` timestamp in milliseconds.
+    pub fn prepare(&mut self, cmd: RestCommand, now: ambre_bus::PageTime) -> LogicCommand {
+        self.prepare_with_timeout(cmd, now, T::DEFAULT_TIMEOUT)
     }
 
     /// Like [`prepare`](Self::prepare) but with an explicit timeout override.
     pub fn prepare_with_timeout(
         &mut self,
         cmd: RestCommand,
-        now_ms: ambre_bus::PageTime,
+        now: ambre_bus::PageTime,
         timeout: ambre_bus::Millis,
     ) -> LogicCommand {
         let id = RequestId::next();
         self.pending.insert(
             id,
             PendingEntry {
-                deadline_ms: now_ms.after(timeout.to_page_millis()),
+                deadline: now.after(timeout.to_page_millis()),
             },
         );
         LogicCommand::Rest { id, cmd }
@@ -110,8 +110,8 @@ impl<T: RequestTag> RequestRegistry<T> {
     /// Drop all pending entries whose deadline has passed. Call once per frame
     /// before draining the inbound queue, so queued events don't match an
     /// already-expired id.
-    pub fn expire(&mut self, now_ms: ambre_bus::PageTime) {
-        self.pending.retain(|_id, entry| entry.deadline_ms > now_ms);
+    pub fn expire(&mut self, now: ambre_bus::PageTime) {
+        self.pending.retain(|_id, entry| entry.deadline > now);
     }
 }
 

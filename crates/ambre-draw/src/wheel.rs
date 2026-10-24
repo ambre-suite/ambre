@@ -12,7 +12,7 @@ use ambre_core::{CssPx, CssVector};
 
 /// The pixels one wheel line is worth, in a view whose content has no line of
 /// its own. Trame steps by a zoomed cell instead.
-pub const WHEEL_LINE_PX: CssPx = CssPx::new(40.0);
+pub const WHEEL_LINE: CssPx = CssPx::new(40.0);
 
 /// The unit of a wheel delta, as the DOM's `WheelEvent.deltaMode` names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,10 +100,10 @@ impl WheelDelta {
 
 #[cfg(test)]
 mod tests {
-    use super::{WHEEL_LINE_PX, WheelDelta, WheelDeltaMode};
+    use super::{WHEEL_LINE, WheelDelta, WheelDeltaMode};
     use ambre_core::{CssPx, CssVector};
 
-    const LINE: CssVector = CssVector::new(WHEEL_LINE_PX, WHEEL_LINE_PX);
+    const LINE: CssVector = CssVector::new(WHEEL_LINE, WHEEL_LINE);
     const PAGE: CssVector = CssVector::new(CssPx::new(800.0), CssPx::new(600.0));
 
     fn px(dx: f32, dy: f32) -> CssVector {

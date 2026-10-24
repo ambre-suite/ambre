@@ -25,10 +25,10 @@ use crate::{ContentRepaint, OverlayRepaint, WheelDelta};
 #[derive(Default, Clone, Copy)]
 pub struct FrameStats {
     pub fps: f32,
-    pub frame_ms: PageMillis,
-    pub drain_ms: PageMillis,
-    pub draw_ms: PageMillis,
-    pub gpu_ms: PageMillis,
+    pub frame: PageMillis,
+    pub drain: PageMillis,
+    pub draw: PageMillis,
+    pub gpu: PageMillis,
 }
 
 /// A full per-frame performance snapshot, published from the canvas view to the
@@ -39,15 +39,15 @@ pub struct FrameStats {
 #[derive(Default, Clone, Copy)]
 pub struct PerfSnapshot {
     pub fps: f32,
-    pub frame_ms: PageMillis,
-    pub drain_ms: PageMillis,
-    pub draw_ms: PageMillis,
-    pub gpu_ms: PageMillis,
-    pub bg_ms: PageMillis,
-    pub cells_ms: PageMillis,
-    pub hdrs_ms: PageMillis,
+    pub frame: PageMillis,
+    pub drain: PageMillis,
+    pub draw: PageMillis,
+    pub gpu: PageMillis,
+    pub background: PageMillis,
+    pub cells: PageMillis,
+    pub headers: PageMillis,
     pub cells_drawn: u32,
-    pub input_lat_ms: PageMillis,
+    pub input_latency: PageMillis,
     pub glyph_misses: u32,
 }
 

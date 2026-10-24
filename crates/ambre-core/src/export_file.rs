@@ -51,14 +51,14 @@ pub enum ExportFilenameError {
     /// The name holds a control character.
     #[error("an export file name holds a control character")]
     ControlCharacter,
-    /// The name is longer than [`ExportFilename::MAX_BYTES`].
+    /// The name is longer than [`ExportFilename::MAX_SIZE`].
     #[error("an export file name is too long")]
     TooLong,
 }
 
 /// The name an export file is saved under. It is never empty, never `.` or
 /// `..`, and holds no path separator and no control character
-/// (`DOCFILE-019`). It holds at most [`MAX_BYTES`](Self::MAX_BYTES) bytes
+/// (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
 /// (`DOCFILE-020`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ExportFilename(String);
@@ -66,7 +66,7 @@ pub struct ExportFilename(String);
 impl ExportFilename {
     /// The most bytes a name holds, extension included: the limit of most
     /// file systems.
-    pub const MAX_BYTES: ByteSize = ByteSize(255);
+    pub const MAX_SIZE: ByteSize = ByteSize(255);
 
     /// The stem an export takes when its title leaves nothing to name it by.
     const FALLBACK_STEM: &'static str = "export";
@@ -89,7 +89,7 @@ impl ExportFilename {
         if text.chars().any(char::is_control) {
             return Err(ExportFilenameError::ControlCharacter);
         }
-        if ByteSize::of_len(text.len()) > Self::MAX_BYTES {
+        if ByteSize::of_len(text.len()) > Self::MAX_SIZE {
             return Err(ExportFilenameError::TooLong);
         }
         Ok(Self(text.to_owned()))
@@ -110,7 +110,7 @@ impl ExportFilename {
     pub fn from_title(title: &str, fallback: &'static str, extension: ExportExtension) -> Self {
         let suffix = extension.as_str();
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_BYTES.as_len().saturating_sub(suffix.len() + 1);
+        let room = Self::MAX_SIZE.as_len().saturating_sub(suffix.len() + 1);
         let stem = [title, fallback, Self::FALLBACK_STEM]
             .into_iter()
             .map(|text| clean_stem(text, room))
@@ -262,9 +262,9 @@ mod tests {
     /// taken.
     #[test]
     fn a_name_past_the_bound_is_refused() {
-        let at = "a".repeat(ExportFilename::MAX_BYTES.as_len());
+        let at = "a".repeat(ExportFilename::MAX_SIZE.as_len());
         assert!(ExportFilename::new(&at).is_ok());
-        let past = "a".repeat(ExportFilename::MAX_BYTES.as_len() + 1);
+        let past = "a".repeat(ExportFilename::MAX_SIZE.as_len() + 1);
         assert_eq!(
             ExportFilename::new(&past),
             Err(ExportFilenameError::TooLong)
@@ -296,7 +296,7 @@ mod tests {
     fn a_long_title_is_cut_and_keeps_its_extension() {
         let title = "\u{e9}".repeat(400);
         let name = ExportFilename::from_title(&title, "x", ExportExtension::Markdown);
-        assert!(ByteSize::of_len(name.as_str().len()) <= ExportFilename::MAX_BYTES);
+        assert!(ByteSize::of_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
         assert!(name.as_str().ends_with(".md"));
         assert!(ExportFilename::new(name.as_str()).is_ok());
     }

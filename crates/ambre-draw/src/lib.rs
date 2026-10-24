@@ -26,7 +26,7 @@ pub use types::*;
 pub mod kinetic;
 
 pub mod wheel;
-pub use wheel::{WHEEL_LINE_PX, WheelDelta, WheelDeltaMode};
+pub use wheel::{WHEEL_LINE, WheelDelta, WheelDeltaMode};
 
 pub mod hit;
 pub use hit::HitTest;
@@ -103,7 +103,7 @@ impl ImageKey {
 pub trait Clock {
     /// The page's monotonic clock. Sub-millisecond precision is expected on
     /// screen but never relied upon for correctness.
-    fn now_ms(&self) -> ambre_core::PageTime;
+    fn now(&self) -> ambre_core::PageTime;
 }
 
 /// GPU- and PDF-agnostic drawing interface.

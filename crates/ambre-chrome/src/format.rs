@@ -116,7 +116,7 @@ pub fn FormatToggle(
 }
 
 /// How far above its anchor the format bar sits, in CSS pixels.
-pub const FORMAT_BAR_LIFT_PX: CssPx = CssPx::new(40.0);
+pub const FORMAT_BAR_LIFT: CssPx = CssPx::new(40.0);
 
 /// Whether a control's mark covers the selection, as `aria-pressed` reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,7 +153,7 @@ pub fn FormatBar(anchor: CssPoint, controls: Vec<FormatControl>) -> impl IntoVie
     let style = format!(
         "position: fixed; left: {}px; top: {}px; transform: translateX(-50%); z-index: 62;",
         anchor.x.get(),
-        (anchor.y - FORMAT_BAR_LIFT_PX).max(CssPx::ZERO).get()
+        (anchor.y - FORMAT_BAR_LIFT).max(CssPx::ZERO).get()
     );
     let controls = controls.into_iter().map(|control| {
         let on_press = control.on_press;

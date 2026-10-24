@@ -2090,7 +2090,7 @@ pub enum ToileCommand {
     /// selection) to broadcast to peers. Produces a `SendEphemeral` payload and
     /// no CRDT delta: the local cursor is drawn by the UI itself.
     ///
-    /// `now_ms` is the UI thread's wall clock, which the Logic thread does not
+    /// `now` is the UI thread's wall clock, which the Logic thread does not
     /// hold (`features/ambre-spec-toile-comments.md section 5`, the same
     /// argument). It never travels: it ages the peers this client knows about,
     /// so one that stopped sending leaves the live set (`TOILE-185`). The UI
@@ -2098,7 +2098,7 @@ pub enum ToileCommand {
     /// always advances.
     Presence {
         payload: PresencePayload,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     },
 }
 

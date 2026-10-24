@@ -819,7 +819,7 @@ impl VAlign {
 /// uses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellBorder {
-    pub width_pt: Pt,
+    pub width: Pt,
     pub color: Rgb,
 }
 
@@ -1395,7 +1395,7 @@ pub enum ProseCommand {
     InsertTableCol {
         table_id: BlockId,
         at_col: Col,
-        width_pt: Option<Pt>,
+        width: Option<Pt>,
     },
     DeleteTableCol {
         table_id: BlockId,
@@ -1404,7 +1404,7 @@ pub enum ProseCommand {
     ResizeTableCol {
         table_id: BlockId,
         col_index: Col,
-        width_pt: Pt,
+        width: Pt,
     },
     /// Two grid positions in either order. The handler resolves them to two
     /// block ids before it writes (`PROSE-FEAT-241`).
@@ -1422,7 +1422,7 @@ pub enum ProseCommand {
         bg: Option<Rgb>,
         valign: Option<VAlign>,
         border: Option<CellBorder>,
-        padding_pt: Option<Pt>,
+        padding: Option<Pt>,
     },
     /// Tab and Shift-Tab: the next or the previous stop in reading order.
     /// Past the last cell, a row is appended (`PROSE-FEAT-251`).
@@ -1539,7 +1539,7 @@ pub enum ProseCommand {
     /// engine writes it as the document's last-modified stamp when this peer
     /// wrote since the last one (`PROSE-FEAT-066`).
     StampModified {
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -1581,18 +1581,18 @@ pub enum ProseCommand {
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// A thread over `range` in `block_id`, opened by a reply holding `text`.
-    /// `now_ms` is the display stamp: the Logic thread reads no clock.
+    /// `now` is the display stamp: the Logic thread reads no clock.
     AddComment {
         block_id: BlockId,
         range: DocSpan,
         text: String,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
         comment_id: CommentId,
         text: String,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     },
     /// Close a thread.
     ResolveComment {

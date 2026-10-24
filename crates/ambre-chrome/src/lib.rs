@@ -62,7 +62,7 @@ pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};
 pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
 pub use format::{
-    FONT_SIZES, FORMAT_BAR_LIFT_PX, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
+    FONT_SIZES, FORMAT_BAR_LIFT, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
 };
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};

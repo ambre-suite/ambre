@@ -303,11 +303,11 @@ pub struct Picture {
 }
 
 /// One frame of a [`Picture`]: non-premultiplied RGBA8, row-major, `width *
-/// height * 4` bytes of its size, shown for `delay_ms`.
+/// height * 4` bytes of its size, shown for `delay`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
     pub pixels: Vec<u8>,
-    pub delay_ms: ambre_core::Millis,
+    pub delay: ambre_core::Millis,
 }
 
 impl Picture {
