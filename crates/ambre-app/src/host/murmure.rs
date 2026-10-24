@@ -27,7 +27,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         pane: Rc::new(move || relay.pane.get_untracked()),
         name_of: Rc::new(move |user| relay.member_name(user)),
         time_of: Rc::new(move |ts| clock.format(ts)),
-        now_ms: Rc::new(super::probe::now_ms),
+        now: Rc::new(super::probe::now),
         // `Date.now()` is a whole, non-negative count of milliseconds.
         wall_clock: Rc::new(|| ambre_bus::Timestamp(js_sys::Date::now() as u64)),
         motion: Rc::new({

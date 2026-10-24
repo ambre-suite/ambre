@@ -152,9 +152,9 @@ impl Cells {
     }
 
     /// Render every bound cell, each under its own plan (`CANVAS-070`).
-    pub(super) fn render(&mut self, now_ms: ambre_core::PageTime) {
+    pub(super) fn render(&mut self, now: ambre_core::PageTime) {
         for cell in self.bound.values_mut() {
-            cell.render(now_ms);
+            cell.render(now);
         }
     }
 
@@ -340,7 +340,7 @@ impl Bound {
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
     /// so a plan is never spent on a canvas that cannot show it. Answers the
     /// plan it presented.
-    fn render(&mut self, now_ms: ambre_core::PageTime) -> Option<RepaintPlan<DevicePx>> {
+    fn render(&mut self, now: ambre_core::PageTime) -> Option<RepaintPlan<DevicePx>> {
         let mut view = self.view.borrow_mut();
         view.update();
         let mut slot = self.gpu.borrow_mut();
@@ -358,7 +358,7 @@ impl Bound {
         } else {
             Relayout::Kept
         };
-        let plan = plan_frame(&mut view, size, relayout, now_ms);
+        let plan = plan_frame(&mut view, size, relayout, now);
         // An edit asked from a menu loads the field as its plan runs.
         self.claim.note(&view);
         let phases = Phases::of(plan.content, plan.overlay);
@@ -436,12 +436,12 @@ fn plan_frame(
     view: &mut AppView,
     size: SurfaceSize,
     relayout: Relayout,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) -> RepaintPlan<DevicePx> {
     if relayout == Relayout::Again {
         view.resize(size.logical());
     }
-    size.on_device(view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle))
+    size.on_device(view.plan_repaint(now, ambre_canvas::HudTick::Idle))
 }
 
 /// The phase and the point of a finger on a cell, in its own pixels. `None`
@@ -963,12 +963,12 @@ mod tests {
             "no GPU yet"
         );
 
-        let plan = |bound: &Bound, now_ms: ambre_core::PageTime| {
+        let plan = |bound: &Bound, now: ambre_core::PageTime| {
             plan_frame(
                 &mut bound.view.borrow_mut(),
                 bound.size.get(),
                 Relayout::Kept,
-                now_ms,
+                now,
             )
             .content
         };

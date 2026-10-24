@@ -152,7 +152,7 @@ impl ClipboardFormat {
 
 /// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
 /// browser spaces a hidden page's timers to a second at least.
-const HIDDEN_RELAY_PERIOD_MS: ambre_bus::Millis = ambre_bus::Millis(1000);
+const HIDDEN_RELAY_PERIOD: ambre_bus::Millis = ambre_bus::Millis(1000);
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
 /// Where a mouse, pointer or drag event landed on its canvas. The DOM
@@ -343,14 +343,14 @@ impl AppView {
     /// Decide what to repaint this frame and clear the dirty flags.
     fn plan_repaint(
         &mut self,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         match self {
-            AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
-            AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
-            AppView::Prose(v) => v.plan_repaint(now_ms, hud_tick),
-            AppView::Murmure(v) => v.plan_repaint(now_ms, hud_tick),
+            AppView::Trame(v) => v.plan_repaint(now, hud_tick),
+            AppView::Toile(v) => v.plan_repaint(now, hud_tick),
+            AppView::Prose(v) => v.plan_repaint(now, hud_tick),
+            AppView::Murmure(v) => v.plan_repaint(now, hud_tick),
         }
     }
 
@@ -466,32 +466,32 @@ impl AppView {
 
     /// A finger on the canvas. Every application takes it apart from the
     /// mouse.
-    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now_ms: ambre_core::PageTime) -> bool {
+    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> bool {
         match self {
             AppView::Toile(v) => match phase {
-                TouchPhase::Down => v.touch_down(at, now_ms),
-                TouchPhase::Move => v.touch_move(at, now_ms),
-                TouchPhase::Up => v.touch_up(at, now_ms),
+                TouchPhase::Down => v.touch_down(at, now),
+                TouchPhase::Move => v.touch_move(at, now),
+                TouchPhase::Up => v.touch_up(at, now),
                 TouchPhase::Cancel => v.touch_cancel(),
             },
             AppView::Trame(v) => {
                 match phase {
-                    TouchPhase::Down => v.touch_down(at, now_ms),
-                    TouchPhase::Move => v.touch_move(at, now_ms),
-                    TouchPhase::Up => v.touch_up(now_ms),
+                    TouchPhase::Down => v.touch_down(at, now),
+                    TouchPhase::Move => v.touch_move(at, now),
+                    TouchPhase::Up => v.touch_up(now),
                     TouchPhase::Cancel => v.touch_cancel(),
                 }
                 true
             }
-            AppView::Prose(v) => v.touch(phase, at, now_ms),
+            AppView::Prose(v) => v.touch(phase, at, now),
             AppView::Murmure(v) => {
                 match phase {
-                    TouchPhase::Down => v.touch_down(at, now_ms),
+                    TouchPhase::Down => v.touch_down(at, now),
                     TouchPhase::Move => {
-                        v.touch_move(at, now_ms);
+                        v.touch_move(at, now);
                     }
                     TouchPhase::Up => {
-                        v.touch_up(now_ms);
+                        v.touch_up(now);
                     }
                     TouchPhase::Cancel => v.touch_cancel(),
                 }

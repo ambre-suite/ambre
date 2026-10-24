@@ -132,7 +132,7 @@ where
             let hidden_relay = Rc::clone(&pre_frame);
             ambre_canvas::host::start_hidden_relay(
                 move || (hidden_relay.borrow_mut())(),
-                HIDDEN_RELAY_PERIOD_MS,
+                HIDDEN_RELAY_PERIOD,
             );
             start_raf_loop(
                 move |now| {

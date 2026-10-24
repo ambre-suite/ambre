@@ -18,10 +18,10 @@ use wasm_bindgen::{JsCast, JsValue};
 use ambre_prose::probe::{Measure, ProbeName, percentiles};
 
 /// How often the summary is printed.
-const SUMMARY_EVERY_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
+const SUMMARY_EVERY: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
 
 /// The page's clock, in milliseconds since the page opened.
-pub(crate) fn now_ms() -> ambre_core::PageTime {
+pub(crate) fn now() -> ambre_core::PageTime {
     ambre_core::PageTime(
         web_sys::window()
             .and_then(|w| w.performance())
@@ -33,8 +33,8 @@ pub(crate) fn now_ms() -> ambre_core::PageTime {
 pub(crate) struct PageClock;
 
 impl ambre_draw::Clock for PageClock {
-    fn now_ms(&self) -> ambre_core::PageTime {
-        now_ms()
+    fn now(&self) -> ambre_core::PageTime {
+        now()
     }
 }
 
@@ -98,7 +98,7 @@ impl Timeline {
         let Some(samples) = self.samples.as_ref() else {
             return;
         };
-        if !self.fresh || now - self.last_summary < SUMMARY_EVERY_MS {
+        if !self.fresh || now - self.last_summary < SUMMARY_EVERY {
             return;
         }
         self.last_summary = now;

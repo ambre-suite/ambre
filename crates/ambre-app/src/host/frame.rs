@@ -206,13 +206,13 @@ pub struct FrameHost {
 
     render_times: VecDeque<ambre_core::PageTime>,
     render_fps: f32,
-    last_frame_ms: ambre_core::PageMillis,
-    last_drain_ms: ambre_core::PageMillis,
-    last_draw_ms: ambre_core::PageMillis,
-    last_gpu_ms: ambre_core::PageMillis,
+    last_frame: ambre_core::PageMillis,
+    last_drain: ambre_core::PageMillis,
+    last_draw: ambre_core::PageMillis,
+    last_gpu: ambre_core::PageMillis,
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
-    last_hud_update_ms: ambre_core::PageTime,
+    last_hud_update: ambre_core::PageTime,
     /// Painted once the fatal terminal screen is up, so the static message
     /// is encoded a single time rather than every subsequent frame.
     fatal_screen: ambre_canvas::FatalScreen,
@@ -247,11 +247,11 @@ impl FrameHost {
             cells: super::cell::Cells::default(),
             render_times: VecDeque::with_capacity(120),
             render_fps: 0.0,
-            last_frame_ms: ambre_core::PageMillis::ZERO,
-            last_drain_ms: ambre_core::PageMillis::ZERO,
-            last_draw_ms: ambre_core::PageMillis::ZERO,
-            last_gpu_ms: ambre_core::PageMillis::ZERO,
-            last_hud_update_ms: ambre_bus::PageTime(0.0),
+            last_frame: ambre_core::PageMillis::ZERO,
+            last_drain: ambre_core::PageMillis::ZERO,
+            last_draw: ambre_core::PageMillis::ZERO,
+            last_gpu: ambre_core::PageMillis::ZERO,
+            last_hud_update: ambre_bus::PageTime(0.0),
             fatal_screen: ambre_canvas::FatalScreen::Unpainted,
         }
     }
@@ -306,7 +306,7 @@ impl FrameHost {
     /// the route on its next send. Returns whether any child needs the board
     /// recomposited this frame (a fresh child, a resize, or a self-driven content
     /// change). A no-op when the launcher installed no child factory.
-    fn sync_children(&mut self, now_ms: ambre_core::PageTime) -> bool {
+    fn sync_children(&mut self, now: ambre_core::PageTime) -> bool {
         let Some(make_child) = self.make_child.clone() else {
             return false;
         };
@@ -324,7 +324,7 @@ impl FrameHost {
                 child.update();
                 !matches!(
                     child
-                        .plan_repaint(now_ms, ambre_canvas::HudTick::Idle)
+                        .plan_repaint(now, ambre_canvas::HudTick::Idle)
                         .content,
                     ContentRepaint::Reuse
                 )
@@ -381,9 +381,9 @@ impl FrameHost {
         &mut self,
         phase: TouchPhase,
         at: ViewPoint,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> bool {
-        self.view.touch(phase, at, now_ms)
+        self.view.touch(phase, at, now)
     }
 
     /// Whether a consumed press captures the pointer, so a drag keeps its
@@ -530,8 +530,8 @@ impl FrameHost {
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
         let mut hud_tick = ambre_canvas::HudTick::Idle;
-        if raf_timestamp - self.last_hud_update_ms >= ambre_core::PageMillis::new(500.0) {
-            self.last_hud_update_ms = raf_timestamp;
+        if raf_timestamp - self.last_hud_update >= ambre_core::PageMillis::new(500.0) {
+            self.last_hud_update = raf_timestamp;
             hud_tick = ambre_canvas::HudTick::Due;
         }
 
@@ -565,16 +565,16 @@ impl FrameHost {
 
         let stats = FrameStats {
             fps: self.render_fps,
-            frame_ms: self.last_frame_ms,
-            drain_ms: self.last_drain_ms,
-            draw_ms: self.last_draw_ms,
-            gpu_ms: self.last_gpu_ms,
+            frame: self.last_frame,
+            drain: self.last_drain,
+            draw: self.last_draw,
+            gpu: self.last_gpu,
         };
 
         let t0 = ambre_core::PageTime(self.perf.now());
 
         // -- Build CPU batches for whichever layers are being rebuilt. --------
-        let t_draw_ms = if any_dirty {
+        let t_draw = if any_dirty {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
             let t_draw_start = ambre_core::PageTime(self.perf.now());
@@ -646,10 +646,10 @@ impl FrameHost {
         }
 
         let t2 = ambre_core::PageTime(self.perf.now());
-        self.last_frame_ms = t2 - t0;
-        self.last_drain_ms = t_after_drain - t_drain;
-        self.last_draw_ms = t_draw_ms;
-        self.last_gpu_ms = t2 - t_gpu_start;
+        self.last_frame = t2 - t0;
+        self.last_drain = t_after_drain - t_drain;
+        self.last_draw = t_draw;
+        self.last_gpu = t2 - t_gpu_start;
     }
 
     /// Paint the unrecoverable-error terminal screen: a dark backdrop with a

@@ -104,7 +104,7 @@ pub struct ProseView {
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
     /// The keystrokes in flight, from their input to their frame.
     probe: KeyProbe,
     timeline: super::probe::Timeline,
@@ -158,7 +158,7 @@ impl ProseView {
             shown: None,
             annotations,
             layout_cx: LayoutContext::new(),
-            now_ms: ambre_bus::PageTime(0.0),
+            now: ambre_bus::PageTime(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
         }
@@ -193,7 +193,7 @@ impl ProseView {
                     self.state.apply_event(&event);
                     let answered =
                         self.probe
-                            .answered(super::probe::now_ms(), &self.state.draft, answer);
+                            .answered(super::probe::now(), &self.state.draft, answer);
                     self.timeline.record(answered);
                     self.timeline
                         .count(ProbeName::ConfirmFrames, self.probe.take_counts());
@@ -244,8 +244,8 @@ impl ProseView {
             return;
         };
         self.annotations.intent.set(None);
-        let now_ms = ambre_core::Timestamp(js_sys::Date::now() as u64);
-        if let Some(command) = self.state.take_intent(intent, now_ms) {
+        let now = ambre_core::Timestamp(js_sys::Date::now() as u64);
+        if let Some(command) = self.state.take_intent(intent, now) {
             send_edit(&mut self.outbox, self.document_id, command);
             self.busy_pub.publish(self.outbox.load());
         }
@@ -426,16 +426,16 @@ impl ProseView {
 
     pub fn plan_repaint(
         &mut self,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         _hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
-        self.now_ms = now_ms;
-        self.timeline.summarize(now_ms);
+        self.now = now;
+        self.timeline.summarize(now);
         self.flush_outbox();
         // A recount is owed half a second after the text last changed
         // (`PROSE-FEAT-124`). A full channel drops it, and the next change
         // asks again.
-        if let Some(command) = self.state.tick(now_ms) {
+        if let Some(command) = self.state.tick(now) {
             send_command(&self.to_logic, self.document_id, command);
         }
         // The pages the canvas is about to show, asked for before a frame
@@ -446,7 +446,7 @@ impl ProseView {
         }
         // A drag held near an edge scrolls the page (`PROSE-UI-038`), and a
         // flick keeps it moving (`PROSE-UI-217`).
-        if self.state.tick_autoscroll(now_ms) | self.state.tick_fling(now_ms) {
+        if self.state.tick_autoscroll(now) | self.state.tick_fling(now) {
             self.state.hovered = None;
             self.publish_hover();
             self.publish_toolbar();
@@ -485,13 +485,13 @@ impl ProseView {
         _text_cache: &mut TextCache,
         _strip: Option<Rect>,
     ) {
-        let start = super::probe::now_ms();
+        let start = super::probe::now();
         self.state.shape_draft(font_cx, &mut self.layout_cx);
         if !self.state.draft.is_empty() {
             self.timeline.record(vec![Measure {
                 name: ProbeName::Shape,
                 start,
-                end: super::probe::now_ms(),
+                end: super::probe::now(),
             }]);
         }
         let backdrop = Rect::new(
@@ -509,7 +509,7 @@ impl ProseView {
             let height = ViewPx::new(bar.height().max(1.0) as f32);
             self.text_input.set_caret(at, height);
         }
-        let painted = self.probe.painted(super::probe::now_ms());
+        let painted = self.probe.painted(super::probe::now());
         self.timeline.record(painted);
     }
 
@@ -548,7 +548,7 @@ impl ProseView {
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
                 let now = web_sys::window()
                     .and_then(|w| w.performance())
-                    .map_or(self.now_ms, |p| ambre_bus::PageTime(p.now()));
+                    .map_or(self.now, |p| ambre_bus::PageTime(p.now()));
                 self.state.wheel(*delta, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).
@@ -571,7 +571,7 @@ impl ProseView {
                 let Some(input) = self.translate(ev) else {
                     return false;
                 };
-                let start = super::probe::now_ms();
+                let start = super::probe::now();
                 let (outbox, document_id) = (&mut self.outbox, self.document_id);
                 let mut sent = false;
                 let mut send = |command| {
@@ -584,7 +584,7 @@ impl ProseView {
                     let dispatch = if sent { Dispatch::Sent } else { Dispatch::Kept };
                     let echoed = self.probe.handled(
                         start,
-                        super::probe::now_ms(),
+                        super::probe::now(),
                         &self.state.draft,
                         dispatch,
                     );
@@ -625,7 +625,7 @@ impl ProseView {
                     alt: false,
                     ..*mods
                 },
-                now_ms: self.now_ms,
+                now: self.now,
             },
             InputEvent::PointerMove { at } => ProseInput::Drag { at: *at },
             InputEvent::PointerUp {
@@ -673,11 +673,11 @@ impl ProseView {
     /// copy while the clipboard is still that copy (`PROSE-UI-043`).
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
         let input = self.state.paste_input(blob, source);
-        let start = super::probe::now_ms();
+        let start = super::probe::now();
         if self.feed(&input) {
             let echoed = self.probe.handled(
                 start,
-                super::probe::now_ms(),
+                super::probe::now(),
                 &self.state.draft,
                 Dispatch::Sent,
             );
@@ -691,15 +691,15 @@ impl ProseView {
         &mut self,
         phase: super::TouchPhase,
         at: ViewPoint,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> bool {
         if self.fatal {
             return false;
         }
         match phase {
-            super::TouchPhase::Down => self.state.touch_start(at, now_ms),
+            super::TouchPhase::Down => self.state.touch_start(at, now),
             super::TouchPhase::Move => {
-                if self.state.touch_move(at, now_ms) {
+                if self.state.touch_move(at, now) {
                     self.state.hovered = None;
                     self.publish_hover();
                     self.publish_toolbar();
@@ -708,11 +708,11 @@ impl ProseView {
             }
             super::TouchPhase::Cancel => self.state.touch_cancel(),
             super::TouchPhase::Up => {
-                if let Some(at) = self.state.touch_end(now_ms) {
+                if let Some(at) = self.state.touch_end(now) {
                     self.feed(&ProseInput::Press {
                         at,
                         mods: Modifiers::NONE,
-                        now_ms,
+                        now,
                     });
                     self.feed(&ProseInput::Release);
                 }

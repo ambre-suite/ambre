@@ -1086,7 +1086,7 @@ pub fn main() {
         if let Some(window) = web_sys::window() {
             let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
                 refresh.as_ref().unchecked_ref(),
-                ambre_murmure::REFRESH_PERIOD_MS.to_timer_i32(),
+                ambre_murmure::REFRESH_PERIOD.to_timer_i32(),
             );
         }
         refresh.forget();
