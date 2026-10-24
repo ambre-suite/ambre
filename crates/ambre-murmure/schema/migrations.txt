@@ -13,10 +13,3 @@
 # `SCHEMA_VERSION` and a new section below, never an edit to a published section.
 
 == v1
-
-== v2
-1 -> 2 9355221ec1cb8ef3
-
-== v3
-1 -> 2 9355221ec1cb8ef3
-2 -> 3 9355221ec1cb8ef3

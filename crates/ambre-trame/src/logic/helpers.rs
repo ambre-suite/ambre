@@ -105,26 +105,6 @@ pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> 
     }
 }
 
-/// Parse a persisted operator string (the legacy `filters_{sheet}` spelling the
-/// `1 -> 2` migration reads back). `None` on an unknown token (defensive against
-/// a corrupt or future entry).
-pub(crate) fn op_from_str(s: &str) -> Option<FilterOp> {
-    Some(match s {
-        "eq" => FilterOp::Eq,
-        "ne" => FilterOp::Ne,
-        "gt" => FilterOp::Gt,
-        "lt" => FilterOp::Lt,
-        "gte" => FilterOp::Gte,
-        "lte" => FilterOp::Lte,
-        "contains" => FilterOp::Contains,
-        "not_contains" => FilterOp::NotContains,
-        "starts_with" => FilterOp::StartsWith,
-        "is_empty" => FilterOp::IsEmpty,
-        "is_not_empty" => FilterOp::IsNotEmpty,
-        _ => return None,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

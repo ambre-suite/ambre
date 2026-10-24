@@ -26,11 +26,7 @@ use crate::error::MurmureError;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-///
-/// Version 2 adds the style marks over a body (`MURMURE-562`), the block
-/// marks among them (`MURMURE-194`). Version 3 adds the attachments of a
-/// message (`MURMURE-017`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 ambre_core::loro_fields!(pub(crate));
 
@@ -260,32 +256,14 @@ pub(crate) fn fields_of<K: ambre_core::crdt::FieldKey>(
 ///
 /// A document with no version reads as 0 (`SCHEMA-005`). No Murmure document
 /// was ever written without one, so the walk finds no step from 0 and
-/// refuses it. Version 1 is the first layout.
+/// refuses it. Version 1 is the first layout, and no build before it shipped,
+/// so the list is empty.
 ///
 /// A step writes no operation (`MURMURE-566`). Each member signs its own
 /// writes, and the check refuses a change under any other identity, so a
-/// migration's writes would never travel. `1 -> 2` adds marks a version 1
-/// body holds none of, so the document reads as it is and keeps its stamp.
-/// `2 -> 3` adds attachments, whose absence reads as none, so it reads as it
-/// is too.
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
-    SchemaMigration {
-        from: SchemaVersion::new(1),
-        to: SchemaVersion::new(2),
-        apply: read_as_it_is,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(2),
-        to: SchemaVersion::new(3),
-        apply: read_as_it_is,
-    },
-];
-
-/// A step that leaves the document as it is (`MURMURE-566`).
-#[allow(clippy::unnecessary_wraps)]
-fn read_as_it_is(_: &LoroDoc) -> Result<(), String> {
-    Ok(())
-}
+/// migration's writes would never travel. A later step therefore reads the
+/// document as it is and keeps its stamp.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The document kinds this build writes and reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -648,15 +626,26 @@ pub(crate) fn import_bytes(
 fn import_current(
     fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
 ) -> Result<LoroDoc, MurmureError> {
+    import_through(MIGRATIONS, SCHEMA_VERSION, fill)
+}
+
+/// [`import_current`] over the registry `steps`, up to `target`. A test hands
+/// it a step and a target of its own, so the walk stays proved while
+/// [`MIGRATIONS`] holds none.
+pub(crate) fn import_through(
+    steps: &[SchemaMigration<LoroDoc>],
+    target: SchemaVersion,
+    fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
+) -> Result<LoroDoc, MurmureError> {
     let doc = LoroDoc::new();
     fill(&doc)?;
     let found = read_version(&doc)?;
-    match verdict(found, SCHEMA_VERSION) {
+    match verdict(found, target) {
         SchemaVerdict::Current => {}
         SchemaVerdict::Newer => {
             return Err(SchemaError::DocumentTooNew {
                 document: found,
-                binary: SCHEMA_VERSION,
+                binary: target,
             }
             .into());
         }
@@ -675,7 +664,7 @@ fn import_current(
                 }))
                 .0,
             )?;
-            migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?;
+            migrate_schema(steps, found, target, &doc)?;
         }
     }
     Ok(doc)

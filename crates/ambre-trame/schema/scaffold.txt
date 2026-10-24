@@ -9,5 +9,5 @@
 # the section frozen for its version. A scaffolding that moves needs a raised
 # `SCHEMA_VERSION` and a new section below, never an edit to the section above.
 
-== v3
+== v1
 3157ccb6e3705184

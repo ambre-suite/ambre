@@ -560,10 +560,10 @@ fn silent_presence_frame() -> Option<ambre_core::EphemeralBytes> {
 
 /// Write the presentation defaults into the config root map (`TOILE-029`).
 ///
-/// Called from board construction and from the schema step that carries an
-/// older board. The map is a root container, so this writes registers into a
-/// container every peer already addresses, never a container of its own.
-pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
+/// Called from board construction. The map is a root container, so this
+/// writes registers into a container every peer already addresses, never a
+/// container of its own.
+pub(super) fn seed_presentation_config(doc: &LoroDoc) {
     let cfg = config(doc);
     if cfg.get(ConfigKey::TransitionMs).is_none() {
         let _ = cfg.insert(ConfigKey::TransitionMs, DEFAULT_TRANSITION_MS.get());

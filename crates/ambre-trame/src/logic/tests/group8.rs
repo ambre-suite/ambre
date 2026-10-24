@@ -177,49 +177,6 @@ fn a_delete_leaves_a_cell_reference_untouched() {
     assert_eq!(read_cell(&mut state, 0, 1), "8");
 }
 
-/// `TRAME-226`: a version-2 workbook stored `=A2`. It opens with the formula
-/// naming the cell it read, so a later insert above it no longer moves it.
-#[test]
-fn a_positional_workbook_migrates_onto_its_cells() {
-    use crate::logic::schema::SCHEMA_VERSION;
-    use crate::model::CellKey;
-
-    let mut old = column(&["1", "7", "9"]);
-    set(&mut old, 0, 1, "=SUM(A2:A3)+A2");
-    // Write the cell back as version 2 stored it: positions, and the number.
-    let (rl, cl) = old
-        .index
-        .resolve(CellPos::new(Row::new(0), Col::new(1)))
-        .expect("B1 is materialized");
-    old.doc
-        .get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str())
-        .insert(CellKey::of(rl, cl).as_str(), "=SUM(A2:A3)+A2")
-        .expect("the positional text");
-    old.doc
-        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-        .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2i64)
-        .expect("the old version");
-    old.doc.commit();
-
-    let mut state = TrameState::new();
-    state
-        .import_snapshot(&old.export_snapshot())
-        .expect("version 2 migrates");
-    assert_eq!(state.schema_version(), SCHEMA_VERSION);
-    let stored = state
-        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
-        .into_string();
-    assert!(
-        !stored.contains("A2"),
-        "the migration named the lines: {stored}"
-    );
-    assert_eq!(read_cell(&mut state, 0, 1), "23");
-
-    state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
-    assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A3:A4)+A3");
-    assert_eq!(read_cell(&mut state, 0, 1), "23");
-}
-
 /// `TRAME-048`: a whole-column range reads the used part of its column. A
 /// value written below the last row, or in a row inserted above, is summed.
 #[test]
@@ -315,4 +272,23 @@ fn a_formula_typed_before_its_cell_reads_the_cell_once_written() {
         text: "8".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "16");
+}
+
+/// `TRAME-226`: a reload keeps each reference on its cell. The stored text
+/// names the lines, so a row inserted after the reload still moves the
+/// reference with its cell.
+#[test]
+fn a_reloaded_workbook_reads_each_reference_from_its_cell() {
+    let mut author = column(&["1", "5"]);
+    set(&mut author, 0, 1, "=A2*2");
+    assert_eq!(read_cell(&mut author, 0, 1), "10");
+
+    let snapshot = author.export_snapshot();
+    let mut peer = TrameState::new();
+    peer.import_snapshot(&snapshot).expect("reload");
+    assert_eq!(read_cell(&mut peer, 0, 1), "10");
+
+    peer.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
+    assert_eq!(read_raw(&mut peer, 0, 1), "=A3*2");
+    assert_eq!(read_cell(&mut peer, 0, 1), "10");
 }

@@ -618,50 +618,9 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// The canonical document of the version a step leaves: that version's
 /// layout, holding what the step rewrites, written under a fixed identity.
 /// Each step reads its own, so a step added later never moves what an earlier
-/// one writes. Version 0 carries no register.
+/// one writes. The registry holds no step yet, so no version has one.
 fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
-    let doc = LoroDoc::new();
-    doc.set_peer_id(1)
-        .expect("a fresh document takes a peer id");
-    match from.get() {
-        // Each of these steps stamps the number and rewrites nothing.
-        0..=7 => {}
-        // A footnote whose text, marks and all, sits in its entry: the layout
-        // the `8 -> 9` step moves into a block of its own.
-        8 => {
-            crate::mark::configure(&doc);
-            let entry = doc::annots(&doc)
-                .insert_container("n1", loro::LoroMap::new())
-                .map(doc::Fields::<doc::AnnotKey>::of)
-                .expect("an entry");
-            entry
-                .insert(doc::AnnotKey::Kind, doc::AnnotKind::Footnote.as_str())
-                .expect("a kind");
-            let text = entry
-                .insert_container(doc::AnnotKey::Text, LoroText::new())
-                .expect("a text");
-            text.insert(0, "old note").expect("written");
-            text.mark(0..3, "b", "true").expect("marked");
-        }
-        // The language the version 9 seed wrote, under the key the
-        // `9 -> 10` step renames.
-        9 => {
-            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-                .insert("lang", "en")
-                .expect("the language");
-        }
-        _ => panic!("the step from version {from} has no canonical document: write one here"),
-    }
-    if from > ambre_core::schema::SCHEMA_VERSION_ABSENT {
-        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-            .insert(
-                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                i64::from(from.get()),
-            )
-            .expect("the register");
-    }
-    doc.commit();
-    doc
+    panic!("the step from version {from} has no canonical document: write one here")
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical

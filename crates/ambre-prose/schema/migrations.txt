@@ -9,26 +9,6 @@
 # one document two ways. A step that must change is a new step under a raised
 # `SCHEMA_VERSION` and a new section below, never an edit to a published section.
 # A step stamps the version it reaches, so a raised version moves every line.
+# Version 1 is the first layout and runs no step, so its section is empty.
 
-== v9
-0 -> 1 c99074bb33d48fb9
-1 -> 2 b656e2eaf0e3eabf
-2 -> 3 b656e2eaf0e3eabf
-3 -> 4 b656e2eaf0e3eabf
-4 -> 5 b656e2eaf0e3eabf
-5 -> 6 b656e2eaf0e3eabf
-6 -> 7 b656e2eaf0e3eabf
-7 -> 8 b656e2eaf0e3eabf
-8 -> 9 bc7c4ada6631fc76
-
-== v10
-0 -> 1 3d70e73374cc2619
-1 -> 2 7f444743707c7dc8
-2 -> 3 7f444743707c7dc8
-3 -> 4 7f444743707c7dc8
-4 -> 5 7f444743707c7dc8
-5 -> 6 7f444743707c7dc8
-6 -> 7 7f444743707c7dc8
-7 -> 8 7f444743707c7dc8
-8 -> 9 9f0d0b8a6ff0201c
-9 -> 10 11140f9f17128291
+== v1

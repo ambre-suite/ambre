@@ -393,20 +393,16 @@ pub(super) fn locked(em: &Fields<ElementKey>) -> bool {
 }
 
 /// The body of a sticky or text element, read from its `LoroText`
-/// (`TOILE-030`). A flat string reads as itself: a board before version 4
-/// carries one, and so does a write from a client on an older build. `None`
-/// when the map holds no body.
+/// (`TOILE-030`). `None` when the map holds no body.
 pub(super) fn body_of(m: &Fields<ElementKey>) -> Option<String> {
     match m.get(ElementKey::Body) {
         Some(ValueOrContainer::Container(Container::Text(t))) => Some(t.to_string()),
-        Some(ValueOrContainer::Value(LoroValue::String(s))) => Some(s.to_string()),
         _ => None,
     }
 }
 
 /// The body `LoroText` of an element map, seeding one in place of a missing
-/// field or a flat string. The caller writes the whole body next, so the
-/// string a seed replaces is not lost.
+/// field.
 pub(super) fn body_text_or_seed(m: &Fields<ElementKey>) -> Option<LoroText> {
     if let Some(ValueOrContainer::Container(Container::Text(t))) = m.get(ElementKey::Body) {
         return Some(t);

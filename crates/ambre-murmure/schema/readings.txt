@@ -15,7 +15,14 @@
 == v1
 amendments:amendments/{id}/by = "author" => message 3 deleted by its author
 amendments:amendments/{id}/content = "hi @channel" => message 1 amended to read "hi @channel"
+amendments:amendments/{id}/content#bold = true => message 1 amended to mark chars 0..2 bold
+amendments:amendments/{id}/content#code = true => message 1 amended to mark chars 0..2 code
+amendments:amendments/{id}/content#code_block = true => message 1 amended to mark chars 0..2 code_block
+amendments:amendments/{id}/content#italic = true => message 1 amended to mark chars 0..2 italic
+amendments:amendments/{id}/content#link = "https://ambre.dev" => message 1 amended to mark chars 0..2 a link to "https://ambre.dev"
+amendments:amendments/{id}/content#list = true => message 1 amended to mark chars 0..2 list
 amendments:amendments/{id}/content#mention = {uuid} => message 1 amended to mention the channel
+amendments:amendments/{id}/content#quote = true => message 1 amended to mark chars 0..2 quote
 amendments:amendments/{id}/deleted = true => message 3 deleted by amendment
 amendments:header/channel_id = {uuid} => the channel it opens as
 amendments:header/created_at = 1700000000007 => read by no reader of this build
@@ -30,207 +37,6 @@ meta:header/channel_id = {uuid} => the channel it opens as
 meta:header/created_at = 1700000000000 => read by no reader of this build
 meta:header/kind = "meta" => admitted as Meta
 meta:meta/schema_version = 1 => version 1, Current
-meta:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-meta:segments/*/amendments = {uuid} => entry 1 names the amendments of its segment
-meta:segments/*/document_id = {uuid} => entry 1 lists the closing segment
-meta:segments/*/document_id = {uuid} => entry 2 lists the active segment
-meta:segments/*/folded = {uuid} => entry 1 marks the amendments of its segment folded
-meta:segments/*/from_ts = 1700000000000 => read by no reader of this build
-meta:segments/*/from_ts = 1700000000006 => read by no reader of this build
-meta:segments/*/state = "active" => entry 2 is Active
-meta:segments/*/state = "closing" => entry 1 is Closing
-segment:header/channel_id = {uuid} => the channel it opens as
-segment:header/created_at = 1700000000000 => read by no reader of this build
-segment:header/folded = {uuid} => folds the amendments of its segment
-segment:header/folded_seq = 0 => folds its amendments up to delta 0
-segment:header/kind = "segment" => admitted as Segment
-segment:messages/*/also_in_thread = {uuid} => message 5 is a copy of a reply in its thread
-segment:messages/*/author = {uuid} => message 1 by the author
-segment:messages/*/author = {uuid} => message 2 by the author
-segment:messages/*/author = {uuid} => message 3 by the author
-segment:messages/*/author = {uuid} => message 4 by the author
-segment:messages/*/author = {uuid} => message 5 by the author
-segment:messages/*/content = "" => message 2 reads ""
-segment:messages/*/content = "" => message 3 reads ""
-segment:messages/*/content = "" => message 4 reads ""
-segment:messages/*/content = "a reply" => message 5 reads "a reply"
-segment:messages/*/content = "hi @channel" => message 1 reads "hi @channel"
-segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
-segment:messages/*/deleted = true => message 3 is deleted
-segment:messages/*/deleted = true => message 4 is deleted
-segment:messages/*/edited = true => message 1 is edited
-segment:messages/*/edited = true => message 3 is edited
-segment:messages/*/id = {uuid} => message 1
-segment:messages/*/id = {uuid} => message 2
-segment:messages/*/id = {uuid} => message 3
-segment:messages/*/id = {uuid} => message 4
-segment:messages/*/id = {uuid} => message 5
-segment:messages/*/member = {uuid} => message 2 names the member who joins
-segment:messages/*/notice = "member_added" => message 2 announces a member
-segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
-segment:messages/*/thread = {uuid} => message 1 names its thread
-segment:messages/*/thread = {uuid} => message 2 names the thread a fold carried
-segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
-segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
-segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
-segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
-segment:messages/*/ts = 1700000000005 => message 5 sent at 1700000000005 ms
-segment:meta/schema_version = 1 => version 1, Current
-segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-space:categories/{id}/name = "Teams" => category 1 named "Teams"
-space:categories/{id}/position = 0 => category 1 at position 0
-space:channels/{id}/category_id = {uuid} => entry 1 in category 1
-space:channels/{id}/key = 010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 => entry 1 hands over a sealed key of 72 bytes
-space:channels/{id}/name = "general" => entry 1 named "general"
-space:channels/{id}/position = 0 => entry 1 at position 0
-space:channels/{id}/topic = "everything" => entry 1 about "everything"
-space:header/created_at = 1700000000000 => read by no reader of this build
-space:header/kind = "space" => admitted as Space
-space:header/space_id = {uuid} => the space it opens as
-space:meta/schema_version = 1 => version 1, Current
-space:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-space:space/name = "Acme" => named "Acme"
-thread:header/channel_id = {uuid} => the channel it opens as
-thread:header/created_at = 1700000000005 => read by no reader of this build
-thread:header/kind = "thread" => admitted as Thread
-thread:header/root_id = {uuid} => the message it threads
-thread:header/segment_id = {uuid} => the segment of its root
-thread:messages/*/author = {uuid} => message 1 by the author
-thread:messages/*/content = "a reply" => message 1 reads "a reply"
-thread:messages/*/id = {uuid} => message 1
-thread:messages/*/ts = 1700000000005 => message 1 sent at 1700000000005 ms
-thread:meta/schema_version = 1 => version 1, Current
-thread:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-
-== v2
-amendments:amendments/{id}/by = "author" => message 3 deleted by its author
-amendments:amendments/{id}/content = "hi @channel" => message 1 amended to read "hi @channel"
-amendments:amendments/{id}/content#bold = true => message 1 amended to mark chars 0..2 bold
-amendments:amendments/{id}/content#code = true => message 1 amended to mark chars 0..2 code
-amendments:amendments/{id}/content#code_block = true => message 1 amended to mark chars 0..2 code_block
-amendments:amendments/{id}/content#italic = true => message 1 amended to mark chars 0..2 italic
-amendments:amendments/{id}/content#link = "https://ambre.dev" => message 1 amended to mark chars 0..2 a link to "https://ambre.dev"
-amendments:amendments/{id}/content#list = true => message 1 amended to mark chars 0..2 list
-amendments:amendments/{id}/content#mention = {uuid} => message 1 amended to mention the channel
-amendments:amendments/{id}/content#quote = true => message 1 amended to mark chars 0..2 quote
-amendments:amendments/{id}/deleted = true => message 3 deleted by amendment
-amendments:header/channel_id = {uuid} => the channel it opens as
-amendments:header/created_at = 1700000000007 => read by no reader of this build
-amendments:header/kind = "amendments" => admitted as Amendments
-amendments:header/segment_id = {uuid} => the segment it amends
-amendments:meta/schema_version = 2 => version 2, Current
-amendments:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-amendments:threads/{id} = {uuid} => message 2 names its thread by amendment
-meta:channel/name = "general" => named "general"
-meta:channel/type = "public" => Public
-meta:header/channel_id = {uuid} => the channel it opens as
-meta:header/created_at = 1700000000000 => read by no reader of this build
-meta:header/kind = "meta" => admitted as Meta
-meta:meta/schema_version = 2 => version 2, Current
-meta:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-meta:segments/*/amendments = {uuid} => entry 1 names the amendments of its segment
-meta:segments/*/document_id = {uuid} => entry 1 lists the closing segment
-meta:segments/*/document_id = {uuid} => entry 2 lists the active segment
-meta:segments/*/folded = {uuid} => entry 1 marks the amendments of its segment folded
-meta:segments/*/from_ts = 1700000000000 => read by no reader of this build
-meta:segments/*/from_ts = 1700000000006 => read by no reader of this build
-meta:segments/*/state = "active" => entry 2 is Active
-meta:segments/*/state = "closing" => entry 1 is Closing
-segment:header/channel_id = {uuid} => the channel it opens as
-segment:header/created_at = 1700000000000 => read by no reader of this build
-segment:header/folded = {uuid} => folds the amendments of its segment
-segment:header/folded_seq = 0 => folds its amendments up to delta 0
-segment:header/kind = "segment" => admitted as Segment
-segment:messages/*/also_in_thread = {uuid} => message 5 is a copy of a reply in its thread
-segment:messages/*/author = {uuid} => message 1 by the author
-segment:messages/*/author = {uuid} => message 2 by the author
-segment:messages/*/author = {uuid} => message 3 by the author
-segment:messages/*/author = {uuid} => message 4 by the author
-segment:messages/*/author = {uuid} => message 5 by the author
-segment:messages/*/content = "" => message 2 reads ""
-segment:messages/*/content = "" => message 3 reads ""
-segment:messages/*/content = "" => message 4 reads ""
-segment:messages/*/content = "a reply" => message 5 reads "a reply"
-segment:messages/*/content = "hi @channel" => message 1 reads "hi @channel"
-segment:messages/*/content#bold = true => message 1 marks chars 0..2 bold
-segment:messages/*/content#code = true => message 1 marks chars 0..2 code
-segment:messages/*/content#code_block = true => message 1 marks chars 0..2 code_block
-segment:messages/*/content#italic = true => message 1 marks chars 0..2 italic
-segment:messages/*/content#link = "https://ambre.dev" => message 1 marks chars 0..2 a link to "https://ambre.dev"
-segment:messages/*/content#list = true => message 1 marks chars 0..2 list
-segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
-segment:messages/*/content#quote = true => message 1 marks chars 0..2 quote
-segment:messages/*/deleted = true => message 3 is deleted
-segment:messages/*/deleted = true => message 4 is deleted
-segment:messages/*/edited = true => message 1 is edited
-segment:messages/*/edited = true => message 3 is edited
-segment:messages/*/id = {uuid} => message 1
-segment:messages/*/id = {uuid} => message 2
-segment:messages/*/id = {uuid} => message 3
-segment:messages/*/id = {uuid} => message 4
-segment:messages/*/id = {uuid} => message 5
-segment:messages/*/member = {uuid} => message 2 names the member who joins
-segment:messages/*/notice = "member_added" => message 2 announces a member
-segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
-segment:messages/*/thread = {uuid} => message 1 names its thread
-segment:messages/*/thread = {uuid} => message 2 names the thread a fold carried
-segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
-segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
-segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
-segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
-segment:messages/*/ts = 1700000000005 => message 5 sent at 1700000000005 ms
-segment:meta/schema_version = 2 => version 2, Current
-segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-space:categories/{id}/name = "Teams" => category 1 named "Teams"
-space:categories/{id}/position = 0 => category 1 at position 0
-space:channels/{id}/category_id = {uuid} => entry 1 in category 1
-space:channels/{id}/key = 010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101 => entry 1 hands over a sealed key of 72 bytes
-space:channels/{id}/name = "general" => entry 1 named "general"
-space:channels/{id}/position = 0 => entry 1 at position 0
-space:channels/{id}/topic = "everything" => entry 1 about "everything"
-space:header/created_at = 1700000000000 => read by no reader of this build
-space:header/kind = "space" => admitted as Space
-space:header/space_id = {uuid} => the space it opens as
-space:meta/schema_version = 2 => version 2, Current
-space:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-space:space/name = "Acme" => named "Acme"
-thread:header/channel_id = {uuid} => the channel it opens as
-thread:header/created_at = 1700000000005 => read by no reader of this build
-thread:header/kind = "thread" => admitted as Thread
-thread:header/root_id = {uuid} => the message it threads
-thread:header/segment_id = {uuid} => the segment of its root
-thread:messages/*/author = {uuid} => message 1 by the author
-thread:messages/*/content = "a reply" => message 1 reads "a reply"
-thread:messages/*/id = {uuid} => message 1
-thread:messages/*/ts = 1700000000005 => message 1 sent at 1700000000005 ms
-thread:meta/schema_version = 2 => version 2, Current
-thread:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-
-== v3
-amendments:amendments/{id}/by = "author" => message 3 deleted by its author
-amendments:amendments/{id}/content = "hi @channel" => message 1 amended to read "hi @channel"
-amendments:amendments/{id}/content#bold = true => message 1 amended to mark chars 0..2 bold
-amendments:amendments/{id}/content#code = true => message 1 amended to mark chars 0..2 code
-amendments:amendments/{id}/content#code_block = true => message 1 amended to mark chars 0..2 code_block
-amendments:amendments/{id}/content#italic = true => message 1 amended to mark chars 0..2 italic
-amendments:amendments/{id}/content#link = "https://ambre.dev" => message 1 amended to mark chars 0..2 a link to "https://ambre.dev"
-amendments:amendments/{id}/content#list = true => message 1 amended to mark chars 0..2 list
-amendments:amendments/{id}/content#mention = {uuid} => message 1 amended to mention the channel
-amendments:amendments/{id}/content#quote = true => message 1 amended to mark chars 0..2 quote
-amendments:amendments/{id}/deleted = true => message 3 deleted by amendment
-amendments:header/channel_id = {uuid} => the channel it opens as
-amendments:header/created_at = 1700000000007 => read by no reader of this build
-amendments:header/kind = "amendments" => admitted as Amendments
-amendments:header/segment_id = {uuid} => the segment it amends
-amendments:meta/schema_version = 3 => version 3, Current
-amendments:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-amendments:threads/{id} = {uuid} => message 2 names its thread by amendment
-meta:channel/name = "general" => named "general"
-meta:channel/type = "public" => Public
-meta:header/channel_id = {uuid} => the channel it opens as
-meta:header/created_at = 1700000000000 => read by no reader of this build
-meta:header/kind = "meta" => admitted as Meta
-meta:meta/schema_version = 3 => version 3, Current
 meta:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 meta:segments/*/amendments = {uuid} => entry 1 names the amendments of its segment
 meta:segments/*/document_id = {uuid} => entry 1 lists the closing segment
@@ -287,7 +93,7 @@ segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
 segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
 segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
 segment:messages/*/ts = 1700000000005 => message 5 sent at 1700000000005 ms
-segment:meta/schema_version = 3 => version 3, Current
+segment:meta/schema_version = 1 => version 1, Current
 segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:categories/{id}/name = "Teams" => category 1 named "Teams"
 space:categories/{id}/position = 0 => category 1 at position 0
@@ -299,7 +105,7 @@ space:channels/{id}/topic = "everything" => entry 1 about "everything"
 space:header/created_at = 1700000000000 => read by no reader of this build
 space:header/kind = "space" => admitted as Space
 space:header/space_id = {uuid} => the space it opens as
-space:meta/schema_version = 3 => version 3, Current
+space:meta/schema_version = 1 => version 1, Current
 space:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:space/name = "Acme" => named "Acme"
 thread:header/channel_id = {uuid} => the channel it opens as
@@ -311,5 +117,5 @@ thread:messages/*/author = {uuid} => message 1 by the author
 thread:messages/*/content = "a reply" => message 1 reads "a reply"
 thread:messages/*/id = {uuid} => message 1
 thread:messages/*/ts = 1700000000005 => message 1 sent at 1700000000005 ms
-thread:meta/schema_version = 3 => version 3, Current
+thread:meta/schema_version = 1 => version 1, Current
 thread:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author

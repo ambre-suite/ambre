@@ -85,10 +85,7 @@ use crate::logic::model::{
 use crate::logic::schema;
 use crate::logic::text_merge::Edit;
 
-pub(crate) use names::{
-    BoardKey, ConnectorKey, ElementKey, Fields, LegacyDeckKey, LegacyRoot, Root, entry, root_list,
-    root_map,
-};
+pub(crate) use names::{BoardKey, ConnectorKey, ElementKey, Fields, Root, entry, root_list, root_map};
 #[cfg(test)]
 pub(crate) use names::{ConfigKey, MediaKey, MessageKey, ThreadKey, board};
 

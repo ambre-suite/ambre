@@ -9,16 +9,6 @@
 # migrate one board two ways. A step that must change is a new step under a
 # raised `SCHEMA_VERSION` and a new section below, never an edit to a published
 # section. A step stamps the version it reaches, so a raised version moves every line.
+# Version 1 is the first layout and runs no step, so its section is empty.
 
-== v4
-0 -> 1 aa3e22b22f0491ff
-1 -> 2 30009a58488763ac
-2 -> 3 a1040def5ed14c2c
-3 -> 4 5b13c87a5c4192ae
-
-== v5
-0 -> 1 0e30e7499da0f0ba
-1 -> 2 7ed11611042d3044
-2 -> 3 e6ce672b395f29db
-3 -> 4 97080282e8ee3ff0
-4 -> 5 0d4de1fa6768119f
+== v1

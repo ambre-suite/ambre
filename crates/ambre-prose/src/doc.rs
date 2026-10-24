@@ -376,9 +376,6 @@ ambre_core::crdt_names! {
     pub(crate) enum AnnotKey: FieldKey {
         /// An annotation's kind, in one field of one type (`PROSE-031`).
         Kind = "kind",
-        /// The text child of an entry, before a footnote's text moved into a
-        /// block.
-        Text = "text",
         /// The block of a footnote's text, as the string Loro prints a
         /// `TreeID`.
         NoteBlock = "block_id",

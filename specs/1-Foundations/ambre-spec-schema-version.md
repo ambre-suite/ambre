@@ -3,8 +3,8 @@
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the version register ships. Every document carries it from creation,
-every full-state entry point reads it, and each of the three applications carries a migration
-registry. The one-register rule ships in the two applications that store a style register, and
+every full-state entry point reads it, and each application carries a migration registry. Every
+registry is empty: nothing shipped before version 1, so no step exists yet. The one-register rule ships in the two applications that store a style register, and
 nothing refuses a third shape.
 
 > What a document looks like once it reaches the disk, and how a later binary knows it can still
@@ -37,7 +37,7 @@ prefix is `SCHEMA`.
 | `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
 | `SCHEMA-018` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | this spec section 2; architecture section 2.D; `ambre-spec-fixtures.md section 2` | Trame `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape`; Toile `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape`; Prose `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `SCHEMA-019` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | this spec section 2; architecture section 2.D | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
-| `SCHEMA-020` | `CONC` | Two peers migrating one document at the same time MUST NOT lose an edit made to what either migrated. | this spec section 2 | `ambre_toile::logic::schema::tests::two_peers_migrating_one_board_keep_both_edits` -- two peers migrate one version 3 board, each types into one body, and both edits survive with the two version vectors equal, so neither peer minted an operation the other lacks; `ambre_core::schema::tests::one_history_derives_one_migration_peer` -- the identity is pinned to its value, so a peer on another build derives the same one | none | verified |
+| `SCHEMA-020` | `CONC` | Two peers migrating one document at the same time MUST NOT lose an edit made to what either migrated. | this spec section 2 | `ambre_toile::logic::schema::tests::two_peers_migrating_one_board_keep_both_edits` -- two peers migrate one version 0 board through a step the test defines, each types into one body, and both edits survive with the two version vectors equal, so neither peer minted an operation the other lacks; `ambre_core::schema::tests::one_history_derives_one_migration_peer` -- the identity is pinned to its value, so a peer on another build derives the same one | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -48,8 +48,8 @@ container, which is the only moment a wrong reading can still be caught.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SCHEMA-006` | `POST` | Every full-state read MUST compare the document's schema version with the binary's before using the document. | this spec section 2 | `ambre_prose::schema::tests::a_document_at_the_current_version_is_handed_back_untouched`; `ambre_toile::logic::schema::tests::a_board_at_the_current_version_is_handed_back_untouched`; `ambre_trame::logic::schema::tests::a_workbook_at_the_current_version_is_handed_back_untouched`; structural -- the gate is the first statement of every full-state entry point, the three engines' `import_snapshot` and the two `import_ambre_plaintext`, and the refusal and migration rows below each drive the comparison through a different verdict | none | verified |
-| `SCHEMA-005` | `POST` | A document with no schema version MUST read as version 0. | this spec section 2 | `ambre_core::schema::tests::an_absent_register_reads_as_zero_and_zero_is_older_than_any_release`; `ambre_prose::schema::tests::a_document_written_before_the_register_migrates_to_the_current_version`; `ambre_toile::logic::schema::tests::a_board_written_before_the_register_migrates_to_the_current_version`; `ambre_trame::logic::schema::tests::a_workbook_written_before_the_register_migrates_to_the_current_version` -- end to end, on an input that carries no register at all | none | verified |
-| `SCHEMA-007` | `POST` | A document older than the binary MUST be migrated before use. | this spec section 2 | `ambre_core::schema::tests::a_chain_runs_every_hop_in_order`; `::a_document_at_the_current_version_runs_nothing` -- over a three-hop registry, and the three application tests named in `SCHEMA-005` assert the register the migrated snapshot comes back carrying; `ambre_toile::logic::schema::tests::a_board_whose_styles_carry_no_version_keeps_them`; `::a_board_whose_deck_sits_in_the_presentation_map_keeps_it`; `::a_board_whose_font_sizes_are_px_keeps_their_height` -- a board older than the registers keeps its content | none | verified |
+| `SCHEMA-005` | `POST` | A document with no schema version MUST read as version 0. | this spec section 2 | `ambre_core::schema::tests::an_absent_register_reads_as_zero_and_zero_is_older_than_any_release`; `ambre_prose::schema::tests::a_document_written_before_the_register_migrates_to_the_current_version`; `ambre_toile::logic::schema::tests::a_board_written_before_the_register_migrates_to_the_current_version`; `ambre_trame::logic::schema::tests::a_workbook_written_before_the_register_migrates_to_the_current_version` -- end to end, on an input that carries no register at all, through a `0 -> 1` step the test defines; `ambre_prose::schema::tests::a_document_written_before_the_register_finds_no_step`; `ambre_toile::logic::schema::tests::a_board_written_before_the_register_finds_no_step`; `ambre_trame::logic::schema::tests::a_workbook_written_before_the_register_finds_no_step` -- the shipping registry holds no step from 0, so the gate refuses the input | none | verified |
+| `SCHEMA-007` | `POST` | A document older than the binary MUST be migrated before use. | this spec section 2 | `ambre_core::schema::tests::a_chain_runs_every_hop_in_order`; `::a_document_at_the_current_version_runs_nothing` -- over a three-hop registry, and the three application tests named in `SCHEMA-005` that migrate assert the register the migrated snapshot comes back carrying. Each registry is empty, so every step these tests run is one the test defines | none | verified |
 | `SCHEMA-012` | `FRAME` | A read that refuses a document MUST NOT write it back. | this spec section 2 | `ambre_prose::schema::tests::a_document_from_a_newer_client_is_refused_and_changes_nothing`; `ambre_toile::logic::state::schema_tests::a_board_from_a_newer_client_is_refused_and_changes_nothing`; `ambre_trame::logic::schema::tests::a_workbook_from_a_newer_client_is_refused_and_changes_nothing` -- each compares the full snapshot before and after the refusal, not merely an element count; structural -- the gate reads the payload in a scratch document, so the live one is never written on the refusing path | none | verified |
 | `SCHEMA-008` | `FAIL` | A document newer than the binary MUST be refused whole. | this spec section 2 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_toile::logic::schema::tests::a_board_from_a_newer_client_is_refused_whole`; `ambre_trame::logic::schema::tests::a_workbook_from_a_newer_client_is_refused_whole`; `ambre_core::schema::tests::the_walk_refuses_to_run_backwards` -- the back door: a chain asked to run downhill refuses rather than guessing; `ambre_toile::logic::state::schema_tests::a_board_from_a_newer_client_is_refused_and_changes_nothing`; `ambre_trame::logic::schema::tests::a_workbook_from_a_newer_client_is_refused_and_changes_nothing` -- the whole snapshot is left as it was | none | verified |
 | `SCHEMA-013` | `FAIL` | A schema version register this build cannot read MUST be refused, never read as absent. | this spec section 2 | `ambre_prose::schema::tests::a_register_this_build_cannot_read_is_refused`; `ambre_toile::logic::schema::tests::a_register_holding_something_other_than_a_version_is_refused`; `ambre_trame::logic::schema::tests::a_register_holding_something_other_than_a_version_is_refused` -- the back door `SCHEMA-005` opens, where absent means 0 means migrate means open, so a register holding a string, or an integer outside `u32`, read as absent would open a document this build does not understand | none | verified |
@@ -110,11 +110,13 @@ successful open of a wrong document is silent loss. The register makes that case
 * **Where.** A root map, written when the engine creates the document. It is ordinary document
   state, so it travels through every persistence path: the container file, the relay snapshot, the
   local store. It does not travel through the one path that happens to check it.
-* **Absent means zero.** A document written before the register existed is version 0, so no existing
-  document needs rewriting.
+* **Absent means zero.** A document with no register reads as version 0 (`SCHEMA-005`). Every
+  registry is empty, so the walk finds no step from 0 and the gate refuses such a document. The
+  first step from 0 that a registry gains makes it open.
 * **Present and unreadable is not absent.** The gate refuses a register holding something other
   than a `u32`: a string, a container, an integer that does not fit (`SCHEMA-013`). It is the back
-  door the rule above opens: absent means 0 means migrate means open. Reading an unreadable
+  door the rule above opens once a registry carries a step from 0: absent means 0 means migrate
+  means open. Reading an unreadable
   register as absent would open a document this build does not understand, which is the one outcome
   the register exists to prevent.
 * **When the gate reads it.** At every full-state entry point. That is `import_snapshot` in all three
@@ -193,12 +195,10 @@ foundation needs no CRDT.
 
 `crates/ambre-prose/src/schema.rs`, `crates/ambre-trame/src/logic/schema.rs` and
 `crates/ambre-toile/src/logic/schema.rs` for each application's current version, its registry and
-its gate. The three registries each carry one row, `0 -> 1`, the register's own arrival. A document
-written before it existed is identical in layout. The step therefore stamps the number and changes
-nothing else, which is what makes it a migration and not a rewrite.
-
-`crates/ambre-murmure/src/schema.rs` carries Murmure's version, its gate and an empty registry:
-every Murmure document was written at version 1, so no step exists yet.
+its gate. `crates/ambre-murmure/src/schema.rs` carries the same for Murmure. Every application is at
+version 1 and every registry is empty: no build before version 1 shipped, so no document needs a
+step. The first layout change after the release adds the first row. Until then each gate is
+tested through a registry its test defines.
 `crates/ambre-trame/src/logic/styles.rs` and
 `crates/ambre-toile/src/logic/state/derive.rs` for the two style registers and for the decode notice
 of `SCHEMA-003`. Prose appears in neither pair: it stores no style register, so it holds no record
@@ -244,8 +244,8 @@ The user never sees the version. What they meet is what it protects them from.
   register are held by their shape belts, and `SCHEMA-015` now obliges a new crate to carry one.
   What the belt reads is a layout, so it would still take a reader to see a register per attribute
   in the lines it gained.
-* **No rule covers what a migration may do to a document it cannot fully read.** The three
-  registries hold one step each and none can fail, so nothing has forced the question yet. A step
+* **No rule covers what a migration may do to a document it cannot fully read.** Every registry
+  is empty, so nothing has forced the question yet. A step
   that *can* fail reports the hop it broke on (`SchemaError::MigrationFailed`), and the caller
   drops the scratch document. The reader therefore refuses the document whole rather than
   half-migrating it. That is the behaviour, and no rule states it.

@@ -9,8 +9,6 @@
 # one workbook two ways. A step that must change is a new step under a raised
 # `SCHEMA_VERSION` and a new section below, never an edit to a published section.
 # A step stamps the version it reaches, so a raised version moves every line.
+# Version 1 is the first layout and runs no step, so its section is empty.
 
-== v3
-0 -> 1 b12779b1c72d649c
-1 -> 2 c6b017e98df1c3db
-2 -> 3 80116169d40d1613
+== v1

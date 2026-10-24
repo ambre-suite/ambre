@@ -41,22 +41,6 @@ ambre_core::crdt_names! {
 }
 
 ambre_core::crdt_names! {
-    /// The root a board before version 3 kept its deck in. Only the `2 -> 3`
-    /// step reads it, and no build writes it.
-    pub(crate) enum LegacyRoot {
-        Presentation = "presentation",
-    }
-}
-
-ambre_core::crdt_names! {
-    /// The two sub-containers of the legacy `presentation` map.
-    pub(crate) enum LegacyDeckKey: FieldKey {
-        Order = "order",
-        Config = "config",
-    }
-}
-
-ambre_core::crdt_names! {
     /// The keys of the `board` register.
     pub(crate) enum BoardKey: FieldKey {
         BgColor = "bg_color",

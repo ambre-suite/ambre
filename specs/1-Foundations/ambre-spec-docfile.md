@@ -456,7 +456,7 @@ plaintext path above. So a sealed file whose *inner* container is older migrates
   derivation. The sealed file holds the state as of the moment the command left, not the moment
   the download lands. That is the same semantics as the plaintext save, and no rule states
   either.
-* **The migration walk has never migrated anything.** The registry holds one row, so
+* **The migration walk has never migrated anything.** The registry is empty, so
   `migrate_ambre` is exercised by synthetic steps alone (`ambre-spec-testing.md section 6`). The
   first real bump is the first honest test of it, and `DOCFILE-008` is what stops that bump from
   destroying its own input.

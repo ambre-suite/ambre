@@ -615,41 +615,10 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 
 /// The canonical document of the version a step leaves: that version's
 /// layout, holding what the step rewrites. Each step reads its own, so a step
-/// added later never moves what an earlier one writes.
+/// added later never moves what an earlier one writes. The registry holds no
+/// step yet, so no version has one.
 fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
-    match from.get() {
-        // A version 1 segment holds one message, its body with no style. A
-        // version 2 one holds the same message, which carries no file.
-        1 | 2 => {
-            let doc = LoroDoc::new();
-            doc.set_peer_id(1).expect("a peer");
-            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-                .insert(
-                    ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                    i64::from(from.get()),
-                )
-                .expect("the stamp");
-            crate::schema::header(&doc)
-                .insert(
-                    crate::schema::HeaderKey::Kind,
-                    DocumentKind::Segment.as_str(),
-                )
-                .expect("the kind");
-            let message = crate::schema::Fields::<crate::schema::MessageKey>::of(
-                crate::schema::root_list(&doc, crate::schema::Root::Messages)
-                    .insert_container(0, loro::LoroMap::new())
-                    .expect("a message"),
-            );
-            message
-                .insert_container(crate::schema::MessageKey::Content, loro::LoroText::new())
-                .expect("a body")
-                .insert(0, "hi")
-                .expect("its text");
-            doc.commit();
-            doc
-        }
-        _ => panic!("the step from version {from} has no canonical document: write one here"),
-    }
+    panic!("the step from version {from} has no canonical document: write one here")
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical
@@ -690,7 +659,7 @@ fn steps_written() -> Vec<String> {
 }
 
 /// Every build of one version runs each migration step alike (`AUTHOR-024`).
-/// Version 1 runs none, and its section is empty. Each step writes nothing
+/// Version 1 runs none, and its section is empty. A step writes nothing
 /// (`MURMURE-566`), so each line holds the fingerprint of no operation.
 #[test]
 fn each_migration_step_writes_what_its_version_froze() {

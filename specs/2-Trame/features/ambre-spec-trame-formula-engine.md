@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-034` | `INV` | A reference to another sheet MUST survive that sheet being renamed. | this spec section 3 | `ambre_trame::formula::render::tests::canonicalize_name_to_id`; `::display_id_to_name`; `ambre_trame::formula::parser::tests::id_qualified_cell_resolves_index`; `::sheet_qualified_resolves_index` | none | verified |
 | `TRAME-228` | `INV` | A stored formula MUST name each reference by the row and column identities it was typed against, never by a position. | this spec section 5 | `ambre_trame::formula::identity::tests::a_stored_formula_names_lines_and_reads_back_as_typed`; `::a_position_past_the_used_range_stays_a_position`; `::a_stored_reference_reparses_to_itself`; `ambre_trame::logic::tests::group8::a_stored_formula_names_its_lines` | none | verified |
 | `TRAME-229` | `CONC` | A reference typed while a peer inserts or deletes a line MUST read, after the merge, the cell it was typed against. | this spec section 5 | `ambre_trame::logic::tests::group8::a_reference_typed_during_a_concurrent_insert_keeps_its_cell`; `ambre_trame::logic::tests::group8::a_reference_typed_during_a_concurrent_delete_keeps_its_cell` | none | verified |
-| `TRAME-226` | `IO` | A workbook storing positional references MUST open with each one reading the cell it read when saved. | this spec section 5; `TRAME-025` | `ambre_trame::logic::tests::group8::a_positional_workbook_migrates_onto_its_cells` | none | verified |
+| `TRAME-226` | `IO` | A reloaded workbook MUST read each stored reference from the cell it read when saved. | this spec section 5; `TRAME-025` | `ambre_trame::logic::tests::group8::a_reloaded_workbook_reads_each_reference_from_its_cell` -- a formula reads the same value after a reload, and a row inserted after it moves the reference with its cell | none | verified |
 | `TRAME-036` | `INV` | Operators MUST bind in the order a spreadsheet user expects. | this spec section 4 | `ambre_trame::formula::parser::tests::arithmetic_precedence`; `::parens_override_precedence`; `::comparison_chain`; `ambre_trame::formula::vm::tests::precedence` | none | verified |
 | `TRAME-037` | `INV` | The power operator MUST group to the right. | this spec section 4 | `ambre_trame::formula::parser::tests::power_right_associative`; `ambre_trame::formula::render::tests::pow_right_associative` | none | verified |
 | `TRAME-038` | `INV` | A cell holding plain text MUST hold no compiled formula and no dependency. | audit `H7`; this spec section 3 | `ambre_trame::formula::cache::tests::non_formula_clears_cache`; `ambre_trame::formula::dag::tests::clear_deps_drops_the_formula_and_its_now_orphan_node` | none | verified |
@@ -166,9 +166,8 @@ and the formula bar render it back to `A1`, and a typed formula is turned into i
 both. The sheet qualifier works the same way (`TRAME-034`).
 
 A position past the used range names no line and stays a position (`TRAME-006`). A later write at
-that position dirties the formula through the position it kept (`TRAME-233`). A workbook that
-stored positions converts each one to the uid at that position in the `2 -> 3`
-schema step (`TRAME-226`). A range of whole lines writes `*` for the axis it takes whole: `A:C` is
+that position dirties the formula through the position it kept (`TRAME-233`). A reload reads the
+same uids back, so each reference keeps its cell (`TRAME-226`). A range of whole lines writes `*` for the axis it takes whole: `A:C` is
 stored `{*|col}:{*|col}`, and `2:5` is `{row|*}:{row|*}` (`TRAME-048`).
 
 **A structural edit** rewrites only what it must, in the commit of the edit, so one undo reverts

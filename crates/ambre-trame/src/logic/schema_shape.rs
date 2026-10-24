@@ -42,8 +42,8 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    Fields, FilterKey, FilterRecord, LegacyFilterKey, MIGRATIONS, Root, SCHEMA_VERSION,
-    SheetContainer, SheetRoot, default_sheet,
+    Fields, FilterKey, FilterRecord, MIGRATIONS, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
+    default_sheet,
 };
 use crate::logic::styles::StyleRecord;
 use crate::model::{CellKey, Uid};
@@ -437,70 +437,12 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
     );
 }
 
-/// A workbook as `version` stored it, written under a fixed identity. `None`
-/// writes no register, which is the layout before the register existed.
-fn workbook_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
-    let doc = LoroDoc::new();
-    doc.set_peer_id(1)
-        .expect("a fresh document takes a peer id");
-    doc.get_map(Root::Sheets.as_str())
-        .insert(default_sheet().as_str(), "Sheet1")
-        .expect("the sheet");
-    write(&doc);
-    if let Some(version) = version {
-        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-            .insert(
-                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                i64::from(version),
-            )
-            .expect("the register");
-    }
-    doc.commit();
-    doc
-}
-
 /// The canonical workbook of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
-/// later never moves what an earlier one writes.
+/// later never moves what an earlier one writes. The registry holds no step
+/// yet, so no version has one.
 fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
-    match from.get() {
-        0 => workbook_at(None, |_| {}),
-        // The flat filter keys the `1 -> 2` step folds.
-        1 => workbook_at(Some(1), |doc| {
-            let filters = Fields::<LegacyFilterKey>::of(
-                doc.get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str()),
-            );
-            for (key, value) in [
-                (LegacyFilterKey::Col, "0000000000000001_00000000"),
-                (LegacyFilterKey::Kind, "condition"),
-                (LegacyFilterKey::Op, "gt"),
-                (LegacyFilterKey::Value, "1"),
-            ] {
-                filters.insert(key, value).expect("a flat key");
-            }
-        }),
-        // A positional formula the `2 -> 3` step names by its cells.
-        2 => workbook_at(Some(2), |doc| {
-            let uid = |counter| Uid {
-                peer: ambre_core::PeerId(1),
-                counter,
-            };
-            let rows = doc
-                .get_movable_list(SheetContainer::of(SheetRoot::Rows, &default_sheet()).as_str());
-            for counter in 0..3 {
-                rows.push(uid(counter).to_key_part()).expect("a row");
-            }
-            let cols = doc
-                .get_movable_list(SheetContainer::of(SheetRoot::Cols, &default_sheet()).as_str());
-            for counter in 3..5 {
-                cols.push(uid(counter).to_key_part()).expect("a column");
-            }
-            doc.get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str())
-                .insert(CellKey::of(uid(0), uid(4)).as_str(), "=SUM(A2:A3)+A2")
-                .expect("the formula");
-        }),
-        _ => panic!("the step from version {from} has no canonical workbook: write one here"),
-    }
+    panic!("the step from version {from} has no canonical workbook: write one here")
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical

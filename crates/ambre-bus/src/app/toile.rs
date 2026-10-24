@@ -444,27 +444,6 @@ impl ElementStyle {
         }
     }
 
-    /// Rewrite a `"style"` register a build before [`StyleLayout`] wrote.
-    ///
-    /// That build stored the bare postcard value under no version byte.
-    /// [`try_from_bytes`](Self::try_from_bytes) reads such a register as a
-    /// layout it does not know, and the element loses its style. The schema
-    /// migration hands every register here instead (`SCHEMA-009`).
-    ///
-    /// Returns the versioned bytes for a register of that layout, and `None` for
-    /// a register that layout does not decode. The migration leaves the second
-    /// verbatim (`SCHEMA-003`): a layout it cannot name is not one it may
-    /// overwrite.
-    ///
-    /// Every version 1 register holds the bare value, so the decode below is the
-    /// whole test. Reading the first byte to guess whether a register already
-    /// carries a version would be the weaker one. A bare value whose first byte
-    /// is [`StyleLayout`] passes that guess.
-    pub fn upgrade_unversioned(bytes: &[u8]) -> Option<Vec<u8>> {
-        let style: Self = postcard::from_bytes(bytes).ok()?;
-        Some(style.to_bytes())
-    }
-
     /// Merge a whole-register restyle value over one element's own style
     /// (`TOILE-UI-174`). The fields a surface shows come from `sent`. The
     /// fields no surface shows -- the corner radius, the shadow, a non-bold

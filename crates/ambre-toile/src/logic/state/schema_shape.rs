@@ -55,8 +55,8 @@ use crate::logic::model::{
 use crate::logic::schema::{MIGRATIONS, SCHEMA_VERSION};
 
 use super::{
-    BoardKey, ConfigKey, ConnectorKey, ElementKey, Fields, LegacyDeckKey, LegacyRoot, MediaKey,
-    MessageKey, Root, ThreadKey, ToileState, root_map,
+    BoardKey, ConfigKey, ConnectorKey, ElementKey, Fields, MediaKey, MessageKey, Root, ThreadKey,
+    ToileState, root_map,
 };
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
@@ -417,8 +417,6 @@ pub(super) fn declared_keys(source: &str) -> Vec<String> {
 }
 
 /// Every name the schema enums declare: the roots and the keys of each map.
-/// The legacy deck root and its two keys are left out, since no build writes
-/// them.
 pub(super) fn schema_names() -> Vec<String> {
     let mut found: Vec<&str> = Root::ALL.iter().map(|n| n.as_str()).collect();
     found.extend(BoardKey::ALL.iter().map(|n| n.as_str()));
@@ -699,111 +697,12 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
     );
 }
 
-/// A board as `version` stored it, written under a fixed identity. `None`
-/// writes no register, which is the layout before the register existed.
-fn board_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
-    let doc = LoroDoc::new();
-    doc.set_peer_id(1)
-        .expect("a fresh document takes a peer id");
-    write(&doc);
-    if let Some(version) = version {
-        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-            .insert(
-                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                i64::from(version),
-            )
-            .expect("the register");
-    }
-    doc.commit();
-    doc
-}
-
-/// One map under the dictionary `root`, keyed `id`, read through the schema
-/// `K`.
-fn entry_map<K: ambre_core::crdt::FieldKey>(doc: &LoroDoc, root: Root, id: &str) -> Fields<K> {
-    Fields::of(
-        root_map(doc, root)
-            .insert_container(id, loro::LoroMap::new())
-            .expect("an entry"),
-    )
-}
-
 /// The canonical board of the version a step leaves: that version's layout,
 /// holding what the step rewrites. Each step reads its own, so a step added
-/// later never moves what an earlier one writes.
+/// later never moves what an earlier one writes. The registry holds no step
+/// yet, so no version has one.
 fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
-    match from.get() {
-        0 => board_at(None, |doc| {
-            entry_map(doc, Root::Elements, "e1")
-                .insert(ElementKey::Type, ElementKind::Sticky.type_tag())
-                .expect("a type");
-        }),
-        // The bare style registers the `1 -> 2` step versions.
-        1 => board_at(Some(1), |doc| {
-            let style = ElementStyle {
-                fill: Some(Rgba::from_bits(0xaabb_ccff)),
-                corner: 8.0,
-                ..ElementStyle::default()
-            };
-            let bare = postcard::to_allocvec(&style).expect("the bare layout");
-            let style = LoroValue::Binary(bare.into());
-            entry_map(doc, Root::Elements, "e1")
-                .insert(ElementKey::Style, style.clone())
-                .expect("a style register");
-            entry_map(doc, Root::Connectors, "c1")
-                .insert(ConnectorKey::Style, style)
-                .expect("a style register");
-        }),
-        // The deck inside the `presentation` map the `2 -> 3` step moves out.
-        2 => board_at(Some(2), |doc| {
-            let pres = Fields::<LegacyDeckKey>::of(doc.get_map(LegacyRoot::Presentation.as_str()));
-            let order = pres
-                .insert_container(LegacyDeckKey::Order, loro::LoroMovableList::new())
-                .expect("the old order");
-            order.push("f1").expect("a slide");
-            order.push("f2").expect("a slide");
-            Fields::<ConfigKey>::of(
-                pres.insert_container(LegacyDeckKey::Config, loro::LoroMap::new())
-                    .expect("the old config"),
-            )
-            .insert(ConfigKey::TransitionMs, 800.0)
-            .expect("a setting");
-        }),
-        // The string bodies the `3 -> 4` step turns into texts.
-        3 => board_at(Some(3), |doc| {
-            for (id, body) in [("e1", "buy milk"), ("e2", "")] {
-                let element = entry_map(doc, Root::Elements, id);
-                element
-                    .insert(ElementKey::Type, ElementKind::Sticky.type_tag())
-                    .expect("a type");
-                element
-                    .insert(ElementKey::Body, body)
-                    .expect("a string body");
-            }
-        }),
-        // A text sized 16 world px and an auto-sized note, whose sizes the
-        // `4 -> 5` step carries to points.
-        4 => board_at(Some(4), |doc| {
-            for (id, kind, px) in [
-                ("e1", ElementKind::Text, Some(16)),
-                ("e2", ElementKind::Sticky, None),
-            ] {
-                let mut style = ElementStyle::default();
-                style.font.size = ambre_bus::app::toile::FontSizeChoice::from_whole_points(px);
-                let element = entry_map(doc, Root::Elements, id);
-                element
-                    .insert(ElementKey::Type, kind.type_tag())
-                    .expect("a type");
-                element
-                    .insert(
-                        ElementKey::Style,
-                        LoroValue::Binary(style.to_bytes().into()),
-                    )
-                    .expect("a style register");
-            }
-        }),
-        _ => panic!("the step from version {from} has no canonical board: write one here"),
-    }
+    panic!("the step from version {from} has no canonical board: write one here")
 }
 
 /// Each step of the registry, run as the gate runs it on its canonical board.

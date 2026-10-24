@@ -11,7 +11,7 @@
 # moves needs a raised `SCHEMA_VERSION` and a new section below, never an edit
 # to the section above: a section is the record of what that version meant.
 
-== v3
+== v1
 cells_*/* = "=1+1" => R2C1 shows "2"
 cells_*/* = "hello" => R1C1 shows "hello"
 cellstyle_*/* = 010000000001000199cdcd010000010e000000000000 => R1C1 bold, aligned Auto Middle, text #336699, 14 pt, format General
@@ -24,7 +24,7 @@ filter_hidden_*/* = true => row 4 hidden
 filter_hidden_*/* = true => row 5 hidden
 filters_*/active = 19303030303030303030303030303030315f303030303030303101000568656c6c6f => column 1 keeps Condition { op: Eq, value: "hello" }
 merges_*/* = "0000000000000001_00000005:0000000000000001_00000006" => R4C1:R5C2 merged
-meta/schema_version = 3 => version 3, Current
+meta/schema_version = 1 => version 1, Current
 named_ranges/* = "#s0!A1" => N names sheet 1 R1C1
 row_heights_*/* = 33 => row 1 is 33 px tall
 rows_*/* = "0000000000000001_00000000" => row 1

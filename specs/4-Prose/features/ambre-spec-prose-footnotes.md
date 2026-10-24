@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | `ambre_prose::logic::notes::tests::two_converged_peers_count_the_same_numbers` | none | verified |
 | `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned` | none | verified |
 | `PROSE-FEAT-305` | `INV` | A note's text MUST live in a block of its own, which the note's entry names and the body flow never holds, and deleting the note MUST remove that block. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::notes::tests::a_note_holds_its_text_in_a_block_out_of_the_flow` | none | verified |
-| `PROSE-FEAT-308` | `INV` | A document written under schema version 8 MUST keep each note's text and its marks once read. | this spec section 3; `ambre-spec-prose-schema.md section 7` | `ambre_prose::logic::notes::tests::a_version_8_note_moves_to_a_block_with_its_marks` | none | verified |
+| `PROSE-FEAT-308` | `INV` | A reloaded document MUST keep each note's text and its marks. | this spec section 3; `ambre-spec-prose-schema.md section 7` | `ambre_prose::logic::notes::tests::a_reloaded_note_keeps_its_text_and_its_marks` -- a marked note reads back the same rich text after a snapshot round trip | none | verified |
 
 ### 1.2 Add a note
 

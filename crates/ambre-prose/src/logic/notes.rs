@@ -138,9 +138,8 @@ impl ProseState {
     }
 }
 
-/// A root paragraph marked as a note, holding `text`. The schema migration
-/// writes a note's block through here too, so both mint it alike.
-pub(crate) fn write_note_block(
+/// A root paragraph marked as a note, holding `text`.
+fn write_note_block(
     document: &loro::LoroDoc,
     text: &str,
 ) -> Result<TreeID, doc::WriteError> {
@@ -422,10 +421,8 @@ mod tests {
             .map(doc::Fields::<doc::AnnotKey>::of)
             .expect("an entry");
         entry
-            .insert_container(doc::AnnotKey::Text, LoroText::new())
-            .expect("a text")
-            .insert(0, "no kind")
-            .expect("written");
+            .insert(doc::AnnotKey::NoteBlock, "no kind")
+            .expect("a block name");
         let other = FootnoteId::new();
         let entry = annots
             .insert_container(&other.to_hyphenated(), LoroMap::new())
@@ -435,8 +432,8 @@ mod tests {
             .insert(doc::AnnotKey::Kind, "comment")
             .expect("a kind");
         entry
-            .insert_container(doc::AnnotKey::Text, LoroText::new())
-            .expect("a text");
+            .insert(doc::AnnotKey::NoteBlock, "a comment")
+            .expect("a block name");
         state.document().commit();
         assert_eq!(note::all(state.document()), vec![real]);
     }
@@ -515,46 +512,32 @@ mod tests {
         assert_eq!(state.root_blocks(), ids);
     }
 
-    /// `PROSE-FEAT-308`: a version 8 document keeps its notes. The text moves
-    /// from the entry to a block of its own, its marks with it.
+    /// `PROSE-FEAT-308`: a reload keeps a note's text and its marks. The
+    /// marks live on the note's own block, so the snapshot carries them.
     #[test]
-    fn a_version_8_note_moves_to_a_block_with_its_marks() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
-        let id = add(&mut state, ids[0], DocOffset::new(4), "old note");
-        // Write the note back the way version 8 held it.
-        let document = state.document();
-        let block = note::block(document, &id).expect("the note's block");
-        let entry = note::entry(document, &id).expect("the entry");
-        let text = entry
-            .insert_container(doc::AnnotKey::Text, LoroText::new())
-            .expect("a text");
-        text.insert(0, "old note").expect("written");
-        text.mark(0..3, "b", "true").expect("marked");
-        entry.delete(doc::AnnotKey::NoteBlock).expect("unnamed");
-        doc::blocks(document).delete(block).expect("gone");
-        document
-            .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-            .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 8_i64)
-            .expect("stamped");
-        document.commit();
-        let bytes = state.export_snapshot();
-
-        let mut read = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document");
-        read.import_snapshot(&bytes).expect("version 8 migrates");
-        let body = note::body(read.document(), &id).expect("the note's text");
-        assert_eq!(body.to_string(), "old note");
-        let bold = body.to_delta().into_iter().any(|delta| match delta {
-            loro::TextDelta::Insert { insert, attributes } => {
-                insert == "old" && attributes.is_some_and(|a| a.contains_key("b"))
-            }
-            _ => false,
+    fn a_reloaded_note_keeps_its_text_and_its_marks() {
+        let (mut author, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let id = add(&mut author, ids[0], DocOffset::new(4), "a note");
+        let block = block_id(note::block(author.document(), &id).expect("the note's block"));
+        author.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: DocSpan::from_usize_range(0..1),
+            key: "b".into(),
+            value: None,
         });
-        assert!(bold, "the mark came with the text");
-        let entry = note::entry(read.document(), &id).expect("the entry");
-        assert!(
-            entry.get(doc::AnnotKey::Text).is_none(),
-            "the entry holds no text"
+        let marked = note::body(author.document(), &id).map(|t| t.get_richtext_value());
+
+        let mut reader = ProseState::with_peer(ambre_core::PeerId(2)).expect("a reader");
+        reader
+            .import_snapshot(&author.export_snapshot())
+            .expect("the reload");
+        assert_eq!(
+            note::body(reader.document(), &id).map(|t| t.get_richtext_value()),
+            marked
         );
-        assert_eq!(read.root_blocks().len(), 1, "the flow holds no note");
+        assert_eq!(
+            reader.footnotes().first().map(|n| n.text.clone()),
+            Some("a note".to_owned())
+        );
     }
 }

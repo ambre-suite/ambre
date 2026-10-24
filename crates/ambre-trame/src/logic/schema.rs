@@ -12,7 +12,6 @@
 // become.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
@@ -23,11 +22,8 @@ use ambre_core::schema::{
     migrate_schema, migration_peer, verdict,
 };
 
-use super::op_from_str;
 use crate::formula::identity::{AxisEdit, LineEdit};
-use crate::formula::parser::parse_formula;
-use crate::formula::{SheetQualifier, identity, render};
-use crate::model::{Line, SheetIndex, Uid};
+use crate::model::{Line, Uid};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -156,28 +152,11 @@ impl SheetContainer {
 }
 
 ambre_core::crdt_names! {
-    /// The key of a sheet's filter map since version 2.
+    /// The key of a sheet's filter map.
     pub(crate) enum FilterKey: FieldKey {
         /// The single register: the whole filter definition, postcard-encoded
         /// as [`FilterRecord`] (`TRAME-FEAT-025`).
         Active = "active",
-    }
-}
-
-ambre_core::crdt_names! {
-    /// The flat keys a version 1 filter map stored. Only the `1 -> 2` step
-    /// reads them, to fold them into [`FilterKey::Active`].
-    pub(crate) enum LegacyFilterKey: FieldKey {
-        /// The filtered column's stable id, as its key part.
-        Col = "col",
-        /// `"values"` or `"condition"`.
-        Kind = "kind",
-        /// The child list of the values a values filter keeps.
-        Values = "values",
-        /// A condition filter's operator.
-        Op = "op",
-        /// A condition filter's operand.
-        Value = "value",
     }
 }
 
@@ -263,11 +242,9 @@ impl SheetLine for Col {
 /// (`SCHEMA-004`).
 ///
 /// Raising it is not a decision about this constant. It is a layout change to a
-/// persisted record. `1 -> 2` folds the flat filter keys into one register
-/// ([`FilterRecord`]), which obliges the [`MIGRATIONS`] row carrying an existing
-/// workbook across it (`SCHEMA-009`). `2 -> 3` stores each formula reference
-/// by the row and column it names (`TRAME-226`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
+/// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
+/// existing workbook across it (`SCHEMA-009`).
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -321,210 +298,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 
 /// Trame's registry: one row per version bump, appended never rewritten.
 ///
-/// `0 -> 1` is the register's own arrival. Every workbook written before it
-/// existed reads as version 0, and its layout is identical to a version 1
-/// workbook. The step therefore stamps the number and changes nothing else,
-/// which is what makes it a migration rather than a rewrite.
-///
-/// `1 -> 2` folds `filters_{sheet}` from five flat keys into the one whole
-/// register ([`FILTER_KEY`] holding a [`FilterRecord`]).
-///
-/// `2 -> 3` names each formula reference by its row and column
-/// ([`stored_reference_step`]).
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
-    SchemaMigration {
-        from: SchemaVersion::new(0),
-        to: SchemaVersion::new(1),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(1),
-        to: SchemaVersion::new(2),
-        apply: filter_register_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(2),
-        to: SchemaVersion::new(3),
-        apply: stored_reference_step,
-    },
-];
-
-/// The `0 -> 1` step. A free function rather than a closure because a registry
-/// row holds a plain `fn`.
-fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
-
-/// The `1 -> 2` step: fold each sheet's flat filter keys into one register.
-///
-/// Version 1 stored `filters_{sheet}` as five keys plus a child `values` list.
-/// Two concurrent filters elected field by field and could converge torn
-/// (`TRAME-FEAT-025`). Version 2 stores the whole
-/// definition as one `Binary(postcard(FilterRecord))` under [`FILTER_KEY`].
-fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
-    if let LoroValue::Map(sheets) = doc.get_map(Root::Sheets.as_str()).get_value() {
-        // Sorted: two peers migrating one history write the same operations
-        // only if they write them in the same order (`SCHEMA-020`).
-        let mut sheets: Vec<SheetId> = sheets.keys().cloned().map(SheetId).collect();
-        sheets.sort();
-        for sheet in &sheets {
-            fold_filter_keys(doc, sheet).map_err(|e| e.to_string())?;
-        }
-    }
-    // Stamp the new version inside the same commit as the shape change
-    // (`SCHEMA-018`).
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
-
-/// The `2 -> 3` step: name each reference of each stored formula by the row
-/// and column at its position today (`TRAME-226`).
-///
-/// Version 2 stored `=A2`, so an insert above row 2 moved the formula onto
-/// another cell. Version 3 stores `={row|col}` (`TRAME-228`). The positions are
-/// read in the layout the workbook was saved with. So each formula reads the
-/// same cell before and after the step. A position past a sheet's
-/// used range stays a position, and a formula that does not parse is left as
-/// typed.
-fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
-    let mut sheets: Vec<SheetId> = match doc.get_map(Root::Sheets.as_str()).get_value() {
-        LoroValue::Map(sheets) => sheets.keys().cloned().map(SheetId).collect(),
-        _ => Vec::new(),
-    };
-    if !sheets.contains(&default_sheet()) {
-        sheets.push(default_sheet());
-    }
-    // Sheets and cells are walked sorted, so every peer writes in one order
-    // (`SCHEMA-020`).
-    sheets.sort();
-    let indices: HashMap<&str, SheetIndex> = sheets
-        .iter()
-        .map(|s| {
-            let index = SheetIndex::build(
-                &doc.get_movable_list(SheetContainer::of(SheetRoot::Rows, s).as_str()),
-                &doc.get_movable_list(SheetContainer::of(SheetRoot::Cols, s).as_str()),
-            );
-            (s.as_str(), index)
-        })
-        .collect();
-    for sheet in &sheets {
-        let map = doc.get_map(SheetContainer::of(SheetRoot::Cells, sheet).as_str());
-        let LoroValue::Map(cells) = map.get_value() else {
-            continue;
-        };
-        // A stored qualifier is a sheet id; a name one was never written.
-        let index_of = |q: Option<&SheetQualifier>| match q {
-            None => indices.get(sheet.as_str()),
-            Some(SheetQualifier::Id(id)) => indices.get(id.as_str()),
-            Some(SheetQualifier::Name(_)) => None,
-        };
-        let mut cells: Vec<(&String, &LoroValue)> = cells.iter().collect();
-        cells.sort_by_key(|(key, _)| *key);
-        for (key, value) in cells {
-            let LoroValue::String(text) = value else {
-                continue;
-            };
-            let Some(Ok(ast)) = text.strip_prefix('=').map(parse_formula) else {
-                continue;
-            };
-            let before = render::render(&ast);
-            let after = render::render(&identity::bind(ast, &index_of));
-            if after != before {
-                map.insert(key, format!("={after}").as_str())
-                    .map_err(|e| format!("rewriting a formula failed: {e:?}"))?;
-            }
-        }
-    }
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
-
-/// Why a version-1 filter does not fold into the register.
-#[derive(Debug)]
-enum FilterFoldError {
-    /// The `col` key holds no column uid: the text it holds.
-    UnreadableColumn(String),
-    /// The `op` key holds no operator: the text it holds.
-    UnreadableOperator(String),
-    /// A condition filter with no `op` key.
-    NoOperator,
-    /// A `kind` key that is absent or names no kind.
-    NoKind,
-    /// The register did not encode.
-    Encode(postcard::Error),
-}
-
-impl std::fmt::Display for FilterFoldError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnreadableColumn(col) => write!(f, "an unreadable filter column {col}"),
-            Self::UnreadableOperator(op) => write!(f, "an unreadable filter operator {op}"),
-            Self::NoOperator => write!(f, "a condition filter with no operator"),
-            Self::NoKind => write!(f, "a filter with no readable kind"),
-            Self::Encode(e) => write!(f, "encoding the filter register failed: {e}"),
-        }
-    }
-}
-
-/// Convert one sheet's flat filter shape into the single register. A sheet with
-/// no filter (an empty or absent map) is left untouched.
-fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), FilterFoldError> {
-    let map = doc.get_map(SheetContainer::of(SheetRoot::Filters, sheet).as_str());
-    // `get_deep_value` resolves the `values` child list, which the shallow read
-    // in `load_active_filter` could not (`TRAME-FEAT-004`).
-    let LoroValue::Map(deep) = map.get_deep_value() else {
-        return Ok(());
-    };
-    let fields = FieldValues::<LegacyFilterKey>::of(&deep);
-    // The old shape carries a flat `col` key; a version-2 register does not.
-    let Some(LoroValue::String(col)) = fields.get(LegacyFilterKey::Col) else {
-        return Ok(());
-    };
-    let col_uid = Uid::parse(col.as_str())
-        .ok_or_else(|| FilterFoldError::UnreadableColumn(col.to_string()))?;
-    let kind = match fields.get(LegacyFilterKey::Kind) {
-        Some(LoroValue::String(kind)) if kind.as_str() == "values" => {
-            let values = match fields.get(LegacyFilterKey::Values) {
-                Some(LoroValue::List(items)) => items
-                    .iter()
-                    .filter_map(|v| match v {
-                        LoroValue::String(s) => Some(s.to_string()),
-                        _ => None,
-                    })
-                    .collect(),
-                _ => Vec::new(),
-            };
-            FilterKind::Values(values)
-        }
-        Some(LoroValue::String(kind)) if kind.as_str() == "condition" => {
-            let op = match fields.get(LegacyFilterKey::Op) {
-                Some(LoroValue::String(s)) => op_from_str(s.as_str())
-                    .ok_or_else(|| FilterFoldError::UnreadableOperator(s.to_string()))?,
-                _ => return Err(FilterFoldError::NoOperator),
-            };
-            let value = match fields.get(LegacyFilterKey::Value) {
-                Some(LoroValue::String(s)) => s.to_string(),
-                _ => String::new(),
-            };
-            FilterKind::Condition { op, value }
-        }
-        _ => return Err(FilterFoldError::NoKind),
-    };
-    let record = FilterRecord { col: col_uid, kind };
-    let bytes = postcard::to_allocvec(&record).map_err(FilterFoldError::Encode)?;
-    // Replace the flat keys with the one register.
-    let mut old_keys: Vec<&String> = deep.keys().collect();
-    old_keys.sort();
-    for key in old_keys {
-        let _ = map.delete(key.as_str());
-    }
-    let _ = Fields::<FilterKey>::of(map).insert(FilterKey::Active, bytes);
-    Ok(())
-}
+/// Version 1 is the first layout, and no build before it shipped, so the list
+/// is empty. A workbook with no version reads as 0 (`SCHEMA-005`), and the walk
+/// finds no step from 0 and refuses it. The first layout change after the
+/// release adds its row here.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The full-state read rule, applied before the caller touches a single
 /// container (`SCHEMA-006`).
@@ -552,6 +330,15 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &SheetId) -> Result<(), FilterFoldErro
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the workbook.
 /// * A migration variant when the chain cannot carry an older workbook.
 pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
+    gate_through(MIGRATIONS, payload)
+}
+
+/// [`gate`] over the registry `steps`. A test hands it a step of its own, so
+/// the walk stays proved while [`MIGRATIONS`] holds none.
+fn gate_through<'a>(
+    steps: &[SchemaMigration<LoroDoc>],
+    payload: &'a [u8],
+) -> Result<Cow<'a, [u8]>, SchemaError> {
     let scratch = LoroDoc::new();
     scratch.import(payload).map_err(|e| {
         tracing::warn!("[Trame] snapshot rejected by the CRDT engine: {e:?}");
@@ -582,7 +369,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
                     to: SCHEMA_VERSION,
                     reason: format!("taking the migration identity failed: {e:?}"),
                 })?;
-            migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
+            migrate_schema(steps, found, SCHEMA_VERSION, &scratch)?;
             let bytes =
                 scratch
                     .export(ExportMode::Snapshot)
@@ -668,10 +455,23 @@ mod tests {
         assert_eq!(&*gated, &bytes[..]);
     }
 
+    /// The `0 -> 1` step a test registry holds: it stamps the number and
+    /// changes nothing else.
+    fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+        stamp(doc);
+        doc.commit();
+        Ok(())
+    }
+
     #[test]
     fn a_workbook_written_before_the_register_migrates_to_the_current_version() {
+        let steps = [SchemaMigration {
+            from: SCHEMA_VERSION_ABSENT,
+            to: SCHEMA_VERSION,
+            apply: stamp_step,
+        }];
         let bytes = snapshot_at(None);
-        let gated = gate(&bytes).expect("version 0 migrates");
+        let gated = gate_through(&steps, &bytes).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
             .import(&gated)
@@ -688,6 +488,18 @@ mod tests {
                 .get(default_sheet().as_str())
                 .is_some(),
             "the migration must not drop what it migrates"
+        );
+    }
+
+    /// No build wrote a workbook before version 1, so the registry holds no
+    /// step and a workbook with no register finds no path.
+    #[test]
+    fn a_workbook_written_before_the_register_finds_no_step() {
+        assert_eq!(
+            gate(&snapshot_at(None)).expect_err("no step leaves version 0"),
+            SchemaError::NoMigrationPath {
+                from: SCHEMA_VERSION_ABSENT
+            }
         );
     }
 
@@ -840,63 +652,6 @@ mod tests {
         assert_eq!(
             gate(b"not a loro snapshot").expect_err("rejected"),
             SchemaError::PayloadRejected
-        );
-    }
-
-    /// `1 -> 2` folds a version-1 flat filter into one register. The five keys
-    /// collapse into one binary [`FilterRecord`] (`TRAME-FEAT-004`).
-    #[test]
-    fn a_flat_filter_migrates_to_one_register() {
-        use ambre_bus::FilterOp;
-
-        // A version-1 workbook holding the old flat condition shape.
-        let doc = LoroDoc::new();
-        doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-            .insert(
-                ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-                i64::from(1),
-            )
-            .expect("stamp");
-        doc.get_map(Root::Sheets.as_str())
-            .insert(default_sheet().as_str(), "Sheet1")
-            .expect("sheet");
-        let filters =
-            doc.get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str());
-        let filters = Fields::<LegacyFilterKey>::of(filters);
-        filters
-            .insert(LegacyFilterKey::Col, "0000000000000001_00000000")
-            .unwrap();
-        filters.insert(LegacyFilterKey::Kind, "condition").unwrap();
-        filters.insert(LegacyFilterKey::Op, "gt").unwrap();
-        filters.insert(LegacyFilterKey::Value, "1").unwrap();
-        doc.commit();
-        let payload = doc.export(ExportMode::Snapshot).expect("snapshot");
-
-        let gated = gate(&payload).expect("version 1 migrates");
-        let migrated = LoroDoc::new();
-        migrated.import(&gated).expect("migrated snapshot imports");
-        assert_eq!(read_version(&migrated).expect("reads"), SCHEMA_VERSION);
-
-        let LoroValue::Map(deep) = migrated
-            .get_map(SheetContainer::of(SheetRoot::Filters, &default_sheet()).as_str())
-            .get_deep_value()
-        else {
-            panic!("the filters map survives");
-        };
-        let old = FieldValues::<LegacyFilterKey>::of(&deep);
-        assert!(
-            old.get(LegacyFilterKey::Col).is_none(),
-            "the flat keys are gone"
-        );
-        let fields = FieldValues::<FilterKey>::of(&deep);
-        let LoroValue::Binary(bytes) = fields.get(FilterKey::Active).expect("one register") else {
-            panic!("the register is binary");
-        };
-        let record: FilterRecord = postcard::from_bytes(bytes).expect("decodes");
-        assert_eq!(record.col.to_key_part(), "0000000000000001_00000000");
-        assert!(
-            matches!(record.kind, FilterKind::Condition { op: FilterOp::Gt, value } if value == "1"),
-            "the whole condition survived the fold"
         );
     }
 }

@@ -469,33 +469,14 @@ fn condition_pass_covers_every_operator() {
     assert!(!condition_pass(FilterOp::IsNotEmpty, &empty, ""));
 }
 
-/// `filter_pass` for the values mode, and the operator string parse
-/// (the legacy spelling the migration reads back).
+/// `filter_pass` for the values mode.
 #[test]
-fn filter_pass_values_and_op_string_roundtrip() {
-    use super::super::{filter_pass, op_from_str};
+fn filter_pass_values() {
+    use super::super::filter_pass;
     use crate::formula::types::CellValue;
     let kind = FilterKind::Values(vec!["keep".to_owned()]);
     assert!(filter_pass(&kind, &CellValue::Text("keep".to_owned())));
     assert!(!filter_pass(&kind, &CellValue::Text("drop".to_owned())));
-
-    let spellings: &[(FilterOp, &str)] = &[
-        (FilterOp::Eq, "eq"),
-        (FilterOp::Ne, "ne"),
-        (FilterOp::Gt, "gt"),
-        (FilterOp::Lt, "lt"),
-        (FilterOp::Gte, "gte"),
-        (FilterOp::Lte, "lte"),
-        (FilterOp::Contains, "contains"),
-        (FilterOp::NotContains, "not_contains"),
-        (FilterOp::StartsWith, "starts_with"),
-        (FilterOp::IsEmpty, "is_empty"),
-        (FilterOp::IsNotEmpty, "is_not_empty"),
-    ];
-    for &(op, spelling) in spellings {
-        assert_eq!(op_from_str(spelling), Some(op), "parses {spelling:?}");
-    }
-    assert_eq!(op_from_str("garbage"), None);
 }
 
 /// A pasted formula's relative references reindex by the paste offset, and a

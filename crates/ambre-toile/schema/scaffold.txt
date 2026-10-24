@@ -10,8 +10,5 @@
 # raised `SCHEMA_VERSION` and a new section below, never an edit to the section
 # above.
 
-== v4
-634c19e4914b6445
-
-== v5
+== v1
 4433e45639763f5e

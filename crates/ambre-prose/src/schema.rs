@@ -30,7 +30,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-018`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(10);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -83,168 +83,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 
 /// Prose's registry: one row per version bump, appended never rewritten.
 ///
-/// `0 -> 1` is the register's own arrival. Prose stamps the number from its
-/// first document, so a version 0 document is one written by no released build.
-/// The step exists because the protocol walks a chain rather than a special
-/// case, and it stamps the number and changes nothing else.
-///
-/// `1 -> 2` is the list marker. A list item gained three attribute keys, and a
-/// version 1 document holds no list item at all, so there is nothing to
-/// rewrite. The step stamps the number and leaves the containers alone.
-///
-/// `2 -> 3` is the table grid, the cell styles and the table of contents
-/// settings. A version 2 document holds no table and no table of contents,
-/// since no command could write either, so this step stamps the number too.
-///
-/// `5 -> 6` is the hiding marker. A version 5 document holds no hidden block,
-/// since its deletions removed the node, so this step stamps the number too.
-///
-/// `6 -> 7` is the comment thread. A version 6 document holds no comment,
-/// since no command could write one, so this step stamps the number too.
-///
-/// `7 -> 8` is the suggestion. A version 7 document holds none, since no
-/// command could write one, so this step stamps the number too.
-///
-/// `8 -> 9` moves a footnote's text out of its entry into a block of its own
-/// (`PROSE-FEAT-305`). A version 8 document may hold notes, so this step
-/// rewrites each one: see [`notes_to_blocks`].
-///
-/// `9 -> 10` renames the document's language register from `lang` to the
-/// `locale` key Trame and Toile share, and the seed stops writing one
-/// (`LOCALE-013`). A version 9 document keeps the tag it holds, under the new
-/// key: see [`lang_to_locale`].
-pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
-    SchemaMigration {
-        from: SchemaVersion::new(0),
-        to: SchemaVersion::new(1),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(1),
-        to: SchemaVersion::new(2),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(2),
-        to: SchemaVersion::new(3),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(3),
-        to: SchemaVersion::new(4),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(4),
-        to: SchemaVersion::new(5),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(5),
-        to: SchemaVersion::new(6),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(6),
-        to: SchemaVersion::new(7),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(7),
-        to: SchemaVersion::new(8),
-        apply: stamp_step,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(8),
-        to: SchemaVersion::new(9),
-        apply: notes_to_blocks,
-    },
-    SchemaMigration {
-        from: SchemaVersion::new(9),
-        to: SchemaVersion::new(10),
-        apply: lang_to_locale,
-    },
-];
-
-/// The `0 -> 1` step. A free function rather than a closure because a registry
-/// row holds a plain `fn`.
-fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
-
-/// The `8 -> 9` step: each footnote's text leaves its entry for a block of
-/// its own. That block is a root marked as a note, and the entry names it.
-///
-/// The text is carried over as its delta, so a mark the note held survives.
-/// An entry that already names a block, or holds no text, is left alone, so
-/// the step read twice writes nothing the second time.
-fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
-    move_notes_to_blocks(doc).map_err(|error| error.to_string())
-}
-
-/// The body of [`notes_to_blocks`], whose signature the registry fixes.
-fn move_notes_to_blocks(doc: &LoroDoc) -> Result<(), crate::doc::WriteError> {
-    use loro::{Container, ValueOrContainer};
-
-    use crate::doc as d;
-
-    let annots = d::annots(doc);
-    let mut entries = Vec::new();
-    for key in annots.keys() {
-        let Some(ValueOrContainer::Container(Container::Map(entry))) = annots.get(&key) else {
-            continue;
-        };
-        let entry = d::Fields::<d::AnnotKey>::of(entry);
-        if d::kind_of(&entry) != Some(d::AnnotKind::Footnote)
-            || d::read_string(&entry, d::AnnotKey::NoteBlock).is_some()
-        {
-            continue;
-        }
-        let Some(ValueOrContainer::Container(Container::Text(text))) = entry.get(d::AnnotKey::Text)
-        else {
-            continue;
-        };
-        entries.push((entry, text));
-    }
-    // The scratch document the gate reads into knows no mark yet, and a
-    // delta carrying one is refused without the policy (`PROSE-007`).
-    crate::mark::configure(doc);
-    for (entry, text) in entries {
-        let block = crate::logic::notes::write_note_block(doc, "")?;
-        d::get_block_text(doc, &block).apply_delta(&text.to_delta())?;
-        entry.insert(d::AnnotKey::NoteBlock, block.to_string())?;
-        entry.delete(d::AnnotKey::Text)?;
-    }
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
-
-/// The key a version 9 document holds its language under, which version 10
-/// renamed. Only the `9 -> 10` step still reads it.
-const V9_LANG: &str = "lang";
-
-/// The `9 -> 10` step: the value under `lang` moves to `locale`, as it was.
-///
-/// The value is moved whatever it holds, since a reader judges the tag and a
-/// malformed one already read as no language. A document that already holds
-/// a `locale` keeps it, so the step read twice writes nothing the second time.
-fn lang_to_locale(doc: &LoroDoc) -> Result<(), String> {
-    let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
-    let locale = crate::doc::MetaKey::Locale.as_str();
-    if let Some(loro::ValueOrContainer::Value(value)) = meta.get(V9_LANG) {
-        if meta.get(locale).is_none() {
-            meta.insert(locale, value)
-                .map_err(|error| error.to_string())?;
-        }
-        meta.delete(V9_LANG).map_err(|error| error.to_string())?;
-    }
-    stamp(doc);
-    doc.commit();
-    Ok(())
-}
+/// Version 1 is the first layout, and no build before it shipped, so the list
+/// is empty. A document with no version reads as 0 (`SCHEMA-005`), and the walk
+/// finds no step from 0 and refuses it. The first layout change after the
+/// release adds its row here.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The full-state read rule, applied before the caller touches a single
 /// container (`SCHEMA-006`, `PROSE-097`).
@@ -265,6 +108,15 @@ fn lang_to_locale(doc: &LoroDoc) -> Result<(), String> {
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the document.
 /// * A migration variant when the chain cannot carry an older document.
 pub fn gate(payload: &SnapshotBytes) -> Result<Cow<'_, SnapshotBytes>, SchemaError> {
+    gate_through(MIGRATIONS, payload)
+}
+
+/// [`gate`] over the registry `steps`. A test hands it a step of its own, so
+/// the walk stays proved while [`MIGRATIONS`] holds none.
+fn gate_through<'a>(
+    steps: &[SchemaMigration<LoroDoc>],
+    payload: &'a SnapshotBytes,
+) -> Result<Cow<'a, SnapshotBytes>, SchemaError> {
     let scratch = LoroDoc::new();
     scratch.import(payload.as_bytes()).map_err(|e| {
         tracing::warn!("Prose: the snapshot was rejected by the CRDT engine: {e:?}");
@@ -295,7 +147,7 @@ pub fn gate(payload: &SnapshotBytes) -> Result<Cow<'_, SnapshotBytes>, SchemaErr
                     to: SCHEMA_VERSION,
                     reason: format!("taking the migration identity failed: {e:?}"),
                 })?;
-            migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
+            migrate_schema(steps, found, SCHEMA_VERSION, &scratch)?;
             let bytes =
                 scratch
                     .export(ExportMode::Snapshot)
@@ -349,10 +201,23 @@ mod tests {
         assert_eq!(&*gated, &bytes);
     }
 
+    /// The `0 -> 1` step a test registry holds: it stamps the number and
+    /// changes nothing else.
+    fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+        stamp(doc);
+        doc.commit();
+        Ok(())
+    }
+
     #[test]
     fn a_document_written_before_the_register_migrates_to_the_current_version() {
+        let steps = [SchemaMigration {
+            from: SCHEMA_VERSION_ABSENT,
+            to: SCHEMA_VERSION,
+            apply: stamp_step,
+        }];
         let bytes = snapshot_at(None);
-        let gated = gate(&bytes).expect("version 0 migrates");
+        let gated = gate_through(&steps, &bytes).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
             .import(gated.as_bytes())
@@ -360,6 +225,18 @@ mod tests {
         assert_eq!(
             read_version(&migrated).expect("the migrated register reads"),
             SCHEMA_VERSION
+        );
+    }
+
+    /// No build wrote a document before version 1, so the registry holds no
+    /// step and a document with no register finds no path.
+    #[test]
+    fn a_document_written_before_the_register_finds_no_step() {
+        assert_eq!(
+            gate(&snapshot_at(None)).expect_err("no step leaves version 0"),
+            SchemaError::NoMigrationPath {
+                from: SCHEMA_VERSION_ABSENT
+            }
         );
     }
 
@@ -402,37 +279,6 @@ mod tests {
             state.export_snapshot(),
             before,
             "a refused read must not write the document back"
-        );
-    }
-
-    /// A version 9 document named its language under `lang`. The step moves
-    /// the tag to `locale`, so the date field still reads it.
-    #[test]
-    fn a_version_9_language_reads_as_the_locale() {
-        let doc = LoroDoc::new();
-        let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
-        meta.insert(V9_LANG, "fr").expect("a version 9 language");
-        meta.insert(
-            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
-            i64::from(9_u32),
-        )
-        .expect("stamp");
-        doc.commit();
-        let bytes = SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"));
-        let gated = gate(&bytes).expect("version 9 migrates");
-        let migrated = LoroDoc::new();
-        migrated
-            .import(gated.as_bytes())
-            .expect("the migrated snapshot imports");
-        assert_eq!(
-            crate::doc::read_locale(&migrated).map(|tag| tag.as_str().to_owned()),
-            Some("fr".to_owned())
-        );
-        assert!(
-            migrated
-                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-                .get(V9_LANG)
-                .is_none()
         );
     }
 

@@ -457,27 +457,32 @@ fn a_document_a_newer_client_wrote_is_refused_whole() {
     );
 }
 
-/// A segment stamped at version 1 opens, and the walk writes nothing in it:
-/// no member would sign that write (`MURMURE-566`).
+/// The step of a test registry: it reads the document as it is
+/// (`MURMURE-566`).
+#[allow(clippy::unnecessary_wraps)]
+fn read_as_it_is(_: &LoroDoc) -> Result<(), String> {
+    Ok(())
+}
+
+/// A segment one version behind the walk's target opens, and the walk writes
+/// nothing in it: no member would sign that write (`MURMURE-566`).
 #[test]
 fn an_older_document_opens_and_the_walk_writes_nothing() {
-    let mut stored = stored_channel();
+    let stored = stored_channel();
     let older = segment_doc(stored.channel);
-    older
-        .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
-        .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 1)
-        .expect("stamp");
-    older.commit();
     let before = older.oplog_vv();
-    stored.segments.insert(stored.active_id, snapshot(&older));
-    let state = ChannelState::open(
-        stored.channel,
-        stored.meta_id,
-        &stored.meta,
-        &stored.segments,
-    )
-    .expect("a version 1 segment opens");
-    let opened = state.doc(stored.active_id.document_id()).expect("held");
+    let bytes = snapshot(&older);
+    let steps = [ambre_core::schema::SchemaMigration {
+        from: SCHEMA_VERSION,
+        to: SCHEMA_VERSION.next(),
+        apply: read_as_it_is,
+    }];
+    let opened = schema::import_through(&steps, SCHEMA_VERSION.next(), |doc| {
+        doc.import(bytes.as_bytes())
+            .map(|_| ())
+            .map_err(|_| SchemaError::PayloadRejected.into())
+    })
+    .expect("an older segment opens");
     assert_eq!(opened.oplog_vv(), before, "the walk wrote an operation");
     assert_eq!(
         schema::unsigned(
@@ -486,7 +491,7 @@ fn an_older_document_opens_and_the_walk_writes_nothing() {
             ),
             ambre_core::schema::MetaKey::SchemaVersion
         ),
-        Some(1)
+        Some(u64::from(SCHEMA_VERSION.get()))
     );
 }
 
