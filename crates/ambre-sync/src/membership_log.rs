@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
-use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
+use ambre_core::{DocumentId, KeyId, PublicKey, Role, RoleRank, UserId};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
@@ -77,16 +77,6 @@ impl LogRule {
             self_join: no_self_join,
             space: None,
         }
-    }
-}
-
-/// The rank of a document role, the order the relay grants them in.
-fn rank(role: Role) -> Option<u8> {
-    match role {
-        Role::Viewer => Some(0),
-        Role::Editor => Some(1),
-        Role::Owner => Some(2),
-        Role::Admin | Role::Member => None,
     }
 }
 
@@ -224,26 +214,28 @@ impl Log {
     fn allows(&self, entry: &MembershipEntry, self_join: SelfJoinRule) -> bool {
         let author = self.held.get(&entry.author).filter(|held| held.present);
         let target = self.held.get(&entry.member).filter(|held| held.present);
-        let author_rank = author.and_then(|held| rank(held.role));
-        let granted = rank(entry.role);
+        let author_rank = author.and_then(|held| held.role.document_rank());
+        let granted = entry.role.document_rank();
         let allowed = match entry.act {
             MembershipAct::Create => false,
             // An editor or an owner adds a member at or below their own rank,
             // and touches no member above it, as the relay checks.
             MembershipAct::Invite => match (author_rank, granted) {
                 (Some(by), Some(role)) => {
-                    by >= 1
+                    by >= RoleRank::Middle
                         && role <= by
-                        && target.is_none_or(|held| rank(held.role).is_some_and(|t| t <= by))
+                        && target
+                            .is_none_or(|held| held.role.document_rank().is_some_and(|t| t <= by))
                 }
                 _ => false,
             },
             MembershipAct::ChangeRole => {
-                author_rank == Some(2) && target.is_some() && granted.is_some()
+                author_rank == Some(RoleRank::Highest) && target.is_some() && granted.is_some()
             }
             // A member removes themselves, and an owner removes anyone.
             MembershipAct::Revoke => {
-                target.is_some() && (entry.author == entry.member || author_rank == Some(2))
+                target.is_some()
+                    && (entry.author == entry.member || author_rank == Some(RoleRank::Highest))
             }
             MembershipAct::SelfJoin => {
                 entry.author == entry.member && granted.is_some() && self_join(entry)
@@ -283,7 +275,10 @@ impl Log {
         }
         if let Some(held) = self.held.get(&entry.member)
             && held.present
-            && rank(held.role).is_some_and(|r| r >= 1)
+            && held
+                .role
+                .document_rank()
+                .is_some_and(|r| r >= RoleRank::Middle)
         {
             self.signers.insert(held.key.clone());
         }

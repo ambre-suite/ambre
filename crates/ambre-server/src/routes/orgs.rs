@@ -92,18 +92,6 @@ pub struct UpdateOrgRequest {
     pub name: String,
 }
 
-/// Privilege rank of an organization role. Higher binds more capability.
-/// `owner` (2) > `admin` (1) > `member` (0). A role no organization holds
-/// ranks below everything so it can never be granted.
-fn org_role_rank(role: Role) -> Option<u8> {
-    match role {
-        Role::Member => Some(0),
-        Role::Admin => Some(1),
-        Role::Owner => Some(2),
-        Role::Editor | Role::Viewer => None,
-    }
-}
-
 /// Validates that a role is allowed in an organization context.
 /// Returns a 409 if the role is not valid for organizations.
 fn org_role_valid(role: Role) -> Result<Role, AppError> {
@@ -302,14 +290,17 @@ pub async fn add_member(
     //      can never mint (or self-promote to) an owner.
     //   2. A caller may only touch a member currently at or below their own rank.
     //      An admin can never demote or lock out an owner via the upsert.
-    let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
+    let caller_rank = caller.role.organization_rank().ok_or(AppError::Forbidden)?;
     let role = org_role_valid(req.role)?;
-    let granted_rank = org_role_rank(role).ok_or(AppError::Forbidden)?;
+    let granted_rank = role.organization_rank().ok_or(AppError::Forbidden)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
     if let Some(existing) = db::get_org_member(&state.db, &org_id, &member_user_id).await? {
-        let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = existing
+            .role
+            .organization_rank()
+            .ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -359,9 +350,12 @@ pub async fn remove_member(
 
     // Same rank clamp as `add_member`. A caller may only remove a member at or
     // below their own rank, so an admin can never remove (or lock out) the owner.
-    let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
+    let caller_rank = caller.role.organization_rank().ok_or(AppError::Forbidden)?;
     if let Some(existing) = db::get_org_member(&state.db, &org_id, &target_uid).await? {
-        let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = existing
+            .role
+            .organization_rank()
+            .ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -462,9 +456,9 @@ mod tests {
 
     #[test]
     fn org_role_rank_ordering() {
-        assert!(org_role_rank(Role::Owner) > org_role_rank(Role::Admin));
-        assert!(org_role_rank(Role::Admin) > org_role_rank(Role::Member));
-        assert_eq!(org_role_rank(Role::Editor), None);
+        assert!(Role::Owner.organization_rank() > Role::Admin.organization_rank());
+        assert!(Role::Admin.organization_rank() > Role::Member.organization_rank());
+        assert_eq!(Role::Editor.organization_rank(), None);
         assert!(org_role_valid(Role::Editor).is_err());
         assert!(
             org_role_valid(Role::Viewer).is_err(),
@@ -476,10 +470,10 @@ mod tests {
     /// rejects any role above the caller's own rank.
     #[test]
     fn admin_cannot_grant_owner() {
-        let caller = org_role_rank(Role::Admin).unwrap();
-        assert!(org_role_rank(Role::Owner).unwrap() > caller); // owner grant blocked
-        assert!(org_role_rank(Role::Admin).unwrap() <= caller);
-        assert!(org_role_rank(Role::Member).unwrap() <= caller);
+        let caller = Role::Admin.organization_rank().unwrap();
+        assert!(Role::Owner.organization_rank().unwrap() > caller); // owner grant blocked
+        assert!(Role::Admin.organization_rank().unwrap() <= caller);
+        assert!(Role::Member.organization_rank().unwrap() <= caller);
     }
 
     // -- Shamir validation (N1) ---------------------------------------------

@@ -3477,10 +3477,8 @@ ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | OrgMemberResponse.has_shamir_share | field | Option<bool>	math	named state or style flag, local
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | UpdateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | org_name(name) | param | &str	newtype-inner	constructor seam into OrgName
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | org_role_rank() | ret | Option<u8>	math	role rank for comparison, local
 ambre-server | src/routes/read_cursors.rs | crate::routes::read_cursors | ActivityJson.active | field | bool	math	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	math	named state or style flag, local
-ambre-server | src/routes/share.rs | crate::routes::share | doc_role_rank() | ret | Option<u8>	math	role rank for comparison, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
@@ -3625,7 +3623,6 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | re
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/membership_log.rs | crate::membership_log | rank() | ret | Option<u8>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | LogHead::is_empty() | ret | bool	math	named predicate of the log head
 ambre-sync | src/mock.rs | crate::mock | MockWsTransport.client_tx | field | ambre_bus::conduit::UnboundedSender<Vec<u8>>	generic	generic byte/text API or codec

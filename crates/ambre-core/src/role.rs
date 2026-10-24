@@ -86,6 +86,36 @@ impl Role {
         matches!(self, Self::Owner | Self::Admin | Self::Member)
     }
 
+    /// This role's place in the grant order of a document, `None` for a role
+    /// no document holds. A role that has no rank can never be granted.
+    pub const fn document_rank(self) -> Option<RoleRank> {
+        if self.is_valid_for_document() {
+            Some(self.rank())
+        } else {
+            None
+        }
+    }
+
+    /// This role's place in the grant order of an organization, `None` for a
+    /// role no organization holds.
+    pub const fn organization_rank(self) -> Option<RoleRank> {
+        if self.is_valid_for_organization() {
+            Some(self.rank())
+        } else {
+            None
+        }
+    }
+
+    /// The one grant order every scope shares: the owner, then the role that
+    /// manages members, then the base role.
+    const fn rank(self) -> RoleRank {
+        match self {
+            Self::Owner => RoleRank::Highest,
+            Self::Editor | Self::Admin => RoleRank::Middle,
+            Self::Viewer | Self::Member => RoleRank::Lowest,
+        }
+    }
+
     /// Returns the default role for a new document member (viewer).
     pub const fn default_document() -> Self {
         Self::Viewer
@@ -100,6 +130,22 @@ impl Role {
     pub const fn default_organization() -> Self {
         Self::Member
     }
+}
+
+/// Where a role sits in the grant order of its scope: a higher rank grants
+/// more. A member grants a role at or below their own rank, and touches no
+/// member above it.
+///
+/// Only [`Role::document_rank`] and [`Role::organization_rank`] build one, so
+/// a rank always comes from a role its scope holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RoleRank {
+    /// A viewer of a document, a member of an organization.
+    Lowest,
+    /// An editor of a document, an admin of an organization.
+    Middle,
+    /// The owner.
+    Highest,
 }
 
 impl fmt::Display for Role {
@@ -227,5 +273,29 @@ mod tests {
         assert_eq!(serialized, "\"editor\"");
         let deserialized: Role = serde_json::from_str(&serialized).unwrap();
         assert_eq!(role, deserialized);
+    }
+
+    #[test]
+    fn the_two_scopes_share_one_grant_order() {
+        assert!(Role::Owner.document_rank() > Role::Editor.document_rank());
+        assert!(Role::Editor.document_rank() > Role::Viewer.document_rank());
+        assert!(Role::Owner.organization_rank() > Role::Admin.organization_rank());
+        assert!(Role::Admin.organization_rank() > Role::Member.organization_rank());
+        // The middle and the base role of each scope sit at the same place.
+        assert_eq!(
+            Role::Editor.document_rank(),
+            Role::Admin.organization_rank()
+        );
+        assert_eq!(
+            Role::Viewer.document_rank(),
+            Role::Member.organization_rank()
+        );
+        // A role of the other scope has no rank, so it is never granted.
+        for role in [Role::Admin, Role::Member] {
+            assert_eq!(role.document_rank(), None);
+        }
+        for role in [Role::Editor, Role::Viewer] {
+            assert_eq!(role.organization_rank(), None);
+        }
     }
 }

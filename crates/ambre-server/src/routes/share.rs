@@ -10,18 +10,6 @@ use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
 
-/// Privilege rank of a document role. Higher binds more capability.
-/// `owner` (2) > `editor` (1) > `viewer` (0). A role no document holds ranks
-/// below everything so it can never be granted.
-fn doc_role_rank(role: Role) -> Option<u8> {
-    match role {
-        Role::Viewer => Some(0),
-        Role::Editor => Some(1),
-        Role::Owner => Some(2),
-        Role::Admin | Role::Member => None,
-    }
-}
-
 /// What a route expects of the membership entry its request carries.
 pub(crate) struct Expected {
     pub act: ambre_protocol::MembershipAct,
@@ -136,7 +124,7 @@ pub async fn invite_to_document(
     // at or below their own rank (N2). Without this clamp an `editor` could mint an
     // `owner`, who could then revoke/rotate -- a privilege escalation. Only an owner
     // may grant `owner`.
-    let caller_rank = doc_role_rank(m.role).ok_or(AppError::Forbidden)?;
+    let caller_rank = m.role.document_rank().ok_or(AppError::Forbidden)?;
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
@@ -157,7 +145,7 @@ pub async fn invite_to_document(
         detail: "invalid role".into(),
     };
     let role = req.role;
-    let granted_rank = doc_role_rank(role).ok_or_else(invalid_role)?;
+    let granted_rank = role.document_rank().ok_or_else(invalid_role)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
@@ -197,7 +185,7 @@ pub async fn invite_to_document(
     // holds the document key, so it could supply a valid wrap. That demotes an
     // owner and overwrites their key entry, despite never being an owner.
     if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
-        let target_rank = doc_role_rank(existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = existing.role.document_rank().ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -652,26 +640,26 @@ mod tests {
 
     #[test]
     fn doc_role_rank_ordering() {
-        assert!(doc_role_rank(Role::Owner) > doc_role_rank(Role::Editor));
-        assert!(doc_role_rank(Role::Editor) > doc_role_rank(Role::Viewer));
-        assert_eq!(doc_role_rank(Role::Admin), None);
-        assert_eq!(doc_role_rank(Role::Member), None);
+        assert!(Role::Owner.document_rank() > Role::Editor.document_rank());
+        assert!(Role::Editor.document_rank() > Role::Viewer.document_rank());
+        assert_eq!(Role::Admin.document_rank(), None);
+        assert_eq!(Role::Member.document_rank(), None);
     }
 
     /// N2: an editor may grant editor/viewer but never owner.
     #[test]
     fn editor_cannot_grant_owner() {
-        let caller = doc_role_rank(Role::Editor).unwrap();
-        assert!(doc_role_rank(Role::Owner).unwrap() > caller); // owner grant blocked
-        assert!(doc_role_rank(Role::Editor).unwrap() <= caller);
-        assert!(doc_role_rank(Role::Viewer).unwrap() <= caller);
+        let caller = Role::Editor.document_rank().unwrap();
+        assert!(Role::Owner.document_rank().unwrap() > caller); // owner grant blocked
+        assert!(Role::Editor.document_rank().unwrap() <= caller);
+        assert!(Role::Viewer.document_rank().unwrap() <= caller);
     }
 
     #[test]
     fn owner_can_grant_any_valid_role() {
-        let caller = doc_role_rank(Role::Owner).unwrap();
+        let caller = Role::Owner.document_rank().unwrap();
         for role in [Role::Owner, Role::Editor, Role::Viewer] {
-            assert!(doc_role_rank(role).unwrap() <= caller);
+            assert!(role.document_rank().unwrap() <= caller);
         }
     }
 }

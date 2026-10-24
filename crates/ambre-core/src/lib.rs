@@ -137,7 +137,7 @@ pub use payload::{
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
-pub use role::Role;
+pub use role::{Role, RoleRank};
 pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
