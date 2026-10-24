@@ -284,7 +284,7 @@ impl FixtureGen for TrameFixture {
         1
     }
 
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
         let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
         match self {
@@ -298,7 +298,6 @@ impl FixtureGen for TrameFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 
@@ -548,7 +547,7 @@ impl FixtureGen for TrameBenchFixture {
         1
     }
 
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
         let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
         match self {
@@ -560,7 +559,6 @@ impl FixtureGen for TrameBenchFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 

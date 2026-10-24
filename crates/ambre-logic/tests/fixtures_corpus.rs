@@ -65,7 +65,7 @@ impl FixtureGen for TrameGen {
     fn generator_version(&self) -> u32 {
         self.version
     }
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         for (row, text) in [(0, "21"), (1, "=A1*2"), (2, "plain")] {
             state.handle_command(TrameCommand::SetCellText {
@@ -77,7 +77,6 @@ impl FixtureGen for TrameGen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 
@@ -100,7 +99,7 @@ impl FixtureGen for ToileGen {
     fn generator_version(&self) -> u32 {
         1
     }
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let mut state = ToileState::with_peer(ambre_core::PeerId(self.seed));
         for i in 0..3 {
             state.handle_command(ToileCommand::CreateElement {
@@ -123,7 +122,6 @@ impl FixtureGen for ToileGen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 
@@ -227,7 +225,7 @@ fn the_sidecar_is_readable_json_and_reads_back_equal() {
 fn a_flipped_header_byte_moves_the_digest() {
     // The write-once check of works only if the digest covers the header, so
     // this is the assertion that C8's "header included" is real.
-    let bytes = TRAME.build();
+    let bytes = TRAME.build().into_bytes();
     let mut tampered = bytes.clone();
     tampered[10] ^= 0x01; // inside `document_id`, not the payload
     assert_ne!(digest_of(&bytes), digest_of(&tampered));
@@ -252,12 +250,12 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
         fn generator_version(&self) -> u32 {
             1
         }
-        fn build(&self) -> Vec<u8> {
+        fn build(&self) -> ambre_core::PlaintextContainer {
             TRAME.build()
         }
     }
     assert!(matches!(
-        manifest_for(&Liar, &Liar.build()),
+        manifest_for(&Liar, Liar.build().as_bytes()),
         Err(FixtureError::Container(DocFileError::WrongDocType {
             found: DocType::Trame
         }))
@@ -415,7 +413,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 /// panicking and without inventing a variant of its own.
 #[test]
 fn every_header_failure_is_typed_and_none_of_them_panics() {
-    let good = TRAME.build();
+    let good = TRAME.build().into_bytes();
     let doc_id = DocumentId::from_bytes([0x33; 16]);
 
     let cases: Vec<(&str, Vec<u8>, DocFileError)> = vec![
@@ -497,7 +495,8 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
     // A *valid* container for another app is not a rejection here. The loader is
     // type-agnostic by design: it reads `doc_type` off the header and routes. A
     // Toile artifact loads as a Toile document.
-    let (_id, state) = fixtures::import_fixture(&TOILE.build()).expect("a Toile fixture loads");
+    let (_id, state) =
+        fixtures::import_fixture(TOILE.build().as_bytes()).expect("a Toile fixture loads");
     assert_eq!(state.doc_type(), DocType::Toile);
 }
 
@@ -534,7 +533,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
 
 #[test]
 fn the_shape_counts_what_the_document_holds() {
-    let (_id, trame) = fixtures::import_fixture(&TRAME.build()).expect("loads");
+    let (_id, trame) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
     match shape_of(&trame).body {
         ShapeBody::Trame {
             cells,
@@ -548,7 +547,7 @@ fn the_shape_counts_what_the_document_holds() {
         other => panic!("a Trame fixture must carry a Trame shape, got {other:?}"),
     }
 
-    let (_id, toile) = fixtures::import_fixture(&TOILE.build()).expect("loads");
+    let (_id, toile) = fixtures::import_fixture(TOILE.build().as_bytes()).expect("loads");
     match shape_of(&toile).body {
         ShapeBody::Toile {
             elements,
@@ -565,7 +564,7 @@ fn the_shape_counts_what_the_document_holds() {
 
 #[test]
 fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
-    let (_id, solo) = fixtures::import_fixture(&TRAME.build()).expect("loads");
+    let (_id, solo) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
     // The importing state commits its own scaffolding under its own peer before
     // the merge. A restored document always carries one peer that is the reader
     // rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
@@ -594,7 +593,7 @@ fn the_canonical_dump_carries_both_representations_of_a_formula() {
     // dumping only the source would let an evaluation regression pass
     // unnoticed; dumping only the result would hide a change in what is
     // persisted. Both go in.
-    let (_id, state) = fixtures::import_fixture(&TRAME.build()).expect("loads");
+    let (_id, state) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
     let dump = canonical_dump(&state);
     assert!(
         dump.contains("raw==A1*2"),

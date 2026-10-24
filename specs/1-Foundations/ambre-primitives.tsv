@@ -1269,7 +1269,6 @@ ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Trame.formulas | fie
 ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Trame.sheets | field | u16	math	fixture shape counts
 ambre-core | src/fixtures.rs | crate::fixtures | fixture_peer_count() | ret | u8	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | seeded_document_id(seed) | param | u64	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::build() | ret | Vec<u8>	generic	fixture generator metadata (test support)
 ambre-core | src/font.rs | crate::font | <FontSize as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::from_whole_points(points) | param | u16	newtype-inner	FontSize field, constructor or accessor
@@ -3477,8 +3476,6 @@ ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of(bytes) | param | &[u8]	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | render() | ret | String	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | render(position) | param | &HashMap<String,usize>	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileBenchFixture as FixtureGen>::build() | ret | Vec<u8>	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileFixture as FixtureGen>::build() | ret | Vec<u8>	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::frame_name() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::rename_frame(name) | param | &str	free-text	label, message or user text
@@ -4102,8 +4099,6 @@ ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_gri
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(rows) | param | u32	math	fixture grid dimensions
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_two_peer_merge(seed) | param | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | new_sheet_id(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::build() | ret | Vec<u8>	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as FixtureGen>::build() | ret | Vec<u8>	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values::rank() | ret | u8	math	a value local to one algorithm
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -4437,7 +4432,6 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice()
 ambre-prose | src/doc.rs | crate::doc | WriteError::Refused.0 | field | &'static str	free-text	a diagnostic sentence naming what the document could not do; it only reaches ProseRefusal::WriteFailed as text
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Refused.command | field | &'static str	free-text	the literal name of the fixture command, printed in the failure message only
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::build() | ret | Vec<u8>	trait	signature fixed by foreign trait
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName.0 | field | String	newtype-inner	the text of a validated defined name

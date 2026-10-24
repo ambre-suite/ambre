@@ -269,7 +269,7 @@ impl FixtureGen for ToileFixture {
         2
     }
 
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
         let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
         match self {
@@ -279,7 +279,6 @@ impl FixtureGen for ToileFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 
@@ -492,7 +491,7 @@ impl FixtureGen for ToileBenchFixture {
         1
     }
 
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
         let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
         match self {
@@ -507,7 +506,6 @@ impl FixtureGen for ToileBenchFixture {
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 

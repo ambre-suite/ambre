@@ -124,8 +124,8 @@ pub trait FixtureGen {
     /// longer matches.
     fn generator_version(&self) -> u32;
 
-    /// Build the document and return the plaintext `.ambre` bytes, that is, the
-    /// output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
+    /// Build the document and return the plaintext `.ambre` container, that is,
+    /// the output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
     /// header makes the artifact self-describing and loadable through the
     /// production importer.
     ///
@@ -136,7 +136,7 @@ pub trait FixtureGen {
     /// is a bug, not a runtime condition. It **panics** rather than emit a
     /// half-built document -- a corpus that silently lost a merge is worse than a
     /// failed `just fixtures`.
-    fn build(&self) -> Vec<u8>;
+    fn build(&self) -> crate::PlaintextContainer;
 }
 
 // -----------------------------------------------------------------------------

@@ -59,7 +59,7 @@ impl FixtureGen for Gen {
     fn generator_version(&self) -> u32 {
         self.version
     }
-    fn build(&self) -> Vec<u8> {
+    fn build(&self) -> ambre_core::PlaintextContainer {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         state.handle_command(TrameCommand::SetCellsBatch {
             cells: (0..self.filler)
@@ -74,7 +74,6 @@ impl FixtureGen for Gen {
         state
             .export_ambre_plaintext(seeded_document_id(self.seed))
             .expect("the document reads")
-            .into_bytes()
     }
 }
 

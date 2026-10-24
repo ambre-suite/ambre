@@ -608,13 +608,14 @@ pub fn write_fixture(
     generator: &dyn FixtureGen,
     dir: &Path,
 ) -> Result<FixtureManifest, FixtureError> {
-    let bytes = generator.build();
-    let manifest = manifest_for(generator, &bytes)?;
+    let container = generator.build();
+    let bytes = container.as_bytes();
+    let manifest = manifest_for(generator, bytes)?;
     let artifact = artifact_path(dir, generator.name());
     if let Some(parent) = artifact.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&artifact, &bytes)?;
+    fs::write(&artifact, bytes)?;
     // Pretty-printed with a trailing newline. The sidecar exists to be *read* in
     // a diff, and a single-line JSON blob would be as opaque as the binary it
     // describes.
