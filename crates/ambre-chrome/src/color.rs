@@ -96,20 +96,49 @@ impl PickedColour for Rgba {
     }
 }
 
-/// Parse the value of an `<input type="color">`, always `"#rrggbb"`. Any other
-/// spelling yields `None`.
-fn parse_hex_color(s: &str) -> Option<Rgb> {
-    let hex = s
-        .strip_prefix('#')
-        .filter(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()))?;
-    u32::from_str_radix(hex, 16).ok().map(Rgb::from_bits)
+/// A colour picked by its channels: the RGB, and the alpha when the pick
+/// names one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pick {
+    rgb: Rgb,
+    /// The alpha an eight-digit spelling carries. A pick without one keeps
+    /// the alpha of the colour it replaces.
+    alpha: Option<u8>,
 }
 
-/// The colour `rgb` in the packing of `current`, with the alpha of `current`.
-/// An unset `current` gives an opaque colour.
-fn repaint<C: PickedColour>(current: Option<C>, rgb: Rgb) -> C {
-    let [.., alpha] = current.map_or(UNSET, PickedColour::as_rgba).channels();
-    C::from_rgba(rgb.to_rgba(alpha))
+impl Pick {
+    /// A pick of the RGB channels alone, as a swatch makes.
+    const fn keeping_alpha(rgb: Rgb) -> Self {
+        Self { rgb, alpha: None }
+    }
+}
+
+/// Parse a hex colour, `"#rrggbb"` as the native widget writes it or
+/// `"#rrggbbaa"` with its alpha. Any other spelling yields `None`.
+fn parse_hex_color(s: &str) -> Option<Pick> {
+    let hex = s
+        .strip_prefix('#')
+        .filter(|hex| hex.bytes().all(|b| b.is_ascii_hexdigit()))?;
+    let bits = u32::from_str_radix(hex, 16).ok()?;
+    match hex.len() {
+        6 => Some(Pick::keeping_alpha(Rgb::from_bits(bits))),
+        8 => {
+            let [r, g, b, alpha] = bits.to_be_bytes();
+            Some(Pick {
+                rgb: Rgb::from_channels(r, g, b),
+                alpha: Some(alpha),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The colour `picked` in the packing of `current`. The alpha is the one the
+/// pick names, else the alpha of `current`, else opaque. A packing with no
+/// alpha drops it.
+fn repaint<C: PickedColour>(current: Option<C>, picked: Pick) -> C {
+    let [.., kept] = current.map_or(UNSET, PickedColour::as_rgba).channels();
+    C::from_rgba(picked.rgb.to_rgba(picked.alpha.unwrap_or(kept)))
 }
 
 /// A composed colour control. `on_pick` receives `Some(colour)` for a chosen
@@ -190,7 +219,7 @@ pub fn ColorPopover<C: PickedColour>(
                                         style:background-color=rgb.to_string()
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
-                                            on_pick.run(Some(repaint(current.get_untracked(), rgb)));
+                                            on_pick.run(Some(repaint(current.get_untracked(), Pick::keeping_alpha(rgb))));
                                             open.set(false);
                                         }
                                     ></button>
@@ -206,8 +235,8 @@ pub fn ColorPopover<C: PickedColour>(
                                 current.get().unwrap_or(default.get()).as_rgba().rgb().to_string()
                             }
                             on:input=move |ev| {
-                                if let Some(rgb) = parse_hex_color(&event_target_value(&ev)) {
-                                    let picked = repaint(current.get_untracked(), rgb);
+                                if let Some(pick) = parse_hex_color(&event_target_value(&ev)) {
+                                    let picked = repaint(current.get_untracked(), pick);
                                     rgb_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                 }
                             }
@@ -259,28 +288,61 @@ mod tests {
 
     #[test]
     fn parse_hex_reads_the_native_widget_value() {
-        assert_eq!(parse_hex_color("#ff0000"), Some(Rgb::from_bits(0xff_0000)));
-        assert_eq!(parse_hex_color("#000000"), Some(Rgb::from_bits(0x00_0000)));
+        let red = Pick::keeping_alpha(Rgb::from_bits(0xff_0000));
+        assert_eq!(parse_hex_color("#ff0000"), Some(red));
+        let black = Pick::keeping_alpha(Rgb::from_bits(0x00_0000));
+        assert_eq!(parse_hex_color("#000000"), Some(black));
+    }
+
+    #[test]
+    fn parse_hex_reads_an_eight_digit_spelling_with_its_alpha() {
+        let pick = Pick {
+            rgb: Rgb::from_bits(0x80_ff00),
+            alpha: Some(0x40),
+        };
+        assert_eq!(parse_hex_color("#80ff0040"), Some(pick));
     }
 
     #[test]
     fn parse_hex_rejects_garbage() {
         assert_eq!(parse_hex_color("ff0000"), None); // no leading '#'
         assert_eq!(parse_hex_color("#zzz"), None);
-        assert_eq!(parse_hex_color("#80ff0000"), None);
+        assert_eq!(parse_hex_color("#80ff000"), None);
+        assert_eq!(parse_hex_color("#80ff00000"), None);
         assert_eq!(parse_hex_color("#+fffff"), None);
+        assert_eq!(parse_hex_color("#+fffffff"), None);
     }
 
     #[test]
     fn a_repaint_keeps_the_alpha_of_the_current_colour() {
-        let rgb = Rgb::from_bits(0x00_ff00);
+        let rgb = Pick::keeping_alpha(Rgb::from_bits(0x00_ff00));
         let translucent = Rgba::from_bits(0xabcd_ef80);
         assert_eq!(
             repaint(Some(translucent), rgb),
             Rgba::from_bits(0x00ff_0080)
         );
         assert_eq!(repaint(None::<Rgba>, rgb), Rgba::from_bits(0x00ff_00ff));
-        assert_eq!(repaint(Some(Rgb::from_bits(0x12_3456)), rgb), rgb);
+        assert_eq!(
+            repaint(Some(Rgb::from_bits(0x12_3456)), rgb),
+            Rgb::from_bits(0x00_ff00)
+        );
+    }
+
+    /// An eight-digit pick puts its alpha in the colour's alpha when the
+    /// packing holds one, and an RGB packing drops it.
+    #[test]
+    fn a_picked_alpha_reaches_the_colour_that_holds_one() {
+        let pick = parse_hex_color("#00ff0040").unwrap();
+        let translucent = Rgba::from_bits(0xabcd_ef80);
+        assert_eq!(
+            repaint(Some(translucent), pick),
+            Rgba::from_bits(0x00ff_0040)
+        );
+        assert_eq!(repaint(None::<Rgba>, pick), Rgba::from_bits(0x00ff_0040));
+        assert_eq!(
+            repaint(Some(Rgb::from_bits(0x12_3456)), pick),
+            Rgb::from_bits(0x00_ff00)
+        );
     }
 
     #[test]

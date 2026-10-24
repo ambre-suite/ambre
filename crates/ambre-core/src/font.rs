@@ -231,16 +231,18 @@ impl FontFamily {
         match self {
             Self::Sans => "sans-serif",
             Self::Other(name) => name,
-            known => known.picker_label().unwrap_or_default(),
+            Self::Serif => "Serif",
+            Self::Mono => "Monospace",
         }
     }
 
     /// The label the font picker shows for the family, or `None` for a
-    /// family it does not offer.
+    /// family it does not offer. The default face shows as the picker's
+    /// "Default" entry, so an element that names no family reads as one.
     #[must_use]
     pub fn picker_label(&self) -> Option<&'static str> {
         match self {
-            Self::Sans => Some("Sans"),
+            Self::Sans => Some("Default"),
             Self::Serif => Some("Serif"),
             Self::Mono => Some("Monospace"),
             Self::Other(_) => None,
@@ -320,6 +322,9 @@ mod tests {
         }
         assert_eq!(FontFamily::from_label("serif"), FontFamily::Serif);
         assert_eq!(FontFamily::from_label("Monospace"), FontFamily::Mono);
+        assert_eq!(FontFamily::default().picker_label(), Some("Default"));
+        assert_eq!(FontFamily::Serif.label(), "Serif");
+        assert_eq!(FontFamily::Mono.label(), "Monospace");
         let other = FontFamily::from_label("Comic Sans MS");
         assert_eq!(other.picker_label(), None);
         assert_eq!(other.label(), "Comic Sans MS");

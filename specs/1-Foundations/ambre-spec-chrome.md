@@ -52,6 +52,8 @@ the DOM side produces.
 |---|---|---|---|---|---|---|
 | `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
 | `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
+| `CHROME-109` | `POST` | A colour picked with an alpha, as `#rrggbbaa` spells it, MUST carry that alpha into a colour that holds one. | this spec section 2 | `ambre_chrome::color::tests::a_picked_alpha_reaches_the_colour_that_holds_one` -- the alpha reaches a colour with an alpha, set or unset, and a colour with none drops it; `::parse_hex_reads_an_eight_digit_spelling_with_its_alpha` | none | verified |
+| `CHROME-110` | `POST` | A colour picked without an alpha, as a swatch or `#rrggbb` spells it, MUST keep the alpha of the colour it replaces. | this spec section 2 | `ambre_chrome::color::tests::a_repaint_keeps_the_alpha_of_the_current_colour` -- a translucent colour keeps its alpha, an unset one reads as opaque | none | verified |
 | `CHROME-105` | `POST` | The format bar MUST hang above the anchor it is handed, show each control with its pressed state, and report a press of that control alone. | this spec section 2; `CHROME-013` | `ambre_chrome::chrome_ui::the_format_bar_hangs_its_controls_and_reports_a_press` -- the placement, the three pressed states, and one press reported | none | verified |
 | `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`; `::perf_chip_renders_fps_from_signal_and_starts_collapsed` -- the menu element is absent on mount | none | verified |
 | `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | `ambre_chrome::chrome_ui::the_zoom_readout_follows_its_signal`; `::the_fps_readout_follows_its_signal` -- each changes the signal after the mount and reads the DOM after a reactive tick | none | verified |
@@ -81,7 +83,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 24 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 26 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.

@@ -270,13 +270,24 @@ mod tests {
         assert!(!model.mixed.stroke);
     }
 
+    /// `TOILE-UI-397`: an element that names no family shows the picker's
+    /// "Default" entry, and so does one the picker reset to it.
+    #[test]
+    fn an_element_with_no_family_shows_the_default_entry() {
+        let dv = viewport(vec![elem("a", ElementStyle::default())]);
+        let model = style_scope_for(&[eid("a")], &els(&dv)).expect("model");
+        assert_eq!(model.base.font.family.picker_label(), Some("Default"));
+        let picked = ambre_bus::app::toile::FontFamily::from_label("Default");
+        assert_eq!(picked.picker_label(), Some("Default"));
+    }
+
     /// `TOILE-UI-161`: an element on the default family and one the picker
     /// reset to it agree, so the family does not read as mixed.
     #[test]
     fn two_elements_on_the_default_family_are_not_mixed() {
         let fresh = ElementStyle::default();
         let mut reset = ElementStyle::default();
-        // The picker names the default "Sans"; a fresh element stores "sans-serif".
+        // The picker names the default "Default"; a fresh element stores "sans-serif".
         let picked = ambre_bus::app::toile::FontFamily::from_label("Sans");
         crate::ui::floatbar::StyleEdit::Font(picked).apply_to(&mut reset);
         let dv = viewport(vec![elem("a", fresh), elem("b", reset)]);
