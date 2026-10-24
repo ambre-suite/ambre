@@ -114,7 +114,7 @@ fn ordered(ui: &ProseUiState, cursor: &CursorPosition) -> Option<(Spot, Spot)> {
     let key = |(block, offset): Spot| {
         (
             ui.flow_index(&crate::events::tree_id(block))
-                .unwrap_or(usize::MAX),
+                .unwrap_or(crate::layout::run::FlowIndex::MAX),
             offset,
         )
     };

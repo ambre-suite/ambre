@@ -84,7 +84,10 @@ impl ProseUiState {
     pub(crate) fn neighbour(&self, block: BlockId, direction: StepDirection) -> Option<BlockId> {
         let after = direction == StepDirection::Forward;
         let index = self.flow_index(&tree_id(block))?;
-        let is_text = |(at, b): &(usize, &crate::layout::place::BlockLayout)| {
+        let is_text = |(at, b): &(
+            crate::layout::run::FlowIndex,
+            &crate::layout::place::BlockLayout,
+        )| {
             (if after { *at > index } else { *at < index })
                 && self.shaped.blocks.contains_key(&b.block_id)
         };

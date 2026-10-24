@@ -25,7 +25,7 @@ use crate::layout::measure::Measurer;
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
-use crate::layout::run::{ShapedLayout, TextEnds, Window, text_ends};
+use crate::layout::run::{FlowIndex, ShapedLayout, TextEnds, Window, text_ends};
 use crate::toc;
 
 /// The most layouts one settling of the tables of contents runs
@@ -60,7 +60,7 @@ pub struct Paginator {
     version: LayoutVersion,
     /// Every block of the layout, by its place in the flow. Shared by every
     /// window handed over, and built again only when the blocks change.
-    order: Arc<HashMap<TreeID, usize>>,
+    order: Arc<HashMap<TreeID, FlowIndex>>,
     /// The first and the last block holding text.
     ends: Option<TextEnds>,
 }
@@ -185,7 +185,7 @@ impl Paginator {
             tables,
         )
         .with_window(Window {
-            first_index: start,
+            first_index: FlowIndex::from_usize(start),
             pages: first.through(last),
             order: Arc::clone(&self.order),
             ends: self.ends,
@@ -196,7 +196,7 @@ impl Paginator {
     #[must_use]
     pub fn page_of(&self, block: &TreeID) -> Option<PageIndex> {
         let index = *self.order.get(block)?;
-        Some(self.layout.blocks.get(index)?.page_start)
+        Some(self.layout.blocks.get(index.to_usize())?.page_start)
     }
 
     /// Lay the whole document out again, shaping every block.
@@ -435,16 +435,15 @@ impl Paginator {
     ) {
         self.page_box = page_box;
         let same_blocks = self.order.len() == measured.len()
-            && measured
-                .iter()
-                .enumerate()
-                .all(|(index, block)| self.order.get(&block.block_id) == Some(&index));
+            && measured.iter().enumerate().all(|(index, block)| {
+                self.order.get(&block.block_id) == Some(&FlowIndex::from_usize(index))
+            });
         if !same_blocks {
             self.order = Arc::new(
                 measured
                     .iter()
                     .enumerate()
-                    .map(|(index, block)| (block.block_id, index))
+                    .map(|(index, block)| (block.block_id, FlowIndex::from_usize(index)))
                     .collect(),
             );
         }

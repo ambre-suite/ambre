@@ -19,7 +19,7 @@ use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 use crate::doc;
 use crate::events::grid::{CellPos, Col, Row};
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{EffectiveStyle, Measurer, TextMetrics};
+use crate::layout::measure::{BlockLine, BlockLineCount, EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
 use crate::layout::run::{CellBorderPx, CellShape, CellStyle, ShapedRun, TableShape};
 use crate::logic::tables::{Grid, surviving_regions};
@@ -271,7 +271,7 @@ impl NotePlan {
     }
 
     /// One call, placed on `line`.
-    fn call(&self, id: &FootnoteId, line: u32) -> Option<NoteCall> {
+    fn call(&self, id: &FootnoteId, line: BlockLine) -> Option<NoteCall> {
         let (ordinal, height_px, block_id) = *self.notes.get(id)?;
         Some(NoteCall {
             footnote_id: *id,
@@ -632,7 +632,7 @@ fn table_calls(scope: &Walk<'_>, table: &TreeID) -> Vec<NoteCall> {
         .iter()
         .enumerate()
     {
-        let line = u32::try_from(row_index).unwrap_or(u32::MAX);
+        let line = BlockLine::from_usize(row_index);
         for cell in doc::children_of(scope.tree, Some(*row)) {
             for block in doc::children_of(scope.tree, Some(cell)) {
                 out.extend(
@@ -702,7 +702,7 @@ fn table_metrics(
     let Some(grid) = Grid::read(tree, table) else {
         let empty = TextMetrics {
             text_height_px: DocPx::ZERO,
-            line_count: 0,
+            line_count: BlockLineCount::ZERO,
             line_tops: vec![DocPx::ZERO],
         };
         return (empty, TableShape::default());
@@ -791,7 +791,7 @@ fn table_metrics(
     }
     let metrics = TextMetrics {
         text_height_px: height_px,
-        line_count: u32::try_from(row_heights.len()).unwrap_or(u32::MAX),
+        line_count: BlockLineCount::from_len(row_heights.len()),
         line_tops: row_tops.clone(),
     };
     (metrics, TableShape { row_tops, cells })
@@ -994,7 +994,7 @@ mod tests {
         let Some(metrics) = measured[0].metrics.as_ref() else {
             return;
         };
-        assert_eq!(metrics.line_count, 3);
+        assert_eq!(metrics.line_count.get(), 3);
         assert_eq!(metrics.line_tops.len(), 4);
         assert!(metrics.text_height_px > DocPx::new(0.0));
     }

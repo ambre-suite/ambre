@@ -178,12 +178,34 @@ fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> Li
     }
 }
 
+ambre_core::define_index! {
+    /// A line of one block as the paginator cuts it: a text's line, or a
+    /// table's row. The first is zero.
+    pub struct BlockLine(u32);
+    /// A number of lines of one block.
+    pub struct BlockLineCount;
+    /// The signed gap between two lines of one block.
+    pub struct BlockLineDelta(i64);
+    /// A run of lines of one block.
+    pub struct BlockLineSpan;
+    /// A list indexed by line of one block.
+    pub struct BlockLineVec;
+}
+
+impl BlockLine {
+    /// The lines of the block above this one.
+    #[must_use]
+    pub const fn lines_before(self) -> BlockLineCount {
+        self.count_from(Self::ZERO)
+    }
+}
+
 /// What one block's text measures, once broken to a width.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextMetrics {
     /// The shaped text alone, with neither margin included.
     pub text_height_px: DocPx,
-    pub line_count: u32,
+    pub line_count: BlockLineCount,
     /// The top of each line, relative to the top of the text. A break is only
     /// ever taken at one of these (`PROSE-071`).
     pub line_tops: Vec<DocPx>,
@@ -193,11 +215,11 @@ impl TextMetrics {
     /// The height the first `lines` lines take. Zero for none, the whole text
     /// for every line, and the top of the next line in between.
     #[must_use]
-    pub fn height_of_first(&self, lines: u32) -> DocPx {
-        if lines == 0 {
+    pub fn height_of_first(&self, lines: BlockLineCount) -> DocPx {
+        if lines.is_zero() {
             return DocPx::ZERO;
         }
-        match self.line_tops.get(lines as usize) {
+        match self.line_tops.get(lines.to_usize()) {
             Some(top) => *top,
             None => self.text_height_px,
         }
@@ -205,13 +227,14 @@ impl TextMetrics {
 
     /// How many whole lines fit in a height. Never more than the text has.
     #[must_use]
-    pub fn lines_fitting_in(&self, height_px: DocPx) -> u32 {
-        let mut fitting = 0;
-        for line in 1..=self.line_count {
-            if self.height_of_first(line) > height_px {
+    pub fn lines_fitting_in(&self, height_px: DocPx) -> BlockLineCount {
+        let mut fitting = BlockLineCount::ZERO;
+        for line in 1..=self.line_count.get() {
+            let lines = BlockLineCount::new(line);
+            if self.height_of_first(lines) > height_px {
                 break;
             }
-            fitting = line;
+            fitting = lines;
         }
         fitting
     }
@@ -373,7 +396,7 @@ impl Measurer {
         width_px: DocPx,
         offsets: &[DocOffset],
         previous: Option<&ShapedRun>,
-    ) -> (TextMetrics, Vec<u32>, ShapedRun) {
+    ) -> (TextMetrics, Vec<BlockLine>, ShapedRun) {
         let run = previous
             .and_then(|old| self.shape_window(old.data(), (text, marks), style, width_px))
             .unwrap_or_else(|| {
@@ -386,7 +409,7 @@ impl Measurer {
             .iter()
             .map(|offset| {
                 let byte = char_to_byte(text, offset.as_char());
-                u32::try_from(run.data().line_at_byte(byte).to_usize()).unwrap_or(u32::MAX)
+                BlockLine::from_usize(run.data().line_at_byte(byte).to_usize())
             })
             .collect();
         (run_metrics(run.data()), lines, run)
@@ -760,7 +783,7 @@ fn metrics_of(layout: &Layout<ParleyBrush>) -> TextMetrics {
     TextMetrics {
         text_height_px: DocPx::new(layout.height()),
 
-        line_count: u32::try_from(layout.len()).unwrap_or(u32::MAX),
+        line_count: BlockLineCount::from_len(layout.len()),
         line_tops,
     }
 }
@@ -770,7 +793,7 @@ fn run_metrics(run: &ParleyRunData) -> TextMetrics {
     let line_tops = run.line_tops();
     TextMetrics {
         text_height_px: run.height(),
-        line_count: u32::try_from(line_tops.len().saturating_sub(1)).unwrap_or(u32::MAX),
+        line_count: BlockLineCount::from_len(line_tops.len().saturating_sub(1)),
         line_tops,
     }
 }
@@ -1067,7 +1090,7 @@ mod tests {
     fn the_line_tops_climb_and_end_at_the_measured_height() {
         let mut measurer = super::shipped_measurer();
         let metrics = measurer.measure(LONG, &style(), DocPx::new(200.0));
-        assert!(metrics.line_count >= 2);
+        assert!(metrics.line_count.get() >= 2);
         for pair in metrics.line_tops.windows(2) {
             let [first, second] = pair else { continue };
             assert!(second >= first);
@@ -1080,13 +1103,17 @@ mod tests {
     fn a_height_holding_no_whole_line_fits_none_of_them() {
         let mut measurer = super::shipped_measurer();
         let metrics = measurer.measure(LONG, &style(), DocPx::new(200.0));
-        assert_eq!(metrics.lines_fitting_in(DocPx::new(0.0)), 0);
+        assert_eq!(
+            metrics.lines_fitting_in(DocPx::new(0.0)),
+            BlockLineCount::ZERO
+        );
         assert_eq!(
             metrics.lines_fitting_in(metrics.text_height_px),
             metrics.line_count
         );
-        let two_lines = metrics.height_of_first(2);
-        assert_eq!(metrics.lines_fitting_in(two_lines), 2);
+        let two = BlockLineCount::new(2);
+        let two_lines = metrics.height_of_first(two);
+        assert_eq!(metrics.lines_fitting_in(two_lines), two);
     }
 
     #[test]
@@ -1127,8 +1154,8 @@ mod tests {
         style.line_height = LineHeight::Absolute(30.0);
         style.at_least_floor_px = None;
         let metrics = measurer.measure(LONG, &style, DocPx::new(200.0));
-        assert!(metrics.line_count >= 2);
-        let expected = 30.0 * metrics.line_count as f32;
+        assert!(metrics.line_count.get() >= 2);
+        let expected = 30.0 * metrics.line_count.get() as f32;
         assert!((metrics.text_height_px - DocPx::new(expected)).abs() < DocPx::new(0.5));
     }
 

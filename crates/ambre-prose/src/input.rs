@@ -816,7 +816,7 @@ impl ProseUiState {
         if layout.page_count.is_zero() {
             return false;
         }
-        if self.shaped.block_count() == 0 {
+        if self.shaped.block_count().is_zero() {
             // Nothing to hit: the block comes through the command path, and
             // the caret goes to it once a layout carries it (`PROSE-UI-072`).
             let command = ProseCommand::InsertBlock {

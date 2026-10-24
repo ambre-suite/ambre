@@ -417,7 +417,7 @@ mod tests {
         let index = ui
             .flow_index(&crate::events::tree_id(block))
             .expect("laid out");
-        let layout = &ui.shaped.layout.blocks[index];
+        let layout = &ui.shaped.layout.blocks[index.to_usize()];
         let run = ui.shaped.blocks[&layout.block_id].data();
         let part = run.range_boxes(RunSpan::new(RunOffset::new(start), RunOffset::new(end)))[0];
         let piece = crate::view::hit::fragment(layout, layout.page_start, &run.line_tops())

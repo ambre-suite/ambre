@@ -127,7 +127,7 @@ impl Rig {
         let index = ui
             .flow_index(&crate::events::tree_id(block))
             .expect("the block is laid out");
-        let placed = &layout.blocks[index];
+        let placed = &layout.blocks[index.to_usize()];
         let run = ui.shaped.blocks[&placed.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
         let x =
@@ -563,7 +563,7 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
         .ui
         .flow_index(&crate::events::tree_id(rule))
         .expect("laid out");
-    let placed = rig.ui.shaped.layout.blocks[index].clone();
+    let placed = rig.ui.shaped.layout.blocks[index.to_usize()].clone();
     let layout = rig.ui.shaped.layout.clone();
     let y_doc = rig.ui.column.page_top_y(placed.page_start)
         + layout.body_top_px()

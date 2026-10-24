@@ -193,7 +193,7 @@ impl ProseUiState {
     }
 
     /// The position of a block in the flow of the layout in force.
-    pub(crate) fn flow_index(&self, block: &TreeID) -> Option<usize> {
+    pub(crate) fn flow_index(&self, block: &TreeID) -> Option<crate::layout::run::FlowIndex> {
         self.shaped.index_of(block)
     }
 
@@ -490,7 +490,10 @@ pub(crate) mod tests {
             "the view holds the value sent"
         );
         let last = *state.root_blocks().last().expect("a block");
-        assert_eq!(ui.flow_index(&crate::events::tree_id(last)), Some(3));
+        assert_eq!(
+            ui.flow_index(&crate::events::tree_id(last)),
+            Some(crate::layout::run::FlowIndex::new(3))
+        );
         assert_eq!(
             ui.blocks_on(crate::events::PageIndex::new(0)).len(),
             4,

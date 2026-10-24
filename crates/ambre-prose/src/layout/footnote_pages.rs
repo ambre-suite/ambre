@@ -9,6 +9,7 @@ use ambre_core::{DocPx, FootnoteId};
 use loro::TreeID;
 
 use crate::events::{BlockId, BlockInit, ProseCommand, tree_id};
+use crate::layout::measure::BlockLine;
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::shipped_paginator;
 use crate::logic::ProseState;
@@ -60,7 +61,7 @@ fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Fo
 }
 
 /// The page a line of a block was placed on.
-fn page_of_line(layout: &PageLayout, block: &TreeID, line: u32) -> Option<u32> {
+fn page_of_line(layout: &PageLayout, block: &TreeID, line: BlockLine) -> Option<u32> {
     let entry = layout
         .blocks
         .iter()
@@ -177,8 +178,15 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
             assert_eq!(Some(page), Some(call.page.get()));
         }
         let pages: Vec<u32> = placed(&layout).iter().map(|(_, _, page)| *page).collect();
-        let last_line = entry.split_points.last().copied().unwrap_or(0);
-        assert_eq!(pages[0], page_of_line(&layout, &block, 0).expect("line 0"));
+        let last_line = entry
+            .split_points
+            .last()
+            .copied()
+            .unwrap_or(BlockLine::ZERO);
+        assert_eq!(
+            pages[0],
+            page_of_line(&layout, &block, BlockLine::ZERO).expect("line 0")
+        );
         assert_eq!(
             pages[1],
             page_of_line(&layout, &block, last_line).expect("a line")

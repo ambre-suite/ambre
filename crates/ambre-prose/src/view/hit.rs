@@ -122,7 +122,7 @@ pub(crate) fn fragment(
         .to_usize()
         .checked_sub(1)?;
     let height = *block.continuation_heights.get(k)?;
-    let first_line = *block.split_points.get(k)? as usize;
+    let first_line = block.split_points.get(k)?.to_usize();
     Some(Fragment {
         top: DocPx::ZERO,
         height,
@@ -271,7 +271,7 @@ impl ProseUiState {
 
     /// The indices of the blocks a page shows, in flow order. Read from the
     /// index built when the layout was taken, never by walking every block.
-    pub(crate) fn blocks_on(&self, page: PageIndex) -> &[usize] {
+    pub(crate) fn blocks_on(&self, page: PageIndex) -> &[crate::layout::run::FlowIndex] {
         self.shaped.blocks_on(page)
     }
 

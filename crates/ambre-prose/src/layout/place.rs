@@ -11,12 +11,12 @@ use std::sync::Arc;
 
 use loro::TreeID;
 
-use crate::layout::measure::TextMetrics;
+use crate::layout::measure::{BlockLine, BlockLineCount, TextMetrics};
 use crate::layout::run::{ShapedRun, TableShape};
 
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
-const MIN_LINES_AT_BREAK: u32 = 2;
+const MIN_LINES_AT_BREAK: BlockLineCount = BlockLineCount::new(2);
 
 /// The band drawn once above the notes of a page, rule and gap together.
 pub const NOTE_SEPARATOR_PX: DocPx = DocPx::new(8.0);
@@ -31,7 +31,7 @@ pub struct NoteCall {
     /// (`PROSE-117`).
     pub ordinal: FootnoteOrdinal,
     /// The line of the block the call sits on: a table's row, a text's line.
-    pub line: u32,
+    pub line: BlockLine,
     /// The note's shaped text, or its number when that is taller.
     pub height_px: DocPx,
 }
@@ -105,12 +105,12 @@ impl MeasuredBlock {
         }
         self.metrics
             .as_ref()
-            .is_some_and(|metrics| metrics.line_count > 1)
+            .is_some_and(|metrics| metrics.line_count > BlockLineCount::ONE)
     }
 
     /// The height the first `lines` lines take, or the whole block when it has
     /// no line structure.
-    fn height_of_first(&self, lines: u32) -> DocPx {
+    fn height_of_first(&self, lines: BlockLineCount) -> DocPx {
         match &self.metrics {
             Some(metrics) => metrics.height_of_first(lines),
             None => self.height_px,
@@ -118,17 +118,18 @@ impl MeasuredBlock {
     }
 
     /// How many whole lines fit in a height.
-    fn lines_fitting_in(&self, height_px: DocPx) -> u32 {
+    fn lines_fitting_in(&self, height_px: DocPx) -> BlockLineCount {
         match &self.metrics {
             Some(metrics) => metrics.lines_fitting_in(height_px),
-            None => u32::from(height_px >= self.height_px),
+            None if height_px >= self.height_px => BlockLineCount::ONE,
+            None => BlockLineCount::ZERO,
         }
     }
 
-    fn line_count(&self) -> u32 {
+    fn line_count(&self) -> BlockLineCount {
         match &self.metrics {
             Some(metrics) => metrics.line_count,
-            None => 1,
+            None => BlockLineCount::ONE,
         }
     }
 }
@@ -148,7 +149,7 @@ pub struct BlockLayout {
     pub y_in_page: DocPx,
     pub is_split: bool,
     /// Index of the first line carried by each page after `page_start`.
-    pub split_points: Vec<u32>,
+    pub split_points: Vec<BlockLine>,
     /// The height of each fragment after `page_start`, one per split point. A
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading
     /// margin (`PROSE-070`).
@@ -408,7 +409,7 @@ fn place_one(
     // there is nowhere further to go, and the rule gives way (`PROSE-017`).
     let room = cursor.room_after_gap(block);
     let wanted = MIN_LINES_AT_BREAK.min(block.line_count());
-    if lines_fitting_from(block, room, 0) < wanted && !cursor.at_page_top() {
+    if lines_fitting_from(block, room, BlockLine::ZERO) < wanted && !cursor.at_page_top() {
         cursor.open_new_page();
     }
     split(block, cursor, placed);
@@ -477,11 +478,11 @@ fn split(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayou
     let first_y = cursor.y + gap;
     let page_start = cursor.page;
     let mut notes = Vec::with_capacity(block.notes.len());
-    let mut taken = fragment(block, cursor, first_y, 0, &mut notes);
+    let mut taken = BlockLine::ZERO + fragment(block, cursor, first_y, BlockLine::ZERO, &mut notes);
     let mut split_points = Vec::new();
     let mut continuation_heights = Vec::new();
-    let first_height = height_between(block, 0, taken);
-    while taken < total_lines {
+    let first_height = height_between(block, BlockLine::ZERO, taken);
+    while taken < total_lines.as_end() {
         cursor.open_new_page();
         let next = fragment(block, cursor, DocPx::ZERO, taken, &mut notes);
         split_points.push(taken);
@@ -518,20 +519,20 @@ fn fragment(
     block: &MeasuredBlock,
     cursor: &mut Cursor,
     y: DocPx,
-    from: u32,
+    from: BlockLine,
     notes: &mut Vec<FootnoteLayout>,
-) -> u32 {
+) -> BlockLineCount {
     let total = block.line_count();
     let room = cursor.body_height_px - cursor.foot_px - y;
-    let calls = |lines: u32| {
+    let calls = |lines: BlockLineCount| {
         block
             .notes
             .iter()
-            .filter(move |note| note.line >= from && note.line < from.saturating_add(lines))
+            .filter(move |note| note.line >= from && note.line < from + lines)
     };
     let mut lines = lines_for(block, room, from, total);
     let cost = cursor.foot_cost(calls(lines));
-    if height_between(block, from, from.saturating_add(lines)) + cost > room {
+    if height_between(block, from, from + lines) + cost > room {
         lines = lines_for(block, room - cost, from, total);
     }
     cursor.reserve(calls(lines), notes);
@@ -544,8 +545,13 @@ fn fragment(
 /// with a single line (`PROSE-073`). A fragment is never empty: a zero would
 /// place no line on a fresh page and the walk would not terminate
 /// (`PROSE-017`).
-fn lines_for(block: &MeasuredBlock, height_px: DocPx, from: u32, total: u32) -> u32 {
-    let remaining = total.saturating_sub(from);
+fn lines_for(
+    block: &MeasuredBlock,
+    height_px: DocPx,
+    from: BlockLine,
+    total: BlockLineCount,
+) -> BlockLineCount {
+    let remaining = total.saturating_sub(from.lines_before());
     let fitting = lines_fitting_from(block, height_px, from).min(remaining);
     if fitting >= remaining {
         return remaining;
@@ -555,24 +561,25 @@ fn lines_for(block: &MeasuredBlock, height_px: DocPx, from: u32, total: u32) -> 
     // holds.
     let carried = remaining.saturating_sub(fitting);
     let trimmed = if carried < MIN_LINES_AT_BREAK {
-        fitting.saturating_sub(MIN_LINES_AT_BREAK - carried)
+        fitting.saturating_sub(MIN_LINES_AT_BREAK.saturating_sub(carried))
     } else {
         fitting
     };
-    trimmed.clamp(1, remaining)
+    trimmed.clamp(BlockLineCount::ONE, remaining)
 }
 
 /// How many lines fit in a height, counting from line `from`.
-fn lines_fitting_from(block: &MeasuredBlock, height_px: DocPx, from: u32) -> u32 {
-    let offset = block.height_of_first(from);
+fn lines_fitting_from(block: &MeasuredBlock, height_px: DocPx, from: BlockLine) -> BlockLineCount {
+    let offset = block.height_of_first(from.lines_before());
     block
         .lines_fitting_in(height_px + offset)
-        .saturating_sub(from)
+        .saturating_sub(from.lines_before())
 }
 
 /// The height of the lines in `from..to`.
-fn height_between(block: &MeasuredBlock, from: u32, to: u32) -> DocPx {
-    (block.height_of_first(to) - block.height_of_first(from)).max(DocPx::ZERO)
+fn height_between(block: &MeasuredBlock, from: BlockLine, to: BlockLine) -> DocPx {
+    (block.height_of_first(to.lines_before()) - block.height_of_first(from.lines_before()))
+        .max(DocPx::ZERO)
 }
 
 /// The zero-height entry a manual break leaves on its page (`PROSE-012`).
@@ -609,7 +616,7 @@ mod tests {
         line_tops.push(DocPx::new(lines as f32 * LINE));
         TextMetrics {
             text_height_px: DocPx::new(lines as f32 * LINE),
-            line_count: lines,
+            line_count: BlockLineCount::new(lines),
             line_tops,
         }
     }
@@ -747,15 +754,17 @@ mod tests {
             if !block.is_split {
                 continue;
             }
-            let first = block.split_points[0];
+            let first = block.split_points[0].lines_before();
             assert!(
                 first >= MIN_LINES_AT_BREAK,
-                "only {first} lines left behind"
+                "only {} lines left behind",
+                first.get()
             );
-            let carried = 11 - first;
+            let carried = BlockLineCount::new(11).saturating_sub(first);
             assert!(
                 carried >= MIN_LINES_AT_BREAK,
-                "only {carried} lines carried"
+                "only {} lines carried",
+                carried.get()
             );
         }
     }
@@ -928,8 +937,8 @@ mod properties {
 
     use super::tests::{nothing_overflows, of_type, text};
     use super::{
-        BlockLayout, BlockType, Cursor, MIN_LINES_AT_BREAK, MeasuredBlock, PageCount, PageIndex,
-        cursor_after, place, place_tail,
+        BlockLayout, BlockLine, BlockLineCount, BlockType, Cursor, MIN_LINES_AT_BREAK,
+        MeasuredBlock, PageCount, PageIndex, cursor_after, place, place_tail,
     };
 
     /// One block of any shape placement has to take.
@@ -1005,7 +1014,7 @@ mod properties {
                     prop_assert!(second > first);
                 }
                 if let Some(first) = block.split_points.first() {
-                    prop_assert!(*first >= 1);
+                    prop_assert!(*first >= BlockLine::new(1));
                 }
             }
         }
@@ -1080,12 +1089,15 @@ mod properties {
             if !block.is_split {
                 return Ok(());
             }
-            let mut previous = 0;
+            let mut previous = BlockLine::ZERO;
             for point in &block.split_points {
-                prop_assert!(point - previous >= MIN_LINES_AT_BREAK);
+                prop_assert!(point.count_from(previous) >= MIN_LINES_AT_BREAK);
                 previous = *point;
             }
-            prop_assert!(lines - previous >= MIN_LINES_AT_BREAK);
+            prop_assert!(
+                BlockLineCount::new(lines).saturating_sub(previous.lines_before())
+                    >= MIN_LINES_AT_BREAK
+            );
         }
     }
 }

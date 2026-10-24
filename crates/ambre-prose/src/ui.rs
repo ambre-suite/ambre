@@ -812,7 +812,10 @@ impl ProseUiState {
     /// text block before it, else the start of the one after it.
     fn nearest_confirmed(&self, gone: BlockId) -> Option<CursorPosition> {
         let index = self.flow_index(&crate::events::tree_id(gone))?;
-        let text = |(_, block): (usize, &crate::layout::place::BlockLayout)| {
+        let text = |(_, block): (
+            crate::layout::run::FlowIndex,
+            &crate::layout::place::BlockLayout,
+        )| {
             self.shaped.blocks.get(&block.block_id).map(|run| {
                 let len = run.data().len();
                 (

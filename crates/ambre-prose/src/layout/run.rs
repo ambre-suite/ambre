@@ -37,6 +37,46 @@ ambre_core::define_index! {
     pub struct RunVec;
 }
 
+ambre_core::define_index! {
+    /// A block's place in the flow of the document, the first being zero.
+    /// A window of the layout carries a stretch of them.
+    pub struct FlowIndex(usize);
+    /// A number of blocks of the flow.
+    pub struct FlowCount;
+    /// The signed gap between two places of the flow.
+    pub struct FlowDelta(isize);
+    /// A stretch of the flow.
+    pub struct FlowSpan;
+    /// A list indexed by place in the flow.
+    pub struct FlowVec;
+}
+
+ambre_core::define_index! {
+    /// A cell of one table shape, in the order `TableShape::cells` holds.
+    pub struct ShapeCell(usize);
+    /// A number of cells of one table shape.
+    pub struct ShapeCellCount;
+    /// The signed gap between two cells of one table shape.
+    pub struct ShapeCellDelta(isize);
+    /// A run of cells of one table shape.
+    pub struct ShapeCellSpan;
+    /// A list indexed by cell of one table shape.
+    pub struct ShapeCellVec;
+}
+
+ambre_core::define_index! {
+    /// A text block of one cell shape, the cell's first being zero.
+    pub struct CellBlock(usize);
+    /// A number of text blocks of one cell.
+    pub struct CellBlockCount;
+    /// The signed gap between two text blocks of one cell.
+    pub struct CellBlockDelta(isize);
+    /// A run of text blocks of one cell.
+    pub struct CellBlockSpan;
+    /// A list indexed by text block of one cell.
+    pub struct CellBlockVec;
+}
+
 /// The side of a wrap point a caret stands on. One offset at a soft wrap
 /// is both the end of one line and the start of the next.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -963,24 +1003,24 @@ pub struct ShapedLayout {
     /// Every block of the document, by its place in the flow. The Logic
     /// thread shares one map between the layouts it hands, and builds it
     /// again only when a block is added, removed or moved.
-    order: Arc<HashMap<TreeID, usize>>,
+    order: Arc<HashMap<TreeID, FlowIndex>>,
     /// The place in the flow of the first block of `layout`.
-    first_index: usize,
+    first_index: FlowIndex,
     /// The pages the window carries.
     pages: PageSpan,
     /// The first and the last block of the document that hold text.
     ends: Option<TextEnds>,
     /// The blocks each page of the window shows, by their place in the flow.
     /// A frame reads its pages and never the whole document (`PROSE-UI-007`).
-    page_blocks: Vec<Vec<usize>>,
+    page_blocks: Vec<Vec<FlowIndex>>,
 }
 
 /// Where a text block sits in the tables of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CellAt {
     table: TreeID,
-    cell: usize,
-    block: usize,
+    cell: ShapeCell,
+    block: CellBlock,
 }
 
 /// The two ends of the text of a document, which a selection of the whole
@@ -997,11 +1037,11 @@ pub struct TextEnds {
 #[derive(Clone, Debug, Default)]
 pub struct Window {
     /// The place in the flow of the first block the window carries.
-    pub first_index: usize,
+    pub first_index: FlowIndex,
     /// The pages the window carries.
     pub pages: PageSpan,
     /// Every block of the document, by its place in the flow.
-    pub order: Arc<HashMap<TreeID, usize>>,
+    pub order: Arc<HashMap<TreeID, FlowIndex>>,
     pub ends: Option<TextEnds>,
 }
 
@@ -1021,7 +1061,7 @@ impl ShapedLayout {
             (block.block_id, run.map(|run| run.data().len()))
         }));
         let window = Window {
-            first_index: 0,
+            first_index: FlowIndex::ZERO,
             pages: layout.page_count.span(),
             order: Arc::new(order_of(&layout.blocks)),
             ends,
@@ -1042,8 +1082,8 @@ impl ShapedLayout {
                                     *id,
                                     CellAt {
                                         table: *table,
-                                        cell,
-                                        block,
+                                        cell: ShapeCell::from_usize(cell),
+                                        block: CellBlock::from_usize(block),
                                     },
                                 )
                             })
@@ -1066,8 +1106,8 @@ impl ShapedLayout {
     #[must_use]
     pub fn cell_run(&self, block: &TreeID) -> Option<(&CellShape, &ShapedRun)> {
         let at = self.cells.get(block)?;
-        let cell = self.tables.get(&at.table)?.cells.get(at.cell)?;
-        let (_, _, run) = cell.blocks.get(at.block)?;
+        let cell = self.tables.get(&at.table)?.cells.get(at.cell.to_usize())?;
+        let (_, _, run) = cell.blocks.get(at.block.to_usize())?;
         Some((cell, run))
     }
 
@@ -1080,7 +1120,7 @@ impl ShapedLayout {
             for page in block.page_span() {
                 let at = page_offset(first, page);
                 if let Some(blocks) = at.and_then(|at| page_blocks.get_mut(at)) {
-                    blocks.push(window.first_index + local);
+                    blocks.push(window.first_index + FlowCount::from_len(local));
                 }
             }
         }
@@ -1095,30 +1135,35 @@ impl ShapedLayout {
     /// The place of a block in the flow of the document, whether or not the
     /// window carries it.
     #[must_use]
-    pub fn index_of(&self, block: &TreeID) -> Option<usize> {
+    pub fn index_of(&self, block: &TreeID) -> Option<FlowIndex> {
         self.order.get(block).copied()
     }
 
     /// The block at a place in the flow, when the window carries it.
     #[must_use]
-    pub fn block(&self, index: usize) -> Option<&BlockLayout> {
-        self.layout.blocks.get(index.checked_sub(self.first_index)?)
+    pub fn block(&self, index: FlowIndex) -> Option<&BlockLayout> {
+        if index < self.first_index {
+            return None;
+        }
+        self.layout
+            .blocks
+            .get(index.count_from(self.first_index).to_usize())
     }
 
     /// The blocks the window carries, each with its place in the flow.
-    pub fn window_blocks(&self) -> impl DoubleEndedIterator<Item = (usize, &BlockLayout)> {
+    pub fn window_blocks(&self) -> impl DoubleEndedIterator<Item = (FlowIndex, &BlockLayout)> {
         let first = self.first_index;
         self.layout
             .blocks
             .iter()
             .enumerate()
-            .map(move |(local, block)| (first + local, block))
+            .map(move |(local, block)| (first + FlowCount::from_len(local), block))
     }
 
     /// How many blocks the document holds, carried or not.
     #[must_use]
-    pub fn block_count(&self) -> usize {
-        self.order.len()
+    pub fn block_count(&self) -> FlowCount {
+        FlowCount::from_len(self.order.len())
     }
 
     /// Whether the window carries a block.
@@ -1144,7 +1189,7 @@ impl ShapedLayout {
     /// The indices of the blocks a page shows, in flow order. Empty for a
     /// page the window does not carry.
     #[must_use]
-    pub fn blocks_on(&self, page: PageIndex) -> &[usize] {
+    pub fn blocks_on(&self, page: PageIndex) -> &[FlowIndex] {
         page_offset(self.pages.start, page)
             .and_then(|at| self.page_blocks.get(at))
             .map_or(&[], Vec::as_slice)
@@ -1158,11 +1203,11 @@ fn page_offset(first: PageIndex, page: PageIndex) -> Option<usize> {
 
 /// Every block of `blocks`, by its place in the flow.
 #[must_use]
-pub fn order_of(blocks: &[BlockLayout]) -> HashMap<TreeID, usize> {
+pub fn order_of(blocks: &[BlockLayout]) -> HashMap<TreeID, FlowIndex> {
     blocks
         .iter()
         .enumerate()
-        .map(|(index, block)| (block.block_id, index))
+        .map(|(index, block)| (block.block_id, FlowIndex::from_usize(index)))
         .collect()
 }
 
@@ -1335,11 +1380,11 @@ mod tests {
         let mut measurer = shipped_measurer();
         let text = "one two three four five six seven eight nine ten eleven";
         let (metrics, run) = measurer.measure_run(text, &style(), DocPx::new(90.0));
-        assert!(metrics.line_count > 2);
+        assert!(metrics.line_count.get() > 2);
         let whole = run
             .data()
             .range_boxes(RunSpan::from_count(RunOffset::ZERO, run.data().len()));
-        assert_eq!(whole.len(), metrics.line_count as usize);
+        assert_eq!(whole.len(), metrics.line_count.to_usize());
         assert!(
             run.data()
                 .range_boxes(RunSpan::new(RunOffset::new(3), RunOffset::new(3)))

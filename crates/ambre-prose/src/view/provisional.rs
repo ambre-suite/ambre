@@ -66,7 +66,7 @@ pub(crate) struct Ghost {
 /// One block a page shows, where the view draws it.
 #[derive(Clone, Debug)]
 pub(crate) struct Piece {
-    pub index: usize,
+    pub index: crate::layout::run::FlowIndex,
     pub fragment: Fragment,
     pub run: Option<ShapedRun>,
     pub table: Option<Arc<TableShape>>,
