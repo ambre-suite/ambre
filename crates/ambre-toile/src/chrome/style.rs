@@ -79,7 +79,7 @@ pub fn StyleInspector(
             working.set(m.base.clone());
             fill.set(m.base.fill);
             stroke.set(m.base.stroke);
-            stroke_w.set(m.base.stroke_w);
+            stroke_w.set(m.base.stroke_w.get());
             opacity.set(m.base.opacity);
             text_color.set(m.base.text_color);
             font_family.set(m.base.font.picker_label().map(str::to_owned));
@@ -208,7 +208,7 @@ pub fn StyleInspector(
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
                                     stroke_w.set(v.max(0.0));
-                                    commit(StyleEdit::StrokeWidth(v));
+                                    commit(StyleEdit::StrokeWidth(ambre_bus::app::toile::StyleLength::new(v)));
                                 }
                             }
                         />

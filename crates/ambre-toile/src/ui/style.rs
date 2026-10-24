@@ -253,12 +253,12 @@ mod tests {
     #[test]
     fn differing_stroke_width_and_opacity_flag_both() {
         let a = ElementStyle {
-            stroke_w: 1.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(1.0),
             opacity: ambre_core::Opacity::new(1.0).unwrap(),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            stroke_w: 3.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(3.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             ..ElementStyle::default()
         };

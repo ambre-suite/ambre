@@ -103,7 +103,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
         ImageFormat::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
             decoder.set_limits(limits).ok()?;
-            let size = fit(decoder.dimensions());
+            let (width, height) = decoder.dimensions();
+            let size = fit(ImageSize::new(width, height));
             let mut frames = Vec::new();
             let mut held = 0;
             for frame in decoder.into_frames() {
@@ -126,7 +127,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
             let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
             reader.limits(limits);
             let image = reader.decode().ok()?.into_rgba8();
-            let size = fit(image.dimensions());
+            let (width, height) = image.dimensions();
+            let size = fit(ImageSize::new(width, height));
             Some(Picture {
                 size,
                 frames: vec![PictureFrame {
@@ -139,10 +141,10 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
     }
 }
 
-/// The size a decoder reads, `(width, height)`, takes inside
-/// [`PREVIEW_EDGE`], its aspect kept. An image already inside it keeps its
-/// size. The tuple is the decoder's own return.
-fn fit((width, height): (u32, u32)) -> ImageSize {
+/// The size `size` takes inside [`PREVIEW_EDGE`], its aspect kept. An image
+/// already inside it keeps its size.
+fn fit(size: ImageSize) -> ImageSize {
+    let ImageSize { width, height, .. } = size;
     let ImageSize {
         width: max_w,
         height: max_h,

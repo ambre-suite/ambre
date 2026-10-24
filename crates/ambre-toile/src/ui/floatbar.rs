@@ -73,7 +73,7 @@ pub enum StyleEdit {
     /// Stroke colour (`None` == no stroke). The panel alone emits it.
     Stroke(Option<Rgba>),
     /// Stroke width in world px, floored at zero. The panel alone emits it.
-    StrokeWidth(f32),
+    StrokeWidth(ambre_bus::app::toile::StyleLength),
     /// Opacity. The panel alone emits it.
     Opacity(ambre_core::Opacity),
     /// Text (foreground ink) colour (`None` == the kind default ink).
@@ -104,7 +104,9 @@ impl StyleEdit {
         match self {
             StyleEdit::Fill(c) => style.fill = c,
             StyleEdit::Stroke(c) => style.stroke = c,
-            StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(0.0),
+            StyleEdit::StrokeWidth(w) => {
+                style.stroke_w = w.max(ambre_bus::app::toile::StyleLength::ZERO)
+            }
             StyleEdit::Opacity(o) => style.opacity = o,
             StyleEdit::TextColor(c) => style.text_color = c,
             StyleEdit::Font(f) => style.font.family = f,
@@ -573,9 +575,9 @@ mod tests {
         let base = ElementStyle {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
-            stroke_w: 3.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(3.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
-            corner: 7.0,
+            corner: ambre_bus::app::toile::StyleLength::new(7.0),
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
@@ -602,9 +604,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::StrokeWidth(-2.0),
+                StyleEdit::StrokeWidth(ambre_bus::app::toile::StyleLength::new(-2.0)),
                 ElementStyle {
-                    stroke_w: 0.0,
+                    stroke_w: ambre_bus::app::toile::StyleLength::ZERO,
                     ..base.clone()
                 },
             ),

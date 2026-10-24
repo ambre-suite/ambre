@@ -287,12 +287,12 @@ impl TextLength for DocPx {
 }
 
 /// The look of a whole text: everything a layout is shaped with but the
-/// text and its spans. Its two lengths are in layout units, unwrapped from a
-/// [`TextLength`] at the public entry.
+/// text and its spans. Its two lengths share one [`TextLength`], unwrapped at
+/// the parley call and the cache key only.
 #[derive(Clone, Copy)]
-struct Look<'a> {
-    font_size: f32,
-    max_width: f32,
+struct Look<'a, L> {
+    font_size: L,
+    max_width: L,
     align: Alignment,
     weight: Weight,
     slant: Slant,
@@ -456,8 +456,8 @@ impl TextCache {
         word_break: WordBreak,
     ) -> &Layout<Brush> {
         let plain = Look {
-            font_size: font_size.layout_units(),
-            max_width: max_width.layout_units(),
+            font_size,
+            max_width,
             align,
             weight,
             slant,
@@ -479,8 +479,8 @@ impl TextCache {
         spans: &[SpanShape],
     ) -> &Layout<Brush> {
         let look = Look {
-            font_size: font_size.layout_units(),
-            max_width: max_width.layout_units(),
+            font_size,
+            max_width,
             align: Alignment::Start,
             weight: Weight::Regular,
             slant: Slant::Upright,
@@ -490,11 +490,11 @@ impl TextCache {
         self.get_or_build_look(font_cx, text, look, spans)
     }
 
-    fn get_or_build_look(
+    fn get_or_build_look<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
         text: &str,
-        look: Look<'_>,
+        look: Look<'_, L>,
         spans: &[SpanShape],
     ) -> &Layout<Brush> {
         let Look {
@@ -508,8 +508,8 @@ impl TextCache {
         } = look;
         let key = CacheKey {
             text: text.into(),
-            font_size_x100: (font_size * 100.0) as u32,
-            max_width_x10: (max_width * 10.0) as u32,
+            font_size_x100: (font_size.layout_units() * 100.0) as u32,
+            max_width_x10: (max_width.layout_units() * 10.0) as u32,
             align,
             weight,
             slant,
@@ -552,11 +552,11 @@ impl TextCache {
         }
     }
 
-    fn build_layout(
+    fn build_layout<L: TextLength>(
         layout_cx: &mut LayoutContext<Brush>,
         font_cx: &mut FontContext,
         text: &str,
-        look: Look<'_>,
+        look: Look<'_, L>,
         spans: &[SpanShape],
         scale: f32,
     ) -> Layout<Brush> {
@@ -580,7 +580,7 @@ impl TextCache {
         // Edit mode -- which already routed through here -- showed it fine.
         let font_family = FontFamilyName::Named(registered_family_name(family).into());
         builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
-        builder.push_default(StyleProperty::FontSize(font_size));
+        builder.push_default(StyleProperty::FontSize(font_size.layout_units()));
         if weight == Weight::Bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
         }
@@ -600,7 +600,7 @@ impl TextCache {
             }
         }
         let mut layout = builder.build(text);
-        break_indented(&mut layout, text, max_width, &indents);
+        break_indented(&mut layout, text, max_width.layout_units(), &indents);
         layout.align(align, AlignmentOptions::default());
         layout
     }

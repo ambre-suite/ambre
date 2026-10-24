@@ -125,7 +125,7 @@ mod tests {
     /// turned right moves it left, as a page scrolls.
     #[test]
     fn the_wheel_moves_the_content_as_a_page_scrolls() {
-        let mut cam = ViewportTransform::new(800.0, 600.0);
+        let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         cam.zoom = ambre_core::ZoomFactor::positive(2.0);
         let mut kinetic = Kinetic::default();
         let world = Point::new(10.0, 10.0);
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn a_paused_glide_keeps_the_board_moving_and_a_notch_never_does() {
         let world = Point::new(10.0, 10.0);
-        let mut cam = ViewportTransform::new(800.0, 600.0);
+        let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         let mut kinetic = Kinetic::default();
         for step in 0..5 {
             pan_by_wheel(
@@ -182,7 +182,7 @@ mod tests {
             "the content keeps going up"
         );
 
-        let mut cam = ViewportTransform::new(800.0, 600.0);
+        let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         let mut kinetic = Kinetic::default();
         for step in 0..5 {
             pan_by_wheel(
@@ -213,7 +213,7 @@ mod tests {
             ambre_bus::PageTime(0.0),
         );
         for zoom in [0.25, 1.0, 4.0] {
-            let mut cam = ViewportTransform::new(800.0, 600.0);
+            let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
             cam.zoom = ambre_core::ZoomFactor::positive(zoom);
             let world = Point::new(10.0, 10.0);
             let before = cam.world_to_screen() * world;
@@ -221,7 +221,7 @@ mod tests {
             let after = cam.world_to_screen() * world;
             assert!((before.y - after.y - 30.0).abs() < 1e-6, "{zoom}");
         }
-        let cam = ViewportTransform::new(800.0, 600.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         assert_eq!(edge_pan_speed(&cam, Point::new(400.0, 300.0)), still);
         let (sx, sy) = edge_pan_speed(&cam, Point::new(799.0, 2.0));

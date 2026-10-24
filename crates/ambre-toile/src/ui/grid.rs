@@ -185,7 +185,7 @@ mod tests {
     /// on 32 apart from one on 20. A unit no step search can use falls back.
     #[test]
     fn a_board_paints_its_grid_on_its_own_unit() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         // At 1x a unit of 20 doubles to stay legible; 32 and 50 already are.
         for (unit, step) in [(20.0, 40.0), (32.0, 32.0), (50.0, 50.0)] {
             assert_eq!(grid_step(cam.zoom, unit), step);
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn a_grid_line_is_one_pixel_at_every_zoom() {
         for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
-            let mut cam = ViewportTransform::new(1000.0, 800.0);
+            let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
             cam.zoom = ambre_core::ZoomFactor::positive(zoom);
             let ops = grid_ops(&cam, BASE_GRID);
             let mut lines = 0;
@@ -233,7 +233,7 @@ mod tests {
     /// the whole canvas, with or without the grid.
     #[test]
     fn the_background_fills_the_canvas_first() {
-        let cam = ViewportTransform::new(640.0, 480.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(640.0, 480.0));
         let mut bare = RecordingSurface::new();
         paint_background(&mut bare, &cam, &palette());
         for ops in [grid_ops(&cam, BASE_GRID), bare.ops().to_vec()] {

@@ -638,7 +638,7 @@ mod tests {
 
     #[test]
     fn child_origin_is_the_embeds_top_left() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn a_child_pixel_is_a_screen_pixel() {
-        let mut cam = ViewportTransform::new(1000.0, 800.0);
+        let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         cam.zoom = ambre_core::ZoomFactor::positive(2.5);
         let e = doc_embed(
             "e1",
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn transform_survives_a_rotated_embed() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let bounds = Rect::new(0.0, 0.0, 100.0, 40.0);
         let e = doc_embed("e1", DocumentId::new(), bounds, std::f64::consts::FRAC_PI_2);
         // The unrotated top-left, carried through the element's own rotation, is
@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn child_size_scales_with_zoom() {
-        let mut cam = ViewportTransform::new(1000.0, 800.0);
+        let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         cam.zoom = ambre_core::ZoomFactor::positive(0.5);
         let e = doc_embed(
             "e1",
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn screen_aabb_contains_a_rotated_quad() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         // A 100x20 bar turned a quarter turn: its AABB must become 20x100. A
         // two-corner projection would report it as 100x20 still, and the clip
         // would take the whole child away.
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn only_the_focused_embed_comes_back_focused() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let (a, b) = (DocumentId::new(), DocumentId::new());
         let dv = viewport(vec![
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn a_board_with_no_embeds_publishes_nothing() {
-        let cam = ViewportTransform::new(1000.0, 800.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         assert!(visible_embeds(&viewport(Vec::new()), &cam, None).is_empty());
     }
 
@@ -1548,7 +1548,7 @@ mod placement_tests {
     /// content.
     #[test]
     fn a_picked_document_lands_as_a_reference_in_the_middle_of_the_view() {
-        let cam = ViewportTransform::new(800.0, 600.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         let document_id = DocumentId::new();
         let target = EmbedTarget::Document {
             document_id,
@@ -1569,7 +1569,7 @@ mod placement_tests {
     /// it was dropped on.
     #[test]
     fn a_web_address_lands_centred_under_its_drop_point() {
-        let cam = ViewportTransform::new(800.0, 600.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
         let url = super::WebAddress::parse("https://example.com").expect("a safe address");
         let placed = PlacedEmbed {
             target: EmbedTarget::Web(url.clone()),

@@ -264,6 +264,41 @@ pub struct Shadow {
     pub blur: f32,
 }
 
+/// A length on the board that an element's style stores: the width of its
+/// stroke, or the radius of its corners.
+///
+/// It is measured in world units, the same units as the element's frame, so
+/// the camera scales it with the shape. A screen length has its own type, and
+/// the two meet only through the camera. The serde form is the bare `f32`,
+/// through `#[serde(transparent)]`, so the register's bytes are those of the
+/// float. No rule bounds a length, so the type has no fallible constructor.
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct StyleLength(f32);
+
+impl StyleLength {
+    /// No length: no stroke, or square corners.
+    pub const ZERO: Self = Self(0.0);
+
+    /// The length of `units` world units.
+    #[must_use]
+    pub const fn new(units: f32) -> Self {
+        Self(units)
+    }
+
+    /// The number of world units, for the drawing call that takes the float.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+
+    /// The larger of the two lengths.
+    #[must_use]
+    pub fn max(self, other: Self) -> Self {
+        Self(self.0.max(other.0))
+    }
+}
+
 /// The whole visual style of an element, held as **one** postcard-encoded LWW
 /// register (`toile-styles`). One register means a fill update racing a stroke
 /// update cannot leave a half-applied tear.
@@ -277,9 +312,10 @@ pub struct Shadow {
 pub struct ElementStyle {
     pub fill: Option<Rgba>, // None = no fill
     pub stroke: Option<Rgba>,
-    pub stroke_w: f32,
+    pub stroke_w: StyleLength,
     pub opacity: ambre_core::Opacity,
-    pub corner: f32, // corner radius for rect / sticky
+    /// The corner radius of a rectangle or a sticky.
+    pub corner: StyleLength,
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
     /// Text (foreground) colour, RGBA. `None` = the kind's default ink (a
@@ -293,9 +329,9 @@ impl Default for ElementStyle {
         Self {
             fill: Some(Rgba::from_bits(0xFFFF_FFFF)),
             stroke: Some(Rgba::from_bits(0x3333_33FF)),
-            stroke_w: 1.0,
+            stroke_w: StyleLength::new(1.0),
             opacity: ambre_core::Opacity::OPAQUE,
-            corner: 0.0,
+            corner: StyleLength::ZERO,
             font: FontSpec::default(),
             shadow: None,
             text_color: None,
@@ -317,7 +353,7 @@ pub const STICKY_DEFAULT_FILL: Rgba = Rgba::from_bits(0xFEF0_8AFF);
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
 /// rectangle (Miro-style), so this is zero. A named constant keeps the card's
 /// shape spec-anchored and easy to revisit.
-pub const STICKY_CORNER: f32 = 0.0;
+pub const STICKY_CORNER: StyleLength = StyleLength::ZERO;
 
 /// The size of a text body: automatic, or a positive size the style names.
 ///
@@ -423,7 +459,7 @@ impl ElementStyle {
             ElementKind::Sticky => Self {
                 fill: Some(STICKY_DEFAULT_FILL),
                 stroke: None,
-                stroke_w: 0.0,
+                stroke_w: StyleLength::ZERO,
                 corner: STICKY_CORNER,
                 font: FontSpec {
                     size: FontSizeChoice::AUTO,
@@ -2491,7 +2527,7 @@ mod tests {
     fn a_style_round_trips_through_its_version() {
         let style = ElementStyle {
             fill: Some(Rgba::from_bits(0xaabb_ccff)),
-            corner: 8.0,
+            corner: StyleLength::new(8.0),
             shadow: Some(Shadow {
                 color: Rgba::from_bits(0x0000_00ff),
                 dx: 1.0,

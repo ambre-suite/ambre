@@ -223,7 +223,11 @@ fn paint_attrs(el: &ExportElement) -> String {
             colour,
         };
         let _ = write!(s, "{paint}");
-        let _ = write!(s, " stroke-width=\"{}\"", f(f64::from(el.style.stroke_w)));
+        let _ = write!(
+            s,
+            " stroke-width=\"{}\"",
+            f(f64::from(el.style.stroke_w.get()))
+        );
     }
     s
 }
@@ -310,7 +314,7 @@ mod tests {
         el.style = ElementStyle {
             fill: Some(Rgba::from_bits(0x3366_CCFF)),
             stroke: Some(Rgba::from_bits(0x0000_00FF)),
-            stroke_w: 2.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(2.0),
             ..ElementStyle::default()
         };
         el

@@ -196,7 +196,7 @@ mod tests {
 
     fn one_page() -> PdfPage {
         let frame = Rect::new(0.0, 0.0, 200.0, 100.0);
-        let mut camera = ViewportTransform::new(1280.0, 720.0);
+        let mut camera = ViewportTransform::new(ambre_draw::Size::new(1280.0, 720.0));
         camera.fit_bounds(frame, 0.08);
         PdfPage {
             viewport: DisplayViewport {

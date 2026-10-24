@@ -52,6 +52,14 @@ impl BoardLength {
     }
 }
 
+/// A length a style stores, widened to the `f64` the board is measured in.
+/// Both are world units, so no camera stands between them.
+impl From<ambre_bus::app::toile::StyleLength> for BoardLength {
+    fn from(length: ambre_bus::app::toile::StyleLength) -> Self {
+        Self(f64::from(length.get()))
+    }
+}
+
 /// The length scaled by a bare number.
 impl std::ops::Mul<f64> for BoardLength {
     type Output = Self;
@@ -99,11 +107,11 @@ impl Default for ViewportTransform {
 
 impl ViewportTransform {
     /// Build from a logical canvas size, centered on the world origin at 1x.
-    pub fn new(width: f64, height: f64) -> Self {
+    pub fn new(size: Size) -> Self {
         Self {
             center: Point::ZERO,
             zoom: ZoomFactor::ONE,
-            size: Size::new(width.max(1.0), height.max(1.0)),
+            size: at_least_one(size),
         }
     }
 
@@ -222,8 +230,8 @@ impl ViewportTransform {
     }
 
     /// Set the logical canvas size (on resize). Keeps center and zoom.
-    pub fn set_size(&mut self, width: f64, height: f64) {
-        self.size = Size::new(width.max(1.0), height.max(1.0));
+    pub fn set_size(&mut self, size: Size) {
+        self.size = at_least_one(size);
     }
 
     /// The world rectangle this camera shows.
@@ -273,6 +281,12 @@ impl ViewportTransform {
     }
 }
 
+/// A viewport `size` with each edge held to at least one pixel, so the camera
+/// never divides by an empty box.
+fn at_least_one(size: Size) -> Size {
+    Size::new(size.width.max(1.0), size.height.max(1.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,7 +327,7 @@ mod tests {
 
     #[test]
     fn zoom_about_keeps_anchor_world_point_fixed() {
-        let mut vt = ViewportTransform::new(1200.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1200.0, 800.0));
         let anchor = Point::new(300.0, 250.0);
         let world_before = vt.screen_to_world() * anchor;
         vt.zoom_about(anchor, 1.8);
@@ -327,7 +341,7 @@ mod tests {
 
     #[test]
     fn zoom_clamps_to_range() {
-        let mut vt = ViewportTransform::new(1000.0, 1000.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 1000.0));
         for _ in 0..100 {
             vt.zoom_about(Point::new(500.0, 500.0), 2.0);
         }
@@ -340,7 +354,7 @@ mod tests {
 
     #[test]
     fn zoom_by_center_keeps_center_world_point_fixed() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.center = Point::new(42.0, -13.0);
         let center_before = vt.center;
         vt.zoom_by_center(ZOOM_STEP);
@@ -352,7 +366,7 @@ mod tests {
 
     #[test]
     fn reset_zoom_returns_to_100_percent() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.zoom = ambre_core::ZoomFactor::positive(4.7);
         vt.center = Point::new(10.0, 20.0);
         vt.reset_zoom();
@@ -363,7 +377,7 @@ mod tests {
 
     #[test]
     fn fit_bounds_centers_and_scales_with_padding() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         // A 200x100 world rect centered at (150, 60).
         let world = Rect::new(50.0, 10.0, 250.0, 110.0);
         vt.fit_bounds(world, FIT_PAD);
@@ -380,7 +394,7 @@ mod tests {
 
     #[test]
     fn fit_bounds_clamps_tiny_rect_to_max_zoom() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         // A sub-pixel rect would demand an enormous zoom; it must clamp.
         vt.fit_bounds(Rect::new(0.0, 0.0, 0.001, 0.001), FIT_PAD);
         assert!((vt.zoom.get() - MAX_ZOOM.get()).abs() < 1e-9);
@@ -388,7 +402,7 @@ mod tests {
 
     #[test]
     fn fit_bounds_ignores_empty_rect() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         let before = vt;
         vt.fit_bounds(Rect::new(5.0, 5.0, 5.0, 5.0), FIT_PAD); // zero area
         assert_eq!(vt, before);
@@ -396,7 +410,7 @@ mod tests {
 
     #[test]
     fn fit_target_matches_fit_bounds() {
-        let vt = ViewportTransform::new(1000.0, 800.0);
+        let vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         let world = Rect::new(50.0, 10.0, 250.0, 110.0);
         let (center, zoom) = vt.fit_target(world, FIT_PAD).unwrap();
         // The pure solver returns exactly what the in-place fit settles on.
@@ -438,7 +452,7 @@ mod tests {
 
     #[test]
     fn pan_moves_content_with_the_drag() {
-        let mut vt = ViewportTransform::new(1000.0, 1000.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 1000.0));
         vt.zoom = ambre_core::ZoomFactor::positive(2.0);
         let world_pt = Point::new(50.0, 50.0);
         let screen_before = vt.world_to_screen() * world_pt;
@@ -461,7 +475,7 @@ mod tests {
     #[test]
     fn a_zoom_at_a_stop_holds_its_anchor() {
         for (zoom, factor) in [(MAX_ZOOM, 4.0), (MIN_ZOOM, 0.25)] {
-            let mut vt = ViewportTransform::new(1000.0, 800.0);
+            let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
             vt.zoom = zoom;
             vt.center = Point::new(120.0, -40.0);
             let anchor = Point::new(810.0, 95.0);
@@ -479,7 +493,7 @@ mod tests {
     /// camera as it was, as a zero-area fit does.
     #[test]
     fn a_fit_over_an_extent_that_is_not_finite_is_refused() {
-        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let mut vt = ViewportTransform::new(Size::new(1000.0, 800.0));
         vt.center = Point::new(3.0, 4.0);
         let before = vt;
         for world in [

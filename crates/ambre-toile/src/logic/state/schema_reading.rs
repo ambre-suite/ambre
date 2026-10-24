@@ -210,9 +210,9 @@ fn style_reading(style: &ElementStyle) -> String {
     let size = f32::from(*size);
     let mut parts = vec![
         format!("fill {}", maybe_colour(*fill)),
-        format!("stroke {} {stroke_w} px", maybe_colour(*stroke)),
+        format!("stroke {} {} px", maybe_colour(*stroke), stroke_w.get()),
         format!("opacity {opacity}"),
-        format!("corner {corner} px"),
+        format!("corner {} px", corner.get()),
         // A style that names no family reads apart from one that names Sans.
         match family {
             Some(family) => format!("font {:?} {size} pt weight {weight}", family.label()),

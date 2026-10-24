@@ -363,12 +363,12 @@ fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &Elem
         surface.fill_path(path, &Brush::Solid(style_color(fill, style.opacity)));
     }
     if let Some(stroke) = style.stroke
-        && style.stroke_w > 0.0
+        && style.stroke_w > ambre_bus::app::toile::StyleLength::ZERO
     {
         surface.stroke_path(
             path,
             &Brush::Solid(style_color(stroke, style.opacity)),
-            &Stroke::new(style.stroke_w as f64),
+            &Stroke::new(f64::from(style.stroke_w.get())),
         );
     }
 }
@@ -509,7 +509,7 @@ fn paint_element<S: DrawSurface>(
                 surface.stroke_path(
                     &polyline_path(pts),
                     &Brush::Solid(style_color(stroke, style.opacity)),
-                    &Stroke::new(style.stroke_w.max(1.0) as f64),
+                    &Stroke::new(f64::from(style.stroke_w.get().max(1.0))),
                 );
             }
         }
@@ -545,12 +545,12 @@ fn paint_element<S: DrawSurface>(
         DisplayGeom::Sticky(_) => {
             let shadow = bounds + ambre_draw::Vec2::new(STICKY_SHADOW_OFFSET, STICKY_SHADOW_OFFSET);
             surface.fill_path(
-                &roundrect_path(shadow, style.corner as f64),
+                &roundrect_path(shadow, f64::from(style.corner.get())),
                 &Brush::Solid(style_color(STICKY_SHADOW, style.opacity)),
             );
             fill_and_stroke(
                 surface,
-                &roundrect_path(bounds, style.corner as f64),
+                &roundrect_path(bounds, f64::from(style.corner.get())),
                 &style,
             );
         }
@@ -565,7 +565,7 @@ fn paint_connector<S: DrawSurface>(surface: &mut S, c: &DisplayConnector) {
     surface.stroke_path(
         &c.path,
         &Brush::Solid(style_color(color, c.style.opacity)),
-        &Stroke::new(c.style.stroke_w.max(1.0) as f64),
+        &Stroke::new(f64::from(c.style.stroke_w.get().max(1.0))),
     );
 }
 

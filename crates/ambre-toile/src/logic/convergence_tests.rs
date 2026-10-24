@@ -536,7 +536,7 @@ fn an_arrow_carries_its_own_style() {
     let two = create_connector(&mut st);
     let red = ElementStyle {
         stroke: Some(Rgba::from_bits(0xCC22_22FF)),
-        stroke_w: 6.0,
+        stroke_w: ambre_bus::app::toile::StyleLength::new(6.0),
         ..Default::default()
     };
 
@@ -4712,7 +4712,7 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
 
         let mut reader = ToileState::new();
         reader.apply_remote_snapshot(&peer.export_snapshot());
-        let cam = crate::ui::viewport::ViewportTransform::new(1000.0, 800.0);
+        let cam = crate::ui::viewport::ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let frames = crate::ui::embed::visible_web_embeds(&reader.debug_viewport(), &cam, None);
         assert!(
             frames.is_empty(),
@@ -6335,7 +6335,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
-            stroke_w: 4.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
@@ -6346,7 +6346,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
-            stroke_w: 1.5,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
             opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()

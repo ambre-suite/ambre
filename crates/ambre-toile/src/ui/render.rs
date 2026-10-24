@@ -614,7 +614,7 @@ mod tests {
     }
 
     fn cam() -> ViewportTransform {
-        ViewportTransform::new(1000.0, 800.0)
+        ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0))
     }
 
     /// The direct cubics draw the shape kurbo's arcs drew: the same box and,

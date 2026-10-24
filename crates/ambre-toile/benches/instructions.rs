@@ -222,7 +222,7 @@ fn board_paint() {
         viewport: Default::default(),
         nodes: (0..BOARD_ELEMENTS).map(busy_node).collect(),
     };
-    let camera = ViewportTransform::new(1280.0, 1000.0);
+    let camera = ViewportTransform::new(ambre_draw::Size::new(1280.0, 1000.0));
     let mut font_cx = ambre_draw::sealed_font_context();
     let face = concat!(
         env!("CARGO_MANIFEST_DIR"),

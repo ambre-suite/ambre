@@ -245,9 +245,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
-        stroke_w: 1.5,
+        stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
         opacity: ambre_core::Opacity::new(0.25).unwrap(),
-        corner: 3.5,
+        corner: ambre_bus::app::toile::StyleLength::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),

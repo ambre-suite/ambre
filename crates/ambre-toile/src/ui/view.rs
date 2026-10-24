@@ -743,7 +743,10 @@ impl ToileView {
             notices,
             to_logic,
             from_logic,
-            cam: ViewportTransform::new(canvas_width.get(), canvas_height.get()),
+            cam: ViewportTransform::new(ambre_draw::Size::new(
+                canvas_width.get(),
+                canvas_height.get(),
+            )),
             display: DisplayViewport {
                 version: ambre_bus::ViewportVersion(0),
                 grid_unit: super::grid::BASE_GRID,
@@ -4075,8 +4078,10 @@ impl ToileView {
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
     pub fn resize(&mut self, size: ambre_canvas::CssSize) {
-        self.cam
-            .set_size(f64::from(size.width), f64::from(size.height));
+        self.cam.set_size(ambre_draw::Size::new(
+            f64::from(size.width),
+            f64::from(size.height),
+        ));
         self.needs_full = true;
         self.queue_viewport();
     }

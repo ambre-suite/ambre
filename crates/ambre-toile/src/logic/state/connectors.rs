@@ -259,6 +259,7 @@ impl ToileState {
         let stroke = f64::from(
             self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref())
                 .stroke_w
+                .get()
                 .max(1.0),
         );
         Some(Wire {

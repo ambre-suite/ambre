@@ -53,7 +53,7 @@ pub enum Tool {
 }
 
 /// Screen-space pick radius (logical px) around a corner / rotate handle.
-const HANDLE_PICK_PX: f64 = 9.0;
+const HANDLE_PICK_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(9.0);
 /// Screen-space grab band (logical px) around a selection edge. The whole side
 /// resizes (with a directional cursor), even though only the corners draw a
 /// visual square (toile-tools).
@@ -994,7 +994,7 @@ fn draw_style() -> ambre_bus::app::toile::ElementStyle {
     ambre_bus::app::toile::ElementStyle {
         fill: None,
         stroke: Some(Rgba::from_bits(0x3333_33FF)),
-        stroke_w: 2.0,
+        stroke_w: ambre_bus::app::toile::StyleLength::new(2.0),
         ..Default::default()
     }
 }
@@ -1149,7 +1149,7 @@ pub fn rotate_handle_point(b: Rect) -> Point {
 /// diagonally. Used by both `pointer_down` (start a resize/rotate) and
 /// `hover_handle` (pick the cursor), so press and hover always agree.
 fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
-    if rotate_handle_point(screen_b).distance(screen) <= HANDLE_PICK_PX {
+    if rotate_handle_point(screen_b).distance(screen) <= f64::from(HANDLE_PICK_PX.get()) {
         return Some(Handle::Rotate);
     }
     // Corners first: a diagonal resize takes precedence over the two sides that
@@ -1160,7 +1160,7 @@ fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
         (Handle::Se, Point::new(screen_b.x1, screen_b.y1)),
         (Handle::Sw, Point::new(screen_b.x0, screen_b.y1)),
     ] {
-        if p.distance(screen) <= HANDLE_PICK_PX {
+        if p.distance(screen) <= f64::from(HANDLE_PICK_PX.get()) {
             return Some(h);
         }
     }
@@ -1999,7 +1999,7 @@ mod tests {
             panic!("rect_elem builds an element")
         };
         e.geom = DisplayGeom::Path(line);
-        e.style.stroke_w = 0.5;
+        e.style.stroke_w = ambre_bus::app::toile::StyleLength::new(0.5);
         let disp = viewport(vec![DisplayNode::Element(e)]);
         let mut cam = cam();
         cam.zoom = ambre_core::ZoomFactor::positive(4.0);

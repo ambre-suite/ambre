@@ -259,7 +259,7 @@ fn rect_import_preserves_fill_and_stroke_style() {
     // fill="#3366cc" -> opaque RGBA; stroke="#000000" width 2.
     assert_eq!(style.fill, Some(Rgba::from_bits(0x3366_CCFF)));
     assert_eq!(style.stroke, Some(Rgba::from_bits(0x0000_00FF)));
-    assert_eq!(style.stroke_w, 2.0);
+    assert_eq!(style.stroke_w, ambre_bus::app::toile::StyleLength::new(2.0));
 }
 
 #[test]

@@ -1898,7 +1898,7 @@ fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     let back = rig.view.cam.screen_to_world() * kurbo::Point::new(0.5, 0.5);
     assert!(back.x.is_finite() && back.y.is_finite());
     // The host hands whole pixels; the camera floors a negative extent too.
-    rig.view.cam.set_size(-4.0, -9.0);
+    rig.view.cam.set_size(ambre_draw::Size::new(-4.0, -9.0));
     assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
 }
 
@@ -2471,7 +2471,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let b = DisplayElement {
         locked: true,
         style: ElementStyle {
-            stroke_w: 4.0,
+            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
             ..ElementStyle::default()
         },
         ..sticky("b", B)

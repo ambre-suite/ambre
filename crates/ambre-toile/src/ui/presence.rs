@@ -411,7 +411,7 @@ mod tests {
     }
 
     fn cam() -> ViewportTransform {
-        ViewportTransform::new(1000.0, 800.0)
+        ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0))
     }
 
     fn paint(cursors: &PeerCursors, vp: &DisplayViewport) -> RecordingSurface {

@@ -258,7 +258,7 @@ mod tests {
             vec![elem("a", a), elem("b", Rect::new(80.0, 0.0, 120.0, 40.0))],
             reactions,
         );
-        let cam = ViewportTransform::new(200.0, 200.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(200.0, 200.0));
 
         let pills = pills(&vp, &cam);
         let a_on_screen = rect_to_screen(a, &cam.world_to_screen());
@@ -276,7 +276,7 @@ mod tests {
         let mut reactions = BTreeMap::new();
         reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 1, 1));
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
-        let near = ViewportTransform::new(800.0, 800.0);
+        let near = ViewportTransform::new(ambre_draw::Size::new(800.0, 800.0));
         let far = ViewportTransform {
             zoom: ambre_core::ZoomFactor::positive(4.0),
             ..near
@@ -302,7 +302,10 @@ mod tests {
         let mut reactions = BTreeMap::new();
         reactions.insert(ElementId("a".into()), tally(&[("x", 1), ("y", 2)], -2, 3));
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
-        let pills = pills(&vp, &ViewportTransform::new(400.0, 400.0));
+        let pills = pills(
+            &vp,
+            &ViewportTransform::new(ambre_draw::Size::new(400.0, 400.0)),
+        );
 
         assert_eq!(pills.len(), 3, "two emoji chips and one vote chip");
         assert!(
@@ -324,7 +327,7 @@ mod tests {
             vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))],
             BTreeMap::new(),
         );
-        let cam = ViewportTransform::new(200.0, 200.0);
+        let cam = ViewportTransform::new(ambre_draw::Size::new(200.0, 200.0));
         paint_reactions(
             &mut surface,
             &vp,
