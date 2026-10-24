@@ -432,7 +432,7 @@ pub(crate) mod tests {
         ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         let in_view = |ui: &ProseUiState| {
-            let hit = ui.find_matches[ui.find_current.expect("a current match") as usize];
+            let hit = ui.find_matches[ui.find_current.expect("a current match").to_usize()];
             let (top, bottom) = ui
                 .flow_span(
                     hit.block_id,

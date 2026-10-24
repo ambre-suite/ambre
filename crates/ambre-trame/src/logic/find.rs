@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::formula::types::CellId;
+use ambre_bus::app::find::MatchIndex;
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
@@ -86,7 +87,7 @@ impl TrameState {
             None
         } else {
             let after = matches.iter().position(|&at| at > self.active);
-            Some(after.unwrap_or(0))
+            Some(MatchIndex::from_usize(after.unwrap_or(0)))
         };
         TrameOutcome::display_only(vec![TrameEvent::FindResult { matches, active }])
     }

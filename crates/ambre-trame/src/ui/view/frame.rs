@@ -128,12 +128,12 @@ impl TrameView {
                 #[cfg(target_arch = "wasm32")]
                 self.find_result.set(Some(crate::chrome::FindPosition::new(
                     active,
-                    matches.len(),
+                    ambre_bus::app::find::MatchCount::from_len(matches.len()),
                 )));
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;
                 if let Some(i) = active
-                    && let Some(&at) = matches.get(i)
+                    && let Some(&at) = i.to_index().and_then(|i| matches.get(i))
                 {
                     self.nav_goto(at, ambre_commands::SelectionMode::Move);
                 }

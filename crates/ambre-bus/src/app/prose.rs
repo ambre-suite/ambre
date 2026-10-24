@@ -1807,10 +1807,12 @@ pub enum ProseEvent {
     /// It goes to the peer that searched and to no other (`PROSE-FEAT-148`).
     FindResults {
         matches: Vec<FindMatch>,
-        current: Option<u32>,
+        current: Option<super::find::MatchIndex>,
     },
     /// The current match moved; the list did not (`PROSE-FEAT-152`).
-    FindUpdated { current: Option<u32> },
+    FindUpdated {
+        current: Option<super::find::MatchIndex>,
+    },
     /// What the local history holds after a command that wrote. The chrome
     /// disables its undo and redo affordances from this alone (`UNDO-006`),
     /// and a command that wrote nothing sends none (`UNDO-009`).

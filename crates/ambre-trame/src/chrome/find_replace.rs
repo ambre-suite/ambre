@@ -14,6 +14,8 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
+use ambre_bus::app::find::{MatchCount, MatchIndex};
+
 use crate::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
 /// Which row set the panel shows. Find mode hides the replacement row and the
@@ -55,24 +57,22 @@ pub struct ReplaceRequest {
 /// no match is focused.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindPosition {
-    focus: usize,
-    total: usize,
+    focus: Option<MatchIndex>,
+    total: MatchCount,
 }
 
 impl FindPosition {
     /// The position a `FindResult` reports: `active` indexes its `total`
     /// matches from zero. An index past the end focuses nothing.
-    pub fn new(active: Option<usize>, total: usize) -> Self {
-        let focus = match active {
-            Some(i) if i < total => i + 1,
-            _ => 0,
-        };
+    pub fn new(active: Option<MatchIndex>, total: MatchCount) -> Self {
+        let focus = active.filter(|i| *i < total.as_end());
         Self { focus, total }
     }
 
     /// The "k/n" counter.
     pub fn label(self) -> String {
-        format!("{}/{}", self.focus, self.total)
+        let focus = self.focus.map_or(0, MatchIndex::ordinal);
+        format!("{focus}/{}", self.total.get())
     }
 }
 

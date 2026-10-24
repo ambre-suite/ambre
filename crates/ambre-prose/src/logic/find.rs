@@ -6,6 +6,7 @@
 //! (`PROSE-FEAT-035`). Every offset is a count of code points, the unit a
 //! block's text is indexed in (`PROSE-045`).
 
+use ambre_bus::app::find::{MatchCount, MatchIndex};
 use ambre_bus::app::prose::DocSpan;
 use ambre_core::StepDirection;
 use loro::TreeID;
@@ -22,7 +23,7 @@ use super::ProseState;
 pub(super) struct FindSession {
     query: FindQuery,
     matches: Vec<FindMatch>,
-    current: Option<u32>,
+    current: Option<MatchIndex>,
 }
 
 /// The match spans inside one block's text, honouring case and whole-word,
@@ -101,7 +102,7 @@ impl ProseState {
             ));
         }
         let matches = self.find_all(&query);
-        let current = (!matches.is_empty()).then_some(0);
+        let current = (!matches.is_empty()).then_some(MatchIndex::ZERO);
         self.find = Some(FindSession {
             query,
             matches,
@@ -116,15 +117,8 @@ impl ProseState {
         let Some(session) = self.find.as_mut() else {
             return Self::err_no_search();
         };
-        let count = u32::try_from(session.matches.len()).unwrap_or(u32::MAX);
-        session.current = session
-            .current
-            .filter(|_| count > 0)
-            .map(|at| match direction {
-                StepDirection::Backward => at.checked_sub(1).unwrap_or(count - 1),
-                StepDirection::Forward if at + 1 >= count => 0,
-                StepDirection::Forward => at + 1,
-            });
+        let count = MatchCount::from_len(session.matches.len());
+        session.current = session.current.and_then(|at| at.stepped(direction, count));
         ProseOutcome::display_only(vec![ProseEvent::FindUpdated {
             current: session.current,
         }])
@@ -148,7 +142,7 @@ impl ProseState {
         };
         let Some(hit) = session
             .current
-            .and_then(|at| session.matches.get(at as usize))
+            .and_then(|at| session.matches.get(at.to_index()?))
             .copied()
         else {
             return Self::err_no_search();
@@ -217,15 +211,15 @@ impl ProseState {
 
     /// Search again under the same query after a write, and answer with the
     /// new list. The index is kept when it still names a match.
-    fn refresh_matches(&mut self, keep: Option<u32>) -> Vec<ProseEvent> {
+    fn refresh_matches(&mut self, keep: Option<MatchIndex>) -> Vec<ProseEvent> {
         let Some(query) = self.find.as_ref().map(|s| s.query.clone()) else {
             return Vec::new();
         };
         let matches = self.find_all(&query);
-        let count = u32::try_from(matches.len()).unwrap_or(u32::MAX);
+        let count = MatchCount::from_len(matches.len());
         let current = match keep {
-            Some(at) if at < count => Some(at),
-            _ if count > 0 => Some(0),
+            Some(at) if at < count.as_end() => Some(at),
+            _ if !count.is_zero() => Some(MatchIndex::ZERO),
             _ => None,
         };
         if let Some(session) = self.find.as_mut() {
@@ -300,7 +294,7 @@ mod tests {
         (state, ids)
     }
 
-    fn results(outcome: &ProseOutcome) -> (Vec<FindMatch>, Option<u32>) {
+    fn results(outcome: &ProseOutcome) -> (Vec<FindMatch>, Option<MatchIndex>) {
         outcome
             .display
             .iter()
@@ -373,7 +367,7 @@ mod tests {
             },
         ];
         assert_eq!(matches, expected);
-        assert_eq!(current, Some(0));
+        assert_eq!(current, Some(MatchIndex::new(0)));
     }
 
     #[test]
@@ -423,18 +417,24 @@ mod tests {
         let walked = state.handle_command(ProseCommand::FindNext);
         assert_eq!(
             walked.display,
-            vec![ProseEvent::FindUpdated { current: Some(1) }]
+            vec![ProseEvent::FindUpdated {
+                current: Some(MatchIndex::new(1))
+            }]
         );
         assert!(walked.update.is_none() && walked.ephemeral.is_none());
         let back = state.handle_command(ProseCommand::FindPrev);
         assert_eq!(
             back.display,
-            vec![ProseEvent::FindUpdated { current: Some(0) }]
+            vec![ProseEvent::FindUpdated {
+                current: Some(MatchIndex::new(0))
+            }]
         );
         let wrapped = state.handle_command(ProseCommand::FindPrev);
         assert_eq!(
             wrapped.display,
-            vec![ProseEvent::FindUpdated { current: Some(2) }]
+            vec![ProseEvent::FindUpdated {
+                current: Some(MatchIndex::new(2))
+            }]
         );
         assert_eq!(state.find.as_ref().map(|s| s.matches.clone()), Some(listed));
         let closed = state.handle_command(ProseCommand::FindClose);
@@ -464,7 +464,7 @@ mod tests {
         let opened = state.handle_command(ProseCommand::FindStart {
             query: query("needle"),
         });
-        assert_eq!(results(&opened).1, Some(0));
+        assert_eq!(results(&opened).1, Some(MatchIndex::ZERO));
         state.handle_command(ProseCommand::FindNext);
         state.handle_command(ProseCommand::FindNext);
         for id in &ids[1..] {
@@ -479,7 +479,7 @@ mod tests {
         let (matches, current) = results(&outcome);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].block_id, ids[0]);
-        assert_eq!(current, Some(0));
+        assert_eq!(current, Some(MatchIndex::new(0)));
         assert!(outcome.update.is_none(), "a stale hit is not replaced");
         assert_eq!(texts(&state, &ids), vec!["needle one", " two", " three"]);
     }
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(texts(&state, &ids), vec!["cat dog", "cat"]);
         let (matches, current) = results(&outcome);
         assert_eq!(matches.len(), 2);
-        assert_eq!(current, Some(1));
+        assert_eq!(current, Some(MatchIndex::new(1)));
         assert_eq!(state.find_query(), Some(&query("cat")));
     }
 

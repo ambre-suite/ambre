@@ -21,6 +21,7 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::ui::find::active_index;
+use ambre_bus::app::find::MatchIndex;
 
 /// A `Find` request emitted by the panel. It carries the query, the options, the
 /// hit to resume from (`None` = a fresh search focusing the first hit), and the
@@ -158,8 +159,7 @@ pub fn FindPanel(
                             {move || match result.get() {
                                 Some(fr) if !fr.hits.is_empty() => {
                                     let active = active_index(&fr.hits, fr.focus.as_ref())
-                                        .map(|i| i + 1)
-                                        .unwrap_or(0);
+                                        .map_or(0, MatchIndex::ordinal);
                                     format!("{active}/{}", fr.hits.len())
                                 }
                                 Some(_) => "0/0".to_string(),

@@ -11,6 +11,7 @@
 // wasm target.
 // ============================================================================
 
+use ambre_bus::app::find::MatchIndex;
 use ambre_bus::app::toile::ElementId;
 use ambre_commands::CommandId;
 
@@ -25,10 +26,12 @@ pub const FIND: CommandId = CommandId("toile.find.open");
 
 /// Index of `focus` within `hits`, or `None` when there is no focus or it is no
 /// longer a hit. A query change can drop the previously focused element. The
-/// panel renders `active + 1` / `hits.len()` as its match counter.
-pub fn active_index(hits: &[ElementId], focus: Option<&ElementId>) -> Option<usize> {
+/// panel renders the index's ordinal over `hits.len()` as its match counter.
+pub fn active_index(hits: &[ElementId], focus: Option<&ElementId>) -> Option<MatchIndex> {
     let focus = focus?;
-    hits.iter().position(|h| h == focus)
+    hits.iter()
+        .position(|h| h == focus)
+        .map(MatchIndex::from_usize)
 }
 
 #[cfg(test)]
@@ -42,7 +45,10 @@ mod tests {
     #[test]
     fn active_index_locates_focus_or_none() {
         let hits = ids(&["a", "b", "c"]);
-        assert_eq!(active_index(&hits, Some(&ElementId("b".into()))), Some(1));
+        assert_eq!(
+            active_index(&hits, Some(&ElementId("b".into()))),
+            Some(MatchIndex::new(1))
+        );
         assert_eq!(active_index(&hits, None), None);
         // A focus no longer in the hit set (query changed) reads as no index.
         assert_eq!(active_index(&hits, Some(&ElementId("z".into()))), None);

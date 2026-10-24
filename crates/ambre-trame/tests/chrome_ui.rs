@@ -24,6 +24,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_bus::app::find::{MatchCount, MatchIndex};
 use ambre_bus::{
     AppCommand, AppEvent, CellFormat, CellStyle, Col, DocumentId, HAlign, Row, RowCount, SheetId,
     SheetName, SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
@@ -262,10 +263,22 @@ fn status_bar_renders_label_and_aggregates() {
 /// past the matches focuses nothing (`UI-THREAD-060`).
 #[wasm_bindgen_test]
 fn a_find_position_counts_from_one_and_never_past_the_matches() {
-    assert_eq!(chrome::FindPosition::new(Some(0), 3).label(), "1/3");
-    assert_eq!(chrome::FindPosition::new(Some(2), 3).label(), "3/3");
-    assert_eq!(chrome::FindPosition::new(Some(3), 3).label(), "0/3");
-    assert_eq!(chrome::FindPosition::new(None, 0).label(), "0/0");
+    assert_eq!(
+        chrome::FindPosition::new(Some(MatchIndex::new(0)), MatchCount::new(3)).label(),
+        "1/3"
+    );
+    assert_eq!(
+        chrome::FindPosition::new(Some(MatchIndex::new(2)), MatchCount::new(3)).label(),
+        "3/3"
+    );
+    assert_eq!(
+        chrome::FindPosition::new(Some(MatchIndex::new(3)), MatchCount::new(3)).label(),
+        "0/3"
+    );
+    assert_eq!(
+        chrome::FindPosition::new(None, MatchCount::new(0)).label(),
+        "0/0"
+    );
 }
 
 /// DOM test: the `FindReplace` panel mounts hidden when closed and, once opened

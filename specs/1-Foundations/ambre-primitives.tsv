@@ -286,8 +286,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | 
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::ExportReady.filename | field | String	free-text	export filename
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindResults.current | field | Option<u32>	math	index into the match list
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::FindUpdated.current | field | Option<u32>	math	index into the match list
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::SuggestionsUpdated.suggesting | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::TextChanged.local | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::UndoState.can_redo | field | bool	generic	named setting or fact flag, selects no mode
@@ -483,7 +481,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Docu
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Error.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.data | field | Vec<u8>	generic	exported file bytes
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ExportComplete.filename | field | String	free-text	export filename
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::FindResult.active | field | Option<usize>	math	index into the match list
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
@@ -2722,8 +2719,6 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::insert_toc(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::update_toc_config(numbered) | param | bool	generic	named setting or fact flag, selects no mode
 ambre-prose | src/logic/derived.rs | crate::logic::derived | ProseState::write_toc_settings(numbered) | param | bool	generic	named setting or fact flag, selects no mode
-ambre-prose | src/logic/find.rs | crate::logic::find | FindSession.current | field | Option<u32>	math	count, size or local index
-ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::refresh_matches(keep) | param | Option<u32>	math	count, size or local index
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	text content / label / parser input
@@ -2850,7 +2845,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.awaiting_block | field | bool
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.find_current | field | Option<u32>	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.highlights_walked | field | u64	math	count, size or local index
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.pending_export | field | Option<(String,ambre_core::MediaType,Vec<u8>)>	generic	export file name and bytes beside the typed MediaType
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
@@ -3636,7 +3630,6 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::edit_notes(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::is_frame() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::notes() | ret | String	free-text	label, message or user text
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::transition_ms::MAX_TRANSITION_MS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | accumulate(emoji) | param | &mut BTreeMap<ambre_bus::Emoji,u32>	math	count, size, limit, index or jitter local to an algorithm
@@ -3745,7 +3738,6 @@ ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleEmbed.focused | field 
 ambre-toile | src/ui/embed.rs | crate::ui::embed | VisibleWebEmbed.focused | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/embed.rs | crate::ui::embed | references() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | routes_to_child() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/find.rs | crate::ui::find | active_index() | ret | Option<usize>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | field | bool	math	local state flag or value, not a mode selector
@@ -3996,11 +3988,7 @@ ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | context_entries_for(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition.focus | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition.total | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::new(active) | param | Option<usize>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::new(total) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindQuery.query | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.query | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.replacement | field | String	free-text	free text: user content, label, message or display string
@@ -4631,6 +4619,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::n
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::stored(text) | param | String	newtype-inner	the read-policy constructor for a name the document or a formula already holds (TRAME-235)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | String	newtype-inner	the case-folded text of a sheet name key
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	newtype-inner	SheetNameRefusal field: the refused character, echoed in the refusal
+ambre-bus | src/app/find.rs | crate::app::find | MatchIndex::ordinal() | ret | u32	newtype-inner	MatchIndex accessor, the 1-based number a label prints
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher

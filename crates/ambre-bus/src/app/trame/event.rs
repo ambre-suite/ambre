@@ -209,7 +209,7 @@ pub enum TrameEvent {
     /// "not found".
     FindResult {
         matches: Vec<CellPos>,
-        active: Option<usize>,
+        active: Option<crate::app::find::MatchIndex>,
     },
 
     /// A [`ReplaceAll`](super::TrameCommand::ReplaceAll) finished, having

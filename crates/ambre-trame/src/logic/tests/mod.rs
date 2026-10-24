@@ -166,7 +166,7 @@ fn find_result(out: &TrameOutcome) -> (Vec<(u32, u32)>, Option<usize>) {
                     .iter()
                     .map(|at| (at.row.get(), at.col.get()))
                     .collect(),
-                *active,
+                active.map(ambre_bus::app::find::MatchIndex::to_usize),
             )),
             _ => None,
         })

@@ -407,7 +407,7 @@ fn the_current_match_is_brought_into_view() {
 
     rig.answer(TrameEvent::FindResult {
         matches: vec![at(0, 0), far],
-        active: Some(1),
+        active: Some(ambre_bus::app::find::MatchIndex::new(1)),
     });
     assert!(in_view(&rig, far), "the elected match is in view");
     assert_eq!(rig.view.state.active_cell(), far);
@@ -432,7 +432,7 @@ fn an_empty_answer_clears_the_highlight() {
             CellPos::new(Row::new(2), Col::new(1)),
             CellPos::new(Row::new(4), Col::new(1)),
         ],
-        active: Some(0),
+        active: Some(ambre_bus::app::find::MatchIndex::new(0)),
     });
     assert_eq!(rig.view.state.find_matches, vec![at(2, 1), at(4, 1)]);
     let cursor = (rig.view.state.active_row(), rig.view.state.active_col());

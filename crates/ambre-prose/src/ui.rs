@@ -349,7 +349,7 @@ pub struct ProseUiState {
     /// The matches of this peer's own search, to highlight, and the current
     /// one. Empty once the search closes (`PROSE-FEAT-289`).
     pub find_matches: Vec<FindMatch>,
-    pub find_current: Option<u32>,
+    pub find_current: Option<ambre_bus::app::find::MatchIndex>,
     /// The four band blocks and their settings, as last answered: the blocks
     /// the ordinary text commands aim at to edit a band.
     pub bands: BandSet,
@@ -1168,7 +1168,7 @@ mod tests {
         };
         ui.apply_event(&ProseEvent::FindResults {
             matches: vec![hit],
-            current: Some(0),
+            current: Some(ambre_bus::app::find::MatchIndex::ZERO),
         });
         assert_eq!(ui.find_matches, vec![hit]);
         ui.apply_event(&ProseEvent::FindResults {

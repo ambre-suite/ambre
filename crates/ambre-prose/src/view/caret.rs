@@ -472,7 +472,7 @@ impl ProseUiState {
     pub(crate) fn reveal_current_match(&mut self) {
         let Some(hit) = self
             .find_current
-            .and_then(|at| self.find_matches.get(at as usize))
+            .and_then(|at| self.find_matches.get(at.to_index()?))
             .copied()
         else {
             return;

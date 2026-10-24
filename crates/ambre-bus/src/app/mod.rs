@@ -15,6 +15,7 @@
 //! command side for shared types. The `Command` / `Event` suffix on the type
 //! names still carries the direction.
 
+pub mod find;
 pub mod grid;
 pub mod murmure;
 pub mod prose;
