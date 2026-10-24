@@ -219,7 +219,7 @@ pub fn paint_list<S: DrawSurface>(
             let layout = body(font_cx, cache, row, text_width);
             // The tints go first, so a selection band stays visible over code.
             for (bytes, color) in tints {
-                fill_bytes(surface, layout, bytes, body_y, color);
+                fill_bytes(surface, layout, bytes, ViewPx::new(body_y), color);
             }
             let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
             for mark in &row.marks {
@@ -230,7 +230,7 @@ pub fn paint_list<S: DrawSurface>(
             }
             if let Some(band) = band {
                 let tint = palette.selection.with_alpha(SELECTION_ALPHA);
-                fill_bytes(surface, layout, band, body_y, tint);
+                fill_bytes(surface, layout, band, ViewPx::new(body_y), tint);
             }
         }
         let bottom = top + tall;
@@ -405,7 +405,12 @@ fn draw_chips<S: DrawSurface>(
         let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, false);
         #[allow(clippy::cast_possible_truncation)]
         let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
-        draw(surface, layout, left, top, palette.cell_text);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(ViewPx::new(left), ViewPx::new(top)),
+            palette.cell_text,
+        );
     }
 }
 
@@ -429,7 +434,12 @@ fn draw_files<S: DrawSurface>(
         let layout = shape(font_cx, cache, &file_label(file), FONT_UI, width, false);
         #[allow(clippy::cast_possible_truncation)]
         let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
-        draw(surface, layout, left, top, palette.selection);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(ViewPx::new(left), ViewPx::new(top)),
+            palette.selection,
+        );
     }
 }
 
@@ -596,7 +606,12 @@ pub fn paint_jump<S: DrawSurface>(
     );
     surface.fill_rect(rect, palette.header_bg);
     surface.stroke_rect(rect, palette.header_border, 1.0);
-    draw(surface, layout, x + SPACE_8, y + SPACE_4, palette.selection);
+    draw(
+        surface,
+        layout,
+        ViewPoint::new(ViewPx::new(x + SPACE_8), ViewPx::new(y + SPACE_4)),
+        palette.selection,
+    );
     rect
 }
 
@@ -623,7 +638,12 @@ fn draw_line<S: DrawSurface>(
     let rule_from = f64::from(SPACE_8 + wide + SPACE_4);
     let rule = Rect::new(rule_from, middle, f64::from(width - SPACE_8), middle + 1.0);
     surface.fill_rect(rule, palette.selection);
-    draw(surface, layout, SPACE_8, y, palette.selection);
+    draw(
+        surface,
+        layout,
+        ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(y)),
+        palette.selection,
+    );
     y + tall
 }
 
@@ -660,12 +680,12 @@ fn fill_bytes<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
     bytes: ByteSpan,
-    body_y: f32,
+    body_y: ViewPx,
     color: Color,
 ) {
     let from = Cursor::from_byte_index(layout, bytes.start.get(), Affinity::Downstream);
     let to = Cursor::from_byte_index(layout, bytes.end.get(), Affinity::Upstream);
-    let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
+    let (x, y) = (f64::from(SPACE_8), f64::from(body_y.get()));
     for (bb, _) in Selection::new(from, to).geometry(layout) {
         surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
     }
@@ -806,10 +826,20 @@ fn draw_row<S: DrawSurface>(
         y += SPACE_4;
         let layout = shape(font_cx, cache, author, FONT_UI, width, true);
         let (wide, author_tall) = (layout.width(), layout.height());
-        draw(surface, layout, x, y, palette.cell_text);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
+            palette.cell_text,
+        );
         let layout = shape(font_cx, cache, time, FONT_UI, width, false);
         let time_tall = layout.height();
-        draw(surface, layout, x + wide + SPACE_4, y, palette.header_text);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(ViewPx::new(x + wide + SPACE_4), ViewPx::new(y)),
+            palette.header_text,
+        );
         y += author_tall.max(time_tall);
     }
     let ink = if row.muted {
@@ -819,7 +849,13 @@ fn draw_row<S: DrawSurface>(
     };
     let layout = body(font_cx, cache, row, width);
     let body_tall = layout.height();
-    draw_body(surface, layout, x, y, ink, palette);
+    draw_body(
+        surface,
+        layout,
+        ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
+        ink,
+        palette,
+    );
     y += body_tall;
     let at = Point::new(f64::from(x), f64::from(y));
     draw_previews(surface, row, pics, at, width, palette, played);
@@ -832,7 +868,12 @@ fn draw_row<S: DrawSurface>(
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
         let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
-        draw(surface, layout, x, y, palette.selection);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
+            palette.selection,
+        );
     }
 }
 
@@ -840,10 +881,10 @@ fn draw_row<S: DrawSurface>(
 pub(crate) fn draw<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    x: f32,
-    y: f32,
+    at: ViewPoint,
     color: Color,
 ) {
+    let (x, y) = (at.x.get(), at.y.get());
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
@@ -861,11 +902,11 @@ pub(crate) fn draw<S: DrawSurface>(
 fn draw_body<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    x: f32,
-    y: f32,
+    at: ViewPoint,
     ink: Color,
     palette: &Palette,
 ) {
+    let (x, y) = (at.x.get(), at.y.get());
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(run) = item else {

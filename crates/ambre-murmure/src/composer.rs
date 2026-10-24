@@ -1448,13 +1448,8 @@ impl Composer {
         surface.fill_rect(rect(0.0, strip, width, height), palette.content_bg);
         if let Some(line) = typing {
             let shaped = shape(font_cx, cache, line, FONT_UI, width - 2.0 * SPACE_8, false);
-            draw(
-                surface,
-                shaped,
-                SPACE_8,
-                strip + SPACE_2,
-                palette.header_text,
-            );
+            let at = ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(strip + SPACE_2));
+            draw(surface, shaped, at, palette.header_text);
         }
         let mut top = strip + TYPING_PX;
         // The files of the draft sit in a row over the field.
@@ -1483,11 +1478,21 @@ impl Composer {
                 let label_y = row + (ALSO_PX - words.height()) / 2.0;
                 let label_x = SPACE_8 + BOX_PX + SPACE_4;
                 let chord_x = label_x + words.width() + SPACE_8;
-                draw(surface, words, label_x, label_y, palette.header_text);
+                draw(
+                    surface,
+                    words,
+                    ViewPoint::new(ViewPx::new(label_x), ViewPx::new(label_y)),
+                    palette.header_text,
+                );
                 // Below the desktop width, no chord shows (`CHROME-057`).
                 if self.chords {
                     let chord = shape(font_cx, cache, ALSO_CHORD, FONT_UI, width, false);
-                    draw(surface, chord, chord_x, label_y, palette.cell_border);
+                    draw(
+                        surface,
+                        chord,
+                        ViewPoint::new(ViewPx::new(chord_x), ViewPx::new(label_y)),
+                        palette.cell_border,
+                    );
                 }
                 row
             }
@@ -1507,7 +1512,12 @@ impl Composer {
         let empty = editor.as_ref().is_none_or(|e| e.text().is_empty()) && !self.composing;
         if empty {
             let hint = shape(font_cx, cache, COMPOSER_HINT, FONT_BODY, width, false);
-            draw(surface, hint, SPACE_8, inner.0, palette.header_text);
+            draw(
+                surface,
+                hint,
+                ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(inner.0)),
+                palette.header_text,
+            );
         }
         let editor = editor?;
         // A draft taller than the field shows its last lines.
@@ -1588,7 +1598,12 @@ impl Composer {
                 palette.header_text
             };
             let label_y = y0 + (y1 - y0 - words.height()) / 2.0;
-            draw(surface, words, x + SPACE_4, label_y, ink);
+            draw(
+                surface,
+                words,
+                ViewPoint::new(ViewPx::new(x + SPACE_4), ViewPx::new(label_y)),
+                ink,
+            );
             if removable {
                 self.file_chips.push((chip, index));
             }

@@ -71,8 +71,10 @@ pub(crate) fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Insertion {
     pub line: RunLine,
-    pub x: f64,
-    pub width: f64,
+    /// Where the text goes in, from the start of the run.
+    pub x: SurfacePx,
+    /// How far the glyphs after it move right.
+    pub width: SurfacePx,
 }
 
 /// One block of text a page shows.
@@ -107,7 +109,11 @@ pub(crate) enum PageItem {
     /// paragraph a split opens.
     Shape { run: ShapedRun, placed: Placed },
     /// The separator above the footnotes.
-    Rule { x0: f64, x1: f64, y: f64 },
+    Rule {
+        x0: SurfacePx,
+        x1: SurfacePx,
+        y: SurfacePx,
+    },
 }
 
 /// One page as the walk draws it.
@@ -183,7 +189,7 @@ impl PageWalk<'_> {
             }
             PageItem::Rule { x0, x1, y } => {
                 surface.stroke_line(
-                    ambre_draw::Line::new((*x0, *y), (*x1, *y)),
+                    ambre_draw::Line::new((x0.get(), y.get()), (x1.get(), y.get())),
                     palette.sheet_border,
                     1.0,
                 );
@@ -243,7 +249,7 @@ impl PageWalk<'_> {
 }
 
 /// Far enough past any page that a clip band never cuts a glyph vertically.
-const BAND: f64 = 1.0e7;
+const BAND: SurfacePx = SurfacePx::new(1.0e7);
 
 /// Draw the glyphs of a run, building its drawing state on its first paint.
 ///
@@ -280,24 +286,26 @@ fn draw_run<S: DrawSurface>(
             draw_lines(surface, &glyphs, placed.origin_x, origin_y, color);
             continue;
         }
-        let (mut from, mut shift) = (-BAND, 0.0);
+        let band = BAND.get();
+        let (mut from, mut shift) = (-band, 0.0);
         let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
             let left = placed.origin_x + from + shift;
             let right = placed.origin_x + to + shift;
-            surface.push_clip(Rect::new(left, -BAND, right, BAND));
+            surface.push_clip(Rect::new(left, -band, right, band));
             let moved = Affine::translate((placed.origin_x + shift, origin_y));
             surface.draw_glyphs(&glyphs, &brush, moved);
             draw_lines(surface, &glyphs, placed.origin_x + shift, origin_y, color);
             surface.pop_clip();
         };
         for cut in cuts {
-            if cut.x > from {
-                slice(surface, from, cut.x, shift);
-                from = cut.x;
+            let x = cut.x.get();
+            if x > from {
+                slice(surface, from, x, shift);
+                from = x;
             }
-            shift += cut.width;
+            shift += cut.width.get();
         }
-        slice(surface, from, BAND, shift);
+        slice(surface, from, band, shift);
     }
 }
 

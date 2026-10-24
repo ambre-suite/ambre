@@ -89,7 +89,7 @@ pub struct ProseView {
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
-    size: (f32, f32),
+    size: (ViewPx, ViewPx),
     /// Something visible changed since the last content paint.
     dirty: bool,
     /// The shared pipe, whose live region carries the announcements.
@@ -128,9 +128,9 @@ impl ProseView {
         // A page is never embedded, so it always owns the pipe it is handed.
         text_input.name_content(ContentKind::Page);
         let theme = theme_ctl.get();
-        let size = (width as f32, height as f32);
+        let size = (ViewPx::new(width as f32), ViewPx::new(height as f32));
         let mut state = ProseUiState::default();
-        state.resize(ViewPx::new(size.0), ViewPx::new(size.1));
+        state.resize(size.0, size.1);
         Self {
             document_id,
             outbox: Outbox::new(to_logic.clone()),
@@ -482,7 +482,12 @@ impl ProseView {
                 end: super::probe::now_ms(),
             }]);
         }
-        let backdrop = Rect::new(0.0, 0.0, f64::from(self.size.0), f64::from(self.size.1));
+        let backdrop = Rect::new(
+            0.0,
+            0.0,
+            f64::from(self.size.0.get()),
+            f64::from(self.size.1.get()),
+        );
         surface.fill_rect(backdrop, self.theme.palette().content_pending);
         self.state.paint(surface, &page_palette(self.theme));
         // The input pipe follows the caret the paint just drew, so the IME
@@ -506,9 +511,8 @@ impl ProseView {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.size = (width as f32, height as f32);
-        self.state
-            .resize(ViewPx::new(self.size.0), ViewPx::new(self.size.1));
+        self.size = (ViewPx::new(width as f32), ViewPx::new(height as f32));
+        self.state.resize(self.size.0, self.size.1);
         self.dirty = true;
     }
 
@@ -723,8 +727,7 @@ impl ProseView {
     pub fn set_document(&mut self, document_id: DocumentId) {
         self.document_id = document_id;
         self.state = ProseUiState::default();
-        self.state
-            .resize(ViewPx::new(self.size.0), ViewPx::new(self.size.1));
+        self.state.resize(self.size.0, self.size.1);
         self.announced = None;
         self.shown = None;
         self.publish_hover();

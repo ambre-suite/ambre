@@ -3,7 +3,7 @@
 // scroll, folded into whole-cell pans of the viewport.
 
 use ambre_canvas::WheelDelta;
-use ambre_core::{CssPx, CssVector, ViewPoint};
+use ambre_core::{CssPx, CssVector, SurfacePx, ViewPoint};
 use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
@@ -19,8 +19,8 @@ use crate::{ColDelta, RowDelta};
 pub(crate) struct GridScroll {
     /// Sub-cell residue (logical px) carried between events, so slow touchpad
     /// scrolls still accumulate into whole rows and columns.
-    accum_x: f64,
-    accum_y: f64,
+    accum_x: SurfacePx,
+    accum_y: SurfacePx,
     /// The shared kinetic scroll (`1-Foundations/ambre-spec-kinetic-scroll.md`).
     kinetic: Kinetic,
     /// The edge scroll of a held drag (`KINETIC-007`).
@@ -60,22 +60,22 @@ impl GridScroll {
 
     /// Add a step of the model to the sub-cell residue.
     fn accumulate(&mut self, step: ScrollStep) {
-        self.accum_x += f64::from(step.x().get());
-        self.accum_y += f64::from(step.y().get());
+        self.accum_x += SurfacePx::new(f64::from(step.x().get()));
+        self.accum_y += SurfacePx::new(f64::from(step.y().get()));
     }
 
     /// Peel whole rows and columns out of the accumulator and pan the grid,
     /// keeping the sub-cell remainder.
     fn apply(&mut self, grid: &mut TrameUiState) -> ScrollOutcome {
-        let step_x = f64::from(COL_WIDTH.get()) * grid.zoom.get();
-        let step_y = f64::from(ROW_HEIGHT.get()) * grid.zoom.get();
+        let step_x = SurfacePx::new(f64::from(COL_WIDTH.get())) * grid.zoom.get();
+        let step_y = SurfacePx::new(f64::from(ROW_HEIGHT.get())) * grid.zoom.get();
         let dc = (self.accum_x / step_x) as i32;
         let dr = (self.accum_y / step_y) as i32;
         if dr == 0 && dc == 0 {
             return ScrollOutcome::Idle;
         }
-        self.accum_x -= f64::from(dc) * step_x;
-        self.accum_y -= f64::from(dr) * step_y;
+        self.accum_x -= step_x * f64::from(dc);
+        self.accum_y -= step_y * f64::from(dr);
         if grid.scroll_by(RowDelta::new(dr.into()), ColDelta::new(dc.into())) {
             ScrollOutcome::Moved
         } else {
@@ -150,8 +150,8 @@ impl GridScroll {
     /// Halt any kinetic motion and clear its residue.
     pub(crate) fn stop(&mut self) {
         self.kinetic.stop();
-        self.accum_x = 0.0;
-        self.accum_y = 0.0;
+        self.accum_x = SurfacePx::ZERO;
+        self.accum_y = SurfacePx::ZERO;
     }
 
     /// The speed of the motion in flight, px per ms, or `None` at rest.

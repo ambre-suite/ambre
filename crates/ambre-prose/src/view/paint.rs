@@ -28,11 +28,11 @@ use crate::view::walk::{
 };
 
 /// How far the shadow falls from the sheet.
-const SHADOW_OFFSET_PX: f64 = 3.0;
+const SHADOW_OFFSET_PX: SurfacePx = SurfacePx::new(3.0);
 /// The width of the local caret and of a remote one.
-const CARET_WIDTH_PX: f64 = 1.5;
+const CARET_WIDTH_PX: SurfacePx = SurfacePx::new(1.5);
 /// The tab a remote caret carries above its bar, standing for its label.
-const LABEL_TAB_PX: f64 = 5.0;
+const LABEL_TAB_PX: SurfacePx = SurfacePx::new(5.0);
 
 /// A block the screen draws around: its selections under the walk, its
 /// carets over it.
@@ -294,8 +294,8 @@ impl ProseUiState {
                 region.union(Rect::new(
                     0.0,
                     page.top.get(),
-                    width + SHADOW_OFFSET_PX,
-                    page.top.get() + height + SHADOW_OFFSET_PX,
+                    width + SHADOW_OFFSET_PX.get(),
+                    page.top.get() + height + SHADOW_OFFSET_PX.get(),
                 ))
             },
         )
@@ -366,7 +366,8 @@ impl ProseUiState {
                 None => {
                     if let Some(caret) = ghost.caret {
                         let rect = to_rect(&placed, &ghost.run.data().caret_box(caret));
-                        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
+                        let bar =
+                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
                         frame.ghost_carets.push((top, placed.clip, bar));
                     }
                     items.push(PageItem::Shape {
@@ -405,9 +406,9 @@ impl ProseUiState {
         let slots = self.note_slots(page);
         if let Some(first) = slots.first() {
             items.push(PageItem::Rule {
-                x0: left,
-                x1: left + content_width / 3.0,
-                y: f64::from((first.top - NOTE_SEPARATOR_PX / 2.0).get()),
+                x0: SurfacePx::new(left),
+                x1: SurfacePx::new(left + content_width / 3.0),
+                y: SurfacePx::new(f64::from((first.top - NOTE_SEPARATOR_PX / 2.0).get())),
             });
         }
         for slot in slots {
@@ -515,8 +516,8 @@ impl ProseUiState {
             .zip(self.composition())
             .map(|((line, caret), (width, _))| Insertion {
                 line,
-                x: caret.x0,
-                width,
+                x: SurfacePx::new(caret.x0),
+                width: SurfacePx::new(width),
             });
         frame.blocks.push(ScreenBlock {
             id,
@@ -628,7 +629,7 @@ impl ProseUiState {
             );
             rect.x0 += width;
         }
-        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
+        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
         surface.fill_rect(bar, palette.accent);
         // The host places the input pipe on this bar (`CHROME-007`).
         self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
@@ -650,14 +651,19 @@ impl ProseUiState {
                 &data.caret_box(crate::view::answered(peer.position.offset)),
             );
             surface.fill_rect(
-                Rect::new(caret.x0, caret.y0, caret.x0 + CARET_WIDTH_PX, caret.y1),
+                Rect::new(
+                    caret.x0,
+                    caret.y0,
+                    caret.x0 + CARET_WIDTH_PX.get(),
+                    caret.y1,
+                ),
                 colour.multiply_alpha(0.8),
             );
             surface.fill_rect(
                 Rect::new(
                     caret.x0,
-                    caret.y0 - LABEL_TAB_PX,
-                    caret.x0 + LABEL_TAB_PX,
+                    caret.y0 - LABEL_TAB_PX.get(),
+                    caret.x0 + LABEL_TAB_PX.get(),
                     caret.y0,
                 ),
                 colour,
@@ -678,10 +684,10 @@ fn paint_sheet<S: DrawSurface>(
     let (width, height) = (width.get(), height.get());
     let sheet = Rect::new(0.0, 0.0, width, height);
     let shadow = Rect::new(
-        SHADOW_OFFSET_PX,
-        SHADOW_OFFSET_PX,
-        width + SHADOW_OFFSET_PX,
-        height + SHADOW_OFFSET_PX,
+        SHADOW_OFFSET_PX.get(),
+        SHADOW_OFFSET_PX.get(),
+        width + SHADOW_OFFSET_PX.get(),
+        height + SHADOW_OFFSET_PX.get(),
     );
     surface.push_transform(Affine::translate((0.0, top.get())));
     surface.fill_rect(shadow, palette.shadow);

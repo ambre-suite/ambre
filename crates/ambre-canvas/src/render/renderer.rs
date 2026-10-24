@@ -983,7 +983,7 @@ impl QuadRenderer {
 
     // -- Glyph geometry -------------------------------------------------------
     #[allow(clippy::too_many_arguments)]
-    pub fn push_glyph(
+    pub(super) fn push_glyph(
         &mut self,
         x: f32,
         y: f32,
@@ -1029,7 +1029,7 @@ impl QuadRenderer {
     /// batch. Same geometry as `push_glyph`; the color pipeline samples the
     /// RGBA atlas and ignores the tint, so `color` is a placeholder here.
     #[allow(clippy::too_many_arguments)]
-    pub fn push_color_glyph(
+    pub(super) fn push_color_glyph(
         &mut self,
         x: f32,
         y: f32,
