@@ -276,9 +276,22 @@ mod tests {
     fn an_element_with_no_family_shows_the_default_entry() {
         let dv = viewport(vec![elem("a", ElementStyle::default())]);
         let model = style_scope_for(&[eid("a")], &els(&dv)).expect("model");
-        assert_eq!(model.base.font.family.picker_label(), Some("Default"));
-        let picked = ambre_bus::app::toile::FontFamily::from_label("Default");
-        assert_eq!(picked.picker_label(), Some("Default"));
+        assert_eq!(model.base.font.picker_label(), Some("Default"));
+        let mut reset = ElementStyle::default();
+        crate::ui::floatbar::StyleEdit::Font(None).apply_to(&mut reset);
+        assert_eq!(reset.font.picker_label(), Some("Default"));
+    }
+
+    /// `TOILE-UI-397`: an element the picker set to Sans names a family, so
+    /// it shows "Sans" and never the "Default" entry.
+    #[test]
+    fn an_element_set_to_sans_shows_sans() {
+        let mut sans = ElementStyle::default();
+        let picked = ambre_bus::app::toile::FontFamily::from_label("Sans");
+        crate::ui::floatbar::StyleEdit::Font(Some(picked)).apply_to(&mut sans);
+        let dv = viewport(vec![elem("a", sans)]);
+        let model = style_scope_for(&[eid("a")], &els(&dv)).expect("model");
+        assert_eq!(model.base.font.picker_label(), Some("Sans"));
     }
 
     /// `TOILE-UI-161`: an element on the default family and one the picker
@@ -287,9 +300,8 @@ mod tests {
     fn two_elements_on_the_default_family_are_not_mixed() {
         let fresh = ElementStyle::default();
         let mut reset = ElementStyle::default();
-        // The picker names the default "Default"; a fresh element stores "sans-serif".
-        let picked = ambre_bus::app::toile::FontFamily::from_label("Sans");
-        crate::ui::floatbar::StyleEdit::Font(picked).apply_to(&mut reset);
+        // The picker's "Default" reset names no family, as a fresh element does.
+        crate::ui::floatbar::StyleEdit::Font(None).apply_to(&mut reset);
         let dv = viewport(vec![elem("a", fresh), elem("b", reset)]);
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         assert!(!model.mixed.font_family);

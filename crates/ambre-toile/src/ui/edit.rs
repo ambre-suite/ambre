@@ -96,7 +96,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family.label().to_owned(),
+            family: font.face().label().to_owned(),
             base_size,
             color,
             underline: font.underline,
@@ -118,7 +118,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family.label().to_owned(),
+            family: font.face().label().to_owned(),
             base_size: ambre_core::DocPx::new(super::label::LABEL_FONT_SIZE),
             color: palette.cell_text,
             underline: false,
@@ -145,7 +145,7 @@ impl InlineEditor {
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
-            family: font.family.label().to_owned(),
+            family: font.face().label().to_owned(),
             base_size,
             color: palette.cell_text,
             underline: false,

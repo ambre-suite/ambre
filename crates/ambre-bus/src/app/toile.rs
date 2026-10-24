@@ -209,7 +209,9 @@ impl ShapeKind {
 /// format controls (`ambre_chrome`) therefore drive one field set in both apps.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
-    pub family: FontFamily,
+    /// The family the user picked, or `None` when the style names none. The
+    /// two draw the same face, and only the picker tells them apart.
+    pub family: Option<FontFamily>,
     /// The size, or automatic: a note's body then tracks its card.
     pub size: FontSizeChoice,
     pub weight: ambre_core::FontWeight,
@@ -221,13 +223,35 @@ pub struct FontSpec {
 impl Default for FontSpec {
     fn default() -> Self {
         Self {
-            family: FontFamily::Sans,
+            family: None,
             size: FontSizeChoice::DEFAULT,
             weight: ambre_core::FontWeight::REGULAR,
             italic: false,
             underline: false,
             strikethrough: false,
         }
+    }
+}
+
+/// The face a style that names no family draws in.
+static DEFAULT_FAMILY: FontFamily = FontFamily::Sans;
+
+impl FontSpec {
+    /// The family the renderer resolves to a face. A style that names no
+    /// family draws in the default one.
+    #[must_use]
+    pub fn face(&self) -> &FontFamily {
+        self.family.as_ref().unwrap_or(&DEFAULT_FAMILY)
+    }
+
+    /// The label the font picker shows, or `None` for a family it does not
+    /// offer. A style that names no family shows the "Default" entry, and a
+    /// named family shows its own label (`TOILE-UI-397`).
+    #[must_use]
+    pub fn picker_label(&self) -> Option<&'static str> {
+        self.family
+            .as_ref()
+            .map_or(Some("Default"), FontFamily::picker_label)
     }
 }
 
@@ -2476,7 +2500,7 @@ mod tests {
                 blur: 3.0,
             }),
             font: FontSpec {
-                family: FontFamily::Serif,
+                family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: ambre_core::FontWeight::new(600).unwrap(),
                 italic: true,

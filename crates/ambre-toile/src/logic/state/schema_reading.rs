@@ -213,7 +213,11 @@ fn style_reading(style: &ElementStyle) -> String {
         format!("stroke {} {stroke_w} px", maybe_colour(*stroke)),
         format!("opacity {opacity}"),
         format!("corner {corner} px"),
-        format!("font {:?} {size} pt weight {weight}", family.label()),
+        // A style that names no family reads apart from one that names Sans.
+        match family {
+            Some(family) => format!("font {:?} {size} pt weight {weight}", family.label()),
+            None => format!("font default {size} pt weight {weight}"),
+        },
     ];
     for (set, name) in [
         (*italic, "italic"),

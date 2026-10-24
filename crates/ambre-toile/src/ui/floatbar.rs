@@ -65,7 +65,7 @@ pub struct FloatBar {
 /// (`TOILE-018`), attaching the ids the DOM bar cannot name.
 ///
 /// Colours are `Option<Rgba>` (`None` == unset / no fill). The font
-/// family is the picker label (`None` == the "Default" reset).
+/// family is `None` for the picker's "Default" reset, which names no family.
 #[derive(Clone, PartialEq, Debug)]
 pub enum StyleEdit {
     /// Fill colour (`None` == no fill).
@@ -78,8 +78,9 @@ pub enum StyleEdit {
     Opacity(ambre_core::Opacity),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<Rgba>),
-    /// Font family. The picker's "Default" reset is [`FontFamily::Sans`].
-    Font(FontFamily),
+    /// Font family. The picker's "Default" reset is `None`, so the element
+    /// names no family and draws in the default face.
+    Font(Option<FontFamily>),
     /// Font size, or automatic: a note's body then tracks its card.
     Size(FontSizeChoice),
     /// Bold toggle (maps to `font.weight` 700 / 400).
@@ -551,10 +552,13 @@ mod tests {
         StyleEdit::Size(FontSizeChoice::AUTO).apply_to(&mut s);
         assert_eq!(s.font.size, FontSizeChoice::AUTO, "Auto lands as automatic");
         assert_eq!(FontSizeChoice::try_from(0.0_f32), Ok(FontSizeChoice::AUTO));
-        StyleEdit::Font(FontFamily::Sans).apply_to(&mut s);
-        assert_eq!(s.font.family, FontFamily::Sans);
-        StyleEdit::Font(FontFamily::Serif).apply_to(&mut s);
-        assert_eq!(s.font.family, FontFamily::Serif);
+        StyleEdit::Font(Some(FontFamily::Serif)).apply_to(&mut s);
+        assert_eq!(s.font.family, Some(FontFamily::Serif));
+        StyleEdit::Font(None).apply_to(&mut s);
+        assert_eq!(s.font.family, None, "the reset names no family");
+        assert_eq!(s.font.face(), &FontFamily::Sans, "and draws the default face");
+        StyleEdit::Font(Some(FontFamily::Sans)).apply_to(&mut s);
+        assert_eq!(s.font.family, Some(FontFamily::Sans));
     }
 
     /// `TOILE-UI-172`: a panel edit writes its own field and keeps every other
@@ -570,7 +574,7 @@ mod tests {
             corner: 7.0,
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
-                family: FontFamily::Other("Comic Sans MS".to_owned()),
+                family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
                 size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: ambre_core::FontWeight::new(600).unwrap(),
                 italic: true,
@@ -631,7 +635,7 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             text_color: Some(Rgba::from_bits(0x0000_00ff)),
             font: FontSpec {
-                family: FontFamily::Sans,
+                family: Some(FontFamily::Sans),
                 size: FontSizeChoice::from_whole_points(Some(12)),
                 weight: ambre_core::FontWeight::REGULAR,
                 italic: false,
@@ -644,7 +648,7 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             text_color: Some(Rgba::from_bits(0xffff_ffff)),
             font: FontSpec {
-                family: FontFamily::Serif,
+                family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: ambre_core::FontWeight::BOLD,
                 italic: true,

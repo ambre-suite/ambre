@@ -82,7 +82,7 @@ pub fn StyleInspector(
             stroke_w.set(m.base.stroke_w);
             opacity.set(m.base.opacity);
             text_color.set(m.base.text_color);
-            font_family.set(m.base.font.family.picker_label().map(str::to_owned));
+            font_family.set(m.base.font.picker_label().map(str::to_owned));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight.is_bold());
             italic.set(m.base.font.italic);
@@ -118,10 +118,9 @@ pub fn StyleInspector(
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f.clone());
-        // The picker's "Default" reset is `None`, the default family.
-        commit(StyleEdit::Font(FontFamily::from_label(
-            f.as_deref().unwrap_or_default(),
-        )));
+        // The picker's "Default" reset is `None`: the element then names no
+        // family, which keeps it apart from an explicit Sans.
+        commit(StyleEdit::Font(f.as_deref().map(FontFamily::from_label)));
     });
     // Size: the shared dropdown speaks sizes (`Option<FontSize>`, `None` =
     // auto), which is the choice the style holds.
