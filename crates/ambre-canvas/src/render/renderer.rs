@@ -873,12 +873,12 @@ impl QuadRenderer {
         image: &ImageSource<'_>,
         corners: [[f32; 2]; 4],
     ) {
-        if image.width == 0 || image.height == 0 {
+        if image.size.width == 0 || image.size.height == 0 {
             return;
         }
         if self
             .images
-            .get(image.key, image.width, image.height)
+            .get(image.key, image.size.width, image.size.height)
             .is_none()
         {
             let Some(uploaded) = self.upload_image(device, queue, image) else {
@@ -912,15 +912,15 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         image: &ImageSource<'_>,
     ) -> Option<CacheEntry<wgpu::BindGroup>> {
-        let level0 = (image.width as usize) * (image.height as usize) * 4;
+        let level0 = (image.size.width as usize) * (image.size.height as usize) * 4;
         let level0_pixels = image.pixels.get(..level0)?;
-        let chain = mipmap::build_chain(image.pixels, image.width, image.height);
-        let levels = mipmap::level_count(image.width, image.height);
+        let chain = mipmap::build_chain(image.pixels, image.size.width, image.size.height);
+        let levels = mipmap::level_count(image.size.width, image.size.height);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("image_texture"),
             size: wgpu::Extent3d {
-                width: image.width,
-                height: image.height,
+                width: image.size.width,
+                height: image.size.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: levels,
@@ -951,7 +951,7 @@ impl QuadRenderer {
                 },
             );
         };
-        write(0, level0_pixels, image.width, image.height);
+        write(0, level0_pixels, image.size.width, image.size.height);
         let mut bytes = level0;
         for (i, level) in chain.iter().enumerate() {
             write(i as u32 + 1, &level.pixels, level.width, level.height);
@@ -975,8 +975,8 @@ impl QuadRenderer {
         Some(CacheEntry {
             payload: bind_group,
             bytes,
-            width: image.width,
-            height: image.height,
+            width: image.size.width,
+            height: image.size.height,
             last_used: self.images.clock,
         })
     }

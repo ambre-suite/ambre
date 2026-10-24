@@ -48,8 +48,7 @@ use super::label::{LABEL_FONT_SIZE, label_rect};
 /// (`ambre-roadmap.md` E6).
 pub struct DecodedImage {
     pub pixels: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
+    pub size: ambre_core::ImageSize,
 }
 
 /// Resolved image pixels for this frame, keyed by media hash. Empty when no
@@ -527,8 +526,7 @@ fn paint_element<S: DrawSurface>(
                     // frame without hashing the buffer again.
                     key: ImageKey::from_address(hash.as_str()),
                     pixels: &img.pixels,
-                    width: img.width,
-                    height: img.height,
+                    size: img.size,
                 },
                 bounds,
             ),

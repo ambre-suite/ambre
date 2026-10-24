@@ -33,7 +33,7 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
     let mut batch = ImportBatch::default();
     let media = MediaRef::Pending(ImportSlot::ZERO);
     let blob = decode_media(bytes, limits, media.clone())?;
-    let size = Size::new(f64::from(blob.width), f64::from(blob.height));
+    let size = Size::new(f64::from(blob.size.width), f64::from(blob.size.height));
     batch.commands.push(ToileCommand::CreateElement {
         kind: ElementKind::Image,
         at: Point::ZERO,
@@ -65,7 +65,7 @@ pub(super) fn decode_media(
     let (width, height) = reader
         .into_dimensions()
         .map_err(|e| ImportError::Decode(e.to_string()))?;
-    limits.check_image_dims(width, height)?;
+    limits.check_image_dims(ambre_core::ImageSize::new(width, height))?;
 
     // A header that lies about its size is the second way in, so the decoder
     // carries the same bound and refuses to allocate past it.
@@ -73,14 +73,15 @@ pub(super) fn decode_media(
         .with_guessed_format()
         .map_err(|e| ImportError::Decode(e.to_string()))?;
     let mut alloc = image::Limits::default();
-    alloc.max_image_width = Some(limits.max_image_dim);
-    alloc.max_image_height = Some(limits.max_image_dim);
+    alloc.max_image_width = Some(limits.max_image.width);
+    alloc.max_image_height = Some(limits.max_image.height);
     reader.limits(alloc);
     let decoded = reader
         .decode()
         .map_err(|e| ImportError::Decode(e.to_string()))?;
     let (width, height) = decoded.dimensions();
-    limits.check_image_dims(width, height)?;
+    let size = ambre_core::ImageSize::new(width, height);
+    limits.check_image_dims(size)?;
 
     // Downscale to a placeholder thumbnail (preserves aspect ratio). PNG-encoded
     // so it round-trips losslessly and the UI can paint it before the full-res
@@ -100,8 +101,7 @@ pub(super) fn decode_media(
         media,
         plaintext: ambre_core::MediaBytes::new(bytes.to_vec()),
         mime: mime_of(format),
-        width,
-        height,
+        size,
         thumb,
     })
 }
@@ -143,7 +143,7 @@ mod tests {
         assert_eq!(batch.report.imported, 1);
 
         let blob = &batch.media[0];
-        assert_eq!((blob.width, blob.height), (64, 48));
+        assert_eq!(blob.size, ambre_core::ImageSize::new(64, 48));
         assert_eq!(blob.mime.as_str(), "image/png");
         assert!(
             !blob.thumb.is_empty(),
@@ -173,11 +173,14 @@ mod tests {
     fn oversized_image_aborts_atomically() {
         let png = solid_png(300, 20);
         let limits = Limits {
-            max_image_dim: 256,
+            max_image: ambre_core::ImageSize::new(256, 256),
             ..Limits::default()
         };
         let err = import_raster(&png, &limits).unwrap_err();
-        assert!(matches!(err, ImportError::ImageTooLarge { limit: 256, .. }));
+        assert!(matches!(
+            err,
+            ImportError::ImageTooLarge { limit, .. } if limit == ambre_core::ImageSize::new(256, 256)
+        ));
     }
 
     /// `TOILE-IO-052`: the picture is measured before it is expanded. The
@@ -195,18 +198,15 @@ mod tests {
             .expect("a PNG data chunk");
         let header_only = png[..idat + 4].to_vec();
         let limits = Limits {
-            max_image_dim: 256,
+            max_image: ambre_core::ImageSize::new(256, 256),
             ..Limits::default()
         };
-        assert!(
-            matches!(
-                import_raster(&header_only, &limits).unwrap_err(),
-                ImportError::ImageTooLarge {
-                    width: 300,
-                    height: 20,
-                    limit: 256
-                }
-            ),
+        assert_eq!(
+            import_raster(&header_only, &limits).unwrap_err(),
+            ImportError::ImageTooLarge {
+                size: ambre_core::ImageSize::new(300, 20),
+                limit: ambre_core::ImageSize::new(256, 256),
+            },
             "the picture was expanded before it was measured"
         );
     }

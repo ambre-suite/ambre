@@ -353,7 +353,7 @@ fn embedded_png_maps_to_image_and_media_blob() {
     let svg = svg_with_embedded_png(32, 24);
     let batch = import_svg(svg.as_bytes(), &Limits::default()).unwrap();
     assert_eq!(batch.media.len(), 1, "one media blob produced");
-    assert_eq!((batch.media[0].width, batch.media[0].height), (32, 24));
+    assert_eq!(batch.media[0].size, ambre_core::ImageSize::new(32, 24));
     assert!(!batch.media[0].thumb.is_empty());
     assert!(batch.commands.iter().any(|c| matches!(
         c,

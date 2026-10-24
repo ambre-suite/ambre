@@ -15,6 +15,7 @@
 //! | [`Pt`] | a typographic point, 1/72 inch | an indent, a table column |
 //! | [`Mm`] | a millimetre | a page size, a margin |
 //! | [`Radians`] | an angle | a rotated element |
+//! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
@@ -342,6 +343,40 @@ impl<P> Vector<P> {
         Self { dx, dy }
     }
 }
+
+/// A size of whole pixels, in the pixel space `P` names: an [`ImageSize`],
+/// or the CSS and device sizes of `ambre-canvas`. The space is a type, so
+/// the size of an image never reaches a place that sizes a buffer or a box.
+///
+/// Its serde form is the two edges, width first, as two `u32` fields were.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct PixelSize<P> {
+    pub width: u32,
+    pub height: u32,
+    #[serde(skip)]
+    space: std::marker::PhantomData<P>,
+}
+
+impl<P> PixelSize<P> {
+    /// The size of `width` x `height` pixels.
+    #[must_use]
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            space: std::marker::PhantomData,
+        }
+    }
+}
+
+/// A pixel of a decoded image: one sample of its bitmap, never a length on a
+/// screen. It names the space of [`ImageSize`] and holds no value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ImagePx {}
+
+/// The size of a decoded image, in its own pixels.
+pub type ImageSize = PixelSize<ImagePx>;
 
 /// The vector from `other` to `self`.
 impl<P: std::ops::Sub<Output = P>> std::ops::Sub for Point<P> {

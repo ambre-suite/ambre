@@ -40,6 +40,10 @@ pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_c
 pub mod walk;
 pub use walk::DocumentWalk;
 
+/// The size of an image a surface draws, for a back end that sees no other
+/// `ambre-core` type.
+pub use ambre_core::ImageSize;
+
 #[cfg(feature = "testing")]
 pub mod testing;
 
@@ -65,10 +69,8 @@ pub struct ImageSource<'a> {
     pub key: ImageKey,
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
     pub pixels: &'a [u8],
-    /// Native pixel width of the image.
-    pub width: u32,
-    /// Native pixel height of the image.
-    pub height: u32,
+    /// Native pixel size of the image.
+    pub size: ambre_core::ImageSize,
 }
 
 /// The identity of a decoded image, as its caller knows it (`ImageSource::key`).

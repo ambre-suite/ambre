@@ -32,7 +32,7 @@ impl ToileState {
     pub(super) fn decoded_thumbnail(
         &self,
         hash: &ambre_core::ContentHash,
-    ) -> Option<(u32, u32, Vec<u8>)> {
+    ) -> Option<crate::ui::render::DecodedImage> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return None;
@@ -46,7 +46,11 @@ impl ToileState {
             return None;
         };
         let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
-        Some((rgba.width(), rgba.height(), rgba.into_raw()))
+        let size = ambre_core::ImageSize::new(rgba.width(), rgba.height());
+        Some(crate::ui::render::DecodedImage {
+            pixels: rgba.into_raw(),
+            size,
+        })
     }
 
     /// The PNG bytes stored as one media address's thumbnail, if the document
@@ -214,12 +218,12 @@ impl ToileState {
                 continue;
             };
             let rgba = img.to_rgba8();
+            let size = ambre_core::ImageSize::new(rgba.width(), rgba.height());
             out.insert(
                 ambre_core::ContentHash::from(hash.as_str()),
                 crate::ui::render::DecodedImage {
-                    width: rgba.width(),
-                    height: rgba.height(),
                     pixels: rgba.into_raw(),
+                    size,
                 },
             );
         }
@@ -419,8 +423,7 @@ mod media_request_tests {
             media: crate::logic::command::MediaRef::Stored(ContentHash(hash.to_owned())),
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from("image/png"),
-            width: w,
-            height: h,
+            size: ambre_core::ImageSize::new(w, h),
             thumb,
         }
     }
@@ -448,19 +451,16 @@ mod media_request_tests {
             .display
             .iter()
             .find_map(|e| match e {
-                ToileEvent::MediaDecoded {
-                    hash,
-                    width,
-                    height,
-                    pixels,
-                } => Some((hash.clone(), *width, *height, pixels.len())),
+                ToileEvent::MediaDecoded { hash, size, pixels } => {
+                    Some((hash.clone(), *size, pixels.len()))
+                }
                 _ => None,
             })
             .expect("the request is answered");
         assert_eq!(answer.0.as_str(), "img");
-        assert_eq!((answer.1, answer.2), (4, 2));
+        assert_eq!(answer.1, ambre_core::ImageSize::new(4, 2));
         // RGBA8, row-major, no padding: exactly four bytes a texel.
-        assert_eq!(answer.3, 4 * 2 * 4);
+        assert_eq!(answer.2, 4 * 2 * 4);
     }
 
     /// The board answers an address it does not carry with nothing. The element

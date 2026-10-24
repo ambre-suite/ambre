@@ -333,9 +333,10 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             ))
         }
         Root::Media if MediaKey::parse(stored.key(1)?) == Some(MediaKey::Thumb) => {
-            let (w, h, _) =
-                reader.decoded_thumbnail(&ambre_core::ContentHash::from(stored.key(0)?))?;
-            Some(format!("thumbnail {w}x{h} px"))
+            let size = reader
+                .decoded_thumbnail(&ambre_core::ContentHash::from(stored.key(0)?))?
+                .size;
+            Some(format!("thumbnail {}x{} px", size.width, size.height))
         }
         _ => None,
     }

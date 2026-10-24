@@ -655,8 +655,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         media: crate::logic::command::MediaRef::Stored(ContentHash("h".to_owned())),
         plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
-        width: 1,
-        height: 2,
+        size: ambre_core::ImageSize::new(1, 2),
         thumb,
     }]);
     st.doc.commit();

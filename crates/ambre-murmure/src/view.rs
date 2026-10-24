@@ -3696,8 +3696,7 @@ mod tests {
             delay_ms: ambre_core::Millis(100),
         };
         let gif = Picture {
-            width: 2,
-            height: 1,
+            size: ambre_core::ImageSize::new(2, 1),
             frames: vec![frame(), frame()],
         };
         let picture = Some(gif);
@@ -3735,8 +3734,7 @@ mod tests {
             delay_ms: ambre_core::Millis(100),
         };
         let picture = Some(Picture {
-            width: 1,
-            height: 1,
+            size: ambre_core::ImageSize::new(1, 1),
             frames: vec![frame(), frame()],
         });
         let media_ref = file.media_ref.clone();

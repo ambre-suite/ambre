@@ -23,9 +23,9 @@ pub struct Limits {
     /// Absolute world-coordinate clamp (applied per axis, symmetric). A coordinate
     /// outside `[-coord_clamp, coord_clamp]` is clamped to the bound.
     pub coord_clamp: f64,
-    /// Maximum decoded image dimension (width or height, in pixels). A larger
-    /// image aborts the import (memory-exhaustion vector,).
-    pub max_image_dim: u32,
+    /// Maximum decoded image size, each edge apart. An image past it on either
+    /// edge aborts the import (memory-exhaustion vector).
+    pub max_image: ambre_core::ImageSize,
 }
 
 impl Default for Limits {
@@ -38,7 +38,7 @@ impl Default for Limits {
             // for the CRDT geometry fields.
             coord_clamp: 1_000_000.0,
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
-            max_image_dim: 8_192,
+            max_image: ambre_core::ImageSize::new(8_192, 8_192),
         }
     }
 }
@@ -99,17 +99,16 @@ impl Limits {
         }
     }
 
-    /// Fail the import if a decoded image exceeds [`max_image_dim`] on either axis.
+    /// Fail the import if a decoded image exceeds [`max_image`] on either axis.
     ///
     /// # Errors
     ///
     /// [`ImportError::ImageTooLarge`], carrying both dimensions and the limit.
-    pub fn check_image_dims(&self, width: u32, height: u32) -> Result<(), ImportError> {
-        if width > self.max_image_dim || height > self.max_image_dim {
+    pub fn check_image_dims(&self, size: ambre_core::ImageSize) -> Result<(), ImportError> {
+        if size.width > self.max_image.width || size.height > self.max_image.height {
             Err(ImportError::ImageTooLarge {
-                width,
-                height,
-                limit: self.max_image_dim,
+                size,
+                limit: self.max_image,
             })
         } else {
             Ok(())
@@ -174,13 +173,16 @@ mod tests {
     #[test]
     fn image_dim_guard() {
         let l = Limits {
-            max_image_dim: 256,
+            max_image: ambre_core::ImageSize::new(256, 256),
             ..Limits::default()
         };
-        assert!(l.check_image_dims(256, 128).is_ok());
+        assert!(
+            l.check_image_dims(ambre_core::ImageSize::new(256, 128))
+                .is_ok()
+        );
         assert!(matches!(
-            l.check_image_dims(257, 10),
-            Err(ImportError::ImageTooLarge { limit: 256, .. })
+            l.check_image_dims(ambre_core::ImageSize::new(257, 10)),
+            Err(ImportError::ImageTooLarge { limit, .. }) if limit == ambre_core::ImageSize::new(256, 256)
         ));
     }
 }

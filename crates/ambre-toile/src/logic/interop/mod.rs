@@ -149,15 +149,13 @@ impl ImportReport {
 
 /// One plaintext media blob produced by an import. `media` names it by its
 /// import slot until Sync returns the content address (blake2b), since interop
-/// never hashes. `width`/`height` are the native resolution (the media map
-/// value), `thumb` is a small PNG-encoded placeholder for the first paint.
+/// never hashes. `size` is the native resolution (the media map value), `thumb` is a small PNG-encoded placeholder for the first paint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBlob {
     pub media: MediaRef,
     pub plaintext: ambre_core::MediaBytes,
     pub mime: ambre_core::MediaType,
-    pub width: u32,
-    pub height: u32,
+    pub size: ambre_core::ImageSize,
     pub thumb: Vec<u8>,
 }
 
@@ -176,8 +174,17 @@ pub enum ImportError {
     TooManyElements { limit: usize },
     #[error("import exceeds the nesting-depth limit ({limit})")]
     TooDeep { limit: usize },
-    #[error("decoded image {width}x{height} exceeds the dimension limit ({limit})")]
-    ImageTooLarge { width: u32, height: u32, limit: u32 },
+    #[error(
+        "decoded image {}x{} exceeds the dimension limit ({}x{})",
+        size.width,
+        size.height,
+        limit.width,
+        limit.height
+    )]
+    ImageTooLarge {
+        size: ambre_core::ImageSize,
+        limit: ambre_core::ImageSize,
+    },
     #[error("import produced no elements")]
     Empty,
 }

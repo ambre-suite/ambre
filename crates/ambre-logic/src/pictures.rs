@@ -12,16 +12,18 @@ use super::*;
 use ambre_bus::{
     ChannelId, MediaRef, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
 };
+use ambre_core::ImageSize;
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
 
 /// The largest preview, in pixels: twice the box the list draws it in, so a
 /// dense screen shows it sharp.
-const PREVIEW_EDGE: (u32, u32) = (480, 320);
-/// The largest edge a file may declare. A decode expands it to four bytes a
-/// pixel before it is scaled down, so the header is held to this first.
-const MAX_EDGE: u32 = 4096;
+const PREVIEW_EDGE: ImageSize = ImageSize::new(480, 320);
+/// The largest size a file may declare, each edge apart. A decode expands it
+/// to four bytes a pixel before it is scaled down, so the header is held to
+/// this first.
+const MAX_SIZE: ImageSize = ImageSize::new(4096, 4096);
 /// The most a decoder may allocate for one image.
 const MAX_ALLOC: u64 = 128 * 1024 * 1024;
 /// The bytes the frames of one preview may hold. An animation past it plays
@@ -90,25 +92,25 @@ impl LogicState {
 }
 
 /// Decode `bytes` into the frames of a preview. `None` for a type this
-/// client does not preview, a header past [`MAX_EDGE`], or a broken file.
+/// client does not preview, a header past [`MAX_SIZE`], or a broken file.
 pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
     let format = image::guess_format(bytes).ok()?;
     let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_EDGE);
-    limits.max_image_height = Some(MAX_EDGE);
+    limits.max_image_width = Some(MAX_SIZE.width);
+    limits.max_image_height = Some(MAX_SIZE.height);
     limits.max_alloc = Some(MAX_ALLOC);
     match format {
         ImageFormat::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
             decoder.set_limits(limits).ok()?;
-            let (width, height) = fit(decoder.dimensions());
+            let size = fit(decoder.dimensions());
             let mut frames = Vec::new();
             let mut held = 0;
             for frame in decoder.into_frames() {
                 // A broken frame ends the animation; the frames before it play.
                 let Ok(frame) = frame else { break };
                 let (numer, denom) = frame.delay().numer_denom_ms();
-                let pixels = scale(frame.into_buffer(), (width, height));
+                let pixels = scale(frame.into_buffer(), size);
                 if !frames.is_empty() && held + pixels.len() > PICTURE_BYTES {
                     break;
                 }
@@ -118,22 +120,17 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
                     delay_ms: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
                 });
             }
-            (!frames.is_empty()).then_some(Picture {
-                width,
-                height,
-                frames,
-            })
+            (!frames.is_empty()).then_some(Picture { size, frames })
         }
         ImageFormat::Png | ImageFormat::Jpeg => {
             let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
             reader.limits(limits);
             let image = reader.decode().ok()?.into_rgba8();
-            let (width, height) = fit(image.dimensions());
+            let size = fit(image.dimensions());
             Some(Picture {
-                width,
-                height,
+                size,
                 frames: vec![PictureFrame {
-                    pixels: scale(image, (width, height)),
+                    pixels: scale(image, size),
                     delay_ms: ambre_core::Millis(0),
                 }],
             })
@@ -142,24 +139,29 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
     }
 }
 
-/// The size `(width, height)` takes inside [`PREVIEW_EDGE`], its aspect kept.
-/// An image already inside it keeps its size.
-fn fit((width, height): (u32, u32)) -> (u32, u32) {
-    let (max_w, max_h) = PREVIEW_EDGE;
+/// The size a decoder reads, `(width, height)`, takes inside
+/// [`PREVIEW_EDGE`], its aspect kept. An image already inside it keeps its
+/// size. The tuple is the decoder's own return.
+fn fit((width, height): (u32, u32)) -> ImageSize {
+    let ImageSize {
+        width: max_w,
+        height: max_h,
+        ..
+    } = PREVIEW_EDGE;
     let scale = (f64::from(max_w) / f64::from(width.max(1)))
         .min(f64::from(max_h) / f64::from(height.max(1)))
         .min(1.0);
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let to = |edge: u32| ((f64::from(edge) * scale).round() as u32).max(1);
-    (to(width), to(height))
+    ImageSize::new(to(width), to(height))
 }
 
 /// The pixels of `image` at `size`.
-fn scale(image: RgbaImage, size: (u32, u32)) -> Vec<u8> {
-    if image.dimensions() == size {
+fn scale(image: RgbaImage, size: ImageSize) -> Vec<u8> {
+    if image.dimensions() == (size.width, size.height) {
         return image.into_raw();
     }
-    image::imageops::resize(&image, size.0, size.1, FilterType::Triangle).into_raw()
+    image::imageops::resize(&image, size.width, size.height, FilterType::Triangle).into_raw()
 }
 
 fn delay(ms: Millis) -> Millis {
@@ -207,7 +209,7 @@ mod tests {
     #[test]
     fn an_animated_gif_decodes_into_its_frames_at_the_preview_size() {
         let picture = decode(&gif(3, (960, 320), 70)).expect("a GIF");
-        assert_eq!((picture.width, picture.height), (480, 160));
+        assert_eq!(picture.size, ImageSize::new(480, 160));
         assert_eq!(picture.frames.len(), 3);
         assert!(
             picture
@@ -231,7 +233,7 @@ mod tests {
     #[test]
     fn a_still_image_is_one_frame_and_a_stranger_none() {
         let picture = decode(&png((40, 30))).expect("a PNG");
-        assert_eq!((picture.width, picture.height), (40, 30));
+        assert_eq!(picture.size, ImageSize::new(40, 30));
         assert_eq!(picture.frames.len(), 1);
         assert!(decode(b"%PDF-1.7").is_none());
         assert!(decode(&png((40, 30))[..20]).is_none());
@@ -241,8 +243,8 @@ mod tests {
     #[test]
     fn a_header_past_the_bound_decodes_nothing() {
         let mut big = png((1, 1));
-        // The IHDR width, past `MAX_EDGE`; the CRC no longer matches either.
-        big[16..20].copy_from_slice(&(MAX_EDGE + 1).to_be_bytes());
+        // The IHDR width, past `MAX_SIZE`; the CRC no longer matches either.
+        big[16..20].copy_from_slice(&(MAX_SIZE.width + 1).to_be_bytes());
         assert!(decode(&big).is_none());
     }
 

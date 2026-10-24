@@ -479,8 +479,8 @@ impl ToileState {
             else {
                 continue;
             };
-            let _ = entry.insert(MediaKey::W, blob.width as i64);
-            let _ = entry.insert(MediaKey::H, blob.height as i64);
+            let _ = entry.insert(MediaKey::W, i64::from(blob.size.width));
+            let _ = entry.insert(MediaKey::H, i64::from(blob.size.height));
             let _ = entry.insert(MediaKey::Mime, blob.mime.as_str());
             let _ = entry.insert(
                 MediaKey::Thumb,
@@ -643,8 +643,7 @@ mod tests {
             media: MediaRef::Stored(ContentHash(hash.to_owned())),
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
-            width: w,
-            height: h,
+            size: ambre_core::ImageSize::new(w, h),
             thumb: vec![1, 2, 3],
         }
     }

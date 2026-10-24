@@ -8,8 +8,7 @@
 // logical size alone (`CANVAS-044`), so it has nothing to scale by.
 // ============================================================================
 
-use std::marker::PhantomData;
-
+pub use ambre_core::PixelSize;
 use ambre_core::{CssPx, ViewPx};
 
 use crate::render::ContentRepaint;
@@ -74,28 +73,6 @@ impl DevicePixelRatio {
     #[must_use]
     pub(crate) const fn get(self) -> f64 {
         self.0
-    }
-}
-
-/// A size of whole pixels, in the pixel space `P` names: [`CssSize`] or
-/// [`DeviceSize`]. The space is a type, so a CSS size never reaches a place
-/// that sizes the buffer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PixelSize<P> {
-    pub width: u32,
-    pub height: u32,
-    space: PhantomData<P>,
-}
-
-impl<P> PixelSize<P> {
-    /// The size of `width` x `height` pixels.
-    #[must_use]
-    pub const fn new(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            space: PhantomData,
-        }
     }
 }
 

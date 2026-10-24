@@ -998,21 +998,10 @@ impl ToileView {
             // The pixels behind an address this view asked for (`toile-media`).
             // They land in the store the render walk consults, and the next
             // frame paints the picture instead of the placeholder.
-            ToileEvent::MediaDecoded {
-                hash,
-                width,
-                height,
-                pixels,
-            } => {
+            ToileEvent::MediaDecoded { hash, size, pixels } => {
                 self.media_requested.remove(&hash);
-                self.images.insert(
-                    hash,
-                    render::DecodedImage {
-                        pixels,
-                        width,
-                        height,
-                    },
-                );
+                self.images
+                    .insert(hash, render::DecodedImage { pixels, size });
                 self.data_dirty = true;
                 self.needs_full = true;
             }

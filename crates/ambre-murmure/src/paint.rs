@@ -788,10 +788,10 @@ fn preview_boxes<'r>(
     for file in previewed(row, pics) {
         let aspect = pics
             .and_then(|pics| pics.shelf.get(&file.media_ref))
-            .filter(|picture| picture.width > 0 && picture.height > 0)
+            .filter(|picture| picture.size.width > 0 && picture.size.height > 0)
             .map_or(PLACEHOLDER_ASPECT, |picture| {
                 #[allow(clippy::cast_precision_loss)]
-                let aspect = picture.width as f32 / picture.height as f32;
+                let aspect = picture.size.width as f32 / picture.size.height as f32;
                 aspect
             });
         y += SPACE_2;
@@ -848,8 +848,7 @@ fn draw_previews<S: DrawSurface>(
         let image = ImageSource {
             key: frame_key(&file.media_ref, index),
             pixels: &frame.pixels,
-            width: picture.width,
-            height: picture.height,
+            size: picture.size,
         };
         surface.draw_image(&image, at);
         played.next = match (played.next, next) {
@@ -1468,8 +1467,7 @@ pub(crate) mod tests {
             delay_ms,
         };
         let gif = Picture {
-            width: 2,
-            height: 1,
+            size: ambre_core::ImageSize::new(2, 1),
             frames: vec![
                 frame(ambre_core::Millis(100)),
                 frame(ambre_core::Millis(100)),

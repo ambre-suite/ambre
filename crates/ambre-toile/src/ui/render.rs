@@ -1081,8 +1081,7 @@ mod tests {
             "h1".into(),
             DecodedImage {
                 pixels: vec![0u8; 4],
-                width: 1,
-                height: 1,
+                size: ambre_core::ImageSize::new(1, 1),
             },
         );
         let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
@@ -1133,8 +1132,7 @@ mod tests {
             "h1".into(),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4],
-                width: 2,
-                height: 2,
+                size: ambre_core::ImageSize::new(2, 2),
             },
         );
         let mut surface = RecordingSurface::new();
@@ -2139,8 +2137,7 @@ mod tests {
             "h".into(),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4],
-                width: 2,
-                height: 2,
+                size: ambre_core::ImageSize::new(2, 2),
             },
         );
         pass.anim.insert(tween.id.clone(), tween.clone());

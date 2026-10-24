@@ -296,14 +296,14 @@ pub struct Attachment {
 /// of its preview (`MURMURE-135`). A still image has one frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Picture {
-    pub width: u32,
-    pub height: u32,
+    /// The size of every frame.
+    pub size: ambre_core::ImageSize,
     /// Each frame in play order, never empty.
     pub frames: Vec<PictureFrame>,
 }
 
 /// One frame of a [`Picture`]: non-premultiplied RGBA8, row-major, `width *
-/// height * 4` bytes, shown for `delay_ms`.
+/// height * 4` bytes of its size, shown for `delay_ms`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
     pub pixels: Vec<u8>,

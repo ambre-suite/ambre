@@ -222,8 +222,8 @@ impl DrawSurface for RecordingSurface {
 
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
         self.ops.push(DrawOp::DrawImage {
-            width: image.width,
-            height: image.height,
+            width: image.size.width,
+            height: image.size.height,
             dest,
         });
     }

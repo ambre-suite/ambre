@@ -212,8 +212,7 @@ mod tests {
 
     fn picture(delays: &[u32], bytes: usize) -> Picture {
         Picture {
-            width: 1,
-            height: 1,
+            size: ambre_core::ImageSize::new(1, 1),
             frames: delays
                 .iter()
                 .map(|&delay_ms| PictureFrame {

@@ -2122,8 +2122,7 @@ pub enum ToileEvent {
     /// printable (`TOILE-IO-100`).
     MediaDecoded {
         hash: ambre_core::ContentHash,
-        width: u32,
-        height: u32,
+        size: ambre_core::ImageSize,
         pixels: Vec<u8>,
     },
     /// A freshly-created element, with the `correlate` token its `CreateElement`
