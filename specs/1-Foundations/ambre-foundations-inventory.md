@@ -38,7 +38,7 @@
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 28 |  |
-| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 25 |  |
+| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 27 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 19 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
@@ -51,7 +51,7 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 21 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
-| `server` | The one process every client talks to. | partial | 86 | 1 |
+| `server` | The one process every client talks to. | partial | 87 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 50 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1101 contract rows, 3 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1104 contract rows, 3 loose.**
