@@ -218,9 +218,9 @@ mod tests {
     use ambre_bus::app::toile::{ElementKind, ElementStyle, ShapeKind};
     use ambre_draw::Affine;
 
-    /// A hit at zoom 1, where the pointer reaches `PICK_PX` world units.
+    /// A hit under the camera at zoom 1.
     fn hit(e: &DisplayElement, p: Point) -> bool {
-        exact_hit(e, p, PICK_PX)
+        exact_hit(e, p, pick_floor(&ViewportTransform::default()))
     }
 
     fn elem(geom: DisplayGeom, bounds: Rect, transform: Affine) -> DisplayElement {
@@ -379,7 +379,11 @@ mod tests {
         });
         let nodes = vec![back, front];
         assert_eq!(
-            hit_topmost(&nodes, Point::new(50.0, 50.0), PICK_PX),
+            hit_topmost(
+                &nodes,
+                Point::new(50.0, 50.0),
+                pick_floor(&ViewportTransform::default())
+            ),
             Some(ElementId("front".to_owned()))
         );
     }

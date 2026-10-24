@@ -1986,6 +1986,36 @@ mod tests {
         }
     }
 
+    /// `TOILE-UI-225`: a tool picks under the reach of the camera at the
+    /// press, not the screen constant taken as board units. At zoom 4, two
+    /// board units off a hairline are eight screen pixels: a miss.
+    #[test]
+    fn a_tool_picks_a_hairline_under_the_reach_of_the_zoomed_camera() {
+        let mut line = ambre_draw::BezPath::new();
+        line.move_to((0.0, 0.0));
+        line.line_to((1000.0, 0.0));
+        let DisplayNode::Element(mut e) = rect_elem("line", Rect::new(0.0, 0.0, 1000.0, 0.0))
+        else {
+            panic!("rect_elem builds an element")
+        };
+        e.geom = DisplayGeom::Path(line);
+        e.style.stroke_w = 0.5;
+        let disp = viewport(vec![DisplayNode::Element(e)]);
+        let mut cam = cam();
+        cam.zoom = ambre_core::ZoomFactor::positive(4.0);
+        let mut m = ToolMachine::new();
+        for (off, on_line) in [(0.5, true), (2.0, false)] {
+            let at = Point::new(500.0, off);
+            m.set_tool(Tool::Comment);
+            m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None);
+            let anchored = matches!(
+                m.pointer_up(at, &disp),
+                ToolOutcome::Comment(CommentAnchor::Element(_))
+            );
+            assert_eq!(anchored, on_line, "{off} board units off at zoom 4");
+        }
+    }
+
     /// The highlighter is a tool a user picks, and it writes nothing
     /// (`TOILE-UI-074`). The point rides the next presence sample, the release
     /// clears it, and the board hears about none of it.
