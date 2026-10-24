@@ -192,7 +192,7 @@ fn signaling_messages_roundtrip() {
 fn version_check() {
     use version::{CURRENT_VERSION, check_version};
     assert!(check_version(CURRENT_VERSION).is_ok());
-    let other_version = ambre_core::version::Version::V1;
+    let other_version = ambre_core::version::Version::V0;
     assert!(check_version(other_version).is_err());
 }
 
@@ -213,8 +213,8 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
         Err(WireDecodeError::Empty)
     ));
     assert!(matches!(
-        decode_client_msg(&[0x01, 0x00]),
-        Err(WireDecodeError::UnsupportedVersion(0x01))
+        decode_client_msg(&[0x02, 0x00]),
+        Err(WireDecodeError::UnsupportedVersion(0x02))
     ));
     let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: DocumentId::new(),
@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (11, "2318d7af26bb0d94836508f9797a5b45");
+const FROZEN_LAYOUT: (u8, &str) = (1, "7ab33ba537221250a1ea60609e35ba2c");
 
 fn sample_update(fill: u8) -> Update {
     Update {
