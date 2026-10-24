@@ -310,7 +310,7 @@ impl MurmureView {
         from_logic: Option<Receiver<UiEvent>>,
         to_logic: Option<Sender<LogicCommand>>,
         reads: PageReads,
-        size: (f64, f64),
+        size: ambre_canvas::CssSize,
         theme_ctl: ThemeControl,
     ) -> Self {
         let theme = theme_ctl.get();
@@ -326,7 +326,7 @@ impl MurmureView {
             last: None,
             theme_ctl,
             theme,
-            size: (size.0 as f32, size.1 as f32),
+            size: (size.width as f32, size.height as f32),
             hover: None,
             rest: Rest::Latest,
             pending: false,
@@ -355,10 +355,10 @@ impl MurmureView {
 
     /// The view of the thread's region: the same theme and the same lists,
     /// and no queue of its own (`MURMURE-420`).
-    pub fn region(&self, width: f64, height: f64) -> Self {
+    pub fn region(&self, size: ambre_canvas::CssSize) -> Self {
         let (to_logic, reads) = (self.to_logic.clone(), self.reads.clone());
         let theme_ctl = self.theme_ctl.clone();
-        let mut view = Self::new(None, to_logic, reads, (width, height), theme_ctl);
+        let mut view = Self::new(None, to_logic, reads, size, theme_ctl);
         view.lists = Rc::clone(&self.lists);
         view.region = Region::Thread;
         view.parked = Rc::clone(&self.parked);
@@ -1538,8 +1538,9 @@ impl MurmureView {
     ) {
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.size = (width as f32, height as f32);
+    /// The region now lays out at `size` logical pixels (`CANVAS-044`).
+    pub fn resize(&mut self, size: ambre_canvas::CssSize) {
+        self.size = (size.width as f32, size.height as f32);
         self.dirty = true;
     }
 
@@ -1998,7 +1999,7 @@ mod tests {
             }),
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
         };
-        let size = (300.0, 400.0);
+        let size = ambre_canvas::CssSize::new(300, 400);
         let view = MurmureView::new(
             Some(from_logic),
             Some(to_logic),
@@ -2116,7 +2117,7 @@ mod tests {
         assert!(frame(&mut page.view));
         assert_eq!(laid_out(&page.view), Some(3));
         assert_eq!(reads(&page).0, 1, "a new latest message moves it again");
-        page.view.resize(300, 400);
+        page.view.resize(ambre_canvas::CssSize::new(300, 400));
         assert!(frame(&mut page.view));
         assert_eq!(reads(&page).0, 0, "the same latest message moves it once");
     }
@@ -2142,7 +2143,7 @@ mod tests {
             messages: replies.to_vec(),
         };
         send(&page, channel, ev);
-        let mut thread_view = page.view.region(300.0, 400.0);
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
         page.pane.set(MurmurePane::Thread {
             channel,
             root: MessageRef {
@@ -2931,7 +2932,7 @@ mod tests {
             message: root.id,
         };
         page.pane.set(MurmurePane::Thread { channel, root: at });
-        let mut view = page.view.region(300.0, 200.0);
+        let mut view = page.view.region(ambre_canvas::CssSize::new(300, 200));
         frame(&mut page.view);
         frame(&mut view);
         assert!(page.said.borrow().is_empty(), "the first list is not news");
@@ -3201,7 +3202,7 @@ mod tests {
             messages: vec![reply.clone()],
         };
         send(&page, channel, ev);
-        let mut thread_view = page.view.region(300.0, 400.0);
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
         page.pane.set(MurmurePane::Thread {
             channel,
             root: MessageRef {
@@ -4216,7 +4217,7 @@ mod tests {
             "the composer's Escape reads nothing"
         );
 
-        let thread_view = composing.view.region(300.0, 400.0);
+        let thread_view = composing.view.region(ambre_canvas::CssSize::new(300, 400));
         let mut thread = Page {
             view: thread_view,
             ..composing
@@ -4432,7 +4433,7 @@ mod tests {
         });
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
-        let mut thread_view = page.view.region(300.0, 400.0);
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
         page.clock
             .set(ambre_bus::PageTime(10.0 * TICK_MS.to_page_millis().get()));
         frame(&mut thread_view);
@@ -4570,7 +4571,7 @@ mod tests {
             message: root.id,
         };
         page.pane.set(MurmurePane::Thread { channel, root: at });
-        let thread = page.view.region(300.0, 400.0);
+        let thread = page.view.region(ambre_canvas::CssSize::new(300, 400));
         let mut channel_view = std::mem::replace(&mut page.view, thread);
         frame_with_fonts(&mut channel_view);
         frame_with_fonts(&mut page.view);
@@ -4779,7 +4780,7 @@ mod tests {
         key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
         key(&mut page, "Escape", false, ambre_bus::PageTime(0.0));
         drop(std::mem::replace(&mut page.view, channel_view));
-        page.view = page.view.region(300.0, 400.0);
+        page.view = page.view.region(ambre_canvas::CssSize::new(300, 400));
         page.pane.set(pane);
         let of = DraftOf::Thread(channel, root);
         assert_eq!(painted(&mut page, of).as_deref(), Some("later"));

@@ -4084,8 +4084,10 @@ impl ToileView {
         });
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.cam.set_size(width as f64, height as f64);
+    /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
+    pub fn resize(&mut self, size: ambre_canvas::CssSize) {
+        self.cam
+            .set_size(f64::from(size.width), f64::from(size.height));
         self.needs_full = true;
         self.queue_viewport();
     }

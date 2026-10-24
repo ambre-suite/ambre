@@ -567,10 +567,11 @@ impl TrameView {
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
+    pub fn resize(&mut self, size: ambre_canvas::CssSize) {
         self.state.resize(
-            ambre_core::SurfacePx::new(f64::from(width)),
-            ambre_core::SurfacePx::new(f64::from(height)),
+            ambre_core::SurfacePx::new(f64::from(size.width)),
+            ambre_core::SurfacePx::new(f64::from(size.height)),
         );
         self.needs_full = true;
     }

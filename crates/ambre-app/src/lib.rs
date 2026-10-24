@@ -1818,7 +1818,9 @@ pub fn main() {
 
     let switcher = host::run_with(
         ambre_core::CanvasId::CONTENT,
-        move |w, h, text_input| {
+        move |size: ambre_canvas::CssSize, text_input| {
+            let w = ambre_core::SurfacePx::new(f64::from(size.width));
+            let h = ambre_core::SurfacePx::new(f64::from(size.height));
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
@@ -1832,7 +1834,7 @@ pub fn main() {
                         text_input,
                         Rc::new(move |text: &str| toasts.warning(text.to_owned())),
                     ),
-                    (w.get(), h.get()),
+                    size,
                     theme_ctl,
                 ))
             } else if booted == ambre_bus::DocType::Prose {
@@ -1840,8 +1842,7 @@ pub fn main() {
                     initial_doc,
                     view_tx_logic,
                     view_rx,
-                    w.get(),
-                    h.get(),
+                    size,
                     text_input,
                     theme_ctl,
                     prose_figures,

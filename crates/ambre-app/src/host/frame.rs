@@ -93,10 +93,10 @@ fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Opt
 /// board must recomposite: a new child, a resize, or a pumped change.
 fn reconcile_children<C>(
     children: &mut HashMap<ElementId, C>,
-    sizes: &mut HashMap<ElementId, (u32, u32)>,
+    sizes: &mut HashMap<ElementId, CssSize>,
     embeds: &[VisibleEmbed],
     mut make: impl FnMut(&VisibleEmbed) -> C,
-    mut resize: impl FnMut(&mut C, u32, u32),
+    mut resize: impl FnMut(&mut C, CssSize),
     mut pump: impl FnMut(&mut C) -> bool,
 ) -> bool {
     let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
@@ -105,17 +105,19 @@ fn reconcile_children<C>(
 
     let mut dirty = false;
     for e in embeds {
-        let w = e.child_size.width.round().max(0.0) as u32;
-        let h = e.child_size.height.round().max(0.0) as u32;
-        if w == 0 || h == 0 {
+        let size = CssSize::new(
+            e.child_size.width.round().max(0.0) as u32,
+            e.child_size.height.round().max(0.0) as u32,
+        );
+        if size.width == 0 || size.height == 0 {
             continue;
         }
-        if sizes.get(&e.element) == Some(&(w, h)) && children.contains_key(&e.element) {
+        if sizes.get(&e.element) == Some(&size) && children.contains_key(&e.element) {
             continue;
         }
         let child = children.entry(e.element.clone()).or_insert_with(|| make(e));
-        resize(child, w, h);
-        sizes.insert(e.element.clone(), (w, h));
+        resize(child, size);
+        sizes.insert(e.element.clone(), size);
         dirty = true;
     }
     // Every child is pumped, so none skips a frame of its own events.
@@ -193,7 +195,7 @@ pub struct FrameHost {
     children: HashMap<ElementId, AppView>,
     /// The last logical canvas size each child was resized to. A moved or zoomed
     /// embed only triggers a child `resize` when its box actually changes.
-    child_sizes: HashMap<ElementId, (u32, u32)>,
+    child_sizes: HashMap<ElementId, CssSize>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,
@@ -321,7 +323,7 @@ impl FrameHost {
             &mut self.child_sizes,
             &embeds,
             |e| make_child(e.document_id, e.doc_type, e.child_size),
-            |child, w, h| child.resize(w, h),
+            |child, size| child.resize(size),
             // Drain the child's Logic->UI events and run its per-frame
             // planning. A non-`Reuse` content plan means it changed on its own
             // (a remote edit).
@@ -413,7 +415,7 @@ impl FrameHost {
     /// keeps it, and still reaches the view so every layer repaints.
     pub fn resize(&mut self, size: SurfaceSize) {
         let CssSize { width, height, .. } = size.logical();
-        self.view.resize(width, height);
+        self.view.resize(size.logical());
         // The density watch lands here, and moves no cell box either.
         self.cells.remeasure();
 
@@ -438,7 +440,7 @@ impl FrameHost {
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
         gpu.configure(size);
         // Force the view to invalidate every cached layer for a clean repaint.
-        self.view.resize(width, height);
+        self.view.resize(size.logical());
     }
 
     pub(crate) fn tick_fps(
@@ -528,7 +530,7 @@ impl FrameHost {
             // paginates into tofu (`CANVAS-068`, `PROSE-115`).
             send_faces(&self.to_logic, new_faces);
             if let Some(size) = self.gpu.as_ref().map(|g| g.size.logical()) {
-                self.view.resize(size.width, size.height);
+                self.view.resize(size);
             }
         }
 
@@ -855,7 +857,7 @@ mod tests {
                 made.push(e.element.0.clone());
                 e.element.0.clone()
             },
-            |_, _, _| {},
+            |_, _| {},
             |_| false,
         );
         assert_eq!(children.len(), 2, "two embeds of one document share a view");
@@ -876,7 +878,7 @@ mod tests {
                 &mut sizes,
                 &embeds,
                 |_| 0,
-                |_, _, _| {},
+                |_, _| {},
                 |_| changed,
             )
         };

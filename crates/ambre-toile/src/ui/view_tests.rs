@@ -1885,7 +1885,7 @@ fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     rig.view.cam.zoom = ambre_core::ZoomFactor::positive(1.5);
     rig.view.update();
     rig.sent();
-    rig.view.resize(1600, 900);
+    rig.view.resize(ambre_canvas::CssSize::new(1600, 900));
     assert_eq!(rig.view.cam.center, kurbo::Point::new(40.0, -25.0));
     assert_eq!(rig.view.cam.zoom.get(), 1.5);
     rig.view.update();
@@ -1893,7 +1893,7 @@ fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].size, kurbo::Size::new(1600.0, 900.0));
 
-    rig.view.resize(0, 0);
+    rig.view.resize(ambre_canvas::CssSize::new(0, 0));
     assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
     let back = rig.view.cam.screen_to_world() * kurbo::Point::new(0.5, 0.5);
     assert!(back.x.is_finite() && back.y.is_finite());

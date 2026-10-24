@@ -361,14 +361,14 @@ impl AppView {
         }
     }
 
-    /// Canvas resized to `width` x `height` logical pixels (`CANVAS-044`).
-    fn resize(&mut self, width: u32, height: u32) {
+    /// Canvas resized to `size` logical pixels (`CANVAS-044`).
+    fn resize(&mut self, size: CssSize) {
         match self {
-            AppView::Trame(v) => v.resize(width, height),
-            AppView::Toile(v) => v.resize(width, height),
-            AppView::Prose(v) => v.resize(width, height),
+            AppView::Trame(v) => v.resize(size),
+            AppView::Toile(v) => v.resize(size),
+            AppView::Prose(v) => v.resize(size),
             AppView::Murmure(v) => {
-                v.resize(width, height);
+                v.resize(size);
                 v.set_width(ambre_murmure::view::WindowWidth::desktop_if(desktop()));
             }
         }
@@ -559,12 +559,12 @@ impl AppView {
         }
     }
 
-    /// The view of the cell named `id`, at `width` x `height` logical pixels.
-    /// `None` for an id this view does not show.
-    fn cell_view(&self, id: CanvasId, width: f64, height: f64) -> Option<AppView> {
+    /// The view of the cell named `id`, at `size` logical pixels. `None` for
+    /// an id this view does not show.
+    fn cell_view(&self, id: CanvasId, size: CssSize) -> Option<AppView> {
         match self {
             AppView::Murmure(v) if id == THREAD_CANVAS => {
-                Some(AppView::Murmure(v.region(width, height)))
+                Some(AppView::Murmure(v.region(size)))
             }
             _ => None,
         }

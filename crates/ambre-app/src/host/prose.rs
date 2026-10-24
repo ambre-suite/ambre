@@ -27,7 +27,7 @@ use ambre_bus::app::prose::WordCount;
 use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, NoticePublisher,
+    BusyPublisher, ContentKind, ContentRepaint, CssSize, FrameStats, InputEvent, NoticePublisher,
     OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
@@ -110,14 +110,22 @@ pub struct ProseView {
     timeline: super::probe::Timeline,
 }
 
+/// The width and the height of a canvas box, as the view pixels the page
+/// lays out against. A view pixel is a CSS pixel in size (`CANVAS-032`).
+fn view_size(size: CssSize) -> (ViewPx, ViewPx) {
+    (
+        ViewPx::new(size.width as f32),
+        ViewPx::new(size.height as f32),
+    )
+}
+
 impl ProseView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        width: f64,
-        height: f64,
+        size: CssSize,
         text_input: TextInput,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -128,7 +136,7 @@ impl ProseView {
         // A page is never embedded, so it always owns the pipe it is handed.
         text_input.name_content(ContentKind::Page);
         let theme = theme_ctl.get();
-        let size = (ViewPx::new(width as f32), ViewPx::new(height as f32));
+        let size = view_size(size);
         let mut state = ProseUiState::default();
         state.resize(size.0, size.1);
         Self {
@@ -514,8 +522,9 @@ impl ProseView {
     ) {
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.size = (ViewPx::new(width as f32), ViewPx::new(height as f32));
+    /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
+    pub fn resize(&mut self, size: CssSize) {
+        self.size = view_size(size);
         self.state.resize(self.size.0, self.size.1);
         self.dirty = true;
     }
@@ -804,8 +813,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            800.0,
-            600.0,
+            CssSize::new(800, 600),
             pipe.clone(),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -850,8 +858,7 @@ mod tests {
             document_id,
             to_logic,
             from_logic,
-            800.0,
-            600.0,
+            CssSize::new(800, 600),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -906,8 +913,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            800.0,
-            600.0,
+            CssSize::new(800, 600),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             figures,

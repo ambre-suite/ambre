@@ -86,9 +86,8 @@ impl Cells {
             let Some(size) = size_backing_store(&canvas) else {
                 continue;
             };
-            let CssSize { width, height, .. } = size.logical();
             if let Some(cell) = view
-                .cell_view(id, f64::from(width), f64::from(height))
+                .cell_view(id, size.logical())
                 .and_then(|region| Bound::bind(id, canvas, size, region, &self.typist))
             {
                 self.bound.insert(id, cell);
@@ -418,8 +417,7 @@ fn measure(
 ) {
     if let Some(measured) = size_backing_store(canvas) {
         size.set(measured);
-        let CssSize { width, height, .. } = measured.logical();
-        view.borrow_mut().resize(width, height);
+        view.borrow_mut().resize(measured.logical());
     }
 }
 
@@ -440,8 +438,7 @@ fn plan_frame(
     now_ms: ambre_core::PageTime,
 ) -> RepaintPlan<DevicePx> {
     if relayout == Relayout::Again {
-        let CssSize { width, height, .. } = size.logical();
-        view.resize(width, height);
+        view.resize(size.logical());
     }
     size.on_device(view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle))
 }
@@ -613,7 +610,7 @@ mod tests {
                 TextInput::detached(),
                 std::rc::Rc::new(|_| {}),
             ),
-            (300.0, 200.0),
+            CssSize::new(300, 200),
             ThemeControl::default(),
         ))
     }
@@ -777,7 +774,7 @@ mod tests {
     fn a_copy_on_a_cell_writes_the_text_it_selects() {
         let (_cell, canvas) = thread_cell(300, 200);
         let (mut view, _events) =
-            ambre_murmure::testing::channel_of(&["hello", "world"], (300.0, 200.0));
+            ambre_murmure::testing::channel_of(&["hello", "world"], CssSize::new(300, 200));
         paint(&mut view);
         let size = size_backing_store(&canvas).unwrap();
         let typist = Typist::default();
@@ -862,11 +859,11 @@ mod tests {
     fn the_pipe_writes_into_the_cell_whose_field_took_the_keys() {
         let (_cell, canvas) = thread_cell(300, 200);
         let (mut thread, _thread_events) =
-            ambre_murmure::testing::channel_of(&["hello"], (300.0, 200.0));
+            ambre_murmure::testing::channel_of(&["hello"], CssSize::new(300, 200));
         paint(&mut thread);
         let (x, y) = field_of(&thread, 200.0);
         let (mut channel, _channel_events) =
-            ambre_murmure::testing::channel_of(&["hi"], (300.0, 200.0));
+            ambre_murmure::testing::channel_of(&["hi"], CssSize::new(300, 200));
         paint(&mut channel);
         let mut content = AppView::Murmure(channel);
         let press_content = |content: &mut AppView| {
