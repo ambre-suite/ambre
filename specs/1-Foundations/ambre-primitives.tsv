@@ -3062,7 +3062,6 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | members
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | refuse_delta(detail) | param | &str	free-text	refusal detail
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_index_row() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState.doc_write_allowed | field | HashMap<DocumentId,bool>	math	named state or style flag, local
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API

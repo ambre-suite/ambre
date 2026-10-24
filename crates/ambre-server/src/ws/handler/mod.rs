@@ -90,6 +90,27 @@ const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 /// this cooldown bounds the abuse without touching that path.
 const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
 
+/// What the caller's role on a subscribed document permits: writing, or
+/// reading alone. The write gate of `handle_update` reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DocWrite {
+    /// An owner or an editor: a delta is sequenced and broadcast.
+    Allowed,
+    /// A viewer, or a role no document holds: a delta is refused.
+    ReadOnly,
+}
+
+impl DocWrite {
+    /// The permission a role carries on a document.
+    const fn of(role: ambre_core::Role) -> Self {
+        if role.can_write_document() {
+            Self::Allowed
+        } else {
+            Self::ReadOnly
+        }
+    }
+}
+
 /// Per-connection state tracking which documents this client is currently
 /// subscribed to.
 struct WsConnectionState {
@@ -109,7 +130,7 @@ struct WsConnectionState {
     /// member's delta without a per-message DB hit. The REST write paths gate on
     /// the same role set. Without this the hot WS write path would let a `viewer`
     /// author sequenced, persisted, broadcast updates.
-    doc_write_allowed: HashMap<DocumentId, bool>,
+    doc_write: HashMap<DocumentId, DocWrite>,
     /// Last instant a `RequestMissing` replay was served per document, enforcing
     /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
     last_replay_at: HashMap<DocumentId, Instant>,
@@ -192,7 +213,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         signing_pubkey: session.signing_pubkey.clone(),
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),
-        doc_write_allowed: HashMap::new(),
+        doc_write: HashMap::new(),
         last_replay_at: HashMap::new(),
         msg_bucket: TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec),
         clock_fences: ClockFences::default(),

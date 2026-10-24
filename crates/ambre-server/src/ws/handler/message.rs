@@ -273,8 +273,7 @@ pub(crate) async fn handle_subscribe(
     }
     // Cache the write capability so `handle_update` can reject a read-only
     // (`viewer`) member's delta without re-hitting the database per message.
-    conn.doc_write_allowed
-        .insert(document_id, role.can_write_document());
+    conn.doc_write.insert(document_id, DocWrite::of(role));
     let ack = Payload::server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
@@ -282,7 +281,7 @@ pub(crate) async fn handle_subscribe(
 pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: DocumentId) {
     conn.doc_subscriptions.remove(&document_id);
     conn.doc_access_verified_at.remove(&document_id);
-    conn.doc_write_allowed.remove(&document_id);
+    conn.doc_write.remove(&document_id);
     conn.clock_fences.forget(&document_id);
     conn.doc_channels.remove(&document_id);
 }
@@ -382,7 +381,7 @@ pub(crate) async fn handle_update(
     // read-only member who holds the doc key and its own signing key. The
     // capability is cached at Subscribe and refreshed by `membership_still_valid`
     // above, so this is a map lookup, not a DB hit.
-    if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
+    if conn.doc_write.get(&doc_id) != Some(&DocWrite::Allowed) {
         let detail = "read-only role cannot write to this document";
         refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
@@ -867,8 +866,7 @@ async fn membership_still_valid(
             conn.doc_access_verified_at.insert(doc_id, Instant::now());
             // Refresh the cached write capability too: a mid-session role change
             // (for example editor demoted to viewer) takes effect within the TTL.
-            conn.doc_write_allowed
-                .insert(doc_id, role.can_write_document());
+            conn.doc_write.insert(doc_id, DocWrite::of(role));
             true
         }
         Err(_) => {
@@ -879,7 +877,7 @@ async fn membership_still_valid(
                 let _ = redis_ops::doc_session_close(&state.redis, &doc_id, &pub_key_hex).await;
             }
             conn.doc_access_verified_at.remove(&doc_id);
-            conn.doc_write_allowed.remove(&doc_id);
+            conn.doc_write.remove(&doc_id);
             // The channel stays known until the unsubscribe, which leaves its
             // topic as it leaves the document's.
             false
@@ -1160,7 +1158,7 @@ mod ephemeral_binding_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             // A writer role, so the size-cap / author-key tests exercise their own
             // concern rather than tripping the read-only gate.
-            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
             last_replay_at: HashMap::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
@@ -1479,7 +1477,7 @@ mod delta_size_cap_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             // A writer role, so the size-cap / author-key tests exercise their own
             // concern rather than tripping the read-only gate.
-            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
             last_replay_at: HashMap::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
@@ -1601,10 +1599,10 @@ mod delta_size_cap_tests {
         let pending_key = format!("doc:{doc_id}:pending");
         let _ = state.redis.del([&pending_key]).await;
 
-        // Fresh membership, but a read-only role: the write capability is cached
-        // false, exactly as `handle_subscribe` would set it for a `viewer`.
+        // Fresh membership, but a read-only role: the write permission is cached
+        // read-only, exactly as `handle_subscribe` would set it for a `viewer`.
         let mut conn = conn_with(session_key.clone(), doc_id);
-        conn.doc_write_allowed.insert(doc_id, false);
+        conn.doc_write.insert(doc_id, DocWrite::ReadOnly);
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_update(&state, &mut conn, update_with(session_key, doc_id, 16), &tx).await;
@@ -1734,7 +1732,7 @@ mod access_tests {
             signing_pubkey: key,
             doc_subscriptions: HashSet::from([doc_id]),
             doc_access_verified_at: HashMap::from([(doc_id, verified)]),
-            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
@@ -2446,7 +2444,7 @@ mod hot_tail_tests {
             signing_pubkey: PublicKey::from_array(key.verifying_key().to_bytes()),
             doc_subscriptions: HashSet::from([doc_id]),
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
-            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
@@ -2569,7 +2567,7 @@ mod hot_tail_tests {
             signing_pubkey: first.signing_pubkey.clone(),
             doc_subscriptions: HashSet::from([doc_id]),
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
-            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
@@ -2691,7 +2689,7 @@ mod channel_gate_tests {
             signing_pubkey: session_key,
             doc_subscriptions: HashSet::new(),
             doc_access_verified_at: HashMap::new(),
-            doc_write_allowed: HashMap::new(),
+            doc_write: HashMap::new(),
             last_replay_at: HashMap::new(),
             msg_bucket: TokenBucket::of(1000, 1000),
             clock_fences: ClockFences::default(),
@@ -2820,7 +2818,7 @@ mod channel_gate_tests {
         assert!(
             matches!(ack, Ok(WsServerMsg::Subscribed { document_id }) if document_id == segment)
         );
-        assert_eq!(conn.doc_write_allowed.get(&segment), Some(&true));
+        assert_eq!(conn.doc_write.get(&segment), Some(&DocWrite::Allowed));
     }
 
     /// `SRV-048`: a wire message on a segment passes the write gate of any document.
