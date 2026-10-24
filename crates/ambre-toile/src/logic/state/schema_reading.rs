@@ -306,7 +306,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         {
             Some(format!(
                 "slides change over {} ms",
-                reader.transition_ms().get()
+                reader.transition_length().get()
             ))
         }
         Root::PresentationOrder => {

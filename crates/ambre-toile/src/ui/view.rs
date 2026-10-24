@@ -40,7 +40,7 @@ use ambre_bus::{
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, NoticePublisher, OverlayRepaint,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
-    ThemeControl, WHEEL_LINE_PX, WheelDelta,
+    ThemeControl, WHEEL_LINE, WheelDelta,
 };
 use ambre_core::{CssPx, CssVector, ViewPx};
 use ambre_draw::kinetic::{Release, ScrollStep};
@@ -127,12 +127,12 @@ impl WheelZoomRate {
 }
 
 /// The zoom rate of a wheel notch and of a pinch alike.
-const ZOOM_PER_WHEEL_PX: WheelZoomRate = WheelZoomRate(0.0018);
+const WHEEL_ZOOM_RATE: WheelZoomRate = WheelZoomRate(0.0018);
 
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
-const WHEEL_MOUSE_NOTCH_PX: CssPx = CssPx::new(40.0);
+const WHEEL_MOUSE_NOTCH: CssPx = CssPx::new(40.0);
 
 /// A point of the canvas, as the shared kinetic model reads it.
 fn view_point(screen: Point) -> ambre_core::ViewPoint {
@@ -176,7 +176,7 @@ fn wheel_device(delta: WheelDelta, px: CssVector) -> Option<WheelDevice> {
         Some(WheelDevice::Mouse)
     } else if px.dx != CssPx::ZERO {
         Some(WheelDevice::Trackpad)
-    } else if px.dy.abs() >= WHEEL_MOUSE_NOTCH_PX {
+    } else if px.dy.abs() >= WHEEL_MOUSE_NOTCH {
         Some(WheelDevice::Mouse)
     } else {
         None
@@ -217,7 +217,7 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 /// Inline-edit caret blink half-period: the caret shows for one interval,
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
 /// cadence.
-const CARET_BLINK_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
+const CARET_BLINK_PERIOD: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
 
 /// How many trailing samples of an in-flight freehand stroke ride a presence
 /// sample (`TOILE-UI-217`). The relay forwards presence and forgets it, and a
@@ -676,7 +676,7 @@ pub struct ToileView {
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
     /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
     /// so the per-frame hook stashes it here.
-    frame_now_ms: ambre_core::PageTime,
+    frame_now: ambre_core::PageTime,
 }
 
 /// The topmost element under a canvas point, through the camera
@@ -861,7 +861,7 @@ impl ToileView {
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
-            frame_now_ms: ambre_bus::PageTime(0.0),
+            frame_now: ambre_bus::PageTime(0.0),
         }
     }
 
@@ -1184,7 +1184,7 @@ impl ToileView {
             // (`PRESENCE-009`, `TOILE-UI-075`). The sender's canonical `UserId`
             // keys each entry (spoof-proof, `TOILE-177`).
             ToileEvent::PeerPresence(peers) => {
-                self.presence.adopt(peers, self.frame_now_ms);
+                self.presence.adopt(peers, self.frame_now);
                 self.data_dirty = true;
             }
             ToileEvent::Error(e) => {
@@ -1338,7 +1338,7 @@ impl ToileView {
         let ctrl_key = mods.primary;
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
-        let line = CssVector::new(WHEEL_LINE_PX, WHEEL_LINE_PX);
+        let line = CssVector::new(WHEEL_LINE, WHEEL_LINE);
         let page = CssVector::new(
             CssPx::new(self.cam.size.width as f32),
             CssPx::new(self.cam.size.height as f32),
@@ -1360,13 +1360,13 @@ impl ToileView {
             self.kinetic.stop();
             // Zoom about the cursor. A trackpad pinch and a mouse notch both land
             // here; only `dy` drives the factor.
-            let factor = ZOOM_PER_WHEEL_PX.factor(px.dy);
+            let factor = WHEEL_ZOOM_RATE.factor(px.dy);
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
             // Two-finger scroll pans the 2D plane in both axes. The model
             // applies the step one for one, and lets a glide coast once it
             // pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
-            let now = self.clock_ms();
+            let now = self.clock();
             super::kinetic::pan_by_wheel(&mut self.cam, &mut self.kinetic, px, delta.mode(), now);
         }
         self.queue_viewport();
@@ -1598,14 +1598,14 @@ impl ToileView {
     /// have stayed out past the debounce (`toile-embeds`, "Opening the
     /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
     /// frame clock.
-    fn drive_embed_lifecycle(&mut self, now_ms: ambre_core::PageTime) {
+    fn drive_embed_lifecycle(&mut self, now: ambre_core::PageTime) {
         // The session set records only what the queue actually took, so the
         // next frame offers a refused command again rather than losing it
         // (`TOILE-UI-338`, `TOILE-UI-339`). `fatal` is the one case that
         // reports success on a send nobody made. The view is tearing down and
         // no later frame will run, so retrying for ever would be the leak.
         let (to_logic, fatal) = (&self.to_logic, self.fatal);
-        self.embed_sessions.sync(&self.display, now_ms, |cmd| {
+        self.embed_sessions.sync(&self.display, now, |cmd| {
             send_session(to_logic, fatal, cmd)
         });
         // Focus cannot outlive the element that held it. An embed a peer
@@ -1636,12 +1636,12 @@ impl ToileView {
 
     /// The time on the frame clock's timeline, for an input that carries
     /// none.
-    fn clock_ms(&self) -> ambre_core::PageTime {
+    fn clock(&self) -> ambre_core::PageTime {
         #[cfg(target_arch = "wasm32")]
         if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
             return ambre_core::PageTime(perf.now());
         }
-        self.frame_now_ms
+        self.frame_now
     }
 
     /// The pick floor in world units at the current zoom (`TOILE-UI-225`).
@@ -1657,7 +1657,7 @@ impl ToileView {
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
-    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
         self.kinetic.stop();
         let screen = on_screen(at);
         let world = self.cam.screen_to_world() * screen;
@@ -1672,7 +1672,7 @@ impl ToileView {
         self.finger = Some(role);
         if role == FingerRole::Pans {
             self.last_pointer = screen;
-            self.kinetic.press(at, now_ms);
+            self.kinetic.press(at, now);
             return true;
         }
         self.handle_input(&InputEvent::PointerDown {
@@ -1684,11 +1684,11 @@ impl ToileView {
 
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
-    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
         match self.finger {
             Some(FingerRole::Pans) => {
                 self.last_pointer = on_screen(at);
-                if let Some(step) = self.kinetic.sample(at, now_ms) {
+                if let Some(step) = self.kinetic.sample(at, now) {
                     super::kinetic::move_view(&mut self.cam, step);
                     self.queue_viewport();
                 }
@@ -1701,10 +1701,10 @@ impl ToileView {
 
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
-    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now_ms: ambre_core::PageTime) -> bool {
+    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
-                if let Release::Tap { at } = self.kinetic.release(now_ms) {
+                if let Release::Tap { at } = self.kinetic.release(now) {
                     self.handle_input(&InputEvent::PointerDown {
                         at,
                         button: PointerButton::Primary,
@@ -1748,10 +1748,10 @@ impl ToileView {
     /// Pan the board under a gesture held at an edge, once a frame, and let
     /// the gesture follow (`TOILE-UI-380`). The first tick only starts the
     /// clock.
-    fn step_edge_pan(&mut self, now_ms: ambre_core::PageTime) {
+    fn step_edge_pan(&mut self, now: ambre_core::PageTime) {
         let held = self.machine.is_active() || self.arrow_drag.is_some();
         let speed = held.then(|| super::kinetic::edge_pan_speed(&self.cam, self.last_pointer));
-        let Some(step) = self.edge.tick(speed, now_ms) else {
+        let Some(step) = self.edge.tick(speed, now) else {
             return;
         };
         super::kinetic::move_view(&mut self.cam, step);
@@ -2284,11 +2284,11 @@ impl ToileView {
     /// Send this peer's sample if it changed or the heartbeat is due
     /// (`TOILE-UI-073`). Lossy: a dropped sample is corrected by the next one,
     /// and presence must never displace an edit on a full queue.
-    fn broadcast_presence(&mut self, now_ms: ambre_core::PageTime) {
-        if let Some(payload) = self.presence_out.due(self.presence_sample(), now_ms) {
+    fn broadcast_presence(&mut self, now: ambre_core::PageTime) {
+        if let Some(payload) = self.presence_out.due(self.presence_sample(), now) {
             // A dropped sample is not re-offered: the next one carries a fresher
             // pointer, and a queue of stale samples is worse than a gap.
-            let _ = self.send_lossy(ToileCommand::Presence { payload, now_ms });
+            let _ = self.send_lossy(ToileCommand::Presence { payload, now });
         }
     }
 
@@ -2418,7 +2418,7 @@ impl ToileView {
                 self.send_edit(ToileCommand::CreateComment {
                     anchor: draft.anchor,
                     body,
-                    ts: wall_clock_ms(),
+                    ts: wall_clock(),
                 });
             }
             CommentIntent::Discard => self.comments.draft.set(None),
@@ -2429,7 +2429,7 @@ impl ToileView {
                 self.send_edit(ToileCommand::ReplyComment {
                     thread,
                     body,
-                    ts: wall_clock_ms(),
+                    ts: wall_clock(),
                 });
             }
             CommentIntent::Resolve { thread, state } => {
@@ -3334,7 +3334,7 @@ impl ToileView {
         // scaled by the zoom at paint. Dividing here opens the edited text at
         // the size the band reads today. A zoom during the edit then drifts,
         // which `toile-frames` section 6 records.
-        let base_size = render::FRAME_TITLE_PX.unzoomed(self.cam.zoom);
+        let base_size = render::FRAME_TITLE_HEIGHT.unzoomed(self.cam.zoom);
         self.editor = Some(InlineEditor::open_frame_title(
             id,
             &title,
@@ -3627,7 +3627,7 @@ impl ToileView {
                 // Blink the caret on a ~1-second cycle so it visibly signals "you can
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
-                let caret_on = (self.frame_now_ms.since_load() / CARET_BLINK_MS) as i64 % 2 == 0;
+                let caret_on = (self.frame_now.since_load() / CARET_BLINK_PERIOD) as i64 % 2 == 0;
                 // The guard above found an editor, and nothing since closed it.
                 let Some(ed) = self.editor.as_mut() else {
                     return;
@@ -3833,18 +3833,18 @@ impl ToileView {
     /// with nothing in between.
     pub fn plan_repaint(
         &mut self,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         // Stash the frame clock for paint-time use (inline-edit caret blink,
         // `toile-text-editing`).
-        self.frame_now_ms = now_ms;
+        self.frame_now = now;
         self.sync_pipe_typing();
         // Open / close the nested documents behind the visible `doc_embed`s
         // (`toile-embeds`). Driven here rather than in `update` because
         // this is the one per-frame hook carrying the frame clock the close
         // debounce needs.
-        self.drive_embed_lifecycle(now_ms);
+        self.drive_embed_lifecycle(now);
 
         // Advance an in-flight presentation transition
         // (`toile-presentation`): glide the camera and
@@ -3856,7 +3856,7 @@ impl ToileView {
         // out whole (`TOILE-UI-085`).
         if let Some(transition) = self.transition.as_mut() {
             let covering = transition.covering_viewport(&self.cam);
-            let frame = transition.advance(now_ms);
+            let frame = transition.advance(now);
             self.cam = frame.cam;
             self.anim_overrides = frame
                 .overrides
@@ -3876,10 +3876,10 @@ impl ToileView {
 
         // A flick or a glide keeps the board moving (`KINETIC-004`), and a
         // gesture held at an edge pans it (`TOILE-UI-380`).
-        if super::kinetic::coast(&mut self.cam, &mut self.kinetic, now_ms) {
+        if super::kinetic::coast(&mut self.cam, &mut self.kinetic, now) {
             self.queue_viewport();
         }
-        self.step_edge_pan(now_ms);
+        self.step_edge_pan(now);
 
         // Keep the status-bar aggregates (`toile-status-bar`) in step with the
         // selection. On a change, ask Logic for the fresh count/bounds. The reply
@@ -3922,7 +3922,7 @@ impl ToileView {
         // pointer stream that outruns the display costs one sample. Also on a
         // heartbeat while nothing changes, which is what keeps this client in
         // the others' live set and advances the Logic thread's only clock.
-        self.broadcast_presence(now_ms);
+        self.broadcast_presence(now);
 
         let any_dirty = self.needs_full
             || self.overlay_dirty
@@ -4021,7 +4021,7 @@ impl ToileView {
                 &self.cam,
                 font_cx,
                 text_cache,
-                self.frame_now_ms,
+                self.frame_now,
             );
         }
 
@@ -4057,10 +4057,10 @@ impl ToileView {
 
         self.perf_pub.publish(PerfSnapshot {
             fps: stats.fps,
-            frame_ms: stats.frame_ms,
-            drain_ms: stats.drain_ms,
-            draw_ms: stats.draw_ms,
-            gpu_ms: stats.gpu_ms,
+            frame: stats.frame,
+            drain: stats.drain,
+            draw: stats.draw,
+            gpu: stats.gpu,
             ..Default::default()
         });
     }
@@ -4413,7 +4413,7 @@ impl ToileView {
 /// (`toile-comments` section 5). The Logic thread holds no clock, and nothing
 /// orders by this one (`TOILE-FEAT-012`): the reader sees it, and that is all.
 #[cfg(target_arch = "wasm32")]
-fn wall_clock_ms() -> ambre_core::Timestamp {
+fn wall_clock() -> ambre_core::Timestamp {
     // `Date.now()` is a whole, non-negative count of milliseconds.
     ambre_core::Timestamp(js_sys::Date::now() as u64)
 }
@@ -4464,7 +4464,7 @@ mod view_tests;
 
 #[cfg(test)]
 mod wheel_tests {
-    use super::{WHEEL_MOUSE_NOTCH_PX, WheelDevice, wheel_device};
+    use super::{WHEEL_MOUSE_NOTCH, WheelDevice, wheel_device};
     use ambre_canvas::{WheelDelta, WheelDeltaMode};
     use ambre_core::{CssPx, CssVector};
 
@@ -4498,7 +4498,7 @@ mod wheel_tests {
     #[test]
     fn large_vertical_notch_is_a_mouse() {
         assert_eq!(
-            wheel_device(GLIDE, CssVector::new(CssPx::new(0.0), WHEEL_MOUSE_NOTCH_PX)),
+            wheel_device(GLIDE, CssVector::new(CssPx::new(0.0), WHEEL_MOUSE_NOTCH)),
             Some(WheelDevice::Mouse)
         );
     }

@@ -21,11 +21,11 @@ use super::viewport::ViewportTransform;
 
 /// One in-flight slide transition. Built by the view on a `SlideChanged` event
 /// and advanced each frame. The camera glides from `cam_from` to `(cam_to_center,
-/// cam_to_zoom)`; the content tweens from `from` to `to`. `start_ms` is
+/// cam_to_zoom)`; the content tweens from `from` to `to`. `started_at` is
 /// stamped lazily on the first `advance` so the transition is measured from the
 /// first frame it is actually shown, not from event dispatch.
 pub struct Transition {
-    start_ms: Option<ambre_core::PageTime>,
+    started_at: Option<ambre_core::PageTime>,
     dur: std::time::Duration,
     cam_from: ViewportTransform,
     cam_to_center: Point,
@@ -57,7 +57,7 @@ impl Transition {
         dur: std::time::Duration,
     ) -> Self {
         Self {
-            start_ms: None,
+            started_at: None,
             dur,
             cam_from,
             cam_to_center,
@@ -78,17 +78,17 @@ impl Transition {
         from.covering_viewport(self.cam_to_center, self.cam_to_zoom)
     }
 
-    /// Advance to the page clock's `now_ms`, stamping the start on the first call. The
+    /// Advance to the page clock's `now`, stamping the start on the first call. The
     /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`. It is eased
     /// before both the camera glide and the content solve, so the whole
     /// transition shares one easing curve. `done` uses the raw (un-eased) phase
     /// so the end is reached exactly at `dur`.
-    pub fn advance(&mut self, now_ms: ambre_core::PageTime) -> TransitionFrame {
-        let start = *self.start_ms.get_or_insert(now_ms);
+    pub fn advance(&mut self, now: ambre_core::PageTime) -> TransitionFrame {
+        let start = *self.started_at.get_or_insert(now);
         let raw = if self.dur.is_zero() {
             1.0
         } else {
-            ((now_ms - start) / ambre_core::PageMillis::from_duration(self.dur)).clamp(0.0, 1.0)
+            ((now - start) / ambre_core::PageMillis::from_duration(self.dur)).clamp(0.0, 1.0)
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {

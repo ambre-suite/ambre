@@ -30,22 +30,22 @@ pub fn board_unit(register: f64) -> f64 {
 }
 
 /// Comfortable on-screen spacing band (logical pixels): the adaptive step keeps
-/// the line spacing at or above `MIN_SPACING_PX`, doubling the world step until
+/// the line spacing at or above `MIN_SPACING`, doubling the world step until
 /// it does.
-const MIN_SPACING_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(24.0);
-const MAX_SPACING_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
+const MIN_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(24.0);
+const MAX_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
 
 /// Choose the grid step (world units) for `zoom`: the smallest power-of-two
 /// multiple of `base` whose screen spacing (`step * zoom`) is at least
-/// `MIN_SPACING_PX`. That step is then halved back down while it stays above
-/// `MAX_SPACING_PX`, never below `base`, so the grid stays magnetic to the board
+/// `MIN_SPACING`. That step is then halved back down while it stays above
+/// `MAX_SPACING`, never below `base`, so the grid stays magnetic to the board
 /// unit.
 pub fn grid_step(zoom: ambre_core::ZoomFactor, base: f64) -> f64 {
     let zoom = zoom.get();
     // The band, in the f64 of the board's screen geometry.
     let (min, max) = (
-        f64::from(MIN_SPACING_PX.get()),
-        f64::from(MAX_SPACING_PX.get()),
+        f64::from(MIN_SPACING.get()),
+        f64::from(MAX_SPACING.get()),
     );
     debug_assert!(base > 0.0);
     let mut step = base;
@@ -135,7 +135,7 @@ mod tests {
     fn spacing_never_illegible_across_zoom_sweep() {
         // For any zoom, the chosen step keeps the on-screen spacing at or above
         // the minimum legible band.
-        let min = f64::from(MIN_SPACING_PX.get());
+        let min = f64::from(MIN_SPACING.get());
         let mut z = min / (BASE_GRID * 64.0); // very zoomed out
         while z <= MAX_ZOOM_SWEEP {
             let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);

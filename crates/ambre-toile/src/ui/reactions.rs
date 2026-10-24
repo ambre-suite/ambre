@@ -28,7 +28,7 @@ use kurbo::{RoundedRect, Shape, Vec2};
 use super::viewport::ViewportTransform;
 
 /// Chip label font size, in logical pixels.
-const CHIP_FONT_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(13.0);
+const CHIP_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(13.0);
 /// The text padding inside a chip: across, then down.
 const CHIP_PAD: Vec2 = Vec2::new(6.0, 3.0);
 /// Gap between adjacent chips and between the element edge and the chip row.
@@ -125,7 +125,7 @@ fn paint_chip<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         label,
-        CHIP_FONT_PX,
+        CHIP_FONT_SIZE,
         ambre_core::ViewPx::new(1000.0),
         Alignment::Start,
         ambre_canvas::Weight::Regular,

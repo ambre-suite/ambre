@@ -29,7 +29,7 @@ use crate::logic::animate::AnimatedElement;
 
 use super::grid;
 use super::tool::{
-    HANDLE_SIZE_PX, Preview, is_group, resize_handle_points, rotate_handle_point, selection_bounds,
+    HANDLE_SIZE, Preview, is_group, resize_handle_points, rotate_handle_point, selection_bounds,
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
@@ -458,7 +458,7 @@ fn paint_link_badges<S: DrawSurface>(
 /// Height of a frame's title band in screen pixels, and the font size inside
 /// it (`TOILE-253`). Screen space, so a title reads the same at every zoom,
 /// like the link badges and the comment pins.
-pub const FRAME_TITLE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
+pub const FRAME_TITLE_HEIGHT: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Gap between the title's baseline band and the frame's own top edge.
 const FRAME_TITLE_GAP: f64 = 4.0;
@@ -515,7 +515,7 @@ pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
     // ~0.6 em per character, the same estimate the SVG import seeds a text box
     // with. A title is one short line, so the error is a few pixels of hit
     // target rather than a layout.
-    let tall = f64::from(FRAME_TITLE_PX.get());
+    let tall = f64::from(FRAME_TITLE_HEIGHT.get());
     let w = (title.chars().count() as f64) * tall * 0.6;
     let bottom = screen.y0 - FRAME_TITLE_GAP;
     Some(Rect::new(screen.x0, bottom - tall, screen.x0 + w, bottom))
@@ -544,7 +544,7 @@ fn paint_frame_titles<S: DrawSurface>(
         let layout = text_cache.get_or_build_font(
             font_cx,
             label,
-            FRAME_TITLE_PX,
+            FRAME_TITLE_HEIGHT,
             ambre_core::ViewPx::new(f32::MAX),
             Alignment::Start,
             ambre_canvas::Weight::Regular,
@@ -574,7 +574,7 @@ fn paint_frame_titles<S: DrawSurface>(
 
 /// A small filled square handle centered on `p`.
 fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
-    let h = f64::from(HANDLE_SIZE_PX.get()) / 2.0;
+    let h = f64::from(HANDLE_SIZE.get()) / 2.0;
     surface.fill_rect(
         Rect::new(p.x - h, p.y - h, p.x + h, p.y + h),
         palette.selection,
@@ -664,7 +664,7 @@ mod tests {
             "the title covers the frame: {band:?} over {screen:?}"
         );
         assert_eq!(band.x0, screen.x0, "the band starts at the frame's corner");
-        assert_eq!(band.height(), f64::from(FRAME_TITLE_PX.get()));
+        assert_eq!(band.height(), f64::from(FRAME_TITLE_HEIGHT.get()));
         // A longer title reserves a wider band, which is what the click target
         // is measured against.
         let wider = frame_title_box(screen, "Agenda and next steps").expect("a band");
@@ -1746,7 +1746,7 @@ mod tests {
         let b = world_rect_to_screen(Rect::new(0.0, 0.0, 50.0, 50.0), &cam);
         let expect_se = super::rotate_about(b.center(), ambre_core::Radians::new(FRAC_PI_4))
             * Point::new(b.x1, b.y1);
-        let half = f64::from(HANDLE_SIZE_PX.get()) / 2.0;
+        let half = f64::from(HANDLE_SIZE.get()) / 2.0;
         let se_square = Rect::new(
             expect_se.x - half,
             expect_se.y - half,

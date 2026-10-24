@@ -53,15 +53,15 @@ pub enum Tool {
 }
 
 /// Screen-space pick radius (logical px) around a corner / rotate handle.
-const HANDLE_PICK_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(9.0);
+const HANDLE_PICK: ambre_core::ViewPx = ambre_core::ViewPx::new(9.0);
 /// Screen-space grab band (logical px) around a selection edge. The whole side
 /// resizes (with a directional cursor), even though only the corners draw a
 /// visual square (toile-tools).
-const EDGE_GRAB_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(6.0);
+const EDGE_GRAB: ambre_core::ViewPx = ambre_core::ViewPx::new(6.0);
 /// Rotate handle offset above the selection's top edge (logical px).
-pub const ROTATE_OFFSET_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(26.0);
+pub const ROTATE_OFFSET: ambre_core::ViewPx = ambre_core::ViewPx::new(26.0);
 /// Drawn size of a square resize handle (logical px), used by the overlay.
-pub const HANDLE_SIZE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(8.0);
+pub const HANDLE_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(8.0);
 
 /// The cursor an in-flight Select gesture calls for: a directional
 /// resize / grab on a transform `Handle`, or a closed-hand move. Mapped to a CSS
@@ -1135,13 +1135,13 @@ pub fn resize_handle_points(b: Rect) -> [(Handle, Point); 4] {
 
 /// The rotate-handle center (screen space): above the top-center edge.
 pub fn rotate_handle_point(b: Rect) -> Point {
-    Point::new(b.center().x, b.y0 - f64::from(ROTATE_OFFSET_PX.get()))
+    Point::new(b.center().x, b.y0 - f64::from(ROTATE_OFFSET.get()))
 }
 
 /// Which handle (if any) a screen point targets on a selection's screen bounds.
 /// The whole edge is grabbable (Miro). The rotate knob and the 4 corners test by
-/// proximity to their point (`HANDLE_PICK_PX`). The 4 sides test by a grab band
-/// (`EDGE_GRAB_PX`) along the full length of the side. So a side resizes (with a
+/// proximity to their point (`HANDLE_PICK`). The 4 sides test by a grab band
+/// (`EDGE_GRAB`) along the full length of the side. So a side resizes (with a
 /// directional cursor) even though only the corners draw a visual square
 /// (toile-selection).
 ///
@@ -1149,7 +1149,7 @@ pub fn rotate_handle_point(b: Rect) -> Point {
 /// diagonally. Used by both `pointer_down` (start a resize/rotate) and
 /// `hover_handle` (pick the cursor), so press and hover always agree.
 fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
-    if rotate_handle_point(screen_b).distance(screen) <= f64::from(HANDLE_PICK_PX.get()) {
+    if rotate_handle_point(screen_b).distance(screen) <= f64::from(HANDLE_PICK.get()) {
         return Some(Handle::Rotate);
     }
     // Corners first: a diagonal resize takes precedence over the two sides that
@@ -1160,13 +1160,13 @@ fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
         (Handle::Se, Point::new(screen_b.x1, screen_b.y1)),
         (Handle::Sw, Point::new(screen_b.x0, screen_b.y1)),
     ] {
-        if p.distance(screen) <= f64::from(HANDLE_PICK_PX.get()) {
+        if p.distance(screen) <= f64::from(HANDLE_PICK.get()) {
             return Some(h);
         }
     }
     // Sides: within the grab band of the edge line AND projecting inside the
     // side's own extent. The band must not stick out past the corners.
-    let grab = f64::from(EDGE_GRAB_PX.get());
+    let grab = f64::from(EDGE_GRAB.get());
     let in_x = screen.x >= screen_b.x0 - grab && screen.x <= screen_b.x1 + grab;
     let in_y = screen.y >= screen_b.y0 - grab && screen.y <= screen_b.y1 + grab;
     if in_x && (screen.y - screen_b.y0).abs() <= grab {
@@ -1783,7 +1783,7 @@ mod tests {
         let rot_screen = to_screen(&cam, Point::new(50.0, 0.0)); // top-center world
         let rot_screen = Point::new(
             rot_screen.x,
-            rot_screen.y - f64::from(ROTATE_OFFSET_PX.get()),
+            rot_screen.y - f64::from(ROTATE_OFFSET.get()),
         );
         // Press the rotate handle (world point under it is the top-center edge).
         tool.pointer_down(Point::new(50.0, 0.0), rot_screen, &sel, &disp, &cam, None);
@@ -1877,7 +1877,7 @@ mod tests {
         // Rotate -> the rotate handle.
         let mut m = ToolMachine::new();
         let rot = to_screen(&cam, Point::new(50.0, 0.0));
-        let rot = Point::new(rot.x, rot.y - f64::from(ROTATE_OFFSET_PX.get()));
+        let rot = Point::new(rot.x, rot.y - f64::from(ROTATE_OFFSET.get()));
         m.pointer_down(Point::new(50.0, 0.0), rot, &sel, &disp, &cam, None);
         assert_eq!(
             m.gesture_cursor(),

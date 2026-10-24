@@ -50,7 +50,7 @@ mod groups;
 mod import;
 mod names;
 mod presence;
-pub use presence::PRESENCE_TTL_MS;
+pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
 mod reactions;
 /// The schema shape belt (`SCHEMA-018`): the key set, the value types and the
@@ -161,7 +161,7 @@ pub struct ToileState {
     /// The latest wall clock a local `Presence` command carried, and the only
     /// clock this thread has (`toile-presence`). Monotonic: it never moves
     /// backwards, whatever the machine's own clock does.
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
     /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
     /// never in Loro and never synced -- only the slide sequence travels.
     present: PresentMode,
@@ -367,7 +367,7 @@ impl ToileState {
             my_user_id: None,
             my_name: None,
             presence: HashMap::new(),
-            now_ms: ambre_core::PageTime(0.0),
+            now: ambre_core::PageTime(0.0),
             present: PresentMode::Editing,
             playback: PlaybackState::default(),
             broadcasting: Broadcast::Private,
@@ -677,7 +677,7 @@ impl ToileState {
                 self.viewport_version = self.viewport_version.next();
                 ToileOutcome::display_only(vec![self.viewport_event()])
             }
-            ToileCommand::Presence { payload, now_ms } => self.broadcast_presence(&payload, now_ms),
+            ToileCommand::Presence { payload, now } => self.broadcast_presence(&payload, now),
         }
     }
 

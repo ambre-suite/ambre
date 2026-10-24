@@ -28,14 +28,14 @@ use crate::logic::command::{PresencePayload, PresenceUpdate, ToileEvent, ToileOu
 use super::ToileState;
 
 /// How long a peer stays live after their last sample. Chosen against the UI's
-/// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT_MS`). A peer survives
+/// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT`). A peer survives
 /// several missed samples, so a stalled frame or a slow relay does not blink a
 /// cursor out. A peer who closed the board still leaves within a few seconds.
-pub const PRESENCE_TTL_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
+pub const PRESENCE_TTL: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
 
 impl ToileState {
     /// Encode the local peer's presence sample into an ephemeral to
-    /// broadcast, and age the peers this client knows about against `now_ms`.
+    /// broadcast, and age the peers this client knows about against `now`.
     ///
     /// The local display name is stamped on the outbound payload here rather
     /// than by the UI. The name arrives with the session (`SessionReady`) and
@@ -47,9 +47,9 @@ impl ToileState {
     pub(super) fn broadcast_presence(
         &mut self,
         payload: &PresencePayload,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> ToileOutcome {
-        let expired = self.expire_peers(now_ms);
+        let expired = self.expire_peers(now);
         let display = if expired {
             vec![self.live_presence_event()]
         } else {
@@ -81,7 +81,7 @@ impl ToileState {
             }
         };
         let present_slide = presence.present_slide;
-        self.presence.insert(from_user_id, (presence, self.now_ms));
+        self.presence.insert(from_user_id, (presence, self.now));
         let mut events = vec![self.live_presence_event()];
         // "Follow presenter": if we follow this sender and the sample carries
         // a broadcast slide, adopt it -- clamp to the deck and glide via
@@ -117,14 +117,14 @@ impl ToileState {
     }
 
     /// Advance the local clock and drop every peer whose last sample is older
-    /// than [`PRESENCE_TTL_MS`]. `true` when the set changed, which is what
+    /// than [`PRESENCE_TTL`]. `true` when the set changed, which is what
     /// makes a departure observable without a departure signal (`TOILE-185`).
     ///
     /// The clock only moves forward. A machine whose wall clock steps backwards
     /// (an NTP correction, a suspended tab) must not age every peer out at once.
-    fn expire_peers(&mut self, now_ms: ambre_core::PageTime) -> bool {
-        self.now_ms = self.now_ms.max(now_ms);
-        let cutoff = self.now_ms.before(PRESENCE_TTL_MS);
+    fn expire_peers(&mut self, now: ambre_core::PageTime) -> bool {
+        self.now = self.now.max(now);
+        let cutoff = self.now.before(PRESENCE_TTL);
         let before = self.presence.len();
         self.presence.retain(|_, (_, seen)| *seen > cutoff);
         self.presence.len() != before

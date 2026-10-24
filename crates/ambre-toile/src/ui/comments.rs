@@ -30,7 +30,7 @@ use kurbo::{Circle, Shape};
 /// size whatever the zoom (`TOILE-UI-022`).
 const PIN_RADIUS: f64 = 11.0;
 /// Badge font size, in logical pixels.
-const PIN_FONT_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
+const PIN_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
 /// The pin's tail: the marker sits this far above and right of its anchor point,
 /// so it flags the anchor instead of covering it.
 const PIN_OFFSET: f64 = 10.0;
@@ -152,7 +152,7 @@ fn paint_pin<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         &label,
-        PIN_FONT_PX,
+        PIN_FONT_SIZE,
         ambre_core::ViewPx::new(1000.0),
         Alignment::Start,
         ambre_canvas::Weight::Regular,

@@ -44,7 +44,7 @@ use super::viewport::ViewportTransform;
 /// members fetch, a key unwrap and a snapshot hydration. So an embed opens the
 /// instant it enters the cull set, and only closes after staying out for this
 /// long. Re-entering cancels the pending close.
-pub const EMBED_CLOSE_DEBOUNCE_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
+pub const EMBED_CLOSE_DEBOUNCE: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
 
 /// One `doc_embed` in the current culled frame, projected to screen space and
 /// published for `FrameHost` (`toile-embeds` "Render").
@@ -449,7 +449,7 @@ pub struct EmbedSessions {
 }
 
 impl EmbedSessions {
-    /// Reconcile against the culled frame at `now_ms`, handing each session
+    /// Reconcile against the culled frame at `now`, handing each session
     /// command to `send` and recording it only once `send` reports it left
     /// (`TOILE-UI-338`, `TOILE-UI-339`).
     ///
@@ -469,7 +469,7 @@ impl EmbedSessions {
     /// `send` returns whether the command left. A caller that cannot send (a
     /// full queue, a disconnected one) returns `false` and the state stays as
     /// it was.
-    pub fn sync<F>(&mut self, display: &DisplayViewport, now_ms: ambre_core::PageTime, mut send: F)
+    pub fn sync<F>(&mut self, display: &DisplayViewport, now: ambre_core::PageTime, mut send: F)
     where
         F: FnMut(LogicCommand) -> bool,
     {
@@ -501,7 +501,7 @@ impl EmbedSessions {
             };
             match countdown {
                 // Deadline reached: close for real, if the queue takes it.
-                Some(deadline) if now_ms >= deadline => {
+                Some(deadline) if now >= deadline => {
                     if send(LogicCommand::CloseDocument { document_id }) {
                         self.open.remove(&document_id);
                     }
@@ -511,7 +511,7 @@ impl EmbedSessions {
                 // Just left the cull set: start the countdown.
                 None => {
                     self.open
-                        .insert(document_id, Some(now_ms.after(EMBED_CLOSE_DEBOUNCE_MS)));
+                        .insert(document_id, Some(now.after(EMBED_CLOSE_DEBOUNCE)));
                 }
             }
         }
@@ -927,10 +927,10 @@ mod tests {
     fn sync(
         s: &mut EmbedSessions,
         dv: &DisplayViewport,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
-        s.sync(dv, now_ms, |cmd| {
+        s.sync(dv, now, |cmd| {
             sent.push(cmd);
             true
         });
@@ -942,10 +942,10 @@ mod tests {
     fn sync_refused(
         s: &mut EmbedSessions,
         dv: &DisplayViewport,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> Vec<LogicCommand> {
         let mut offered = Vec::new();
-        s.sync(dv, now_ms, |cmd| {
+        s.sync(dv, now, |cmd| {
             offered.push(cmd);
             false
         });
@@ -1016,7 +1016,7 @@ mod tests {
         // Leaves the cull set: the countdown starts, and nothing leaves yet.
         assert!(sync(&mut s, &empty, ambre_bus::PageTime(1_000.0)).is_empty());
         // One millisecond short of the deadline: still nothing.
-        let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get() - 1.0;
+        let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE.get() - 1.0;
         assert!(sync(&mut s, &empty, ambre_bus::PageTime(almost)).is_empty());
         assert!(s.is_open(&child), "closed before the debounce elapsed");
         // Deadline reached.
@@ -1024,7 +1024,7 @@ mod tests {
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::PageTime(1_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get())
+                ambre_bus::PageTime(1_000.0 + EMBED_CLOSE_DEBOUNCE.get())
             )),
             vec![child]
         );
@@ -1079,7 +1079,7 @@ mod tests {
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::PageTime(6_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get())
+                ambre_bus::PageTime(6_000.0 + EMBED_CLOSE_DEBOUNCE.get())
             )),
             vec![child]
         );
@@ -1143,7 +1143,7 @@ mod tests {
         sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
         sync(&mut s, &empty, ambre_bus::PageTime(0.0)); // countdown armed
-        let past = EMBED_CLOSE_DEBOUNCE_MS.get() + 1.0;
+        let past = EMBED_CLOSE_DEBOUNCE.get() + 1.0;
         assert_eq!(
             closed(&sync_refused(&mut s, &empty, ambre_bus::PageTime(past))),
             vec![child]

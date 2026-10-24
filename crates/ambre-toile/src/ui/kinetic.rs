@@ -61,9 +61,9 @@ pub fn pan_by_wheel(
     kinetic: &mut Kinetic,
     delta: CssVector,
     mode: WheelDeltaMode,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) {
-    let step = kinetic.wheel(delta, mode, now_ms);
+    let step = kinetic.wheel(delta, mode, now);
     move_view(cam, step);
 }
 
@@ -72,9 +72,9 @@ pub fn pan_by_wheel(
 pub fn coast(
     cam: &mut ViewportTransform,
     kinetic: &mut Kinetic,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) -> bool {
-    let Some(step) = kinetic.tick(now_ms) else {
+    let Some(step) = kinetic.tick(now) else {
         return false;
     };
     move_view(cam, step);

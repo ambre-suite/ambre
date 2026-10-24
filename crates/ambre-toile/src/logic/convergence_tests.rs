@@ -24,7 +24,7 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
     PathType, ShapeKind, StrokePoint, ThreadId,
 };
-use crate::logic::state::{PRESENCE_TTL_MS, ToileState};
+use crate::logic::state::{PRESENCE_TTL, ToileState};
 
 // -----------------------------------------------------------------------------
 // Lifecycle unit tests
@@ -1384,13 +1384,13 @@ fn sample_at(x: f64, y: f64) -> PresencePayload {
     }
 }
 
-/// Broadcast `payload` from `st` at `now_ms` and return the ephemeral.
+/// Broadcast `payload` from `st` at `now` and return the ephemeral.
 fn presence_frame(
     st: &mut ToileState,
     payload: PresencePayload,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) -> ambre_core::EphemeralBytes {
-    st.handle_command(ToileCommand::Presence { payload, now_ms })
+    st.handle_command(ToileCommand::Presence { payload, now })
         .ephemeral
         .expect("presence broadcasts an ephemeral")
 }
@@ -1433,7 +1433,7 @@ fn a_stroke_in_flight_reaches_the_other_users() {
             laser: None,
             present_slide: None,
         },
-        now_ms: ambre_core::PageTime(1_000.0),
+        now: ambre_core::PageTime(1_000.0),
     });
     assert!(out.update.is_none(), "a stroke in flight writes nothing");
     let frame = out.ephemeral.expect("the sample broadcasts");
@@ -1468,7 +1468,7 @@ fn presence_command_broadcasts_ephemeral_only() {
     };
     let out = st.handle_command(ToileCommand::Presence {
         payload,
-        now_ms: ambre_core::PageTime(1_000.0),
+        now: ambre_core::PageTime(1_000.0),
     });
     assert!(out.display.is_empty(), "presence emits no display event");
     assert!(out.update.is_none(), "presence is never a CRDT delta");
@@ -1521,7 +1521,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // The receiver's clock starts at the first local sample.
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(1_000.0),
+        now: ambre_core::PageTime(1_000.0),
     });
     let alice = UserId::new();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
@@ -1529,7 +1529,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS.get() - 1.0),
+        now: ambre_core::PageTime(1_000.0 + PRESENCE_TTL.get() - 1.0),
     });
     assert!(out.display.is_empty(), "nothing left the set yet");
     assert!(rx.peer_presence(&alice).is_some());
@@ -1537,7 +1537,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Past it: the set changes, and the event that announces it is empty.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS.get() + 1.0),
+        now: ambre_core::PageTime(1_000.0 + PRESENCE_TTL.get() + 1.0),
     });
     assert!(
         live_set(out.display).is_empty(),
@@ -1582,14 +1582,14 @@ fn a_clock_that_steps_backwards_ages_nobody() {
     let mut rx = ToileState::new();
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(100_000.0),
+        now: ambre_core::PageTime(100_000.0),
     });
     let alice = UserId::new();
     rx.apply_ephemeral(alice, &frame);
 
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(0.0),
+        now: ambre_core::PageTime(0.0),
     });
     assert!(
         rx.peer_presence(&alice).is_some(),

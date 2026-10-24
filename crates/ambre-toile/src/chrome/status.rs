@@ -56,11 +56,11 @@ pub fn StatusBar(
                     let p = perf.get();
                     view! {
                         <div class="statusbar-perf-panel">
-                            <div>"frame " {format!("{:.1}", p.frame_ms.get())} " ms"</div>
-                            <div>"drain " {format!("{:.1}", p.drain_ms.get())}
-                                "  draw " {format!("{:.1}", p.draw_ms.get())}
-                                "  gpu " {format!("{:.1}", p.gpu_ms.get())}</div>
-                            <div>"inlat " {format!("{:.1}", p.input_lat_ms.get())} " ms"
+                            <div>"frame " {format!("{:.1}", p.frame.get())} " ms"</div>
+                            <div>"drain " {format!("{:.1}", p.drain.get())}
+                                "  draw " {format!("{:.1}", p.draw.get())}
+                                "  gpu " {format!("{:.1}", p.gpu.get())}</div>
+                            <div>"inlat " {format!("{:.1}", p.input_latency.get())} " ms"
                                 "  miss " {p.glyph_misses.to_string()}</div>
                         </div>
                     }

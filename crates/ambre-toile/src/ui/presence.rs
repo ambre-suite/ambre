@@ -45,21 +45,21 @@ use super::viewport::ViewportTransform;
 const LASER_TRAIL_MAX: usize = 24;
 
 /// Screen size of a remote cursor arrow, in logical pixels.
-const CURSOR_SIZE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
+const CURSOR_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Name-label font size, in logical pixels.
-const LABEL_FONT_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(12.0);
+const LABEL_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(12.0);
 
 /// How long a laser sample stays visible. Long enough to read a
 /// gesture across the board, short enough that a highlighter held still leaves
 /// nothing behind (`TOILE-UI-077`).
-const LASER_FADE_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(1_200.0);
+const LASER_FADE: ambre_core::PageMillis = ambre_core::PageMillis::new(1_200.0);
 
 /// How often the local peer sends a sample while nothing changes. The heartbeat keeps this client in the others' live set
 /// (`PRESENCE-009`), and it advances the Logic thread's only clock. It MUST
-/// stay well under `PRESENCE_TTL_MS`, since the network may drop several
+/// stay well under `PRESENCE_TTL`, since the network may drop several
 /// heartbeats before a peer ages out.
-pub const PRESENCE_HEARTBEAT_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(2_000.0);
+pub const PRESENCE_HEARTBEAT: ambre_core::PageMillis = ambre_core::PageMillis::new(2_000.0);
 
 /// The broadcast schedule for this peer's own presence (`TOILE-UI-073`). Pure:
 /// it decides whether the sample built this frame is worth sending, and holds
@@ -72,7 +72,7 @@ pub const PRESENCE_HEARTBEAT_MS: ambre_core::PageMillis = ambre_core::PageMillis
 #[derive(Default)]
 pub struct PresenceSender {
     last: Option<PresencePayload>,
-    last_sent_ms: ambre_core::PageTime,
+    last_sent: ambre_core::PageTime,
 }
 
 impl PresenceSender {
@@ -81,15 +81,15 @@ impl PresenceSender {
     pub fn due(
         &mut self,
         sample: PresencePayload,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> Option<PresencePayload> {
         let changed = self.last.as_ref() != Some(&sample);
-        let heartbeat = now_ms - self.last_sent_ms >= PRESENCE_HEARTBEAT_MS;
+        let heartbeat = now - self.last_sent >= PRESENCE_HEARTBEAT;
         if !changed && !heartbeat {
             return None;
         }
         self.last = Some(sample.clone());
-        self.last_sent_ms = now_ms;
+        self.last_sent = now;
         Some(sample)
     }
 
@@ -98,7 +98,7 @@ impl PresenceSender {
     /// is about to paint.
     pub fn reset(&mut self) {
         self.last = None;
-        self.last_sent_ms = ambre_bus::PageTime(0.0);
+        self.last_sent = ambre_bus::PageTime(0.0);
     }
 }
 
@@ -126,10 +126,10 @@ impl PeerCursors {
     /// signal (`TOILE-UI-075`, `TOILE-185`).
     ///
     /// A laser point extends the peer's trail, a ring buffer capped at
-    /// [`LASER_TRAIL_MAX`] whose samples each carry `now_ms`. `laser = None`
+    /// [`LASER_TRAIL_MAX`] whose samples each carry `now`. `laser = None`
     /// clears it, so the trail vanishes as soon as the peer lifts the
     /// highlighter.
-    pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now_ms: ambre_core::PageTime) {
+    pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now: ambre_core::PageTime) {
         self.peers
             .retain(|id, _| peers.iter().any(|p| &p.user_id == id));
         for PresenceUpdate { user_id, presence } in peers {
@@ -139,7 +139,7 @@ impl PeerCursors {
             });
             match presence.laser {
                 Some(p) => {
-                    state.laser_trail.push_back((p, now_ms));
+                    state.laser_trail.push_back((p, now));
                     while state.laser_trail.len() > LASER_TRAIL_MAX {
                         state.laser_trail.pop_front();
                     }
@@ -162,7 +162,7 @@ impl PeerCursors {
     }
 
     /// Paint every known peer's presence into the top overlay pass, in screen
-    /// space above all content. `now_ms` is the frame clock, which ages the
+    /// space above all content. `now` is the frame clock, which ages the
     /// laser trails (`TOILE-UI-077`). Pure over `DrawSurface`: host-testable.
     #[allow(clippy::too_many_arguments)]
     pub fn paint<S: DrawSurface>(
@@ -172,7 +172,7 @@ impl PeerCursors {
         cam: &ViewportTransform,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) {
         let w2s = cam.world_to_screen();
         // Deterministic peer order so the overlay draw log is stable for tests
@@ -182,7 +182,7 @@ impl PeerCursors {
         for (user_id, state) in peers {
             let color = peer_color(user_id);
             paint_peer(
-                surface, user_id, state, &color, vp, &w2s, font_cx, text_cache, now_ms,
+                surface, user_id, state, &color, vp, &w2s, font_cx, text_cache, now,
             );
         }
     }
@@ -199,7 +199,7 @@ fn paint_peer<S: DrawSurface>(
     w2s: &Affine,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) {
     let p = &state.presence;
 
@@ -221,7 +221,7 @@ fn paint_peer<S: DrawSurface>(
 
     // 3. Laser trail: a fading highlighter trail, oldest -> newest, each segment
     // a touch more opaque so the trail melts behind the moving point.
-    paint_laser(surface, &state.laser_trail, color, w2s, now_ms);
+    paint_laser(surface, &state.laser_trail, color, w2s, now);
 
     // 4. Cursor + name chip at the peer's pointer, if the pointer is on-board.
     if let Some(cursor) = p.cursor {
@@ -233,7 +233,7 @@ fn paint_peer<S: DrawSurface>(
 
 /// Stroke the laser ring buffer as an age-faded polyline. A segment's alpha
 /// falls with how long ago it arrived, and this skips one older than
-/// [`LASER_FADE_MS`]. Fading by age rather than by rank is what makes a
+/// [`LASER_FADE`]. Fading by age rather than by rank is what makes a
 /// highlighter held still fade out instead of freezing its tail
 /// (`TOILE-UI-077`).
 fn paint_laser<S: DrawSurface>(
@@ -241,7 +241,7 @@ fn paint_laser<S: DrawSurface>(
     trail: &VecDeque<(Point, ambre_core::PageTime)>,
     color: &Color,
     w2s: &Affine,
-    now_ms: ambre_core::PageTime,
+    now: ambre_core::PageTime,
 ) {
     if trail.len() < 2 {
         return;
@@ -249,7 +249,7 @@ fn paint_laser<S: DrawSurface>(
     for i in 1..trail.len() {
         let (pa, _) = trail[i - 1];
         let (pb, tb) = trail[i];
-        let alpha = laser_alpha(tb, now_ms);
+        let alpha = laser_alpha(tb, now);
         if alpha <= 0.0 {
             continue;
         }
@@ -263,15 +263,15 @@ fn paint_laser<S: DrawSurface>(
     }
 }
 
-/// The alpha of a laser segment that arrived at `sample_ms`, read at `now_ms`:
-/// opaque when fresh, zero once [`LASER_FADE_MS`] has passed. A sample from the
+/// The alpha of a laser segment that arrived at `sampled_at`, read at `now`:
+/// opaque when fresh, zero once [`LASER_FADE`] has passed. A sample from the
 /// future (a clock that stepped back) reads as fresh rather than as invisible.
-pub fn laser_alpha(sample_ms: ambre_core::PageTime, now_ms: ambre_core::PageTime) -> f32 {
-    let age = (now_ms - sample_ms).max(ambre_core::PageMillis::ZERO);
-    if age >= LASER_FADE_MS {
+pub fn laser_alpha(sampled_at: ambre_core::PageTime, now: ambre_core::PageTime) -> f32 {
+    let age = (now - sampled_at).max(ambre_core::PageMillis::ZERO);
+    if age >= LASER_FADE {
         return 0.0;
     }
-    (1.0 - age / LASER_FADE_MS) as f32
+    (1.0 - age / LASER_FADE) as f32
 }
 
 /// What a peer's chip reads: the display name their sample carried, or a short
@@ -294,7 +294,7 @@ fn paint_cursor<S: DrawSurface>(
 ) {
     // Arrowhead: a filled triangle whose tip sits on the pointer, opening down-
     // right (a conventional cursor silhouette), drawn in screen space.
-    let s = f64::from(CURSOR_SIZE_PX.get());
+    let s = f64::from(CURSOR_SIZE.get());
     let mut arrow = BezPath::new();
     arrow.move_to((at.x, at.y));
     arrow.line_to((at.x, at.y + s));
@@ -308,7 +308,7 @@ fn paint_cursor<S: DrawSurface>(
     let layout = text_cache.get_or_build(
         font_cx,
         label,
-        LABEL_FONT_PX,
+        LABEL_FONT_SIZE,
         ambre_core::ViewPx::new(200.0),
         Alignment::Start,
         ambre_canvas::Weight::Bold,
@@ -422,12 +422,12 @@ mod tests {
     fn paint_at(
         cursors: &PeerCursors,
         vp: &DisplayViewport,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     ) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
         let mut tc = TextCache::new();
-        cursors.paint(&mut surface, vp, &cam(), &mut font_cx, &mut tc, now_ms);
+        cursors.paint(&mut surface, vp, &cam(), &mut font_cx, &mut tc, now);
         surface
     }
 
@@ -668,7 +668,7 @@ mod tests {
             paint_at(
                 &cursors,
                 &vp_with(vec![]),
-                ambre_bus::PageTime(LASER_FADE_MS.get() + 1.0)
+                ambre_bus::PageTime(LASER_FADE.get() + 1.0)
             )
             .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
             0,
@@ -681,7 +681,7 @@ mod tests {
         assert_eq!(
             laser_alpha(
                 ambre_bus::PageTime(0.0),
-                ambre_bus::PageTime(LASER_FADE_MS.get())
+                ambre_bus::PageTime(LASER_FADE.get())
             ),
             0.0
         );
@@ -728,7 +728,7 @@ mod tests {
             sender
                 .due(
                     at(1.0),
-                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS.get())
+                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get())
                 )
                 .is_some(),
             "an idle peer still says it is there"
@@ -740,7 +740,7 @@ mod tests {
             sender
                 .due(
                     at(1.0),
-                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS.get())
+                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get())
                 )
                 .is_some()
         );

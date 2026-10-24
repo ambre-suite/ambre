@@ -20,9 +20,9 @@ use super::viewport::{BoardLength, MIN_ZOOM, ViewportTransform};
 
 /// The screen distance within which a pointer reaches a thin stroke's
 /// outline. Keeps hair-thin lines and open paths clickable (`TOILE-UI-225`).
-pub(crate) const PICK_PX: ViewPx = ViewPx::new(4.0);
+pub(crate) const PICK_REACH: ViewPx = ViewPx::new(4.0);
 
-/// [`PICK_PX`] in world units under `cam`: the reach of a pointer at this
+/// [`PICK_REACH`] in world units under `cam`: the reach of a pointer at this
 /// zoom. Every pointer hit test takes it, so the reach holds on screen. A zoom
 /// below the camera's floor reads as the floor.
 pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
@@ -34,7 +34,7 @@ pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
         },
         ..*cam
     };
-    floored.to_board(PICK_PX)
+    floored.to_board(PICK_REACH)
 }
 
 /// Exact hit-test of one element against a world-space point. `pick` is the
