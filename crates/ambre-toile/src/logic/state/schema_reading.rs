@@ -236,8 +236,11 @@ fn style_reading(style: &ElementStyle) -> String {
     }) = shadow
     {
         parts.push(format!(
-            "shadow {} offset ({dx}, {dy}) px blur {blur} px",
-            colour(*color)
+            "shadow {} offset ({}, {}) px blur {} px",
+            colour(*color),
+            dx.get(),
+            dy.get(),
+            blur.get()
         ));
     }
     parts.push(format!("ink {}", maybe_colour(*text_color)));
@@ -265,8 +268,9 @@ fn layout_reading(layout: &AutoLayout) -> String {
         align,
         sizing,
     } = layout;
+    let sides = [padding.top, padding.right, padding.bottom, padding.left];
     format!(
-        "flows {direction:?}, gap {gap} px, padding {padding:?} px, aligned {align:?}, \
+        "flows {direction:?}, gap {gap} px, padding {sides:?} px, aligned {align:?}, \
          sized {sizing:?}"
     )
 }
@@ -445,7 +449,7 @@ fn comment_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
     match ThreadKey::parse(stored.key(1)?)? {
         ThreadKey::Anchor => Some(match &thread.anchor {
             CommentAnchor::Element(element) => format!("pinned to element {}", element.as_str()),
-            CommentAnchor::Point { x, y } => format!("pinned at ({x}, {y}) px"),
+            CommentAnchor::Point(at) => format!("pinned at ({}, {}) px", at.x, at.y),
         }),
         ThreadKey::Resolved => Some(if thread.resolved { "resolved" } else { "open" }.to_owned()),
         ThreadKey::Messages => {

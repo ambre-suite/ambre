@@ -114,7 +114,7 @@ reply mints a rival container (`TOILE-029`).
 ```rust
 pub enum CommentAnchor {
     Element(ElementId),        // the pin tracks the element as it moves
-    Point { x: f64, y: f64 },  // a free world point, for a remark on empty board
+    Point(kurbo::Point),       // a free world point, for a remark on empty board
 }
 ```
 

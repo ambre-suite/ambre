@@ -2540,8 +2540,8 @@ impl ToileView {
     )]
     fn focus_thread(&mut self, anchor: &CommentAnchor) {
         match anchor {
-            CommentAnchor::Point { x, y } => {
-                self.cam.center = Point::new(*x, *y);
+            CommentAnchor::Point(at) => {
+                self.cam.center = *at;
                 self.needs_full = true;
                 self.queue_viewport();
             }

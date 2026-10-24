@@ -16,7 +16,7 @@
 //!
 //! ## Semantics (pinned; the spec leaves the fine details to the solver)
 //!
-//! - **Content box** = `frame` inset by `padding` `[top, right, bottom, left]`.
+//! - **Content box** = `frame` inset by `padding`, one length a side.
 //!   Children lay out inside it; the origin is the content-box top-left.
 //! - **Main axis** = X for [`Direction::Horizontal`] / [`Direction::Wrap`],
 //!   Y for [`Direction::Vertical`]. The **cross axis** is the other one.
@@ -47,7 +47,7 @@ use kurbo::{Rect, Size};
 // `Sizing`) live in `ambre-bus` so `ToileCommand::SetAutoLayout` can carry them
 // across `AppCommand::Toile` without a dependency cycle (mirrors `model.rs`).
 // This module owns the pure `solve_layout` solver over them.
-pub use ambre_bus::app::toile::{Align, AutoLayout, Direction, Sizing};
+pub use ambre_bus::app::toile::{Align, AutoLayout, Direction, Padding, Sizing};
 
 /// Solve the auto-layout of `frame` for the given `children` sizes (in
 /// `children` order), returning one world-space [`Rect`] per child.
@@ -59,9 +59,14 @@ pub fn solve_layout(frame: Rect, layout: &AutoLayout, children: &[Size]) -> Vec<
         return Vec::new();
     }
 
-    // Content box: frame inset by padding [top, right, bottom, left].
-    let [pt, pr, pb, pl] = layout.padding;
-    let content = Rect::new(frame.x0 + pl, frame.y0 + pt, frame.x1 - pr, frame.y1 - pb);
+    // Content box: the frame inset by the padding.
+    let pad = layout.padding;
+    let content = Rect::new(
+        frame.x0 + pad.left,
+        frame.y0 + pad.top,
+        frame.x1 - pad.right,
+        frame.y1 - pad.bottom,
+    );
 
     match layout.direction {
         Direction::Horizontal => solve_axis(content, layout, children, Axis::X),
@@ -230,7 +235,7 @@ mod tests {
         AutoLayout {
             direction,
             gap,
-            padding: [0.0; 4],
+            padding: Padding::ZERO,
             align,
             sizing,
         }
@@ -268,7 +273,12 @@ mod tests {
         let l = AutoLayout {
             direction: Direction::Horizontal,
             gap: 0.0,
-            padding: [5.0, 10.0, 15.0, 20.0], // top, right, bottom, left
+            padding: Padding {
+                top: 5.0,
+                right: 10.0,
+                bottom: 15.0,
+                left: 20.0,
+            },
             align: Align::Start,
             sizing: Sizing::Fixed,
         };
@@ -432,7 +442,12 @@ mod tests {
     fn the_far_padding_bounds_the_room() {
         let frame = rect(0.0, 0.0, 200.0, 100.0);
         let mut l = layout(Direction::Horizontal, 0.0, Align::End, Sizing::Fixed);
-        l.padding = [10.0, 20.0, 10.0, 30.0];
+        l.padding = Padding {
+            top: 10.0,
+            right: 20.0,
+            bottom: 10.0,
+            left: 30.0,
+        };
         let out = solve_layout(frame, &l, &[size(40.0, 10.0), size(40.0, 10.0)]);
         assert_eq!(out[1].x1, 180.0, "the run stops at the inner edge");
         assert_eq!(out[0].x0, 100.0);

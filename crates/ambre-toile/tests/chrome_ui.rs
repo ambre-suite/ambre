@@ -1068,7 +1068,7 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
 fn summary(id: &str, preview: &str) -> CommentSummary {
     CommentSummary {
         id: ElementId(id.to_owned()),
-        anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+        anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: false,
         messages: 1,
         preview: preview.to_owned(),
@@ -1103,7 +1103,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
     list.set(vec![summary("t3", "third")]);
     open.set(Some(CommentThread {
         id: ElementId("t3".to_owned()),
-        anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+        anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: false,
         messages: vec![CommentMessage {
             author: UserId::new(),
@@ -1120,7 +1120,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
         fired.get_untracked(),
         Some(CommentIntent::Focus {
             thread: ElementId("t3".to_owned()),
-            anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+            anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         })
     );
     leptos::task::tick().await;
@@ -1154,7 +1154,7 @@ async fn a_dropped_comment_opens_its_composer_where_it_clicked() {
     );
 
     draft.set(Some(CommentDraft {
-        anchor: CommentAnchor::Point { x: 0.0, y: 0.0 },
+        anchor: CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         at: ambre_draw::Point::new(120.0, 80.0),
     }));
     leptos::task::tick().await;

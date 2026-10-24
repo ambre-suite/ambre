@@ -4371,7 +4371,7 @@ fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
     AutoLayout {
         direction,
         gap,
-        padding: [4.0, 4.0, 4.0, 4.0],
+        padding: ambre_bus::app::toile::Padding::uniform(4.0),
         align: Align::Start,
         sizing: Sizing::Hug,
     }
@@ -5117,7 +5117,7 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
     );
     let on_board = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 40.0, y: -12.5 },
+        CommentAnchor::Point(kurbo::Point::new(40.0, -12.5)),
         "on the board",
         ambre_bus::Timestamp(0),
     );
@@ -5128,7 +5128,7 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
     );
     assert_eq!(
         st.comment_thread(&on_board).map(|t| t.anchor),
-        Some(CommentAnchor::Point { x: 40.0, y: -12.5 }),
+        Some(CommentAnchor::Point(kurbo::Point::new(40.0, -12.5))),
     );
 }
 
@@ -5139,7 +5139,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     let me = UserId::new();
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CreateComment {
-        anchor: CommentAnchor::Point { x: 0.0, y: 0.0 },
+        anchor: CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         body: "too early".to_owned(),
         ts: ambre_bus::Timestamp(0),
     });
@@ -5152,7 +5152,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     st.set_user_id(me);
     let t = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "hello",
         ambre_bus::Timestamp(7),
     );
@@ -5209,7 +5209,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
     a.set_user_id(UserId::new());
     let t = comment_on(
         &mut a,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
         ambre_bus::Timestamp(50),
     );
@@ -5253,7 +5253,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     a.set_user_id(me);
     let t = comment_on(
         &mut a,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "typo",
         ambre_bus::Timestamp(0),
     );
@@ -5300,7 +5300,7 @@ fn editing_another_authors_message_is_refused() {
     a.set_user_id(UserId::new());
     let t = comment_on(
         &mut a,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "mine",
         ambre_bus::Timestamp(0),
     );
@@ -5329,7 +5329,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     a.set_user_id(UserId::new());
     let t = comment_on(
         &mut a,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "settled?",
         ambre_bus::Timestamp(0),
     );
@@ -5508,7 +5508,7 @@ fn a_reply_lands_at_the_end_of_the_thread() {
     st.set_user_id(UserId::new());
     let t = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "one",
         ambre_bus::Timestamp(0),
     );
@@ -5533,7 +5533,7 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
     st.set_user_id(UserId::new());
     let t = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
         ambre_bus::Timestamp(0),
     );
@@ -5571,7 +5571,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     // TOILE-FEAT-073: writing in a thread touches the message list alone.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
-    let anchor = CommentAnchor::Point { x: 12.0, y: -4.0 };
+    let anchor = CommentAnchor::Point(kurbo::Point::new(12.0, -4.0));
     let t = comment_on(&mut st, anchor.clone(), "open it", ambre_bus::Timestamp(0));
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5596,7 +5596,7 @@ fn a_resolve_keeps_every_message_body() {
     st.set_user_id(UserId::new());
     let t = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "why",
         ambre_bus::Timestamp(0),
     );
@@ -5626,7 +5626,7 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
 
     let t = comment_on(
         &mut a,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "seed",
         ambre_bus::Timestamp(0),
     );
@@ -5671,7 +5671,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
     });
     let on_board = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 5.0, y: 6.0 },
+        CommentAnchor::Point(kurbo::Point::new(5.0, 6.0)),
         "here",
         ambre_bus::Timestamp(0),
     );
@@ -5733,7 +5733,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
     st.set_user_id(UserId::new());
     let t = comment_on(
         &mut st,
-        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "the body",
         ambre_bus::Timestamp(0),
     );

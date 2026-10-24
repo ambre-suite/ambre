@@ -911,9 +911,9 @@ mod inner_tests {
         // Seed two members with differing hidden fields, whole (the import path).
         let shadow = ambre_bus::app::toile::Shadow {
             color: Rgba::from_bits(0x0000_0000),
-            dx: 1.0,
-            dy: 1.0,
-            blur: 2.0,
+            dx: ambre_bus::app::toile::StyleLength::new(1.0),
+            dy: ambre_bus::app::toile::StyleLength::new(1.0),
+            blur: ambre_bus::app::toile::StyleLength::new(2.0),
         };
         let style_a = ElementStyle {
             fill: Some(Rgba::from_bits(0xff00_00ff)),

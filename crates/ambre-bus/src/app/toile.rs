@@ -255,13 +255,14 @@ impl FontSpec {
     }
 }
 
-/// Optional drop shadow.
+/// Optional drop shadow. Its offset and its blur are board lengths, so the
+/// camera scales them with the shape. Each encodes as the bare `f32` it was.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Shadow {
     pub color: Rgba,
-    pub dx: f32,
-    pub dy: f32,
-    pub blur: f32,
+    pub dx: StyleLength,
+    pub dy: StyleLength,
+    pub blur: StyleLength,
 }
 
 /// A length on the board that an element's style stores: the width of its
@@ -1148,7 +1149,7 @@ pub type ThreadId = ElementId;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CommentAnchor {
     Element(ElementId),
-    Point { x: f64, y: f64 },
+    Point(kurbo::Point),
 }
 
 /// One message of a thread, read from the CRDT (`toile-comments`). The
@@ -1297,12 +1298,41 @@ pub struct AutoLayout {
     pub direction: Direction,
     /// Space between consecutive children on the main axis.
     pub gap: f64,
-    /// `[top, right, bottom, left]` inset of the content box inside the frame.
-    pub padding: [f64; 4],
+    /// The inset of the content box inside the frame.
+    pub padding: Padding,
     /// Main-axis distribution of children in the free space.
     pub align: Align,
     /// Main-axis child sizing.
     pub sizing: Sizing,
+}
+
+/// The inset of a frame's content box, one length a side, in board units.
+///
+/// The sides are named, so none can be read as another. Postcard encodes them
+/// in the order `top`, `right`, `bottom`, `left`, the bytes of the
+/// `[f64; 4]` the register held before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Padding {
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub left: f64,
+}
+
+impl Padding {
+    /// No inset.
+    pub const ZERO: Self = Self::uniform(0.0);
+
+    /// The same inset on all four sides.
+    #[must_use]
+    pub const fn uniform(side: f64) -> Self {
+        Self {
+            top: side,
+            right: side,
+            bottom: side,
+            left: side,
+        }
+    }
 }
 
 /// Per-viewer presentation playback (`toile-presentation`). Purely local,
@@ -2530,9 +2560,9 @@ mod tests {
             corner: StyleLength::new(8.0),
             shadow: Some(Shadow {
                 color: Rgba::from_bits(0x0000_00ff),
-                dx: 1.0,
-                dy: 2.0,
-                blur: 3.0,
+                dx: StyleLength::new(1.0),
+                dy: StyleLength::new(2.0),
+                blur: StyleLength::new(3.0),
             }),
             font: FontSpec {
                 family: Some(FontFamily::Serif),

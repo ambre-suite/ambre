@@ -258,16 +258,21 @@ fn postcard_layouts() -> Vec<(String, String)> {
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),
-            dx: 11.5,
-            dy: 12.5,
-            blur: 13.5,
+            dx: ambre_bus::app::toile::StyleLength::new(11.5),
+            dy: ambre_bus::app::toile::StyleLength::new(12.5),
+            blur: ambre_bus::app::toile::StyleLength::new(13.5),
         }),
         text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
     let layout = AutoLayout {
         direction: Direction::Vertical,
         gap: 1.5,
-        padding: [2.5, 3.5, 4.5, 5.5],
+        padding: ambre_bus::app::toile::Padding {
+            top: 2.5,
+            right: 3.5,
+            bottom: 4.5,
+            left: 5.5,
+        },
         align: Align::End,
         sizing: Sizing::Fill,
     };
@@ -305,7 +310,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
         ),
         (
             format!("comments/{ANY}/anchor#point"),
-            hex(&encode(&CommentAnchor::Point { x: 1.5, y: 2.5 })),
+            hex(&encode(&CommentAnchor::Point(kurbo::Point::new(1.5, 2.5)))),
         ),
         (
             format!("reactions/{ANY}#emoji"),
@@ -555,7 +560,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
             gap: 8.0,
-            padding: [4.0; 4],
+            padding: ambre_bus::app::toile::Padding::uniform(4.0),
             align: Align::Start,
             sizing: Sizing::Hug,
         }),

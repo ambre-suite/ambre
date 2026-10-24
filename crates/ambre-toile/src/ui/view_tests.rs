@@ -2779,10 +2779,7 @@ fn a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke() {
 fn a_thread_brings_the_camera_to_its_anchor() {
     let mut rig = Rig::new();
     rig.sent();
-    rig.view.focus_thread(&CommentAnchor::Point {
-        x: 700.0,
-        y: -300.0,
-    });
+    rig.view.focus_thread(&CommentAnchor::Point(kurbo::Point::new(700.0, -300.0)));
     assert_eq!(rig.view.cam.center, kurbo::Point::new(700.0, -300.0));
 
     rig.view.focus_thread(&CommentAnchor::Element(eid("far")));

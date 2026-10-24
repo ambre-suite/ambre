@@ -833,7 +833,7 @@ impl ToolMachine {
                     // board keeps a free world point.
                     let anchor = match hit_topmost(&display.nodes, world, self.pick) {
                         Some(id) => CommentAnchor::Element(id),
-                        None => CommentAnchor::Point { x: at.x, y: at.y },
+                        None => CommentAnchor::Point(at),
                     };
                     ToolOutcome::Comment(anchor)
                 }
@@ -1980,8 +1980,8 @@ mod tests {
         m.set_tool(Tool::Comment);
         m.pointer_down(empty, to_screen(&cam, empty), &[], &disp, &cam, None);
         match m.pointer_up(empty, &disp) {
-            ToolOutcome::Comment(CommentAnchor::Point { x, y }) => {
-                assert_eq!((x, y), (empty.x, empty.y));
+            ToolOutcome::Comment(CommentAnchor::Point(at)) => {
+                assert_eq!(at, empty);
             }
             other => panic!("expected a point anchor, got {other:?}"),
         }

@@ -314,8 +314,8 @@ impl ToileState {
                         let rect = self.element_rect(element)?;
                         kurbo::Point::new(rect.x1, rect.y0)
                     }
-                    CommentAnchor::Point { x, y } => {
-                        let at = kurbo::Point::new(*x, *y);
+                    CommentAnchor::Point(at) => {
+                        let at = *at;
                         if !camera.contains(at) {
                             return None;
                         }
