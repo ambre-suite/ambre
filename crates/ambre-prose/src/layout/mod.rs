@@ -98,7 +98,7 @@ mod belts {
             "peer_id",
             "SystemTime",
             "Instant",
-            "now_ms",
+            "now",
             "random",
         ];
         for (name, source) in SOURCES {

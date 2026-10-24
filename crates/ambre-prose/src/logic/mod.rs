@@ -684,8 +684,8 @@ impl ProseState {
             ProseCommand::InsertTableCol {
                 table_id,
                 at_col,
-                width_pt,
-            } => self.insert_table_col(&tree_id(table_id), at_col, width_pt),
+                width,
+            } => self.insert_table_col(&tree_id(table_id), at_col, width),
             ProseCommand::DeleteTableCol {
                 table_id,
                 col_index,
@@ -693,8 +693,8 @@ impl ProseState {
             ProseCommand::ResizeTableCol {
                 table_id,
                 col_index,
-                width_pt,
-            } => self.resize_table_col(&tree_id(table_id), col_index, width_pt),
+                width,
+            } => self.resize_table_col(&tree_id(table_id), col_index, width),
             ProseCommand::MergeTableCells {
                 table_id,
                 start,
@@ -708,8 +708,8 @@ impl ProseState {
                 bg,
                 valign,
                 border,
-                padding_pt,
-            } => self.set_cell_style(&tree_id(cell_id), bg, valign, border, padding_pt),
+                padding,
+            } => self.set_cell_style(&tree_id(cell_id), bg, valign, border, padding),
             ProseCommand::StepTableCell { cell_id, direction } => {
                 self.step_table_cell(&tree_id(cell_id), direction)
             }
@@ -767,7 +767,7 @@ impl ProseState {
             ProseCommand::SetBandAlign { block_id, align } => {
                 self.set_band_align(&tree_id(block_id), align)
             }
-            ProseCommand::StampModified { now_ms } => self.stamp_modified(now_ms),
+            ProseCommand::StampModified { now } => self.stamp_modified(now),
             ProseCommand::FindStart { query } => self.find_start(query),
             ProseCommand::FindNext => self.find_step(StepDirection::Forward),
             ProseCommand::FindPrev => self.find_step(StepDirection::Backward),
@@ -788,13 +788,13 @@ impl ProseState {
                 block_id,
                 range,
                 text,
-                now_ms,
-            } => self.add_comment(&tree_id(block_id), range, &text, now_ms),
+                now,
+            } => self.add_comment(&tree_id(block_id), range, &text, now),
             ProseCommand::ReplyToComment {
                 comment_id,
                 text,
-                now_ms,
-            } => self.reply_to_comment(&comment_id, &text, now_ms),
+                now,
+            } => self.reply_to_comment(&comment_id, &text, now),
             ProseCommand::ResolveComment { comment_id } => {
                 self.set_thread_state(&comment_id, ambre_core::ThreadState::Resolved)
             }

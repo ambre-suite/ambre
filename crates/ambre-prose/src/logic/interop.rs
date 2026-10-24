@@ -736,7 +736,7 @@ mod tests {
             bg: Some(ambre_core::Rgb::from_bits(0x00ff_8800)),
             valign: None,
             border: None,
-            padding_pt: None,
+            padding: None,
         });
         let (_, warnings) = export(&mut state, MarkdownFlavor::Gfm);
         assert!(

@@ -42,7 +42,7 @@ use crate::doc;
 use crate::events::{ParagraphStyle, block_id};
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::EffectiveStyle;
-use crate::layout::pass::{cell_style, column_widths_px};
+use crate::layout::pass::{cell_style, column_widths};
 use crate::logic::ProseState;
 use crate::schema::SCHEMA_VERSION;
 use crate::style::ResolvedStyle;
@@ -318,15 +318,15 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         doc::MetaKey::Page => {
             let page = PageBox::from_mm(doc::read_page_format(document));
             let length = match doc::PageKey::parse(stored.key(1)?)? {
-                doc::PageKey::WidthMm => page.page_width_px,
-                doc::PageKey::HeightMm => page.page_height_px,
-                doc::PageKey::MarginLeftMm => page.margin_left_px,
-                doc::PageKey::MarginTopMm => page.margin_top_px,
+                doc::PageKey::WidthMm => page.page_width,
+                doc::PageKey::HeightMm => page.page_height,
+                doc::PageKey::MarginLeftMm => page.margin_left,
+                doc::PageKey::MarginTopMm => page.margin_top,
                 doc::PageKey::MarginRightMm => {
-                    page.page_width_px - page.margin_left_px - page.content_width_px
+                    page.page_width - page.margin_left - page.content_width
                 }
                 doc::PageKey::MarginBottomMm => {
-                    page.page_height_px - page.margin_top_px - page.content_height_px
+                    page.page_height - page.margin_top - page.content_height
                 }
                 doc::PageKey::Orientation => return None,
             };
@@ -344,7 +344,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                     Some(format!("body set in {:?}", style.font_family.label()))
                 }
                 doc::DefaultsKey::FontSizePt => {
-                    Some(format!("body set at {} px", style.font_size_px.get()))
+                    Some(format!("body set at {} px", style.font_size.get()))
                 }
                 doc::DefaultsKey::LineHeight => Some(format!("body lines {:?}", style.line_height)),
             }
@@ -410,16 +410,16 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         doc::NodeKey::Note => format!("is a note {}", doc::is_note(&tree, &id)),
         doc::NodeKey::Align => format!("aligned {:?}", style.align),
         doc::NodeKey::IndentFirst => {
-            format!("first line indented {} px", style.indent_first_px.get())
+            format!("first line indented {} px", style.indent_first.get())
         }
         doc::NodeKey::IndentLeft => {
-            format!("indented {} px on the left", style.indent_left_px.get())
+            format!("indented {} px on the left", style.indent_left.get())
         }
         doc::NodeKey::IndentRight => {
-            format!("indented {} px on the right", style.indent_right_px.get())
+            format!("indented {} px on the right", style.indent_right.get())
         }
-        doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before_px.get()),
-        doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after_px.get()),
+        doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before.get()),
+        doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after.get()),
         doc::NodeKey::LineHeight => format!("lines {:?}", style.line_height),
         doc::NodeKey::KeepTogether => format!("kept together {}", style.keep_together),
         doc::NodeKey::KeepWithNext => format!("kept with the next {}", style.keep_with_next),
@@ -458,9 +458,9 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         }
         doc::AttrKey::ColWidths => {
             let at = stored.at(3)?;
-            let stored_pt = doc::col_widths(&tree, id);
-            let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width_px;
-            let widths = column_widths_px(&stored_pt, stored_pt.len(), content);
+            let stored_widths = doc::col_widths(&tree, id);
+            let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
+            let widths = column_widths(&stored_widths, stored_widths.len(), content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
         doc::AttrKey::Merged => {
@@ -483,7 +483,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::EdgeLeft => format!("left edge {} px", edge(|b| b.left.get())),
         doc::AttrKey::EdgeRight => format!("right edge {} px", edge(|b| b.right.get())),
         doc::AttrKey::EdgeColor => format!("edged {}", colour(cell().border?.color?)),
-        doc::AttrKey::Padding => format!("padded {} px", cell().padding_px.get()),
+        doc::AttrKey::Padding => format!("padded {} px", cell().padding.get()),
         doc::AttrKey::VAlign => format!("set {:?}", cell().valign),
         _ => return None,
     })

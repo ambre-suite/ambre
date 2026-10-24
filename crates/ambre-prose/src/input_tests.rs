@@ -80,11 +80,11 @@ impl Rig {
         self.input(ProseInput::Text(text.to_owned()))
     }
 
-    fn press(&mut self, (x, y): (f32, f32), shift: bool, now_ms: ambre_core::PageTime) -> bool {
+    fn press(&mut self, (x, y): (f32, f32), shift: bool, now: ambre_core::PageTime) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
             mods: ambre_commands::Modifiers::from_event(false, false, shift, false),
-            now_ms,
+            now,
         })
     }
 
@@ -131,14 +131,14 @@ impl Rig {
         let run = ui.shaped.blocks[&placed.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
         let x =
-            layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+            layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
         let y_doc = ui.column.page_top_y(placed.page_start)
-            + layout.body_top_px()
+            + layout.body_top()
             + placed.y_in_page
             + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
             (y_doc - ui.viewport.scroll_y).get() * scale,
         )
     }
@@ -536,10 +536,10 @@ fn a_press_in_the_margin_resolves_to_the_nearest_caret() {
     let mut rig = Rig::new(&["hello world"]);
     let block = rig.blocks()[0];
     let (_, y) = rig.point_of(block, 0);
-    let left = rig.ui.column.left_px(&rig.ui.viewport);
+    let left = rig.ui.column.left(&rig.ui.viewport);
     assert!(rig.press((left.get() + 2.0, y), false, ambre_core::PageTime(0.0)));
     assert_eq!(rig.caret().offset, DocOffset::ZERO);
-    let bottom = rig.ui.viewport.height_px - ViewPx::new(2.0);
+    let bottom = rig.ui.viewport.height - ViewPx::new(2.0);
     assert!(rig.press(
         (left.get() + 400.0, bottom.get()),
         false,
@@ -566,18 +566,18 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
     let placed = rig.ui.shaped.layout.blocks[index.to_usize()].clone();
     let layout = rig.ui.shaped.layout.clone();
     let y_doc = rig.ui.column.page_top_y(placed.page_start)
-        + layout.body_top_px()
+        + layout.body_top()
         + placed.y_in_page
-        + placed.height_px / 2.0;
+        + placed.height / 2.0;
     let y = (y_doc - rig.ui.viewport.scroll_y).get();
-    let left = rig.ui.column.left_px(&rig.ui.viewport).get() + layout.margin_left_px.get();
+    let left = rig.ui.column.left(&rig.ui.viewport).get() + layout.margin_left.get();
     rig.press((left + 5.0, y), false, ambre_core::PageTime(0.0));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
         (before, DocOffset::new(6))
     );
     rig.press(
-        (left + layout.content_width_px.get() - 5.0, y),
+        (left + layout.content_width.get() - 5.0, y),
         false,
         ambre_core::PageTime(1000.0),
     );
@@ -686,8 +686,8 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let empty = crate::layout::run::ShapedLayout::new(
         crate::layout::run::LayoutVersion::new(1),
         Arc::new(crate::layout::pass::PageLayout {
-            page_width_px: DocPx::new(800.0),
-            page_height_px: DocPx::new(1000.0),
+            page_width: DocPx::new(800.0),
+            page_height: DocPx::new(1000.0),
             page_count: crate::events::PageCount::ONE,
             ..crate::layout::pass::PageLayout::default()
         }),
@@ -700,7 +700,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let press = ProseInput::Press {
         at: view_at(600.0, 100.0),
         mods: ambre_commands::Modifiers::NONE,
-        now_ms: ambre_core::PageTime(0.0),
+        now: ambre_core::PageTime(0.0),
     };
     assert!(ui.handle_input(&press, &mut |command| {
         sent.push(command);
@@ -745,7 +745,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
         &ProseInput::Press {
             at: view_at(10.0, 10.0),
             mods: ambre_commands::Modifiers::NONE,
-            now_ms: ambre_core::PageTime(0.0),
+            now: ambre_core::PageTime(0.0),
         },
         &mut |_| SendResult::Sent,
     );
@@ -1107,7 +1107,7 @@ fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
         mods: ambre_commands::Modifiers::from_event(follow, false, false, false),
-        now_ms: ambre_core::PageTime(0.0),
+        now: ambre_core::PageTime(0.0),
     })
 }
 
@@ -1230,12 +1230,12 @@ fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
         .expect("the band is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
-    let x = layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+    let x = layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
     let y_doc =
         ui.column.page_top_y(page) + slot.top + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
     let scale = ui.viewport.scale();
     (
-        (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+        (ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
         (y_doc - ui.viewport.scroll_y).get() * scale,
     )
 }
@@ -1332,13 +1332,13 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
         .expect("the note is drawn");
     let run = ui.shaped.blocks[&slot.block].data();
     let caret = run.caret_box(RunOffset::new(offset));
-    let x = layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+    let x = layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
     let y_doc = ui.column.page_top_y(crate::events::PageIndex::new(0))
         + slot.top
         + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
     let scale = ui.viewport.scale();
     (
-        (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+        (ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
         (y_doc - ui.viewport.scroll_y).get() * scale,
     )
 }
@@ -2307,7 +2307,7 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     let first = rig.blocks()[0];
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
-    let bottom = rig.ui.viewport.height_px + ViewPx::new(40.0);
+    let bottom = rig.ui.viewport.height + ViewPx::new(40.0);
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
@@ -2337,7 +2337,7 @@ fn a_released_drag_leaves_nothing_armed() {
     let first = rig.blocks()[0];
     rig.press(rig.point_of(first, 2), false, ambre_core::PageTime(0.0));
     let (x, _) = rig.point_of(first, 2);
-    let bottom = rig.ui.viewport.height_px + ViewPx::new(40.0);
+    let bottom = rig.ui.viewport.height + ViewPx::new(40.0);
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
@@ -2500,7 +2500,7 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
     by_line.ui.wheel(notch(2.0), ambre_core::PageTime(0.0));
     let mut by_px = long_rig();
     by_px.ui.wheel(
-        glide(2.0 * f64::from(ambre_draw::WHEEL_LINE_PX.get())),
+        glide(2.0 * f64::from(ambre_draw::WHEEL_LINE.get())),
         ambre_core::PageTime(0.0),
     );
     assert!(
@@ -2510,7 +2510,7 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
     assert_eq!(by_line.ui.viewport.scroll_y, by_px.ui.viewport.scroll_y);
 
     let mut by_page = long_rig();
-    let page = by_page.ui.viewport.height_px;
+    let page = by_page.ui.viewport.height;
     let page_delta = ambre_draw::WheelDelta::new(0.0, 1.0, ambre_draw::WheelDeltaMode::Page);
     by_page.ui.wheel(page_delta, ambre_core::PageTime(0.0));
     assert_eq!(by_page.ui.viewport.scroll_y.get(), page.get());

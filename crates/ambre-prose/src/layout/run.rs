@@ -236,7 +236,7 @@ pub struct ParleyRunData {
     char_starts: RunVec<ByteOffset>,
     /// How far the text sits from the left of the content box. It is the
     /// block's left indent, which the width it was broken to left out.
-    indent_px: DocPx,
+    indent: DocPx,
     /// The text the glyphs were shaped from. The caret walks its graphemes
     /// and its words, which the glyphs alone do not tell apart.
     text: String,
@@ -248,14 +248,14 @@ pub struct ParleyRunData {
     marks: Vec<MarkedSpan>,
     /// The width the text was broken to, when pagination shaped it. Only such
     /// a run is re-shaped in part (`PROSE-128`).
-    width_px: Option<DocPx>,
+    width: Option<DocPx>,
 }
 
 impl ParleyRunData {
-    /// The run of `text` as `layout` shaped it, `indent_px` from the left of
+    /// The run of `text` as `layout` shaped it, `indent` from the left of
     /// the content box.
     #[must_use]
-    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: DocPx) -> Self {
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent: DocPx) -> Self {
         let mut char_starts: RunVec<ByteOffset> = text
             .char_indices()
             .map(|(at, _)| ByteOffset::from_usize(at))
@@ -274,11 +274,11 @@ impl ParleyRunData {
             lines: RunLineVec::new(),
             height: DocPx::ZERO,
             char_starts,
-            indent_px,
+            indent,
             text: text.to_owned(),
             style: None,
             marks: Vec::new(),
-            width_px: None,
+            width: None,
         };
         data.index_lines();
         data
@@ -343,11 +343,11 @@ impl ParleyRunData {
                 segments.push(kept);
             }
         }
-        let mut data = Self::new(text, Layout::new(), previous.indent_px);
+        let mut data = Self::new(text, Layout::new(), previous.indent);
         data.segments = segments;
         data.style = previous.style.clone();
         data.marks = marks.to_vec();
-        data.width_px = previous.width_px;
+        data.width = previous.width;
         data.index_lines();
         Some(data)
     }
@@ -357,16 +357,16 @@ impl ParleyRunData {
         &mut self,
         style: &EffectiveStyle,
         marks: &[MarkedSpan],
-        width_px: DocPx,
+        width: DocPx,
     ) {
         self.style = Some(style.clone());
         self.marks = marks.to_vec();
-        self.width_px = Some(width_px);
+        self.width = Some(width);
     }
 
     /// The width the text was broken to, when pagination shaped it.
-    pub(crate) fn width_px(&self) -> Option<DocPx> {
-        self.width_px
+    pub(crate) fn width(&self) -> Option<DocPx> {
+        self.width
     }
 
     /// How many shaped stretches the run holds: one for a run shaped whole,
@@ -496,8 +496,8 @@ impl ParleyRunData {
 
     /// How far the text sits from the left of the content box.
     #[must_use]
-    pub fn indent_px(&self) -> DocPx {
-        self.indent_px
+    pub fn indent(&self) -> DocPx {
+        self.indent
     }
 
     /// The height the shaped text takes.
@@ -896,17 +896,17 @@ impl fmt::Debug for ParleyRunData {
 pub struct ShapedRun(Arc<ParleyRunData>);
 
 impl ShapedRun {
-    /// The run of `text` as `layout` shaped it, `indent_px` from the left of
+    /// The run of `text` as `layout` shaped it, `indent` from the left of
     /// the content box.
     #[must_use]
-    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: DocPx) -> Self {
-        Self(Arc::new(ParleyRunData::new(text, layout, indent_px)))
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent: DocPx) -> Self {
+        Self(Arc::new(ParleyRunData::new(text, layout, indent)))
     }
 
     /// The same, recording the style the text was shaped in.
     #[must_use]
     pub fn styled(text: &str, layout: Layout<ParleyBrush>, style: &EffectiveStyle) -> Self {
-        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        let mut data = ParleyRunData::new(text, layout, style.indent_left);
         data.style = Some(style.clone());
         Self(Arc::new(data))
     }
@@ -919,7 +919,7 @@ impl ShapedRun {
         style: &EffectiveStyle,
         marks: &[MarkedSpan],
     ) -> Self {
-        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        let mut data = ParleyRunData::new(text, layout, style.indent_left);
         data.style = Some(style.clone());
         data.marks = marks.to_vec();
         Self(Arc::new(data))
@@ -1246,15 +1246,15 @@ pub struct TableShape {
 pub struct CellShape {
     /// The cell the text sits in: a region's top-left cell.
     pub cell: TreeID,
-    pub x_px: DocPx,
-    pub width_px: DocPx,
+    pub x: DocPx,
+    pub width: DocPx,
     /// The rows the cell spans, the last one excluded.
     pub rows: std::ops::Range<usize>,
     /// The text blocks the cell holds, each with its top from the top of the
     /// padded box, before the vertical alignment moves them.
     pub blocks: Vec<(TreeID, DocPx, ShapedRun)>,
     /// The height of that text, padding excluded: what the alignment places.
-    pub content_px: DocPx,
+    pub content_height: DocPx,
     pub style: CellStyle,
 }
 
@@ -1267,7 +1267,7 @@ pub struct CellStyle {
     /// The stored border. None draws the theme's hairline (`PROSE-UI-181`).
     pub border: Option<CellBorderPx>,
     /// The inset on each of the four sides.
-    pub padding_px: DocPx,
+    pub padding: DocPx,
     pub valign: ambre_bus::app::prose::VAlign,
 }
 
@@ -1276,7 +1276,7 @@ impl Default for CellStyle {
         Self {
             fill: None,
             border: None,
-            padding_px: DocPx::ZERO,
+            padding: DocPx::ZERO,
             valign: ambre_bus::app::prose::VAlign::Top,
         }
     }
@@ -1344,7 +1344,7 @@ mod tests {
     fn the_first_line_starts_at_its_indent() {
         let mut measurer = shipped_measurer();
         let mut indented = style();
-        indented.indent_first_px = DocPx::new(40.0);
+        indented.indent_first = DocPx::new(40.0);
         let text = "one two three four five six seven eight nine ten eleven";
         let (plain_metrics, plain) = measurer.measure_run(text, &style(), DocPx::new(120.0));
         let (metrics, run) = measurer.measure_run(text, &indented, DocPx::new(120.0));

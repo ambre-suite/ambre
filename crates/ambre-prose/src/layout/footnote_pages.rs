@@ -89,20 +89,20 @@ fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
 
 /// No page's body text runs into the notes at its foot.
 fn nothing_runs_into_the_notes(layout: &PageLayout) {
-    let body = layout.body_height_px();
+    let body = layout.body_height();
     for page in layout.page_count.span() {
         let foot: DocPx = layout
             .footnotes_on_page(page)
             .iter()
-            .map(|note| note.height_px)
+            .map(|note| note.height)
             .sum();
         if foot <= DocPx::ZERO {
             continue;
         }
-        let foot = foot + crate::layout::place::NOTE_SEPARATOR_PX;
+        let foot = foot + crate::layout::place::NOTE_SEPARATOR;
         for entry in layout.blocks_on_page(page) {
             let bottom = if entry.page_start == page {
-                entry.y_in_page + entry.height_px
+                entry.y_in_page + entry.height
             } else {
                 let index = page.count_from(entry.page_start).to_usize() - 1;
                 entry

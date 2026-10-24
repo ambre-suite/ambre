@@ -145,9 +145,9 @@ impl ProseSignals {
 }
 
 /// The width of the panel, in CSS pixels.
-const PANEL_WIDTH_PX: CssPx = CssPx::new(260.0);
+const PANEL_WIDTH: CssPx = CssPx::new(260.0);
 /// How far above the suggestion the popover sits, in CSS pixels.
-const POPOVER_LIFT_PX: CssPx = CssPx::new(30.0);
+const POPOVER_LIFT: CssPx = CssPx::new(30.0);
 
 /// The comment panel, right of the page: each open thread at the height of
 /// its anchor. A click on a thread's text brings the anchor into view.
@@ -163,7 +163,7 @@ pub fn ProseCommentsPanel(signals: ProseSignals) -> impl IntoView {
             style=move || format!(
                 "position: fixed; top: 0; right: 8px; bottom: 0; width: {}px; \
                  pointer-events: none; z-index: 60;{}",
-                PANEL_WIDTH_PX.get(),
+                PANEL_WIDTH.get(),
                 if signals.threads.with(Vec::is_empty) { " display: none;" } else { "" }
             )
         >
@@ -279,7 +279,7 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
             let style = format!(
                 "position: fixed; left: {}px; top: {}px; z-index: 61;",
                 hovered.rect.x0.on_page(origin.x).get(),
-                (hovered.rect.y0.on_page(origin.y) - POPOVER_LIFT_PX)
+                (hovered.rect.y0.on_page(origin.y) - POPOVER_LIFT)
                     .max(CssPx::ZERO)
                     .get()
             );
@@ -348,7 +348,7 @@ fn control(signals: ProseSignals, id: CommandId, pressed: Pressed) -> FormatCont
 }
 
 /// How far below the slash's line the menu sits, in CSS pixels.
-const MENU_DROP_PX: CssPx = CssPx::new(4.0);
+const MENU_DROP: CssPx = CssPx::new(4.0);
 
 /// The slash menu under the caret
 /// (`features/ambre-spec-prose-slash-command.md section 4`).
@@ -364,7 +364,7 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
         let style = format!(
             "position: fixed; left: {}px; top: {}px; z-index: 62;",
             at.x.get(),
-            (at.y + MENU_DROP_PX).get()
+            (at.y + MENU_DROP).get()
         );
         let items = menu.items.iter_enumerated().map(|(index, label)| {
             let selected = if index == menu.selected {
@@ -393,7 +393,7 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
 }
 
 /// The height of the ruler, in CSS pixels.
-const RULER_HEIGHT_PX: CssPx = CssPx::new(22.0);
+const RULER_HEIGHT: CssPx = CssPx::new(22.0);
 
 /// Where a pointer event falls on the canvas whose corner sits at `origin`.
 fn pointer_x(ev: &web_sys::PointerEvent, origin: CssPoint) -> ViewPx {
@@ -429,7 +429,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
             ruler.page_left.on_page(origin.x).get(),
             origin.y.get(),
             ruler.content_width.get(),
-            RULER_HEIGHT_PX.get()
+            RULER_HEIGHT.get()
         );
         let handles = ruler.visible.then(|| {
             [

@@ -675,7 +675,7 @@ fn a_column_insert_and_a_concurrent_edit_in_the_table_converge() {
         .handle_command(ProseCommand::InsertTableCol {
             table_id: crate::events::block_id(table),
             at_col: crate::events::grid::Col::new(1),
-            width_pt: None,
+            width: None,
         })
         .update
         .expect("a delta");
@@ -720,7 +720,7 @@ fn a_column_inserted_between_the_corners_widens_the_region_on_both_peers() {
         .handle_command(ProseCommand::InsertTableCol {
             table_id: crate::events::block_id(table),
             at_col: crate::events::grid::Col::new(1),
-            width_pt: None,
+            width: None,
         })
         .update
         .expect("a delta");

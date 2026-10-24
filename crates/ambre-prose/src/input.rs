@@ -17,7 +17,7 @@ use crate::ui::{ProseUiState, SendResult};
 use crate::view::caret::{Direction, SelectUnit, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
-pub const MULTI_PRESS_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
+pub const MULTI_PRESS_WINDOW: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
 /// How far a second press may land from the first and still be in place.
 const MULTI_PRESS: ViewPx = ViewPx::new(4.0);
@@ -91,7 +91,7 @@ pub enum ProseInput {
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
         mods: Modifiers,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
     },
     Drag {
         at: ViewPoint,
@@ -174,7 +174,7 @@ impl Sent {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
     at: ViewPoint,
-    at_ms: ambre_core::PageTime,
+    pressed_at: ambre_core::PageTime,
     count: u8,
 }
 
@@ -345,7 +345,7 @@ impl ProseUiState {
                 self.type_into_menu(text, send);
                 true
             }
-            ProseInput::Press { at, mods, now_ms } => {
+            ProseInput::Press { at, mods, now } => {
                 let target = mods
                     .primary
                     .then(|| self.link_at(*at).map(|link| link.url.clone()))
@@ -364,7 +364,7 @@ impl ProseUiState {
                     None => {
                         // A press on the canvas is outside the menu.
                         self.slash = None;
-                        self.press(*at, SelectionMode::from_mods(*mods), *now_ms, send)
+                        self.press(*at, SelectionMode::from_mods(*mods), *now, send)
                     }
                 }
             }
@@ -813,7 +813,7 @@ impl ProseUiState {
         &mut self,
         at: ViewPoint,
         mode: SelectionMode,
-        now_ms: ambre_core::PageTime,
+        now: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         let layout = &self.shaped.layout;
@@ -839,7 +839,7 @@ impl ProseUiState {
         };
         let count = match self.last_press {
             Some(last)
-                if now_ms - last.at_ms <= MULTI_PRESS_MS
+                if now - last.pressed_at <= MULTI_PRESS_WINDOW
                     && (at.x - last.at.x).abs() <= MULTI_PRESS
                     && (at.y - last.at.y).abs() <= MULTI_PRESS =>
             {
@@ -849,7 +849,7 @@ impl ProseUiState {
         };
         self.last_press = Some(Press {
             at,
-            at_ms: now_ms,
+            pressed_at: now,
             count,
         });
         // A caret in a header or a footer shows on the page it was placed

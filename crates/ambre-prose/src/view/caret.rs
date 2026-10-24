@@ -170,7 +170,7 @@ impl ProseUiState {
             let caret = run.caret_box_at(laid, affinity);
             Some(
                 self.x_goal
-                    .unwrap_or(run.indent_px() + DocPx::new(caret.x0 as f32)),
+                    .unwrap_or(run.indent() + DocPx::new(caret.x0 as f32)),
             )
         } else {
             None
@@ -303,7 +303,7 @@ impl ProseUiState {
             line.prev()
         };
         if let Some(target) = inside {
-            let (offset, up) = run.at_line(target, x - run.indent_px());
+            let (offset, up) = run.at_line(target, x - run.indent());
             return (block, offset, up);
         }
         match self.neighbour(block, direction) {
@@ -320,7 +320,7 @@ impl ProseUiState {
                         .prev()
                         .unwrap_or(RunLine::ZERO)
                 };
-                let (offset, up) = next_run.at_line(target, x - next_run.indent_px());
+                let (offset, up) = next_run.at_line(target, x - next_run.indent());
                 (next, offset, up)
             }
             None if down => (block, run.len().as_end(), Affinity::Downstream),
@@ -407,7 +407,7 @@ impl ProseUiState {
         let run = self.run_of(block_id)?;
         let caret = run.caret_box_at(laid, affinity);
         let (y0, y1) = (DocPx::new(caret.y0 as f32), DocPx::new(caret.y1 as f32));
-        let body_top = self.shaped.layout.body_top_px();
+        let body_top = self.shaped.layout.body_top();
         let last = block.last_page();
         for page in block.page_span() {
             let (pieces, _) = self.pieces(page);
@@ -540,8 +540,8 @@ impl ProseUiState {
             return Some((block, self.doc_of_hit(block, offset)));
         }
         let x_in_page =
-            DocPx::new((at.x - self.column.left_px(&self.viewport)).get() / self.viewport.scale());
-        let middle = self.shaped.layout.margin_left_px + self.shaped.layout.content_width_px / 2.0;
+            DocPx::new((at.x - self.column.left(&self.viewport)).get() / self.viewport.scale());
+        let middle = self.shaped.layout.margin_left + self.shaped.layout.content_width / 2.0;
         let (side, other) = if x_in_page >= middle {
             (StepDirection::Forward, StepDirection::Backward)
         } else {
@@ -581,7 +581,7 @@ impl ProseUiState {
         };
         self.drag_pointer = Some(at);
         // A pointer off the text resolves on the edge line of the canvas.
-        let bottom = (self.viewport.height_px - ViewPx::new(1.0)).max(ViewPx::ZERO);
+        let bottom = (self.viewport.height - ViewPx::new(1.0)).max(ViewPx::ZERO);
         let edge = ViewPoint::new(at.x, at.y.clamp(ViewPx::ZERO, bottom));
         let Some(focus) = self.place_at(at).or_else(|| self.place_at(edge)) else {
             return;
@@ -603,16 +603,16 @@ impl ProseUiState {
     /// edge speed (`KINETIC-007`).
     fn autoscroll_speed(&self) -> Option<EdgeSpeed> {
         let at = self.drag_pointer.filter(|_| self.dragging.is_some())?;
-        Some(EdgeSpeed::at(at.y, self.viewport.height_px))
+        Some(EdgeSpeed::at(at.y, self.viewport.height))
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near
     /// an edge scrolls, and then the last pointer is resolved again, so the
     /// selection follows the text being revealed. Answers whether the view
     /// moved. With no drag in flight nothing is armed (`PROSE-UI-163`).
-    pub fn tick_autoscroll(&mut self, now_ms: ambre_core::PageTime) -> bool {
+    pub fn tick_autoscroll(&mut self, now: ambre_core::PageTime) -> bool {
         let speed = self.autoscroll_speed().map(|y| (EdgeSpeed::NONE, y));
-        let Some(step) = self.autoscroll.tick(speed, now_ms) else {
+        let Some(step) = self.autoscroll.tick(speed, now) else {
             return false;
         };
         let before = self.viewport.scroll_y;

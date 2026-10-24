@@ -456,7 +456,7 @@ fn write_the_bands(state: &mut ProseState) {
         pos: DocOffset::ZERO,
     });
     state.handle_command(ProseCommand::StampModified {
-        now_ms: ambre_core::Timestamp(1),
+        now: ambre_core::Timestamp(1),
     });
 }
 
@@ -479,7 +479,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
         block_id: root,
         range: DocSpan::from_usize_range(0..1),
         text: "A comment.".to_owned(),
-        now_ms: ambre_core::Timestamp(1),
+        now: ambre_core::Timestamp(1),
     });
     let Some(thread) = state.comments().into_iter().next() else {
         panic!("the scenario opened a thread");
@@ -487,7 +487,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::ReplyToComment {
         comment_id: thread.comment_id,
         text: "A reply.".to_owned(),
-        now_ms: ambre_core::Timestamp(2),
+        now: ambre_core::Timestamp(2),
     });
 }
 
@@ -554,10 +554,10 @@ fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
         bg: Some(ambre_core::Rgb::from_bits(0x00ff_8800)),
         valign: Some(VAlign::Middle),
         border: Some(CellBorder {
-            width_pt: ambre_core::Pt::new(0.5),
+            width: ambre_core::Pt::new(0.5),
             color: ambre_core::Rgb::from_bits(0x0000_0000),
         }),
-        padding_pt: Some(ambre_core::Pt::new(4.0)),
+        padding: Some(ambre_core::Pt::new(4.0)),
     });
 }
 

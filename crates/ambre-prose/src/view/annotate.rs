@@ -159,12 +159,12 @@ impl ProseUiState {
             .flow_index(&tree_id(block))
             .and_then(|index| self.shaped.block(index))
             .and_then(|b| self.shaped.blocks.get(&b.block_id))
-            .map_or(DocPx::ZERO, |run| run.data().indent_px());
+            .map_or(DocPx::ZERO, |run| run.data().indent());
         let scale = self.viewport.scale();
-        let page_x = layout.margin_left_px + indent + at.x;
-        let page_y = layout.body_top_px() + piece.top + (at.y - piece.run_top);
+        let page_x = layout.margin_left + indent + at.x;
+        let page_y = layout.body_top() + piece.top + (at.y - piece.run_top);
         ViewPoint::new(
-            self.column.left_px(&self.viewport) + ViewPx::new(page_x.get() * scale),
+            self.column.left(&self.viewport) + ViewPx::new(page_x.get() * scale),
             ViewPx::new(
                 (self.column.page_top_y(page) + page_y - self.viewport.scroll_y).get() * scale,
             ),
@@ -300,7 +300,7 @@ impl ProseUiState {
     pub fn take_intent(
         &mut self,
         intent: AnnotationIntent,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     ) -> Option<ProseCommand> {
         Some(match intent {
             AnnotationIntent::Focus { comment_id } => {
@@ -316,7 +316,7 @@ impl ProseUiState {
                 ProseCommand::ReplyToComment {
                     comment_id,
                     text,
-                    now_ms,
+                    now,
                 }
             }
             AnnotationIntent::Resolve { comment_id } => ProseCommand::ResolveComment { comment_id },
@@ -557,7 +557,7 @@ mod tests {
             Some(ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "ok".to_owned(),
-                now_ms: ambre_core::Timestamp(5)
+                now: ambre_core::Timestamp(5)
             })
         );
         let blank = AnnotationIntent::Reply {

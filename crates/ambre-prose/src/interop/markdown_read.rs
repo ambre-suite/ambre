@@ -18,7 +18,7 @@ use super::{
 use crate::doc::StoredLevel;
 
 /// The largest file a Markdown import reads.
-pub const MAX_BYTES: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024);
+pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024);
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.
@@ -28,12 +28,12 @@ pub const MAX_LIST_DEPTH: usize = 16;
 ///
 /// # Errors
 ///
-/// [`InteropError::TooLarge`] past [`MAX_BYTES`], and
+/// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
 /// [`InteropError::ParseFailed`] for bytes that are not UTF-8. Every string of
 /// text is some Markdown document, so nothing else fails.
 pub fn read(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
     let size = ambre_core::ByteSize::of_len(bytes.len());
-    if size > MAX_BYTES {
+    if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }
     let text = std::str::from_utf8(bytes)
@@ -573,7 +573,7 @@ mod tests {
             Err(InteropError::ParseFailed(_))
         ));
         assert!(matches!(
-            read(&vec![b'a'; MAX_BYTES.as_len() + 1]),
+            read(&vec![b'a'; MAX_SIZE.as_len() + 1]),
             Err(InteropError::TooLarge(_))
         ));
     }

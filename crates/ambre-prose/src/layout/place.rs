@@ -19,7 +19,7 @@ use crate::layout::run::{ShapedRun, TableShape};
 const MIN_LINES_AT_BREAK: BlockLineCount = BlockLineCount::new(2);
 
 /// The band drawn once above the notes of a page, rule and gap together.
-pub const NOTE_SEPARATOR_PX: DocPx = DocPx::new(8.0);
+pub const NOTE_SEPARATOR: DocPx = DocPx::new(8.0);
 
 /// One footnote a block calls, as pass 0 numbered and measured it.
 #[derive(Clone, Debug, PartialEq)]
@@ -33,7 +33,7 @@ pub struct NoteCall {
     /// The line of the block the call sits on: a table's row, a text's line.
     pub line: BlockLine,
     /// The note's shaped text, or its number when that is taller.
-    pub height_px: DocPx,
+    pub height: DocPx,
 }
 
 /// A footnote placed at the foot of a page (`PROSE-015`).
@@ -44,7 +44,7 @@ pub struct FootnoteLayout {
     pub block_id: TreeID,
     pub ordinal: FootnoteOrdinal,
     pub page: PageIndex,
-    pub height_px: DocPx,
+    pub height: DocPx,
 }
 
 /// What one block costs, as pass 1 measured it.
@@ -56,9 +56,9 @@ pub struct MeasuredBlock {
     pub block_id: TreeID,
     pub block_type: BlockType,
     /// The content height, both margins excluded.
-    pub height_px: DocPx,
-    pub space_before_px: DocPx,
-    pub space_after_px: DocPx,
+    pub height: DocPx,
+    pub space_before: DocPx,
+    pub space_after: DocPx,
     pub keep_together: bool,
     pub keep_with_next: bool,
     /// The line tops a split may be taken at (`PROSE-071`). Empty for a block
@@ -80,9 +80,9 @@ impl PartialEq for MeasuredBlock {
     fn eq(&self, other: &Self) -> bool {
         self.block_id == other.block_id
             && self.block_type == other.block_type
-            && self.height_px == other.height_px
-            && self.space_before_px == other.space_before_px
-            && self.space_after_px == other.space_after_px
+            && self.height == other.height
+            && self.space_before == other.space_before
+            && self.space_after == other.space_after
             && self.keep_together == other.keep_together
             && self.keep_with_next == other.keep_with_next
             && self.metrics == other.metrics
@@ -113,15 +113,15 @@ impl MeasuredBlock {
     fn height_of_first(&self, lines: BlockLineCount) -> DocPx {
         match &self.metrics {
             Some(metrics) => metrics.height_of_first(lines),
-            None => self.height_px,
+            None => self.height,
         }
     }
 
     /// How many whole lines fit in a height.
-    fn lines_fitting_in(&self, height_px: DocPx) -> BlockLineCount {
+    fn lines_fitting_in(&self, height: DocPx) -> BlockLineCount {
         match &self.metrics {
-            Some(metrics) => metrics.lines_fitting_in(height_px),
-            None if height_px >= self.height_px => BlockLineCount::ONE,
+            Some(metrics) => metrics.lines_fitting_in(height),
+            None if height >= self.height => BlockLineCount::ONE,
             None => BlockLineCount::ZERO,
         }
     }
@@ -138,13 +138,13 @@ impl MeasuredBlock {
 ///
 /// A split block is one entry: `page_start` carries the first fragment, and
 /// each later page carries the next. The whole height of a split block is
-/// never in `height_px` (`PROSE-066`).
+/// never in `height` (`PROSE-066`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockLayout {
     pub block_id: TreeID,
     pub block_type: BlockType,
     /// The height of the portion on `page_start` alone.
-    pub height_px: DocPx,
+    pub height: DocPx,
     pub page_start: PageIndex,
     pub y_in_page: DocPx,
     pub is_split: bool,
@@ -158,7 +158,7 @@ pub struct BlockLayout {
     pub notes: Vec<FootnoteLayout>,
     /// The height the notes take at the foot of the block's last page once
     /// this block is placed. Earlier blocks' notes on that page count too.
-    pub foot_px: DocPx,
+    pub foot_height: DocPx,
 }
 
 impl BlockLayout {
@@ -209,21 +209,21 @@ pub(crate) struct Cursor {
     pub(crate) y: DocPx,
     /// The trailing margin of the block just placed, not yet spent
     /// (`PROSE-069`).
-    pub(crate) pending_margin_px: DocPx,
-    pub(crate) body_height_px: DocPx,
+    pub(crate) pending_margin: DocPx,
+    pub(crate) body_height: DocPx,
     /// The height the current page's notes hold at its foot, separator
     /// included.
-    pub(crate) foot_px: DocPx,
+    pub(crate) foot_height: DocPx,
 }
 
 impl Cursor {
-    pub(crate) fn new(body_height_px: DocPx) -> Self {
+    pub(crate) fn new(body_height: DocPx) -> Self {
         Self {
             page: PageIndex::ZERO,
             y: DocPx::ZERO,
-            pending_margin_px: DocPx::ZERO,
-            body_height_px,
-            foot_px: DocPx::ZERO,
+            pending_margin: DocPx::ZERO,
+            body_height,
+            foot_height: DocPx::ZERO,
         }
     }
 
@@ -237,21 +237,21 @@ impl Cursor {
         if self.at_page_top() {
             DocPx::ZERO
         } else {
-            self.pending_margin_px.max(block.space_before_px)
+            self.pending_margin.max(block.space_before)
         }
     }
 
     /// What is left on this page once the gap and the notes are spent.
     fn room_after_gap(&self, block: &MeasuredBlock) -> DocPx {
-        self.body_height_px - self.foot_px - self.y - self.gap_before(block)
+        self.body_height - self.foot_height - self.y - self.gap_before(block)
     }
 
     /// The height `notes` would add to this page's foot, the separator
     /// counted when they are the page's first.
     fn foot_cost<'a>(&self, notes: impl Iterator<Item = &'a NoteCall>) -> DocPx {
-        let height: DocPx = notes.map(|note| note.height_px).sum();
-        if height > DocPx::ZERO && self.foot_px <= DocPx::ZERO {
-            height + NOTE_SEPARATOR_PX
+        let height: DocPx = notes.map(|note| note.height).sum();
+        if height > DocPx::ZERO && self.foot_height <= DocPx::ZERO {
+            height + NOTE_SEPARATOR
         } else {
             height
         }
@@ -263,33 +263,33 @@ impl Cursor {
         notes: impl Iterator<Item = &'a NoteCall> + Clone,
         out: &mut Vec<FootnoteLayout>,
     ) {
-        self.foot_px += self.foot_cost(notes.clone());
+        self.foot_height += self.foot_cost(notes.clone());
         out.extend(notes.map(|note| FootnoteLayout {
             footnote_id: note.footnote_id,
             block_id: note.block_id,
             ordinal: note.ordinal,
             page: self.page,
-            height_px: note.height_px,
+            height: note.height,
         }));
     }
 
     fn open_new_page(&mut self) {
         self.page = self.page.next();
         self.y = DocPx::ZERO;
-        self.pending_margin_px = DocPx::ZERO;
-        self.foot_px = DocPx::ZERO;
+        self.pending_margin = DocPx::ZERO;
+        self.foot_height = DocPx::ZERO;
     }
 }
 
 /// Lay measured blocks onto pages.
 ///
-/// `body_height_px` is what the two bands left, which the page box already
+/// `body_height` is what the two bands left, which the page box already
 /// capped (`PROSE-016`). It is treated as positive. A body of zero would take
 /// no block at all, so one line is forced onto each page rather than looping
 /// (`PROSE-017`).
 #[must_use]
-pub fn place(blocks: &[MeasuredBlock], body_height_px: DocPx) -> Placement {
-    let mut cursor = Cursor::new(body_height_px.max(DocPx::ZERO));
+pub fn place(blocks: &[MeasuredBlock], body_height: DocPx) -> Placement {
+    let mut cursor = Cursor::new(body_height.max(DocPx::ZERO));
     let mut placed: Vec<BlockLayout> = Vec::with_capacity(blocks.len());
     place_tail(blocks, BlockIndex::ZERO, &mut cursor, &mut placed);
     Placement {
@@ -349,24 +349,24 @@ pub(crate) fn place_tail_until(
 pub(crate) fn cursor_after(
     entry: &BlockLayout,
     block: &MeasuredBlock,
-    body_height_px: DocPx,
+    body_height: DocPx,
 ) -> Cursor {
     if entry.block_type == BlockType::PageBreak {
-        let mut cursor = Cursor::new(body_height_px);
+        let mut cursor = Cursor::new(body_height);
         cursor.page = entry.page_start.next();
         return cursor;
     }
     let last_page = entry.last_page();
     let y = match entry.continuation_heights.last() {
         Some(height) => *height,
-        None => entry.y_in_page + entry.height_px,
+        None => entry.y_in_page + entry.height,
     };
     Cursor {
         page: last_page,
         y,
-        pending_margin_px: block.space_after_px,
-        body_height_px,
-        foot_px: entry.foot_px,
+        pending_margin: block.space_after,
+        body_height,
+        foot_height: entry.foot_height,
     }
 }
 
@@ -379,7 +379,7 @@ fn place_one(
     placed: &mut Vec<BlockLayout>,
 ) {
     let room = cursor.room_after_gap(block);
-    if block.height_px + cursor.foot_cost(block.notes.iter()) <= room {
+    if block.height + cursor.foot_cost(block.notes.iter()) <= room {
         if moves_to_keep_with_successor(block, successor, room, cursor) {
             cursor.open_new_page();
         }
@@ -389,14 +389,14 @@ fn place_one(
     // It does not fit. A block a whole page holds moves rather than splits
     // (`PROSE-075`), and so does one that may not be cut at all. Its notes
     // move with it.
-    let whole = block.height_px + Cursor::new(DocPx::ZERO).foot_cost(block.notes.iter());
-    let whole_page_holds_it = whole <= cursor.body_height_px;
+    let whole = block.height + Cursor::new(DocPx::ZERO).foot_cost(block.notes.iter());
+    let whole_page_holds_it = whole <= cursor.body_height;
     if (whole_page_holds_it || block.keep_together || !block.splittable()) && !cursor.at_page_top()
     {
         cursor.open_new_page();
         // On a fresh page it is placed whether or not it fits: the page it
         // would move to is no larger (`PROSE-017`).
-        if whole <= cursor.body_height_px || !block.splittable() {
+        if whole <= cursor.body_height || !block.splittable() {
             emit_whole(block, cursor, placed);
             return;
         }
@@ -440,7 +440,7 @@ fn moves_to_keep_with_successor(
     if next.block_type == BlockType::PageBreak {
         return false;
     }
-    let after_block = room - block.height_px - next.space_before_px.max(block.space_after_px);
+    let after_block = room - block.height - next.space_before.max(block.space_after);
     let wanted = next.line_count().min(MIN_LINES_AT_BREAK);
     next.height_of_first(wanted) > after_block
 }
@@ -454,17 +454,17 @@ fn emit_whole(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<Block
     placed.push(BlockLayout {
         block_id: block.block_id,
         block_type: block.block_type,
-        height_px: block.height_px,
+        height: block.height,
         page_start: cursor.page,
         y_in_page: y,
         is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
         notes,
-        foot_px: cursor.foot_px,
+        foot_height: cursor.foot_height,
     });
-    cursor.y = y + block.height_px;
-    cursor.pending_margin_px = block.space_after_px;
+    cursor.y = y + block.height;
+    cursor.pending_margin = block.space_after;
 }
 
 /// Cut a block across pages, at a line and never inside one (`PROSE-071`).
@@ -495,18 +495,18 @@ fn split(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayou
     } else {
         continuation_heights.last().copied().unwrap_or(DocPx::ZERO)
     };
-    cursor.pending_margin_px = block.space_after_px;
+    cursor.pending_margin = block.space_after;
     placed.push(BlockLayout {
         block_id: block.block_id,
         block_type: block.block_type,
-        height_px: first_height,
+        height: first_height,
         page_start,
         y_in_page: first_y,
         is_split: !split_points.is_empty(),
         split_points,
         continuation_heights,
         notes,
-        foot_px: cursor.foot_px,
+        foot_height: cursor.foot_height,
     });
 }
 
@@ -524,7 +524,7 @@ fn fragment(
     notes: &mut Vec<FootnoteLayout>,
 ) -> BlockLineCount {
     let total = block.line_count();
-    let room = cursor.body_height_px - cursor.foot_px - y;
+    let room = cursor.body_height - cursor.foot_height - y;
     let calls = |lines: BlockLineCount| {
         block
             .notes
@@ -548,12 +548,12 @@ fn fragment(
 /// (`PROSE-017`).
 fn lines_for(
     block: &MeasuredBlock,
-    height_px: DocPx,
+    height: DocPx,
     from: BlockLine,
     total: BlockLineCount,
 ) -> BlockLineCount {
     let remaining = total.saturating_sub(from.lines_before());
-    let fitting = lines_fitting_from(block, height_px, from).min(remaining);
+    let fitting = lines_fitting_from(block, height, from).min(remaining);
     if fitting >= remaining {
         return remaining;
     }
@@ -570,10 +570,10 @@ fn lines_for(
 }
 
 /// How many lines fit in a height, counting from line `from`.
-fn lines_fitting_from(block: &MeasuredBlock, height_px: DocPx, from: BlockLine) -> BlockLineCount {
+fn lines_fitting_from(block: &MeasuredBlock, height: DocPx, from: BlockLine) -> BlockLineCount {
     let offset = block.height_of_first(from.lines_before());
     block
-        .lines_fitting_in(height_px + offset)
+        .lines_fitting_in(height + offset)
         .saturating_sub(from.lines_before())
 }
 
@@ -588,14 +588,14 @@ fn zero_height_at(block: &MeasuredBlock, cursor: &Cursor) -> BlockLayout {
     BlockLayout {
         block_id: block.block_id,
         block_type: block.block_type,
-        height_px: DocPx::ZERO,
+        height: DocPx::ZERO,
         page_start: cursor.page,
         y_in_page: cursor.y,
         is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
         notes: Vec::new(),
-        foot_px: cursor.foot_px,
+        foot_height: cursor.foot_height,
     }
 }
 
@@ -616,7 +616,7 @@ mod tests {
         let mut line_tops: Vec<DocPx> = (0..lines).map(|n| DocPx::new(n as f32 * LINE)).collect();
         line_tops.push(DocPx::new(lines as f32 * LINE));
         TextMetrics {
-            text_height_px: DocPx::new(lines as f32 * LINE),
+            text_height: DocPx::new(lines as f32 * LINE),
             line_count: BlockLineCount::new(lines),
             line_tops,
         }
@@ -626,9 +626,9 @@ mod tests {
         MeasuredBlock {
             block_id: id(n),
             block_type: BlockType::Paragraph,
-            height_px: DocPx::new(lines as f32 * LINE),
-            space_before_px: DocPx::new(0.0),
-            space_after_px: DocPx::new(0.0),
+            height: DocPx::new(lines as f32 * LINE),
+            space_before: DocPx::new(0.0),
+            space_after: DocPx::new(0.0),
             keep_together: false,
             keep_with_next: false,
             metrics: Some(metrics(lines)),
@@ -642,9 +642,9 @@ mod tests {
         MeasuredBlock {
             block_id: id(n),
             block_type: kind,
-            height_px: DocPx::new(height_px),
-            space_before_px: DocPx::new(0.0),
-            space_after_px: DocPx::new(0.0),
+            height: DocPx::new(height_px),
+            space_before: DocPx::new(0.0),
+            space_after: DocPx::new(0.0),
             keep_together: false,
             keep_with_next: false,
             metrics: None,
@@ -658,7 +658,7 @@ mod tests {
     pub(super) fn nothing_overflows(placement: &Placement, body: f32) {
         for block in &placement.blocks {
             assert!(
-                block.y_in_page + block.height_px <= DocPx::new(body + 0.01),
+                block.y_in_page + block.height <= DocPx::new(body + 0.01),
                 "{:?} runs off its page",
                 block.block_id
             );
@@ -695,7 +695,7 @@ mod tests {
         ];
         let placement = place(&blocks, DocPx::new(BODY));
         assert_eq!(placement.page_count, crate::events::PageCount::new(2));
-        assert_eq!(placement.blocks[1].height_px, DocPx::new(0.0));
+        assert_eq!(placement.blocks[1].height, DocPx::new(0.0));
         assert_eq!(
             placement.blocks[1].page_start,
             crate::events::PageIndex::new(0)
@@ -849,9 +849,9 @@ mod tests {
     #[test]
     fn a_leading_margin_collapses_against_the_trailing_one_before_it() {
         let mut first = text(1, 2);
-        first.space_after_px = DocPx::new(30.0);
+        first.space_after = DocPx::new(30.0);
         let mut second = text(2, 2);
-        second.space_before_px = DocPx::new(10.0);
+        second.space_before = DocPx::new(10.0);
         let placement = place(&[first, second], DocPx::new(BODY));
         // The larger of the two, never their sum (`PROSE-069`).
         assert_eq!(placement.blocks[1].y_in_page, DocPx::new(2.0 * LINE + 30.0));
@@ -860,7 +860,7 @@ mod tests {
     #[test]
     fn a_leading_margin_is_dropped_at_a_page_top() {
         let mut second = text(2, 4);
-        second.space_before_px = DocPx::new(50.0);
+        second.space_before = DocPx::new(50.0);
         let placement = place(&[text(1, 9), second], DocPx::new(BODY));
         assert_eq!(
             placement.blocks[1].page_start,
@@ -948,8 +948,8 @@ mod properties {
             (1u32..40).prop_map(move |lines| text(n, lines)),
             (1u32..40, 0.0f32..80.0, 0.0f32..80.0).prop_map(move |(lines, before, after)| {
                 let mut block = text(n, lines);
-                block.space_before_px = DocPx::new(before);
-                block.space_after_px = DocPx::new(after);
+                block.space_before = DocPx::new(before);
+                block.space_after = DocPx::new(after);
                 block
             }),
             (1u32..40, any::<bool>(), any::<bool>()).prop_map(move |(lines, together, with)| {
@@ -1039,7 +1039,7 @@ mod properties {
             body in 600.0f32..900.0,
         ) {
             let placement = place(&blocks, DocPx::new(body));
-            let tall = blocks.iter().any(|block| block.height_px > DocPx::new(body));
+            let tall = blocks.iter().any(|block| block.height > DocPx::new(body));
             if !tall {
                 nothing_overflows(&placement, body);
             }

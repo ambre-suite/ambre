@@ -12,7 +12,7 @@ use ambre_core::{DocPx, ViewPoint, ViewPx};
 use crate::layout::pass::PageLayout;
 
 /// The gap between two pages, in document pixels.
-pub const GUTTER_PX: DocPx = DocPx::new(24.0);
+pub const GUTTER: DocPx = DocPx::new(24.0);
 
 /// Where the reader is looking. Local, and never sent (`PROSE-UI-010`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,8 +20,8 @@ pub struct Viewport {
     /// From the top of the column, in document pixels.
     pub scroll_y: DocPx,
     /// The canvas, in screen pixels.
-    pub width_px: ViewPx,
-    pub height_px: ViewPx,
+    pub width: ViewPx,
+    pub height: ViewPx,
     /// One at a hundred per cent.
     pub zoom: ambre_core::ZoomFactor,
 }
@@ -30,8 +30,8 @@ impl Default for Viewport {
     fn default() -> Self {
         Self {
             scroll_y: DocPx::ZERO,
-            width_px: ViewPx::ZERO,
-            height_px: ViewPx::ZERO,
+            width: ViewPx::ZERO,
+            height: ViewPx::ZERO,
             zoom: ambre_core::ZoomFactor::ONE,
         }
     }
@@ -55,7 +55,7 @@ impl Viewport {
     /// How much of the column the canvas shows, in document pixels.
     #[must_use]
     pub fn visible_height(&self) -> DocPx {
-        DocPx::new((self.height_px.get() / self.scale()).max(0.0))
+        DocPx::new((self.height.get() / self.scale()).max(0.0))
     }
 }
 
@@ -75,36 +75,36 @@ pub enum DocPos {
 /// (`PROSE-UI-131`).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PageColumn {
-    pub page_width_px: DocPx,
-    pub page_height_px: DocPx,
-    pub gutter_px: DocPx,
+    pub page_width: DocPx,
+    pub page_height: DocPx,
+    pub gutter: DocPx,
     /// Zero until a layout has arrived.
     pub page_count: PageCount,
-    pub total_height_px: DocPx,
+    pub total_height: DocPx,
 }
 
 impl PageColumn {
     /// The column a layout describes.
     #[must_use]
     pub fn of(layout: &PageLayout) -> Self {
-        let page_height_px = layout.page_height_px.max(DocPx::ZERO);
+        let page_height = layout.page_height.max(DocPx::ZERO);
         let count = layout.page_count.get() as f32;
-        let total_height_px = if layout.page_count.is_zero() {
+        let total_height = if layout.page_count.is_zero() {
             DocPx::ZERO
         } else {
-            page_height_px * count + GUTTER_PX * (count - 1.0)
+            page_height * count + GUTTER * (count - 1.0)
         };
         Self {
-            page_width_px: layout.page_width_px.max(DocPx::ZERO),
-            page_height_px,
-            gutter_px: GUTTER_PX,
+            page_width: layout.page_width.max(DocPx::ZERO),
+            page_height,
+            gutter: GUTTER,
             page_count: layout.page_count,
-            total_height_px,
+            total_height,
         }
     }
 
     fn stride(&self) -> DocPx {
-        self.page_height_px + self.gutter_px
+        self.page_height + self.gutter
     }
 
     /// Where a page starts, from the top of the column.
@@ -116,7 +116,7 @@ impl PageColumn {
     /// The last offset the column scrolls to: its bottom at the canvas's.
     #[must_use]
     pub fn max_scroll(&self, viewport: &Viewport) -> DocPx {
-        (self.total_height_px - viewport.visible_height()).max(DocPx::ZERO)
+        (self.total_height - viewport.visible_height()).max(DocPx::ZERO)
     }
 
     /// An offset brought inside the column (`PROSE-UI-025`). One that is not a
@@ -144,18 +144,18 @@ impl PageColumn {
         }
         let index = (doc_y / stride).floor();
         if index >= last.get() as f32 {
-            let within = (doc_y - self.page_top_y(last)).min(self.page_height_px);
+            let within = (doc_y - self.page_top_y(last)).min(self.page_height);
             return Some((last, within));
         }
         // `index` is below `last`, so it fits a page index.
         let page = PageIndex::new(index as u32);
         let within = doc_y - self.page_top_y(page);
-        if within <= self.page_height_px {
+        if within <= self.page_height {
             return Some((page, within));
         }
-        let past_bottom = within - self.page_height_px;
-        if past_bottom * 2.0 <= self.gutter_px {
-            Some((page, self.page_height_px))
+        let past_bottom = within - self.page_height;
+        if past_bottom * 2.0 <= self.gutter {
+            Some((page, self.page_height))
         } else {
             Some((page.next(), DocPx::ZERO))
         }
@@ -186,9 +186,9 @@ impl PageColumn {
     /// The left edge of the column on the canvas, in screen pixels. A page
     /// wider than the canvas pins the column to the left edge.
     #[must_use]
-    pub fn left_px(&self, viewport: &Viewport) -> ViewPx {
+    pub fn left(&self, viewport: &Viewport) -> ViewPx {
         ViewPx::new(
-            ((viewport.width_px.get() - self.page_width_px.get() * viewport.scale()) / 2.0)
+            ((viewport.width.get() - self.page_width.get() * viewport.scale()) / 2.0)
                 .max(0.0),
         )
     }
@@ -201,7 +201,7 @@ impl PageColumn {
         match self.doc_y_to_page(doc_y) {
             Some((page, y_in_page)) => DocPos::OnPage {
                 page,
-                x_in_page: DocPx::new((at.x - self.left_px(viewport)).get() / scale),
+                x_in_page: DocPx::new((at.x - self.left(viewport)).get() / scale),
 
                 y_in_page,
             },
@@ -222,8 +222,8 @@ mod tests {
 
     fn column(pages: u32) -> PageColumn {
         PageColumn::of(&PageLayout {
-            page_width_px: DocPx::new(800.0),
-            page_height_px: DocPx::new(1000.0),
+            page_width: DocPx::new(800.0),
+            page_height: DocPx::new(1000.0),
             page_count: PageCount::new(pages),
             ..PageLayout::default()
         })
@@ -232,8 +232,8 @@ mod tests {
     fn viewport(scroll_y: f32, height_px: f32, zoom: f32) -> Viewport {
         Viewport {
             scroll_y: DocPx::new(scroll_y),
-            width_px: ViewPx::new(1200.0),
-            height_px: ViewPx::new(height_px),
+            width: ViewPx::new(1200.0),
+            height: ViewPx::new(height_px),
             zoom: ambre_core::ZoomFactor::positive(f64::from(zoom)),
         }
     }
@@ -267,7 +267,7 @@ mod tests {
                 None => prop_assert_eq!(pages, 0),
                 Some((page, within)) => {
                     prop_assert!(page.get() < pages);
-                    prop_assert!((0.0..=column.page_height_px.get()).contains(&within.get()));
+                    prop_assert!((0.0..=column.page_height.get()).contains(&within.get()));
                 }
             }
         }
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn a_position_in_a_gutter_goes_to_the_nearer_page_edge() {
         let column = column(3);
-        let bottom = column.page_height_px;
+        let bottom = column.page_height;
         assert_eq!(
             column.doc_y_to_page(bottom + DocPx::new(5.0)),
             Some((PageIndex::ZERO, bottom))
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn a_layout_with_no_page_resolves_nothing() {
         let column = column(0);
-        assert_eq!(column.total_height_px, DocPx::new(0.0));
+        assert_eq!(column.total_height, DocPx::new(0.0));
         assert_eq!(column.doc_y_to_page(DocPx::new(10.0)), None);
         assert_eq!(
             column.screen_to_doc(&viewport(0.0, 600.0, 1.0), point(10.0, 10.0)),
@@ -336,7 +336,7 @@ mod tests {
     fn a_screen_point_lands_on_the_page_drawn_under_it() {
         let column = column(3);
         let view = viewport(column.page_top_y(PageIndex::new(1)).get(), 800.0, 2.0);
-        let left = column.left_px(&view);
+        let left = column.left(&view);
         let DocPos::OnPage {
             page,
             x_in_page,

@@ -189,7 +189,7 @@ mod tests {
     use crate::events::{
         BlockId, BlockInit, BlockType, ProseCommand, ProseEvent, TableOfContents, tree_id,
     };
-    use crate::ui::{ProseUiState, RECOUNT_DELAY_MS};
+    use crate::ui::{ProseUiState, RECOUNT_DELAY};
 
     /// A document laid out on the shipped faces, holding nothing yet.
     fn fresh() -> ProseState {
@@ -542,7 +542,7 @@ mod tests {
             assert_eq!(view.tick(ambre_core::PageTime(0.0)), None);
         }
         let command = view
-            .tick(ambre_core::PageTime(RECOUNT_DELAY_MS.get()))
+            .tick(ambre_core::PageTime(RECOUNT_DELAY.get()))
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);

@@ -163,7 +163,7 @@ impl ProseUiState {
         let (cell, run) = self.shaped.cell_run(&tree_id(block))?;
         Some((
             run,
-            (cell.width_px - cell.style.padding_px * 2.0).max(DocPx::ZERO),
+            (cell.width - cell.style.padding * 2.0).max(DocPx::ZERO),
         ))
     }
 
@@ -186,7 +186,7 @@ impl ProseUiState {
             if shift == DocPx::ZERO {
                 continue;
             }
-            cell.content_px = (cell.content_px + shift).max(DocPx::ZERO);
+            cell.content_height = (cell.content_height + shift).max(DocPx::ZERO);
             let spanned = match (
                 table.row_tops.get(cell.rows.start),
                 table.row_tops.get(cell.rows.end),
@@ -194,7 +194,7 @@ impl ProseUiState {
                 (Some(y0), Some(y1)) => *y1 - *y0,
                 _ => continue,
             };
-            let lack = cell.content_px + cell.style.padding_px * 2.0 - spanned;
+            let lack = cell.content_height + cell.style.padding * 2.0 - spanned;
             if let Some(slot) = cell
                 .rows
                 .end
@@ -226,7 +226,7 @@ impl ProseUiState {
         if self.provisional.key.as_ref() == Some(&key) {
             return;
         }
-        let width = self.shaped.layout.content_width_px;
+        let width = self.shaped.layout.content_width;
         let mut blocks = self.draft.blocks();
         if let Some(split) = self.splitting
             && !blocks.contains(&split.block)
@@ -244,10 +244,10 @@ impl ProseUiState {
                 };
                 (laid.data(), width)
             } else {
-                let Some((laid, text_px)) = self.cell_run(block) else {
+                let Some((laid, text_width)) = self.cell_run(block) else {
                     continue;
                 };
-                (laid.data(), text_px)
+                (laid.data(), text_width)
             };
             let Some(style) = laid.style().cloned() else {
                 continue;
@@ -296,7 +296,7 @@ impl ProseUiState {
                     layout_cx,
                     (&ghost_text, &ghost_marks),
                     &style,
-                    style.text_width_px(width),
+                    style.text_width(width),
                 );
                 let run = ShapedRun::marked(&ghost_text, layout, &style, &ghost_marks);
                 if let Some(new_block) = split.new_block {
@@ -316,7 +316,7 @@ impl ProseUiState {
                 laid,
                 (&text, &marks),
                 &style,
-                style.text_width_px(width),
+                style.text_width(width),
             );
             runs.insert(block, run);
         }
@@ -334,7 +334,7 @@ impl ProseUiState {
     /// move by what it grew, and by the paragraph a split opens below it. A
     /// block pushed past the foot of the body is cut there.
     pub(crate) fn pieces(&self, page: PageIndex) -> (Vec<Piece>, Option<Fragment>) {
-        let body = self.shaped.layout.body_height_px();
+        let body = self.shaped.layout.body_height();
         let drawn = self.provisional_drawn();
         let ghost = self.provisional.ghost.as_ref().filter(|_| drawn);
         let mut shift = DocPx::ZERO;

@@ -150,13 +150,13 @@ impl ProseState {
     /// The stamp is the author's clock, read once and stored. Every reader then
     /// resolves the same date, whatever its own clock says. A collaborator's
     /// change is dated by the collaborator, so nothing here stamps it.
-    pub(super) fn stamp_modified(&mut self, now_ms: ambre_core::Timestamp) -> ProseOutcome {
+    pub(super) fn stamp_modified(&mut self, now: ambre_core::Timestamp) -> ProseOutcome {
         let ours = self.own_counter();
         if ours <= self.stamped_counter {
             return ProseOutcome::nothing();
         }
-        let now = now_ms.to_i64_saturating();
-        if let Err(e) = doc::meta(&self.doc).insert(doc::MetaKey::UpdatedAt, now) {
+        let stamp = now.to_i64_saturating();
+        if let Err(e) = doc::meta(&self.doc).insert(doc::MetaKey::UpdatedAt, stamp) {
             return Self::err_write(e);
         }
         self.doc
@@ -479,7 +479,7 @@ pub(crate) mod tests {
     fn the_date_field_stores_a_format_and_no_date() {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::StampModified {
-            now_ms: ambre_core::Timestamp(1_700_000_000_000),
+            now: ambre_core::Timestamp(1_700_000_000_000),
         });
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
@@ -556,7 +556,7 @@ pub(crate) mod tests {
             text: "a".to_owned(),
         });
         let stamped = state.handle_command(ProseCommand::StampModified {
-            now_ms: ambre_core::Timestamp(42),
+            now: ambre_core::Timestamp(42),
         });
         assert!(stamped.update.is_some());
         assert_eq!(
@@ -564,7 +564,7 @@ pub(crate) mod tests {
             Some(ambre_core::Timestamp(42))
         );
         let again = state.handle_command(ProseCommand::StampModified {
-            now_ms: ambre_core::Timestamp(43),
+            now: ambre_core::Timestamp(43),
         });
         assert!(again.update.is_none(), "nothing was written since");
         state.handle_command(ProseCommand::Undo);
@@ -634,7 +634,7 @@ pub(crate) mod tests {
         });
         send(&field, &mut bob);
         let stamp = alice.handle_command(ProseCommand::StampModified {
-            now_ms: ambre_core::Timestamp(1_772_712_000_000),
+            now: ambre_core::Timestamp(1_772_712_000_000),
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
@@ -655,7 +655,7 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
         });
         state.handle_command(ProseCommand::StampModified {
-            now_ms: ambre_core::Timestamp(1_772_712_000_000),
+            now: ambre_core::Timestamp(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
         // A new document carries no language, so the date takes the neutral
@@ -755,7 +755,7 @@ pub(crate) mod tests {
         let mut state = ProseState::new().expect("a fresh document");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let bare = state.paginate(&[]).clone();
-        assert_eq!(bare.header_height_px, DocPx::new(0.0));
+        assert_eq!(bare.header_height, DocPx::new(0.0));
         state.handle_command(ProseCommand::SetHeaderEnabled {
             shown: crate::events::BandState::On,
         });
@@ -766,8 +766,8 @@ pub(crate) mod tests {
             text: "A header".to_owned(),
         });
         let banded = state.paginate(&[]).clone();
-        assert!(banded.header_height_px > DocPx::new(0.0));
-        assert!(banded.body_height_px() < bare.body_height_px());
+        assert!(banded.header_height > DocPx::new(0.0));
+        assert!(banded.body_height() < bare.body_height());
     }
 
     #[test]
@@ -780,9 +780,9 @@ pub(crate) mod tests {
             text: "a very long header line ".repeat(400),
         });
         let layout = state.paginate(&[]).clone();
-        let cap = layout.content_height_px * crate::layout::geometry::BAND_SHARE;
-        assert!((layout.header_height_px - cap).abs() < DocPx::new(0.01));
-        assert!(layout.body_height_px() >= layout.content_height_px * 0.5);
+        let cap = layout.content_height * crate::layout::geometry::BAND_SHARE;
+        assert!((layout.header_height - cap).abs() < DocPx::new(0.01));
+        assert!(layout.body_height() >= layout.content_height * 0.5);
         assert_eq!(layout.page_count, crate::events::PageCount::new(1));
     }
 }

@@ -30,7 +30,7 @@ impl ProseState {
         block: &TreeID,
         range: DocSpan,
         text: &str,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if doc::is_band(&tree, block) {
@@ -58,7 +58,7 @@ impl ProseState {
         let written = self.write_thread(&id, span).and_then(|entry| {
             let replies = comment::replies_of(&entry)
                 .ok_or(doc::WriteError::Refused(doc::RefusalCause::NoReplyList))?;
-            self.write_reply(&replies, text, now_ms)
+            self.write_reply(&replies, text, now)
         });
         if let Err(e) = written {
             return Self::err_write(e);
@@ -80,7 +80,7 @@ impl ProseState {
         &mut self,
         id: &CommentId,
         text: &str,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     ) -> ProseOutcome {
         let Some(entry) = comment::entry(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
@@ -91,7 +91,7 @@ impl ProseState {
         let Some(replies) = comment::replies_of(&entry) else {
             return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::NoReplyList));
         };
-        if let Err(e) = self.write_reply(&replies, text, now_ms) {
+        if let Err(e) = self.write_reply(&replies, text, now) {
             return Self::err_write(e);
         }
         if let Err(e) = entry.insert(doc::AnnotKey::Resolved, false) {
@@ -268,7 +268,7 @@ impl ProseState {
         &self,
         list: &LoroList,
         text: &str,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     ) -> Result<(), doc::WriteError> {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let reply = list
@@ -286,7 +286,7 @@ impl ProseState {
                 .unwrap_or_default(),
         )?;
         reply.insert(doc::ReplyKey::User, user.to_string())?;
-        reply.insert(doc::ReplyKey::Created, now_ms.to_i64_saturating())?;
+        reply.insert(doc::ReplyKey::Created, now.to_i64_saturating())?;
         let body = reply.insert_container(doc::ReplyKey::Text, LoroText::new())?;
         body.insert(0, text).map_err(doc::WriteError::from)
     }
@@ -399,7 +399,7 @@ mod tests {
             block_id: block,
             range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
             text: text.to_owned(),
-            now_ms: ambre_core::Timestamp(10),
+            now: ambre_core::Timestamp(10),
         });
         state
             .comments()
@@ -426,12 +426,12 @@ mod tests {
         state: &mut ProseState,
         id: CommentId,
         text: &str,
-        now_ms: ambre_core::Timestamp,
+        now: ambre_core::Timestamp,
     ) -> ProseOutcome {
         state.handle_command(ProseCommand::ReplyToComment {
             comment_id: id,
             text: text.to_owned(),
-            now_ms,
+            now,
         })
     }
 
@@ -488,7 +488,7 @@ mod tests {
                 block_id: block,
                 range,
                 text: "x".to_owned(),
-                now_ms: ambre_core::Timestamp(0),
+                now: ambre_core::Timestamp(0),
             }))
         };
         assert_eq!(
@@ -786,7 +786,7 @@ mod tests {
             ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "Two.".to_owned(),
-                now_ms: ambre_core::Timestamp(11),
+                now: ambre_core::Timestamp(11),
             },
         );
         let ids = |state: &ProseState| -> Vec<CommentId> {
@@ -807,13 +807,13 @@ mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..11),
             text: "Alice.".to_owned(),
-            now_ms: ambre_core::Timestamp(1),
+            now: ambre_core::Timestamp(1),
         });
         let theirs = bob.handle_command(ProseCommand::AddComment {
             block_id: block,
             range: DocSpan::from_usize_range(6..17),
             text: "Bob.".to_owned(),
-            now_ms: ambre_core::Timestamp(1),
+            now: ambre_core::Timestamp(1),
         });
         bob.apply_remote(&mine.update.expect("a delta"));
         alice.apply_remote(&theirs.update.expect("a delta"));

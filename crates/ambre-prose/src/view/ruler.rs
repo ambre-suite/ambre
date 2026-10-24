@@ -158,8 +158,8 @@ impl ProseUiState {
         let zoom = self.viewport.zoom;
         let mut ruler = RulerState {
             visible: false,
-            page_left: self.column.left_px(&self.viewport) + layout.margin_left_px.zoomed(zoom),
-            content_width: layout.content_width_px.zoomed(zoom),
+            page_left: self.column.left(&self.viewport) + layout.margin_left.zoomed(zoom),
+            content_width: layout.content_width.zoomed(zoom),
             point_width: Pt::new(1.0).to_doc_px().zoomed(zoom),
             indent_first: Pt::ZERO,
             indent_left: Pt::ZERO,
@@ -175,9 +175,9 @@ impl ProseUiState {
         if let Some(style) = style {
             ruler.visible = true;
             // A hanging indent is laid out as none (`PROSE-FEAT-310`).
-            ruler.indent_first = style.indent_first_px.max(DocPx::ZERO).to_pt();
-            ruler.indent_left = style.indent_left_px.to_pt();
-            ruler.indent_right = style.indent_right_px.to_pt();
+            ruler.indent_first = style.indent_first.max(DocPx::ZERO).to_pt();
+            ruler.indent_left = style.indent_left.to_pt();
+            ruler.indent_right = style.indent_right.to_pt();
         }
         ruler
     }
@@ -286,10 +286,10 @@ mod tests {
             ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
             let ruler = ui.ruler();
             let layout = &ui.shaped.layout;
-            let left = ui.column.left_px(&ui.viewport).get() + layout.margin_left_px.get() * zoom;
+            let left = ui.column.left(&ui.viewport).get() + layout.margin_left.get() * zoom;
             assert!((ruler.page_left.get() - left).abs() < 1e-3);
             assert!(
-                (ruler.content_width.get() - layout.content_width_px.get() * zoom).abs() < 1e-3
+                (ruler.content_width.get() - layout.content_width.get() * zoom).abs() < 1e-3
             );
             // A handle placed at its value reads back the same value.
             for handle in [
@@ -361,7 +361,7 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
-        let column_pt = Pt::new(ruler.content_width / ruler.point_width);
+        let column_width = Pt::new(ruler.content_width / ruler.point_width);
         let short = Pt::new(36.0 - 1e-3);
         let far_right = ruler.page_left + ruler.content_width * 3.0;
         let far_left = ruler.page_left - ruler.content_width;
@@ -371,16 +371,16 @@ mod tests {
             Pt::ZERO
         );
         let left = ruler.points_at(RulerHandle::IndentLeft, far_right);
-        assert!(left + ruler.indent_right <= column_pt - short);
+        assert!(left + ruler.indent_right <= column_width - short);
         let right = ruler.points_at(RulerHandle::IndentRight, far_left);
-        assert!(right + ruler.indent_left <= column_pt - short);
+        assert!(right + ruler.indent_left <= column_width - short);
         // The first line counts from the left indent, and stops as short.
         assert_eq!(
             ruler.points_at(RulerHandle::IndentFirst, far_left),
             Pt::ZERO
         );
         let first = ruler.points_at(RulerHandle::IndentFirst, far_right);
-        assert!(first + ruler.indent_left + ruler.indent_right <= column_pt - short);
+        assert!(first + ruler.indent_left + ruler.indent_right <= column_width - short);
         // No caret, no command.
         ui.cursor = None;
         let release = RulerRelease {

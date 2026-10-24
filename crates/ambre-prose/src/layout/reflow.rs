@@ -212,18 +212,18 @@ impl Paginator {
         // The bands first: they decide the height every page leaves the body
         // (`PROSE-076`).
         self.bands =
-            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width_px);
+            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width);
         // Every note numbered before the first block is placed (`PROSE-117`).
-        self.notes = pass::NotePlan::read(&mut self.measurer, document, page_box.content_width_px);
+        self.notes = pass::NotePlan::read(&mut self.measurer, document, page_box.content_width);
         let measured = pass::measure_document_with(
             &mut self.measurer,
             document,
-            (page_box.content_width_px, &self.defaults),
+            (page_box.content_width, &self.defaults),
             (&HashMap::new(), &HashMap::new()),
             &self.toc_pages,
             &self.notes,
         );
-        let placement = place::place(&measured, self.bands.body_height_px(&page_box));
+        let placement = place::place(&measured, self.bands.body_height(&page_box));
         self.commit(page_box, measured, placement, PageIndex::ZERO);
         &self.layout
     }
@@ -240,7 +240,7 @@ impl Paginator {
         // four again is a few short paragraphs, and a band that moved changes
         // every page's body height: that is a full recomputation.
         let bands =
-            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width_px);
+            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width);
         if page_box != self.page_box
             || bands != self.bands
             || doc::read_defaults(document) != self.defaults
@@ -366,7 +366,7 @@ impl Paginator {
         pass::measure_document_with(
             &mut self.measurer,
             document,
-            (page_box.content_width_px, &self.defaults),
+            (page_box.content_width, &self.defaults),
             (&cached, &previous),
             &self.toc_pages,
             &self.notes,
@@ -383,14 +383,14 @@ impl Paginator {
         page_box: PageBox,
         from: BlockIndex,
     ) -> Placement {
-        let body_height_px = self.bands.body_height_px(&page_box);
-        let Some(resume) = self.cursor_before(from, body_height_px) else {
-            return place::place(measured, body_height_px);
+        let body_height = self.bands.body_height(&page_box);
+        let Some(resume) = self.cursor_before(from, body_height) else {
+            return place::place(measured, body_height);
         };
         let mut cursor = resume;
         let mut placed: Vec<BlockLayout> = match self.layout.blocks.get(..from.to_usize()) {
             Some(head) => head.to_vec(),
-            None => return place::place(measured, body_height_px),
+            None => return place::place(measured, body_height),
         };
         // The tail can only be reused when the sequence still has the same
         // shape. An inserted or deleted block shifts every index after it, so
@@ -398,7 +398,7 @@ impl Paginator {
         let same_shape = measured.len() == self.measured.len();
         let stopped =
             place::place_tail_until(measured, from, &mut cursor, &mut placed, |index, live| {
-                same_shape && self.cursor_before(index, body_height_px) == Some(*live)
+                same_shape && self.cursor_before(index, body_height) == Some(*live)
             });
         let Some(stop) = stopped else {
             return Placement {
@@ -419,11 +419,11 @@ impl Paginator {
 
     /// The cursor the block before `from` left, or `None` when `from` is the
     /// first block or the old layout is too short to answer.
-    fn cursor_before(&self, from: BlockIndex, body_height_px: DocPx) -> Option<place::Cursor> {
+    fn cursor_before(&self, from: BlockIndex, body_height: DocPx) -> Option<place::Cursor> {
         let index = from.prev()?.to_usize();
         let entry = self.layout.blocks.get(index)?;
         let block = self.measured.get(index)?;
-        Some(place::cursor_after(entry, block, body_height_px))
+        Some(place::cursor_after(entry, block, body_height))
     }
 
     fn commit(

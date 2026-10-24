@@ -43,19 +43,19 @@ pub(crate) struct CellFrame {
 pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFrame> {
     let y0 = *table.row_tops.get(cell.rows.start)?;
     let y1 = *table.row_tops.get(cell.rows.end)?;
-    let pad = cell.style.padding_px;
-    let room = (y1 - y0 - pad * 2.0 - cell.content_px).max(DocPx::ZERO);
+    let pad = cell.style.padding;
+    let room = (y1 - y0 - pad * 2.0 - cell.content_height).max(DocPx::ZERO);
     let shift = match cell.style.valign {
         VAlign::Top => DocPx::ZERO,
         VAlign::Middle => room / 2.0,
         VAlign::Bottom => room,
     };
     Some(CellFrame {
-        x0: cell.x_px,
+        x0: cell.x,
         y0,
-        x1: cell.x_px + cell.width_px,
+        x1: cell.x + cell.width,
         y1,
-        text_x: cell.x_px + pad,
+        text_x: cell.x + pad,
         text_y: y0 + pad + shift,
     })
 }
@@ -98,7 +98,7 @@ fn cell_hit(table: &TableShape, x: DocPx, y: DocPx) -> Option<(BlockId, RunOffse
     let (held, top, run) = chosen;
     let id = block_id(*held);
     let data = run.data();
-    let x = x - frame.text_x - data.indent_px();
+    let x = x - frame.text_x - data.indent();
     let y = (y - *top).clamp(DocPx::ZERO, data.height().max(DocPx::ZERO));
     Some((id, data.offset_at(DocPoint::new(x, y))))
 }
@@ -113,7 +113,7 @@ pub(crate) fn fragment(
     if page == block.page_start {
         return Some(Fragment {
             top: block.y_in_page,
-            height: block.height_px,
+            height: block.height,
             run_top: DocPx::ZERO,
         });
     }
@@ -178,13 +178,13 @@ impl ProseUiState {
             .filter(|note| note.page == page)
             .collect();
         notes.sort_by_key(|note| note.ordinal);
-        let total: DocPx = notes.iter().map(|note| note.height_px).sum();
-        let mut y = layout.body_top_px() + layout.body_height_px() - total;
+        let total: DocPx = notes.iter().map(|note| note.height).sum();
+        let mut y = layout.body_top() + layout.body_height() - total;
         notes
             .into_iter()
             .map(|note| {
                 let top = y;
-                y += note.height_px;
+                y += note.height;
                 NoteSlot {
                     footnote_id: note.footnote_id,
                     block: note.block_id,
@@ -200,17 +200,17 @@ impl ProseUiState {
     pub(crate) fn band_slots(&self, page: PageIndex) -> Vec<BandSlot> {
         let layout = &self.shaped.layout;
         let first = page == PageIndex::ZERO && layout.bands.different_first_page;
-        let (header_px, footer_px) = if first {
-            (layout.header_first_height_px, layout.footer_first_height_px)
+        let (header_height, footer_height) = if first {
+            (layout.header_first_height, layout.footer_first_height)
         } else {
-            (layout.header_height_px, layout.footer_height_px)
+            (layout.header_height, layout.footer_height)
         };
-        let top = layout.margin_top_px;
-        let bottom = top + layout.content_height_px;
+        let top = layout.margin_top;
+        let bottom = top + layout.content_height;
         let (header, footer) = layout.bands_on_page(page);
         [
-            (header, top, top + header_px),
-            (footer, bottom - footer_px, bottom),
+            (header, top, top + header_height),
+            (footer, bottom - footer_height, bottom),
         ]
         .into_iter()
         .filter_map(|(band, top, bottom)| {
@@ -263,7 +263,7 @@ impl ProseUiState {
             .find(|(_, top, bottom)| y_in_page >= *top && y_in_page < *bottom)?;
         let slot = BandSlot { block, top, bottom };
         let run = self.drawn_of(slot.block)?.data();
-        let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
+        let x = x_in_page - self.shaped.layout.margin_left - run.indent();
         let y =
             (y_in_page - slot.top).clamp(DocPx::ZERO, (slot.bottom - slot.top).max(DocPx::ZERO));
         Some((block_id(slot.block), run.offset_at(DocPoint::new(x, y))))
@@ -303,7 +303,7 @@ impl ProseUiState {
             return Some((block, HitOffset::of(self, block, offset)));
         }
         let layout = &self.shaped.layout;
-        let y_body = y_in_page - layout.body_top_px();
+        let y_body = y_in_page - layout.body_top();
         let (pieces, ghost_at) = self.pieces(page);
         if let (Some(at), Some(new_block), Some(ghost)) = (
             ghost_at,
@@ -313,7 +313,7 @@ impl ProseUiState {
             && y_body < at.top + at.height
         {
             let run = ghost.run.data();
-            let x = x_in_page - layout.margin_left_px - run.indent_px();
+            let x = x_in_page - layout.margin_left - run.indent();
             return Some((
                 new_block,
                 HitOffset::Drawn(DocOffset::new(
@@ -337,7 +337,7 @@ impl ProseUiState {
         // A press in a table lands in the cell under it, in the text drawn
         // there (`PROSE-UI-216`).
         if let Some(table) = &chosen.table {
-            let x = x_in_page - layout.margin_left_px;
+            let x = x_in_page - layout.margin_left;
             let y = (y_body - piece.top).clamp(DocPx::ZERO, piece.height.max(DocPx::ZERO))
                 + piece.run_top;
             if let Some((id, offset)) = cell_hit(table, x, y) {
@@ -355,7 +355,7 @@ impl ProseUiState {
         let offset = match &chosen.run {
             Some(run) => {
                 let run = run.data();
-                let x = x_in_page - layout.margin_left_px - run.indent_px();
+                let x = x_in_page - layout.margin_left - run.indent();
                 let y = (y_body - piece.top).clamp(DocPx::ZERO, piece.height.max(DocPx::ZERO))
                     + piece.run_top;
                 run.offset_at(DocPoint::new(x, y))
@@ -391,14 +391,14 @@ mod tests {
         let run = ui.shaped.blocks[&block.block_id].data();
         let caret = run.caret_box(RunOffset::new(offset));
         let x =
-            layout.margin_left_px + run.indent_px() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
+            layout.margin_left + run.indent() + DocPx::new(caret.x0 as f32) + DocPx::new(0.5);
         let y_doc = ui.column.page_top_y(block.page_start)
-            + layout.body_top_px()
+            + layout.body_top()
             + block.y_in_page
             + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
             (y_doc - ui.viewport.scroll_y).get() * scale,
         )
     }

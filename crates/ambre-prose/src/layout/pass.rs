@@ -36,19 +36,19 @@ const RULE_HEIGHT: DocPx = DocPx::new(1.0);
 /// (`PROSE-033`, `PROSE-065`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PageLayout {
-    pub page_width_px: DocPx,
-    pub page_height_px: DocPx,
-    pub content_width_px: DocPx,
-    pub content_height_px: DocPx,
+    pub page_width: DocPx,
+    pub page_height: DocPx,
+    pub content_width: DocPx,
+    pub content_height: DocPx,
     /// Where the content box starts on the sheet.
-    pub margin_left_px: DocPx,
-    pub margin_top_px: DocPx,
+    pub margin_left: DocPx,
+    pub margin_top: DocPx,
     pub page_count: PageCount,
     pub blocks: Vec<BlockLayout>,
-    pub header_height_px: DocPx,
-    pub header_first_height_px: DocPx,
-    pub footer_height_px: DocPx,
-    pub footer_first_height_px: DocPx,
+    pub header_height: DocPx,
+    pub header_first_height: DocPx,
+    pub footer_height: DocPx,
+    pub footer_first_height: DocPx,
     /// The first page this layout differs from the one it replaces on
     /// (`PROSE-067`). `None` when nothing moved, and the first page for a layout
     /// that replaces nothing.
@@ -104,16 +104,16 @@ impl PageLayout {
     /// Where the body starts on a sheet, below the taller header. Every page
     /// gets the same body, so every page starts it at the same height.
     #[must_use]
-    pub fn body_top_px(&self) -> DocPx {
-        self.margin_top_px + self.header_height_px.max(self.header_first_height_px)
+    pub fn body_top(&self) -> DocPx {
+        self.margin_top + self.header_height.max(self.header_first_height)
     }
 
     /// The height left for body content on a page, both bands deducted.
     #[must_use]
-    pub fn body_height_px(&self) -> DocPx {
-        let header = self.header_height_px.max(self.header_first_height_px);
-        let footer = self.footer_height_px.max(self.footer_first_height_px);
-        (self.content_height_px - header - footer).max(DocPx::ZERO)
+    pub fn body_height(&self) -> DocPx {
+        let header = self.header_height.max(self.header_first_height);
+        let footer = self.footer_height.max(self.footer_first_height);
+        (self.content_height - header - footer).max(DocPx::ZERO)
     }
 }
 
@@ -124,24 +124,24 @@ impl PageLayout {
 /// block is placed (`PROSE-076`).
 pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
     let page_box = PageBox::read(document);
-    let bands = BandHeights::measure(measurer, document, page_box.content_width_px);
-    let notes = NotePlan::read(measurer, document, page_box.content_width_px);
+    let bands = BandHeights::measure(measurer, document, page_box.content_width);
+    let notes = NotePlan::read(measurer, document, page_box.content_width);
     let blocks = measure_document_with(
         measurer,
         document,
-        (page_box.content_width_px, &doc::read_defaults(document)),
+        (page_box.content_width, &doc::read_defaults(document)),
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
     );
-    let placement = place::place(&blocks, bands.body_height_px(&page_box));
+    let placement = place::place(&blocks, bands.body_height(&page_box));
     let mut layout = layout_of(page_box, &placement);
     bands.stamp(&mut layout);
     layout
 }
 
 /// The room between a note's number and its text, in pixels.
-pub const NOTE_GAP_PX: DocPx = DocPx::new(4.0);
+pub const NOTE_GAP: DocPx = DocPx::new(4.0);
 
 /// Every footnote numbered and measured, before any block is placed
 /// (`PROSE-117`).
@@ -202,7 +202,7 @@ impl NotePlan {
     pub(crate) fn read(
         measurer: &mut Measurer,
         document: &LoroDoc,
-        content_width_px: DocPx,
+        content_width: DocPx,
     ) -> Self {
         let key = Self::key_of(document);
         if key.is_empty() {
@@ -214,7 +214,7 @@ impl NotePlan {
             &ParagraphStyle::default(),
             crate::layout::measure::Weight::Regular,
         );
-        let width = style.text_width_px(content_width_px);
+        let width = style.text_width(content_width);
         let mut numbers = HashMap::with_capacity(key.len());
         let mut texts = Vec::with_capacity(key.len());
         let mut notes = HashMap::with_capacity(key.len());
@@ -225,15 +225,15 @@ impl NotePlan {
             let (number_metrics, number) =
                 measurer.measure_run(&ordinal.to_string(), &style, width);
             let mut hung = style.clone();
-            hung.indent_left_px += number.data().full_width() + NOTE_GAP_PX;
+            hung.indent_left += number.data().full_width() + NOTE_GAP;
             let (metrics, _, run) = measurer.measure_with_lines(
                 (text, marks),
                 &hung,
-                hung.text_width_px(content_width_px),
+                hung.text_width(content_width),
                 &[],
                 None,
             );
-            let height = metrics.text_height_px.max(number_metrics.text_height_px);
+            let height = metrics.text_height.max(number_metrics.text_height);
             numbers.insert(*id, number);
             texts.push((block, run));
             notes.insert(*id, (*ordinal, height, block));
@@ -272,13 +272,13 @@ impl NotePlan {
 
     /// One call, placed on `line`.
     fn call(&self, id: &FootnoteId, line: BlockLine) -> Option<NoteCall> {
-        let (ordinal, height_px, block_id) = *self.notes.get(id)?;
+        let (ordinal, height, block_id) = *self.notes.get(id)?;
         Some(NoteCall {
             footnote_id: *id,
             block_id,
             ordinal,
             line,
-            height_px,
+            height,
         })
     }
 }
@@ -287,10 +287,10 @@ impl NotePlan {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct BandHeights {
     pub(crate) bands: doc::Bands,
-    header_px: DocPx,
-    header_first_px: DocPx,
-    footer_px: DocPx,
-    footer_first_px: DocPx,
+    header_height: DocPx,
+    header_first_height: DocPx,
+    footer_height: DocPx,
+    footer_first_height: DocPx,
     /// The text of each band shown, as it was shaped, for the view to draw.
     pub(crate) runs: Vec<(TreeID, ShapedRun)>,
 }
@@ -301,10 +301,10 @@ pub(crate) struct BandHeights {
 impl PartialEq for BandHeights {
     fn eq(&self, other: &Self) -> bool {
         self.bands == other.bands
-            && self.header_px == other.header_px
-            && self.header_first_px == other.header_first_px
-            && self.footer_px == other.footer_px
-            && self.footer_first_px == other.footer_first_px
+            && self.header_height == other.header_height
+            && self.header_first_height == other.header_first_height
+            && self.footer_height == other.footer_height
+            && self.footer_first_height == other.footer_first_height
     }
 }
 
@@ -313,31 +313,31 @@ impl BandHeights {
     pub(crate) fn measure(
         measurer: &mut Measurer,
         document: &LoroDoc,
-        content_width_px: DocPx,
+        content_width: DocPx,
     ) -> Self {
         let bands = doc::read_bands(document);
         let mut runs = Vec::new();
         let mut height = |band: doc::Band, shown: bool| match band.block {
             Some(id) if shown => {
-                let measured = measure_band(measurer, document, &id, content_width_px);
+                let measured = measure_band(measurer, document, &id, content_width);
                 if let Some(run) = measured.run {
                     runs.push((id, run));
                 }
-                measured.height_px
+                measured.height
             }
             _ => DocPx::ZERO,
         };
         let first = bands.different_first_page;
-        let header_px = height(bands.header, bands.header_enabled);
-        let header_first_px = height(bands.header_first, bands.header_enabled && first);
-        let footer_px = height(bands.footer, bands.footer_enabled);
-        let footer_first_px = height(bands.footer_first, bands.footer_enabled && first);
+        let header_height = height(bands.header, bands.header_enabled);
+        let header_first_height = height(bands.header_first, bands.header_enabled && first);
+        let footer_height = height(bands.footer, bands.footer_enabled);
+        let footer_first_height = height(bands.footer_first, bands.footer_enabled && first);
         Self {
             bands,
-            header_px,
-            header_first_px,
-            footer_px,
-            footer_first_px,
+            header_height,
+            header_first_height,
+            footer_height,
+            footer_first_height,
             runs,
         }
     }
@@ -348,20 +348,20 @@ impl BandHeights {
     /// One height for every page: the taller of the regular band and the
     /// first page's own. A page never overflows its bands. The price is
     /// some room lost after the first page when its own bands are the taller.
-    pub(crate) fn body_height_px(&self, page_box: &PageBox) -> DocPx {
-        page_box.body_height_px(
-            self.header_px.max(self.header_first_px),
-            self.footer_px.max(self.footer_first_px),
+    pub(crate) fn body_height(&self, page_box: &PageBox) -> DocPx {
+        page_box.body_height(
+            self.header_height.max(self.header_first_height),
+            self.footer_height.max(self.footer_first_height),
         )
     }
 
     /// Write the heights, capped, and the settings into a layout.
     pub(crate) fn stamp(&self, layout: &mut PageLayout) {
-        let cap = (layout.content_height_px * crate::layout::geometry::BAND_SHARE).max(DocPx::ZERO);
-        layout.header_height_px = self.header_px.min(cap);
-        layout.header_first_height_px = self.header_first_px.min(cap);
-        layout.footer_height_px = self.footer_px.min(cap);
-        layout.footer_first_height_px = self.footer_first_px.min(cap);
+        let cap = (layout.content_height * crate::layout::geometry::BAND_SHARE).max(DocPx::ZERO);
+        layout.header_height = self.header_height.min(cap);
+        layout.header_first_height = self.header_first_height.min(cap);
+        layout.footer_height = self.footer_height.min(cap);
+        layout.footer_first_height = self.footer_first_height.min(cap);
         layout.bands = self.bands;
     }
 }
@@ -370,18 +370,18 @@ impl BandHeights {
 #[must_use]
 pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout {
     PageLayout {
-        page_width_px: page_box.page_width_px,
-        page_height_px: page_box.page_height_px,
-        content_width_px: page_box.content_width_px,
-        content_height_px: page_box.content_height_px,
-        margin_left_px: page_box.margin_left_px,
-        margin_top_px: page_box.margin_top_px,
+        page_width: page_box.page_width,
+        page_height: page_box.page_height,
+        content_width: page_box.content_width,
+        content_height: page_box.content_height,
+        margin_left: page_box.margin_left,
+        margin_top: page_box.margin_top,
         page_count: placement.page_count,
         blocks: placement.blocks.clone(),
-        header_height_px: DocPx::ZERO,
-        header_first_height_px: DocPx::ZERO,
-        footer_height_px: DocPx::ZERO,
-        footer_first_height_px: DocPx::ZERO,
+        header_height: DocPx::ZERO,
+        header_first_height: DocPx::ZERO,
+        footer_height: DocPx::ZERO,
+        footer_first_height: DocPx::ZERO,
         first_dirty_page: Some(PageIndex::ZERO),
         // The caller knows what its measurer was missing; this one assembles
         // geometry and placement alone.
@@ -397,15 +397,15 @@ pub(crate) fn measure_band(
     measurer: &mut Measurer,
     document: &LoroDoc,
     id: &TreeID,
-    content_width_px: DocPx,
+    content_width: DocPx,
 ) -> MeasuredBlock {
     let Some(tree) = doc::blocks_read(document) else {
         return MeasuredBlock {
             block_id: *id,
             block_type: BlockType::Paragraph,
-            height_px: DocPx::ZERO,
-            space_before_px: DocPx::ZERO,
-            space_after_px: DocPx::ZERO,
+            height: DocPx::ZERO,
+            space_before: DocPx::ZERO,
+            space_after: DocPx::ZERO,
             keep_together: false,
             keep_with_next: false,
             metrics: None,
@@ -420,7 +420,7 @@ pub(crate) fn measure_band(
         document,
         tree: &tree,
         defaults: &defaults,
-        content_width_px,
+        content_width,
         cached: &cached,
         previous: &cached,
         toc_pages: &toc_pages,
@@ -434,13 +434,13 @@ pub(crate) fn measure_band(
 pub fn measure_document(
     measurer: &mut Measurer,
     document: &LoroDoc,
-    content_width_px: DocPx,
+    content_width: DocPx,
 ) -> Vec<MeasuredBlock> {
-    let notes = NotePlan::read(measurer, document, content_width_px);
+    let notes = NotePlan::read(measurer, document, content_width);
     measure_document_with(
         measurer,
         document,
-        (content_width_px, &doc::read_defaults(document)),
+        (content_width, &doc::read_defaults(document)),
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
@@ -461,7 +461,7 @@ pub fn measure_document(
 pub(crate) fn measure_document_with(
     measurer: &mut Measurer,
     document: &LoroDoc,
-    (content_width_px, defaults): (DocPx, &doc::DocDefaults),
+    (content_width, defaults): (DocPx, &doc::DocDefaults),
     (cached, previous): (
         &HashMap<TreeID, &MeasuredBlock>,
         &HashMap<TreeID, &MeasuredBlock>,
@@ -485,7 +485,7 @@ pub(crate) fn measure_document_with(
         document,
         tree: &tree,
         defaults,
-        content_width_px,
+        content_width,
         cached,
         previous,
         toc_pages,
@@ -502,7 +502,7 @@ struct Walk<'a> {
     document: &'a LoroDoc,
     tree: &'a LoroTree,
     defaults: &'a doc::DocDefaults,
-    content_width_px: DocPx,
+    content_width: DocPx,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
     previous: &'a HashMap<TreeID, &'a MeasuredBlock>,
     toc_pages: &'a HashMap<TreeID, PageNumber>,
@@ -546,31 +546,31 @@ fn measure_one(
     block_type: BlockType,
 ) -> MeasuredBlock {
     let (document, tree, defaults) = (scope.document, scope.tree, scope.defaults);
-    let content_width_px = scope.content_width_px;
+    let content_width = scope.content_width;
     let weight = if block_type == BlockType::Heading {
         crate::layout::measure::Weight::Bold
     } else {
         crate::layout::measure::Weight::Regular
     };
     let style = EffectiveStyle::resolve(defaults, tree, id, weight);
-    let text_width_px = style.text_width_px(content_width_px);
+    let text_width = style.text_width(content_width);
     let mut notes = Vec::new();
     let mut run = None;
     let mut table = None;
-    let (height_px, metrics) = match block_type {
+    let (height, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (DocPx::ZERO, None),
         BlockType::HRule => (RULE_HEIGHT, None),
         BlockType::Image => (
-            image_height(measurer, tree, id, &style, text_width_px),
+            image_height(measurer, tree, id, &style, text_width),
             None,
         ),
         BlockType::Table => {
             let (rows, shape) =
-                table_metrics(measurer, document, tree, defaults, id, content_width_px);
+                table_metrics(measurer, document, tree, defaults, id, content_width);
             notes = table_calls(scope, id);
             table = Some(Arc::new(shape));
-            (rows.text_height_px, Some(rows))
+            (rows.text_height, Some(rows))
         }
         // One line per entry, measured on the pages the layout before gave
         // the headings. A table of contents that lists nothing measures as
@@ -582,9 +582,9 @@ fn measure_one(
             if text.is_empty() {
                 (DocPx::ZERO, None)
             } else {
-                let (metrics, shaped) = measurer.measure_run(&text, &style, text_width_px);
+                let (metrics, shaped) = measurer.measure_run(&text, &style, text_width);
                 run = Some(shaped);
-                (metrics.text_height_px, Some(metrics))
+                (metrics.text_height, Some(metrics))
             }
         }
         _ => {
@@ -596,7 +596,7 @@ fn measure_one(
             let (metrics, lines, shaped) = measurer.measure_with_lines(
                 (&text, &marks),
                 &style,
-                text_width_px,
+                text_width,
                 &offsets,
                 previous,
             );
@@ -606,15 +606,15 @@ fn measure_one(
                 .zip(lines)
                 .filter_map(|((_, note), line)| scope.notes.call(note, line))
                 .collect();
-            (metrics.text_height_px, Some(metrics))
+            (metrics.text_height, Some(metrics))
         }
     };
     MeasuredBlock {
         block_id: *id,
         block_type,
-        height_px,
-        space_before_px: style.space_before_px,
-        space_after_px: style.space_after_px,
+        height,
+        space_before: style.space_before,
+        space_after: style.space_after,
         keep_together: style.keep_together,
         keep_with_next: style.keep_with_next,
         metrics,
@@ -658,26 +658,26 @@ fn image_height(
     tree: &LoroTree,
     id: &TreeID,
     style: &EffectiveStyle,
-    text_width_px: DocPx,
+    text_width: DocPx,
 ) -> DocPx {
     let attrs = doc::attrs_read(tree, id);
     let Some(attrs) = attrs else {
         return DocPx::ZERO;
     };
-    let box_px = DocPx::new(
+    let box_height = DocPx::new(
         number_at(&attrs, doc::AttrKey::ImageHeight)
             .unwrap_or(0.0)
             .max(0.0),
     );
-    let caption_px = match string_at(&attrs, doc::AttrKey::ImageCaption) {
+    let caption_height = match string_at(&attrs, doc::AttrKey::ImageCaption) {
         Some(caption) if !caption.is_empty() => {
             measurer
-                .measure(&caption, style, text_width_px)
-                .text_height_px
+                .measure(&caption, style, text_width)
+                .text_height
         }
         _ => DocPx::ZERO,
     };
-    box_px + caption_px
+    box_height + caption_height
 }
 
 /// A table, measured per row: the tallest cell of each row decides its height.
@@ -697,18 +697,18 @@ fn table_metrics(
     tree: &LoroTree,
     defaults: &doc::DocDefaults,
     table: &TreeID,
-    content_width_px: DocPx,
+    content_width: DocPx,
 ) -> (TextMetrics, TableShape) {
     let Some(grid) = Grid::read(tree, table) else {
         let empty = TextMetrics {
-            text_height_px: DocPx::ZERO,
+            text_height: DocPx::ZERO,
             line_count: BlockLineCount::ZERO,
             line_tops: vec![DocPx::ZERO],
         };
         return (empty, TableShape::default());
     };
     let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
-    let widths = column_widths_px(&doc::col_widths(tree, table), cols, content_width_px);
+    let widths = column_widths(&doc::col_widths(tree, table), cols, content_width);
     let mut col_x = Vec::with_capacity(cols + 1);
     col_x.push(DocPx::ZERO);
     for width in &widths {
@@ -732,32 +732,32 @@ fn table_metrics(
                 .iter()
                 .find(|(_, rect)| rect.top_left == at)
                 .map_or(at, |(_, rect)| rect.bottom_right);
-            let x_px = col_x.get(col).copied().unwrap_or(DocPx::ZERO);
+            let x = col_x.get(col).copied().unwrap_or(DocPx::ZERO);
             let right_x = col_x
                 .get(last.col.next().to_usize())
                 .copied()
-                .unwrap_or(x_px);
-            let width_px = right_x - x_px;
+                .unwrap_or(x);
+            let width = right_x - x;
             let style = cell_style(tree, cell);
-            let text_px = (width_px - style.padding_px * 2.0).max(DocPx::ZERO);
-            let stacked = cell_blocks(measurer, document, tree, defaults, cell, text_px);
+            let text_width = (width - style.padding * 2.0).max(DocPx::ZERO);
+            let stacked = cell_blocks(measurer, document, tree, defaults, cell, text_width);
             let mut top = DocPx::ZERO;
             let mut blocks = Vec::new();
             for block in stacked {
-                top += block.space_before_px;
+                top += block.space_before;
                 if let Some(run) = block.run {
                     blocks.push((block.block_id, top, run));
                 }
-                top += block.height_px + block.space_after_px;
+                top += block.height + block.space_after;
             }
-            heights.push(top + style.padding_px * 2.0);
+            heights.push(top + style.padding * 2.0);
             cells.push(CellShape {
                 cell: *cell,
-                x_px,
-                width_px,
+                x,
+                width,
                 rows: row..last.row.next().to_usize(),
                 blocks,
-                content_px: top,
+                content_height: top,
                 style,
             });
         }
@@ -784,13 +784,13 @@ fn table_metrics(
         }
     }
     let mut row_tops = vec![DocPx::ZERO];
-    let mut height_px = DocPx::ZERO;
+    let mut height = DocPx::ZERO;
     for row_height in &row_heights {
-        height_px += *row_height;
-        row_tops.push(height_px);
+        height += *row_height;
+        row_tops.push(height);
     }
     let metrics = TextMetrics {
-        text_height_px: height_px,
+        text_height: height,
         line_count: BlockLineCount::from_len(row_heights.len()),
         line_tops: row_tops.clone(),
     };
@@ -800,7 +800,7 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-pub(crate) fn column_widths_px(stored: &[Pt], cols: usize, content_width_px: DocPx) -> Vec<DocPx> {
+pub(crate) fn column_widths(stored: &[Pt], cols: usize, content_width: DocPx) -> Vec<DocPx> {
     let usable = stored.len() == cols
         && stored
             .iter()
@@ -809,9 +809,9 @@ pub(crate) fn column_widths_px(stored: &[Pt], cols: usize, content_width_px: Doc
         stored.iter().map(|width| width.to_doc_px()).collect()
     } else {
         let share = if cols == 0 {
-            content_width_px
+            content_width
         } else {
-            content_width_px / cols as f32
+            content_width / cols as f32
         };
         vec![share; cols]
     }
@@ -850,7 +850,7 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     CellStyle {
         fill: colour(doc::AttrKey::CellBg),
         border,
-        padding_px: length(doc::AttrKey::Padding).unwrap_or(DocPx::ZERO),
+        padding: length(doc::AttrKey::Padding).unwrap_or(DocPx::ZERO),
 
         valign,
     }
@@ -863,7 +863,7 @@ fn cell_blocks(
     tree: &LoroTree,
     defaults: &doc::DocDefaults,
     cell: &TreeID,
-    width_px: DocPx,
+    width: DocPx,
 ) -> Vec<MeasuredBlock> {
     let mut stacked = Vec::new();
     let empty = HashMap::new();
@@ -872,7 +872,7 @@ fn cell_blocks(
         document,
         tree,
         defaults,
-        content_width_px: width_px,
+        content_width: width,
         cached: &empty,
         previous: &empty,
         toc_pages: &no_pages,
@@ -951,8 +951,8 @@ mod tests {
         let mut measurer = crate::layout::measure::shipped_measurer();
         let measured = measure_document(&mut measurer, &document, DocPx::new(400.0));
         assert_eq!(measured.len(), 2);
-        assert_eq!(measured[0].height_px, DocPx::new(0.0));
-        assert_eq!(measured[1].height_px, DocPx::new(RULE_HEIGHT.get()));
+        assert_eq!(measured[0].height, DocPx::new(0.0));
+        assert_eq!(measured[1].height, DocPx::new(RULE_HEIGHT.get()));
     }
 
     #[test]
@@ -963,7 +963,7 @@ mod tests {
         assert_eq!(measured.len(), 1);
         // Nothing here decodes the file, so an image with no display height
         // and no caption takes no room at all.
-        assert_eq!(measured[0].height_px, DocPx::new(0.0));
+        assert_eq!(measured[0].height, DocPx::new(0.0));
         assert!(!measured[0].splittable());
     }
 
@@ -996,7 +996,7 @@ mod tests {
         };
         assert_eq!(metrics.line_count.get(), 3);
         assert_eq!(metrics.line_tops.len(), 4);
-        assert!(metrics.text_height_px > DocPx::new(0.0));
+        assert!(metrics.text_height > DocPx::new(0.0));
     }
 
     #[test]
@@ -1028,8 +1028,8 @@ mod tests {
                 .count(),
             0
         );
-        assert!(layout.page_width_px > DocPx::new(0.0));
-        assert!(layout.body_height_px() > DocPx::new(0.0));
+        assert!(layout.page_width > DocPx::new(0.0));
+        assert!(layout.body_height() > DocPx::new(0.0));
     }
 
     #[test]

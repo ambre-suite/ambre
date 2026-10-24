@@ -156,9 +156,9 @@ impl ProseUiState {
 
     /// The canvas took a new size. The offset and the zoom stay
     /// (`PROSE-UI-130`): what was at the top of the canvas still is.
-    pub fn resize(&mut self, width_px: ViewPx, height_px: ViewPx) {
-        self.viewport.width_px = width_px.max(ViewPx::ZERO);
-        self.viewport.height_px = height_px.max(ViewPx::ZERO);
+    pub fn resize(&mut self, width: ViewPx, height: ViewPx) {
+        self.viewport.width = width.max(ViewPx::ZERO);
+        self.viewport.height = height.max(ViewPx::ZERO);
     }
 
     /// Bring the heading a table-of-contents entry reads to the top of the
@@ -181,7 +181,7 @@ impl ProseUiState {
             return;
         };
         let top = self.column.page_top_y(layout.page_start)
-            + self.shaped.layout.body_top_px()
+            + self.shaped.layout.body_top()
             + layout.y_in_page;
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, top);
     }
@@ -537,8 +537,8 @@ pub(crate) mod tests {
         ShapedLayout::new(
             crate::layout::run::LayoutVersion::new(version),
             Arc::new(PageLayout {
-                page_width_px: DocPx::new(800.0),
-                page_height_px: DocPx::new(1000.0),
+                page_width: DocPx::new(800.0),
+                page_height: DocPx::new(1000.0),
                 page_count: PageCount::new(pages),
                 ..PageLayout::default()
             }),
@@ -654,7 +654,7 @@ pub(crate) mod tests {
         };
         ui.follow_toc_entry(&entry);
         let top =
-            ui.column.page_top_y(far.page_start) + ui.shaped.layout.body_top_px() + far.y_in_page;
+            ui.column.page_top_y(far.page_start) + ui.shaped.layout.body_top() + far.y_in_page;
         assert_eq!(
             ui.viewport.scroll_y,
             ui.column.clamp_scroll(&ui.viewport, top)

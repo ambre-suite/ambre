@@ -13,7 +13,7 @@ use ambre_draw::{Affine, DocumentWalk, DrawSurface, Point, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
-use crate::layout::place::NOTE_SEPARATOR_PX;
+use crate::layout::place::NOTE_SEPARATOR;
 use crate::layout::run::{
     ParleyRunData, RunCount, RunLine, RunOffset, RunSpan, ShapedRun, TableShape,
 };
@@ -28,11 +28,11 @@ use crate::view::walk::{
 };
 
 /// How far the shadow falls from the sheet.
-const SHADOW_OFFSET_PX: SurfacePx = SurfacePx::new(3.0);
+const SHADOW_OFFSET: SurfacePx = SurfacePx::new(3.0);
 /// The width of the local caret and of a remote one.
-const CARET_WIDTH_PX: SurfacePx = SurfacePx::new(1.5);
+const CARET_WIDTH: SurfacePx = SurfacePx::new(1.5);
 /// The tab a remote caret carries above its bar, standing for its label.
-const LABEL_TAB_PX: SurfacePx = SurfacePx::new(5.0);
+const LABEL_TAB: SurfacePx = SurfacePx::new(5.0);
 
 /// A block the screen draws around: its selections under the walk, its
 /// carets over it.
@@ -102,7 +102,7 @@ fn place(content: ContentBox, run: &ShapedRun, piece: Fragment) -> Placed {
     let clip_top = content.body_top.get() + f64::from(piece.top.get());
     Placed {
         origin: Point::new(
-            left + f64::from(run.data().indent_px().get()),
+            left + f64::from(run.data().indent().get()),
             clip_top - f64::from(piece.run_top.get()),
         ),
         clip: Rect::new(
@@ -247,8 +247,8 @@ impl ProseUiState {
             return;
         };
         let camera = self.camera();
-        let width = SurfacePx::new(f64::from(self.shaped.layout.page_width_px.get()));
-        let height = SurfacePx::new(f64::from(self.shaped.layout.page_height_px.get()));
+        let width = SurfacePx::new(f64::from(self.shaped.layout.page_width.get()));
+        let height = SurfacePx::new(f64::from(self.shaped.layout.page_height.get()));
         let mut frame = Frame::default();
         for page in pages {
             let top = SurfacePx::new(f64::from(self.column.page_top_y(page).get()));
@@ -316,7 +316,7 @@ impl ProseUiState {
     /// The camera from column coordinates to the canvas: the column's left
     /// edge, the zoom, then the scroll.
     fn camera(&self) -> Affine {
-        Affine::translate((f64::from(self.column.left_px(&self.viewport).get()), 0.0))
+        Affine::translate((f64::from(self.column.left(&self.viewport).get()), 0.0))
             * Affine::scale(f64::from(self.viewport.scale()))
             * Affine::translate((0.0, -f64::from(self.viewport.scroll_y.get())))
     }
@@ -324,13 +324,13 @@ impl ProseUiState {
     /// The region the walk covers: the canvas, and the pages built on each
     /// side of it. Their runs are then ready when a scroll reaches them.
     fn walk_region(&self, camera: Affine, frame: &Frame) -> Rect {
-        let width = f64::from(self.shaped.layout.page_width_px.get());
-        let height = f64::from(self.shaped.layout.page_height_px.get());
+        let width = f64::from(self.shaped.layout.page_width.get());
+        let height = f64::from(self.shaped.layout.page_height.get());
         let canvas = Rect::new(
             0.0,
             0.0,
-            f64::from(self.viewport.width_px.get()),
-            f64::from(self.viewport.height_px.get()),
+            f64::from(self.viewport.width.get()),
+            f64::from(self.viewport.height.get()),
         );
         frame.pages.iter().fold(
             camera.inverse().transform_rect_bbox(canvas),
@@ -338,8 +338,8 @@ impl ProseUiState {
                 region.union(Rect::new(
                     0.0,
                     page.top.get(),
-                    width + SHADOW_OFFSET_PX.get(),
-                    page.top.get() + height + SHADOW_OFFSET_PX.get(),
+                    width + SHADOW_OFFSET.get(),
+                    page.top.get() + height + SHADOW_OFFSET.get(),
                 ))
             },
         )
@@ -350,9 +350,9 @@ impl ProseUiState {
     fn resolve_page(&self, frame: &mut Frame, page: crate::events::PageIndex, top: SurfacePx) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
         let content = ContentBox {
-            left: SurfacePx::new(f64::from(layout.margin_left_px.get())),
-            body_top: SurfacePx::new(f64::from(layout.body_top_px().get())),
-            width: SurfacePx::new(f64::from(layout.content_width_px.get())),
+            left: SurfacePx::new(f64::from(layout.margin_left.get())),
+            body_top: SurfacePx::new(f64::from(layout.body_top().get())),
+            width: SurfacePx::new(f64::from(layout.content_width.get())),
         };
         let (left, body_top, content_width) = (
             content.left.get(),
@@ -374,7 +374,7 @@ impl ProseUiState {
                 let table_right = table
                     .cells
                     .iter()
-                    .map(|cell| f64::from((cell.x_px + cell.width_px).get()))
+                    .map(|cell| f64::from((cell.x + cell.width).get()))
                     .fold(content_width, f64::max);
                 let clip = Rect::new(
                     left,
@@ -418,7 +418,7 @@ impl ProseUiState {
                     if let Some(caret) = ghost.caret {
                         let rect = to_rect(&placed, &ghost.run.data().caret_box(caret));
                         let bar =
-                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
+                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH.get(), rect.y1);
                         frame.ghost_carets.push(GhostCaret {
                             top,
                             clip: placed.clip,
@@ -446,7 +446,7 @@ impl ProseUiState {
             };
             let (from, to) = (f64::from(slot.top.get()), f64::from(slot.bottom.get()));
             let placed = Placed {
-                origin: Point::new(left + f64::from(run.data().indent_px().get()), from),
+                origin: Point::new(left + f64::from(run.data().indent().get()), from),
                 clip: Rect::new(left, from, right, to),
             };
             let id = block_id(slot.block);
@@ -466,7 +466,7 @@ impl ProseUiState {
             items.push(PageItem::Rule {
                 x0: SurfacePx::new(left),
                 x1: SurfacePx::new(left + content_width / 3.0),
-                y: SurfacePx::new(f64::from((first.top - NOTE_SEPARATOR_PX / 2.0).get())),
+                y: SurfacePx::new(f64::from((first.top - NOTE_SEPARATOR / 2.0).get())),
             });
         }
         for slot in slots {
@@ -486,7 +486,7 @@ impl ProseUiState {
             }
             if let Some(text) = self.drawn_of(slot.block).cloned() {
                 let placed = Placed {
-                    origin: Point::new(left + f64::from(text.data().indent_px().get()), from),
+                    origin: Point::new(left + f64::from(text.data().indent().get()), from),
                     clip,
                 };
                 let id = block_id(slot.block);
@@ -532,7 +532,7 @@ impl ProseUiState {
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
                     origin: Point::new(
-                        left + f64::from((cell_box.text_x + run.data().indent_px()).get()),
+                        left + f64::from((cell_box.text_x + run.data().indent()).get()),
                         top_y + f64::from((cell_box.text_y + *y).get()),
                     ),
                     clip: bounds.intersect(clip),
@@ -692,7 +692,7 @@ impl ProseUiState {
             );
             rect.x0 += width.get();
         }
-        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX.get(), rect.y1);
+        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH.get(), rect.y1);
         surface.fill_rect(bar, palette.accent);
         // The host places the input pipe on this bar (`CHROME-007`).
         self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
@@ -717,7 +717,7 @@ impl ProseUiState {
                 Rect::new(
                     caret.x0,
                     caret.y0,
-                    caret.x0 + CARET_WIDTH_PX.get(),
+                    caret.x0 + CARET_WIDTH.get(),
                     caret.y1,
                 ),
                 colour.multiply_alpha(0.8),
@@ -725,8 +725,8 @@ impl ProseUiState {
             surface.fill_rect(
                 Rect::new(
                     caret.x0,
-                    caret.y0 - LABEL_TAB_PX.get(),
-                    caret.x0 + LABEL_TAB_PX.get(),
+                    caret.y0 - LABEL_TAB.get(),
+                    caret.x0 + LABEL_TAB.get(),
                     caret.y0,
                 ),
                 colour,
@@ -747,10 +747,10 @@ fn paint_sheet<S: DrawSurface>(
     let (width, height) = (width.get(), height.get());
     let sheet = Rect::new(0.0, 0.0, width, height);
     let shadow = Rect::new(
-        SHADOW_OFFSET_PX.get(),
-        SHADOW_OFFSET_PX.get(),
-        width + SHADOW_OFFSET_PX.get(),
-        height + SHADOW_OFFSET_PX.get(),
+        SHADOW_OFFSET.get(),
+        SHADOW_OFFSET.get(),
+        width + SHADOW_OFFSET.get(),
+        height + SHADOW_OFFSET.get(),
     );
     surface.push_transform(Affine::translate((0.0, top.get())));
     surface.fill_rect(shadow, palette.shadow);
@@ -1158,7 +1158,7 @@ mod tests {
 
         let surface = paint(&mut ui);
         let border = palette().sheet_border;
-        let page_width = f64::from(ui.shaped.layout.page_width_px.get());
+        let page_width = f64::from(ui.shaped.layout.page_width.get());
         let widths: Vec<f64> = surface
             .ops()
             .iter()
@@ -1200,7 +1200,7 @@ mod tests {
             bg: None,
             valign: None,
             border: None,
-            padding_pt: None,
+            padding: None,
         };
         edit(&mut command);
         assert!(
@@ -1237,7 +1237,7 @@ mod tests {
             if let ProseCommand::SetCellStyle { bg, border, .. } = command {
                 *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
                 *border = Some(CellBorder {
-                    width_pt: ambre_core::Pt::new(3.0),
+                    width: ambre_core::Pt::new(3.0),
                     color: ambre_core::Rgb::from_bits(0x0012_3456),
                 });
             }
@@ -1255,7 +1255,7 @@ mod tests {
         };
         assert_eq!(fills(fill), 1, "one fill");
         assert_eq!(fills(edge), 4, "four edges");
-        let page_width = f64::from(ui.shaped.layout.page_width_px.get());
+        let page_width = f64::from(ui.shaped.layout.page_width.get());
         let hairlines = surface
             .ops()
             .iter()
@@ -1283,8 +1283,8 @@ mod tests {
         let height0 = table(&ui);
 
         style(&mut state, first, |command| {
-            if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
-                *padding_pt = Some(ambre_core::Pt::new(12.0));
+            if let ProseCommand::SetCellStyle { padding, .. } = command {
+                *padding = Some(ambre_core::Pt::new(12.0));
             }
         });
         let mut ui = view_of(&mut state);
@@ -1302,8 +1302,8 @@ mod tests {
 
         // The neighbour pads more, so the first cell has room below its text.
         style(&mut state, second, |command| {
-            if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
-                *padding_pt = Some(ambre_core::Pt::new(48.0));
+            if let ProseCommand::SetCellStyle { padding, .. } = command {
+                *padding = Some(ambre_core::Pt::new(48.0));
             }
         });
         style(&mut state, first, |command| {
@@ -1452,7 +1452,7 @@ mod tests {
         );
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
-        let text_px = laid.cells[0].width_px - laid.cells[0].style.padding_px * 2.0;
+        let text_width = laid.cells[0].width - laid.cells[0].style.padding * 2.0;
         assert!(
             run.data().line_count().get() > 1,
             "the draft wraps in its column"
@@ -1461,7 +1461,7 @@ mod tests {
             .map(|at| run.data().caret_box(RunOffset::new(at)).x0)
             .fold(0.0, f64::max);
         assert!(
-            widest <= f64::from(text_px.get()) + 0.5,
+            widest <= f64::from(text_width.get()) + 0.5,
             "at the column's width"
         );
         let (pieces, _) = ui.pieces(crate::events::PageIndex::new(0));
@@ -1824,17 +1824,17 @@ mod tests {
         let run = ui.ghost().expect("shaped").run.clone();
         let caret = run.data().caret_box(RunOffset::new(3));
         let layout = &ui.shaped.layout;
-        let x = layout.margin_left_px
-            + run.data().indent_px()
+        let x = layout.margin_left
+            + run.data().indent()
             + DocPx::new(caret.x0 as f32)
             + DocPx::new(0.5);
         let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
-            + layout.body_top_px()
+            + layout.body_top()
             + at.top
             + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         let point = (
-            ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale),
+            ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale),
             (y - ui.viewport.scroll_y).get() * scale,
         );
         assert_eq!(
@@ -1881,20 +1881,20 @@ mod tests {
         let run = ui.provisional_run(block).cloned().unwrap_or(run);
         let caret = run.data().caret_box(RunOffset::new(at));
         let layout = &ui.shaped.layout;
-        let x = layout.margin_left_px
+        let x = layout.margin_left
             + frame.text_x
-            + run.data().indent_px()
+            + run.data().indent()
             + DocPx::new(caret.x0 as f32)
             + DocPx::new(0.5);
         let y = ui.column.page_top_y(crate::events::PageIndex::new(0))
-            + layout.body_top_px()
+            + layout.body_top()
             + piece.fragment.top
             + frame.text_y
             + top
             + DocPx::new((caret.y0 + caret.y1) as f32 / 2.0);
         let scale = ui.viewport.scale();
         (
-            (ui.column.left_px(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
+            (ui.column.left(&ui.viewport) + ViewPx::new(x.get() * scale)).get(),
             (y - ui.viewport.scroll_y).get() * scale,
         )
     }
@@ -2130,8 +2130,8 @@ mod tests {
             let palette = palette();
             let view = PageView {
                 palette: &palette,
-                width: SurfacePx::new(f64::from(ui.shaped.layout.page_width_px.get())),
-                height: SurfacePx::new(f64::from(ui.shaped.layout.page_height_px.get())),
+                width: SurfacePx::new(f64::from(ui.shaped.layout.page_width.get())),
+                height: SurfacePx::new(f64::from(ui.shaped.layout.page_height.get())),
                 pages: &frame.pages,
             };
             let mut runs = RunCache::default();
