@@ -118,6 +118,12 @@ status values are normative in `ambre-spec-template.md`.
 (`ambre-spec-trame-schema.md section 3`) and holds every derived structure in memory, rebuilt from
 the document on load. Named ranges are the exception, and are a feature of their own.
 
+**Three texts of one formula.** The *formula source* is the text with each reference at its
+position, as the user types it and as a fill shifts it (`FormulaSource`). The *stored formula* is
+that text as the document holds it, each reference bound to a sheet id and to line identities
+(`StoredFormula`). The *display formula* is the text the formula bar shows, each qualifier through
+the sheet's current name (`DisplayFormula`). One type per text keeps one from passing for another.
+
 **The pipeline**, from typed text to displayed value:
 
 1. `parse_formula` reads the text into an AST. It knows nothing of the document.

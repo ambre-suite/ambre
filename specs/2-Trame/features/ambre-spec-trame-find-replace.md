@@ -85,7 +85,9 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
   (`TRAME-UI-080`);
 * the row-major order is Trame's, and the origin is the active cell the Logic thread tracks.
 
-Trame widens the shared option set to four, one enum per panel checkbox:
+The *find text* is the query as the user typed it, never empty (`FindText`). An empty query clears
+the highlight and never reaches a scan (`FIND-005`). The *find options* are the refinements a find
+applies to its query. Trame widens the shared set to four, one enum per panel checkbox:
 
 ```rust
 pub struct FindOptions {

@@ -89,7 +89,8 @@ pub struct Selection {
 ```
 
 The live rectangle is `anchor` to `active`, normalized on read. The whole selection is `extra` plus
-that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`).
+that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`). Each rectangle is a
+*cell rect* (`CellRect`): a block of cells, both corners included.
 
 **Commands and events** (`ambre-bus`):
 

@@ -136,6 +136,8 @@ So is a column more than the materialization cap past the used range
 The boundary band is four pixels each side of the edge, and its upper half hosts the inline insert
 affordance instead (`features/ambre-spec-trame-headers.md section 3`). While a resize is armed the
 pointer shows the axis it will move, and a hit anywhere else in the strip keeps its own cursor.
+That pointer is the *grid cursor* (`GridCursor`), the one the view sets on the canvas. It shows
+over a boundary, a header or the fill handle, and the view sets none of its own elsewhere.
 
 **Auto-fit measurement.** The widths are measured with the text layout the renderer uses, over the
 cached cells of that column. The widest one plus the cell padding becomes the width. The

@@ -127,7 +127,7 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 
 | Question | Answer |
 |---|---|
-| Is the name case-sensitive | no. It is matched upper-cased, so `sum(a1:a3)` and `SUM(A1:A3)` are one call |
+| Is the function name case-sensitive | no. It is matched upper-cased, so `sum(a1:a3)` and `SUM(A1:A3)` are one call |
 | An unknown name | reads `#N/A` (`TRAME-049`) |
 | How arguments are separated | by commas. A range is one argument holding many values |
 | A criterion, for `SUMIF` and its kin | text carrying an operator and an operand: `">5"`, `"<>done"`, or a bare value meaning equality |
@@ -136,7 +136,8 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 | A lookup key that is text | matched without regard to case, Unicode letters included (`TRAME-202`) |
 | An approximate lookup over keys out of order | reads `#N/A`, never a neighbouring row (`TRAME-197`). Blank keys are skipped |
 | A total of decimals | summed exactly, then rounded once, so its order cannot change it (`TRAME-199`) |
-| How a date is held | a serial number on the 1899-12-30 epoch: integer part the day, fraction the time of day |
+| How a date is held | a date serial (`DateSerial`) on the 1899-12-30 epoch: integer part the day, fraction the time of day |
+| How a calendar day is named | a civil date (`CivilDate`): a proleptic-Gregorian year, month and day, counted to and from its serial |
 | Where `TODAY` and `NOW` read | the recomputation clock, never the system clock (`TRAME-053`) |
 
 ---

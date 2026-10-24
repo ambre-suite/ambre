@@ -168,3 +168,18 @@
 | reject | settle a pending suggestion against its author | | `4-Prose/features/ambre-spec-prose-track-changes.md` |
 | story | one scheduled unit of work | | `ambre-roadmap.md` |
 | epic | a group of stories | | `ambre-roadmap.md` |
+
+## 6. THE SPREADSHEET
+
+| Term | Definition | Forbidden | Reference |
+| :--- | :--- | :--- | :--- |
+| formula source | a cell's text with each reference at its position | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
+| stored formula | a cell's text bound to sheet ids and line identities | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
+| display formula | a cell's text as the formula bar shows it | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
+| function name | the name a formula calls a built-in function by | | `2-Trame/features/ambre-spec-trame-function-library.md` |
+| date serial | a date held as a count of days, time in the fraction | | `2-Trame/features/ambre-spec-trame-function-library.md` |
+| civil date | a calendar year, month and day | | `2-Trame/features/ambre-spec-trame-function-library.md` |
+| cell rect | a rectangle of cells, both corners included | | `2-Trame/features/ambre-spec-trame-selection.md` |
+| grid cursor | the pointer shape the grid sets on the canvas | | `2-Trame/features/ambre-spec-trame-resize.md` |
+| find text | the query of a find, as typed, never empty | | `2-Trame/features/ambre-spec-trame-find-replace.md` |
+| find options | the refinements a find applies to its query | | `2-Trame/features/ambre-spec-trame-find-replace.md` |
