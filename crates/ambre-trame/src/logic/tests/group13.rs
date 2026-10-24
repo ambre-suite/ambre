@@ -237,7 +237,7 @@ fn styling_keeps_every_value() {
         StylePatch {
             bold: Some(true),
             format: Some(CellFormat::Number),
-            decimals: Some(Some(0)),
+            decimals: Some(crate::Decimals::new(0)),
             ..Default::default()
         },
     );
@@ -306,7 +306,7 @@ fn a_decimal_step_keeps_the_computed_value() {
         &mut state,
         StylePatch {
             format: Some(CellFormat::Number),
-            decimals: Some(Some(2)),
+            decimals: Some(crate::Decimals::new(2)),
             ..Default::default()
         },
     );
@@ -317,7 +317,7 @@ fn a_decimal_step_keeps_the_computed_value() {
     style(
         &mut state,
         StylePatch {
-            decimals_step: Some(2),
+            decimals_step: Some(crate::DecimalsStep::new(2)),
             ..Default::default()
         },
     );

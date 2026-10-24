@@ -27,7 +27,7 @@ use ambre_bus::{
     MessageId, OpenFailure, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand,
     Timestamp, TrameCommand, UserId,
 };
-use ambre_bus::{Col, ColCount, Row, RowCount};
+use ambre_bus::{Col, ColCount, Decimals, DecimalsStep, Row, RowCount};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -122,6 +122,19 @@ fn has_decimals_is_true_only_for_numeric_families() {
     ] {
         assert!(!fmt.has_decimals(), "{fmt:?} should ignore decimals");
     }
+}
+
+/// A decimal count holds between zero and fifteen places, stepped or decoded.
+#[test]
+fn a_decimal_count_stays_within_fifteen_places() {
+    assert_eq!(Decimals::new(16), None);
+    assert_eq!(Decimals::MAX.stepped(DecimalsStep::MORE), Decimals::MAX);
+    assert_eq!(Decimals::ZERO.stepped(DecimalsStep::FEWER), Decimals::ZERO);
+    assert_eq!(Decimals::TWO.stepped(DecimalsStep::MORE).get(), 3);
+    let past: Result<Decimals, _> = postcard::from_bytes(&[16]);
+    assert!(past.is_err(), "a decoded count past fifteen is refused");
+    let bytes = postcard::to_allocvec(&Decimals::TWO).unwrap();
+    assert_eq!(bytes, [2], "the count travels as one byte");
 }
 
 // -- Service plane: RequestId allocator --------------------------------------

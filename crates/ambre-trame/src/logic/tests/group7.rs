@@ -424,7 +424,7 @@ fn percent_sheet() -> TrameState {
     state.handle_command(TrameCommand::SetCellStyle {
         patch: ambre_bus::StylePatch {
             format: Some(ambre_bus::CellFormat::Percent),
-            decimals: Some(Some(1)),
+            decimals: Some(crate::Decimals::new(1)),
             ..Default::default()
         },
     });

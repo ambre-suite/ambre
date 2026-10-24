@@ -102,6 +102,88 @@ pub enum CellFormat {
     Custom(String),
 }
 
+/// A count of decimal places a number format renders, from zero to
+/// [`Decimals::MAX`]. An `f64` holds no more significant digits than that.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct Decimals(u8);
+
+impl Decimals {
+    /// No decimal places: a whole number.
+    pub const ZERO: Self = Self(0);
+    /// Two decimal places, the default of the numeric families.
+    pub const TWO: Self = Self(2);
+    /// The most decimal places a cell may carry.
+    pub const MAX: Self = Self(15);
+
+    /// The count `places`, or `None` past [`Self::MAX`].
+    pub const fn new(places: u8) -> Option<Self> {
+        if places <= Self::MAX.0 {
+            Some(Self(places))
+        } else {
+            None
+        }
+    }
+
+    /// The number of places.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// The number of places as a format precision.
+    pub const fn precision(self) -> usize {
+        self.0 as usize
+    }
+
+    /// The count moved by `step`, held between zero and [`Self::MAX`].
+    #[must_use]
+    pub fn stepped(self, step: DecimalsStep) -> Self {
+        Self(self.0.saturating_add_signed(step.0).min(Self::MAX.0))
+    }
+}
+
+impl std::fmt::Display for Decimals {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The error of a decoded decimal count past [`Decimals::MAX`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a cell carries at most 15 decimal places, not {0}")]
+pub struct InvalidDecimals(pub u8);
+
+impl TryFrom<u8> for Decimals {
+    type Error = InvalidDecimals;
+
+    fn try_from(places: u8) -> Result<Self, Self::Error> {
+        Self::new(places).ok_or(InvalidDecimals(places))
+    }
+}
+
+impl From<Decimals> for u8 {
+    fn from(decimals: Decimals) -> Self {
+        decimals.0
+    }
+}
+
+/// A signed number of decimal places to add to a count: what one press of
+/// the Increase or Decrease decimals control asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DecimalsStep(i8);
+
+impl DecimalsStep {
+    /// One place more.
+    pub const MORE: Self = Self(1);
+    /// One place fewer.
+    pub const FEWER: Self = Self(-1);
+
+    /// A step of `places`, negative for fewer.
+    pub const fn new(places: i8) -> Self {
+        Self(places)
+    }
+}
+
 impl CellFormat {
     /// Whether this format honours a decimal-places count (that is, the
     /// Increase/Decrease-decimals controls are meaningful). Only the numeric
@@ -113,10 +195,12 @@ impl CellFormat {
 
     /// The decimal count the family renders when a cell carries none, or `None`
     /// for a family that renders no decimals.
-    pub fn default_decimals(&self) -> Option<u8> {
+    pub fn default_decimals(&self) -> Option<Decimals> {
         match self {
-            CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => Some(2),
-            CellFormat::Percent => Some(0),
+            CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => {
+                Some(Decimals::TWO)
+            }
+            CellFormat::Percent => Some(Decimals::ZERO),
             CellFormat::General
             | CellFormat::Fraction
             | CellFormat::Date
@@ -218,7 +302,7 @@ pub struct CellStyle {
     pub size: Option<FontSize>,
     pub format: CellFormat,
     /// Decimal places for the active number format. `None` = the format default.
-    pub decimals: Option<u8>,
+    pub decimals: Option<Decimals>,
     /// Per-edge border (style + colour each), resolved per cell by the Logic
     /// thread from the selection-level [`StylePatch::border`] edit.
     pub borders: Borders,
@@ -243,12 +327,12 @@ pub struct StylePatch {
     pub font: Option<Option<String>>,
     pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
-    pub decimals: Option<Option<u8>>,
+    pub decimals: Option<Option<Decimals>>,
     /// Add this many places to the count each cell already carries, or its
     /// family's default when it carries none (`TRAME-105`). Applied after
     /// `format` and `decimals`, per cell, so a mixed selection steps each count
     /// from its own value. A family that renders no decimals is left alone.
-    pub decimals_step: Option<i8>,
+    pub decimals_step: Option<DecimalsStep>,
     pub border: Option<BorderEdit>,
 }
 

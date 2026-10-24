@@ -522,9 +522,7 @@ ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::contains() | ret | bo
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::overlaps() | ret | bool	generic	predicate result
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::Custom.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::default_decimals() | ret | Option<u8>	math	decimal places
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellFormat::has_decimals() | ret | bool	generic	predicate
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellStyle.decimals | field | Option<u8>	math	decimal places
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellStyle.font | field | Option<String>	free-text	font family / font size
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellStyle.strikethrough | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellStyle.underline | field | bool	generic	named option or style flag, selects no mode
@@ -532,13 +530,19 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | CellStyle.wrap |
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Condition.value | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | FilterKind::Values.0 | field | Vec<String>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.bold | field | Option<bool>	generic	named option or style flag, selects no mode
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.decimals | field | Option<Option<u8>>	math	decimal places
-ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.decimals_step | field | Option<i8>	math	decimal places
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.font | field | Option<Option<String>>	free-text	font family / font size
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.italic | field | Option<bool>	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.strikethrough | field | Option<bool>	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.underline | field | Option<bool>	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | StylePatch.wrap | field | Option<bool>	generic	named option or style flag, selects no mode
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | <Decimals as TryFrom<u8>>::try_from(places) | param | u8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals.0 | field | u8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::get() | ret | u8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::new(places) | param | u8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::precision() | ret | usize	foreign-api	the count as the usize precision std::fmt takes
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.0 | field | u8	newtype-inner	the refused count an error reports
 ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
@@ -4208,9 +4212,7 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections() | ret | Vec<String>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/packing.rs | crate::logic::packing | MAX_DECIMALS | const | u8	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(decimals) | param | Option<u8>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types

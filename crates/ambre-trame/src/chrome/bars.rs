@@ -5,7 +5,7 @@
 // the rich-formatting controls emit a `StylePatch` through `on_style`.
 // ============================================================================
 
-use ambre_bus::StylePatch;
+use ambre_bus::{DecimalsStep, StylePatch};
 use ambre_chrome::commands::{CommandId, Locale};
 use ambre_chrome::{FontSizeSelect, FormatToggle};
 use ambre_core::{FontSize, Rgb};
@@ -212,7 +212,7 @@ pub fn FormatBar(
             aria-label="Decrease decimals"
             disabled=move || !style.format.get().has_decimals()
             on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(-1), ..Default::default() })
+            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::FEWER), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowLeft />
         </button>
@@ -220,7 +220,7 @@ pub fn FormatBar(
             aria-label="Increase decimals"
             disabled=move || !style.format.get().has_decimals()
             on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(1), ..Default::default() })
+            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(DecimalsStep::MORE), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowRight />
         </button>

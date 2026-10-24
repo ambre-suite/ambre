@@ -61,11 +61,12 @@ pub use event::{
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, CivilDate, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
-    ColVec, CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DateSerial, DaySerial,
-    DefinedName, DisplayCell, EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign,
-    HeaderRow, MergeSpan, Percent, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind,
-    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, SortKey, SortOrder,
-    StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
+    ColVec, CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DateSerial, DaySerial, Decimals,
+    DecimalsStep, DefinedName, DisplayCell, EditSessionId, FillMode, FilterKind, FilterOp,
+    FilterViewId, HAlign, HeaderRow, MergeSpan, Percent, Row, RowCount, RowDelta, RowSpan, RowVec,
+    SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos,
+    SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind,
+    ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};

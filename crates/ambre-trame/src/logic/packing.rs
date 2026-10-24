@@ -49,26 +49,22 @@ pub(crate) fn apply_patch_to_style(s: &mut CellStyle, p: &StylePatch) {
         && let Some(default) = s.format.default_decimals()
     {
         let current = s.decimals.unwrap_or(default);
-        s.decimals = Some(current.saturating_add_signed(step).min(MAX_DECIMALS));
+        s.decimals = Some(current.stepped(step));
     }
     // `p.border` (the selection-level edit: preset + stroke style + colour) is
     // resolved into per-cell edges by `set_cell_style`, which has the selection
     // geometry; not handled here.
 }
 
-/// The most decimal places a cell may carry: an `f64` holds no more significant
-/// digits than this.
-pub(crate) const MAX_DECIMALS: u8 = 15;
-
 /// Format a numeric `value` per a [`CellFormat`] and decimal count. Non-numeric
 /// cells keep their text (handled by the caller); this is the numeric branch.
-pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) -> String {
-    let dec = |default: usize| decimals.map(|d| d as usize).unwrap_or(default);
+pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<Decimals>) -> String {
+    let dec = |default: Decimals| decimals.unwrap_or(default).precision();
     match fmt {
-        CellFormat::Number => format!("{:.*}", dec(2), value),
-        CellFormat::Currency => format!("{:.*}", dec(2), value) + " \u{20AC}",
-        CellFormat::Percent => format!("{:.*}%", dec(0), value * 100.0),
-        CellFormat::Scientific => format!("{:.*e}", dec(2), value),
+        CellFormat::Number => format!("{:.*}", dec(Decimals::TWO), value),
+        CellFormat::Currency => format!("{:.*}", dec(Decimals::TWO), value) + " \u{20AC}",
+        CellFormat::Percent => format!("{:.*}%", dec(Decimals::ZERO), value * 100.0),
+        CellFormat::Scientific => format!("{:.*e}", dec(Decimals::TWO), value),
         CellFormat::Fraction => {
             // Simple proper-fraction rendering over a /16 denominator (MVP).
             // Round the whole value to sixteenths in one step. A fraction that
