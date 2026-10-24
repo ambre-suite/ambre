@@ -22,7 +22,7 @@ use crate::logic::stroke::smooth_stroke;
 use super::ToileState;
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_of, path_of,
+    bin_of, body_of, locked, connector_label, doc_type_from_tag, f64_of, kind_of, path_of,
     read_connector, rotation_of, stored_rect, str_of,
 };
 use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
@@ -170,7 +170,7 @@ impl ToileState {
             stored_rect(&em)
         };
         let rot = rotation_of(&em);
-        let locked = bool_of(&em, ElementKey::Locked);
+        let locked = locked(&em);
         let style = self.style_read(bin_of(&em, ElementKey::Style).as_deref());
         let kind = kind_of(&em);
         // World transform: rotation about the AABB center.
@@ -241,8 +241,9 @@ impl ToileState {
                 DisplayGeom::Frame(str_of(em, ElementKey::Name).unwrap_or_default())
             }
             ElementKind::Group => DisplayGeom::Group,
-            ElementKind::Sticky => DisplayGeom::Sticky(body_of(em)),
-            ElementKind::Text => DisplayGeom::Text(body_of(em)),
+            // A body the map lacks draws as an empty one.
+            ElementKind::Sticky => DisplayGeom::Sticky(body_of(em).unwrap_or_default()),
+            ElementKind::Text => DisplayGeom::Text(body_of(em).unwrap_or_default()),
             ElementKind::Drawing => {
                 // No samples read as an empty stroke, which is not a decode failure.
                 let raw = bin_of(em, ElementKey::Points).unwrap_or_default();
@@ -303,7 +304,8 @@ impl ToileState {
             // which reads as the default: the same look it had.
             style: self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref()),
             arrows: conn.arrows,
-            label: connector_label(&cm),
+            // A connector minted before the caption field carries none.
+            label: connector_label(&cm).unwrap_or_default(),
         })
     }
 }

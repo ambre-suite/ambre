@@ -355,12 +355,12 @@ impl ToileState {
             .collect()
     }
 
-    /// The title a frame carries, empty until it is named. Test / integration
-    /// accessor; every surface reads it off the display payload instead.
-    pub fn frame_name(&self, frame: &ElementId) -> String {
+    /// The title a frame carries, `None` until it is named or for no frame.
+    /// Test / integration accessor; every surface reads it off the display
+    /// payload instead.
+    pub fn frame_name(&self, frame: &ElementId) -> Option<String> {
         self.element_map(frame)
             .and_then(|em| str_of(&em, ElementKey::Name))
-            .unwrap_or_default()
     }
 
     /// Name a frame (`TOILE-247`). The title is one LWW register, so two users

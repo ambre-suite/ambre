@@ -21,7 +21,7 @@ use crate::logic::text_merge::merge_edits;
 
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, stored_rect, stroke_aabb,
+    bin_of, body_text_or_seed, locked, content_matches, expanded_aabb, stored_rect, stroke_aabb,
 };
 use super::names::{ElementKey, Fields, Root};
 use super::{ToileState, write_edits};
@@ -189,7 +189,7 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, ElementKey::Locked) {
+        if locked(&em) {
             return ToileOutcome::display_only(Vec::new());
         }
         // The `"text"` field exists only on sticky / text elements (seeded at
@@ -220,7 +220,7 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, ElementKey::Locked) {
+        if locked(&em) {
             return ToileOutcome::display_only(Vec::new());
         }
         match link {
@@ -256,7 +256,7 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, ElementKey::Locked) {
+            if locked(&em) {
                 continue; // locked blocks edit locally (advisory)
             }
             let at = stored_rect(&em).origin() + delta;
@@ -297,7 +297,7 @@ impl ToileState {
             };
             if self
                 .element_map(id)
-                .is_some_and(|em| bool_of(&em, ElementKey::Locked))
+                .is_some_and(|em| locked(&em))
             {
                 continue;
             }
@@ -317,7 +317,7 @@ impl ToileState {
                 let Some(em) = self.element_map(leaf) else {
                     continue;
                 };
-                if bool_of(&em, ElementKey::Locked) {
+                if locked(&em) {
                     continue; // a locked leaf inside a moving group stays put
                 }
                 let at = stored_rect(&em).origin() + delta;
@@ -341,7 +341,7 @@ impl ToileState {
         };
         // A group's box is derived from its members, so a resize has nothing
         // to write (`TOILE-150`, `TOILE-155`).
-        if bool_of(&em, ElementKey::Locked) || has_type(&em, ElementKind::Group) {
+        if locked(&em) || has_type(&em, ElementKind::Group) {
             return ToileOutcome::display_only(Vec::new());
         }
         let r = new.abs();
@@ -363,7 +363,7 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, ElementKey::Locked) {
+        if locked(&em) {
             return ToileOutcome::display_only(Vec::new());
         }
         let _ = em.insert(ElementKey::Rot, radians.get());
@@ -408,7 +408,7 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, ElementKey::Locked) {
+            if locked(&em) {
                 continue;
             }
             let existing = self.style_read(bin_of(&em, ElementKey::Style).as_deref());
@@ -434,7 +434,7 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, ElementKey::Locked) {
+            if locked(&em) {
                 continue;
             }
             let _ = em.insert(ElementKey::Style, LoroValue::Binary(bytes.clone().into()));
@@ -494,7 +494,7 @@ impl ToileState {
         self.collect_subtree(id, &mut subtree);
         subtree.iter().any(|e| {
             self.element_map(e)
-                .is_some_and(|em| bool_of(&em, ElementKey::Locked))
+                .is_some_and(|em| locked(&em))
         })
     }
 

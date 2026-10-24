@@ -1112,7 +1112,7 @@ fn a_named_frame_is_found_by_its_title() {
         name: "  Agenda  ".into(),
     });
     assert!(out.update.is_some(), "a name broadcasts a delta");
-    assert_eq!(st.frame_name(&frame), "Agenda", "the name is trimmed");
+    assert_eq!(st.frame_name(&frame).unwrap_or_default(), "Agenda", "the name is trimmed");
     assert_eq!(find(&mut st, "agenda", opts, None).hits, vec![frame]);
 }
 
@@ -1130,10 +1130,10 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
 
     // One undo item: the name goes, the frame stays.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.frame_name(&frame), "");
+    assert_eq!(st.frame_name(&frame).unwrap_or_default(), "");
     assert_eq!(st.element_count(), 1);
     st.handle_command(ToileCommand::Redo);
-    assert_eq!(st.frame_name(&frame), "Agenda");
+    assert_eq!(st.frame_name(&frame).unwrap_or_default(), "Agenda");
 
     // The same name again writes nothing at all.
     let out = st.handle_command(ToileCommand::RenameFrame {
@@ -1149,7 +1149,7 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
         name: long,
     });
     assert_eq!(
-        st.frame_name(&frame).chars().count(),
+        st.frame_name(&frame).unwrap_or_default().chars().count(),
         ambre_bus::app::toile::FRAME_NAME_MAX
     );
 
@@ -1167,7 +1167,7 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
         "the refusal said nothing: {:?}",
         out.display
     );
-    assert_eq!(st.frame_name(&sticky), "");
+    assert_eq!(st.frame_name(&sticky), None, "a sticky carries no title");
 }
 
 /// `TOILE-252`: two users naming one frame at once converge on one writer's
@@ -1197,8 +1197,8 @@ fn concurrent_names_converge_on_one_whole_name() {
     b.apply_remote(&da);
     a.apply_remote(&db);
 
-    let merged = a.frame_name(&frame);
-    assert_eq!(merged, b.frame_name(&frame), "the two names diverged");
+    let merged = a.frame_name(&frame).unwrap_or_default();
+    assert_eq!(merged, b.frame_name(&frame).unwrap_or_default(), "the two names diverged");
     assert!(
         merged == "Agenda" || merged == "Roadmap",
         "a blend of the two: {merged:?}"
@@ -2655,7 +2655,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     let pasted = created_ids(&paste);
     assert_eq!(pasted.len(), 1);
     assert_eq!(
-        st.notes(&pasted[0]),
+        st.notes(&pasted[0]).unwrap_or_default(),
         "open on the budget",
         "the copy lost its notes"
     );
@@ -2690,8 +2690,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         .expect("a delta");
     peer.apply_remote(&da);
     st.apply_remote(&db);
-    let merged = st.notes(&pasted[0]);
-    assert_eq!(merged, peer.notes(&pasted[0]), "the notes diverged");
+    let merged = st.notes(&pasted[0]).unwrap_or_default();
+    assert_eq!(merged, peer.notes(&pasted[0]).unwrap_or_default(), "the notes diverged");
     assert!(
         merged.contains("A: ") && merged.contains("(B)"),
         "a rival container dropped one side: {merged:?}"
@@ -4139,7 +4139,7 @@ fn edit_notes_produces_delta_and_is_undoable() {
         out.update.is_some(),
         "speaker notes are CRDT and must broadcast a delta"
     );
-    assert_eq!(st.notes(&f), "Intro slide");
+    assert_eq!(st.notes(&f).unwrap_or_default(), "Intro slide");
 
     // A second splice appends " -- talk track" after the existing text.
     st.handle_command(ToileCommand::EditNotes {
@@ -4147,14 +4147,14 @@ fn edit_notes_produces_delta_and_is_undoable() {
         base: "Intro slide".into(),
         delta: insert_notes(11, " -- talk track"),
     });
-    assert_eq!(st.notes(&f), "Intro slide -- talk track");
+    assert_eq!(st.notes(&f).unwrap_or_default(), "Intro slide -- talk track");
 
     // Each EditNotes is one undo item: undo drops the last splice only.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.notes(&f), "Intro slide", "one undo reverts one splice");
+    assert_eq!(st.notes(&f).unwrap_or_default(), "Intro slide", "one undo reverts one splice");
     st.handle_command(ToileCommand::Redo);
     assert_eq!(
-        st.notes(&f),
+        st.notes(&f).unwrap_or_default(),
         "Intro slide -- talk track",
         "redo re-applies it"
     );
@@ -4191,7 +4191,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
         delta: insert_notes(11, "!"),
     });
     assert_eq!(
-        a.notes(&f),
+        a.notes(&f).unwrap_or_default(),
         "Dear Hello world!",
         "not \"Dear Hello !world\""
     );
@@ -4203,7 +4203,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
         "the panel is told the merged note"
     );
     b.apply_remote(&out.update.expect("a delta"));
-    assert_eq!(b.notes(&f), "Dear Hello world!");
+    assert_eq!(b.notes(&f).unwrap_or_default(), "Dear Hello world!");
 
     // A splice measured against the note as stored says nothing more.
     let out = a.handle_command(ToileCommand::EditNotes {
@@ -4211,7 +4211,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
         base: "Dear Hello world!".into(),
         delta: insert_notes(17, "!"),
     });
-    assert_eq!(a.notes(&f), "Dear Hello world!!");
+    assert_eq!(a.notes(&f).unwrap_or_default(), "Dear Hello world!!");
     assert!(
         !out.display
             .iter()
@@ -4221,7 +4221,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
     a.handle_command(ToileCommand::Undo);
     a.handle_command(ToileCommand::Undo);
     assert_eq!(
-        a.notes(&f),
+        a.notes(&f).unwrap_or_default(),
         "Dear Hello world",
         "each keystroke is one undo"
     );
@@ -4243,7 +4243,7 @@ fn edit_notes_clamps_out_of_range_splice() {
         base: "abc".into(),
         delta: insert_notes(999, "Z"),
     });
-    assert_eq!(st.notes(&f), "abcZ");
+    assert_eq!(st.notes(&f).unwrap_or_default(), "abcZ");
     // The handler clamps an oversized deletion span to what remains.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
@@ -4254,7 +4254,7 @@ fn edit_notes_clamps_out_of_range_splice() {
             insert: String::new(),
         },
     });
-    assert_eq!(st.notes(&f), "");
+    assert_eq!(st.notes(&f).unwrap_or_default(), "");
 }
 
 #[test]
@@ -4275,7 +4275,7 @@ fn edit_notes_rejects_non_frame() {
             .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
         "notes on a non-frame report a ContentKindMismatch"
     );
-    assert_eq!(st.notes(&sticky), "", "no notes were written to the sticky");
+    assert_eq!(st.notes(&sticky), None, "no notes were written to the sticky");
 
     // A missing element reports NoSuchElement.
     let out = st.handle_command(ToileCommand::EditNotes {
@@ -4301,8 +4301,8 @@ fn concurrent_notes_edits_converge() {
     let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     // Bring B up to date so both share the same frame + notes container.
     b.apply_remote_snapshot(&a.export_snapshot());
-    assert_eq!(a.notes(&f), "");
-    assert_eq!(b.notes(&f), "");
+    assert_eq!(a.notes(&f).unwrap_or_default(), "");
+    assert_eq!(b.notes(&f).unwrap_or_default(), "");
 
     // Concurrent, non-overlapping edits, each unaware of the other.
     let da = a
@@ -4328,8 +4328,8 @@ fn concurrent_notes_edits_converge() {
 
     // Char-CRDT convergence: identical final notes on both peers, and both edits
     // survived (no LWW loss of a rival container).
-    assert_eq!(a.notes(&f), b.notes(&f), "concurrent notes edits diverged");
-    let merged = a.notes(&f);
+    assert_eq!(a.notes(&f).unwrap_or_default(), b.notes(&f).unwrap_or_default(), "concurrent notes edits diverged");
+    let merged = a.notes(&f).unwrap_or_default();
     assert!(
         merged.contains("AAA") && merged.contains("BBB"),
         "both concurrent insertions must survive, got {merged:?}"

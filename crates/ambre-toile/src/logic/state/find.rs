@@ -73,7 +73,8 @@ impl ToileState {
             return false;
         };
         let body = if has_type(&em, ElementKind::Sticky) || has_type(&em, ElementKind::Text) {
-            body_of(&em)
+            // A text element that stores no body holds no text to match.
+            body_of(&em).unwrap_or_default()
         } else if has_type(&em, ElementKind::Frame) {
             // A frame title lives in its `name` field (empty until named).
             str_of(&em, ElementKey::Name).unwrap_or_default()

@@ -945,7 +945,8 @@ impl ToileState {
             .slide_order()
             .get(self.playback.active.to_index()?)
             .cloned()?;
-        let notes = self.notes(&frame);
+        // A slide with no notes yet reads as empty ones.
+        let notes = self.notes(&frame).unwrap_or_default();
         Some((frame, notes))
     }
 
@@ -1053,7 +1054,7 @@ impl ToileState {
             .filter_map(|key| {
                 let id = ElementId(key.to_string());
                 let em = self.element_map(&id)?;
-                if codec::bool_of(&em, ElementKey::Locked)
+                if codec::locked(&em)
                     || codec::has_type(&em, ElementKind::Group)
                 {
                     None

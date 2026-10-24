@@ -283,7 +283,8 @@ impl ToileState {
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
             to_rect: slide(to_idx).and_then(|f| self.element_rect(f)),
-            notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
+            // A slide with no notes shows none.
+            notes: frame.as_ref().and_then(|f| self.notes(f)).unwrap_or_default(),
             frame,
             transition: self.transition(),
         }
@@ -425,15 +426,14 @@ impl ToileState {
         self.emit_with_update(Vec::new())
     }
 
-    /// The current speaker notes of `frame` as a plain string (empty if the frame
-    /// has no notes yet or does not exist). Test / integration accessor.
-    pub fn notes(&self, frame: &FrameId) -> String {
+    /// The current speaker notes of `frame` as a plain string, `None` when the
+    /// frame has no notes yet or does not exist.
+    pub fn notes(&self, frame: &FrameId) -> Option<String> {
         self.element_map(frame)
             .and_then(|em| em.get(ElementKey::Notes))
             .and_then(|v| v.into_container().ok())
             .and_then(|c| c.into_text().ok())
             .map(|t| t.to_string())
-            .unwrap_or_default()
     }
 
     // -- PDF export pages (toile-pdf-export) ----------------------------

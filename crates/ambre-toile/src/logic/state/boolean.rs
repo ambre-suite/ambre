@@ -18,7 +18,7 @@ use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKin
 
 use super::ToileState;
 use super::codec::has_type;
-use super::codec::{bin_of, bool_of, path_of, rotation_of, shape_of, stored_rect};
+use super::codec::{bin_of, locked, path_of, rotation_of, shape_of, stored_rect};
 use super::names::{ElementKey, Fields, Root};
 
 impl ToileState {
@@ -42,7 +42,7 @@ impl ToileState {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
-            if bool_of(&em, ElementKey::Locked) {
+            if locked(&em) {
                 continue;
             }
             let Some(path) = element_world_path(&em) else {

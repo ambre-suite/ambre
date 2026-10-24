@@ -268,14 +268,13 @@ pub(super) fn write_connector(
     let _ = cm.insert_container(ConnectorKey::Label, LoroText::new());
 }
 
-/// The caption text of a connector map, empty when the connector predates the
-/// field or carries none.
-pub(super) fn connector_label(cm: &Fields<ConnectorKey>) -> String {
+/// The caption text of a connector map, `None` when the connector predates
+/// the field.
+pub(super) fn connector_label(cm: &Fields<ConnectorKey>) -> Option<String> {
     cm.get(ConnectorKey::Label)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_text().ok())
         .map(|t| t.to_string())
-        .unwrap_or_default()
 }
 
 /// The caption `LoroText` of a connector map, seeding one for a connector
@@ -305,9 +304,10 @@ pub(super) fn read_connector(id: ConnectorId, cm: &Fields<ConnectorKey>) -> Opti
         to: ElementId(text(ConnectorKey::To)),
         to_anch: decode_anchor(&text(ConnectorKey::ToAnch)),
         path_type: decode_path_type(&text(ConnectorKey::PathType)),
+        // A connector that stores no cap draws none at that end.
         arrows: EndCaps {
-            start: bool_of(cm, ConnectorKey::ArrowStart),
-            end: bool_of(cm, ConnectorKey::ArrowEnd),
+            start: bool_of(cm, ConnectorKey::ArrowStart).unwrap_or(false),
+            end: bool_of(cm, ConnectorKey::ArrowEnd).unwrap_or(false),
         },
     })
 }
@@ -378,18 +378,29 @@ pub(super) fn f64_of<K: FieldKey>(m: &Fields<K>, k: K) -> Option<f64> {
     }
 }
 
-pub(super) fn bool_of<K: FieldKey>(m: &Fields<K>, k: K) -> bool {
-    matches!(m.value(k), Some(LoroValue::Bool(true)))
+/// A flag field, `None` when the map lacks it or holds another kind there.
+pub(super) fn bool_of<K: FieldKey>(m: &Fields<K>, k: K) -> Option<bool> {
+    match m.value(k) {
+        Some(LoroValue::Bool(b)) => Some(b),
+        _ => None,
+    }
+}
+
+/// Whether an element map is locked. A map that stores no lock is unlocked:
+/// an element is created so.
+pub(super) fn locked(em: &Fields<ElementKey>) -> bool {
+    bool_of(em, ElementKey::Locked).unwrap_or(false)
 }
 
 /// The body of a sticky or text element, read from its `LoroText`
 /// (`TOILE-030`). A flat string reads as itself: a board before version 4
-/// carries one, and so does a write from a client on an older build.
-pub(super) fn body_of(m: &Fields<ElementKey>) -> String {
+/// carries one, and so does a write from a client on an older build. `None`
+/// when the map holds no body.
+pub(super) fn body_of(m: &Fields<ElementKey>) -> Option<String> {
     match m.get(ElementKey::Body) {
-        Some(ValueOrContainer::Container(Container::Text(t))) => t.to_string(),
-        Some(ValueOrContainer::Value(LoroValue::String(s))) => s.to_string(),
-        _ => String::new(),
+        Some(ValueOrContainer::Container(Container::Text(t))) => Some(t.to_string()),
+        Some(ValueOrContainer::Value(LoroValue::String(s))) => Some(s.to_string()),
+        _ => None,
     }
 }
 

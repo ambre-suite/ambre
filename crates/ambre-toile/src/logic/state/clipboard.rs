@@ -91,7 +91,10 @@ impl ToileState {
                 },
                 None => Vec::new(),
             };
-            let notes = self.is_frame(id).then(|| self.notes(id));
+            // A copied frame carries its notes, empty when it holds none.
+            let notes = self
+                .is_frame(id)
+                .then(|| self.notes(id).unwrap_or_default());
             elements.push(ClipElement { fields, notes });
             // Group / frame membership -> child slots (captured children only).
             let child_slots: Vec<ClipSlot> = self

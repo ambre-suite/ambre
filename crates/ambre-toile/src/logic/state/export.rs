@@ -133,7 +133,8 @@ impl ToileState {
                 _ => None,
             },
             text: match kind {
-                ElementKind::Text | ElementKind::Sticky => Some(body_of(&em)),
+                // A body the map lacks exports as an empty one.
+                ElementKind::Text | ElementKind::Sticky => Some(body_of(&em).unwrap_or_default()),
                 _ => None,
             },
             media_hash: match kind {
