@@ -103,8 +103,8 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE * layout.zoom.get() as f32,
-            cw as f32,
+            HEADER_SIZE.zoomed(layout.zoom),
+            ViewPx::new(cw as f32),
             Alignment::Center,
             ambre_canvas::Weight::Regular,
             ambre_canvas::Slant::Upright,
@@ -240,8 +240,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
-            HEADER_SIZE * layout.zoom.get() as f32,
-            max_width,
+            HEADER_SIZE.zoomed(layout.zoom),
+            ViewPx::new(max_width),
             Alignment::End,
             ambre_canvas::Weight::Regular,
             ambre_canvas::Slant::Upright,

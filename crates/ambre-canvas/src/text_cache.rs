@@ -12,6 +12,7 @@
 // ============================================================================
 
 use ambre_bus::ByteSpan;
+use ambre_core::{DocPx, ViewPx};
 
 use ambre_draw::{Brush, Color};
 use parley::style::{
@@ -262,8 +263,32 @@ pub(crate) fn push_shape(
 // TextCache
 // -----------------------------------------------------------------------------
 
+/// A length a text is laid out in: a font size or a wrap width.
+///
+/// Parley lays out in the units of its caller, so a screen text passes
+/// [`ViewPx`] and a board text passes [`DocPx`]. Both lengths of one layout
+/// share the space, so a font size in one space never meets a width in the
+/// other. The `f32` is unwrapped at the parley call and the cache key only.
+pub trait TextLength: Copy {
+    /// The length in the units parley lays out in.
+    fn layout_units(self) -> f32;
+}
+
+impl TextLength for ViewPx {
+    fn layout_units(self) -> f32 {
+        self.get()
+    }
+}
+
+impl TextLength for DocPx {
+    fn layout_units(self) -> f32 {
+        self.get()
+    }
+}
+
 /// The look of a whole text: everything a layout is shaped with but the
-/// text and its spans.
+/// text and its spans. Its two lengths are in layout units, unwrapped from a
+/// [`TextLength`] at the public entry.
 #[derive(Clone, Copy)]
 struct Look<'a> {
     font_size: f32,
@@ -390,12 +415,12 @@ impl TextCache {
     /// faux bold or oblique. They are part of the cache key, so each style combination
     /// of the same string is stored separately.
     #[allow(clippy::too_many_arguments)]
-    pub fn get_or_build(
+    pub fn get_or_build<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
         text: &str,
-        font_size: f32,
-        max_width: f32,
+        font_size: L,
+        max_width: L,
         align: Alignment,
         weight: Weight,
         slant: Slant,
@@ -418,12 +443,12 @@ impl TextCache {
     /// face, and `"Serif"`/`"Monospace"` to the matching generic. Any other name
     /// is requested verbatim and falls back to the default if unavailable.
     #[allow(clippy::too_many_arguments)]
-    pub fn get_or_build_font(
+    pub fn get_or_build_font<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
         text: &str,
-        font_size: f32,
-        max_width: f32,
+        font_size: L,
+        max_width: L,
         align: Alignment,
         weight: Weight,
         slant: Slant,
@@ -431,8 +456,8 @@ impl TextCache {
         word_break: WordBreak,
     ) -> &Layout<Brush> {
         let plain = Look {
-            font_size,
-            max_width,
+            font_size: font_size.layout_units(),
+            max_width: max_width.layout_units(),
             align,
             weight,
             slant,
@@ -445,17 +470,17 @@ impl TextCache {
     /// A body text at `font_size` within `max_width`, start-aligned, with
     /// each of `spans` shaped in its own look. Each set of spans of one text
     /// is cached apart (`CANVAS-081`).
-    pub fn get_or_build_spans(
+    pub fn get_or_build_spans<L: TextLength>(
         &mut self,
         font_cx: &mut FontContext,
         text: &str,
-        font_size: f32,
-        max_width: f32,
+        font_size: L,
+        max_width: L,
         spans: &[SpanShape],
     ) -> &Layout<Brush> {
         let look = Look {
-            font_size,
-            max_width,
+            font_size: font_size.layout_units(),
+            max_width: max_width.layout_units(),
             align: Alignment::Start,
             weight: Weight::Regular,
             slant: Slant::Upright,
@@ -584,6 +609,7 @@ impl TextCache {
 #[cfg(test)]
 mod tests {
     use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
+    use ambre_core::ViewPx;
     use ambre_bus::ByteSpan;
     use parley::{Alignment, FontContext};
 
@@ -602,8 +628,8 @@ mod tests {
         let layout = cache.get_or_build(
             cx,
             text,
-            14.0,
-            400.0,
+            ViewPx::new(14.0),
+            ViewPx::new(400.0),
             Alignment::Start,
             Weight::Regular,
             Slant::Upright,
@@ -645,14 +671,14 @@ mod tests {
             ids.dedup();
             ids.len()
         };
-        let plain = cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[]);
+        let plain = cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[]);
         let plain_width = plain.width();
         assert_eq!(faces_of(plain), 1);
         let spanned = cache.get_or_build_spans(
             &mut cx,
             "wide text",
-            14.0,
-            400.0,
+            ViewPx::new(14.0),
+            ViewPx::new(400.0),
             std::slice::from_ref(&bold),
         );
         assert_eq!(faces_of(spanned), 2, "the span shaped no face of its own");
@@ -661,11 +687,11 @@ mod tests {
             range: ByteSpan::from_usize_range(0..40),
             ..bold.clone()
         };
-        let off = cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[off]);
+        let off = cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[off]);
         assert_eq!(faces_of(off), 1, "a range past the text shapes nothing");
         assert_eq!(cache.cache_size(), 3);
         cache.reset_frame_stats();
-        cache.get_or_build_spans(&mut cx, "wide text", 14.0, 400.0, &[bold]);
+        cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[bold]);
         assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
     }
 
@@ -684,7 +710,7 @@ mod tests {
             indent: 12,
             ..SpanShape::default()
         };
-        let layout = cache.get_or_build_spans(&mut cx, &text, 14.0, 200.0, &[indent]);
+        let layout = cache.get_or_build_spans(&mut cx, &text, ViewPx::new(14.0), ViewPx::new(200.0), &[indent]);
         let lines: Vec<(f32, f32)> = layout
             .lines()
             .map(|line| {
@@ -799,8 +825,8 @@ mod tests {
             cache.get_or_build(
                 &mut cx,
                 &text,
-                14.0,
-                120.0,
+                ViewPx::new(14.0),
+                ViewPx::new(120.0),
                 align,
                 Weight::Regular,
                 Slant::Upright,
@@ -830,8 +856,8 @@ mod tests {
         let start = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            14.0,
-            120.0,
+            ViewPx::new(14.0),
+            ViewPx::new(120.0),
             Alignment::Start,
             Weight::Regular,
             Slant::Upright,
@@ -839,8 +865,8 @@ mod tests {
         let justified = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            14.0,
-            120.0,
+            ViewPx::new(14.0),
+            ViewPx::new(120.0),
             Alignment::Justify,
             Weight::Regular,
             Slant::Upright,

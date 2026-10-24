@@ -717,8 +717,8 @@ pub(crate) fn shape<'c>(
     cache.get_or_build(
         font_cx,
         text,
-        size,
-        width,
+        ViewPx::new(size),
+        ViewPx::new(width),
         Alignment::Start,
         weight,
         ambre_canvas::Slant::Upright,
@@ -738,7 +738,13 @@ fn body<'c>(
         .iter()
         .map(|mark| look::shape(&mark.style, mark.bytes))
         .collect();
-    cache.get_or_build_spans(font_cx, &row.body, FONT_BODY, width, &spans)
+    cache.get_or_build_spans(
+        font_cx,
+        &row.body,
+        ViewPx::new(FONT_BODY),
+        ViewPx::new(width),
+        &spans,
+    )
 }
 
 /// Fill the boxes `layout` gives the bytes `bytes`, its top at `body_y`.

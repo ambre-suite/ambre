@@ -16,6 +16,8 @@
 
 use rustc_hash::FxHashMap;
 
+use crate::density::DevicePixelRatio;
+
 // ============================================================================
 // GlyphAtlas
 // ============================================================================
@@ -52,6 +54,35 @@ impl GlyphId {
     }
 }
 
+/// The size a glyph is rasterized at, in device pixels: its logical size,
+/// times the scale of the transform it is drawn under, times the density.
+///
+/// A walk is laid out in document units and drawn under a zoom. Its glyphs get
+/// a bitmap of the size they cover on the screen, never a stretched one
+/// (`CANVAS-074`). The atlas keys a raster by this size, so a density change
+/// never draws a raster made for the previous screen (`CANVAS-034`).
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct RasterSize(f32);
+
+impl RasterSize {
+    /// The raster of a glyph run whose layout gives it `font_size`, in the
+    /// units of that layout, drawn under a transform of `scale` on a screen
+    /// of `density`.
+    pub fn of_layout(font_size: f32, scale: f64, density: DevicePixelRatio) -> Self {
+        Self((f64::from(font_size) * scale) as f32 * density.get() as f32)
+    }
+
+    /// A raster `device_px` device pixels high.
+    pub const fn new(device_px: f32) -> Self {
+        Self(device_px)
+    }
+
+    /// The size Swash renders, in device pixels.
+    const fn get(self) -> f32 {
+        self.0
+    }
+}
+
 /// A raster size quantized to a hundredth of a device pixel, so it can be
 /// hashed. Two sizes closer than that share a raster.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -59,8 +90,8 @@ struct RasterSizeKey(u32);
 
 impl RasterSizeKey {
     /// The key of a raster `size` device pixels high.
-    fn of(size: f32) -> Self {
-        Self((size * 100.0) as u32)
+    fn of(size: RasterSize) -> Self {
+        Self((size.get() * 100.0) as u32)
     }
 }
 
@@ -74,7 +105,7 @@ pub(super) struct GlyphKey {
 impl GlyphKey {
     /// The key of a raster at `raster_size`, the size in device pixels. A
     /// raster made for one density is never found for another (`CANVAS-034`).
-    pub(super) fn new(font: FontId, glyph: GlyphId, raster_size: f32) -> Self {
+    pub(super) fn new(font: FontId, glyph: GlyphId, raster_size: RasterSize) -> Self {
         Self {
             font,
             glyph,
@@ -515,7 +546,7 @@ impl GlyphAtlas {
     pub fn get_or_rasterize(
         &mut self,
         font_data: &parley::FontData,
-        font_size: f32,
+        font_size: RasterSize,
         normalized_coords: &[swash::NormalizedCoord],
         glyph: GlyphId,
     ) -> Option<AtlasSlot> {
@@ -559,7 +590,7 @@ impl GlyphAtlas {
 pub(super) fn rasterize(
     scale_cx: &mut swash::scale::ScaleContext,
     font: swash::FontRef<'_>,
-    size: f32,
+    size: RasterSize,
     normalized_coords: &[swash::NormalizedCoord],
     glyph: GlyphId,
 ) -> Option<Raster> {
@@ -575,7 +606,7 @@ pub(super) fn rasterize(
     .render(
         &mut scale_cx
             .builder(font)
-            .size(size)
+            .size(size.get())
             .normalized_coords(normalized_coords)
             .build(),
         glyph.get(),
@@ -652,7 +683,7 @@ mod tests {
     }
 
     fn key(glyph: u16) -> GlyphKey {
-        GlyphKey::new(FontId::of_blob(7), GlyphId::new(glyph), 16.0)
+        GlyphKey::new(FontId::of_blob(7), GlyphId::new(glyph), RasterSize::new(16.0))
     }
 
     /// The pixel origin of a slot in an atlas of side `size`.

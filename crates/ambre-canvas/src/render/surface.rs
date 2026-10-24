@@ -25,18 +25,6 @@ use lyon::tessellation::{
 // vertices to screen space.
 const PATH_TOLERANCE_PX: f64 = 0.15;
 
-/// The size a glyph is rasterized at: its logical size, times the scale of the
-/// transform it is drawn under, times the density.
-///
-/// A walk is laid out in document units and drawn under a zoom. Its glyphs get
-/// a bitmap of the size they cover on the screen, never a stretched one
-/// (`CANVAS-074`). The
-/// atlas keys a raster by this size. A density change therefore never draws a
-/// raster made for the previous screen (`CANVAS-034`).
-fn raster_size(font_size: f32, scale: f64, density: DevicePixelRatio) -> f32 {
-    (f64::from(font_size) * scale) as f32 * density.get() as f32
-}
-
 /// A transform's linear part split into its scale and the rest. The scale is
 /// the square root of the determinant, as a path's tolerance reads it. The
 /// rest is the linear part divided by it.
@@ -360,7 +348,7 @@ impl DrawSurface for WgpuSurface<'_> {
         // is rasterized at the transform's scale and the density, then drawn
         // back over the screen box that scale gives it (`CANVAS-074`).
         let density = self.renderer.density();
-        let raster = raster_size(font_size, scale, density);
+        let raster = RasterSize::of_layout(font_size, scale, density);
 
         let mut pen_x = 0.0f32;
         for glyph in run.glyphs() {
@@ -760,7 +748,10 @@ mod tests {
     /// stretched over twice its texels on a dense screen.
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
-        assert_eq!(raster_size(14.0, 1.0, ratio(2.0)), 28.0);
+        assert_eq!(
+            RasterSize::of_layout(14.0, 1.0, ratio(2.0)),
+            RasterSize::new(28.0)
+        );
         // A bitmap of 20 x 30 device pixels at density 2.
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), ratio(2.0)),
@@ -779,7 +770,7 @@ mod tests {
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::{FontId, GlyphKey};
         let key = |density| {
-            let size = raster_size(14.0, 1.0, ratio(density));
+            let size = RasterSize::of_layout(14.0, 1.0, ratio(density));
             GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
         };
         assert_ne!(key(1.0), key(2.0));
@@ -792,8 +783,14 @@ mod tests {
     /// the zoom would apply twice.
     #[test]
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
-        assert_eq!(raster_size(14.0, 2.0, DevicePixelRatio::ONE), 28.0);
-        assert_eq!(raster_size(14.0, 2.0, ratio(2.0)), 56.0);
+        assert_eq!(
+            RasterSize::of_layout(14.0, 2.0, DevicePixelRatio::ONE),
+            RasterSize::new(28.0)
+        );
+        assert_eq!(
+            RasterSize::of_layout(14.0, 2.0, ratio(2.0)),
+            RasterSize::new(56.0)
+        );
 
         let (scale, unit) =
             split_linear(Affine::translate((5.0, 7.0)) * Affine::scale(3.0) * Affine::rotate(0.5))

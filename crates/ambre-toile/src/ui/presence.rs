@@ -48,7 +48,7 @@ const LASER_TRAIL_MAX: usize = 24;
 const CURSOR_SIZE_PX: f64 = 14.0;
 
 /// Name-label font size, in logical pixels.
-const LABEL_FONT_PX: f32 = 12.0;
+const LABEL_FONT_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(12.0);
 
 /// How long a laser sample stays visible. Long enough to read a
 /// gesture across the board, short enough that a highlighter held still leaves
@@ -309,7 +309,7 @@ fn paint_cursor<S: DrawSurface>(
         font_cx,
         label,
         LABEL_FONT_PX,
-        200.0,
+        ambre_core::ViewPx::new(200.0),
         Alignment::Start,
         ambre_canvas::Weight::Bold,
         ambre_canvas::Slant::Upright,

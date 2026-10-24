@@ -38,7 +38,7 @@ pub fn draw_edit<S: DrawSurface>(
         weight: ambre_core::FontWeight::of_bold(bold),
         italic,
         family: "Sans".to_owned(),
-        base_size: ambre_core::DocPx::new(BODY_SIZE),
+        base_size: BODY_SIZE,
         color: palette.cell_text,
         underline: false,
         strikethrough: false,

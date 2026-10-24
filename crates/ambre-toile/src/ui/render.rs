@@ -548,8 +548,8 @@ fn paint_frame_titles<S: DrawSurface>(
         let layout = text_cache.get_or_build_font(
             font_cx,
             label,
-            FRAME_TITLE_PX as f32,
-            f32::MAX,
+            ambre_core::ViewPx::new(FRAME_TITLE_PX as f32),
+            ambre_core::ViewPx::new(f32::MAX),
             Alignment::Start,
             ambre_canvas::Weight::Regular,
             ambre_canvas::Slant::Upright,
@@ -973,13 +973,13 @@ mod tests {
         // The style holds points: 30 points lay out at 40 px.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Sticky, &manual, bounds),
-            40.0
+            ambre_core::DocPx::new(40.0)
         );
         // A text element has no card to track. Auto draws it at the default
         // size: 12 points lay out at 16 px, never at zero.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Text, &auto, bounds),
-            16.0
+            ambre_core::DocPx::new(16.0)
         );
     }
 
@@ -1022,11 +1022,17 @@ mod tests {
         let big = sticky_font_size(Rect::new(0.0, 0.0, 240.0, 240.0));
         assert!(big > small, "font must grow with the note");
         // Clamped to a legible range at the extremes.
-        assert_eq!(sticky_font_size(Rect::new(0.0, 0.0, 4.0, 4.0)), 8.0);
-        assert_eq!(sticky_font_size(Rect::new(0.0, 0.0, 4000.0, 4000.0)), 48.0);
+        assert_eq!(
+            sticky_font_size(Rect::new(0.0, 0.0, 4.0, 4.0)),
+            ambre_core::DocPx::new(8.0)
+        );
+        assert_eq!(
+            sticky_font_size(Rect::new(0.0, 0.0, 4000.0, 4000.0)),
+            ambre_core::DocPx::new(48.0)
+        );
         // A square 120x120 (the default) sits in-range.
         let default = sticky_font_size(Rect::new(0.0, 0.0, 120.0, 120.0));
-        assert!((8.0..=48.0).contains(&default));
+        assert!((ambre_core::DocPx::new(8.0)..=ambre_core::DocPx::new(48.0)).contains(&default));
     }
 
     // A free `Text` element has no card. The geometry pass paints nothing for it,

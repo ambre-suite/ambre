@@ -105,12 +105,12 @@ where
         };
         // True zoom: the glyph size scales with the grid (the per-axis metrics
         // already do via `col_w`/`row_h`).
-        let font_size = super::cell_font_px(content.size) * layout.zoom.get() as f32;
+        let font_size = super::cell_font_px(content.size).zoomed(layout.zoom);
         let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
             font_cx,
             content.text,
             font_size,
-            max_w,
+            ViewPx::new(max_w),
             Alignment::Start,
             ambre_canvas::Weight::bold_if(content.bold),
             ambre_canvas::Slant::italic_if(content.italic),

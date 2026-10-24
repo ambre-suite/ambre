@@ -14,6 +14,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+use ambre_core::ViewPx;
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect};
 use parley::FontContext;
 
@@ -205,15 +206,17 @@ pub fn paint_fatal(
         FATAL_BACKDROP,
     );
     // A centered column at most 640 logical pixels wide, the stack centered.
-    let column = (width * 0.8).min(640.0);
-    let x = (f64::from(width) - f64::from(column)) / 2.0;
-    let title_h = text_height(font_cx, cache, TITLE_TEXT, FONT_HEADING, column);
-    let body_h = text_height(font_cx, cache, message, FONT_BODY, column);
+    let column = ViewPx::new((width * 0.8).min(640.0));
+    let x = (f64::from(width) - f64::from(column.get())) / 2.0;
+    let heading = ViewPx::new(FONT_HEADING);
+    let body = ViewPx::new(FONT_BODY);
+    let title_h = text_height(font_cx, cache, TITLE_TEXT, heading, column);
+    let body_h = text_height(font_cx, cache, message, body, column);
     let gap = 16.0;
     let title_y = (f64::from(height) - (title_h + gap + body_h)) / 2.0;
     let lines = [
-        (TITLE_TEXT, FONT_HEADING, title_y, TITLE),
-        (message, FONT_BODY, title_y + title_h + gap, BODY),
+        (TITLE_TEXT, heading, title_y, TITLE),
+        (message, body, title_y + title_h + gap, BODY),
     ];
     for (text, size, y, color) in lines {
         draw_centered(
@@ -234,8 +237,8 @@ fn text_height(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    size: f32,
-    width: f32,
+    size: ViewPx,
+    width: ViewPx,
 ) -> f64 {
     let layout = cache.get_or_build(
         font_cx,
@@ -256,8 +259,8 @@ fn draw_centered(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    size: f32,
-    width: f32,
+    size: ViewPx,
+    width: ViewPx,
     origin: Point,
     color: Color,
 ) {

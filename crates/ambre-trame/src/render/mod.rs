@@ -26,7 +26,7 @@ use ambre_bus::{
     CellPos, Col, ColCount, ColDelta, ColSpan, MergeSpan, Row, RowCount, RowDelta, RowSpan,
 };
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::{DocPx, FontSize};
+use ambre_core::{DocPx, FontSize, ViewPx};
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush, Point,
     PositionedLayoutItem, Rect,
@@ -38,17 +38,17 @@ pub const CELL_PAD_X: DocPx = DocPx::new(4.0);
 pub const BODY_FONT: FontSize = FontSize::from_whole_points(9);
 /// Body font size in px, shared by the cell renderer and the edit overlay. It
 /// is [`BODY_FONT`] laid out.
-pub const BODY_SIZE: f32 = 12.0;
+pub const BODY_SIZE: DocPx = DocPx::new(12.0);
 
 /// The px size parley lays a cell's text out in, before the zoom. The bus
 /// carries points, so an explicit size goes through [`FontSize::to_px`] as in
 /// every other view.
 #[must_use]
-pub fn cell_font_px(size: Option<FontSize>) -> f32 {
-    size.map_or(BODY_SIZE, |size| size.to_px().get())
+pub fn cell_font_px(size: Option<FontSize>) -> DocPx {
+    size.map_or(BODY_SIZE, FontSize::to_px)
 }
-/// Header label font size (column letters + row numbers).
-pub const HEADER_SIZE: f32 = 11.0;
+/// Header label font size (column letters + row numbers), before the zoom.
+pub const HEADER_SIZE: DocPx = DocPx::new(11.0);
 
 // -----------------------------------------------------------------------------
 // Renderer split across submodules by concern (all re-exported below, so call

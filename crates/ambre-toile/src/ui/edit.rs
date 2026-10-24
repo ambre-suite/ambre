@@ -88,11 +88,8 @@ impl InlineEditor {
         // Size: the one the board draws, sticky auto-size and the free text
         // default included, so the body keeps its height under edit
         // (`TOILE-UI-188`).
-        let base_size = ambre_core::DocPx::new(super::walk::sticky_or_style_font_size(
-            host,
-            &elem.style,
-            elem.bounds,
-        ));
+        let base_size =
+            super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
@@ -119,7 +116,7 @@ impl InlineEditor {
             weight: font.weight,
             italic: font.italic,
             family: font.face().label().to_owned(),
-            base_size: ambre_core::DocPx::new(super::label::LABEL_FONT_SIZE),
+            base_size: super::label::LABEL_FONT_SIZE,
             color: palette.cell_text,
             underline: false,
             strikethrough: false,
@@ -331,7 +328,7 @@ mod tests {
         let drawn =
             super::super::walk::sticky_or_style_font_size(TextHost::Text, &e.style, e.bounds);
         let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
-        assert_eq!(editor.style().base_size.get(), drawn);
-        assert_eq!(drawn, 16.0);
+        assert_eq!(editor.style().base_size, drawn);
+        assert_eq!(drawn, ambre_core::DocPx::new(16.0));
     }
 }

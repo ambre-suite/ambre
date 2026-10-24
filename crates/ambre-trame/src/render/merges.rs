@@ -61,7 +61,7 @@ where
             let avail = (rect.width() - 2.0 * layout.pad_x().get()).max(0.0);
             // True zoom: scale the glyph size with the grid (span metrics already
             // scale via `cell_rect`/`merge_rect`).
-            let font_size = super::cell_font_px(content.size) * layout.zoom.get() as f32;
+            let font_size = super::cell_font_px(content.size).zoomed(layout.zoom);
             // Wrap constrains the layout to the span width, breaking long tokens
             // within the word. Otherwise the line lays out unbounded, and is
             // clipped to the span rect below (`trame-cell-rendering`).
@@ -70,7 +70,7 @@ where
                 font_cx,
                 content.text,
                 font_size,
-                max_w,
+                ViewPx::new(max_w),
                 Alignment::Start,
                 ambre_canvas::Weight::bold_if(content.bold),
                 ambre_canvas::Slant::italic_if(content.italic),
