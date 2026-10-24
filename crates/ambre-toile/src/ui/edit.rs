@@ -88,8 +88,7 @@ impl InlineEditor {
         // Size: the one the board draws, sticky auto-size and the free text
         // default included, so the body keeps its height under edit
         // (`TOILE-UI-188`).
-        let base_size =
-            super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
+        let base_size = super::walk::sticky_or_style_font_size(host, &elem.style, elem.bounds);
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,

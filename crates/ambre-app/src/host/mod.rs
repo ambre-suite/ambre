@@ -563,9 +563,7 @@ impl AppView {
     /// an id this view does not show.
     fn cell_view(&self, id: CanvasId, size: CssSize) -> Option<AppView> {
         match self {
-            AppView::Murmure(v) if id == THREAD_CANVAS => {
-                Some(AppView::Murmure(v.region(size)))
-            }
+            AppView::Murmure(v) if id == THREAD_CANVAS => Some(AppView::Murmure(v.region(size))),
             _ => None,
         }
     }

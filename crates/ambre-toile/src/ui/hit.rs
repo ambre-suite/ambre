@@ -27,7 +27,11 @@ pub(crate) const PICK_PX: ViewPx = ViewPx::new(4.0);
 /// below the camera's floor reads as the floor.
 pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
     let floored = ViewportTransform {
-        zoom: if cam.zoom < MIN_ZOOM { MIN_ZOOM } else { cam.zoom },
+        zoom: if cam.zoom < MIN_ZOOM {
+            MIN_ZOOM
+        } else {
+            cam.zoom
+        },
         ..*cam
     };
     floored.to_board(PICK_PX)
@@ -157,11 +161,7 @@ fn point_segment_distance(p: Point, a: Point, b: Point) -> f64 {
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last
 /// element that passes `exact_hit` wins (first hit walking front-to-back).
 /// `pick` is the pointer's reach in world units (see [`pick_floor`]).
-pub fn hit_topmost(
-    nodes: &[DisplayNode],
-    world_pt: Point,
-    pick: BoardLength,
-) -> Option<ElementId> {
+pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point, pick: BoardLength) -> Option<ElementId> {
     nodes
         .iter()
         .rev()

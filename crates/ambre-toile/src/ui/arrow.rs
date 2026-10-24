@@ -180,9 +180,18 @@ mod tests {
     #[test]
     fn a_press_grabs_the_nearer_end() {
         let p = line((0.0, 0.0), (100.0, 0.0));
-        assert_eq!(handle_at(&p, Point::new(2.0, 1.0), BoardLength::new(6.0)), Some(End::From));
-        assert_eq!(handle_at(&p, Point::new(98.0, 1.0), BoardLength::new(6.0)), Some(End::To));
-        assert_eq!(handle_at(&p, Point::new(50.0, 0.0), BoardLength::new(6.0)), None);
+        assert_eq!(
+            handle_at(&p, Point::new(2.0, 1.0), BoardLength::new(6.0)),
+            Some(End::From)
+        );
+        assert_eq!(
+            handle_at(&p, Point::new(98.0, 1.0), BoardLength::new(6.0)),
+            Some(End::To)
+        );
+        assert_eq!(
+            handle_at(&p, Point::new(50.0, 0.0), BoardLength::new(6.0)),
+            None
+        );
     }
 
     /// A re-aim released over a shape moves the dragged end there, on the side

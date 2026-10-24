@@ -596,11 +596,12 @@ impl ToileState {
                 hashes
                     .iter()
                     .filter_map(|h| {
-                        self.decoded_thumbnail(h).map(|decoded| ToileEvent::MediaDecoded {
-                            hash: h.clone(),
-                            size: decoded.size,
-                            pixels: decoded.pixels,
-                        })
+                        self.decoded_thumbnail(h)
+                            .map(|decoded| ToileEvent::MediaDecoded {
+                                hash: h.clone(),
+                                size: decoded.size,
+                                pixels: decoded.pixels,
+                            })
                     })
                     .collect(),
             ),

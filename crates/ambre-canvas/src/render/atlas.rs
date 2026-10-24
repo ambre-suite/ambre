@@ -68,7 +68,7 @@ impl RasterSize {
     /// The raster of a glyph run whose layout gives it `font_size`, in the
     /// units of that layout, drawn under a transform of `scale` on a screen
     /// of `density`.
-    pub fn of_layout(font_size: f32, scale: f64, density: DevicePixelRatio) -> Self {
+    pub(crate) fn of_layout(font_size: f32, scale: f64, density: DevicePixelRatio) -> Self {
         Self((f64::from(font_size) * scale) as f32 * density.get() as f32)
     }
 
@@ -683,7 +683,11 @@ mod tests {
     }
 
     fn key(glyph: u16) -> GlyphKey {
-        GlyphKey::new(FontId::of_blob(7), GlyphId::new(glyph), RasterSize::new(16.0))
+        GlyphKey::new(
+            FontId::of_blob(7),
+            GlyphId::new(glyph),
+            RasterSize::new(16.0),
+        )
     }
 
     /// The pixel origin of a slot in an atlas of side `size`.
@@ -699,7 +703,7 @@ mod tests {
         let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
         let glyph = GlyphId::new(font.charmap().map(ch));
         let mut scale_cx = swash::scale::ScaleContext::new();
-        rasterize(&mut scale_cx, font, size, &[], glyph).expect("a raster")
+        rasterize(&mut scale_cx, font, RasterSize::new(size), &[], glyph).expect("a raster")
     }
 
     /// A glyph rasterized for a density of 2 has twice the texels of the

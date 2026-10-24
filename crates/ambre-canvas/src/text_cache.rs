@@ -609,8 +609,8 @@ impl TextCache {
 #[cfg(test)]
 mod tests {
     use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
-    use ambre_core::ViewPx;
     use ambre_bus::ByteSpan;
+    use ambre_core::ViewPx;
     use parley::{Alignment, FontContext};
 
     /// A context holding the shipped Noto Sans face, read from the tree.
@@ -671,7 +671,13 @@ mod tests {
             ids.dedup();
             ids.len()
         };
-        let plain = cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[]);
+        let plain = cache.get_or_build_spans(
+            &mut cx,
+            "wide text",
+            ViewPx::new(14.0),
+            ViewPx::new(400.0),
+            &[],
+        );
         let plain_width = plain.width();
         assert_eq!(faces_of(plain), 1);
         let spanned = cache.get_or_build_spans(
@@ -687,11 +693,23 @@ mod tests {
             range: ByteSpan::from_usize_range(0..40),
             ..bold.clone()
         };
-        let off = cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[off]);
+        let off = cache.get_or_build_spans(
+            &mut cx,
+            "wide text",
+            ViewPx::new(14.0),
+            ViewPx::new(400.0),
+            &[off],
+        );
         assert_eq!(faces_of(off), 1, "a range past the text shapes nothing");
         assert_eq!(cache.cache_size(), 3);
         cache.reset_frame_stats();
-        cache.get_or_build_spans(&mut cx, "wide text", ViewPx::new(14.0), ViewPx::new(400.0), &[bold]);
+        cache.get_or_build_spans(
+            &mut cx,
+            "wide text",
+            ViewPx::new(14.0),
+            ViewPx::new(400.0),
+            &[bold],
+        );
         assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
     }
 
@@ -710,7 +728,13 @@ mod tests {
             indent: 12,
             ..SpanShape::default()
         };
-        let layout = cache.get_or_build_spans(&mut cx, &text, ViewPx::new(14.0), ViewPx::new(200.0), &[indent]);
+        let layout = cache.get_or_build_spans(
+            &mut cx,
+            &text,
+            ViewPx::new(14.0),
+            ViewPx::new(200.0),
+            &[indent],
+        );
         let lines: Vec<(f32, f32)> = layout
             .lines()
             .map(|line| {

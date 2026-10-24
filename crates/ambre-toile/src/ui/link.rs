@@ -229,13 +229,24 @@ mod tests {
             ),
             elem("over", Rect::new(0.0, 0.0, 100.0, 100.0), None),
         ]);
-        let hit = link_at(&display, Point::new(50.0, 50.0), crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default()));
+        let hit = link_at(
+            &display,
+            Point::new(50.0, 50.0),
+            crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default()),
+        );
         assert_eq!(
             hit,
             Some((ElementId("under".into()), url)),
             "an unlinked element on top does not swallow the link below it"
         );
-        assert!(link_at(&display, Point::new(500.0, 500.0), crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default())).is_none());
+        assert!(
+            link_at(
+                &display,
+                Point::new(500.0, 500.0),
+                crate::ui::hit::pick_floor(&crate::ui::viewport::ViewportTransform::default())
+            )
+            .is_none()
+        );
     }
 
     /// A jump stays on the board; the other two leave it for the shell.
