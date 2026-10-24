@@ -152,8 +152,7 @@ layout is then red until the number rises.
   release is a `git tag` matching `v[0-9]*`, the pattern `RELEASE_TAG` of
   `scripts/schema_freeze.py`. While no tag matches, the gate reads no base and holds the pairing
   alone. The first matching tag switches the append-only comparison on, for good.
-  A shallow clone often carries no tag, so the gate refuses a shallow clone with no tag at all.
-  It names the fetch of the tags that fixes it, and the CI checkout fetches them.
+  The gate refuses a shallow clone with no tag at all, naming the tag fetch the CI checkout runs.
 * **The pairing is read, not trusted.** A crate that stamps a version and freezes nothing, and a
   frozen shape no belt compares, are each a half that holds nothing (`SCHEMA-015`). The same gate
   pairs them both ways, so a fourth application inherits the obligation rather than the list.
