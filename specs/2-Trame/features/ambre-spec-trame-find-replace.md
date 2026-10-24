@@ -69,10 +69,10 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::FindNext { query, options }` | UI to Logic | the query and the options, read for case and extent; the origin is the tracked active cell |
+| `TrameCommand::FindNext { query }` | UI to Logic | the query and its options, read for case and extent, or none for an emptied field; the origin is the tracked active cell |
 | `TrameEvent::FindResult { matches, active }` | Logic to UI | every hit in row-major order, and the index to move to |
-| `TrameCommand::ReplaceAll { query, replacement, options }` | UI to Logic | the query, its replacement and the four options |
-| `TrameCommand::ReplaceOne { query, replacement, options }` | UI to Logic | the same, for the active match alone; the sheet scope is not read |
+| `TrameCommand::ReplaceAll { query, replacement }` | UI to Logic | the query with the four options, and its replacement |
+| `TrameCommand::ReplaceOne { query, replacement }` | UI to Logic | the same, for the active match alone; the sheet scope is not read |
 | `TrameEvent::ReplaceDone { replaced }` | Logic to UI | how many cells were rewritten |
 
 **What a Trame match is** (the shared walk is `ambre-spec-find.md section 3`):
@@ -85,10 +85,9 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
   (`TRAME-UI-080`);
 * the row-major order is Trame's, and the origin is the active cell the Logic thread tracks.
 
-The *find text* is the query as the user typed it, never empty (`FindText`). An empty field sends
-no query, which clears the highlight and never reaches a scan (`FIND-005`). The *find options* are
-the refinements a find applies to its query. Both travel in the shared `FindQuery`
-(`ambre-spec-find.md section 3`). Trame widens the shared set to four, one enum per panel checkbox:
+The *find text* is the query as typed, never empty (`FindText`): an empty field sends no query
+(`FIND-005`). The *find options* are the refinements a find applies to it. Both travel in the
+shared `FindQuery`. Trame widens the options to four, one enum per panel checkbox:
 
 ```rust
 // ambre_bus::app::trame
@@ -102,9 +101,6 @@ pub struct FindOptions {
     pub sheets: SheetScope,   // Active | All
 }
 ```
-
-**Code.** `logic/find.rs` for the scan, the match and the rewrite; `chrome/find_replace.rs` for the
-panel.
 
 ---
 
