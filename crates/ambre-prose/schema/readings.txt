@@ -303,6 +303,7 @@ meta/header/align = "center" => header aligned Center
 meta/header/block_id = "117@1" => header drawn from block 11
 meta/header/enabled = true => header shown true
 meta/header_first/block_id = "122@1" => header_first drawn from block 12
+meta/locale = "fr" => in "fr"
 meta/page/height_mm = 297 => height_mm is 1122.5198 px
 meta/page/margin_bottom_mm = 20 => margin_bottom_mm is 75.590515 px
 meta/page/margin_left_mm = 20 => margin_left_mm is 75.59055 px

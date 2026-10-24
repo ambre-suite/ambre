@@ -635,16 +635,16 @@ pub(crate) mod tests {
         let seeded =
             crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(seeded, "2026-03-05");
-        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "en");
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "en");
         let english =
             crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(english, "March 5, 2026");
-        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr");
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr");
         let french =
             crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(french, "5 mars 2026");
         // A peer's malformed tag is no language, not French nor English.
-        let _ = doc::meta(state.document()).insert(doc::MetaKey::Lang, "fr_FR");
+        let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr_FR");
         let unnamed =
             crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
         assert_eq!(unnamed, "2026-03-05");

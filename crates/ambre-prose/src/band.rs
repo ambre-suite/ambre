@@ -96,7 +96,7 @@ fn field_value(
         HeaderField::PageCount => count.to_string(),
         HeaderField::Title => doc::read_title(document),
         HeaderField::Date(format) => doc::read_updated_at(document)
-            .map(|at| format_date(at, format, doc::read_lang(document).as_ref()))
+            .map(|at| format_date(at, format, doc::read_locale(document).as_ref()))
             .unwrap_or_default(),
     }
 }

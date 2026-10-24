@@ -126,7 +126,7 @@ the container, `--` where no feature does.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version`, `title`, `created_at`, `updated_at`, `lang`, `pageless`, `different_first_page` | `u32`, String, `u64` and `u64` as Unix milliseconds, a BCP 47 tag, `bool`, `bool` | the key | -- (foundation; this spec section 7) | built |
+| `meta` | Map | `schema_version`, `title`, `created_at`, `updated_at`, `locale`, `pageless`, `different_first_page` | `u32`, String, `u64` and `u64` as Unix milliseconds, a BCP 47 tag, `bool`, `bool` | the key | -- (foundation; this spec section 7) | built |
 | `meta/page` | Map | `orientation`, `width_mm`, `height_mm`, `margin_top_mm`, `margin_bottom_mm`, `margin_left_mm`, `margin_right_mm` | `"portrait"` or `"landscape"` (`PROSE-032`), and `f32` for the six | the key | pagination | built |
 | `meta/defaults` | Map | `font_family`, `font_size_pt`, `line_height` | the picker's label, resolved through `registered_family_name`; `f32` points; `f32` multiple | the key | inline-styles | built |
 | `meta/header`, `meta/footer` | Map | `enabled`, `block_id`, `align` | `bool`, String, String | the key | headers-footers | built |

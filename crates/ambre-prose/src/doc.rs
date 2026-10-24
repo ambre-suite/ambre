@@ -103,8 +103,8 @@ ambre_core::crdt_names! {
     /// The keys of the `meta` register.
     pub(crate) enum MetaKey: FieldKey {
         Title = "title",
-        /// A BCP 47 tag.
-        Lang = "lang",
+        /// The document locale, a BCP 47 tag: the key Trame and Toile share.
+        Locale = "locale",
         Pageless = "pageless",
         /// The page sub-map, keyed by [`PageKey`].
         Page = "page",
@@ -1505,13 +1505,13 @@ pub fn read_title(doc: &LoroDoc) -> String {
         .unwrap_or_default()
 }
 
-/// The document language, or `None` when the register is absent or holds no
+/// The document locale, or `None` when the register is absent or holds no
 /// well-formed tag. A peer may have written any string there; a malformed one
 /// reads as no language rather than as a fixed one.
 #[must_use]
-pub fn read_lang(doc: &LoroDoc) -> Option<LangTag> {
+pub fn read_locale(doc: &LoroDoc) -> Option<LangTag> {
     meta_read(doc)
-        .and_then(|meta| read_string(&meta, MetaKey::Lang))
+        .and_then(|meta| read_string(&meta, MetaKey::Locale))
         .and_then(|text| LangTag::parse(&text))
 }
 

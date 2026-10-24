@@ -887,6 +887,7 @@ meta/header/enabled: bool
 meta/header: map
 meta/header_first/block_id: string
 meta/header_first: map
+meta/locale: string
 meta/page/height_mm: f64
 meta/page/margin_bottom_mm: f64
 meta/page/margin_left_mm: f64

@@ -109,9 +109,10 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 /// (`PROSE-FEAT-305`). A version 8 document may hold notes, so this step
 /// rewrites each one: see [`notes_to_blocks`].
 ///
-/// `9 -> 10` is the seed that writes no language (`LOCALE-013`). A version 9
-/// document keeps the tag its seed wrote, and a reader still honours it, so
-/// this step stamps the number and rewrites nothing.
+/// `9 -> 10` renames the document's language register from `lang` to the
+/// `locale` key Trame and Toile share, and the seed stops writing one
+/// (`LOCALE-013`). A version 9 document keeps the tag it holds, under the new
+/// key: see [`lang_to_locale`].
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: SchemaVersion::new(0),
@@ -161,7 +162,7 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: SchemaVersion::new(9),
         to: SchemaVersion::new(10),
-        apply: stamp_step,
+        apply: lang_to_locale,
     },
 ];
 
@@ -215,6 +216,30 @@ fn move_notes_to_blocks(doc: &LoroDoc) -> Result<(), crate::doc::WriteError> {
         d::get_block_text(doc, &block).apply_delta(&text.to_delta())?;
         entry.insert(d::AnnotKey::NoteBlock, block.to_string())?;
         entry.delete(d::AnnotKey::Text)?;
+    }
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The key a version 9 document holds its language under, which version 10
+/// renamed. Only the `9 -> 10` step still reads it.
+const V9_LANG: &str = "lang";
+
+/// The `9 -> 10` step: the value under `lang` moves to `locale`, as it was.
+///
+/// The value is moved whatever it holds, since a reader judges the tag and a
+/// malformed one already read as no language. A document that already holds
+/// a `locale` keeps it, so the step read twice writes nothing the second time.
+fn lang_to_locale(doc: &LoroDoc) -> Result<(), String> {
+    let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
+    let locale = crate::doc::MetaKey::Locale.as_str();
+    if let Some(loro::ValueOrContainer::Value(value)) = meta.get(V9_LANG) {
+        if meta.get(locale).is_none() {
+            meta.insert(locale, value)
+                .map_err(|error| error.to_string())?;
+        }
+        meta.delete(V9_LANG).map_err(|error| error.to_string())?;
     }
     stamp(doc);
     doc.commit();
@@ -377,6 +402,37 @@ mod tests {
             state.export_snapshot(),
             before,
             "a refused read must not write the document back"
+        );
+    }
+
+    /// A version 9 document named its language under `lang`. The step moves
+    /// the tag to `locale`, so the date field still reads it.
+    #[test]
+    fn a_version_9_language_reads_as_the_locale() {
+        let doc = LoroDoc::new();
+        let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
+        meta.insert(V9_LANG, "fr").expect("a version 9 language");
+        meta.insert(
+            ambre_core::schema::MetaKey::SchemaVersion.as_str(),
+            i64::from(9_u32),
+        )
+        .expect("stamp");
+        doc.commit();
+        let bytes = SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"));
+        let gated = gate(&bytes).expect("version 9 migrates");
+        let migrated = LoroDoc::new();
+        migrated
+            .import(gated.as_bytes())
+            .expect("the migrated snapshot imports");
+        assert_eq!(
+            crate::doc::read_locale(&migrated).map(|tag| tag.as_str().to_owned()),
+            Some("fr".to_owned())
+        );
+        assert!(
+            migrated
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .get(V9_LANG)
+                .is_none()
         );
     }
 

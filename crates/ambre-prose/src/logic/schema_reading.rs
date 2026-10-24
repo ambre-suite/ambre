@@ -307,7 +307,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let key = doc::MetaKey::parse(stored_key)?;
     match key {
         doc::MetaKey::Title => Some(format!("titled {:?}", doc::read_title(document))),
-        doc::MetaKey::Lang => Some(doc::read_lang(document).map_or_else(
+        doc::MetaKey::Locale => Some(doc::read_locale(document).map_or_else(
             || "in no well-formed language".to_owned(),
             |tag| format!("in {:?}", tag.as_str()),
         )),

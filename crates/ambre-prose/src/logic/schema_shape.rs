@@ -398,6 +398,15 @@ pub(super) fn document_of_every_key() -> ProseState {
     hide_the_rule(&mut state);
     write_a_thread(&mut state, root);
     write_a_suggestion(&mut state, root);
+    // No command sets the document locale yet, so the scenario writes the
+    // register directly: the freeze still has to hold its type.
+    if doc::meta(&state.doc)
+        .insert(doc::MetaKey::Locale, "fr")
+        .is_err()
+    {
+        panic!("the scenario could not write the locale");
+    }
+    state.doc.commit();
     for key in mark_roots_to_apply() {
         // The style path refuses an anchor its own command owns
         // (`PROSE-FEAT-298`). The scenario still has to reach every root, so
@@ -634,8 +643,13 @@ fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
             text.insert(0, "old note").expect("written");
             text.mark(0..3, "b", "true").expect("marked");
         }
-        // The seed of version 9 wrote a language, and the step leaves it.
-        9 => {}
+        // The language the version 9 seed wrote, under the key the
+        // `9 -> 10` step renames.
+        9 => {
+            doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert("lang", "en")
+                .expect("the language");
+        }
         _ => panic!("the step from version {from} has no canonical document: write one here"),
     }
     if from > ambre_core::schema::SCHEMA_VERSION_ABSENT {

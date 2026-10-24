@@ -4229,6 +4229,8 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn |
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
+ambre-prose | src/schema.rs | crate::schema | V9_LANG | const | &str	foreign-api	the retired Loro map key the 9 -> 10 step reads and deletes, passed to LoroMap::get and LoroMap::delete
+ambre-prose | src/schema.rs | crate::schema | lang_to_locale() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>
 ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
 ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
