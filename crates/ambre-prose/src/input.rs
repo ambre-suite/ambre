@@ -120,7 +120,7 @@ pub enum ProseInput {
     Paste {
         text: String,
         html: Option<String>,
-        rich: Option<Vec<u8>>,
+        rich: Option<ambre_core::ClipboardBytes>,
     },
 }
 
@@ -376,7 +376,7 @@ impl ProseUiState {
             ProseInput::Drop { at, text } => self.drop_text(*at, text, send),
             ProseInput::Copy(write) => self.copy(*write, send),
             ProseInput::Paste { text, html, rich } => {
-                self.paste(text, html.as_deref(), rich.as_deref(), send)
+                self.paste(text, html.as_deref(), rich.as_ref(), send)
             }
         }
     }
@@ -435,7 +435,7 @@ impl ProseUiState {
         &mut self,
         text: &str,
         html: Option<&str>,
-        rich: Option<&[u8]>,
+        rich: Option<&ambre_core::ClipboardBytes>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         if rich.is_none() && html.is_none() && !text.contains('\n') {
@@ -452,7 +452,7 @@ impl ProseUiState {
             at,
             text: text.replace("\r\n", "\n"),
             html: html.map(str::to_owned),
-            payload: rich.map(<[u8]>::to_vec),
+            payload: rich.cloned(),
         });
         true
     }

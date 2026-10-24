@@ -213,7 +213,7 @@ impl ProseState {
             Ok(payload) => outcome.display.push(ProseEvent::Clipboard {
                 text,
                 html,
-                payload,
+                payload: ambre_core::ClipboardBytes::new(payload),
             }),
             Err(e) => tracing::warn!("Prose: a copy could not be encoded: {e}"),
         }
@@ -257,9 +257,9 @@ impl ProseState {
         at: (TreeID, DocOffset),
         text: &str,
         html: Option<&str>,
-        bytes: Option<&[u8]>,
+        bytes: Option<&ambre_core::ClipboardBytes>,
     ) -> ProseOutcome {
-        if let Some(Ok(payload)) = bytes.map(postcard::from_bytes::<Payload>)
+        if let Some(Ok(payload)) = bytes.map(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()))
             && payload.magic == MAGIC
         {
             return self.paste_blocks(at, payload);
@@ -390,7 +390,7 @@ mod tests {
         state: &mut ProseState,
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
-    ) -> (String, Vec<u8>, bool) {
+    ) -> (String, ambre_core::ClipboardBytes, bool) {
         let (anchor, focus) = (
             (anchor.0, DocOffset::new(anchor.1)),
             (focus.0, DocOffset::new(focus.1)),
@@ -480,7 +480,7 @@ mod tests {
             at: (first, DocOffset::ZERO),
             text: "one\ntwo".to_owned(),
             html: None,
-            payload: Some(b"not a payload".to_vec()),
+            payload: Some(ambre_core::ClipboardBytes::new(b"not a payload".to_vec())),
         });
         let roots = state.root_blocks();
         assert_eq!(state.text_of(&roots[0]).as_deref(), Some("one"));
@@ -624,7 +624,7 @@ mod tests {
         else {
             panic!("a copy answers with the clipboard");
         };
-        let paste = |state: &mut ProseState, html: Option<&str>, payload: Option<Vec<u8>>| {
+        let paste = |state: &mut ProseState, html: Option<&str>, payload: Option<ambre_core::ClipboardBytes>| {
             let target = append(state, BlockInit::Paragraph, "");
             state.handle_command(ProseCommand::Paste {
                 at: (target, DocOffset::ZERO),
@@ -636,7 +636,7 @@ mod tests {
         };
         assert_eq!(paste(&mut state, Some("<p>html</p>"), Some(payload)), "own");
         assert_eq!(
-            paste(&mut state, Some("<p>html</p>"), Some(b"foreign".to_vec())),
+            paste(&mut state, Some("<p>html</p>"), Some(ambre_core::ClipboardBytes::new(b"foreign".to_vec()))),
             "html"
         );
         assert_eq!(paste(&mut state, Some("<script>x</script>"), None), "plain");

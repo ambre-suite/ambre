@@ -430,14 +430,14 @@ fn argon2_deterministic() {
     let salt = MasterKeySalt::from_array([0xAB; 32]);
     let k1 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     let k2 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
-    assert_eq!(k1, k2);
+    assert_eq!(k1.as_bytes(), k2.as_bytes());
 
     let other_salt = MasterKeySalt::from_array([0xCD; 32]);
     let k3 = passphrase::derive_user_key(&pass("correct horse"), &other_salt).unwrap();
-    assert_ne!(k1, k3);
+    assert_ne!(k1.as_bytes(), k3.as_bytes());
 
     let k4 = passphrase::derive_user_key(&pass("wrong passphrase"), &salt).unwrap();
-    assert_ne!(k1, k4);
+    assert_ne!(k1.as_bytes(), k4.as_bytes());
 }
 
 // -- BLAKE2b chain -----------------------------------------------------------
@@ -636,7 +636,7 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
     .unwrap();
     let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
         .unwrap();
-    assert_ne!(file.as_bytes(), &user);
+    assert_ne!(file.as_bytes(), user.as_bytes());
 }
 
 #[test]

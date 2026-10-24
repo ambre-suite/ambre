@@ -328,6 +328,18 @@ impl DraftBuffer {
     }
 }
 
+/// A file the Logic thread wrote, for the host to hand to the browser
+/// (`PROSE-IO-056`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExportFile {
+    /// The name the download carries.
+    pub filename: String,
+    /// The media type the Logic thread named for the bytes.
+    pub media_type: ambre_core::MediaType,
+    /// The file itself.
+    pub bytes: Vec<u8>,
+}
+
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
@@ -370,8 +382,8 @@ pub struct ProseUiState {
     /// (`features/ambre-spec-prose-page-rendering.md`).
     pub shaped: Arc<ShapedLayout>,
     /// A file the Logic thread wrote, waiting for the host to hand it to the
-    /// browser: filename, media type and bytes (`PROSE-IO-056`).
-    pub pending_export: Option<(String, ambre_core::MediaType, Vec<u8>)>,
+    /// browser (`PROSE-IO-056`).
+    pub pending_export: Option<ExportFile>,
 
     // Local, and never sent.
     pub viewport: Viewport,
@@ -561,7 +573,7 @@ pub fn send_edit(
 
 impl ProseUiState {
     /// Hand the file the Logic thread wrote to the host, once.
-    pub fn take_export(&mut self) -> Option<(String, ambre_core::MediaType, Vec<u8>)> {
+    pub fn take_export(&mut self) -> Option<ExportFile> {
         self.pending_export.take()
     }
 
@@ -595,7 +607,11 @@ impl ProseUiState {
                 data,
                 ..
             } => {
-                self.pending_export = Some((filename.clone(), media_type.clone(), data.clone()));
+                self.pending_export = Some(ExportFile {
+                    filename: filename.clone(),
+                    media_type: media_type.clone(),
+                    bytes: data.clone(),
+                });
             }
             // Whole and already shaped: the view adopts it and lays nothing
             // out (`PROSE-UI-006`), by its pointer (`PROSE-UI-205`). A handle
@@ -915,11 +931,11 @@ mod tests {
         });
         assert_eq!(
             state.take_export(),
-            Some((
-                "document.ambre".to_owned(),
-                ambre_core::MediaType::from("application/octet-stream"),
-                vec![1, 2, 3]
-            ))
+            Some(ExportFile {
+                filename: "document.ambre".to_owned(),
+                media_type: ambre_core::MediaType::from("application/octet-stream"),
+                bytes: vec![1, 2, 3],
+            })
         );
         assert_eq!(state.take_export(), None);
     }

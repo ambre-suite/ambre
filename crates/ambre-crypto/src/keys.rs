@@ -16,7 +16,7 @@ use ambre_core::{FileSalt, KeyId, SALT_LEN, WrappedMasterKey};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::aead;
 use crate::error::CryptoError;
@@ -34,12 +34,13 @@ const KEY_ID_DOMAIN: &[u8] = b"ambre-key-id-v1";
 const STORE_DOMAIN: &[u8] = b"ambre-store-v1";
 
 /// Derives 32 bytes from `domain || seed` via BLAKE2b, truncating the 64-byte
-/// digest. Distinct domains yield independent keys from the same seed.
-fn derive32(domain: &[u8], seed: &[u8; 32]) -> [u8; 32] {
+/// digest. Distinct domains yield independent keys from the same seed. The
+/// bytes are secret, so they are wiped when the caller drops them.
+fn derive32(domain: &[u8], seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
     let mut hasher = Blake2b512::new();
     hasher.update(domain);
     hasher.update(seed);
-    crate::hash::prefix(&hasher.finalize())
+    Zeroizing::new(crate::hash::prefix(&hasher.finalize()))
 }
 
 /// The root secret of a user, decrypted at login from the server-stored,
@@ -64,23 +65,21 @@ impl MasterSeed {
 
     /// Derives the Ed25519 signing key (deterministic for a given seed).
     pub fn derive_signing_key(&self) -> SigningKey {
-        let mut sk = derive32(SIGN_DOMAIN, &self.0);
-        let key = SigningKey::from_bytes(&sk);
-        sk.zeroize();
-        key
+        let sk = derive32(SIGN_DOMAIN, &self.0);
+        SigningKey::from_bytes(&sk)
     }
 
     /// Derives the X25519 exchange key (deterministic for a given seed).
     pub fn derive_exchange_key(&self) -> StaticSecret {
         let sk = derive32(EXCH_DOMAIN, &self.0);
-        StaticSecret::from(sk)
+        StaticSecret::from(*sk)
     }
 
     /// Derives the key that seals the rows of the local store
     /// (`ambre-spec-residency.md`, `RESID-025`). The same seed derives it on
     /// every device and every sign-in, so nothing of it is ever written down.
     pub fn derive_store_key(&self) -> StoreKey {
-        StoreKey(derive32(STORE_DOMAIN, &self.0))
+        StoreKey(*derive32(STORE_DOMAIN, &self.0))
     }
 
     /// Returns the raw seed bytes for recovery-word encoding. This is the one
@@ -238,10 +237,8 @@ impl FileKey {
         passphrase: &ambre_core::Passphrase,
         salt: &FileSalt,
     ) -> Result<Self, CryptoError> {
-        let mut intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
-        let key = Self(derive32(FILE_DOMAIN, &intermediate));
-        intermediate.zeroize();
-        Ok(key)
+        let intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
+        Ok(Self(*derive32(FILE_DOMAIN, &intermediate)))
     }
 
     /// Draws a fresh salt from the platform CSPRNG, derives the key of a file

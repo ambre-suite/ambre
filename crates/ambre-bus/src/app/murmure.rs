@@ -312,8 +312,11 @@ pub struct PictureFrame {
 
 impl Picture {
     /// The bytes its frames hold.
-    pub fn bytes(&self) -> usize {
-        self.frames.iter().map(|f| f.pixels.len()).sum()
+    pub fn bytes(&self) -> ByteSize {
+        self.frames
+            .iter()
+            .map(|f| ByteSize::of_len(f.pixels.len()))
+            .sum()
     }
 }
 

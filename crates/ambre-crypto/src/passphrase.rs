@@ -9,8 +9,10 @@
 //! passphrase becomes a key, against the same offline guessing attack.
 
 use argon2::{Algorithm, Argon2, Params, Version};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::error::CryptoError;
+use crate::keys::DocumentKey;
 
 /// Length of the derived user key, in bytes.
 pub const USER_KEY_LEN: usize = 32;
@@ -26,6 +28,29 @@ const MEM_KIB: u32 = 64 * 1024;
 const ITERATIONS: u32 = 3;
 const LANES: u32 = 1;
 
+/// The key a passphrase derives to unwrap the server-stored master key. It is
+/// wiped on drop and prints only its length.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct UserKey([u8; USER_KEY_LEN]);
+
+impl UserKey {
+    /// The key as the AEAD that wraps the master seed reads it.
+    pub fn document_key(&self) -> DocumentKey {
+        DocumentKey::from_array(self.0)
+    }
+
+    /// The raw key bytes, for a test that compares two derivations.
+    pub fn as_bytes(&self) -> &[u8; USER_KEY_LEN] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for UserKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "UserKey({USER_KEY_LEN} bytes)")
+    }
+}
+
 /// Derives a 32-byte user key from `passphrase` and `salt` using Argon2id v1.
 ///
 /// # Errors
@@ -36,23 +61,24 @@ const LANES: u32 = 1;
 pub fn derive_user_key(
     passphrase: &ambre_core::Passphrase,
     salt: &ambre_core::MasterKeySalt,
-) -> Result<[u8; USER_KEY_LEN], CryptoError> {
-    argon2id(passphrase, salt.as_bytes())
+) -> Result<UserKey, CryptoError> {
+    argon2id(passphrase, salt.as_bytes()).map(|key| UserKey(*key))
 }
 
 /// Argon2id v1 over raw salt bytes, under the parameters above. The kernel of
 /// [`derive_user_key`] and of [`crate::keys::FileKey::from_passphrase`], each
-/// of which names its own salt type.
+/// of which names its own salt type. The output is secret, so it is wiped
+/// when the caller drops it.
 pub(crate) fn argon2id(
     passphrase: &ambre_core::Passphrase,
     salt: &[u8],
-) -> Result<[u8; USER_KEY_LEN], CryptoError> {
+) -> Result<Zeroizing<[u8; USER_KEY_LEN]>, CryptoError> {
     let params = Params::new(MEM_KIB, ITERATIONS, LANES, Some(USER_KEY_LEN))
         .map_err(|_| CryptoError::Argon2Failed)?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut out = [0u8; USER_KEY_LEN];
+    let mut out = Zeroizing::new([0u8; USER_KEY_LEN]);
     argon2
-        .hash_password_into(passphrase.as_bytes(), salt, &mut out)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut *out)
         .map_err(|_| CryptoError::Argon2Failed)?;
     Ok(out)
 }

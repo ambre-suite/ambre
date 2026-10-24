@@ -741,7 +741,7 @@ impl ProseState {
                 (tree_id(at.0), at.1),
                 &text,
                 html.as_deref(),
-                payload.as_deref(),
+                payload.as_ref(),
             ),
             ProseCommand::FormatSelection {
                 anchor,

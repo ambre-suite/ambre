@@ -140,7 +140,7 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use passphrase::Passphrase;
 pub use payload::{
-    DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
+    ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
     PlaintextContainer, SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes,
 };
 pub use provider::OidcProvider;

@@ -105,7 +105,7 @@ impl Pictures {
         }
         let held = match picture {
             Some(picture) => {
-                self.bytes = self.bytes.saturating_add(ByteSize::of_len(picture.bytes()));
+                self.bytes = self.bytes.saturating_add(picture.bytes());
                 Held::Shown {
                     picture,
                     painted: self.paint,
@@ -154,7 +154,7 @@ impl Pictures {
                 .map(|(_, media_ref)| media_ref.clone());
             let Some(coldest) = coldest else { return };
             if let Some(Held::Shown { picture, .. }) = self.held.remove(&coldest) {
-                self.bytes = self.bytes.saturating_sub(ByteSize::of_len(picture.bytes()));
+                self.bytes = self.bytes.saturating_sub(picture.bytes());
             }
         }
     }

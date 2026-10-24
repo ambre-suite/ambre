@@ -1036,7 +1036,9 @@ impl ToileView {
                 let blob = ambre_bus::ClipboardBlob {
                     text: String::new(),
                     html: None,
-                    ambre: postcard::to_allocvec(&payload).ok(),
+                    ambre: postcard::to_allocvec(&payload)
+                        .ok()
+                        .map(ambre_core::ClipboardBytes::new),
                     form: ambre_core::PasteForm::Rich,
                 };
                 self.last_clip = Some(blob.clone());
@@ -4323,7 +4325,7 @@ impl ToileView {
             .ambre
             .as_ref()
             .filter(|_| source.form != ambre_core::PasteForm::Plain)
-            .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes).ok())
+            .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes.as_bytes()).ok())
         else {
             return;
         };

@@ -257,7 +257,10 @@ fn publish_item<T>(
     build: impl Fn(&[(ClipboardFormat, Option<&str>)]) -> Option<T>,
 ) -> Option<Published<T>> {
     let html = blob.html.as_deref();
-    let payload = blob.ambre.as_deref().map(base64_encode);
+    let payload = blob
+        .ambre
+        .as_ref()
+        .map(|bytes| base64_encode(bytes.as_bytes()));
     let text = (ClipboardFormat::PlainText, Some(blob.text.as_str()));
     let full = [
         text,
@@ -812,7 +815,7 @@ mod tests {
         let blob = ambre_bus::ClipboardBlob {
             text: "a\tb".to_owned(),
             html: Some("<p>a</p>".to_owned()),
-            ambre: Some(bytes.to_vec()),
+            ambre: Some(ambre_core::ClipboardBytes::new(bytes.to_vec())),
             ..ambre_bus::ClipboardBlob::default()
         };
         let Published { item, web } = publish_item(
@@ -834,7 +837,10 @@ mod tests {
         let (blob, token) = read_back(&item).await;
         assert_eq!(blob.text, "a\tb");
         assert_eq!(blob.html.as_deref(), Some("<p>a</p>"));
-        assert_eq!(blob.ambre.as_deref(), Some(&bytes[..]));
+        assert_eq!(
+            blob.ambre.as_ref().map(ambre_core::ClipboardBytes::as_bytes),
+            Some(&bytes[..])
+        );
         assert_eq!(
             token.as_ref().map(ambre_bus::ClipToken::as_str),
             Some("ambre-1")
@@ -854,7 +860,7 @@ mod tests {
         let blob = ambre_bus::ClipboardBlob {
             text: "a".to_owned(),
             html: Some("<p>a</p>".to_owned()),
-            ambre: Some(vec![1, 2, 3]),
+            ambre: Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])),
             ..ambre_bus::ClipboardBlob::default()
         };
         let Published { item, web } = publish_item(

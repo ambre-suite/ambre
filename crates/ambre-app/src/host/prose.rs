@@ -197,8 +197,8 @@ impl ProseView {
                     self.timeline.record(answered);
                     self.timeline
                         .count(ProbeName::ConfirmFrames, self.probe.take_counts());
-                    if let Some((filename, media_type, data)) = self.state.take_export() {
-                        download(&filename, &media_type, &data);
+                    if let Some(file) = self.state.take_export() {
+                        download(&file.filename, &file.media_type, &file.bytes);
                     }
                     self.dirty = true;
                 }

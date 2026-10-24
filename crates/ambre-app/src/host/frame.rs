@@ -48,9 +48,8 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
 /// the next fetch is a fresh delivery. Whether they were sent.
 pub(crate) fn send_faces(
     to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-    faces: Vec<Vec<u8>>,
+    faces: Vec<ambre_core::FontBytes>,
 ) -> bool {
-    let faces = faces.into_iter().map(ambre_core::FontBytes::new).collect();
     to_logic.try_send(LogicCommand::LoadFonts { faces }).is_ok()
 }
 
@@ -907,9 +906,9 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_late_face_reaches_the_logic_thread_as_a_base_face_does() {
         let (to_logic, from_ui) = ambre_bus::conduit::local(1);
-        assert!(send_faces(&to_logic, vec![vec![1, 2, 3]]));
+        assert!(send_faces(&to_logic, vec![ambre_core::FontBytes::new(vec![1, 2, 3])]));
         assert!(
-            !send_faces(&to_logic, vec![vec![4]]),
+            !send_faces(&to_logic, vec![ambre_core::FontBytes::new(vec![4])]),
             "a full channel took the face"
         );
         match from_ui.try_recv() {

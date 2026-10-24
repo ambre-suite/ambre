@@ -91,7 +91,7 @@ pub struct ClipboardBlob {
     /// The `text/html` half, for an application that reads formatting but
     /// not Ambre's own bytes. `None` when the active app writes none.
     pub html: Option<String>,
-    pub ambre: Option<Vec<u8>>,
+    pub ambre: Option<ambre_core::ClipboardBytes>,
     /// [`PasteForm::Plain`] when the user asked for the plain text alone: a
     /// view ignores every richer half, and the copy it kept in memory too.
     pub form: ambre_core::PasteForm,
@@ -237,7 +237,7 @@ mod clipboard_tests {
     fn blob(text: &str, ambre: u8) -> ClipboardBlob {
         ClipboardBlob {
             text: text.into(),
-            ambre: Some(vec![ambre]),
+            ambre: Some(ambre_core::ClipboardBytes::new(vec![ambre])),
             ..ClipboardBlob::default()
         }
     }

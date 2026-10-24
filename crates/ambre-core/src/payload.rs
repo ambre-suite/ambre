@@ -155,6 +155,13 @@ define_payload! {
     FontBytes
 }
 
+define_payload! {
+    /// An application's own clipboard half: the encoded selection it copied,
+    /// which only the same application decodes on a paste. Another program
+    /// reads the text and HTML halves beside it.
+    ClipboardBytes
+}
+
 /// What a CRDT document imports: one delta, or a whole snapshot. The engine
 /// imports both alike. The holder knows which it is, and a local store, a
 /// ledger or a test may treat the two apart.

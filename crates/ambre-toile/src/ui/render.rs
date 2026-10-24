@@ -1809,7 +1809,7 @@ mod tests {
             "/../ambre-app/fonts/NotoSans-Regular.ttf"
         );
         let face = std::fs::read(path).expect("the shipped face is in the tree");
-        ambre_canvas::fonts::font_context_from_bytes([face])
+        ambre_canvas::fonts::font_context_from_bytes([ambre_core::FontBytes::new(face)])
     }
 
     fn board(nodes: Vec<DisplayNode>) -> DisplayViewport {

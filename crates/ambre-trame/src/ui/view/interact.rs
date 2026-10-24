@@ -486,7 +486,7 @@ impl TrameView {
             .ambre
             .as_ref()
             .filter(|_| source.form != ambre_core::PasteForm::Plain)
-            .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes).ok());
+            .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes.as_bytes()).ok());
         match payload {
             Some(payload) => self.grid_paste_payload(payload),
             None => self.grid_paste_text(&blob.text),

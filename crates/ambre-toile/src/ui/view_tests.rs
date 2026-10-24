@@ -647,7 +647,9 @@ fn clip(origin: Rect) -> ambre_bus::ClipboardBlob {
     ambre_bus::ClipboardBlob {
         text: "mirror".to_owned(),
         html: None,
-        ambre: postcard::to_allocvec(&payload).ok(),
+        ambre: postcard::to_allocvec(&payload)
+            .ok()
+            .map(ambre_core::ClipboardBytes::new),
         form: ambre_core::PasteForm::Rich,
     }
 }

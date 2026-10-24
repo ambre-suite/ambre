@@ -1483,7 +1483,7 @@ pub enum ProseCommand {
         at: (BlockId, DocOffset),
         text: String,
         html: Option<String>,
-        payload: Option<Vec<u8>>,
+        payload: Option<ambre_core::ClipboardBytes>,
     },
     /// Apply one presence mark over a whole selection, or remove it. Every
     /// block the selection covers changes in one commit, so one undo takes
@@ -1930,8 +1930,8 @@ pub enum InteropError {
     #[error("the file could not be read: {0}")]
     ParseFailed(String),
     /// The file is larger than a conversion accepts.
-    #[error("the file is too large to import ({0} bytes)")]
-    TooLarge(usize),
+    #[error("the file is too large to import ({} bytes)", .0.0)]
+    TooLarge(ambre_core::ByteSize),
 }
 
 impl ExportFormat {
@@ -2144,7 +2144,7 @@ pub enum ProseEvent {
     Clipboard {
         text: String,
         html: String,
-        payload: Vec<u8>,
+        payload: ambre_core::ClipboardBytes,
     },
     /// A cell a merge covers still holds text: masked, not destroyed. A hint,
     /// and it blocks nothing (`PROSE-FEAT-255`).

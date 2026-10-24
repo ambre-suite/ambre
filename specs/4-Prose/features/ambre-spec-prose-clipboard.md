@@ -98,7 +98,7 @@ payload of `ambre-bus`:
 /// What crosses to the host, and back. `text` is the plain-text mirror every other
 /// application can read, `html` the formatted half other editors read, and `ambre` this
 /// application's own bytes, under its private type.
-pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<Vec<u8>> }
+pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<ClipboardBytes> }
 ```
 
 **The three steps of a copy.**

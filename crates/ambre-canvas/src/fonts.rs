@@ -26,6 +26,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_core::FontBytes;
 use rustc_hash::FxHashSet;
 
 // -----------------------------------------------------------------------------
@@ -55,7 +56,7 @@ const BASE_FONTS: [&str; 6] = [
 /// thread ships the same bytes to the Logic thread (`LogicCommand::LoadFonts`),
 /// which cannot fetch. A face that fails to fetch is logged and omitted.
 #[cfg(target_arch = "wasm32")]
-pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
+pub async fn fetch_base_font_faces() -> Vec<FontBytes> {
     let mut faces = Vec::new();
     for url in BASE_FONTS {
         // The log names the face by its file, the last segment of its URL.
@@ -63,7 +64,7 @@ pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
         match crate::host::fetch_bytes(url).await {
             Some(bytes) => {
                 tracing::info!("{label} loaded");
-                faces.push(bytes);
+                faces.push(FontBytes::new(bytes));
             }
             None => tracing::warn!("Failed to fetch {url}"),
         }
@@ -84,10 +85,12 @@ pub async fn font_context_from() -> parley::FontContext {
 /// The context is sealed, so no face of the machine is discoverable from it. A
 /// codepoint the shipped faces miss draws as tofu here and on every peer alike.
 /// Fetch-free, so a host test reaches the same constructor the browser runs.
-pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parley::FontContext {
+pub fn font_context_from_bytes(faces: impl IntoIterator<Item = FontBytes>) -> parley::FontContext {
     let mut font_cx = ambre_draw::sealed_font_context();
     for bytes in faces {
-        font_cx.collection.register_fonts(bytes.into(), None);
+        font_cx
+            .collection
+            .register_fonts(bytes.into_bytes().into(), None);
     }
     font_cx
 }
@@ -103,7 +106,7 @@ pub use ambre_draw::LazyFont;
 /// `FontContext`. Shared with the in-flight fetch tasks (same thread).
 #[derive(Default)]
 struct Inbox {
-    pending: Vec<Vec<u8>>,
+    pending: Vec<FontBytes>,
 }
 
 /// Tracks which lazy scripts have been requested and collects fetched faces.
@@ -157,7 +160,7 @@ impl LazyFontLoader {
     /// bus (`CANVAS-068`). One clone per lazy script, once, against a
     /// document that would otherwise paginate on tofu.
     #[must_use]
-    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<Vec<u8>> {
+    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<FontBytes> {
         let pending = std::mem::take(&mut self.inbox.borrow_mut().pending);
         for bytes in &pending {
             // Registered as an additional family in the shared collection;
@@ -165,7 +168,7 @@ impl LazyFontLoader {
             // families cannot shape.
             font_cx
                 .collection
-                .register_fonts(bytes.clone().into(), None);
+                .register_fonts(bytes.as_bytes().to_vec().into(), None);
         }
         pending
     }
@@ -187,7 +190,7 @@ impl LazyFontLoader {
             match crate::host::fetch_bytes(url).await {
                 Some(bytes) => {
                     tracing::info!("lazy font {url} loaded ({} bytes)", bytes.len());
-                    inbox.borrow_mut().pending.push(bytes);
+                    inbox.borrow_mut().pending.push(FontBytes::new(bytes));
                 }
                 None => tracing::warn!("lazy font {url} fetch failed -- glyphs render as tofu"),
             }
@@ -205,7 +208,7 @@ impl LazyFontLoader {
     /// have delivered.
     #[cfg(test)]
     pub(crate) fn deliver(&self, bytes: Vec<u8>) {
-        self.inbox.borrow_mut().pending.push(bytes);
+        self.inbox.borrow_mut().pending.push(FontBytes::new(bytes));
     }
 }
 

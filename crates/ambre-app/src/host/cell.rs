@@ -775,7 +775,7 @@ mod tests {
     /// One frame of `view` on a recording surface. No face is shipped to the
     /// test, so the text shapes with no width: the host tier holds the bytes.
     fn paint(view: &mut MurmureView) {
-        let mut font_cx = ambre_canvas::fonts::font_context_from_bytes([]);
+        let mut font_cx = ambre_canvas::fonts::font_context_from_bytes(Vec::new());
         let mut cache = ambre_canvas::TextCache::new();
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();

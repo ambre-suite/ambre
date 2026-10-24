@@ -12,7 +12,7 @@ use super::*;
 use ambre_bus::{
     ChannelId, MediaRef, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
 };
-use ambre_core::ImageSize;
+use ambre_core::{ByteSize, ImageSize};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
@@ -25,10 +25,10 @@ const PREVIEW_EDGE: ImageSize = ImageSize::new(480, 320);
 /// this first.
 const MAX_SIZE: ImageSize = ImageSize::new(4096, 4096);
 /// The most a decoder may allocate for one image.
-const MAX_ALLOC: u64 = 128 * 1024 * 1024;
+const MAX_ALLOC: ByteSize = ByteSize(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
 /// the frames that fit (`ambre-spec-budgets.md section 6`).
-pub(crate) const PICTURE_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const PICTURE_BYTES: ByteSize = ByteSize(8 * 1024 * 1024);
 /// A frame delay at or under this plays at [`SLOW_DELAY_MS`], as browsers do:
 /// a file that asks for none would otherwise spin.
 const FAST_DELAY_MS: Millis = Millis(10);
@@ -98,7 +98,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_SIZE.width);
     limits.max_image_height = Some(MAX_SIZE.height);
-    limits.max_alloc = Some(MAX_ALLOC);
+    limits.max_alloc = Some(MAX_ALLOC.0);
     match format {
         ImageFormat::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
@@ -106,16 +106,17 @@ pub(crate) fn decode(bytes: &[u8]) -> Option<Picture> {
             let (width, height) = decoder.dimensions();
             let size = fit(ImageSize::new(width, height));
             let mut frames = Vec::new();
-            let mut held = 0;
+            let mut held = ByteSize(0);
             for frame in decoder.into_frames() {
                 // A broken frame ends the animation; the frames before it play.
                 let Ok(frame) = frame else { break };
                 let (numer, denom) = frame.delay().numer_denom_ms();
                 let pixels = scale(frame.into_buffer(), size);
-                if !frames.is_empty() && held + pixels.len() > PICTURE_BYTES {
+                let after = held.saturating_add(ByteSize::of_len(pixels.len()));
+                if !frames.is_empty() && after > PICTURE_BYTES {
                     break;
                 }
-                held += pixels.len();
+                held = after;
                 frames.push(PictureFrame {
                     pixels,
                     delay_ms: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
@@ -254,7 +255,7 @@ mod tests {
     #[test]
     fn an_animation_past_the_bound_keeps_the_frames_that_fit() {
         let frame = 480 * 320 * 4;
-        let fit = PICTURE_BYTES / frame;
+        let fit = PICTURE_BYTES.as_len() / frame;
         let picture = decode(&gif(fit + 3, (480, 320), 50)).expect("a GIF");
         assert_eq!(picture.frames.len(), fit);
         assert!(picture.bytes() <= PICTURE_BYTES);

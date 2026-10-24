@@ -1090,7 +1090,8 @@ pub(crate) mod tests {
             "DejaVuSansMono.ttf",
         ]
         .iter()
-        .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"));
+        .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"))
+        .map(ambre_core::FontBytes::new);
         font_context_from_bytes(faces)
     }
 

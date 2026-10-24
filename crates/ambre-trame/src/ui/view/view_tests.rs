@@ -205,7 +205,9 @@ fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
     ambre_bus::ClipboardBlob {
         text: text.to_owned(),
         html: None,
-        ambre: postcard::to_allocvec(&payload).ok(),
+        ambre: postcard::to_allocvec(&payload)
+            .ok()
+            .map(ambre_core::ClipboardBytes::new),
         form: ambre_core::PasteForm::Rich,
     }
 }

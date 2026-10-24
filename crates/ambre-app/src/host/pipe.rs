@@ -255,7 +255,8 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     .get_data(ClipboardFormat::Ambre.mime())
                     .ok()
                     .filter(|s| !s.is_empty() && !plain)
-                    .and_then(|b64| base64_decode(&b64));
+                    .and_then(|b64| base64_decode(&b64))
+                    .map(ambre_core::ClipboardBytes::new);
                 let text = data
                     .get_data(ClipboardFormat::PlainText.mime())
                     .unwrap_or_default();
@@ -759,7 +760,7 @@ mod tests {
         let rig = Rig::new();
         let blob = ambre_bus::ClipboardBlob {
             text: "x".to_owned(),
-            ambre: Some(vec![1, 2, 3]),
+            ambre: Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])),
             ..ambre_bus::ClipboardBlob::default()
         };
         let (item, _) = publish_item(
@@ -787,7 +788,7 @@ mod tests {
         {
             let host = rig.host.borrow();
             assert_eq!(host.pastes.len(), 1, "the read answers");
-            assert_eq!(host.pastes[0].0.ambre.as_deref(), Some(&[1u8, 2, 3][..]));
+            assert_eq!(host.pastes[0].0.ambre, Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])));
             assert_eq!(
                 host.pastes[0].1,
                 PasteSource::Own,

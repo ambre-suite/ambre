@@ -82,7 +82,7 @@ shape is serialized onto the operating system clipboard.
 /// `text` is the plain-text mirror every other application can read; `ambre` is
 /// the active application's own bytes, opaque to the host. `html` is the formatted half
 /// other editors read and write; only Prose fills it today.
-pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<Vec<u8>> }
+pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<ClipboardBytes> }
 ```
 
 **The four names on the clipboard.** The host owns all four, and an application names none

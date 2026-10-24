@@ -68,7 +68,7 @@ impl SyncState {
                                     return;
                                 }
                             };
-                        let user_doc_key = DocumentKey::from_array(user_key);
+                        let user_doc_key = user_key.document_key();
                         let seed_bytes = match ambre_crypto::aead::open(
                             &ambre_core::Nonce(*nonce),
                             &ambre_core::Ciphertext(ciphertext.to_vec()),
@@ -378,7 +378,7 @@ impl SyncState {
                     .and_then(|(salt, user_key)| {
                         master_seed
                             .wrap_for_storage(
-                                &DocumentKey::from_array(user_key),
+                                &user_key.document_key(),
                                 &ambre_core::Aad::of(b"ambre-master-seed"),
                             )
                             .map(|wrapped| (salt, wrapped))
