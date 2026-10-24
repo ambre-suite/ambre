@@ -173,7 +173,7 @@ impl SyncState {
                     doc_key_enc,
                     document_id: Some(document_id),
                     entry: Some(entry),
-                    space: http::DocumentScope::Personal,
+                    space: ambre_core::DocumentScope::Personal,
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await

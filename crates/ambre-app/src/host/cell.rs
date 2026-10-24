@@ -353,7 +353,12 @@ impl Bound {
         // A script face fetched for this cell repaints it, as on the content
         // canvas. The content canvas alone hands faces to the Logic thread.
         let faces = !gpu.text_cache.poll_lazy_fonts(&mut gpu.font_cx).is_empty();
-        let plan = plan_frame(&mut view, size, refit || faces, now_ms);
+        let relayout = if refit || faces {
+            Relayout::Again
+        } else {
+            Relayout::Kept
+        };
+        let plan = plan_frame(&mut view, size, relayout, now_ms);
         // An edit asked from a menu loads the field as its plan runs.
         self.claim.note(&view);
         let phases = Phases::of(plan.content, plan.overlay);
@@ -418,20 +423,27 @@ fn measure(
     }
 }
 
+/// Whether a cell's view is laid out again before its frame is planned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Relayout {
+    Kept,
+    Again,
+}
+
 /// Plan the frame of a cell's `view` at `size`, the size its GPU is fitted
-/// to. A `relayout` lays the view out again first. The plan answers in the
+/// to. [`Relayout::Again`] lays the view out again first. The plan answers in the
 /// physical pixels of the canvas.
 fn plan_frame(
     view: &mut AppView,
     size: SurfaceSize,
-    relayout: bool,
+    relayout: Relayout,
     now_ms: ambre_core::PageTime,
 ) -> RepaintPlan<DevicePx> {
-    if relayout {
+    if relayout == Relayout::Again {
         let CssSize { width, height, .. } = size.logical();
         view.resize(width, height);
     }
-    size.on_device(view.plan_repaint(now_ms, false))
+    size.on_device(view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle))
 }
 
 /// The phase and the point of a finger on a cell, in its own pixels. `None`
@@ -754,7 +766,7 @@ mod tests {
         let mut cache = ambre_canvas::TextCache::new(1.0);
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();
-        view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
     }
 
@@ -947,7 +959,7 @@ mod tests {
             plan_frame(
                 &mut bound.view.borrow_mut(),
                 bound.size.get(),
-                false,
+                Relayout::Kept,
                 now_ms,
             )
             .content
@@ -962,7 +974,7 @@ mod tests {
         ));
         assert!(
             matches!(
-                page.plan_repaint(ambre_bus::PageTime(16.0), false).content,
+                page.plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle).content,
                 ContentRepaint::Full
             ),
             "the page keeps its own plan"
@@ -976,7 +988,7 @@ mod tests {
             ContentRepaint::Full
         ));
         assert!(matches!(
-            page.plan_repaint(ambre_bus::PageTime(32.0), false).content,
+            page.plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle).content,
             ContentRepaint::Reuse
         ));
         assert_eq!(bound.size.get().logical(), CssSize::new(140, 80));

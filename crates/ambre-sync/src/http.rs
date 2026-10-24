@@ -1343,31 +1343,11 @@ pub(crate) struct CreateDocumentRequest {
     pub entry: Option<ambre_core::EncodedLogEntry>,
     /// Whether the document is a Murmure space, which its members list. The
     /// JSON flag `space` is written for a space alone.
-    #[serde(skip_serializing_if = "is_personal", serialize_with = "space_flag")]
-    pub space: DocumentScope,
-}
-
-/// Whether a created document is a Murmure space or a document of its own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum DocumentScope {
-    /// A document of its own, or a channel document.
-    #[default]
-    Personal,
-    /// A Murmure space, which its members list.
-    Space,
-}
-
-/// Whether the body leaves out the `space` flag: the relay reads it as false.
-fn is_personal(scope: &DocumentScope) -> bool {
-    *scope == DocumentScope::Personal
-}
-
-/// Writes the scope as the JSON flag of a space.
-fn space_flag<S: serde::Serializer>(
-    scope: &DocumentScope,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    (*scope == DocumentScope::Space).serialize(serializer)
+    #[serde(
+        skip_serializing_if = "ambre_core::serde_enums::space_flag::is_personal",
+        serialize_with = "ambre_core::serde_enums::space_flag::serialize"
+    )]
+    pub space: ambre_core::DocumentScope,
 }
 
 /// `POST /api/channels`: a channel of a space, with its first two documents.

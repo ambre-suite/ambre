@@ -23,13 +23,28 @@ pub enum FingerRole {
     ActsAsMouse,
 }
 
-/// The role of a finger pressed with `tool`. The hand always pans. The
-/// select tool pans on the empty board, and grabs what it can grab; a
-/// drawing tool always draws.
-pub fn finger_role(tool: Tool, grabbable: bool) -> FingerRole {
+/// What lies under a finger as it presses: the empty board, or an element or
+/// handle it can grab.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Under {
+    Empty,
+    Grabbable,
+}
+
+impl Under {
+    /// `Grabbable` when `grabbable` holds, `Empty` otherwise.
+    pub fn grabbable_if(grabbable: bool) -> Self {
+        if grabbable { Under::Grabbable } else { Under::Empty }
+    }
+}
+
+/// The role of a finger pressed with `tool` over `under`. The hand always
+/// pans. The select tool pans on the empty board, and grabs what it can grab;
+/// a drawing tool always draws.
+pub fn finger_role(tool: Tool, under: Under) -> FingerRole {
     match tool {
         Tool::Hand => FingerRole::Pans,
-        Tool::Select if !grabbable => FingerRole::Pans,
+        Tool::Select if under == Under::Empty => FingerRole::Pans,
         _ => FingerRole::ActsAsMouse,
     }
 }
@@ -86,11 +101,11 @@ mod tests {
     /// a drawing tool.
     #[test]
     fn a_finger_pans_the_empty_board_and_grabs_or_draws_otherwise() {
-        assert_eq!(finger_role(Tool::Hand, true), FingerRole::Pans);
-        assert_eq!(finger_role(Tool::Select, false), FingerRole::Pans);
-        assert_eq!(finger_role(Tool::Select, true), FingerRole::ActsAsMouse);
-        assert_eq!(finger_role(Tool::Pen, false), FingerRole::ActsAsMouse);
-        assert_eq!(finger_role(Tool::Draw, false), FingerRole::ActsAsMouse);
+        assert_eq!(finger_role(Tool::Hand, Under::Grabbable), FingerRole::Pans);
+        assert_eq!(finger_role(Tool::Select, Under::Empty), FingerRole::Pans);
+        assert_eq!(finger_role(Tool::Select, Under::Grabbable), FingerRole::ActsAsMouse);
+        assert_eq!(finger_role(Tool::Pen, Under::Empty), FingerRole::ActsAsMouse);
+        assert_eq!(finger_role(Tool::Draw, Under::Empty), FingerRole::ActsAsMouse);
     }
 
     /// `TOILE-UI-289`: a wheel turned down moves the content up, and one

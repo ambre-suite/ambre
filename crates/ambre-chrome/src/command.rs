@@ -23,6 +23,33 @@ use std::rc::Rc;
 use ambre_commands::{Key, KeyBinding, Modifiers};
 use leptos::prelude::*;
 
+/// Whether a toggle command is on, as the Logic thread reports it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Toggle {
+    #[default]
+    Off,
+    On,
+}
+
+/// Whether a command can run now, as the Logic thread reports it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Availability {
+    Disabled,
+    #[default]
+    Enabled,
+}
+
+impl Availability {
+    /// [`Availability::Enabled`] when `can` holds.
+    pub fn enabled_if(can: bool) -> Self {
+        if can {
+            Availability::Enabled
+        } else {
+            Availability::Disabled
+        }
+    }
+}
+
 /// Reactive store of command toggle state, keyed by `CommandId`.
 ///
 /// Cheap to clone (an `Rc` to the signal map). Toggle signals are created once
@@ -67,9 +94,9 @@ impl CommandStates {
 
     /// Push the authoritative toggle state for `id`. Called by the dispatcher
     /// from the inbound `UiEvent` stream -- the single writer.
-    pub fn set_toggled(&self, id: ambre_commands::CommandId, value: bool) {
+    pub fn set_toggled(&self, id: ambre_commands::CommandId, toggle: Toggle) {
         if let Some(sig) = self.toggled.get(&id) {
-            sig.set(value);
+            sig.set(toggle == Toggle::On);
         }
     }
 
@@ -82,9 +109,9 @@ impl CommandStates {
 
     /// Push the authoritative enabled state for `id`. Called by the dispatcher
     /// from the inbound `UiEvent` stream -- the single writer.
-    pub fn set_enabled(&self, id: ambre_commands::CommandId, value: bool) {
+    pub fn set_enabled(&self, id: ambre_commands::CommandId, availability: Availability) {
         if let Some(sig) = self.enabled.get(&id) {
-            sig.set(value);
+            sig.set(availability == Availability::Enabled);
         }
     }
 }

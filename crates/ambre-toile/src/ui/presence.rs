@@ -311,8 +311,8 @@ fn paint_cursor<S: DrawSurface>(
         LABEL_FONT_PX,
         200.0,
         Alignment::Start,
-        true,
-        false,
+        ambre_canvas::Weight::Bold,
+        ambre_canvas::Slant::Upright,
     );
     let pad = 4.0;
     let chip_x = at.x + s * 0.8;

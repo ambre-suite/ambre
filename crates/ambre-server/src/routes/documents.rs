@@ -238,8 +238,8 @@ pub struct CreateDocumentRequest {
     pub entry: Option<ambre_core::EncodedLogEntry>,
     /// The document is a Murmure space, which its members list
     /// (`SRV-216`).
-    #[serde(default)]
-    pub space: bool,
+    #[serde(default, with = "ambre_core::serde_enums::space_flag")]
+    pub space: ambre_core::DocumentScope,
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
@@ -258,7 +258,7 @@ pub async fn create_document(
 
     let name_enc = req.name_enc;
     // Only a Murmure document is a space (`SRV-217`).
-    if req.space && req.doc_type != ambre_core::DocType::Murmure {
+    if req.space == ambre_core::DocumentScope::Space && req.doc_type != ambre_core::DocType::Murmure {
         return Err(AppError::BadRequest("a space is a Murmure document".into()));
     }
     let client_id = req.document_id;
@@ -307,7 +307,7 @@ pub async fn create_document(
         )
         .await?;
         // An owner's retry registers the space it may have missed.
-        if req.space && doc.doc_type == ambre_core::DocType::Murmure {
+        if req.space == ambre_core::DocumentScope::Space && doc.doc_type == ambre_core::DocType::Murmure {
             db::register_space(&state.db, &ambre_core::SpaceId::from_document(doc_id)).await?;
         }
     }

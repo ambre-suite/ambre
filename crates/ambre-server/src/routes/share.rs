@@ -450,7 +450,12 @@ async fn raise_debt_mirrors(
     documents: &[ambre_core::DocumentId],
 ) -> Result<(), AppError> {
     for doc_id in documents {
-        crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, true).await?;
+        crate::redis_ops::mirror_rotation_owed(
+            &state.redis,
+            doc_id,
+            crate::redis_ops::RotationDebt::Owed,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -516,7 +521,10 @@ async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
 /// failure is logged: a subscribe rewrites the mirror again.
 async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) {
     let restored = match db::rotation_owed(&state.db, doc_id).await {
-        Ok(owed) => crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, owed).await,
+        Ok(owed) => {
+            let debt = crate::redis_ops::RotationDebt::owed_if(owed);
+            crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, debt).await
+        }
         Err(e) => Err(e),
     };
     if let Err(e) = restored {

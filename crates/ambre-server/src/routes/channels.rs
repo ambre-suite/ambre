@@ -85,7 +85,8 @@ pub struct MemberChannelJson {
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::space_id::option")]
     pub space_id: Option<ambre_core::SpaceId>,
-    pub public: bool,
+    #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
+    pub visibility: ambre_core::Visibility,
     /// The channel's `meta`, which the sealed name binds.
     #[serde(with = "ambre_core::serde_id::meta_id")]
     pub meta_id: ambre_core::MetaId,
@@ -134,7 +135,7 @@ pub async fn list_member_channels(
             MemberChannelJson {
                 channel_id: row.id,
                 space_id: row.space_id,
-                public: row.is_public,
+                visibility: ambre_core::Visibility::public_if(row.is_public),
                 meta_id: row.meta_id,
                 name_enc: row.name_enc,
                 doc_key_enc: row.doc_key_enc,
@@ -172,7 +173,8 @@ pub async fn list_space_channels(
 #[derive(serde::Deserialize)]
 pub struct CreateChannelRequest {
     /// A public channel, which its catalogue lists, or a private one.
-    pub public: bool,
+    #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
+    pub visibility: ambre_core::Visibility,
     #[serde(with = "ambre_core::serde_id::channel_id")]
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::space_id")]
@@ -302,7 +304,7 @@ pub async fn create_channel(
     let new = db::NewChannel {
         channel_id: req.channel_id,
         space_id: req.space_id,
-        is_public: req.public,
+        is_public: req.visibility == ambre_core::Visibility::Public,
         meta_id: req.meta_id,
         segment_id: req.segment_id,
     };
@@ -1127,7 +1129,7 @@ mod tests {
         space: SpaceId,
         channel: &Channel,
     ) -> StatusCode {
-        register_as(state, who, space, channel, true).await
+        register_as(state, who, space, channel, ambre_core::Visibility::Public).await
     }
 
     async fn register_as(
@@ -1135,14 +1137,14 @@ mod tests {
         who: UserId,
         space: SpaceId,
         channel: &Channel,
-        public: bool,
+        visibility: ambre_core::Visibility,
     ) -> StatusCode {
         status(
             create_channel(
                 State(state.clone()),
                 session(who),
                 Json(CreateChannelRequest {
-                    public,
+                    visibility,
                     channel_id: channel.id,
                     space_id: space,
                     meta_id: channel.meta,
@@ -1241,7 +1243,7 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let space = DocumentId::new();
-        let answer = create_as(&state, alice, space, ambre_core::DocType::Murmure, true).await;
+        let answer = create_as(&state, alice, space, ambre_core::DocType::Murmure, ambre_core::DocumentScope::Space).await;
         assert_eq!(answer, StatusCode::OK);
         assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
         assert_eq!(member_ids(&state, space).await, [alice]);
@@ -1253,7 +1255,7 @@ mod tests {
         who: UserId,
         document: DocumentId,
         doc_type: ambre_core::DocType,
-        space: bool,
+        space: ambre_core::DocumentScope,
     ) -> StatusCode {
         let answer = crate::routes::create_document(
             State(state.clone()),
@@ -1299,11 +1301,11 @@ mod tests {
         let (space, other) = (DocumentId::new(), DocumentId::new());
         let murmure = ambre_core::DocType::Murmure;
         assert_eq!(
-            create_as(&state, alice, space, murmure, true).await,
+            create_as(&state, alice, space, murmure, ambre_core::DocumentScope::Space).await,
             StatusCode::OK
         );
         assert_eq!(
-            create_as(&state, alice, other, murmure, false).await,
+            create_as(&state, alice, other, murmure, ambre_core::DocumentScope::Personal).await,
             StatusCode::OK
         );
         grant(&state, space, bob, Role::Viewer).await;
@@ -1323,7 +1325,7 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let prose = DocumentId::new();
-        let answer = create_as(&state, alice, prose, ambre_core::DocType::Prose, true).await;
+        let answer = create_as(&state, alice, prose, ambre_core::DocType::Prose, ambre_core::DocumentScope::Space).await;
         assert_eq!(answer, StatusCode::BAD_REQUEST);
         assert_eq!(member_ids(&state, prose).await, []);
         assert_eq!(spaces_of(&state, alice).await, []);
@@ -1807,7 +1809,7 @@ mod tests {
     async fn private_channel(state: &Arc<AppState>, creator: UserId, space: SpaceId) -> Channel {
         let channel = new_channel(state, creator).await;
         assert_eq!(
-            register_as(state, creator, space, &channel, false).await,
+            register_as(state, creator, space, &channel, ambre_core::Visibility::Private).await,
             StatusCode::NO_CONTENT
         );
         channel
@@ -2052,7 +2054,7 @@ mod tests {
 
         let stranger = new_channel(&state, mallory).await;
         assert_eq!(
-            register_as(&state, mallory, space, &stranger, false).await,
+            register_as(&state, mallory, space, &stranger, ambre_core::Visibility::Private).await,
             StatusCode::FORBIDDEN
         );
         let channel = private_channel(&state, alice, space).await;
@@ -2623,9 +2625,9 @@ mod tests {
 
         let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
         let mut want = vec![
-            (public.id, Some(space), true),
-            (private.id, Some(space), false),
-            (direct, None, false),
+            (public.id, Some(space), ambre_core::Visibility::Public),
+            (private.id, Some(space), ambre_core::Visibility::Private),
+            (direct, None, ambre_core::Visibility::Private),
         ];
         want.sort_by_key(|(id, ..)| *id.as_bytes());
         let got: Vec<_> = listed(alice)
@@ -2634,7 +2636,7 @@ mod tests {
             .0
             .channels
             .into_iter()
-            .map(|c| (c.channel_id, c.space_id, c.public))
+            .map(|c| (c.channel_id, c.space_id, c.visibility))
             .collect();
         assert_eq!(got, want);
         let bobs: Vec<_> = listed(bob)
@@ -2643,9 +2645,9 @@ mod tests {
             .0
             .channels
             .into_iter()
-            .map(|c| (c.channel_id, c.space_id, c.public))
+            .map(|c| (c.channel_id, c.space_id, c.visibility))
             .collect();
-        assert_eq!(bobs, vec![(direct, None, false)]);
+        assert_eq!(bobs, vec![(direct, None, ambre_core::Visibility::Private)]);
     }
 
     /// `SRV-219`: the listing carries the name sealed beside each channel's

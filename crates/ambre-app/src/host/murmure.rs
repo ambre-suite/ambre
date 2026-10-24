@@ -30,12 +30,18 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         now_ms: Rc::new(super::probe::now_ms),
         // `Date.now()` is a whole, non-negative count of milliseconds.
         wall_clock: Rc::new(|| ambre_bus::Timestamp(js_sys::Date::now() as u64)),
-        still: Rc::new({
+        motion: Rc::new({
             // The query is asked once; its answer follows the user's setting.
             let query = web_sys::window()
                 .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok())
                 .flatten();
-            move || query.as_ref().is_some_and(web_sys::MediaQueryList::matches)
+            move || {
+                if query.as_ref().is_some_and(web_sys::MediaQueryList::matches) {
+                    ambre_murmure::pictures::Motion::Reduced
+                } else {
+                    ambre_murmure::pictures::Motion::Full
+                }
+            }
         }),
         announce: Rc::new({
             let pipe = pipe.clone();

@@ -1384,9 +1384,9 @@ impl SyncState {
         // A space is marked so on its creation, so each member lists it
         // (`SYNC-170`).
         let space = if self.new_spaces.contains(&document_id) {
-            http::DocumentScope::Space
+            ambre_core::DocumentScope::Space
         } else {
-            http::DocumentScope::Personal
+            ambre_core::DocumentScope::Personal
         };
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;

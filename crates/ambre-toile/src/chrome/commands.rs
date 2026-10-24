@@ -55,8 +55,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
         ..
     } = ev
     {
-        store.set_enabled(UNDO, *can_undo);
-        store.set_enabled(REDO, *can_redo);
+        store.set_enabled(UNDO, ambre_chrome::Availability::enabled_if(*can_undo));
+        store.set_enabled(REDO, ambre_chrome::Availability::enabled_if(*can_redo));
     }
 }
 
@@ -65,6 +65,6 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
 /// [`ToileEvent::UndoState`] arrives. Called by the launcher right after it
 /// builds the store.
 pub fn init_command_states(store: &CommandStates) {
-    store.set_enabled(UNDO, false);
-    store.set_enabled(REDO, false);
+    store.set_enabled(UNDO, ambre_chrome::Availability::Disabled);
+    store.set_enabled(REDO, ambre_chrome::Availability::Disabled);
 }

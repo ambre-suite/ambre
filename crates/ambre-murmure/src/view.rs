@@ -66,9 +66,9 @@ pub struct PageReads {
     /// typing sample. The page's clock restarts at every load, so it never
     /// dates anything a peer reads.
     pub wall_clock: Rc<dyn Fn() -> Timestamp>,
-    /// The user asks for reduced motion: an animated picture holds its
-    /// first frame (`MURMURE-130`).
-    pub still: Rc<dyn Fn() -> bool>,
+    /// The motion the user asks for: under reduced motion an animated
+    /// picture holds its first frame (`MURMURE-130`).
+    pub motion: Rc<dyn Fn() -> crate::pictures::Motion>,
     /// Say a text to a screen reader, through the polite live region of the
     /// content (`CHROME-023`). It holds no element that takes the focus.
     pub announce: Rc<dyn Fn(&str)>,
@@ -177,6 +177,33 @@ struct Lists {
 enum ListOf {
     Channel(ChannelId),
     Thread(ChannelId, MessageId),
+}
+
+/// How the pointer reached a message: a click, which opens its actions
+/// where the menu falls, or a long press, which opens them at the finger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Press {
+    Click,
+    Held,
+}
+
+/// Whether the window is as wide as a desktop (`MURMURE-544`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WindowWidth {
+    #[default]
+    Narrow,
+    Desktop,
+}
+
+impl WindowWidth {
+    /// [`WindowWidth::Desktop`] when `desktop` holds.
+    pub fn desktop_if(desktop: bool) -> Self {
+        if desktop {
+            WindowWidth::Desktop
+        } else {
+            WindowWidth::Narrow
+        }
+    }
 }
 
 /// The canvas view of a Murmure message region.
@@ -516,15 +543,15 @@ impl MurmureView {
     }
 
     /// The message under `(x, y)` at the last paint, as the target of its
-    /// actions. `pressed` keeps the point, where a long press opens them.
-    /// `None` on a band, between rows, or on the control to the latest.
-    fn target_at(&self, at: ViewPoint, pressed: bool) -> Option<MessageTarget> {
+    /// actions. A [`Press::Held`] keeps the point, where a long press opens
+    /// them. `None` on a band, between rows, or on the control to the latest.
+    fn target_at(&self, at: ViewPoint, press: Press) -> Option<MessageTarget> {
         if self.on_jump(on_screen(at)) || self.in_composer(at.y) {
             return None;
         }
         let i = self.last.as_ref()?.row_at(at.y)?;
         let mut target = self.target_of_row(i)?;
-        target.pressed = pressed.then_some(at);
+        target.pressed = (press == Press::Held).then_some(at);
         Some(target)
     }
 
@@ -831,7 +858,7 @@ impl MurmureView {
     fn target_of_focus(&self) -> Option<MessageTarget> {
         let (top, bottom) = self.last.as_ref()?.focus?;
         let middle = ViewPoint::new(ViewPx::ZERO, ViewPx::new((top + bottom) / 2.0));
-        let mut target = self.target_at(middle, false)?;
+        let mut target = self.target_at(middle, Press::Click)?;
         target.pressed = Some(ViewPoint::new(ViewPx::ZERO, ViewPx::new(bottom)));
         Some(target)
     }
@@ -1030,7 +1057,11 @@ impl MurmureView {
         }
     }
 
-    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, _hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(
+        &mut self,
+        now_ms: ambre_core::PageTime,
+        _hud_tick: ambre_canvas::HudTick,
+    ) -> RepaintPlan {
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;
@@ -1063,7 +1094,7 @@ impl MurmureView {
         if let Some(at) = self.kinetic.held(now_ms) {
             // A finger held still: the actions of its message open where it
             // went down (`MURMURE-423`).
-            (self.reads.act_on)(self.target_at(at, true));
+            (self.reads.act_on)(self.target_at(at, Press::Held));
         }
         self.tick();
         // An edit asked from the actions of a message loads the channel's
@@ -1209,7 +1240,7 @@ impl MurmureView {
                 pictures: Some(Pictured {
                     shelf: &shelf,
                     now_ms: (self.reads.now_ms)(),
-                    still: (self.reads.still)(),
+                    motion: (self.reads.motion)(),
                 }),
             },
             list_size,
@@ -1506,8 +1537,8 @@ impl MurmureView {
 
     /// The window is as wide as a desktop, or no longer is. The box under a
     /// thread's composer names its chord only then (`MURMURE-544`).
-    pub fn set_desktop(&mut self, desktop: bool) {
-        if self.composer.show_chords(desktop) {
+    pub fn set_width(&mut self, width: WindowWidth) {
+        if self.composer.show_chords(width == WindowWidth::Desktop) {
             self.dirty = true;
         }
     }
@@ -1554,7 +1585,7 @@ impl MurmureView {
                 if button == PointerButton::Secondary {
                     // The page's menu event follows, and opens the actions of
                     // the message found here (`MURMURE-422`).
-                    (self.reads.act_on)(self.target_at(pointer, false));
+                    (self.reads.act_on)(self.target_at(pointer, Press::Click));
                 } else if button == PointerButton::Primary && !self.on_jump(at) {
                     self.selecting = Selecting {
                         press: Some(pointer),
@@ -1794,8 +1825,8 @@ mod tests {
         clock: Rc<Cell<ambre_core::PageTime>>,
         /// The wall clock, when a test sets it apart from the page's clock.
         wall: Rc<Cell<Option<Timestamp>>>,
-        /// The user asks for reduced motion.
-        still: Rc<Cell<bool>>,
+        /// The motion the user asks for.
+        motion: Rc<Cell<crate::pictures::Motion>>,
         events: Sender<UiEvent>,
         commands: Receiver<LogicCommand>,
         /// What the view said to a screen reader, oldest first.
@@ -1854,8 +1885,8 @@ mod tests {
         let follows = Rc::clone(&clock);
         let wall_set = Rc::new(Cell::new(None::<Timestamp>));
         let wall = Rc::clone(&wall_set);
-        let still = Rc::new(Cell::new(false));
-        let reduced = Rc::clone(&still);
+        let motion = Rc::new(Cell::new(crate::pictures::Motion::Full));
+        let reduced = Rc::clone(&motion);
         let said_log = Rc::new(RefCell::new(Vec::new()));
         let said = Rc::clone(&said_log);
         let acted_log = Rc::new(RefCell::new(Vec::new()));
@@ -1897,7 +1928,7 @@ mod tests {
             // step dates what it sends.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             wall_clock: Rc::new(move || wall.get().unwrap_or(Timestamp(follows.get().0 as u64))),
-            still: Rc::new(move || reduced.get()),
+            motion: Rc::new(move || reduced.get()),
             announce: Rc::new(move |text: &str| said.borrow_mut().push(text.to_owned())),
             act_on: Rc::new(move |target| acted.borrow_mut().push(target)),
             take_edit: Rc::new(move |in_thread| {
@@ -1972,7 +2003,7 @@ mod tests {
             view,
             pane,
             clock,
-            still,
+            motion,
             events,
             commands,
             said: said_log,
@@ -2001,7 +2032,7 @@ mod tests {
 
     fn frame_at(view: &mut MurmureView, now_ms: ambre_core::PageTime) -> bool {
         view.update();
-        let plan = view.plan_repaint(now_ms, false);
+        let plan = view.plan_repaint(now_ms, ambre_canvas::HudTick::Idle);
         let full = matches!(plan.content, ContentRepaint::Full);
         if full {
             let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new(1.0));
@@ -2169,7 +2200,7 @@ mod tests {
     /// falls on the bytes a reader sees there.
     fn frame_with_fonts(view: &mut MurmureView) {
         view.update();
-        view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
@@ -2270,7 +2301,7 @@ mod tests {
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut x_after = |text| {
             let width =
-                crate::paint::shape(&mut font_cx, &mut cache, text, FONT_BODY, 284.0, false);
+                crate::paint::shape(&mut font_cx, &mut cache, text, FONT_BODY, 284.0, ambre_canvas::Weight::Regular);
             f64::from(SPACE_8 + width.width())
         };
         let on_link = (x_after("see si"), f64::from(second - SPACE_2 - 6.0));
@@ -2342,7 +2373,7 @@ mod tests {
             "\u{1F44D} 1",
             FONT_UI,
             284.0,
-            false,
+            ambre_canvas::Weight::Regular,
         );
         let y = f64::from(bottom - 2.0 * SPACE_2 - 2.0);
         let on_first = (f64::from(SPACE_8 + 2.0), y);
@@ -3382,7 +3413,11 @@ mod tests {
                 ..
             } = command
             {
-                assert!(!confirmed, "a plain send asks no confirmation");
+                assert_eq!(
+                    confirmed,
+                    ambre_bus::Confirmation::Unconfirmed,
+                    "a plain send asks no confirmation"
+                );
                 assert!(draft.mentions.is_empty());
                 sent.push((draft.text, now.0));
             }
@@ -3676,7 +3711,7 @@ mod tests {
         use ambre_bus::{Picture, PictureFrame};
         let channel = ChannelId::new();
         let mut page = page();
-        page.still.set(true);
+        page.motion.set(crate::pictures::Motion::Reduced);
         let file = gif_list(&page, channel, &["see"]);
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
@@ -3772,7 +3807,7 @@ mod tests {
         assert!(band > 0.0, "a channel region shows the composer");
         assert_eq!(page.view.list_height(), 400.0 - band);
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4395,7 +4430,7 @@ mod tests {
     /// The glyph runs painted in the strip above the field.
     fn strip_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4546,7 +4581,11 @@ mod tests {
                         also_in_channel == ReplyEcho::ThreadOnly,
                         "the reply stays in its thread"
                     );
-                    assert!(!confirmed, "a plain reply asks no confirmation");
+                    assert_eq!(
+                    confirmed,
+                    ambre_bus::Confirmation::Unconfirmed,
+                    "a plain reply asks no confirmation"
+                );
                     replies.push((root, draft.text, now.0));
                 }
                 MurmureCommand::SendMessage { .. } => panic!("a message in the channel"),
@@ -4842,7 +4881,7 @@ mod tests {
     /// Every run of glyphs the view paints, as glyph counts.
     fn glyph_runs(page: &mut Page) -> Vec<usize> {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -4865,7 +4904,7 @@ mod tests {
         let (mut page, _channel_view, _, _) = threaded(channel);
         assert!(press_composer(&mut page));
         let narrow = glyph_runs(&mut page);
-        page.view.set_desktop(true);
+        page.view.set_width(WindowWidth::Desktop);
         let mut wide = glyph_runs(&mut page);
         let at = wide
             .iter()
@@ -4874,7 +4913,7 @@ mod tests {
             .expect("one more run at the desktop width");
         assert_eq!(wide.remove(at), crate::composer::ALSO_CHORD.chars().count());
         assert_eq!(wide, narrow, "only the chord is added");
-        page.view.set_desktop(false);
+        page.view.set_width(WindowWidth::Narrow);
         assert_eq!(glyph_runs(&mut page), narrow);
     }
 
@@ -5241,7 +5280,7 @@ mod tests {
     /// a quote's rule and a list's dots.
     fn margin_marks(page: &mut Page) -> usize {
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view
@@ -5328,7 +5367,7 @@ mod tests {
         shift_key(&mut page, "Enter");
         type_slowly(&mut page, "plain");
         page.view.update();
-        page.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        page.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
         let (mut font_cx, mut cache) = (crate::paint::tests::fonts(), TextCache::new(1.0));
         let mut surface = RecordingSurface::new();
         page.view

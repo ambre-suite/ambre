@@ -346,6 +346,15 @@ pub struct HeldReply {
     pub also_in_channel: ReplyEcho,
 }
 
+/// Whether the author of a send confirmed the `@channel` it holds, once
+/// the Logic thread asked (`MURMURE-231`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Confirmation {
+    #[default]
+    Unconfirmed,
+    Confirmed,
+}
+
 /// A command for an open channel, UI thread -> Logic thread.
 ///
 /// Carried by [`LogicCommand::Channel`](crate::LogicCommand::Channel). The
@@ -362,9 +371,9 @@ pub enum MurmureCommand {
         attachments: Vec<Attachment>,
         /// The instant the author sent it, stamped by the view.
         now: Timestamp,
-        /// The author confirmed the `@channel` the Logic thread asked about
-        /// (`MURMURE-231`). `false` on a first send.
-        confirmed: bool,
+        /// Whether the author confirmed the `@channel` the Logic thread asked
+        /// about (`MURMURE-231`). [`Confirmation::Unconfirmed`] on a first send.
+        confirmed: Confirmation,
     },
     /// Load the final segment listed before `segment`, because the view
     /// scrolled past the oldest message it holds (`MURMURE-023`).
@@ -434,9 +443,10 @@ pub enum MurmureCommand {
         also_in_channel: ReplyEcho,
         /// The instant the author replied, stamped by the view.
         now: Timestamp,
-        /// The author confirmed the `@channel` the Logic thread asked about
-        /// (`MURMURE-231`). `false` on a first reply.
-        confirmed: bool,
+        /// Whether the author confirmed the `@channel` the Logic thread asked
+        /// about (`MURMURE-231`). [`Confirmation::Unconfirmed`] on a first
+        /// reply.
+        confirmed: Confirmation,
     },
     /// The view's tick of the open channel, once a second while it shows
     /// it. It expires the indicators and refreshes this user's presence in

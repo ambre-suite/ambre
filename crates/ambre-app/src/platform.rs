@@ -572,10 +572,12 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
         .dyn_ref::<web_sys::Element>()
         .map(|el| el.tag_name())
         .unwrap_or_default();
-    let content_editable = target
-        .dyn_ref::<web_sys::HtmlElement>()
-        .is_some_and(|el| el.is_content_editable());
-    ambre_toile::ui::palette::is_editable_tag(&tag, content_editable)
+    let host = ambre_toile::ui::palette::Host::content_editable_if(
+        target
+            .dyn_ref::<web_sys::HtmlElement>()
+            .is_some_and(|el| el.is_content_editable()),
+    );
+    ambre_toile::ui::palette::is_editable_tag(&tag, host)
 }
 
 /// Install the global command-keybinding listener (the keymap's DOM half).
@@ -1041,9 +1043,9 @@ mod tests {
             read.get().expect("the listener ran")
         };
         assert!(reads(), "a pipe is typed text by default");
-        pipe.set_typing(false);
+        pipe.set_typing(ambre_canvas::Typing::Commands);
         assert!(!reads(), "a board with no editor open");
-        pipe.set_typing(true);
+        pipe.set_typing(ambre_canvas::Typing::Text);
         assert!(reads(), "a board with an editor open");
     }
 }

@@ -53,8 +53,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
             // enabled state. The Logic thread is the single source of truth.
             TrameEvent::UndoState { can_undo, can_redo } => {
-                store.set_enabled(UNDO, *can_undo);
-                store.set_enabled(REDO, *can_redo);
+                store.set_enabled(UNDO, ambre_chrome::Availability::enabled_if(*can_undo));
+                store.set_enabled(REDO, ambre_chrome::Availability::enabled_if(*can_redo));
             }
             // Every other variant carries no command-toggle state. Listed
             // explicitly so a future variant is a compile error here, not a
@@ -99,8 +99,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
 /// first [`TrameEvent::UndoState`] arrives. Every other command stays enabled
 /// by default. Called by the launcher right after it builds the store.
 pub fn init_command_states(store: &CommandStates) {
-    store.set_enabled(UNDO, false);
-    store.set_enabled(REDO, false);
+    store.set_enabled(UNDO, ambre_chrome::Availability::Disabled);
+    store.set_enabled(REDO, ambre_chrome::Availability::Disabled);
 }
 
 /// Surface a Trame `UiEvent` to the user as a transient toast, when it carries a

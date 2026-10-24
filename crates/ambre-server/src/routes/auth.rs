@@ -20,7 +20,16 @@ use crate::state::AppState;
 /// flag.
 #[derive(serde::Serialize)]
 pub struct AuthConfigResponse {
-    pub dev_mode: bool,
+    #[serde(serialize_with = "dev_flag")]
+    pub dev_mode: crate::state::DevMode,
+}
+
+/// Writes the mode as the JSON flag the SPA reads: `true` in development.
+fn dev_flag<S: serde::Serializer>(
+    mode: &crate::state::DevMode,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_bool(*mode == crate::state::DevMode::On)
 }
 
 /// `GET /auth/config` (unauthenticated)
@@ -31,7 +40,7 @@ pub async fn auth_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
     Ok(axum::Json(AuthConfigResponse {
-        dev_mode: state.config.dev_mode == crate::state::DevMode::On,
+        dev_mode: state.config.dev_mode,
     }))
 }
 

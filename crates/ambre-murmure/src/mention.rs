@@ -111,9 +111,13 @@ pub enum Screened {
 
 /// Screen `draft` against `members`, the users of its channel. `None` before
 /// the relay has listed them: every mention stays, and the relay still
-/// routes nothing of the channel to a user outside it. `confirmed` says the
-/// author confirmed an `@channel`.
-pub fn screen(draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) -> Screened {
+/// routes nothing of the channel to a user outside it. `confirmed` says
+/// whether the author confirmed an `@channel`.
+pub fn screen(
+    draft: MessageDraft,
+    members: Option<&[UserId]>,
+    confirmed: ambre_bus::Confirmation,
+) -> Screened {
     let Some(members) = members else {
         return Screened::Send(draft);
     };
@@ -122,7 +126,10 @@ pub fn screen(draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) 
         .mentions
         .iter()
         .any(|mention| mention.target == MentionTarget::Channel);
-    if all && !confirmed && members.len() > CONFIRM_CHANNEL_PAST {
+    if all
+        && confirmed == ambre_bus::Confirmation::Unconfirmed
+        && members.len() > CONFIRM_CHANNEL_PAST
+    {
         return Screened::Confirm {
             members: members.len(),
             draft,

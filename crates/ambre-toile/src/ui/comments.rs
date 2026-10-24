@@ -18,6 +18,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport, ThreadId};
+use super::tool::Tool;
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
@@ -91,13 +92,13 @@ pub enum BoardPress {
 /// opens the menu. Pure, so a host test covers the order the view applies,
 /// rather than the pointer path burying it.
 pub fn press_target(
-    select_tool: bool,
+    tool: Tool,
     button: ambre_canvas::PointerButton,
     pins: &[CommentPin],
     w2s: &Affine,
     screen: Point,
 ) -> BoardPress {
-    if !select_tool || button != ambre_canvas::PointerButton::Primary {
+    if tool != Tool::Select || button != ambre_canvas::PointerButton::Primary {
         return BoardPress::Board;
     }
     match hit_pin(pins, w2s, screen) {
@@ -154,8 +155,8 @@ fn paint_pin<S: DrawSurface>(
         PIN_FONT_PX,
         1000.0,
         Alignment::Start,
-        false,
-        false,
+        ambre_canvas::Weight::Regular,
+        ambre_canvas::Slant::Upright,
     );
     let (w, h) = (layout.width() as f64, layout.height() as f64);
     let origin = Point::new(circle.center.x - w / 2.0, circle.center.y - h / 2.0);
@@ -198,13 +199,27 @@ pub enum ThreadFilter {
 }
 
 impl ThreadFilter {
-    /// Whether a thread with this `resolved` flag belongs in the filtered list.
-    pub fn keeps(self, resolved: bool) -> bool {
+    /// Whether a thread in `state` belongs in the filtered list.
+    pub fn keeps(self, state: ThreadState) -> bool {
         match self {
             ThreadFilter::All => true,
-            ThreadFilter::Open => !resolved,
-            ThreadFilter::Resolved => resolved,
+            ThreadFilter::Open => state == ThreadState::Open,
+            ThreadFilter::Resolved => state == ThreadState::Resolved,
         }
+    }
+}
+
+/// Where a thread stands, as the panel's filter reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThreadState {
+    Open,
+    Resolved,
+}
+
+impl ThreadState {
+    /// `Resolved` when `resolved` holds, `Open` otherwise.
+    pub fn resolved_if(resolved: bool) -> Self {
+        if resolved { ThreadState::Resolved } else { ThreadState::Open }
     }
 }
 
@@ -396,14 +411,14 @@ mod tests {
         let pins = vec![pin("t1", at, 1, false)];
         let on_pin = pin_circle(at, &w2s).center;
         assert_eq!(
-            press_target(true, PointerButton::Primary, &pins, &w2s, on_pin),
+            press_target(Tool::Select, PointerButton::Primary, &pins, &w2s, on_pin),
             BoardPress::Thread(ElementId("t1".to_owned()))
         );
         // Off the pin, with another button, or with a creation tool armed: the
         // press is the board's.
         assert_eq!(
             press_target(
-                true,
+                Tool::Select,
                 PointerButton::Primary,
                 &pins,
                 &w2s,
@@ -412,11 +427,11 @@ mod tests {
             BoardPress::Board
         );
         assert_eq!(
-            press_target(true, PointerButton::Secondary, &pins, &w2s, on_pin),
+            press_target(Tool::Select, PointerButton::Secondary, &pins, &w2s, on_pin),
             BoardPress::Board
         );
         assert_eq!(
-            press_target(false, PointerButton::Primary, &pins, &w2s, on_pin),
+            press_target(Tool::Pen, PointerButton::Primary, &pins, &w2s, on_pin),
             BoardPress::Board
         );
     }
@@ -425,8 +440,9 @@ mod tests {
     /// and it hides nothing by default.
     #[test]
     fn the_filter_keeps_what_it_names() {
-        assert!(ThreadFilter::All.keeps(true) && ThreadFilter::All.keeps(false));
-        assert!(ThreadFilter::Open.keeps(false) && !ThreadFilter::Open.keeps(true));
-        assert!(ThreadFilter::Resolved.keeps(true) && !ThreadFilter::Resolved.keeps(false));
+        let (open, resolved) = (ThreadState::Open, ThreadState::Resolved);
+        assert!(ThreadFilter::All.keeps(resolved) && ThreadFilter::All.keeps(open));
+        assert!(ThreadFilter::Open.keeps(open) && !ThreadFilter::Open.keeps(resolved));
+        assert!(ThreadFilter::Resolved.keeps(resolved) && !ThreadFilter::Resolved.keeps(open));
     }
 }

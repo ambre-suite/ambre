@@ -110,7 +110,7 @@ impl Rig {
     /// recording surface, where a deferred commit lands.
     fn frame(&mut self) {
         self.view.update();
-        self.view.plan_repaint(self.clock.now_ms(), false);
+        self.view.plan_repaint(self.clock.now_ms(), ambre_canvas::HudTick::Idle);
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
         let mut cache = TextCache::new(1.0);
@@ -358,7 +358,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
     rig.frame();
     rig.frame();
     rig.view.update();
-    let idle = rig.view.plan_repaint(rig.clock.now_ms(), false);
+    let idle = rig.view.plan_repaint(rig.clock.now_ms(), ambre_canvas::HudTick::Idle);
     assert!(
         matches!(idle.content, ContentRepaint::Reuse),
         "an idle frame reuses"
@@ -366,7 +366,7 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
 
     let next = rig.theme.toggle();
     rig.view.update();
-    let plan = rig.view.plan_repaint(rig.clock.now_ms(), false);
+    let plan = rig.view.plan_repaint(rig.clock.now_ms(), ambre_canvas::HudTick::Idle);
     assert!(
         matches!(plan.content, ContentRepaint::Full),
         "{:?}",

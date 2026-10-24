@@ -59,6 +59,15 @@ pub struct Outbox {
     capacity: usize,
 }
 
+/// Whether a view's outbox holds a command the Logic thread has not taken
+/// (`BUS-016`). The view publishes it every frame as its busy signal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Load {
+    #[default]
+    Free,
+    Busy,
+}
+
 impl Outbox {
     /// An outbox over `to_logic`, holding up to [`HOLD_CAPACITY`] commands.
     pub fn new(to_logic: crate::conduit::Sender<LogicCommand>) -> Self {
@@ -77,10 +86,14 @@ impl Outbox {
 
     /// Whether the outbox holds a command the Logic thread has not taken.
     ///
-    /// The view publishes this as its busy signal and refuses input while it is
-    /// `true` (`BUS-016`).
+    /// The view refuses input while it is `true` (`BUS-016`).
     pub fn is_busy(&self) -> bool {
         !self.held.is_empty()
+    }
+
+    /// The level the view publishes as its busy signal (`BUS-016`).
+    pub fn load(&self) -> Load {
+        if self.is_busy() { Load::Busy } else { Load::Free }
     }
 
     /// How many commands the outbox holds. For a test and a diagnostic.

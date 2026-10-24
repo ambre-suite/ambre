@@ -293,7 +293,7 @@ impl LocalStore {
             Refusal::Full => {
                 self.inner.held.borrow_mut().push((id, write));
                 if attempt != Attempt::Held {
-                    self.tell_logic(id, true);
+                    self.tell_logic(id, ambre_bus::StoreRoom::Full);
                 }
             }
             Refusal::Drop => {
@@ -306,16 +306,16 @@ impl LocalStore {
     /// resumes (`RESID-018`).
     fn resumed(&self, id: DocumentId) {
         if !self.inner.held.borrow().iter().any(|(held, _)| *held == id) {
-            self.tell_logic(id, false);
+            self.tell_logic(id, ambre_bus::StoreRoom::Free);
         }
     }
 
     /// Tell Logic whether the store refuses the document's unsent change.
-    fn tell_logic(&self, document_id: DocumentId, full: bool) {
+    fn tell_logic(&self, document_id: DocumentId, room: ambre_bus::StoreRoom) {
         if self
             .inner
             .to_logic
-            .try_send(LogicCommand::LocalStoreFull { document_id, full })
+            .try_send(LogicCommand::LocalStoreFull { document_id, room })
             .is_err()
         {
             tracing::warn!("Persistence: Logic did not take the store state");

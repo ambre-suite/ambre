@@ -47,11 +47,11 @@ struct CacheKey {
     /// Each of the six alignments is its own entry: `Left` and `Start`
     /// differ in a right-to-left text, and `Justify` spreads its lines.
     align: Alignment,
-    bold: bool,
-    italic: bool,
-    /// Allow emergency (within-word) breaking so a long unbreakable token wraps
-    /// onto multiple lines instead of overflowing (`trame-cell-rendering`).
-    break_word: bool,
+    weight: Weight,
+    slant: Slant,
+    /// Whether a long unbreakable token wraps onto more lines instead of
+    /// overflowing (`trame-cell-rendering`).
+    word_break: WordBreak,
     /// Font family name (`None` = the grid default). Part of the key so each
     /// family of the same string is cached separately.
     font: Option<Box<str>>,
@@ -67,11 +67,57 @@ impl std::hash::Hash for CacheKey {
         self.font_size_x100.hash(state);
         self.max_width_x10.hash(state);
         std::mem::discriminant(&self.align).hash(state);
-        self.bold.hash(state);
-        self.italic.hash(state);
-        self.break_word.hash(state);
+        self.weight.hash(state);
+        self.slant.hash(state);
+        self.word_break.hash(state);
         self.font.hash(state);
         self.spans.hash(state);
+    }
+}
+
+/// The weight of a text's face: the family's regular face or its real bold.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Weight {
+    #[default]
+    Regular,
+    Bold,
+}
+
+impl Weight {
+    /// The bold face when `bold` holds, the regular one otherwise.
+    pub fn bold_if(bold: bool) -> Self {
+        if bold { Weight::Bold } else { Weight::Regular }
+    }
+}
+
+/// The slant of a text's face: upright, or the family's real italic.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Slant {
+    #[default]
+    Upright,
+    Italic,
+}
+
+impl Slant {
+    /// The italic face when `italic` holds, the upright one otherwise.
+    pub fn italic_if(italic: bool) -> Self {
+        if italic { Slant::Italic } else { Slant::Upright }
+    }
+}
+
+/// Where a line may break: between words only, or within a word too, so a
+/// long unbreakable token wraps instead of overflowing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum WordBreak {
+    #[default]
+    Whole,
+    Anywhere,
+}
+
+impl WordBreak {
+    /// Within a word too when `wrap` holds, between words only otherwise.
+    pub fn anywhere_if(wrap: bool) -> Self {
+        if wrap { WordBreak::Anywhere } else { WordBreak::Whole }
     }
 }
 
@@ -213,10 +259,10 @@ struct Look<'a> {
     font_size: f32,
     max_width: f32,
     align: Alignment,
-    bold: bool,
-    italic: bool,
+    weight: Weight,
+    slant: Slant,
     family: Option<&'a str>,
-    break_word: bool,
+    word_break: WordBreak,
 }
 
 /// A cached layout plus the monotonic tick of its last access, used to drive
@@ -330,8 +376,8 @@ impl TextCache {
 
     /// Return a shaped `Layout` for `text`, building it on first access.
     ///
-    /// `bold` / `italic` select the matching real face of the family, not faux
-    /// bold/oblique. They are part of the cache key, so each style combination
+    /// `weight` and `slant` select the matching real face of the family, not
+    /// faux bold or oblique. They are part of the cache key, so each style combination
     /// of the same string is stored separately.
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build(
@@ -341,11 +387,19 @@ impl TextCache {
         font_size: f32,
         max_width: f32,
         align: Alignment,
-        bold: bool,
-        italic: bool,
+        weight: Weight,
+        slant: Slant,
     ) -> &Layout<Brush> {
         self.get_or_build_font(
-            font_cx, text, font_size, max_width, align, bold, italic, None, false,
+            font_cx,
+            text,
+            font_size,
+            max_width,
+            align,
+            weight,
+            slant,
+            None,
+            WordBreak::Whole,
         )
     }
 
@@ -361,19 +415,19 @@ impl TextCache {
         font_size: f32,
         max_width: f32,
         align: Alignment,
-        bold: bool,
-        italic: bool,
+        weight: Weight,
+        slant: Slant,
         family: Option<&str>,
-        break_word: bool,
+        word_break: WordBreak,
     ) -> &Layout<Brush> {
         let plain = Look {
             font_size,
             max_width,
             align,
-            bold,
-            italic,
+            weight,
+            slant,
             family,
-            break_word,
+            word_break,
         };
         self.get_or_build_look(font_cx, text, plain, &[])
     }
@@ -393,10 +447,10 @@ impl TextCache {
             font_size,
             max_width,
             align: Alignment::Start,
-            bold: false,
-            italic: false,
+            weight: Weight::Regular,
+            slant: Slant::Upright,
             family: None,
-            break_word: false,
+            word_break: WordBreak::Whole,
         };
         self.get_or_build_look(font_cx, text, look, spans)
     }
@@ -412,19 +466,19 @@ impl TextCache {
             font_size,
             max_width,
             align,
-            bold,
-            italic,
+            weight,
+            slant,
             family,
-            break_word,
+            word_break,
         } = look;
         let key = CacheKey {
             text: text.into(),
             font_size_x100: (font_size * 100.0) as u32,
             max_width_x10: (max_width * 10.0) as u32,
             align,
-            bold,
-            italic,
-            break_word,
+            weight,
+            slant,
+            word_break,
             font: family.map(Box::from),
             spans: spans.into(),
         };
@@ -475,10 +529,10 @@ impl TextCache {
             font_size,
             max_width,
             align,
-            bold,
-            italic,
+            weight,
+            slant,
             family,
-            break_word,
+            word_break,
         } = look;
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
         // Resolve every requested family to an actually-loaded face through the
@@ -492,15 +546,15 @@ impl TextCache {
         let font_family = FontFamilyName::Named(registered_family_name(family).into());
         builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size));
-        if bold {
+        if weight == Weight::Bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
         }
-        if italic {
+        if slant == Slant::Italic {
             builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
         }
         // Cell "wrap text": let an overlong unbreakable token break within the
         // word so it flows onto the next line (`trame-cell-rendering`).
-        if break_word {
+        if word_break == WordBreak::Anywhere {
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
         }
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
@@ -519,7 +573,7 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpanShape, TextCache, registered_family_name};
+    use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
     use ambre_bus::ByteSpan;
     use parley::{Alignment, FontContext};
 
@@ -535,7 +589,7 @@ mod tests {
 
     /// Shape `text` through the cache and return its width and glyph count.
     fn shape(cache: &mut TextCache, cx: &mut FontContext, text: &str) -> (f32, usize) {
-        let layout = cache.get_or_build(cx, text, 14.0, 400.0, Alignment::Start, false, false);
+        let layout = cache.get_or_build(cx, text, 14.0, 400.0, Alignment::Start, Weight::Regular, Slant::Upright);
         let glyphs = layout
             .lines()
             .flat_map(|line| line.items())
@@ -724,7 +778,7 @@ mod tests {
             Alignment::Justify,
         ];
         for align in all {
-            cache.get_or_build(&mut cx, &text, 14.0, 120.0, align, false, false);
+            cache.get_or_build(&mut cx, &text, 14.0, 120.0, align, Weight::Regular, Slant::Upright);
         }
         assert_eq!(
             cache.cache_size(),
@@ -748,15 +802,15 @@ mod tests {
                 .last()
         };
         let start =
-            last_x(cache.get_or_build(&mut cx, &text, 14.0, 120.0, Alignment::Start, false, false));
+            last_x(cache.get_or_build(&mut cx, &text, 14.0, 120.0, Alignment::Start, Weight::Regular, Slant::Upright));
         let justified = last_x(cache.get_or_build(
             &mut cx,
             &text,
             14.0,
             120.0,
             Alignment::Justify,
-            false,
-            false,
+            Weight::Regular,
+            Slant::Upright,
         ));
         assert!(justified > start, "the justified line was not spread");
     }

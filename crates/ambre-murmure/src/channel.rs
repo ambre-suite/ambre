@@ -208,6 +208,14 @@ pub struct Named {
     pub event: MurmureEvent,
 }
 
+/// Whether an answer matches the messages of a segment against the numbers
+/// the relay gave them, or leaves them as they are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Matching {
+    Skip,
+    Resolve,
+}
+
 /// An open channel: its documents, each apart (`MURMURE-021`).
 #[derive(Debug)]
 pub struct ChannelState {
@@ -1448,7 +1456,7 @@ impl ChannelState {
                     .or_default()
                     .note_bare(order, payload);
             }
-            return self.answer(document_id, false, None::<fn(&mut Sequence)>);
+            return self.answer(document_id, Matching::Skip, None::<fn(&mut Sequence)>);
         }
         if status.pending.is_some()
             && matches!(order, Some(Order::Snapshot(_)))
@@ -1458,9 +1466,13 @@ impl ChannelState {
         }
         // Only an update needs the messages matched; a snapshot's numbers
         // ride in its table.
-        let resolve = matches!(order, Some(Order::Update(_)));
+        let matching = if matches!(order, Some(Order::Update(_))) {
+            Matching::Resolve
+        } else {
+            Matching::Skip
+        };
         let note = order.map(|order| move |sequence: &mut Sequence| sequence.note(order, payload));
-        self.answer(document_id, resolve, note)
+        self.answer(document_id, matching, note)
     }
 
     /// Hold `snapshot` in place of `document_id`, a copy it could not import
@@ -1549,7 +1561,7 @@ impl ChannelState {
             self.arrived = Some((SegmentId::from_document(document_id), message));
         }
         let note = move |sequence: &mut Sequence| sequence.note_range(seq, range);
-        self.answer(document_id, true, Some(note))
+        self.answer(document_id, Matching::Resolve, Some(note))
     }
 
     /// The last message a remote delta brought to a segment since the last
@@ -1560,12 +1572,12 @@ impl ChannelState {
 
     /// What a document answers once a payload is in: `meta` its name, a
     /// segment its whole message list. `note` records where the payload
-    /// stands, and `resolve` matches the messages against it. A segment
+    /// stands, and [`Matching::Resolve`] matches the messages against it. A segment
     /// that came with no number keeps no entry.
     fn answer(
         &mut self,
         document_id: DocumentId,
-        resolve: bool,
+        matching: Matching,
         note: Option<impl FnOnce(&mut Sequence)>,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         if document_id == self.meta.id {
@@ -1583,7 +1595,7 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let created = resolve.then(|| sequence::created(doc));
+        let created = (matching == Matching::Resolve).then(|| sequence::created(doc));
         if let Some(note) = note {
             let sequence = self.sequences.entry(document_id).or_default();
             note(sequence);

@@ -24,7 +24,7 @@ use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
-    MurmureHandler, MurmureRelay, SearchBox, coverage,
+    MurmureHandler, MurmureRelay, PageVisibility, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -1400,7 +1400,7 @@ fn a_notice_opens_its_channel_at_its_message() {
         message: Some((at.segment, at.message)),
     };
     let notice = relay
-        .notice(&event, true)
+        .notice(&event, PageVisibility::Visible)
         .expect("a direct message notifies");
     assert_eq!(notice.at, Some(at));
     // The channel was opened once already: the click asks Logic nothing.
@@ -1413,7 +1413,7 @@ fn a_notice_opens_its_channel_at_its_message() {
         }
     );
     relay.pane.set(MurmurePane::ChannelList);
-    let closed = relay.notice(&news(direct, false), true).expect("notifies");
+    let closed = relay.notice(&news(direct, false), PageVisibility::Visible).expect("notifies");
     assert_eq!(closed.at, None);
     assert!(relay.open_at(direct, closed.at).is_none());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
@@ -1479,20 +1479,20 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
     });
     relay.pane.set(MurmurePane::ChannelList);
 
-    assert_eq!(relay.notice(&news(general, false), true), None);
+    assert_eq!(relay.notice(&news(general, false), PageVisibility::Visible), None);
     let mention = relay
-        .notice(&news(general, true), true)
+        .notice(&news(general, true), PageVisibility::Visible)
         .expect("a mention notifies");
     assert_eq!(mention.channel_id, general);
     assert_eq!(mention.title, "You were mentioned in general");
     for named in [false, true] {
         let message = relay
-            .notice(&news(direct, named), true)
+            .notice(&news(direct, named), PageVisibility::Visible)
             .expect("a direct message notifies");
         assert_eq!(message.channel_id, direct);
         assert_eq!(message.title, "New message from Bob");
     }
-    assert_eq!(relay.notice(&UiEvent::UpdateRequired, true), None);
+    assert_eq!(relay.notice(&UiEvent::UpdateRequired, PageVisibility::Visible), None);
 }
 
 /// The channel the user is reading notifies nothing. On a hidden page
@@ -1500,10 +1500,10 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
 #[wasm_bindgen_test]
 fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
     let (_owner, relay, direct) = shown_direct();
-    assert_eq!(relay.notice(&news(direct, true), true), None);
-    assert!(relay.notice(&news(direct, true), false).is_some());
+    assert_eq!(relay.notice(&news(direct, true), PageVisibility::Visible), None);
+    assert!(relay.notice(&news(direct, true), PageVisibility::Hidden).is_some());
     relay.pane.set(MurmurePane::ChannelList);
-    assert!(relay.notice(&news(direct, false), true).is_some());
+    assert!(relay.notice(&news(direct, false), PageVisibility::Visible).is_some());
 }
 
 /// The `@` list shows its entries as options, the chosen one selected. A
@@ -1723,7 +1723,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
         &sent.get_untracked()[..],
         [LogicCommand::Channel {
             channel_id,
-            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: true, .. },
+            command: MurmureCommand::SendMessage { draft: d, now: t, confirmed: ambre_bus::Confirmation::Confirmed, .. },
         }] if *channel_id == direct && *d == draft && *t == now
     ));
     assert_eq!(

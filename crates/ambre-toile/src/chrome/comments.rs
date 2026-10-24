@@ -86,7 +86,7 @@ pub fn CommentsPanel(
                             let f = filter.get();
                             list.get()
                                 .into_iter()
-                                .filter(|t| f.keeps(t.resolved))
+                                .filter(|t| f.keeps(crate::ui::comments::ThreadState::resolved_if(t.resolved)))
                                 .map(|t| {
                                     let anchor = t.anchor.clone();
                                     let id = t.id.clone();

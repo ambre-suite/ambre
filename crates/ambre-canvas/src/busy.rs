@@ -9,12 +9,14 @@
 // the view restates it every frame and the chrome reads it without consuming it,
 // like `AnchorPublisher` and unlike the one-shot `FilterOpenPublisher`.
 //
-// Pure value plumbing (an `Rc<Cell<bool>>`) that compiles on every target,
+// Pure value plumbing (an `Rc<Cell<Load>>`) that compiles on every target,
 // reaches no UI framework, and stays `!Send` on the UI thread.
 // ============================================================================
 
 use std::cell::Cell;
 use std::rc::Rc;
+
+use ambre_bus::Load;
 
 /// The level signal a view uses to say it cannot take more input.
 ///
@@ -23,7 +25,7 @@ use std::rc::Rc;
 /// `Rc<Cell>`).
 #[derive(Clone, Default)]
 pub struct BusyPublisher {
-    slot: Rc<Cell<bool>>,
+    slot: Rc<Cell<Load>>,
 }
 
 impl BusyPublisher {
@@ -33,13 +35,13 @@ impl BusyPublisher {
 
     /// State the current level. Returns `true` when the level changed, so the
     /// chrome raises one notice per episode instead of one per frame.
-    pub fn publish(&self, busy: bool) -> bool {
-        self.slot.replace(busy) != busy
+    pub fn publish(&self, load: Load) -> bool {
+        self.slot.replace(load) != load
     }
 
     /// Whether the view is refusing input right now.
     pub fn is_busy(&self) -> bool {
-        self.slot.get()
+        self.slot.get() == Load::Busy
     }
 }
 
@@ -51,10 +53,10 @@ mod tests {
     fn only_the_first_frame_of_an_episode_reports_a_change() {
         let busy = BusyPublisher::new();
         assert!(!busy.is_busy());
-        assert!(busy.publish(true));
-        assert!(!busy.publish(true));
+        assert!(busy.publish(Load::Busy));
+        assert!(!busy.publish(Load::Busy));
         assert!(busy.is_busy());
-        assert!(busy.publish(false));
-        assert!(!busy.publish(false));
+        assert!(busy.publish(Load::Free));
+        assert!(!busy.publish(Load::Free));
     }
 }

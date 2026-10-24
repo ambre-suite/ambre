@@ -361,7 +361,7 @@ impl ChannelState {
             .entry(document_id)
             .or_default()
             .note_bare_range(seq, &end);
-        self.answer(document_id, false, None::<fn(&mut Sequence)>)
+        self.answer(document_id, super::Matching::Skip, None::<fn(&mut Sequence)>)
     }
 
     /// Write `change` of `message` as an amendment of the locked `segment`

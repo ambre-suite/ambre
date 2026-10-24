@@ -265,15 +265,30 @@ pub fn resize_cursor(h: Handle, theta: ambre_core::Radians) -> Cow<'static, str>
     }
 }
 
-/// Whether a keyboard event targeting an element with this tag / contenteditable
-/// flag should be treated as "typing". A bare tool chord must then NOT be
+/// What the DOM says of an event target's editing host: a plain element, or
+/// one whose `isContentEditable` holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Host {
+    Plain,
+    ContentEditable,
+}
+
+impl Host {
+    /// `ContentEditable` when the DOM's `isContentEditable` holds.
+    pub fn content_editable_if(editable: bool) -> Self {
+        if editable { Host::ContentEditable } else { Host::Plain }
+    }
+}
+
+/// Whether a keyboard event targeting an element with this tag and editing
+/// host should be treated as "typing". A bare tool chord must then NOT be
 /// stolen. True for form text fields (`INPUT`, `TEXTAREA`) and any
 /// contenteditable host. The tag is compared case-insensitively
 /// (`Element.tagName` is upper-case in HTML, but be defensive). The launcher's
 /// `target_is_editable` reads `tagName` and `isContentEditable` off the event
 /// target and delegates here so the decision stays pure and host-tested.
-pub fn is_editable_tag(tag_name: &str, content_editable: bool) -> bool {
-    if content_editable {
+pub fn is_editable_tag(tag_name: &str, host: Host) -> bool {
+    if host == Host::ContentEditable {
         return true;
     }
     tag_name.eq_ignore_ascii_case("input") || tag_name.eq_ignore_ascii_case("textarea")
@@ -457,10 +472,10 @@ mod tests {
 
     #[test]
     fn editable_tag_guards_text_entry() {
-        assert!(is_editable_tag("INPUT", false));
-        assert!(is_editable_tag("textarea", false)); // case-insensitive
-        assert!(is_editable_tag("DIV", true)); // contenteditable host
-        assert!(!is_editable_tag("DIV", false));
-        assert!(!is_editable_tag("CANVAS", false));
+        assert!(is_editable_tag("INPUT", Host::Plain));
+        assert!(is_editable_tag("textarea", Host::Plain)); // case-insensitive
+        assert!(is_editable_tag("DIV", Host::ContentEditable)); // contenteditable host
+        assert!(!is_editable_tag("DIV", Host::Plain));
+        assert!(!is_editable_tag("CANVAS", Host::Plain));
     }
 }

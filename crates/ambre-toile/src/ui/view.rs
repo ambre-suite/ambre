@@ -733,7 +733,7 @@ impl ToileView {
             text_input.name_content(ambre_canvas::ContentKind::Board);
             text_input.focus();
             // No editor is open yet, so a bare key arms a tool (`TOILE-UI-393`).
-            text_input.set_typing(false);
+            text_input.set_typing(ambre_canvas::Typing::Commands);
         }
         let theme = theme_ctl.get();
         Self {
@@ -966,7 +966,7 @@ impl ToileView {
             self.signal_fatal("Logic thread disconnected");
             return;
         }
-        if self.busy_pub.publish(self.outbox.is_busy()) && !self.outbox.is_busy() {
+        if self.busy_pub.publish(self.outbox.load()) && !self.outbox.is_busy() {
             tracing::info!("Toile: the UI->Logic channel cleared, input resumes");
         }
     }
@@ -1664,12 +1664,14 @@ impl ToileView {
         self.kinetic.stop();
         let screen = on_screen(at);
         let world = self.cam.screen_to_world() * screen;
-        let grabbable = self.element_at(world).is_some()
-            || self
-                .machine
-                .hover_handle(&self.selection, &self.display, &self.cam, screen)
-                .is_some();
-        let role = super::kinetic::finger_role(self.machine.tool(), grabbable);
+        let under = super::kinetic::Under::grabbable_if(
+            self.element_at(world).is_some()
+                || self
+                    .machine
+                    .hover_handle(&self.selection, &self.display, &self.cam, screen)
+                    .is_some(),
+        );
+        let role = super::kinetic::finger_role(self.machine.tool(), under);
         self.finger = Some(role);
         if role == FingerRole::Pans {
             self.last_pointer = screen;
@@ -1875,7 +1877,7 @@ impl ToileView {
         // (`TOILE-UI-308`). Only the Select tool picks pins -- a creation tool
         // still places where it clicks.
         if let comments::BoardPress::Thread(thread) = comments::press_target(
-            self.machine.tool() == Tool::Select,
+            self.machine.tool(),
             button,
             &self.display.pins,
             &self.cam.world_to_screen(),
@@ -2078,7 +2080,9 @@ impl ToileView {
         if self.embedded {
             return;
         }
-        let typing = self.editor.is_some() || self.embed_focus.current().is_some();
+        let typing = ambre_canvas::Typing::text_if(
+            self.editor.is_some() || self.embed_focus.current().is_some(),
+        );
         if typing != self.text_input.typing() {
             self.text_input.set_typing(typing);
         }
@@ -2087,7 +2091,7 @@ impl ToileView {
     /// Whether a key on the keyboard pipe is typed text (`TOILE-UI-393`).
     #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn pipe_typing(&self) -> bool {
-        self.text_input.typing()
+        self.text_input.typing() == ambre_canvas::Typing::Text
     }
 
     /// Announce the selection through the shared live region (`CHROME-023`).
@@ -2317,7 +2321,7 @@ impl ToileView {
     /// panel keeps no answer of its own (`TOILE-UI-023`).
     #[cfg(target_arch = "wasm32")]
     fn reread_comments(&mut self, thread: &ThreadId) {
-        let panel = self.comments.panel.get_untracked();
+        let panel = Panel::open_if(self.comments.panel.get_untracked());
         let showing = self.comments.open.get_untracked().map(|t| t.id);
         self.reread_comments_shown(panel, showing.as_ref(), thread);
     }
@@ -2332,11 +2336,11 @@ impl ToileView {
     )]
     fn reread_comments_shown(
         &mut self,
-        panel: bool,
+        panel: Panel,
         showing: Option<&ThreadId>,
         thread: &ThreadId,
     ) {
-        if !panel {
+        if panel == Panel::Closed {
             return;
         }
         self.send_edit(ToileCommand::ReadComments { thread: None });
@@ -2468,8 +2472,7 @@ impl ToileView {
     /// Re-read the deck after it changed, while the panel is open.
     #[cfg(target_arch = "wasm32")]
     fn reread_deck(&mut self) {
-        let panel = self.deck.panel.get_untracked();
-        self.reread_deck_shown(panel);
+        self.reread_deck_shown(Panel::open_if(self.deck.panel.get_untracked()));
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn reread_deck(&mut self) {}
@@ -2480,8 +2483,8 @@ impl ToileView {
         not(target_arch = "wasm32"),
         allow(dead_code, reason = "the panel signal that feeds it is wasm-only")
     )]
-    fn reread_deck_shown(&mut self, panel: bool) {
-        if panel {
+    fn reread_deck_shown(&mut self, panel: Panel) {
+        if panel == Panel::Open {
             self.send_edit(ToileCommand::ReadDeck);
         }
     }
@@ -3579,24 +3582,24 @@ impl ToileView {
                 _ => return false,
             }
         }
-        let word = mods.alt; // Alt+Arrow = word motion (Ctrl is reserved for chords).
+        let word = ambre_canvas::Stride::word_if(mods.alt); // Alt+Arrow = word motion (Ctrl is reserved for chords).
         match key {
             "Escape" => self.request_close_editor(),
             "Enter" => self.push_intent(EditIntent::Newline),
             "Backspace" => self.push_intent(EditIntent::Backspace),
             "Delete" => self.push_intent(EditIntent::Delete),
             "ArrowLeft" => self.push_intent(EditIntent::Left {
-                select: shift,
+                select: ambre_canvas::Extend::select_if(shift),
                 word,
             }),
             "ArrowRight" => self.push_intent(EditIntent::Right {
-                select: shift,
+                select: ambre_canvas::Extend::select_if(shift),
                 word,
             }),
-            "ArrowUp" => self.push_intent(EditIntent::Up { select: shift }),
-            "ArrowDown" => self.push_intent(EditIntent::Down { select: shift }),
-            "Home" => self.push_intent(EditIntent::LineStart { select: shift }),
-            "End" => self.push_intent(EditIntent::LineEnd { select: shift }),
+            "ArrowUp" => self.push_intent(EditIntent::Up { select: ambre_canvas::Extend::select_if(shift) }),
+            "ArrowDown" => self.push_intent(EditIntent::Down { select: ambre_canvas::Extend::select_if(shift) }),
+            "Home" => self.push_intent(EditIntent::LineStart { select: ambre_canvas::Extend::select_if(shift) }),
+            "End" => self.push_intent(EditIntent::LineEnd { select: ambre_canvas::Extend::select_if(shift) }),
             // A character key: do NOT consume, so the textarea emits `input` and
             // the char arrives as `InputEvent::Text`. Returning false also skips
             // the board shortcut handler (guarded by `editor.is_some()`).
@@ -3839,7 +3842,11 @@ impl ToileView {
     /// When the in-flight presentation transition vanishes between the guard
     /// that finds it and the step that advances it. Both run on this thread,
     /// with nothing in between.
-    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(
+        &mut self,
+        now_ms: ambre_core::PageTime,
+        hud_tick: ambre_canvas::HudTick,
+    ) -> RepaintPlan {
         // Stash the frame clock for paint-time use (inline-edit caret blink,
         // `toile-text-editing`).
         self.frame_now_ms = now_ms;
@@ -3935,7 +3942,7 @@ impl ToileView {
             || self.machine.is_active()
             || self.edit_dirty
             || self.editor.is_some()
-            || hud_tick;
+            || hud_tick == ambre_canvas::HudTick::Due;
 
         // Phase 0 has no blit-scroll optimization: any content change is a full
         // repaint. The board is transformed on the GPU for pan/zoom, so this is
@@ -4447,6 +4454,25 @@ fn canvas_client_offset() -> ambre_core::CssPoint {
             ambre_core::CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
         })
         .unwrap_or_default()
+}
+
+/// Whether a side panel is open, as its signal last said. A closed panel
+/// re-reads nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Panel {
+    Closed,
+    Open,
+}
+
+impl Panel {
+    /// `Open` when `open` holds, `Closed` otherwise.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the panel signals that feed it are wasm-only")
+    )]
+    fn open_if(open: bool) -> Self {
+        if open { Panel::Open } else { Panel::Closed }
+    }
 }
 
 // Host-only: the view drives a detached text pipe, which the browser build

@@ -21,6 +21,13 @@ use crate::render::{ContentRepaint, OverlayRepaint};
 use crate::text_cache::TextCache;
 use crate::theme::{FONT_BODY, FONT_HEADING};
 
+/// What covers the canvas: its own document, or the launcher.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cover {
+    Document,
+    Launcher,
+}
+
 /// Handle to gate the rAF loop, so the chrome can freeze the canvas behind a
 /// fullscreen `<dialog>` or the launcher. While suspended the loop keeps
 /// ticking but does no work: no dispatch, no render. The canvas holds its last
@@ -56,8 +63,8 @@ impl RafControl {
     }
 
     /// Record whether the launcher covers the canvas.
-    pub fn set_away(&self, away: bool) {
-        self.away.store(away, Ordering::Relaxed);
+    pub fn set_cover(&self, cover: Cover) {
+        self.away.store(cover == Cover::Launcher, Ordering::Relaxed);
     }
 
     /// Take a hold: an open modal freezes the canvas.
@@ -115,15 +122,31 @@ pub enum Tick {
     Idle,
 }
 
+/// Whether the process is still running, or has latched a fatal error
+/// (`CANVAS-014`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Health {
+    Running,
+    Fatal,
+}
+
+/// Whether the terminal screen of a fatal process is up yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FatalScreen {
+    #[default]
+    Unpainted,
+    Painted,
+}
+
 impl Tick {
     /// The frame to run. Fatal wins over everything, and the terminal screen
     /// is painted once (`CANVAS-014`). A fatal process never dispatches
     /// again: the thread feeding the view may be gone.
-    pub fn of(fatal: bool, fatal_painted: bool) -> Self {
-        match (fatal, fatal_painted) {
-            (false, _) => Tick::Render,
-            (true, false) => Tick::PaintFatal,
-            (true, true) => Tick::Idle,
+    pub fn of(health: Health, screen: FatalScreen) -> Self {
+        match (health, screen) {
+            (Health::Running, _) => Tick::Render,
+            (Health::Fatal, FatalScreen::Unpainted) => Tick::PaintFatal,
+            (Health::Fatal, FatalScreen::Painted) => Tick::Idle,
         }
     }
 }
@@ -214,7 +237,7 @@ fn text_height(
     size: f32,
     width: f32,
 ) -> f64 {
-    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, false, false);
+    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, crate::Weight::Regular, crate::Slant::Upright);
     f64::from(layout.height())
 }
 
@@ -233,7 +256,7 @@ fn draw_centered(
     if text.is_empty() {
         return;
     }
-    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, false, false);
+    let layout = cache.get_or_build(font_cx, text, size, width, Alignment::Center, crate::Weight::Regular, crate::Slant::Upright);
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
@@ -326,12 +349,12 @@ mod tests {
         control.release();
         assert!(control.is_running(), "its close resumes the loop");
 
-        control.set_away(true);
+        control.set_cover(Cover::Launcher);
         assert!(!control.is_running(), "the launcher suspends the loop");
         control.hold();
         control.release();
         assert!(!control.is_running(), "a modal closed at home");
-        control.set_away(false);
+        control.set_cover(Cover::Document);
         assert!(control.is_running(), "back in a document");
 
         control.hold();
@@ -347,9 +370,18 @@ mod tests {
     /// (`CANVAS-014`).
     #[test]
     fn a_fatal_process_paints_its_screen_once_then_idles() {
-        assert_eq!(Tick::of(false, false), Tick::Render);
-        assert_eq!(Tick::of(true, false), Tick::PaintFatal);
-        assert_eq!(Tick::of(true, true), Tick::Idle);
+        assert_eq!(
+            Tick::of(Health::Running, FatalScreen::Unpainted),
+            Tick::Render
+        );
+        assert_eq!(
+            Tick::of(Health::Fatal, FatalScreen::Unpainted),
+            Tick::PaintFatal
+        );
+        assert_eq!(
+            Tick::of(Health::Fatal, FatalScreen::Painted),
+            Tick::Idle
+        );
     }
 
     /// The terminal screen covers the whole surface and draws its title and

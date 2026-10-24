@@ -1071,14 +1071,14 @@ impl LogicState {
             MurmureCommand::SendMessage {
                 draft,
                 attachments,
-                confirmed: false,
+                confirmed: ambre_bus::Confirmation::Unconfirmed,
                 ..
             } => (draft, attachments.clone(), None),
             MurmureCommand::Reply {
                 root,
                 draft,
                 also_in_channel,
-                confirmed: false,
+                confirmed: ambre_bus::Confirmation::Unconfirmed,
                 ..
             } => {
                 let reply = HeldReply {
@@ -1099,7 +1099,7 @@ impl LogicState {
             .iter()
             .map(|row| row.user_id)
             .collect();
-        match screen(draft.clone(), Some(&members), false) {
+        match screen(draft.clone(), Some(&members), ambre_bus::Confirmation::Unconfirmed) {
             Screened::Send(_) => None,
             Screened::Confirm { members, draft } => Some(MurmureEvent::ConfirmChannelMention {
                 members,
@@ -2147,7 +2147,7 @@ mod tests {
             },
             attachments: Vec::new(),
             now: NOW,
-            confirmed: false,
+            confirmed: ambre_bus::Confirmation::Unconfirmed,
         }
     }
 
@@ -4334,7 +4334,7 @@ mod tests {
             draft: draft.clone(),
             attachments: Vec::new(),
             now: NOW,
-            confirmed: true,
+            confirmed: ambre_bus::Confirmation::Confirmed,
         };
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
@@ -4348,7 +4348,7 @@ mod tests {
             draft: draft.clone(),
             also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,
             now: NOW,
-            confirmed: false,
+            confirmed: ambre_bus::Confirmation::Unconfirmed,
         };
         command(&mut state, channel_id, reply);
         let held = HeldSend {
@@ -5649,7 +5649,7 @@ mod tests {
                 ambre_bus::ReplyEcho::ThreadOnly
             },
             now: at(1),
-            confirmed: false,
+            confirmed: ambre_bus::Confirmation::Unconfirmed,
         }
     }
 

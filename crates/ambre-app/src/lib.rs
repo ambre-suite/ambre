@@ -1059,7 +1059,7 @@ pub fn main() {
     let relay_tx = ui_to_logic_tx.clone();
     // A click on a notification opens its channel at its message (the
     // Murmure notifications spec). The permission is asked once per page.
-    let notice_asked = Rc::new(std::cell::Cell::new(false));
+    let notice_asked = Rc::new(std::cell::Cell::new(notify::Question::Unasked));
     let open_noticed: notify::Opener = {
         let tx = ui_to_logic_tx.clone();
         Rc::new(move |channel, at| {
@@ -1140,11 +1140,11 @@ pub fn main() {
                     if let Some(sw) = route_switcher.borrow().as_ref() {
                         sw.set_document(document_id);
                     }
-                    route_raf.set_away(false);
+                    route_raf.set_cover(ambre_canvas::Cover::Document);
                 }
                 // Freeze the canvas behind the landing overlay (the relay below
                 // keeps running -- only the render is gated).
-                None => route_raf.set_away(true),
+                None => route_raf.set_cover(ambre_canvas::Cover::Launcher),
             }
             prev_route = Some(cur_route);
         }
@@ -1329,7 +1329,10 @@ pub fn main() {
             for command in murmure_relay.absorb(&ev) {
                 let _ = relay_tx.try_send(command);
             }
-            if let Some(notice) = murmure_relay.notice(&ev, notify::page_visible()) {
+            if let Some(notice) = murmure_relay.notice(
+                &ev,
+                ambre_murmure::chrome::PageVisibility::visible_if(notify::page_visible()),
+            ) {
                 notify::deliver(notice, &notice_asked, Rc::clone(&open_noticed));
             }
             match &ev {

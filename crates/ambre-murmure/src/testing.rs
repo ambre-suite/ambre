@@ -39,7 +39,7 @@ pub fn channel_of(texts: &[&str], size: (f64, f64)) -> (MurmureView, Sender<UiEv
         time_of: Rc::new(|_| "t".to_owned()),
         now_ms: Rc::new(|| ambre_core::PageTime(0.0)),
         wall_clock: Rc::new(|| ambre_bus::Timestamp(0)),
-        still: Rc::new(|| false),
+        motion: Rc::new(|| crate::pictures::Motion::Full),
         announce: Rc::new(|_| {}),
         act_on: Rc::new(|_| {}),
         take_edit: Rc::new(|_| None),

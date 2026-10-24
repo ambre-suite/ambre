@@ -239,7 +239,7 @@ impl SyncState {
                         doc_key_enc,
                         document_id: Some(document_id),
                         entry: Some(entry),
-                        space: http::DocumentScope::Personal,
+                        space: ambre_core::DocumentScope::Personal,
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
                         &base.route("/documents"),
@@ -1881,9 +1881,9 @@ pub(crate) mod tests {
                 document_id: Some(document_id),
                 entry: Some(ambre_core::EncodedLogEntry::new(Vec::new())),
                 space: if state.new_spaces.contains(&document_id) {
-                    http::DocumentScope::Space
+                    ambre_core::DocumentScope::Space
                 } else {
-                    http::DocumentScope::Personal
+                    ambre_core::DocumentScope::Personal
                 },
             };
             serde_json::to_value(request).expect("encodes")

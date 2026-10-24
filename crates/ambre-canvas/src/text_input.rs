@@ -97,11 +97,29 @@ pub struct TextInput {
     focus_requests: Rc<Cell<u32>>,
     /// Whether a key on the pipe is typed text. Mirrored on the element as
     /// [`TYPING_ATTR`], which the keymap listener reads off the key's target.
-    typing: Rc<Cell<bool>>,
+    typing: Rc<Cell<Typing>>,
 }
 
 /// The attribute that says a key on the pipe is not typed text, when it reads
 /// `false`. A pipe without it is typed text.
+/// What a key on the pipe is (`CHROME-103`): a command a keymap reads, or
+/// typed text an editor takes. A pipe is typed text by default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Typing {
+    /// A bare key reaches the keymap: a board with no editor open.
+    Commands,
+    /// A key is typed text, as in a page, a cell or an open editor.
+    #[default]
+    Text,
+}
+
+impl Typing {
+    /// `Text` when `typing` holds, `Commands` otherwise.
+    pub fn text_if(typing: bool) -> Self {
+        if typing { Typing::Text } else { Typing::Commands }
+    }
+}
+
 pub const TYPING_ATTR: &str = "data-typing";
 
 #[derive(Clone)]
@@ -121,7 +139,7 @@ impl TextInput {
             dom: None,
             composing: Rc::new(Cell::new(false)),
             focus_requests: Rc::new(Cell::new(0)),
-            typing: Rc::new(Cell::new(true)),
+            typing: Rc::new(Cell::new(Typing::Text)),
         }
     }
 
@@ -182,7 +200,7 @@ impl TextInput {
             dom: Some(Pipe { textarea, live }),
             composing: Rc::new(Cell::new(false)),
             focus_requests: Rc::new(Cell::new(0)),
-            typing: Rc::new(Cell::new(true)),
+            typing: Rc::new(Cell::new(Typing::Text)),
         }
     }
 
@@ -246,17 +264,19 @@ impl TextInput {
     /// Say whether a key on the pipe is typed text (`CHROME-103`). A pipe is
     /// typed text by default, as in a page or a cell. A board says it is not
     /// while no text editor is open, so a bare tool key reaches the keymap.
-    pub fn set_typing(&self, typing: bool) {
+    pub fn set_typing(&self, typing: Typing) {
         self.typing.set(typing);
         if let Some(dom) = &self.dom {
-            let _ = dom
-                .textarea
-                .set_attribute(TYPING_ATTR, if typing { "true" } else { "false" });
+            let flag = match typing {
+                Typing::Commands => "false",
+                Typing::Text => "true",
+            };
+            let _ = dom.textarea.set_attribute(TYPING_ATTR, flag);
         }
     }
 
-    /// Whether a key on the pipe is typed text, as the view last said.
-    pub fn typing(&self) -> bool {
+    /// What a key on the pipe is, as the view last said.
+    pub fn typing(&self) -> Typing {
         self.typing.get()
     }
 

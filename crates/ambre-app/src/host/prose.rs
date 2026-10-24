@@ -217,7 +217,7 @@ impl ProseView {
             let (outbox, document_id) = (&mut self.outbox, self.document_id);
             let mut send = |command| send_edit(outbox, document_id, command);
             self.dirty |= self.state.replay(&mut send);
-            self.busy_pub.publish(self.outbox.is_busy());
+            self.busy_pub.publish(self.outbox.load());
         }
         if self.shown != Some(self.state.word_count) {
             self.shown = Some(self.state.word_count);
@@ -239,7 +239,7 @@ impl ProseView {
         let now_ms = ambre_core::Timestamp(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now_ms) {
             send_edit(&mut self.outbox, self.document_id, command);
-            self.busy_pub.publish(self.outbox.is_busy());
+            self.busy_pub.publish(self.outbox.load());
         }
         self.publish_hover();
         self.dirty = true;
@@ -266,7 +266,7 @@ impl ProseView {
         if let Some(command) = self.state.format(id) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.is_busy());
+        self.busy_pub.publish(self.outbox.load());
     }
 
     /// Act on a released ruler handle: one command for the whole drag
@@ -283,7 +283,7 @@ impl ProseView {
         if let Some(command) = self.state.ruler_release(release) {
             send_edit(&mut self.outbox, self.document_id, command);
         }
-        self.busy_pub.publish(self.outbox.is_busy());
+        self.busy_pub.publish(self.outbox.load());
     }
 
     /// Publish the ruler in pixels of the view. The release comes back in
@@ -327,7 +327,7 @@ impl ProseView {
         self.dirty |= self
             .state
             .handle_input(&ProseInput::SlashPick(index), &mut send);
-        self.busy_pub.publish(self.outbox.is_busy());
+        self.busy_pub.publish(self.outbox.load());
     }
 
     /// Publish the slash menu where the view placed it.
@@ -395,7 +395,7 @@ impl ProseView {
             self.signal_fatal("Logic thread disconnected");
             return;
         }
-        self.busy_pub.publish(self.outbox.is_busy());
+        self.busy_pub.publish(self.outbox.load());
     }
 
     /// Announce the block the caret entered (`CHROME-023`). A move inside the
@@ -416,7 +416,11 @@ impl ProseView {
         }
     }
 
-    pub fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, _hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(
+        &mut self,
+        now_ms: ambre_core::PageTime,
+        _hud_tick: ambre_canvas::HudTick,
+    ) -> RepaintPlan {
         self.now_ms = now_ms;
         self.timeline.summarize(now_ms);
         self.flush_outbox();
@@ -582,7 +586,7 @@ impl ProseView {
                 if let Some(url) = self.state.followed.take() {
                     self.annotations.followed.set(Some(url));
                 }
-                self.busy_pub.publish(self.outbox.is_busy());
+                self.busy_pub.publish(self.outbox.load());
                 self.publish_toolbar();
                 self.dirty |= consumed;
                 consumed
@@ -639,7 +643,7 @@ impl ProseView {
         let (outbox, document_id) = (&mut self.outbox, self.document_id);
         let mut send = |command| send_edit(outbox, document_id, command);
         let consumed = self.state.handle_input(input, &mut send);
-        self.busy_pub.publish(self.outbox.is_busy());
+        self.busy_pub.publish(self.outbox.load());
         self.publish_toolbar();
         self.dirty |= consumed;
         consumed

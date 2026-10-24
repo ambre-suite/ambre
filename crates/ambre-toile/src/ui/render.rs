@@ -551,10 +551,10 @@ fn paint_frame_titles<S: DrawSurface>(
             FRAME_TITLE_PX as f32,
             f32::MAX,
             Alignment::Start,
-            false,
-            false,
+            ambre_canvas::Weight::Regular,
+            ambre_canvas::Slant::Upright,
             None,
-            false,
+            ambre_canvas::WordBreak::Whole,
         );
         // A placeholder reads as the absence it is: the secondary ink, not the
         // ink of a title somebody typed.

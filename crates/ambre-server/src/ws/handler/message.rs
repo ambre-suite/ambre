@@ -230,7 +230,10 @@ pub(crate) async fn handle_subscribe(
     // client can send. A reset of the ephemeral store then loses the debt only
     // until the next subscribe (`SRV-123`).
     let mirrored = match db::rotation_owed(&state.db, &document_id).await {
-        Ok(owed) => redis_ops::mirror_rotation_owed(&state.redis, &document_id, owed).await,
+        Ok(owed) => {
+            let debt = redis_ops::RotationDebt::owed_if(owed);
+            redis_ops::mirror_rotation_owed(&state.redis, &document_id, debt).await
+        }
         Err(e) => Err(e),
     };
     if let Err(e) = mirrored {

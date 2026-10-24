@@ -63,8 +63,8 @@ fn command_states_single_writer_propagates() {
     owner.set();
     let store = CommandStates::new([A, B]);
 
-    store.set_toggled(A, true);
-    store.set_enabled(B, false);
+    store.set_toggled(A, ambre_chrome::Toggle::On);
+    store.set_enabled(B, ambre_chrome::Availability::Disabled);
     assert!(store.toggled_signal(A).unwrap().get_untracked());
     assert!(
         !store.toggled_signal(B).unwrap().get_untracked(),
@@ -85,8 +85,8 @@ fn command_states_unknown_id_is_noop() {
     assert!(store.toggled_signal(B).is_none());
     assert!(store.enabled_signal(B).is_none());
     // Writing an unregistered id must not panic.
-    store.set_toggled(B, true);
-    store.set_enabled(B, false);
+    store.set_toggled(B, ambre_chrome::Toggle::On);
+    store.set_enabled(B, ambre_chrome::Availability::Disabled);
 }
 
 // -- DOM belt ----------------------------------------------------------------

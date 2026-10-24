@@ -41,6 +41,29 @@ pub enum Visibility {
     Public,
 }
 
+impl Visibility {
+    /// [`Visibility::Public`] when a store row says `public`.
+    #[must_use]
+    pub fn public_if(public: bool) -> Self {
+        if public {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        }
+    }
+}
+
+/// Whether a created document is a Murmure space, which its members list,
+/// or a document of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum DocumentScope {
+    /// A document of its own, or a channel document.
+    #[default]
+    Personal,
+    /// A Murmure space, which its members list.
+    Space,
+}
+
 /// How a failed attempt to finalize a segment leaves it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum FinalizeEnd {

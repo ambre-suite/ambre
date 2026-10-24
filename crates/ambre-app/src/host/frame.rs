@@ -218,9 +218,9 @@ pub struct FrameHost {
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
     last_hud_update_ms: ambre_core::PageTime,
-    /// Set once the fatal terminal screen has been painted, so the static
-    /// message is encoded a single time rather than every subsequent frame.
-    fatal_painted: bool,
+    /// Painted once the fatal terminal screen is up, so the static message
+    /// is encoded a single time rather than every subsequent frame.
+    fatal_screen: ambre_canvas::FatalScreen,
 }
 
 impl FrameHost {
@@ -257,7 +257,7 @@ impl FrameHost {
             last_draw_ms: ambre_core::PageMillis::ZERO,
             last_gpu_ms: ambre_core::PageMillis::ZERO,
             last_hud_update_ms: ambre_bus::PageTime(0.0),
-            fatal_painted: false,
+            fatal_screen: ambre_canvas::FatalScreen::Unpainted,
         }
     }
 
@@ -328,7 +328,7 @@ impl FrameHost {
             |child| {
                 child.update();
                 !matches!(
-                    child.plan_repaint(now_ms, false).content,
+                    child.plan_repaint(now_ms, ambre_canvas::HudTick::Idle).content,
                     ContentRepaint::Reuse
                 )
             },
@@ -463,11 +463,16 @@ impl FrameHost {
         // aborted, so we must not keep draining it. Paint the terminal screen a
         // single time and then idle (the rAF loop keeps ticking harmlessly).
         let fatal = fatal_message();
-        match Tick::of(fatal.is_some(), self.fatal_painted) {
+        let health = if fatal.is_some() {
+            ambre_canvas::Health::Fatal
+        } else {
+            ambre_canvas::Health::Running
+        };
+        match Tick::of(health, self.fatal_screen) {
             Tick::Render => {}
             Tick::PaintFatal => {
                 self.render_fatal(fatal.as_deref().unwrap_or_default());
-                self.fatal_painted = true;
+                self.fatal_screen = ambre_canvas::FatalScreen::Painted;
                 return;
             }
             Tick::Idle => return,
@@ -527,10 +532,10 @@ impl FrameHost {
 
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
-        let mut hud_tick = false;
+        let mut hud_tick = ambre_canvas::HudTick::Idle;
         if raf_timestamp - self.last_hud_update_ms >= ambre_core::PageMillis::new(500.0) {
             self.last_hud_update_ms = raf_timestamp;
-            hud_tick = true;
+            hud_tick = ambre_canvas::HudTick::Due;
         }
 
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);

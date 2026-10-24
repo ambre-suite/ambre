@@ -327,10 +327,10 @@ fn a_mention_of_a_non_member_is_no_mark() {
         ],
     );
     assert_eq!(
-        screen(both.clone(), Some(&[bob]), false),
+        screen(both.clone(), Some(&[bob]), ambre_bus::Confirmation::Unconfirmed),
         Screened::Send(draft("@bob @eve", vec![at(MentionTarget::User(bob), 0..4)]))
     );
-    assert_eq!(screen(both.clone(), None, false), Screened::Send(both));
+    assert_eq!(screen(both.clone(), None, ambre_bus::Confirmation::Unconfirmed), Screened::Send(both));
 }
 
 // --- MURMURE-231 ---
@@ -343,23 +343,23 @@ fn an_at_channel_past_the_threshold_waits_for_confirmation() {
     let members: Vec<UserId> = (0..=CONFIRM_CHANNEL_PAST).map(|_| UserId::new()).collect();
     let at_threshold = &members[..CONFIRM_CHANNEL_PAST];
     assert_eq!(
-        screen(all.clone(), Some(at_threshold), false),
+        screen(all.clone(), Some(at_threshold), ambre_bus::Confirmation::Unconfirmed),
         Screened::Send(all.clone())
     );
     assert_eq!(
-        screen(all.clone(), Some(&members), false),
+        screen(all.clone(), Some(&members), ambre_bus::Confirmation::Unconfirmed),
         Screened::Confirm {
             members: CONFIRM_CHANNEL_PAST + 1,
             draft: all.clone(),
         }
     );
     assert_eq!(
-        screen(all.clone(), Some(&members), true),
+        screen(all.clone(), Some(&members), ambre_bus::Confirmation::Confirmed),
         Screened::Send(all)
     );
     let plain = draft("hello", vec![]);
     assert_eq!(
-        screen(plain.clone(), Some(&members), false),
+        screen(plain.clone(), Some(&members), ambre_bus::Confirmation::Unconfirmed),
         Screened::Send(plain)
     );
 }

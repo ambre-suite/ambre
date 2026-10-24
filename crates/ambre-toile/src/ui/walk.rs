@@ -402,10 +402,10 @@ fn paint_label<S: DrawSurface>(
         LABEL_FONT_SIZE,
         wrap_w,
         Alignment::Center,
-        false,
-        false,
+        ambre_canvas::Weight::Regular,
+        ambre_canvas::Slant::Upright,
         Some(style.font.family.label()),
-        false,
+        ambre_canvas::WordBreak::Whole,
     );
     // The plate hugs the laid-out text rather than the (fixed) caption box, so a
     // short caption does not punch a wide hole in the board.
@@ -608,10 +608,10 @@ fn paint_text<S: DrawSurface>(
         font_size,
         wrap_w,
         Alignment::Start,
-        e.style.font.weight.is_bold(),
-        e.style.font.italic,
+        ambre_canvas::Weight::bold_if(e.style.font.weight.is_bold()),
+        ambre_canvas::Slant::italic_if(e.style.font.italic),
         Some(e.style.font.family.label()),
-        false,
+        ambre_canvas::WordBreak::Whole,
     );
     let brush = Brush::Solid(color);
     let underline = e.style.font.underline;

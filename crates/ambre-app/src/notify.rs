@@ -28,12 +28,20 @@ pub(crate) enum Act {
     Nothing,
 }
 
+/// Whether this page has already asked for the notification permission.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Question {
+    #[default]
+    Unasked,
+    Asked,
+}
+
 /// The act a permission calls for. The page asks once: a question left
 /// unanswered is not asked again.
-pub(crate) fn act(permission: NotificationPermission, asked: bool) -> Act {
+pub(crate) fn act(permission: NotificationPermission, asked: Question) -> Act {
     match permission {
         NotificationPermission::Granted => Act::Raise,
-        NotificationPermission::Default if !asked => Act::Ask,
+        NotificationPermission::Default if asked == Question::Unasked => Act::Ask,
         _ => Act::Nothing,
     }
 }
@@ -41,7 +49,7 @@ pub(crate) fn act(permission: NotificationPermission, asked: bool) -> Act {
 /// Raise `notice`, asking for the permission first when none was given.
 /// A click on it calls `open` with its channel and its message. A browser
 /// with no notifications raises nothing.
-pub(crate) fn deliver(notice: Notice, asked: &Rc<Cell<bool>>, open: Opener) {
+pub(crate) fn deliver(notice: Notice, asked: &Rc<Cell<Question>>, open: Opener) {
     if !has_notifications() {
         return;
     }
@@ -49,7 +57,7 @@ pub(crate) fn deliver(notice: Notice, asked: &Rc<Cell<bool>>, open: Opener) {
         Act::Raise => raise(&notice, open),
         Act::Nothing => {}
         Act::Ask => {
-            asked.set(true);
+            asked.set(Question::Asked);
             let Ok(question) = Notification::request_permission() else {
                 return;
             };
@@ -107,9 +115,9 @@ mod tests {
     /// Murmure notifications spec). An unanswered one is asked once.
     #[wasm_bindgen_test]
     fn a_refused_permission_raises_nothing_and_an_open_one_is_asked_once() {
-        assert_eq!(act(NotificationPermission::Granted, true), Act::Raise);
-        assert_eq!(act(NotificationPermission::Denied, false), Act::Nothing);
-        assert_eq!(act(NotificationPermission::Default, false), Act::Ask);
-        assert_eq!(act(NotificationPermission::Default, true), Act::Nothing);
+        assert_eq!(act(NotificationPermission::Granted, Question::Asked), Act::Raise);
+        assert_eq!(act(NotificationPermission::Denied, Question::Unasked), Act::Nothing);
+        assert_eq!(act(NotificationPermission::Default, Question::Unasked), Act::Ask);
+        assert_eq!(act(NotificationPermission::Default, Question::Asked), Act::Nothing);
     }
 }

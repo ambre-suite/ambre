@@ -128,8 +128,8 @@ fn paint_chip<S: DrawSurface>(
         CHIP_FONT_PX,
         1000.0,
         Alignment::Start,
-        false,
-        false,
+        ambre_canvas::Weight::Regular,
+        ambre_canvas::Slant::Upright,
     );
     let text_w = layout.width() as f64;
     let text_h = layout.height() as f64;

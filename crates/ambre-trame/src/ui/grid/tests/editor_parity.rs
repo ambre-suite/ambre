@@ -72,25 +72,25 @@ fn intent(op: &Op) -> EditIntent {
         Op::Backspace => EditIntent::Backspace,
         Op::Delete => EditIntent::Delete,
         Op::Left => EditIntent::Left {
-            select: false,
-            word: false,
+            select: ambre_canvas::Extend::Move,
+            word: ambre_canvas::Stride::Char,
         },
         Op::Right => EditIntent::Right {
-            select: false,
-            word: false,
+            select: ambre_canvas::Extend::Move,
+            word: ambre_canvas::Stride::Char,
         },
         Op::ShiftLeft => EditIntent::Left {
-            select: true,
-            word: false,
+            select: ambre_canvas::Extend::Select,
+            word: ambre_canvas::Stride::Char,
         },
         Op::ShiftRight => EditIntent::Right {
-            select: true,
-            word: false,
+            select: ambre_canvas::Extend::Select,
+            word: ambre_canvas::Stride::Char,
         },
-        Op::Home => EditIntent::LineStart { select: false },
-        Op::End => EditIntent::LineEnd { select: false },
-        Op::ShiftHome => EditIntent::LineStart { select: true },
-        Op::ShiftEnd => EditIntent::LineEnd { select: true },
+        Op::Home => EditIntent::LineStart { select: ambre_canvas::Extend::Move },
+        Op::End => EditIntent::LineEnd { select: ambre_canvas::Extend::Move },
+        Op::ShiftHome => EditIntent::LineStart { select: ambre_canvas::Extend::Select },
+        Op::ShiftEnd => EditIntent::LineEnd { select: ambre_canvas::Extend::Select },
         Op::SelectAll => EditIntent::SelectAll,
     }
 }

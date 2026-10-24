@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Deserializer, Serializer};
 
-use crate::{ChannelDocumentKind, DocType, Role, Visibility};
+use crate::{ChannelDocumentKind, DocType, DocumentScope, Role, Visibility};
 
 /// Reads a word of a closed set, refusing one `parse` does not know as an
 /// unknown variant among `words`.
@@ -149,6 +149,49 @@ pub mod visibility_flag {
             Visibility::Public
         } else {
             Visibility::Private
+        })
+    }
+}
+
+// DocumentScope adapter: the JSON flag `true` for a Murmure space. A body
+// that leaves the flag out creates a document of its own.
+
+pub mod space_flag {
+    use super::*;
+    use serde::Serialize;
+
+    /// Whether a body leaves the flag out: the relay reads it as false.
+    #[must_use]
+    pub fn is_personal(scope: &DocumentScope) -> bool {
+        *scope == DocumentScope::Personal
+    }
+
+    /// Writes the scope as the flag of a space.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
+    pub fn serialize<S>(scope: &DocumentScope, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        (*scope == DocumentScope::Space).serialize(serializer)
+    }
+
+    /// Reads the scope from the flag of a space.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a JSON boolean.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DocumentScope, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let space = bool::deserialize(deserializer)?;
+        Ok(if space {
+            DocumentScope::Space
+        } else {
+            DocumentScope::Personal
         })
     }
 }

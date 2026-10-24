@@ -22,8 +22,8 @@ impl LogicState {
             } => {
                 self.handle_app_command(document_id, command);
             }
-            LogicCommand::LocalStoreFull { document_id, full } => {
-                self.store_full(document_id, full);
+            LogicCommand::LocalStoreFull { document_id, room } => {
+                self.store_full(document_id, room);
             }
 
             // -- Local restore (Main thread, startup) --------------------------

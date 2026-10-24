@@ -137,13 +137,13 @@ impl LogicState {
     /// no longer pauses editing (`RESID-018`).
     pub(crate) fn store_sent(&mut self, document_id: DocumentId) {
         self.send_to_persist(document_id, PersistWrite::Sent);
-        self.store_full(document_id, false);
+        self.store_full(document_id, ambre_bus::StoreRoom::Free);
     }
 
     /// The browser refuses, or takes again, an unsent change of a document
     /// (`RESID-018`). The user is warned once, as editing pauses.
-    pub(crate) fn store_full(&mut self, document_id: DocumentId, full: bool) {
-        if !full {
+    pub(crate) fn store_full(&mut self, document_id: DocumentId, room: ambre_bus::StoreRoom) {
+        if room == ambre_bus::StoreRoom::Free {
             if self.store_full.remove(&document_id) && self.store_full.is_empty() {
                 tracing::info!("Logic: the local store takes changes again, editing resumes");
             }
@@ -355,7 +355,7 @@ mod tests {
         for _ in 0..2 {
             state.handle_logic_command(LogicCommand::LocalStoreFull {
                 document_id,
-                full: true,
+                room: ambre_bus::StoreRoom::Full,
             });
         }
         let warnings = drain(&ui)
@@ -377,12 +377,12 @@ mod tests {
         );
         state.handle_logic_command(LogicCommand::LocalStoreFull {
             document_id,
-            full: false,
+            room: ambre_bus::StoreRoom::Free,
         });
         assert!(edit(&mut state), "editing did not resume once space freed");
         state.handle_logic_command(LogicCommand::LocalStoreFull {
             document_id,
-            full: true,
+            room: ambre_bus::StoreRoom::Full,
         });
         state.handle_logic_event(LogicEvent::Released { document_id });
         assert!(

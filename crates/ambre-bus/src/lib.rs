@@ -42,7 +42,7 @@ pub mod ui;
 pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
+    Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity, Confirmation,
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, DirectMember,
     DirectMessageDraft, DirectMessageEvent, DirectPeers, DocumentActivity, Emoji, HeldReply,
     HeldSend, MediaRef, MediaType, MemberChannel, MemberView, Mention, MentionCount, MentionTarget,
@@ -68,9 +68,9 @@ pub use app::trame::{
     SheetTab, SheetTabPos, SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign,
     ValidationKind, ValidationOnInvalid,
 };
-pub use logic::{AppCommand, LogicCommand};
+pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
-pub use outbox::{Outbox, SendOutcome};
+pub use outbox::{Load, Outbox, SendOutcome};
 pub use rest::{
     DocumentSummary, DraftKey, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent,
     RowPlace, SealedRow, SecretBytes, SecretString, UserInfo,

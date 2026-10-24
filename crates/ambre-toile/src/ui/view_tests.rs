@@ -165,7 +165,7 @@ impl Rig {
 
     /// Plan one frame, where the view sends what a changed selection asks for.
     fn frame(&mut self) {
-        self.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+        self.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
     }
 
     /// Run one frame's paint into a recording surface. A deferred editor
@@ -288,15 +288,15 @@ fn an_untouched_editor_closes_without_a_write() {
 #[test]
 fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+    rig.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
     assert!(!rig.view.pipe_typing(), "a board with no editor");
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
-    rig.view.plan_repaint(ambre_bus::PageTime(16.0), false);
+    rig.view.plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle);
     assert!(rig.view.pipe_typing(), "an open editor takes the keys");
     rig.key("Escape", false, false);
     rig.paint();
-    rig.view.plan_repaint(ambre_bus::PageTime(32.0), false);
+    rig.view.plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle);
     assert!(!rig.view.pipe_typing(), "a closed editor gives them back");
 }
 
@@ -923,29 +923,29 @@ fn the_board_editor_drives_the_shared_core() {
         meta: false,
     };
     let text = |s: &str| InputEvent::Text { text: s.to_owned() };
-    let left = |select, word| EditIntent::Left { select, word };
-    let right = |select, word| EditIntent::Right { select, word };
+    let left = |select: ambre_canvas::Extend, word: ambre_canvas::Stride| EditIntent::Left { select, word };
+    let right = |select: ambre_canvas::Extend, word: ambre_canvas::Stride| EditIntent::Right { select, word };
     let corpus: Vec<(InputEvent, EditIntent)> = vec![
         (text(" ab cd"), EditIntent::Insert(" ab cd".to_owned())),
-        (key("ArrowLeft", false, false), left(false, false)),
-        (key("ArrowLeft", false, true), left(true, false)),
+        (key("ArrowLeft", false, false), left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char)),
+        (key("ArrowLeft", false, true), left(ambre_canvas::Extend::Select, ambre_canvas::Stride::Char)),
         (key("Backspace", false, false), EditIntent::Backspace),
-        (key("ArrowLeft", true, false), left(false, true)),
-        (key("ArrowRight", true, true), right(true, true)),
+        (key("ArrowLeft", true, false), left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Word)),
+        (key("ArrowRight", true, true), right(ambre_canvas::Extend::Select, ambre_canvas::Stride::Word)),
         (text("X"), EditIntent::Insert("X".to_owned())),
         (
             key("Home", false, false),
-            EditIntent::LineStart { select: false },
+            EditIntent::LineStart { select: ambre_canvas::Extend::Move },
         ),
         (key("Delete", false, false), EditIntent::Delete),
         (
             key("End", false, true),
-            EditIntent::LineEnd { select: true },
+            EditIntent::LineEnd { select: ambre_canvas::Extend::Select },
         ),
-        (key("ArrowRight", false, false), right(false, false)),
+        (key("ArrowRight", false, false), right(ambre_canvas::Extend::Move, ambre_canvas::Stride::Char)),
         (
             key("Home", false, true),
-            EditIntent::LineStart { select: true },
+            EditIntent::LineStart { select: ambre_canvas::Extend::Select },
         ),
         (
             InputEvent::Key {
@@ -1325,7 +1325,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     for i in 1..4 {
         let (x, y) = rig.screen(i as f64 * 10.0, 0.0);
         rig.input(InputEvent::PointerMove { at: pointer(x, y) });
-        rig.view.plan_repaint(ambre_bus::PageTime(t), false);
+        rig.view.plan_repaint(ambre_bus::PageTime(t), ambre_canvas::HudTick::Idle);
         t += 16.0;
         seen.extend(live_strokes(&rig.sent()));
     }
@@ -1336,7 +1336,7 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     );
     let end = rig.screen(40.0, 0.0);
     rig.release(end);
-    rig.view.plan_repaint(ambre_bus::PageTime(t), false);
+    rig.view.plan_repaint(ambre_bus::PageTime(t), ambre_canvas::HudTick::Idle);
     assert_eq!(live_strokes(&rig.sent()), [None], "the trail ends");
 }
 
@@ -1591,7 +1591,7 @@ fn the_caret_blinks() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     let ops_at = |rig: &mut Rig, t: f64| {
-        rig.view.plan_repaint(ambre_bus::PageTime(t), false);
+        rig.view.plan_repaint(ambre_bus::PageTime(t), ambre_canvas::HudTick::Idle);
         rig.paint().ops().len()
     };
     let on = ops_at(&mut rig, 0.0);
@@ -1826,9 +1826,9 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
         rig.input(InputEvent::PointerMove {
             at: pointer(1195.0, 400.0),
         });
-        rig.view.plan_repaint(ambre_bus::PageTime(1000.0), false);
+        rig.view.plan_repaint(ambre_bus::PageTime(1000.0), ambre_canvas::HudTick::Idle);
         let x = rig.view.cam.center.x;
-        rig.view.plan_repaint(ambre_bus::PageTime(1016.0), false);
+        rig.view.plan_repaint(ambre_bus::PageTime(1016.0), ambre_canvas::HudTick::Idle);
         let moved = rig.view.cam.center.x - x;
         rig.view.update();
         assert!(!viewport_requests(rig.sent()).is_empty(), "zoom {zoom}");
@@ -1905,7 +1905,7 @@ fn the_band_asks_once_per_selection_change() {
 }
 
 fn plan(rig: &mut Rig) -> (bool, bool) {
-    let p = rig.view.plan_repaint(ambre_bus::PageTime(0.0), false);
+    let p = rig.view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
     (
         matches!(p.content, ContentRepaint::Full),
         matches!(p.overlay, OverlayRepaint::Redraw),
@@ -2784,12 +2784,12 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
     rig.sent();
     let t = eid("t");
 
-    rig.view.reread_comments_shown(true, Some(&t), &t);
+    rig.view.reread_comments_shown(Panel::Open, Some(&t), &t);
     assert_eq!(reads(&mut rig), [None, Some(t.clone())]);
     rig.view
-        .reread_comments_shown(true, Some(&eid("other")), &t);
+        .reread_comments_shown(Panel::Open, Some(&eid("other")), &t);
     assert_eq!(reads(&mut rig), [None], "the list alone");
-    rig.view.reread_comments_shown(false, None, &t);
+    rig.view.reread_comments_shown(Panel::Closed, None, &t);
     assert!(reads(&mut rig).is_empty(), "a closed panel reads nothing");
 }
 
@@ -2799,9 +2799,9 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
 fn a_changed_deck_is_read_again_while_the_panel_is_open() {
     let mut rig = Rig::new();
     rig.sent();
-    rig.view.reread_deck_shown(true);
+    rig.view.reread_deck_shown(Panel::Open);
     assert!(matches!(rig.sent().as_slice(), [ToileCommand::ReadDeck]));
-    rig.view.reread_deck_shown(false);
+    rig.view.reread_deck_shown(Panel::Closed);
     assert!(rig.sent().is_empty(), "a closed panel reads nothing");
 }
 

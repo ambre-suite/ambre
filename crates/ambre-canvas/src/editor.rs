@@ -40,6 +40,35 @@ use crate::text_cache::{SpanShape, break_indented, push_shape};
 /// Caret bar width in screen pixels.
 pub const CARET_WIDTH: f32 = 1.5;
 
+/// What a caret motion does to the selection: the caret moves alone, or the
+/// selection extends with it (Shift).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extend {
+    Move,
+    Select,
+}
+
+impl Extend {
+    /// `Select` when `shift` holds, `Move` otherwise.
+    pub fn select_if(shift: bool) -> Self {
+        if shift { Extend::Select } else { Extend::Move }
+    }
+}
+
+/// How far a horizontal caret motion steps: one character, or one word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stride {
+    Char,
+    Word,
+}
+
+impl Stride {
+    /// `Word` when `word` holds, `Char` otherwise.
+    pub fn word_if(word: bool) -> Self {
+        if word { Stride::Word } else { Stride::Char }
+    }
+}
+
 /// A font-free editing action recorded at input time and applied at paint time,
 /// when the `FontContext` is available. Pointer coordinates are already mapped
 /// into the editor's local (text-top-left-relative) screen frame.
@@ -56,26 +85,26 @@ pub enum EditIntent {
     /// Horizontal caret motion; `select` extends the selection (Shift), `word`
     /// jumps by word (Ctrl/Alt).
     Left {
-        select: bool,
-        word: bool,
+        select: Extend,
+        word: Stride,
     },
     Right {
-        select: bool,
-        word: bool,
+        select: Extend,
+        word: Stride,
     },
     /// Vertical caret motion across wrapped lines; `select` extends (Shift).
     Up {
-        select: bool,
+        select: Extend,
     },
     Down {
-        select: bool,
+        select: Extend,
     },
     /// Caret to the start / end of the current visual line; `select` extends.
     LineStart {
-        select: bool,
+        select: Extend,
     },
     LineEnd {
-        select: bool,
+        select: Extend,
     },
     SelectAll,
     /// Place the caret at a local-space point (single click / drag start).
@@ -289,62 +318,62 @@ impl TextEditor {
     /// Move the caret left, collapsing any selection.
     pub fn move_left(&mut self) {
         self.push(EditIntent::Left {
-            select: false,
-            word: false,
+            select: Extend::Move,
+            word: Stride::Char,
         });
     }
     /// Move the caret right, collapsing any selection.
     pub fn move_right(&mut self) {
         self.push(EditIntent::Right {
-            select: false,
-            word: false,
+            select: Extend::Move,
+            word: Stride::Char,
         });
     }
     /// Extend the selection one place left.
     pub fn extend_left(&mut self) {
         self.push(EditIntent::Left {
-            select: true,
-            word: false,
+            select: Extend::Select,
+            word: Stride::Char,
         });
     }
     /// Extend the selection one place right.
     pub fn extend_right(&mut self) {
         self.push(EditIntent::Right {
-            select: true,
-            word: false,
+            select: Extend::Select,
+            word: Stride::Char,
         });
     }
     /// Move the caret to the start of the line.
     pub fn move_home(&mut self) {
-        self.push(EditIntent::LineStart { select: false });
+        self.push(EditIntent::LineStart { select: Extend::Move });
     }
     /// Move the caret to the end of the line.
     pub fn move_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: false });
+        self.push(EditIntent::LineEnd { select: Extend::Move });
     }
     /// Extend the selection to the start of the line.
     pub fn extend_home(&mut self) {
-        self.push(EditIntent::LineStart { select: true });
+        self.push(EditIntent::LineStart { select: Extend::Select });
     }
     /// Extend the selection to the end of the line.
     pub fn extend_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: true });
+        self.push(EditIntent::LineEnd { select: Extend::Select });
     }
     /// Move the caret up one line.
     pub fn move_up(&mut self) {
-        self.push(EditIntent::Up { select: false });
+        self.push(EditIntent::Up { select: Extend::Move });
     }
     /// Move the caret down one line.
     pub fn move_down(&mut self) {
-        self.push(EditIntent::Down { select: false });
+        self.push(EditIntent::Down { select: Extend::Move });
     }
     /// Extend the selection up one line.
     pub fn extend_up(&mut self) {
-        self.push(EditIntent::Up { select: true });
+        self.push(EditIntent::Up { select: Extend::Select });
     }
     /// Extend the selection down one line.
     pub fn extend_down(&mut self) {
-        self.push(EditIntent::Down { select: true });
+        self.push(EditIntent::Down { select: Extend::Select });
     }
     /// Select the whole buffer.
     pub fn select_all(&mut self) {
@@ -475,40 +504,40 @@ impl TextEditor {
                     EditIntent::Delete => drv.delete(),
                     EditIntent::DeleteSelection => drv.delete_selection(),
                     EditIntent::Left { select, word } => match (select, word) {
-                        (false, false) => drv.move_left(),
-                        (true, false) => drv.select_left(),
-                        (false, true) => drv.move_word_left(),
-                        (true, true) => drv.select_word_left(),
+                        (Extend::Move, Stride::Char) => drv.move_left(),
+                        (Extend::Select, Stride::Char) => drv.select_left(),
+                        (Extend::Move, Stride::Word) => drv.move_word_left(),
+                        (Extend::Select, Stride::Word) => drv.select_word_left(),
                     },
                     EditIntent::Right { select, word } => match (select, word) {
-                        (false, false) => drv.move_right(),
-                        (true, false) => drv.select_right(),
-                        (false, true) => drv.move_word_right(),
-                        (true, true) => drv.select_word_right(),
+                        (Extend::Move, Stride::Char) => drv.move_right(),
+                        (Extend::Select, Stride::Char) => drv.select_right(),
+                        (Extend::Move, Stride::Word) => drv.move_word_right(),
+                        (Extend::Select, Stride::Word) => drv.select_word_right(),
                     },
                     EditIntent::Up { select } => {
-                        if select {
+                        if select == Extend::Select {
                             drv.select_up()
                         } else {
                             drv.move_up()
                         }
                     }
                     EditIntent::Down { select } => {
-                        if select {
+                        if select == Extend::Select {
                             drv.select_down()
                         } else {
                             drv.move_down()
                         }
                     }
                     EditIntent::LineStart { select } => {
-                        if select {
+                        if select == Extend::Select {
                             drv.select_to_line_start()
                         } else {
                             drv.move_to_line_start()
                         }
                     }
                     EditIntent::LineEnd { select } => {
-                        if select {
+                        if select == Extend::Select {
                             drv.select_to_line_end()
                         } else {
                             drv.move_to_line_end()
@@ -645,10 +674,10 @@ impl TextEditor {
         });
         let from = goal.map_or(held, |goal| goal.selection);
         let next = match *intent {
-            EditIntent::Up { select } => from.previous_line(layout, select),
-            EditIntent::Down { select } => from.next_line(layout, select),
-            EditIntent::LineStart { select } => held.line_start(layout, select),
-            EditIntent::LineEnd { select } => held.line_end(layout, select),
+            EditIntent::Up { select } => from.previous_line(layout, select == Extend::Select),
+            EditIntent::Down { select } => from.next_line(layout, select == Extend::Select),
+            EditIntent::LineStart { select } => held.line_start(layout, select == Extend::Select),
+            EditIntent::LineEnd { select } => held.line_end(layout, select == Extend::Select),
             EditIntent::PointerDown(at) => Selection::from_point(layout, at.x.get(), at.y.get()),
             EditIntent::PointerDrag(at) => held.extend_to_point(layout, at.x.get(), at.y.get()),
             EditIntent::WordAt(at) => Selection::word_from_point(layout, at.x.get(), at.y.get()),
@@ -913,8 +942,8 @@ mod tests {
     /// corpus relies on (`ambre-trame/src/ui/grid` tests).
     fn left() -> EditIntent {
         EditIntent::Left {
-            select: false,
-            word: false,
+            select: Extend::Move,
+            word: Stride::Char,
         }
     }
 
@@ -1111,8 +1140,8 @@ mod tests {
         let mut ed = TextEditor::new("abc", style());
         ed.flush(&mut fcx, 1000.0, ZoomFactor::ONE);
         ed.push(EditIntent::Left {
-            select: true,
-            word: false,
+            select: Extend::Select,
+            word: Stride::Char,
         });
         ed.flush(&mut fcx, 1000.0, ZoomFactor::ONE);
         assert_eq!(ed.selected_text().as_deref(), Some("c"));

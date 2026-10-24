@@ -1037,11 +1037,30 @@ pub async fn mirror_segment_lock(
         .map_err(|e| AppError::Redis(format!("mirror segment lock: {e}")))
 }
 
+/// Whether a document owes a key rotation, as its mirror holds it
+/// (`SRV-123`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RotationDebt {
+    Settled,
+    Owed,
+}
+
+impl RotationDebt {
+    /// [`RotationDebt::Owed`] when the register says `owed`.
+    pub fn owed_if(owed: bool) -> Self {
+        if owed {
+            RotationDebt::Owed
+        } else {
+            RotationDebt::Settled
+        }
+    }
+}
+
 /// Sets or clears the mirror of an owed rotation.
 pub async fn mirror_rotation_owed(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    owed: bool,
+    debt: RotationDebt,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 if ARGV[1] == '1' then
@@ -1051,7 +1070,10 @@ end
 return redis.call('DEL', KEYS[1])
 "#;
     let key = RotationOwedKey::of(document_id);
-    let flag = if owed { "1" } else { "0" };
+    let flag = match debt {
+        RotationDebt::Owed => "1",
+        RotationDebt::Settled => "0",
+    };
     let _: i64 = redis
         .eval::<i64>(LUA, [key.as_str()], [flag])
         .await
@@ -1188,7 +1210,9 @@ mod lua_tests {
             "0aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa1".into(),
         );
 
-        mirror_rotation_owed(&redis, &doc_id, true).await.unwrap();
+        mirror_rotation_owed(&redis, &doc_id, RotationDebt::Owed)
+            .await
+            .unwrap();
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1)).await;
         assert!(
             matches!(refused, Err(AppError::RotationOwed)),
@@ -1209,7 +1233,9 @@ mod lua_tests {
         let seq: usize = redis.exists(format!("doc:{doc_id}:seq")).await.unwrap();
         assert_eq!(seq, 0, "a refused frame takes no sequence number");
 
-        mirror_rotation_owed(&redis, &doc_id, false).await.unwrap();
+        mirror_rotation_owed(&redis, &doc_id, RotationDebt::Settled)
+            .await
+            .unwrap();
         let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
             .await
             .expect("the same clock is accepted once the debt clears");

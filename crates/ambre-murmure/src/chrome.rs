@@ -201,7 +201,11 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                         .into_iter()
                         .map(|member| {
                             let user = member.user_id;
-                            let here = here.contains(&user);
+                            let watching = if here.contains(&user) {
+                                Watching::Here
+                            } else {
+                                Watching::Elsewhere
+                            };
                             let choose = (Some(user) != me)
                                 .then(|| {
                                     Callback::new(move |()| {
@@ -210,7 +214,7 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
                                         }
                                     })
                                 });
-                            member_view(member, here, choose.map(|choose| (choose, "Message")))
+                            member_view(member, watching, choose.map(|choose| (choose, "Message")))
                         })
                         .collect_view()
                 }}
@@ -277,7 +281,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                                             open.set(false);
                                             query.set(String::new());
                                         });
-                                        member_view(member, false, Some((choose, "Invite")))
+                                        member_view(member, Watching::Elsewhere, Some((choose, "Invite")))
                                     })
                                     .collect_view()
                             }}
@@ -289,18 +293,25 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
     }
 }
 
+/// Whether a member watches the channel the pane shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Watching {
+    Elsewhere,
+    Here,
+}
+
 /// One member: the avatar, the name, then the presence mark. The marks
 /// differ in shape as well as in colour, and each carries its word for a
-/// screen reader (`MURMURE-443`, `MURMURE-520`). A member `here` watches the
-/// current channel. A row the user may act on is a button, titled by the verb
+/// screen reader (`MURMURE-443`, `MURMURE-520`). A member [`Watching::Here`]
+/// watches the current channel. A row the user may act on is a button, titled by the verb
 /// of what it does; the user's own row is not.
 fn member_view(
     member: MemberView,
-    here: bool,
+    watching: Watching,
     choose: Option<(Callback<()>, &'static str)>,
 ) -> impl IntoView {
     let (state, word) = match member.presence {
-        _ if here => ("here", "In this channel"),
+        _ if watching == Watching::Here => ("here", "In this channel"),
         Presence::Online => ("online", "Online"),
         Presence::Offline => ("offline", "Offline"),
     };
@@ -330,6 +341,25 @@ fn member_view(
                 None => who.into_any(),
             }}
         </li>
+    }
+}
+
+/// Whether the browser shows the page, so the user can read the channel
+/// the pane holds (`MURMURE-146`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageVisibility {
+    Hidden,
+    Visible,
+}
+
+impl PageVisibility {
+    /// [`PageVisibility::Visible`] when `visible` holds.
+    pub fn visible_if(visible: bool) -> Self {
+        if visible {
+            PageVisibility::Visible
+        } else {
+            PageVisibility::Hidden
+        }
     }
 }
 
@@ -719,8 +749,8 @@ impl MurmureRelay {
     /// The notification an event calls for, if any (`MURMURE-143`). A
     /// message that names the user notifies, and so does any message of a
     /// direct message. The channel the user is reading notifies nothing
-    /// (`MURMURE-146`). A page that is not `visible` shows none to read.
-    pub fn notice(&self, ev: &UiEvent, visible: bool) -> Option<Notice> {
+    /// (`MURMURE-146`). A hidden page shows none to read.
+    pub fn notice(&self, ev: &UiEvent, page: PageVisibility) -> Option<Notice> {
         let UiEvent::NewMessage {
             channel_id,
             mention,
@@ -730,7 +760,8 @@ impl MurmureRelay {
             return None;
         };
         let at = message.map(|(segment, message)| MessageRef { segment, message });
-        let reading = visible && self.pane.get_untracked().shown_channel() == Some(channel_id);
+        let reading = page == PageVisibility::Visible
+            && self.pane.get_untracked().shown_channel() == Some(channel_id);
         if reading {
             return None;
         }

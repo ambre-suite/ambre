@@ -340,7 +340,11 @@ impl TrameView {
         }
     }
 
-    pub fn plan_repaint(&mut self, _now_ms: ambre_core::PageTime, hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(
+        &mut self,
+        _now_ms: ambre_core::PageTime,
+        hud_tick: ambre_canvas::HudTick,
+    ) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
         // move needs no special repaint -- the cells keep their runs as they
         // shift. Only a CellFormat event (handled in `update`) dirties content.
@@ -348,7 +352,7 @@ impl TrameView {
             || self.viewport_changed
             || self.data_dirty
             || self.edit_dirty
-            || hud_tick;
+            || hud_tick == ambre_canvas::HudTick::Due;
 
         let (content, content_strip): (ContentRepaint, Option<Rect>) = if self.needs_full {
             (ContentRepaint::Full, None)

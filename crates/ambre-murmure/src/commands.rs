@@ -376,7 +376,7 @@ impl AskedAll {
                 draft,
                 attachments,
                 now,
-                confirmed: true,
+                confirmed: ambre_bus::Confirmation::Confirmed,
             },
             Some(HeldReply {
                 root,
@@ -386,7 +386,7 @@ impl AskedAll {
                 draft,
                 also_in_channel,
                 now,
-                confirmed: true,
+                confirmed: ambre_bus::Confirmation::Confirmed,
             },
         };
         LogicCommand::Channel {
@@ -687,7 +687,7 @@ mod tests {
             asked.clone().command(Timestamp(7)),
             LogicCommand::Channel {
                 channel_id,
-                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: true, .. },
+                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: ambre_bus::Confirmation::Confirmed, .. },
             } if channel_id == channel && d == draft
         ));
         let root = MessageId::new();
@@ -712,7 +712,7 @@ mod tests {
                     draft: d,
                     also_in_channel: ReplyEcho::AlsoInChannel,
                     now: Timestamp(8),
-                    confirmed: true,
+                    confirmed: ambre_bus::Confirmation::Confirmed,
                 },
             } if channel_id == channel && r == root && d == draft
         ));

@@ -144,10 +144,10 @@ impl TrameView {
                         size,
                         f32::MAX,
                         Alignment::Start,
-                        data.bold,
-                        data.italic,
+                        ambre_canvas::Weight::bold_if(data.bold),
+                        ambre_canvas::Slant::italic_if(data.italic),
                         data.font.as_deref(),
-                        false,
+                        ambre_canvas::WordBreak::Whole,
                     );
                     max_h = max_h.max(lyt.height());
                 }
@@ -891,10 +891,10 @@ pub(crate) fn fit_column_width(
                     size,
                     f32::MAX,
                     ambre_draw::Alignment::Start,
-                    cell.bold,
-                    cell.italic,
+                    ambre_canvas::Weight::bold_if(cell.bold),
+                    ambre_canvas::Slant::italic_if(cell.italic),
                     cell.font.as_deref(),
-                    false,
+                    ambre_canvas::WordBreak::Whole,
                 )
                 .width()
         })

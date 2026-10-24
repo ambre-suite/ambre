@@ -106,8 +106,8 @@ pub fn draw_col_headers_on<S: DrawSurface>(
             HEADER_SIZE * layout.zoom.get() as f32,
             cw as f32,
             Alignment::Center,
-            false,
-            false,
+            ambre_canvas::Weight::Regular,
+            ambre_canvas::Slant::Upright,
         );
         let text_h = lyt.height() as f64;
         let y_off = ((hh - text_h) / 2.0).max(0.0);
@@ -243,8 +243,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             HEADER_SIZE * layout.zoom.get() as f32,
             max_width,
             Alignment::End,
-            false,
-            false,
+            ambre_canvas::Weight::Regular,
+            ambre_canvas::Slant::Upright,
         );
         let text_h = lyt.height() as f64;
         let y_off = ((rh - text_h) / 2.0).max(0.0);

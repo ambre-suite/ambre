@@ -36,16 +36,16 @@ const PLACEHOLDER_ASPECT: f32 = 4.0 / 3.0;
 pub struct Pictured<'a> {
     pub shelf: &'a Pictures,
     pub now_ms: ambre_core::PageTime,
-    /// The user asks for reduced motion: each picture shows its first frame
-    /// (`MURMURE-130`).
-    pub still: bool,
+    /// The motion the user asks for: under reduced motion each picture
+    /// shows its first frame (`MURMURE-130`).
+    pub motion: crate::pictures::Motion,
 }
 
 impl std::fmt::Debug for Pictured<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pictured")
             .field("now_ms", &self.now_ms)
-            .field("still", &self.still)
+            .field("motion", &self.motion)
             .finish_non_exhaustive()
     }
 }
@@ -356,7 +356,7 @@ fn chip_boxes(
     let mut boxes = Vec::with_capacity(labels.len());
     let (mut x, mut y, mut line) = (0.0_f32, SPACE_2, 0.0_f32);
     for label in labels {
-        let layout = shape(font_cx, cache, label, FONT_UI, width, false);
+        let layout = shape(font_cx, cache, label, FONT_UI, width, ambre_canvas::Weight::Regular);
         let (wide, tall) = (
             layout.width() + 2.0 * SPACE_4,
             layout.height() + 2.0 * SPACE_2,
@@ -402,7 +402,7 @@ fn draw_chips<S: DrawSurface>(
             surface.fill_rect(at, palette.header_bg);
             surface.stroke_rect(at, palette.header_border, 1.0);
         }
-        let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, false);
+        let layout = shape(font_cx, cache, &chip_label(reaction), FONT_UI, width, ambre_canvas::Weight::Regular);
         #[allow(clippy::cast_possible_truncation)]
         let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
         draw(
@@ -431,7 +431,7 @@ fn draw_files<S: DrawSurface>(
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         surface.fill_rect(at, palette.header_bg);
         surface.stroke_rect(at, palette.header_border, 1.0);
-        let layout = shape(font_cx, cache, &file_label(file), FONT_UI, width, false);
+        let layout = shape(font_cx, cache, &file_label(file), FONT_UI, width, ambre_canvas::Weight::Regular);
         #[allow(clippy::cast_possible_truncation)]
         let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
         draw(
@@ -568,8 +568,8 @@ fn header_height(
     let Some((author, time)) = &row.header else {
         return 0.0;
     };
-    let author = shape(font_cx, cache, author, FONT_UI, width, true).height();
-    let time = shape(font_cx, cache, time, FONT_UI, width, false).height();
+    let author = shape(font_cx, cache, author, FONT_UI, width, ambre_canvas::Weight::Bold).height();
+    let time = shape(font_cx, cache, time, FONT_UI, width, ambre_canvas::Weight::Regular).height();
     SPACE_4 + author.max(time)
 }
 
@@ -590,7 +590,7 @@ pub fn paint_jump<S: DrawSurface>(
         JUMP_TO_LATEST,
         FONT_UI,
         width.max(1.0),
-        true,
+        ambre_canvas::Weight::Bold,
     );
     let (wide, tall) = (
         2.0 * SPACE_8 + layout.width(),
@@ -617,7 +617,7 @@ pub fn paint_jump<S: DrawSurface>(
 
 /// The height of the unread line: its words and the space above them.
 fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: f32) -> f32 {
-    SPACE_4 + shape(font_cx, cache, UNREAD_LINE, FONT_UI, width, true).height()
+    SPACE_4 + shape(font_cx, cache, UNREAD_LINE, FONT_UI, width, ambre_canvas::Weight::Bold).height()
 }
 
 /// Paint the unread line whose top is at `top`: a rule across the list in
@@ -632,7 +632,7 @@ fn draw_line<S: DrawSurface>(
 ) -> f32 {
     let text_width = (width - 2.0 * SPACE_8).max(1.0);
     let y = top + SPACE_4;
-    let layout = shape(font_cx, cache, UNREAD_LINE, FONT_UI, text_width, true);
+    let layout = shape(font_cx, cache, UNREAD_LINE, FONT_UI, text_width, ambre_canvas::Weight::Bold);
     let (wide, tall) = (layout.width(), layout.height());
     let middle = f64::from(y + tall / 2.0);
     let rule_from = f64::from(SPACE_8 + wide + SPACE_4);
@@ -654,9 +654,17 @@ pub(crate) fn shape<'c>(
     text: &str,
     size: f32,
     width: f32,
-    bold: bool,
+    weight: ambre_canvas::Weight,
 ) -> &'c Layout<ParleyBrush> {
-    cache.get_or_build(font_cx, text, size, width, Alignment::Start, bold, false)
+    cache.get_or_build(
+        font_cx,
+        text,
+        size,
+        width,
+        Alignment::Start,
+        weight,
+        ambre_canvas::Slant::Upright,
+    )
 }
 
 /// The layout of a row's body, each of its marks shaped in (`MURMURE-565`).
@@ -769,7 +777,7 @@ fn draw_previews<S: DrawSurface>(
             surface.stroke_rect(at, palette.header_border, 1.0);
             continue;
         };
-        let (index, next) = frame_at(picture, pictured.now_ms, pictured.still);
+        let (index, next) = frame_at(picture, pictured.now_ms, pictured.motion);
         let Some(frame) = picture.frames.get(index) else {
             continue;
         };
@@ -801,7 +809,7 @@ fn measure(
     tall += file_chips(font_cx, cache, row, width).1;
     tall += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
-        tall += shape(font_cx, cache, replies, FONT_UI, width, false).height();
+        tall += shape(font_cx, cache, replies, FONT_UI, width, ambre_canvas::Weight::Regular).height();
     }
     tall
 }
@@ -824,7 +832,7 @@ fn draw_row<S: DrawSurface>(
     let mut y = top + SPACE_2;
     if let Some((author, time)) = &row.header {
         y += SPACE_4;
-        let layout = shape(font_cx, cache, author, FONT_UI, width, true);
+        let layout = shape(font_cx, cache, author, FONT_UI, width, ambre_canvas::Weight::Bold);
         let (wide, author_tall) = (layout.width(), layout.height());
         draw(
             surface,
@@ -832,7 +840,7 @@ fn draw_row<S: DrawSurface>(
             ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
             palette.cell_text,
         );
-        let layout = shape(font_cx, cache, time, FONT_UI, width, false);
+        let layout = shape(font_cx, cache, time, FONT_UI, width, ambre_canvas::Weight::Regular);
         let time_tall = layout.height();
         draw(
             surface,
@@ -867,7 +875,7 @@ fn draw_row<S: DrawSurface>(
     draw_chips(surface, font_cx, cache, row, at, width, palette, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
-        let layout = shape(font_cx, cache, replies, FONT_UI, width, false);
+        let layout = shape(font_cx, cache, replies, FONT_UI, width, ambre_canvas::Weight::Regular);
         draw(
             surface,
             layout,
@@ -1326,7 +1334,7 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![carrying]);
         let mut shelf = Pictures::default();
-        let at = |shelf: &Pictures, now_ms, still| {
+        let at = |shelf: &Pictures, now_ms, motion| {
             let shown = Shown {
                 list: &list,
                 unread: None,
@@ -1337,7 +1345,7 @@ pub(crate) mod tests {
                 pictures: Some(Pictured {
                     shelf,
                     now_ms,
-                    still,
+                    motion,
                 }),
             };
             paint_from(shown, 600.0)
@@ -1351,7 +1359,7 @@ pub(crate) mod tests {
         };
         let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
         let (_, chip_only) = paint(&list, 600.0);
-        let (surface, waiting) = at(&shelf, ambre_bus::PageTime(0.0), false);
+        let (surface, waiting) = at(&shelf, ambre_bus::PageTime(0.0), crate::pictures::Motion::Full);
         assert_eq!(waiting.pictures, vec![file.media_ref.clone()]);
         assert_eq!(images(&surface), 0, "not decoded yet");
         assert!(tall(&waiting) >= tall(&chip_only) + PREVIEW_TALL);
@@ -1371,11 +1379,11 @@ pub(crate) mod tests {
             ],
         };
         assert!(shelf.land(file.media_ref.clone(), Some(gif)));
-        let (surface, playing) = at(&shelf, ambre_bus::PageTime(30.0), false);
+        let (surface, playing) = at(&shelf, ambre_bus::PageTime(30.0), crate::pictures::Motion::Full);
         assert_eq!(images(&surface), 1);
         assert_eq!(tall(&playing), tall(&waiting), "the row keeps its height");
         assert_eq!(playing.next_frame, Some(ambre_core::PageTime(100.0)));
-        let (surface, still) = at(&shelf, ambre_bus::PageTime(30.0), true);
+        let (surface, still) = at(&shelf, ambre_bus::PageTime(30.0), crate::pictures::Motion::Reduced);
         assert_eq!((images(&surface), still.next_frame), (1, None));
     }
 
@@ -1469,7 +1477,7 @@ pub(crate) mod tests {
         marks.sort_unstable();
         assert_eq!(marks, [(8, 12), (13, 14), (15, 16)]);
         let (mut font_cx, mut cache) = (fonts(), TextCache::new(1.0));
-        let plain = shape(&mut font_cx, &mut cache, &row.body, FONT_BODY, 384.0, false).width();
+        let plain = shape(&mut font_cx, &mut cache, &row.body, FONT_BODY, 384.0, ambre_canvas::Weight::Regular).width();
         assert!(body(&mut font_cx, &mut cache, &row, 384.0).width() > plain);
 
         let (surface, _) = paint(&list, 600.0);

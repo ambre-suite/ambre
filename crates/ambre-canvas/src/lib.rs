@@ -73,16 +73,20 @@ pub use busy::BusyPublisher;
 pub use density::{CssSize, DevicePx, DeviceSize, PixelSize, SurfaceSize};
 #[cfg(target_arch = "wasm32")]
 pub use density::{DensityWatch, density_query, size_backing_store};
-pub use editor::{CARET_WIDTH, Caret, EditIntent, TextEditor, TextEditorStyle, TextSpan};
+pub use editor::{
+    CARET_WIDTH, Caret, EditIntent, Extend, Stride, TextEditor, TextEditorStyle, TextSpan,
+};
 pub use fatal::{fatal_message, signal_fatal};
-pub use frame::{FATAL_BACKDROP, Phases, RafControl, Tick, drive_frame, paint_fatal};
+pub use frame::{
+    Cover, FATAL_BACKDROP, FatalScreen, Health, Phases, RafControl, Tick, drive_frame, paint_fatal,
+};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};
 pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
-pub use text_cache::{SpanShape, TextCache, registered_family_name};
-pub use text_input::{ContentKind, Embedding, TYPING_ATTR, TextInput};
+pub use text_cache::{Slant, SpanShape, TextCache, Weight, WordBreak, registered_family_name};
+pub use text_input::{ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};
-pub use view::{FrameStats, InputEvent, PerfSnapshot, PointerButton, RepaintPlan};
+pub use view::{FrameStats, HudTick, InputEvent, PerfSnapshot, PointerButton, RepaintPlan};

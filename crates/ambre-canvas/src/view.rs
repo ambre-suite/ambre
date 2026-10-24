@@ -50,6 +50,16 @@ pub struct PerfSnapshot {
     pub glyph_misses: u32,
 }
 
+/// Whether this frame is the one that refreshes the HUD's figures. The
+/// driver marks one frame every half second; the others leave the HUD as
+/// it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HudTick {
+    #[default]
+    Idle,
+    Due,
+}
+
 /// What the view wants repainted this frame.
 ///
 /// `content` is the persistent layer (offscreen, supports scroll-strip reuse);

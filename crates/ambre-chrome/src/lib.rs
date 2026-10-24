@@ -55,7 +55,7 @@ pub use app_shell::{
 };
 pub use avatar::{Avatar, avatar_initials};
 pub use color::{AlphaEdit, ColorPopover, PickedColour};
-pub use command::{CommandStates, keybinding_from_event};
+pub use command::{Availability, CommandStates, Toggle, keybinding_from_event};
 pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};

@@ -316,7 +316,11 @@ impl AppView {
     }
 
     /// Decide what to repaint this frame and clear the dirty flags.
-    fn plan_repaint(&mut self, now_ms: ambre_core::PageTime, hud_tick: bool) -> RepaintPlan {
+    fn plan_repaint(
+        &mut self,
+        now_ms: ambre_core::PageTime,
+        hud_tick: ambre_canvas::HudTick,
+    ) -> RepaintPlan {
         match self {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
@@ -365,7 +369,7 @@ impl AppView {
             AppView::Prose(v) => v.resize(width, height),
             AppView::Murmure(v) => {
                 v.resize(width, height);
-                v.set_desktop(desktop());
+                v.set_width(ambre_murmure::view::WindowWidth::desktop_if(desktop()));
             }
         }
     }

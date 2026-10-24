@@ -38,6 +38,15 @@ use ambre_core::SessionNonce;
 // LogicCommand -- UI Thread -> Logic thread
 // -----------------------------------------------------------------------------
 
+/// Whether the browser store takes the unsent changes of a document
+/// (`RESID-018`). Main tells Logic each time the answer changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StoreRoom {
+    #[default]
+    Free,
+    Full,
+}
+
 /// Message sent from the UI Thread to the Logic thread.
 ///
 /// - [`App`](LogicCommand::App) (**P2**): user edits / viewport requests, < 50 ms
@@ -106,10 +115,14 @@ pub enum LogicCommand {
 
     /// The browser refused to store a change of `document_id` that the relay
     /// has not acknowledged, even after room was made (`RESID-018`). While
-    /// `full`, no local edit is taken. Sent again with `full: false` once
-    /// the change is stored or the relay holds it. Local-only, from the Main
-    /// thread, like [`RestoreLocalSnapshot`](LogicCommand::RestoreLocalSnapshot).
-    LocalStoreFull { document_id: DocumentId, full: bool },
+    /// [`StoreRoom::Full`], no local edit is taken. Sent again with
+    /// [`StoreRoom::Free`] once the change is stored or the relay holds it.
+    /// Local-only, from the Main thread, like
+    /// [`RestoreLocalSnapshot`](LogicCommand::RestoreLocalSnapshot).
+    LocalStoreFull {
+        document_id: DocumentId,
+        room: StoreRoom,
+    },
 
     // -- P3 -- Service plane (relayed request/response) -------------------------
     /// A [`RestCommand`] service operation. The Logic dispatcher applies any

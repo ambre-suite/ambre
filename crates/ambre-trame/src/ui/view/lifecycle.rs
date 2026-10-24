@@ -208,7 +208,7 @@ impl TrameView {
             self.signal_fatal("UI->Logic channel disconnected");
             return;
         }
-        if self.busy_pub.publish(self.outbox.is_busy()) && !self.outbox.is_busy() {
+        if self.busy_pub.publish(self.outbox.load()) && !self.outbox.is_busy() {
             tracing::info!("Trame: the UI->Logic channel cleared, input resumes");
         }
     }
