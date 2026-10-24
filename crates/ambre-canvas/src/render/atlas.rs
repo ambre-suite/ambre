@@ -54,8 +54,8 @@ impl GlyphId {
     }
 }
 
-/// The size a glyph is rasterized at, in device pixels: its logical size,
-/// times the scale of the transform it is drawn under, times the density.
+/// The size a glyph is rasterized at, in device pixels. It is the logical
+/// size, times the scale of the transform it is drawn under, times the density.
 ///
 /// A walk is laid out in document units and drawn under a zoom. Its glyphs get
 /// a bitmap of the size they cover on the screen, never a stretched one
@@ -66,8 +66,8 @@ pub struct RasterSize(f32);
 
 impl RasterSize {
     /// The raster of a glyph run whose layout gives it `font_size`, in the
-    /// units of that layout, drawn under a transform of `scale` on a screen
-    /// of `density`.
+    /// units of that layout. The run is drawn under a transform of `scale`, on
+    /// a screen of `density`.
     pub(crate) fn of_layout(font_size: f32, scale: f64, density: DevicePixelRatio) -> Self {
         Self((f64::from(font_size) * scale) as f32 * density.get() as f32)
     }

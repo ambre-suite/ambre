@@ -6201,6 +6201,7 @@
   {"edge": "verified-by", "from": "TOILE-UI-224", "to": "ambre_toile::ui::hit::tests::group_never_hits"},
   {"edge": "cites-section", "from": "TOILE-UI-225", "section": "2", "to": "3-Toile/features/ambre-spec-toile-selection.md"},
   {"edge": "verified-by", "from": "TOILE-UI-225", "to": "ambre_toile::ui::hit::tests::a_hairline_is_hit_within_the_same_screen_reach_at_every_zoom"},
+  {"edge": "verified-by", "from": "TOILE-UI-225", "to": "ambre_toile::ui::tool::tests::a_tool_picks_a_hairline_under_the_reach_of_the_zoomed_camera"},
   {"edge": "cites-section", "from": "TOILE-UI-226", "section": "3", "to": "3-Toile/features/ambre-spec-toile-selection.md"},
   {"edge": "verified-by", "from": "TOILE-UI-226", "to": "ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses"},
   {"edge": "cites-section", "from": "TOILE-UI-227", "section": "3", "to": "3-Toile/features/ambre-spec-toile-selection.md"},

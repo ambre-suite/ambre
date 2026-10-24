@@ -21,8 +21,8 @@ use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 /// A length on the board, in world units: what the camera scales by the zoom
 /// into screen pixels.
 ///
-/// A screen length and a board length are both floats, and a reach of four
-/// screen pixels taken as four board units picks wrong at every zoom but 1.
+/// A screen length and a board length are both floats. A reach of four screen
+/// pixels taken as four board units picks wrong at every zoom but 1.
 /// The only way from a [`ViewPx`] in is [`ViewportTransform::to_board`], so
 /// the zoom stands between the two. The type wraps the `f64` that kurbo
 /// measures the board in, and no rule bounds it.
