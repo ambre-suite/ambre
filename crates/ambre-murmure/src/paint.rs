@@ -17,8 +17,8 @@ use ambre_draw::{
 };
 
 use crate::list::{
-    HeaderWords, JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label,
-    file_label, window,
+    HeaderWords, JUMP_TO_LATEST, ListRow, ListRowCount, ListRowVec, MessageList, RowKey, RowWords,
+    UNREAD_LINE, chip_label, file_label, window,
 };
 use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
@@ -76,14 +76,14 @@ impl RowBounds {
 /// A row on screen: its index in the list, and where it lies.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaintedRow {
-    pub index: usize,
+    pub index: ListRow,
     pub bounds: RowBounds,
 }
 
 /// A row the paint laid out: its index in the list, its top and its height.
 #[derive(Debug, Clone, Copy)]
 struct LaidRow {
-    index: usize,
+    index: ListRow,
     top: ViewPx,
     tall: ViewPx,
 }
@@ -134,7 +134,7 @@ pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> ViewPx {
 pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
-    pub laid_out: usize,
+    pub laid_out: ListRowCount,
     /// The latest row is on screen.
     pub latest_shown: bool,
     /// The oldest row the list holds is on screen (`MURMURE-191`).
@@ -142,11 +142,11 @@ pub struct Painted {
     /// The unread line is on screen (`MURMURE-184`).
     pub line_shown: bool,
     /// The row the list rests on and its top, `None` on the latest row.
-    pub rest: Option<(usize, ViewPx)>,
+    pub rest: Option<(ListRow, ViewPx)>,
     /// The first row on screen and its top, wherever the list rests.
-    pub top: Option<(usize, ViewPx)>,
+    pub top: Option<(ListRow, ViewPx)>,
     /// The last row on screen, wherever the list rests.
-    pub bottom: Option<usize>,
+    pub bottom: Option<ListRow>,
     /// The top and the bottom of the focused row, `None` when it is off
     /// screen (`MURMURE-205`).
     pub focus: Option<RowBounds>,
@@ -160,7 +160,7 @@ pub struct Painted {
     pub link: Option<ambre_core::LinkUrl>,
     /// The reaction chip a click landed on: the index of its row, and its
     /// emoji.
-    pub chip: Option<(usize, Emoji)>,
+    pub chip: Option<(ListRow, Emoji)>,
     /// The file chip a click landed on: the file it fetches.
     pub file: Option<Attachment>,
     /// The files whose preview this paint drew, decoded or not. Only these
@@ -174,7 +174,7 @@ pub struct Painted {
 impl Painted {
     /// The index of the row under the height `y`, `None` between rows or
     /// past them.
-    pub fn row_at(&self, y: ViewPx) -> Option<usize> {
+    pub fn row_at(&self, y: ViewPx) -> Option<ListRow> {
         self.rows
             .iter()
             .find(|row| row.bounds.holds(y))
@@ -189,9 +189,9 @@ pub struct Shown<'a> {
     pub list: &'a MessageList,
     pub unread: Option<MessageId>,
     /// The row at the top and its top, `None` to rest on the latest row.
-    pub anchor: Option<(usize, ViewPx)>,
+    pub anchor: Option<(ListRow, ViewPx)>,
     /// The row that holds the focus, ringed in the accent (`MURMURE-205`).
-    pub focus: Option<usize>,
+    pub focus: Option<ListRow>,
     /// The selection, and the points of a drag the paint resolves.
     pub selecting: Selecting,
     /// The signed-in member, whose own reactions take the accent.
@@ -221,7 +221,7 @@ pub fn paint_list<S: DrawSurface>(
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
     let text_width = (width - SPACE_8 * 2.0).max(ViewPx::new(1.0));
-    let mut words: HashMap<usize, (RowWords, bool)> = HashMap::new();
+    let mut words: HashMap<ListRow, (RowWords, bool)> = HashMap::new();
     let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return ViewPx::ZERO;
@@ -246,7 +246,7 @@ pub fn paint_list<S: DrawSurface>(
     let keys = if active {
         shown.list.keys()
     } else {
-        Vec::new()
+        ListRowVec::new()
     };
     let mut selection = selecting.selection;
     let mut spot_at = |at| spot_at(font_cx, cache, &laid, &words, &keys, at, text_width);
@@ -339,7 +339,7 @@ pub fn paint_list<S: DrawSurface>(
         }
     }
     Painted {
-        laid_out: words.len(),
+        laid_out: ListRowCount::from_len(words.len()),
         latest_shown: reached.latest,
         oldest_shown: reached.oldest,
         line_shown,
@@ -372,11 +372,11 @@ fn chip_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<usize, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, bool)>,
     at: ViewPoint,
     width: ViewPx,
     pics: Option<Pictured<'_>>,
-) -> Option<(usize, Emoji)> {
+) -> Option<(ListRow, Emoji)> {
     let (x, y) = (at.x, at.y);
     let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
     let (row, line) = words.get(&i)?;
@@ -542,7 +542,7 @@ fn file_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<usize, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, bool)>,
     at: ViewPoint,
     width: ViewPx,
     pics: Option<Pictured<'_>>,
@@ -578,7 +578,7 @@ fn link_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<usize, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, bool)>,
     at: ViewPoint,
     width: ViewPx,
 ) -> Option<ambre_core::LinkUrl> {
@@ -609,8 +609,8 @@ fn spot_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<usize, (RowWords, bool)>,
-    keys: &[RowKey],
+    words: &HashMap<ListRow, (RowWords, bool)>,
+    keys: &ListRowVec<RowKey>,
     at: ViewPoint,
     width: ViewPx,
 ) -> Option<Spot> {
@@ -1195,7 +1195,7 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let (surface, painted) = paint_from(focused(98), 300.0);
+        let (surface, painted) = paint_from(focused(ListRow::new(98)), 300.0);
         let rings: Vec<Rect> = surface
             .ops()
             .iter()
@@ -1210,10 +1210,10 @@ pub(crate) mod tests {
         let RowBounds { top, bottom } = painted.focus.expect("the focused row is on screen");
         assert_eq!((ring.y0, ring.y1), (surface_px(top), surface_px(bottom)));
         assert!(top >= ViewPx::ZERO && bottom <= ViewPx::new(300.0) && bottom > top);
-        assert_eq!(painted.bottom, Some(99), "the latest row is the last one");
+        assert_eq!(painted.bottom, Some(ListRow::new(99)), "the latest row is the last one");
         let body = runs(&surface, LIGHT.cell_text);
         assert!(body.iter().any(|&(y, _)| y > ring.y0 && y < ring.y1));
-        let (surface, painted) = paint_from(focused(3), 300.0);
+        let (surface, painted) = paint_from(focused(ListRow::new(3)), 300.0);
         assert_eq!(painted.focus, None);
         assert!(
             !surface.ops().iter().any(
@@ -1234,7 +1234,10 @@ pub(crate) mod tests {
         list.absorb(SegmentId::new(), messages);
         let (surface, painted) = paint(&list, 200.0);
         assert!(painted.latest_shown);
-        assert!(painted.laid_out > 1 && painted.laid_out < 20, "{painted:?}");
+        assert!(
+            painted.laid_out.get() > 1 && painted.laid_out.get() < 20,
+            "{painted:?}"
+        );
         assert_eq!(surface.fill_colors().first(), Some(&LIGHT.content_bg));
     }
 
@@ -1257,11 +1260,11 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let (_, painted) = paint_from(at((10, ViewPx::ZERO)), 200.0);
-        assert_eq!(painted.rest, Some((10, ViewPx::ZERO)));
+        let (_, painted) = paint_from(at((ListRow::new(10), ViewPx::ZERO)), 200.0);
+        assert_eq!(painted.rest, Some((ListRow::new(10), ViewPx::ZERO)));
         assert!(!painted.latest_shown && !painted.oldest_shown);
-        assert!(painted.laid_out < 20, "{painted:?}");
-        let (_, top) = paint_from(at((0, ViewPx::ZERO)), 200.0);
+        assert!(painted.laid_out.get() < 20, "{painted:?}");
+        let (_, top) = paint_from(at((ListRow::ZERO, ViewPx::ZERO)), 200.0);
         assert!(top.oldest_shown && !top.latest_shown);
         let (_, bottom) = paint(&list, 200.0);
         assert_eq!(bottom.rest, None);
@@ -1281,7 +1284,7 @@ pub(crate) mod tests {
             .collect();
         list.absorb(SegmentId::new(), messages);
         let (surface, painted) = paint(&list, 600.0);
-        assert_eq!(painted.laid_out, 3);
+        assert_eq!(painted.laid_out.get(), 3);
         let counts: Vec<usize> = runs(&surface, LIGHT.cell_text)
             .iter()
             .map(|r| r.1)
@@ -1357,7 +1360,7 @@ pub(crate) mod tests {
         };
         let (surface, painted) = paint_from(shown, 600.0);
         assert!(tall(&painted) > tall(&plain), "the chips take room");
-        assert_eq!(painted.chip, Some((0, Emoji::from("\u{1F44D}"))));
+        assert_eq!(painted.chip, Some((ListRow::ZERO, Emoji::from("\u{1F44D}"))));
         let fills = |color: Color| -> Vec<Rect> {
             surface
                 .ops()
@@ -1598,7 +1601,7 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(SegmentId::new(), vec![sent]);
         let rows = list.rows();
-        let first = rows.first().expect("one row");
+        let first = rows.iter().next().expect("one row");
         let row = first.words(
             |_| ambre_core::DisplayName::new("Ada").ok(),
             |_| "t".to_owned(),
@@ -1744,7 +1747,7 @@ pub(crate) mod tests {
         assert!(runs(&plain, LIGHT.selection).is_empty());
 
         let (surface, painted) = paint_above(&list, unread, 600.0);
-        assert_eq!(painted.laid_out, 2);
+        assert_eq!(painted.laid_out.get(), 2);
         assert!(painted.line_shown);
         let line = runs(&surface, LIGHT.selection);
         let [(line_y, glyphs)] = line.as_slice() else {
@@ -1781,7 +1784,7 @@ pub(crate) mod tests {
         };
         list.unreadable(SegmentId::new(), band);
         let (surface, painted) = paint(&list, 600.0);
-        assert_eq!(painted.laid_out, 2);
+        assert_eq!(painted.laid_out.get(), 2);
         let muted = runs(&surface, LIGHT.header_text);
         let body = runs(&surface, LIGHT.cell_text);
         let [(band_y, _), .., (time_y, 1)] = muted.as_slice() else {
@@ -1836,14 +1839,14 @@ pub(crate) mod tests {
         assert_eq!(
             selection.anchor,
             Spot {
-                row: keys[0],
+                row: keys[ListRow::ZERO],
                 byte: ByteOffset::ZERO
             }
         );
         assert_eq!(
             selection.focus,
             Spot {
-                row: keys[1],
+                row: keys[ListRow::new(1)],
                 byte: ByteOffset::new(5)
             }
         );
@@ -1860,7 +1863,7 @@ pub(crate) mod tests {
         assert_eq!(
             focus,
             Spot {
-                row: keys[2],
+                row: keys[ListRow::new(2)],
                 byte: ByteOffset::new(5)
             }
         );
@@ -1876,7 +1879,7 @@ pub(crate) mod tests {
         assert_eq!(
             painted,
             Painted {
-                laid_out: 0,
+                laid_out: ListRowCount::ZERO,
                 latest_shown: false,
                 oldest_shown: false,
                 line_shown: false,

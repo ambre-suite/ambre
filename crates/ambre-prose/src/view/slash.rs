@@ -16,6 +16,19 @@ use ambre_bus::app::grid::{ColCount, RowCount};
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{DocPoint, DocPx, ViewPoint};
 
+ambre_core::define_index! {
+    /// The place of an item in the menu as a query filters it.
+    pub struct SlashChoice(u32);
+    /// A number of items the filtered menu lists.
+    pub struct SlashChoiceCount;
+    /// A move between two places of the filtered menu.
+    pub struct SlashChoiceDelta(i64);
+    /// A run of places of the filtered menu.
+    pub struct SlashChoiceSpan;
+    /// The filtered menu, one entry per place.
+    pub struct SlashChoiceVec;
+}
+
 /// The rows of the table the menu inserts.
 const TABLE_ROWS: RowCount = RowCount::new(3);
 /// The columns of the table the menu inserts.
@@ -140,7 +153,7 @@ impl SlashCommand {
 /// The items a query keeps: those whose label holds it, case folded, in the
 /// menu's order.
 #[must_use]
-pub fn filter(query: &str) -> Vec<SlashItem> {
+pub fn filter(query: &str) -> SlashChoiceVec<SlashItem> {
     let query = query.to_lowercase();
     ITEMS
         .into_iter()
@@ -156,7 +169,7 @@ pub(crate) struct SlashMenu {
     pub(crate) origin: Spot,
     /// What was typed after the slash.
     pub(crate) query: String,
-    pub(crate) selected: usize,
+    pub(crate) selected: SlashChoice,
 }
 
 impl SlashMenu {
@@ -173,8 +186,8 @@ pub struct SlashMenuState {
     /// Under the slash, on the canvas. `None` hides the menu.
     pub anchor: Option<ViewPoint>,
     pub query: String,
-    pub items: Vec<&'static str>,
-    pub selected: usize,
+    pub items: SlashChoiceVec<&'static str>,
+    pub selected: SlashChoice,
 }
 
 impl SlashMenuState {
@@ -221,14 +234,15 @@ impl ProseUiState {
             return;
         };
         let count = filter(&menu.query).len();
-        if count == 0 {
+        if count.is_zero() {
             return;
         }
-        menu.selected = if direction == ambre_core::StepDirection::Forward {
-            (menu.selected + 1) % count
+        let (selected, count) = (menu.selected.get(), count.get());
+        menu.selected = SlashChoice::new(if direction == ambre_core::StepDirection::Forward {
+            (selected + 1) % count
         } else {
-            (menu.selected + count - 1) % count
-        };
+            (selected + count - 1) % count
+        });
     }
 
     /// The bottom of the line holding a place, on the canvas.

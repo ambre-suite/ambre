@@ -21,7 +21,7 @@ use loro::{LoroDoc, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::Measurer;
+use crate::layout::measure::{BlockIndex, Measurer};
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
@@ -381,14 +381,14 @@ impl Paginator {
         &self,
         measured: &[MeasuredBlock],
         page_box: PageBox,
-        from: usize,
+        from: BlockIndex,
     ) -> Placement {
         let body_height_px = self.bands.body_height_px(&page_box);
         let Some(resume) = self.cursor_before(from, body_height_px) else {
             return place::place(measured, body_height_px);
         };
         let mut cursor = resume;
-        let mut placed: Vec<BlockLayout> = match self.layout.blocks.get(..from) {
+        let mut placed: Vec<BlockLayout> = match self.layout.blocks.get(..from.to_usize()) {
             Some(head) => head.to_vec(),
             None => return place::place(measured, body_height_px),
         };
@@ -408,7 +408,7 @@ impl Paginator {
         };
         // From here the old layout is the answer, entry for entry
         // (`PROSE-100`).
-        if let Some(tail) = self.layout.blocks.get(stop..) {
+        if let Some(tail) = self.layout.blocks.get(stop.to_usize()..) {
             placed.extend_from_slice(tail);
         }
         Placement {
@@ -419,8 +419,8 @@ impl Paginator {
 
     /// The cursor the block before `from` left, or `None` when `from` is the
     /// first block or the old layout is too short to answer.
-    fn cursor_before(&self, from: usize, body_height_px: DocPx) -> Option<place::Cursor> {
-        let index = from.checked_sub(1)?;
+    fn cursor_before(&self, from: BlockIndex, body_height_px: DocPx) -> Option<place::Cursor> {
+        let index = from.prev()?.to_usize();
         let entry = self.layout.blocks.get(index)?;
         let block = self.measured.get(index)?;
         Some(place::cursor_after(entry, block, body_height_px))
@@ -468,8 +468,10 @@ impl Paginator {
 /// A block added or removed moves the sequence from where it sits, so a
 /// length change answers at the first index that differs.
 #[must_use]
-fn first_difference(before: &[MeasuredBlock], after: &[MeasuredBlock]) -> Option<usize> {
-    (0..before.len().max(after.len())).find(|&index| before.get(index) != after.get(index))
+fn first_difference(before: &[MeasuredBlock], after: &[MeasuredBlock]) -> Option<BlockIndex> {
+    (0..before.len().max(after.len()))
+        .find(|&index| before.get(index) != after.get(index))
+        .map(BlockIndex::from_usize)
 }
 
 /// The first page the new layout differs from the old one on (`PROSE-067`).

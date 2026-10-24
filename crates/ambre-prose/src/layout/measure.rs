@@ -179,6 +179,20 @@ fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> Li
 }
 
 ambre_core::define_index! {
+    /// A block of the document in reading order, as the paginator measures
+    /// and places it. The first is zero.
+    pub struct BlockIndex(u32);
+    /// A number of blocks.
+    pub struct BlockCount;
+    /// The signed gap between two blocks.
+    pub struct BlockDelta(i64);
+    /// A run of blocks.
+    pub struct BlockSpan;
+    /// A list indexed by block.
+    pub struct BlockVec;
+}
+
+ambre_core::define_index! {
     /// A line of one block as the paginator cuts it: a text's line, or a
     /// table's row. The first is zero.
     pub struct BlockLine(u32);

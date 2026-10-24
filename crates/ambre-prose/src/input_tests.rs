@@ -1829,7 +1829,10 @@ fn moving_through_the_menu_sends_nothing() {
     rig.key(ProseKey::Down, false, false);
     rig.key(ProseKey::Down, false, false);
     rig.key(ProseKey::Up, false, false);
-    assert_eq!(rig.ui.slash_menu().selected, 1);
+    assert_eq!(
+        rig.ui.slash_menu().selected,
+        crate::view::slash::SlashChoice::new(1)
+    );
     assert_eq!(rig.sent.len(), sent);
     rig.deliver();
     assert_eq!(rig.logic.export_snapshot(), before);
@@ -1881,7 +1884,9 @@ fn every_item_is_a_command_the_plane_carries_out() {
         caret_at(&mut rig, block, 0);
         rig.type_text("/");
         rig.deliver();
-        rig.input(ProseInput::SlashPick(index));
+        rig.input(ProseInput::SlashPick(
+            crate::view::slash::SlashChoice::from_usize(index),
+        ));
         rig.deliver();
         let turned = rig.logic.block_type_of(&block) == Some(crate::events::BlockType::Heading);
         assert!(

@@ -9,7 +9,7 @@
 use ambre_bus::{Timestamp, UserId};
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint};
 
-use crate::list::{MessageList, RowKey, UNKNOWN_MEMBER};
+use crate::list::{ListRow, ListRowVec, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
 
 /// One end of a selection: a row, and a byte of the body it paints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,9 +43,12 @@ pub struct Selecting {
 impl TextSelection {
     /// The ends in the order of the list, as a row index and a byte each.
     /// `None` once a row of an end left the list.
-    fn ordered(&self, keys: &[RowKey]) -> Option<((usize, ByteOffset), (usize, ByteOffset))> {
+    fn ordered(
+        &self,
+        keys: &ListRowVec<RowKey>,
+    ) -> Option<((ListRow, ByteOffset), (ListRow, ByteOffset))> {
         let at = |spot: Spot| {
-            let row = keys.iter().position(|k| *k == spot.row)?;
+            let row = row_of(keys, spot.row)?;
             Some((row, spot.byte))
         };
         let (anchor, focus) = (at(self.anchor)?, at(self.focus)?);
@@ -58,9 +61,14 @@ impl TextSelection {
 
     /// The bytes it selects of the row `row`, whose body is `len` bytes
     /// long. `None` when it selects none of them, or `row` left the list.
-    pub fn range_in(&self, keys: &[RowKey], row: RowKey, len: ByteCount) -> Option<ByteSpan> {
+    pub fn range_in(
+        &self,
+        keys: &ListRowVec<RowKey>,
+        row: RowKey,
+        len: ByteCount,
+    ) -> Option<ByteSpan> {
         let ((first, from), (last, to)) = self.ordered(keys)?;
-        let i = keys.iter().position(|k| *k == row)?;
+        let i = row_of(keys, row)?;
         if i < first || i > last {
             return None;
         }
@@ -91,7 +99,7 @@ impl TextSelection {
     ) -> Option<String> {
         let keys = list.keys();
         let mut parts = Vec::new();
-        for (i, row) in list.rows().iter().enumerate() {
+        for (i, row) in list.rows().iter_enumerated() {
             let Some(message) = row.message() else {
                 continue;
             };
@@ -139,9 +147,9 @@ mod tests {
         list
     }
 
-    fn spot(list: &MessageList, row: usize, byte: usize) -> Spot {
+    fn spot(list: &MessageList, row: u32, byte: usize) -> Spot {
         Spot {
-            row: list.keys()[row],
+            row: list.keys()[ListRow::new(row)],
             byte: ByteOffset::new(byte),
         }
     }
@@ -168,15 +176,15 @@ mod tests {
         };
         for selection in [down, up] {
             assert_eq!(
-                selection.range_in(&keys, keys[0], ByteCount::new(5)),
+                selection.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(2..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[1], ByteCount::new(5)),
+                selection.range_in(&keys, keys[ListRow::new(1)], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(0..5))
             );
             assert_eq!(
-                selection.range_in(&keys, keys[2], ByteCount::new(5)),
+                selection.range_in(&keys, keys[ListRow::new(2)], ByteCount::new(5)),
                 Some(ByteSpan::from_usize_range(0..3))
             );
         }
@@ -185,11 +193,11 @@ mod tests {
             focus: spot(&list, 1, 2),
         };
         assert_eq!(
-            none.range_in(&keys, keys[1], ByteCount::new(5)),
+            none.range_in(&keys, keys[ListRow::new(1)], ByteCount::new(5)),
             None,
             "a collapsed one"
         );
-        assert_eq!(none.range_in(&keys, keys[0], ByteCount::new(5)), None);
+        assert_eq!(none.range_in(&keys, keys[ListRow::new(0)], ByteCount::new(5)), None);
     }
 
     /// `MURMURE-426`: a copy puts each message under its author and its
@@ -224,7 +232,7 @@ mod tests {
         gone.deleted = true;
         let segment = SegmentId::new();
         list.absorb(segment, vec![gone, edited]);
-        let rows = list.keys().len();
+        let rows = list.keys().len().get();
         let all = TextSelection {
             anchor: spot(&list, 0, 0),
             focus: spot(&list, rows - 1, 999),

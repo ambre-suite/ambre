@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use loro::TreeID;
 
-use crate::layout::measure::{BlockLine, BlockLineCount, TextMetrics};
+use crate::layout::measure::{BlockIndex, BlockLine, BlockLineCount, TextMetrics};
 use crate::layout::run::{ShapedRun, TableShape};
 
 /// The lines a break leaves behind, and the lines it carries over
@@ -291,7 +291,7 @@ impl Cursor {
 pub fn place(blocks: &[MeasuredBlock], body_height_px: DocPx) -> Placement {
     let mut cursor = Cursor::new(body_height_px.max(DocPx::ZERO));
     let mut placed: Vec<BlockLayout> = Vec::with_capacity(blocks.len());
-    place_tail(blocks, 0, &mut cursor, &mut placed);
+    place_tail(blocks, BlockIndex::ZERO, &mut cursor, &mut placed);
     Placement {
         blocks: placed,
         page_count: PageCount::through(cursor.page),
@@ -304,7 +304,7 @@ pub fn place(blocks: &[MeasuredBlock], body_height_px: DocPx) -> Placement {
 /// first block whose measurement moved (`PROSE-081`).
 pub(crate) fn place_tail(
     blocks: &[MeasuredBlock],
-    from: usize,
+    from: BlockIndex,
     cursor: &mut Cursor,
     placed: &mut Vec<BlockLayout>,
 ) {
@@ -318,12 +318,13 @@ pub(crate) fn place_tail(
 /// there the rest of the layout is what it already is (`PROSE-100`).
 pub(crate) fn place_tail_until(
     blocks: &[MeasuredBlock],
-    from: usize,
+    from: BlockIndex,
     cursor: &mut Cursor,
     placed: &mut Vec<BlockLayout>,
-    stop: impl Fn(usize, &Cursor) -> bool,
-) -> Option<usize> {
-    for (index, block) in blocks.iter().enumerate().skip(from) {
+    stop: impl Fn(BlockIndex, &Cursor) -> bool,
+) -> Option<BlockIndex> {
+    for (at, block) in blocks.iter().enumerate().skip(from.to_usize()) {
+        let index = BlockIndex::from_usize(at);
         if index > from && stop(index, cursor) {
             return Some(index);
         }
@@ -334,7 +335,7 @@ pub(crate) fn place_tail_until(
             cursor.open_new_page();
             continue;
         }
-        let successor = blocks.get(index + 1);
+        let successor = blocks.get(at + 1);
         place_one(block, successor, cursor, placed);
     }
     None
@@ -1073,7 +1074,7 @@ mod properties {
                 Some(head) => head.to_vec(),
                 None => return Ok(()),
             };
-            place_tail(&blocks, from, &mut cursor, &mut placed);
+            place_tail(&blocks, BlockIndex::from_usize(from), &mut cursor, &mut placed);
             prop_assert_eq!(placed, full.blocks);
             prop_assert_eq!(PageCount::through(cursor.page), full.page_count);
         }

@@ -105,7 +105,7 @@ pub enum ProseInput {
     },
     /// An item of the slash menu picked with the pointer, by its place in
     /// the filtered list.
-    SlashPick(usize),
+    SlashPick(crate::view::slash::SlashChoice),
     /// The input method's text in progress, replacing the previous one. It
     /// is drawn and never sent (`PROSE-UI-142`).
     Compose(String),
@@ -516,11 +516,11 @@ impl ProseUiState {
             self.slash = Some(crate::view::slash::SlashMenu {
                 origin,
                 query: text.chars().skip(1).collect(),
-                selected: 0,
+                selected: crate::view::slash::SlashChoice::ZERO,
             });
         } else if let Some(menu) = &mut self.slash {
             menu.query.push_str(&text);
-            menu.selected = 0;
+            menu.selected = crate::view::slash::SlashChoice::ZERO;
         }
         consumed
     }
@@ -554,7 +554,7 @@ impl ProseUiState {
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
             ProseKey::Backspace if !mods.primary && menu.query.pop().is_some() => {
-                menu.selected = 0;
+                menu.selected = crate::view::slash::SlashChoice::ZERO;
                 None
             }
             _ => {
@@ -567,7 +567,10 @@ impl ProseUiState {
     /// Confirm an item. The slash and the query leave the origin block, then
     /// the item's one command is sent (`PROSE-UI-060`, `PROSE-UI-093`). The
     /// menu closes (`PROSE-UI-175`).
-    fn pick(&mut self, index: usize, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    fn pick(
+        &mut self,
+        index: crate::view::slash::SlashChoice,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
         let Some(menu) = self.slash.take() else {
             return false;
         };

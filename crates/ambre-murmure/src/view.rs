@@ -36,7 +36,10 @@ use crate::commands::{
 };
 use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
-use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey, UnreadLine};
+use crate::list::{
+    Conversations, JUMP_HINT, ListRow, ListRowDelta, ListRowVec, MessageList, ReadMarks, Row,
+    RowKey, UnreadLine, row_of,
+};
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
 use crate::mention_list::OfferIndex;
@@ -568,7 +571,7 @@ impl MurmureView {
 
     /// The message of the row `i` of the list on screen, as the target of
     /// its actions. `None` on a band.
-    fn target_of_row(&self, i: usize) -> Option<MessageTarget> {
+    fn target_of_row(&self, i: ListRow) -> Option<MessageTarget> {
         let pane = (self.reads.pane)();
         let lists = self.lists.borrow();
         let list = self.shown(&lists.conversations, pane)?;
@@ -662,7 +665,7 @@ impl MurmureView {
         }
     }
 
-    fn press_chip(&self, i: usize, emoji: Emoji) {
+    fn press_chip(&self, i: ListRow, emoji: Emoji) {
         let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
             return;
         };
@@ -826,13 +829,13 @@ impl MurmureView {
         let Some(focus) = self.focus else {
             return false;
         };
-        self.retry_row(|keys| keys.iter().position(|key| *key == focus))
+        self.retry_row(|keys| row_of(keys, focus))
     }
 
     /// Ask again for the row `pick` finds among the keys of the list shown,
     /// when it is a band whose cause may clear. Only the channel region shows
     /// bands.
-    fn retry_row(&self, pick: impl Fn(&[RowKey]) -> Option<usize>) -> bool {
+    fn retry_row(&self, pick: impl Fn(&ListRowVec<RowKey>) -> Option<ListRow>) -> bool {
         let pane = (self.reads.pane)();
         let Some(channel_id) = pane
             .shown_channel()
@@ -884,7 +887,7 @@ impl MurmureView {
     /// focus off screen starts again from the last row on screen. No read
     /// cursor moves: only a paint that shows a message reads it
     /// (`MURMURE-206`).
-    fn move_focus(&mut self, by: isize) {
+    fn move_focus(&mut self, by: ListRowDelta) {
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
         let Some(list) = self.shown(&lists.conversations, (self.reads.pane)()) else {
@@ -897,17 +900,17 @@ impl MurmureView {
                 .last
                 .as_ref()
                 .is_some_and(|painted| painted.focus.is_some());
-        let from = self
-            .focus
-            .and_then(|key| keys.iter().position(|k| *k == key));
+        let from = self.focus.and_then(|key| row_of(&keys, key));
+        let last = keys.len().as_end().prev();
         let at = match from {
             Some(i) if on_screen => i
-                .checked_add_signed(by)
-                .filter(|&next| next < keys.len())
+                .checked_offset(by)
+                .filter(|&next| next < keys.len().as_end())
                 .unwrap_or(i),
-            _ => match self.last.as_ref().and_then(|painted| painted.bottom) {
-                Some(bottom) => bottom.min(keys.len().saturating_sub(1)),
-                None => return,
+            _ => match (self.last.as_ref().and_then(|painted| painted.bottom), last) {
+                (Some(bottom), Some(last)) => bottom.min(last),
+                (Some(_), None) => ListRow::ZERO,
+                (None, _) => return,
             },
         };
         let (Some(&key), Some(row)) = (keys.get(at), list.rows().get(at).copied()) else {
@@ -921,7 +924,7 @@ impl MurmureView {
 
     /// Bring the focused row into view, once the paint placed it. A row off
     /// screen comes to rest at the top, and the next paint checks it again.
-    fn reveal_focus(&mut self, painted: &Painted, at: Option<usize>, keys: &[RowKey]) {
+    fn reveal_focus(&mut self, painted: &Painted, at: Option<ListRow>, keys: &ListRowVec<RowKey>) {
         let Some(key) = at.and_then(|i| keys.get(i).copied()) else {
             self.reveal = false;
             return;
@@ -1226,16 +1229,12 @@ impl MurmureView {
         let unread = self.unread_line.above(on_screen, &lists.conversations);
         let keys = list.keys();
         let anchor = match self.rest {
-            Rest::Row { key, anchor_y } => {
-                keys.iter().position(|k| *k == key).map(|i| (i, anchor_y))
-            }
+            Rest::Row { key, anchor_y } => row_of(&keys, key).map(|i| (i, anchor_y)),
             Rest::Latest => None,
         };
         self.pending = matches!(self.rest, Rest::Row { .. }) && anchor.is_none();
         let at_bottom = self.rest == Rest::Latest;
-        let focus = self
-            .focus
-            .and_then(|key| keys.iter().position(|k| *k == key));
+        let focus = self.focus.and_then(|key| row_of(&keys, key));
         if focus.is_none() {
             self.focus = None;
         }
@@ -1487,8 +1486,8 @@ impl MurmureView {
 
     /// Keep where the paint left the list, and stop a motion that met an
     /// end of it.
-    fn settle(&mut self, painted: &Painted, keys: &[RowKey]) {
-        let key_of = |(i, y): (usize, ambre_core::ViewPx)| keys.get(i).map(|&key| (key, y));
+    fn settle(&mut self, painted: &Painted, keys: &ListRowVec<RowKey>) {
+        let key_of = |(i, y): (ListRow, ambre_core::ViewPx)| keys.get(i).map(|&key| (key, y));
         self.top_row = painted.top.and_then(key_of);
         if !self.pending {
             self.rest = painted
@@ -1499,7 +1498,7 @@ impl MurmureView {
         let at_latest = painted.rest.is_none();
         let at_oldest = painted
             .rest
-            .is_some_and(|(i, y)| i == 0 && y >= ambre_core::ViewPx::ZERO);
+            .is_some_and(|(i, y)| i == ListRow::ZERO && y >= ambre_core::ViewPx::ZERO);
         let edge = if self.heading > ViewPx::ZERO {
             at_latest
         } else {
@@ -1657,8 +1656,8 @@ impl MurmureView {
                     "PageDown" => self.page(1.0),
                     "PageUp" => self.page(-1.0),
                     "End" => self.rest_at_latest(),
-                    "ArrowDown" => self.move_focus(1),
-                    "ArrowUp" => self.move_focus(-1),
+                    "ArrowDown" => self.move_focus(ListRowDelta::new(1)),
+                    "ArrowUp" => self.move_focus(ListRowDelta::new(-1)),
                     "Enter" if self.retry_focus() => {}
                     "Escape" if self.mark_shown_read() || self.close_thread() => {}
                     _ => return false,
@@ -1839,9 +1838,9 @@ mod tests {
     const ALSO_PX: f32 = crate::composer::ALSO_PX.get();
 
     /// Each row of a paint as its index, its top and its bottom.
-    fn spans(rows: &[crate::paint::PaintedRow]) -> Vec<(usize, f32, f32)> {
+    fn spans(rows: &[crate::paint::PaintedRow]) -> Vec<(u32, f32, f32)> {
         rows.iter()
-            .map(|row| (row.index, row.bounds.top.get(), row.bounds.bottom.get()))
+            .map(|row| (row.index.get(), row.bounds.top.get(), row.bounds.bottom.get()))
             .collect()
     }
 
@@ -2114,8 +2113,8 @@ mod tests {
         reads
     }
 
-    fn laid_out(view: &MurmureView) -> Option<usize> {
-        view.last_painted().map(|p| p.laid_out)
+    fn laid_out(view: &MurmureView) -> Option<u32> {
+        view.last_painted().map(|p| p.laid_out.get())
     }
 
     /// Selecting a channel shows its messages in the list, and its latest
@@ -3045,7 +3044,7 @@ mod tests {
     }
 
     /// The middle height of the row at `index`, as the last paint placed it.
-    fn middle_of(view: &MurmureView, index: usize) -> f32 {
+    fn middle_of(view: &MurmureView, index: u32) -> f32 {
         let painted = shown(view);
         let &(_, top, bottom) = spans(&painted.rows)
             .iter()
