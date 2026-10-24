@@ -33,8 +33,8 @@ meta: map
 named_ranges/*: string
 named_ranges: map
 postcard/cellstyle_*/*: 010101010302010183840401868a1001016601070701080105018c96280001020000
-postcard/filters_*/active#condition: 016301010176
-postcard/filters_*/active#values: 016300010176
+postcard/filters_*/active#condition: 19303030303030303030303030303030315f303030303030303101010176
+postcard/filters_*/active#values: 19303030303030303030303030303030315f303030303030303100010176
 row_heights_*/*: f64
 row_heights_*: map
 rows_*/*: string
@@ -64,8 +64,8 @@ meta: map
 named_ranges/*: string
 named_ranges: map
 postcard/cellstyle_*/*: 010101010302010183840401868a1001016601070701080105018c96280001020000
-postcard/filters_*/active#condition: 016301010176
-postcard/filters_*/active#values: 016300010176
+postcard/filters_*/active#condition: 19303030303030303030303030303030315f303030303030303101010176
+postcard/filters_*/active#values: 19303030303030303030303030303030315f303030303030303100010176
 row_heights_*/*: f64
 row_heights_*: map
 rows_*/*: string

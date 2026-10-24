@@ -201,14 +201,12 @@ pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u
 /// The winner is one writer's whole definition, never a blend of one peer's
 /// column and the other's operator (`TRAME-FEAT-025`).
 ///
-/// The column is a [`Uid`] in every record a build writes or reads. The type
-/// parameter exists for the frozen layout alone. Its canonical value names the
-/// column `"c"`, a string no uid spells. A uid serialises as a string, so the
-/// layout is the same (`schema_shape::postcard_layouts`).
+/// A uid serialises as its key part string, so the column keeps the bytes
+/// it had when it was stored as text (`schema_shape::postcard_layouts`).
 #[derive(Serialize, Deserialize)]
-pub(crate) struct FilterRecord<C = Uid> {
+pub(crate) struct FilterRecord {
     /// The filtered column's stable id, stored as its 25-char key part.
-    pub col: C,
+    pub col: Uid,
     pub kind: FilterKind,
 }
 
@@ -618,15 +616,22 @@ mod tests {
             kind: kind.clone(),
         })
         .expect("encodes");
-        let text = postcard::to_allocvec(&FilterRecord {
-            col: uid.to_key_part(),
+        // The record as it was stored when the column was text.
+        #[derive(serde::Serialize)]
+        struct TextRecord<'a> {
+            col: &'a str,
+            kind: FilterKind,
+        }
+        let key_part = uid.to_key_part();
+        let text = postcard::to_allocvec(&TextRecord {
+            col: &key_part,
             kind: kind.clone(),
         })
         .expect("encodes");
         assert_eq!(typed, text, "the bytes are the key part's");
         let back: FilterRecord = postcard::from_bytes(&typed).expect("decodes");
         assert_eq!(back.col, uid);
-        let stray = postcard::to_allocvec(&FilterRecord { col: "c", kind }).expect("encodes");
+        let stray = postcard::to_allocvec(&TextRecord { col: "c", kind }).expect("encodes");
         assert!(postcard::from_bytes::<FilterRecord>(&stray).is_err());
     }
 

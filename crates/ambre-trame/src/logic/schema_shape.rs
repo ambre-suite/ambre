@@ -231,17 +231,20 @@ fn postcard_layouts() -> Vec<(String, String)> {
             },
         },
     };
-    // The column is the string a uid serialises as. `"c"` is the value the
-    // published sections froze, and no uid spells it.
-    let condition = FilterRecord::<&str> {
-        col: "c",
+    // A fixed uid, so the layout holds the column's key part bytes.
+    let col = Uid {
+        peer: ambre_core::PeerId(1),
+        counter: 1,
+    };
+    let condition = FilterRecord {
+        col,
         kind: FilterKind::Condition {
             op: FilterOp::Ne,
             value: "v".to_owned(),
         },
     };
-    let values = FilterRecord::<&str> {
-        col: "c",
+    let values = FilterRecord {
+        col,
         kind: FilterKind::Values(vec!["v".to_owned()]),
     };
     vec![
