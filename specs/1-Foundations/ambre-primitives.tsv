@@ -4179,7 +4179,7 @@ ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.width | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.x | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.y | field | f32	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-core | src/unit.rs | crate::unit | ViewVelocity::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
+ambre-core | src/unit.rs | crate::unit | ViewSpeedVector::scaled(factor) | param | f32	math	a decay or blend weight the velocity is multiplied by
 ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	free-text	header text a message row draws
 ambre-murmure | src/list.rs | crate::list | HeaderWords.time | field | String	free-text	header text a message row draws
 ambre-murmure | src/paint.rs | crate::paint | LaidRow.index | field | usize	math	row index in the message list, private to the window algorithm

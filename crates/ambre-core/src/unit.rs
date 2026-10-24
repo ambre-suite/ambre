@@ -471,9 +471,9 @@ pub type ViewSize = Size<ViewPx>;
 
 /// A velocity on the zoomed view, in view pixels per millisecond on each
 /// axis: what a flick leaves.
-pub type ViewVelocity = Vector<ViewSpeed>;
+pub type ViewSpeedVector = Vector<ViewSpeed>;
 
-impl ViewVelocity {
+impl ViewSpeedVector {
     /// The speed along the direction of travel.
     #[must_use]
     pub fn magnitude(self) -> ViewSpeed {
@@ -496,7 +496,7 @@ impl ViewVector {
 
     /// The velocity of this displacement made over `span`.
     #[must_use]
-    pub fn per(self, span: PageMillis) -> ViewVelocity {
+    pub fn per(self, span: PageMillis) -> ViewSpeedVector {
         Vector::new(self.dx.per(span), self.dy.per(span))
     }
 }

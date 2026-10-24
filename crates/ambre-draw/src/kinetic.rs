@@ -7,7 +7,7 @@
 //! cells, a board under a zoom. A trackpad glide that stops keeps its
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
-use ambre_core::{CssPx, CssVector, PageMillis, ViewPoint, ViewPx, ViewSpeed, ViewVelocity};
+use ambre_core::{CssPx, CssVector, PageMillis, ViewPoint, ViewPx, ViewSpeed, ViewSpeedVector};
 
 use crate::wheel::WheelDeltaMode;
 
@@ -186,7 +186,7 @@ pub struct Kinetic {
 /// A trackpad glide under way: its speed so far and its last event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
-    speed: ViewVelocity,
+    speed: ViewSpeedVector,
     last_ms: ambre_core::PageTime,
 }
 
@@ -206,7 +206,7 @@ struct Pan {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
-    speed: ViewVelocity,
+    speed: ViewSpeedVector,
     last_ms: Option<ambre_core::PageTime>,
 }
 
@@ -397,7 +397,7 @@ impl Kinetic {
     }
 
     /// The speed of the motion under way, in screen pixels per millisecond.
-    pub fn speed(&self) -> Option<ViewVelocity> {
+    pub fn speed(&self) -> Option<ViewSpeedVector> {
         self.motion.map(|motion| motion.speed)
     }
 
