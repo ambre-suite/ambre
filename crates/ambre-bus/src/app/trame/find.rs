@@ -1,5 +1,5 @@
 //! The options of a Trame find or replace (`trame-find-replace`): the four
-//! checkbox states of the panel, carried by [`TrameCommand::FindNext`],
+//! checkbox states of the panel, carried in a [`FindQuery`] by [`TrameCommand::FindNext`],
 //! [`TrameCommand::ReplaceOne`] and [`TrameCommand::ReplaceAll`].
 //!
 //! [`TrameCommand::FindNext`]: super::TrameCommand::FindNext
@@ -35,6 +35,9 @@ pub enum SheetScope {
     Active,
     All,
 }
+
+/// A Trame find or replace: the shared shape over Trame's own options.
+pub type FindQuery = crate::app::find::FindQuery<FindOptions>;
 
 /// The options of a find or a replace (`trame-find-replace`). A find reads
 /// only `case` and `extent`, and only a replace-all reads `sheets`.

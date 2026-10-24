@@ -79,12 +79,14 @@ A search touches no shared state, so this section carries no table
 /// Refinements, both local to the panel.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindOptions { pub case: CaseMatch, pub word: WordMatch }
+pub type FindQuery = find::FindQuery<FindOptions>;
 
 /// `hits` in paint order; `focus` is the element to recentre on.
 pub struct FindResults { pub hits: Vec<ElementId>, pub focus: Option<ElementId> }
 ```
 
-`Find { query, options, from, backward }` carries the match to resume from and the direction.
+`Find { query, from, backward }` carries the query with its options, none for an emptied field,
+the match to resume from and the direction.
 
 **What a board match is** (the shared walk is `ambre-spec-find.md section 3`):
 

@@ -19,9 +19,10 @@ use crate::events::{
 use super::ProseState;
 
 /// The open search: the query, what it found, and the match the walk is on.
+/// No query is the emptied field, which finds nothing (`FIND-005`).
 #[derive(Debug, Default)]
 pub(super) struct FindSession {
-    query: FindQuery,
+    query: Option<FindQuery>,
     matches: Vec<FindMatch>,
     current: Option<MatchIndex>,
 }
@@ -34,7 +35,7 @@ pub(super) struct FindSession {
 /// than one is compared as it is.
 pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
     let fold = |c: char| -> char {
-        if query.case == ambre_core::CaseMatch::Sensitive {
+        if query.options.case == ambre_core::CaseMatch::Sensitive {
             return c;
         }
         let mut lower = c.to_lowercase();
@@ -44,7 +45,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
         }
     };
     let hay: Vec<char> = hay.chars().map(fold).collect();
-    let needle: Vec<char> = query.text.chars().map(fold).collect();
+    let needle: Vec<char> = query.text.as_str().chars().map(fold).collect();
     let mut found = Vec::new();
     if needle.is_empty() || needle.len() > hay.len() {
         return found;
@@ -56,7 +57,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
         let hit = hay
             .get(at..end)
             .is_some_and(|window| window == needle.as_slice());
-        let bounded = query.word == ambre_core::WordMatch::Anywhere
+        let bounded = query.options.word == ambre_core::WordMatch::Anywhere
             || (!at
                 .checked_sub(1)
                 .and_then(|before| hay.get(before))
@@ -76,7 +77,10 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
 impl ProseState {
     /// Every match in the document, in block order: body blocks only
     /// (`PROSE-FEAT-033`, `PROSE-FEAT-150`).
-    pub(super) fn find_all(&self, query: &FindQuery) -> Vec<FindMatch> {
+    pub(super) fn find_all(&self, query: Option<&FindQuery>) -> Vec<FindMatch> {
+        let Some(query) = query else {
+            return Vec::new();
+        };
         let tree = doc::blocks(&self.doc);
         self.document_order()
             .into_iter()
@@ -95,11 +99,14 @@ impl ProseState {
 
     /// Open a search. It reads the document and writes nothing
     /// (`PROSE-FEAT-151`).
-    pub(super) fn find_start(&mut self, query: FindQuery) -> ProseOutcome {
-        if query.pattern == crate::events::PatternKind::Regex {
+    pub(super) fn find_start(&mut self, query: Option<FindQuery>) -> ProseOutcome {
+        if query
+            .as_ref()
+            .is_some_and(|q| q.options.pattern == crate::events::PatternKind::Regex)
+        {
             return ProseOutcome::refused(ProseRefusal::FindRefused(FindRefusal::RegexUnbuilt));
         }
-        let matches = self.find_all(&query);
+        let matches = self.find_all(query.as_ref());
         let current = (!matches.is_empty()).then_some(MatchIndex::ZERO);
         self.find = Some(FindSession {
             query,
@@ -149,7 +156,7 @@ impl ProseState {
         // A collaborator's change may have moved or removed the match since
         // the view saw it. A range no fresh search reports is not replaced:
         // the view gets the fresh list instead.
-        if !self.find_all(&session.query).contains(&hit) {
+        if !self.find_all(session.query.as_ref()).contains(&hit) {
             return ProseOutcome::display_only(self.refresh_matches(at));
         }
         if let Err(outcome) = self.replace_range(&tree_id(hit.block_id), hit.range, replacement) {
@@ -168,7 +175,7 @@ impl ProseState {
         };
         // Search again first: the list the view saw may predate a remote
         // change, and a stale range would replace the wrong characters.
-        let matches = self.find_all(&session.query);
+        let matches = self.find_all(session.query.as_ref());
         if matches.is_empty() {
             return ProseOutcome::display_only(self.refresh_matches(None));
         }
@@ -213,7 +220,7 @@ impl ProseState {
         let Some(query) = self.find.as_ref().map(|s| s.query.clone()) else {
             return Vec::new();
         };
-        let matches = self.find_all(&query);
+        let matches = self.find_all(query.as_ref());
         let count = MatchCount::from_len(matches.len());
         let current = match keep {
             Some(at) if at < count.as_end() => Some(at),
@@ -244,7 +251,7 @@ impl ProseState {
     /// The open query, for a test.
     #[cfg(test)]
     fn find_query(&self) -> Option<&FindQuery> {
-        self.find.as_ref().map(|s| &s.query)
+        self.find.as_ref().and_then(|s| s.query.as_ref())
     }
 }
 
@@ -261,11 +268,13 @@ mod tests {
     use crate::events::{BlockId, BlockInit, ProseCommand};
     use ambre_bus::app::prose::DocOffset;
 
-    fn query(text: &str) -> FindQuery {
-        FindQuery {
-            text: text.to_owned(),
-            ..FindQuery::default()
-        }
+    fn query(text: &str) -> Option<FindQuery> {
+        FindQuery::new(text.to_owned(), crate::events::FindOptions::default())
+    }
+
+    /// The query for a non-empty `text`, for the scan alone.
+    fn needle(text: &str) -> FindQuery {
+        query(text).expect("a non-empty text")
     }
 
     /// A document of the given paragraphs, in order.
@@ -313,20 +322,20 @@ mod tests {
     #[test]
     fn matches_never_overlap_and_resume_past_the_end() {
         assert_eq!(
-            pairs(match_offsets("aaaa", &query("aa"))),
+            pairs(match_offsets("aaaa", &needle("aa"))),
             vec![(0, 2), (2, 4)]
         );
-        assert_eq!(pairs(match_offsets("aaa", &query("aa"))), vec![(0, 2)]);
+        assert_eq!(pairs(match_offsets("aaa", &needle("aa"))), vec![(0, 2)]);
     }
 
     #[test]
     fn case_and_whole_word_narrow_the_match() {
-        let mut q = query("Cat");
+        let mut q = needle("Cat");
         assert_eq!(pairs(match_offsets("cat Cat scatter", &q)).len(), 3);
-        q.case = ambre_core::CaseMatch::Sensitive;
+        q.options.case = ambre_core::CaseMatch::Sensitive;
         assert_eq!(pairs(match_offsets("cat Cat scatter", &q)), vec![(4, 7)]);
-        q.case = ambre_core::CaseMatch::Insensitive;
-        q.word = ambre_core::WordMatch::WholeWord;
+        q.options.case = ambre_core::CaseMatch::Insensitive;
+        q.options.word = ambre_core::WordMatch::WholeWord;
         assert_eq!(
             pairs(match_offsets("cat Cat scatter", &q)),
             vec![(0, 3), (4, 7)]
@@ -338,7 +347,7 @@ mod tests {
         assert_eq!(
             pairs(match_offsets(
                 "\u{e9}t\u{e9} \u{e9}t\u{e9}",
-                &query("\u{c9}T\u{c9}")
+                &needle("\u{c9}T\u{c9}")
             )),
             vec![(0, 3), (4, 7)]
         );
@@ -511,7 +520,7 @@ mod tests {
         let (matches, current) = results(&outcome);
         assert_eq!(matches.len(), 2);
         assert_eq!(current, Some(MatchIndex::new(1)));
-        assert_eq!(state.find_query(), Some(&query("cat")));
+        assert_eq!(state.find_query(), query("cat").as_ref());
     }
 
     #[test]
@@ -528,7 +537,7 @@ mod tests {
             vec!["a-tiger-b-tiger", "tiger!", "none"]
         );
         assert_eq!(results(&outcome), (Vec::new(), None));
-        assert_eq!(state.find_query(), Some(&query("cat")));
+        assert_eq!(state.find_query(), query("cat").as_ref());
     }
 
     #[test]
@@ -559,7 +568,9 @@ mod tests {
     fn a_regular_expression_is_refused_rather_than_read_literally() {
         let (mut state, _) = document(&["a.c"]);
         let mut q = query("a.c");
-        q.pattern = crate::events::PatternKind::Regex;
+        if let Some(q) = q.as_mut() {
+            q.options.pattern = crate::events::PatternKind::Regex;
+        }
         let outcome = state.handle_command(ProseCommand::FindStart { query: q });
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
         assert!(state.find.is_none());

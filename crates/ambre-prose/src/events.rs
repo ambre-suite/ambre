@@ -14,7 +14,7 @@ pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
     ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
-    EditMode, FindMatch, FindQuery, FirstPage, FootnoteEntry, FootnoteOrdinal, GraphemeCount,
+    EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry, FootnoteOrdinal, GraphemeCount,
     HeaderField, HeadingLevel, HfTarget, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan,
     ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan,
     ParagraphCount, ParagraphStyle, PatternKind, PresencePayload, ProseCommand, ProseError,

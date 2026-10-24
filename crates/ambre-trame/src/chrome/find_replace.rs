@@ -34,22 +34,17 @@ pub struct FindReplaceState {
     pub mode: FindMode,
 }
 
-/// A `FindNext` request: the query plus the options. A find reads only the
-/// case and the extent. The launcher forwards it as
-/// [`ambre_bus::TrameCommand::FindNext`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FindQuery {
-    pub query: String,
-    pub options: FindOptions,
-}
+/// A `FindNext` request: the find text plus the options, or `None` for an
+/// emptied field. A find reads only the case and the extent. The launcher
+/// forwards it as [`ambre_bus::TrameCommand::FindNext`].
+pub use ambre_bus::app::trame::FindQuery;
 
-/// A `ReplaceAll` request. The launcher forwards it as
-/// [`ambre_bus::TrameCommand::ReplaceAll`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// A `ReplaceOne` or `ReplaceAll` request. The panel sends none for an empty
+/// query. The launcher forwards it as [`ambre_bus::TrameCommand::ReplaceAll`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplaceRequest {
-    pub query: String,
+    pub query: FindQuery,
     pub replacement: String,
-    pub options: FindOptions,
 }
 
 /// Where the last search left the counter: the focused match, counted from one,
@@ -82,7 +77,7 @@ impl FindPosition {
 pub fn FindReplace(
     state: RwSignal<Option<FindReplaceState>>,
     result: RwSignal<Option<FindPosition>>,
-    on_find: Callback<FindQuery>,
+    on_find: Callback<Option<FindQuery>>,
     on_replace: Callback<ReplaceRequest>,
     on_replace_all: Callback<ReplaceRequest>,
 ) -> impl IntoView {
@@ -128,14 +123,11 @@ pub fn FindReplace(
         }
     });
 
-    // Emit a find request with the current query and options. An empty query is a
-    // valid "clear" signal: the Logic thread replies with an empty `FindResult`,
-    // which wipes the canvas highlight and the counter.
+    // Emit a find request with the current query and options. An empty field
+    // sends no query, the "clear" signal: the Logic thread replies with an empty
+    // `FindResult`, which wipes the canvas highlight and the counter.
     let emit_find = move || {
-        on_find.run(FindQuery {
-            query: query.get_untracked(),
-            options: options(),
-        });
+        on_find.run(FindQuery::new(query.get_untracked(), options()));
     };
 
     let close = move || {
@@ -148,22 +140,22 @@ pub fn FindReplace(
 
     let run_find = move || emit_find();
 
-    let replace_request = move || ReplaceRequest {
-        query: query.get_untracked(),
-        replacement: replacement.get_untracked(),
-        options: options(),
+    // An empty query replaces nothing, so it sends no request.
+    let replace_request = move || {
+        FindQuery::new(query.get_untracked(), options()).map(|query| ReplaceRequest {
+            query,
+            replacement: replacement.get_untracked(),
+        })
     };
     let run_replace = move || {
-        if query.get_untracked().is_empty() {
-            return;
+        if let Some(request) = replace_request() {
+            on_replace.run(request);
         }
-        on_replace.run(replace_request());
     };
     let run_replace_all = move || {
-        if query.get_untracked().is_empty() {
-            return;
+        if let Some(request) = replace_request() {
+            on_replace_all.run(request);
         }
-        on_replace_all.run(replace_request());
     };
     // Flip find <-> replace mode from the mouse (the chevron button), so reaching
     // replace does not require the Ctrl+H chord.

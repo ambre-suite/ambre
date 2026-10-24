@@ -15,7 +15,7 @@
 // canvas view handles the highlight + camera recenter off the same event.
 // ============================================================================
 
-use ambre_bus::app::toile::{ElementId, FindOptions, FindResults};
+use ambre_bus::app::toile::{ElementId, FindOptions, FindQuery, FindResults};
 use ambre_core::StepDirection;
 use leptos::html;
 use leptos::prelude::*;
@@ -23,15 +23,14 @@ use leptos::prelude::*;
 use crate::ui::find::active_index;
 use ambre_bus::app::find::MatchIndex;
 
-/// A `Find` request emitted by the panel. It carries the query, the options, the
-/// hit to resume from (`None` = a fresh search focusing the first hit), and the
-/// step direction. The launcher forwards it as
-/// [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps `focus` forward or
-/// backward from `from` itself (toile-find).
+/// A `Find` request emitted by the panel. It carries the query and its options
+/// (`None` for an emptied field), the hit to resume from (`None` = a fresh
+/// search focusing the first hit), and the step direction. The launcher
+/// forwards it as [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps
+/// `focus` forward or backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FindQuery {
-    pub query: String,
-    pub options: FindOptions,
+pub struct FindRequest {
+    pub query: Option<FindQuery>,
     pub from: Option<ElementId>,
     pub direction: StepDirection,
 }
@@ -58,7 +57,7 @@ impl FindPanelState {
 pub fn FindPanel(
     state: RwSignal<FindPanelState>,
     result: RwSignal<Option<FindResults>>,
-    on_find: Callback<FindQuery>,
+    on_find: Callback<FindRequest>,
 ) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let match_case = RwSignal::new(false);
@@ -77,20 +76,20 @@ pub fn FindPanel(
 
     // Emit a `Find` with the current query / options, resume point and direction.
     let emit = move |from: Option<ElementId>, direction: StepDirection| {
-        on_find.run(FindQuery {
-            query: query.get_untracked(),
-            options: FindOptions {
-                case: if match_case.get_untracked() {
-                    ambre_core::CaseMatch::Sensitive
-                } else {
-                    ambre_core::CaseMatch::Insensitive
-                },
-                word: if whole_word.get_untracked() {
-                    ambre_core::WordMatch::WholeWord
-                } else {
-                    ambre_core::WordMatch::Anywhere
-                },
+        let options = FindOptions {
+            case: if match_case.get_untracked() {
+                ambre_core::CaseMatch::Sensitive
+            } else {
+                ambre_core::CaseMatch::Insensitive
             },
+            word: if whole_word.get_untracked() {
+                ambre_core::WordMatch::WholeWord
+            } else {
+                ambre_core::WordMatch::Anywhere
+            },
+        };
+        on_find.run(FindRequest {
+            query: FindQuery::new(query.get_untracked(), options),
             from,
             direction,
         });

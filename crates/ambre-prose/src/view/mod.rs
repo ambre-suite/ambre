@@ -453,10 +453,10 @@ pub(crate) mod tests {
         step(
             &mut ui,
             ProseCommand::FindStart {
-                query: crate::events::FindQuery {
-                    text: "needle".to_owned(),
-                    ..Default::default()
-                },
+                query: crate::events::FindQuery::new(
+                    "needle".to_owned(),
+                    crate::events::FindOptions::default(),
+                ),
             },
         );
         assert_eq!(

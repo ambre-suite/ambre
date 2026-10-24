@@ -171,8 +171,7 @@ fn find_next_matches_and_wraps() {
         kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::FindNext {
-        query: "apple".to_owned(),
-        options: crate::FindOptions::default(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
     });
     let (matches, active) = find_result(&out);
     assert_eq!(matches, vec![(0, 0), (1, 0), (3, 0)]);
@@ -190,8 +189,7 @@ fn find_next_matches_and_wraps() {
         kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::FindNext {
-        query: "apple".to_owned(),
-        options: crate::FindOptions::default(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
     });
     assert_eq!(find_result(&out).1, Some(0), "wraps to the first match");
 }
@@ -212,22 +210,20 @@ fn find_next_honors_case_and_whole_cell() {
 
     // Case-sensitive "apple": only the exact-case A1 substring matches.
     let out = state.handle_command(TrameCommand::FindNext {
-        query: "apple".to_owned(),
-        options: crate::FindOptions {
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions {
             case: crate::CaseMatch::Sensitive,
             ..Default::default()
-        },
+        }),
     });
     assert_eq!(find_result(&out).0, vec![(0, 0)]);
 
     // Whole-cell, case-insensitive "apple": A1 and A4 are exactly "apple"
     // (folded); "Apple pie" is not.
     let out = state.handle_command(TrameCommand::FindNext {
-        query: "apple".to_owned(),
-        options: crate::FindOptions {
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions {
             extent: crate::MatchExtent::WholeCell,
             ..Default::default()
-        },
+        }),
     });
     assert_eq!(find_result(&out).0, vec![(0, 0), (3, 0)]);
 }
@@ -252,8 +248,7 @@ fn a_search_reads_past_the_requested_window() {
         col_end: Col::new(10),
     });
     let out = state.handle_command(TrameCommand::FindNext {
-        query: "needle".to_owned(),
-        options: crate::FindOptions::default(),
+        query: ambre_bus::app::trame::FindQuery::new("needle".to_owned(), crate::FindOptions::default()),
     });
     assert_eq!(find_result(&out), (vec![(0, 0), (900, 60)], Some(1)));
 }
@@ -287,9 +282,8 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "apple".to_owned(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
         replacement: "fig".to_owned(),
-        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 3);
     assert_eq!(read_cell(&mut state, 1, 0), "fig pie");
@@ -308,9 +302,8 @@ fn replace_all_rewrites_and_undoes_as_one_group() {
     seed_find(&mut state);
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "apple".to_owned(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
         replacement: "cherry".to_owned(),
-        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 3);
     assert_eq!(read_cell(&mut state, 0, 0), "cherry");
@@ -344,9 +337,8 @@ fn replace_all_gates_formula_cells() {
 
     // Values scope: the literal A1 is rewritten, the formula A2 is left.
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "2".to_owned(),
+        query: ambre_bus::app::trame::FindQuery::new("2".to_owned(), crate::FindOptions::default()),
         replacement: "9".to_owned(),
-        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_raw(&mut state, 0, 0), "9");
@@ -359,12 +351,11 @@ fn replace_all_gates_formula_cells() {
     // Formulas scope: a formula cell matches on its raw text. "=A1"
     // contains "A1" -> rewrite the formula source to "=B2".
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "A1".to_owned(),
-        replacement: "B2".to_owned(),
-        options: crate::FindOptions {
+        query: ambre_bus::app::trame::FindQuery::new("A1".to_owned(), crate::FindOptions {
             scope: crate::SearchScope::Formulas,
             ..Default::default()
-        },
+        }),
+        replacement: "B2".to_owned(),
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_raw(&mut state, 1, 0), "=B2");
@@ -387,9 +378,8 @@ fn replace_one_replaces_active_and_advances() {
         kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::ReplaceOne {
-        query: "apple".to_owned(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
         replacement: "cherry".to_owned(),
-        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 1);
     assert_eq!(read_cell(&mut state, 0, 0), "cherry");
@@ -410,9 +400,8 @@ fn replace_one_replaces_active_and_advances() {
         kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::ReplaceOne {
-        query: "apple".to_owned(),
+        query: ambre_bus::app::trame::FindQuery::new("apple".to_owned(), crate::FindOptions::default()),
         replacement: "cherry".to_owned(),
-        options: crate::FindOptions::default(),
     });
     assert_eq!(replaced_count(&out), 0);
     assert_eq!(find_result(&out).1, Some(1), "advances to A4 after A3");
@@ -446,12 +435,11 @@ fn replace_all_spans_sheets() {
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "foo".to_owned(),
-        replacement: "bar".to_owned(),
-        options: crate::FindOptions {
+        query: ambre_bus::app::trame::FindQuery::new("foo".to_owned(), crate::FindOptions {
             sheets: crate::SheetScope::All,
             ..Default::default()
-        },
+        }),
+        replacement: "bar".to_owned(),
     });
     assert_eq!(replaced_count(&out), 2);
     assert_eq!(read_cell(&mut state, 0, 0), "bar");

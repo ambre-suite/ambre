@@ -256,12 +256,11 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: "foo".to_owned(),
-        replacement: "bar".to_owned(),
-        options: crate::FindOptions {
+        query: ambre_bus::app::trame::FindQuery::new("foo".to_owned(), crate::FindOptions {
             sheets: crate::SheetScope::All,
             ..Default::default()
-        },
+        }),
+        replacement: "bar".to_owned(),
     });
     assert_eq!(state.active_sheet, default_sheet());
     assert!(

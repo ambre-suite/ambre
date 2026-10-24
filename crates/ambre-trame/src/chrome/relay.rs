@@ -32,8 +32,8 @@ pub enum TrameIntent {
     Filter(FilterKind),
     /// Sort the selection on the dialog's levels (`trame-sort`).
     Sort(SortApply),
-    /// Step to the next match (`trame-find-replace`).
-    Find(FindQuery),
+    /// Step to the next match (`trame-find-replace`); `None` clears the highlight.
+    Find(Option<FindQuery>),
     /// Replace the focused match.
     Replace(ReplaceRequest),
     /// Replace every match.
@@ -81,19 +81,14 @@ impl TrameRelay {
                 sort_keys: req.sort_keys,
                 header: req.header,
             },
-            TrameIntent::Find(q) => TrameCommand::FindNext {
-                query: q.query,
-                options: q.options,
-            },
+            TrameIntent::Find(query) => TrameCommand::FindNext { query },
             TrameIntent::Replace(r) => TrameCommand::ReplaceOne {
-                query: r.query,
+                query: Some(r.query),
                 replacement: r.replacement,
-                options: r.options,
             },
             TrameIntent::ReplaceAll(r) => TrameCommand::ReplaceAll {
-                query: r.query,
+                query: Some(r.query),
                 replacement: r.replacement,
-                options: r.options,
             },
             TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
             // `Sheet` and a number is always a valid name, and the Logic thread

@@ -49,7 +49,7 @@ pub use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
 pub use crate::ui::link::{LinkEdit, ShellNav};
 pub use ambre_bus::app::toile::AddressError;
-pub use find::{FindPanel, FindPanelState, FindQuery};
+pub use find::{FindPanel, FindPanelState, FindRequest};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested
 // in `ui::comments` (like `ui::find`); the launcher names them through

@@ -9,7 +9,7 @@
 
 use ambre_core::StepDirection;
 
-use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
+use crate::logic::command::{FindOptions, FindQuery, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, NodeId};
 
 use super::ToileState;
@@ -21,19 +21,16 @@ use crate::logic::model::ElementKind;
 impl ToileState {
     /// Scan the text-bearing elements for `query`, returning the matching ids in
     /// z-order and the recenter target. Read-only: no CRDT mutation,
-    /// no sync payload. An empty query yields no hits (the UI's "clear" signal).
+    /// no sync payload. No query yields no hits (the UI's "clear" signal).
     pub(super) fn find(
         &self,
-        query: &str,
-        options: FindOptions,
+        query: Option<&FindQuery>,
         from: Option<&ElementId>,
         direction: StepDirection,
     ) -> ToileOutcome {
-        let hits = if query.is_empty() {
-            Vec::new()
-        } else {
-            self.find_hits(query, options)
-        };
+        let hits = query.map_or_else(Vec::new, |query| {
+            self.find_hits(query.text.as_str(), query.options)
+        });
         let focus = next_focus(&hits, from, direction);
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }

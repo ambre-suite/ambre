@@ -91,26 +91,33 @@ other features own, which is why one replace-all is one undo item rather than on
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `<App>Command::Find { query, options, from, backward }` | UI to Logic | the query, its options, the match to resume from and the direction |
+| `<App>Command::Find { query, from, backward }` | UI to Logic | the query with its options, or none for an emptied field; the match to resume from and the direction |
 | `<App>Event::FindResult { hits, current }` | Logic to UI | every hit in the application's stable order, and the one to reveal |
-| `<App>Command::Replace{One,All} { query, replacement, options }` | UI to Logic | the query, its replacement and the options; text applications only |
+| `<App>Command::Replace{One,All} { query, replacement }` | UI to Logic | the query with its options, and its replacement; text applications only |
 | `<App>Event::ReplaceDone { replaced }` | Logic to UI | how many matches were rewritten |
 
-**Panel state**, held in the chrome, never in the document:
+**The query**, held by the panel and sent on the bus, never written to the document. The shape is
+one, in `ambre-bus` (`app/find.rs`); the options are each application's:
 
 ```rust
+// ambre_bus::app::find
+/// The query as typed, never empty. An emptied field sends no query.
+pub struct FindText(String);
+
 /// The query and its refinements. What "whole" means -- a whole cell, a whole
 /// word -- is each application's, and the option set is theirs to widen.
-pub struct FindQuery { pub query: String, pub options: FindOptions }
+pub struct FindQuery<O> { pub text: FindText, pub options: O }
 
+// ambre_bus::app::<app>
 /// Each application declares its own, and every one opens on the case.
 pub struct FindOptions { pub case: CaseMatch, /* the application's own refinements */ }
+pub type FindQuery = find::FindQuery<FindOptions>;
 ```
 
 **Steps, when a query arrives.** The same walk everywhere; step 2 is the application's own order.
 
-1. answer with nothing when the query is empty, which is how the panel clears its highlight
-   (`FIND-005`);
+1. answer with nothing when the field is empty and no query came, which is how the panel clears
+   its highlight (`FIND-005`);
 2. walk the whole scope in the application's stable order, and keep each text-bearing item that
    matches. Both sides fold to lower case unless the case option is set (`FIND-002`);
 3. resolve the reveal target: the hit after the resume point, or the one before it when stepping

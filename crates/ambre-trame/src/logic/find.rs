@@ -10,27 +10,16 @@
 
 use super::*;
 use crate::formula::types::CellId;
-use ambre_bus::app::find::{MatchCount, MatchIndex};
+use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
-/// The text a find looks for, as the user typed it. Never empty: an empty
-/// query finds nothing and replaces nothing, so it never reaches a scan.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct FindText(String);
-
-impl FindText {
-    /// The query `text`, or `None` when it is empty.
-    pub(super) fn new(text: String) -> Option<Self> {
-        (!text.is_empty()).then_some(Self(text))
-    }
-
-    /// The query folded by `case`, the form every comparison takes.
-    fn fold(&self, case: CaseMatch) -> FoldedNeedle {
-        FoldedNeedle {
-            text: fold(&self.0, case),
-            case,
-        }
+/// The query folded by `case`, the form every comparison takes. The find text
+/// is never empty: an empty field sends no query, so it never reaches a scan.
+fn fold_needle(query: &FindText, case: CaseMatch) -> FoldedNeedle {
+    FoldedNeedle {
+        text: fold(query.as_str(), case),
+        case,
     }
 }
 
@@ -51,7 +40,7 @@ impl Replacement {
 }
 
 /// A query folded by the case it is compared under. Only
-/// [`FindText::fold`] makes one, so no comparison meets an unfolded query.
+/// [`fold_needle`] makes one, so no comparison meets an unfolded query.
 struct FoldedNeedle {
     text: String,
     case: CaseMatch,
@@ -67,7 +56,7 @@ impl TrameState {
     /// cell onto that hit, so a repeated `FindNext` advances naturally. An
     /// empty query clears the highlight: see [`Self::find_nothing`].
     pub(super) fn find_next(&self, query: &FindText, options: FindOptions) -> TrameOutcome {
-        let needle = query.fold(options.case);
+        let needle = fold_needle(query, options.case);
         let mut matches: Vec<CellPos> = Vec::new();
         for at in self
             .index
@@ -121,7 +110,7 @@ impl TrameState {
         replacement: &Replacement,
         options: FindOptions,
     ) -> TrameOutcome {
-        let needle = query.fold(options.case);
+        let needle = fold_needle(query, options.case);
 
         // One undo group for the whole replace (sealed by the next command's
         // fallback `group_end`), mirroring `fill_range`.
@@ -170,7 +159,7 @@ impl TrameState {
         replacement: &Replacement,
         options: FindOptions,
     ) -> TrameOutcome {
-        let needle = query.fold(options.case);
+        let needle = fold_needle(query, options.case);
         let at = self.active;
 
         let _ = self.undo_manager.group_start();
@@ -446,15 +435,14 @@ fn replace_ci(raw: &str, needle: &FoldedNeedle, replacement: &Replacement) -> St
 #[cfg(test)]
 mod tests {
     use super::{
-        CaseMatch, FindText, FoldedNeedle, FormulaSource, MatchExtent, Replacement, replace_ci,
-        rewrite,
+        CaseMatch, FindText, FoldedNeedle, FormulaSource, MatchExtent, Replacement, fold_needle,
+        replace_ci, rewrite,
     };
 
     /// `query` folded by `case`.
     fn needle(query: &str, case: CaseMatch) -> FoldedNeedle {
-        FindText::new(query.to_owned())
-            .expect("a test query is not empty")
-            .fold(case)
+        let query = FindText::new(query.to_owned()).expect("a test query is not empty");
+        fold_needle(&query, case)
     }
 
     /// `raw` with every case-insensitive match of `query` replaced by `with`.
@@ -464,12 +452,6 @@ mod tests {
             &needle(query, CaseMatch::Insensitive),
             &Replacement::new(with.to_owned()),
         )
-    }
-
-    #[test]
-    fn an_empty_query_is_no_query() {
-        assert_eq!(FindText::new(String::new()), None);
-        assert!(FindText::new("a".to_owned()).is_some());
     }
 
     #[test]

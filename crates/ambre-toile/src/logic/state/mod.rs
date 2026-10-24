@@ -632,10 +632,9 @@ impl ToileState {
             ToileCommand::DuplicateElements { ids, delta } => self.duplicate_elements(&ids, delta),
             ToileCommand::Find {
                 query,
-                options,
                 from,
                 direction,
-            } => self.find(&query, options, from.as_ref(), direction),
+            } => self.find(query.as_ref(), from.as_ref(), direction),
             ToileCommand::RequestSelectionStats { ids, kind } => self.selection_stats(&ids, kind),
             ToileCommand::RequestSelectionData { ids } => self.selection_data(&ids),
             ToileCommand::RequestBoardIds => self.board_ids(),

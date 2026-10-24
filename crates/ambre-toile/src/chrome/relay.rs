@@ -19,14 +19,14 @@ use ambre_bus::app::toile::{
 use ambre_bus::{AppCommand, AppEvent, UiEvent, UserId};
 use leptos::prelude::*;
 
-use super::find::FindQuery;
+use super::find::FindRequest;
 use super::presenter::PresenterIntent;
 use crate::ui::status::SelStats;
 
 /// What one of Toile's panels asks of the board.
 pub enum ToileIntent {
     /// Search the whole board, off-screen matches included (`toile-find`).
-    Find(FindQuery),
+    Find(FindRequest),
     /// Drive the presentation from the presenter panel (`toile-presentation`).
     Present(PresenterIntent),
 }
@@ -59,7 +59,6 @@ impl ToileRelay {
         let command = match intent {
             ToileIntent::Find(q) => ToileCommand::Find {
                 query: q.query,
-                options: q.options,
                 from: q.from,
                 direction: q.direction,
             },

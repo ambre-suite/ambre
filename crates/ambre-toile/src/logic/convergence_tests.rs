@@ -1064,8 +1064,7 @@ fn find_dir(
     direction: StepDirection,
 ) -> crate::logic::command::FindResults {
     let out = st.handle_command(ToileCommand::Find {
-        query: query.to_owned(),
-        options,
+        query: crate::logic::command::FindQuery::new(query.to_owned(), options),
         from,
         direction,
     });

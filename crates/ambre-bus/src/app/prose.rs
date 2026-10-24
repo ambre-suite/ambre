@@ -998,10 +998,13 @@ impl FirstPage {
     }
 }
 
-/// What a search looks for (`features/ambre-spec-prose-find-replace.md`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FindQuery {
-    pub text: String,
+/// What a search looks for (`features/ambre-spec-prose-find-replace.md`):
+/// the shared shape over Prose's own options.
+pub type FindQuery = super::find::FindQuery<FindOptions>;
+
+/// The refinements of a Prose search.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FindOptions {
     pub case: ambre_core::CaseMatch,
     pub word: ambre_core::WordMatch,
     /// [`PatternKind::Regex`] asks for the regular-expression search, unbuilt:
@@ -1546,9 +1549,10 @@ pub enum ProseCommand {
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     /// Open a search, or replace the one open. It writes nothing
-    /// (`PROSE-FEAT-151`).
+    /// (`PROSE-FEAT-151`). `None` is the emptied field: the search finds
+    /// nothing and the highlight clears (`FIND-005`).
     FindStart {
-        query: FindQuery,
+        query: Option<FindQuery>,
     },
     FindNext,
     FindPrev,

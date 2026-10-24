@@ -5,7 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
-use super::find::{FindText, Replacement};
+use super::find::Replacement;
 use super::*;
 use ambre_core::HistoryStep;
 
@@ -273,16 +273,16 @@ impl TrameState {
                 mode,
             } => self.fill_range(&sheet_id, src, dest, mode),
 
-            TrameCommand::FindNext { query, options } => match FindText::new(query) {
-                Some(query) => self.find_next(&query, options),
+            TrameCommand::FindNext { query } => match query {
+                Some(query) => self.find_next(&query.text, query.options),
                 None => Self::find_nothing(),
             },
-            TrameCommand::ReplaceAll {
-                query,
-                replacement,
-                options,
-            } => match FindText::new(query) {
-                Some(query) => self.replace_all(&query, &Replacement::new(replacement), options),
+            TrameCommand::ReplaceAll { query, replacement } => match query {
+                Some(query) => self.replace_all(
+                    &query.text,
+                    &Replacement::new(replacement),
+                    query.options,
+                ),
                 None => Self::replace_nothing(),
             },
             TrameCommand::ImportCsv {
@@ -321,12 +321,12 @@ impl TrameState {
                 }])
             }
 
-            TrameCommand::ReplaceOne {
-                query,
-                replacement,
-                options,
-            } => match FindText::new(query) {
-                Some(query) => self.replace_one(&query, &Replacement::new(replacement), options),
+            TrameCommand::ReplaceOne { query, replacement } => match query {
+                Some(query) => self.replace_one(
+                    &query.text,
+                    &Replacement::new(replacement),
+                    query.options,
+                ),
                 None => Self::replace_nothing(),
             },
 

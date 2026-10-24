@@ -85,11 +85,15 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
   (`TRAME-UI-080`);
 * the row-major order is Trame's, and the origin is the active cell the Logic thread tracks.
 
-The *find text* is the query as the user typed it, never empty (`FindText`). An empty query clears
-the highlight and never reaches a scan (`FIND-005`). The *find options* are the refinements a find
-applies to its query. Trame widens the shared set to four, one enum per panel checkbox:
+The *find text* is the query as the user typed it, never empty (`FindText`). An empty field sends
+no query, which clears the highlight and never reaches a scan (`FIND-005`). The *find options* are
+the refinements a find applies to its query. Both travel in the shared `FindQuery`
+(`ambre-spec-find.md section 3`). Trame widens the shared set to four, one enum per panel checkbox:
 
 ```rust
+// ambre_bus::app::trame
+pub type FindQuery = find::FindQuery<FindOptions>;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FindOptions {
     pub case: CaseMatch,      // Insensitive | Sensitive

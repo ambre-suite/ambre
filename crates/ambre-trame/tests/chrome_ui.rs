@@ -289,7 +289,7 @@ fn find_replace_panel_opens_in_find_mode() {
     let container = mount_in_container(|| {
         let state = RwSignal::new(None::<FindReplaceState>);
         let result = RwSignal::new(None::<chrome::FindPosition>);
-        let noop_find = Callback::new(|_: FindQuery| {});
+        let noop_find = Callback::new(|_: Option<FindQuery>| {});
         let noop_replace = Callback::new(|_: ReplaceRequest| {});
         // Open the panel in find mode after the initial render so the closed ->
         // open transition is what the DOM reflects.

@@ -188,7 +188,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::ElementDro
 ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNotSupported.count | field | u32	math	count
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | DocCount::of(text) | param | &str	free-text	text content / label / parser input
-ambre-bus | src/app/prose.rs | crate::app::prose | FindQuery.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -289,7 +288,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::new(units) | par
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::Find.query | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::RenameFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::ReplyComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::SetConnectorLabel.base | field | String	free-text	user text
@@ -331,11 +329,8 @@ ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | Clipboar
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::CommitCellEdit.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	the A1 reference text the user typed; only the Trame engine parses it, against the live sheets, so no type holds its parse on the bus
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceOne.replacement | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SaveFilterView.name | field | String	free-text	user label of a filter view
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellText.text | field | String	free-text	cell text / query / user message
@@ -2793,7 +2788,6 @@ ambre-toile | src/chrome/comments.rs | crate::chrome::comments | CommentsPanel(s
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/chrome/deck.rs | crate::chrome::deck | DeckPanel(state) | param | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/chrome/find.rs | crate::chrome::find | FindQuery.query | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_doc_open | field | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_open | field | RwSignal<bool>	generic	local state flag or value, not a mode selector
@@ -2927,7 +2921,6 @@ ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileSta
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches(query) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find_hits(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_match(haystack) | param | &str	free-text	label, message or user text
@@ -3279,8 +3272,6 @@ ambre-trame | src/chrome/commands.rs | crate::chrome::commands | context_entries
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindQuery.query | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.query | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | ReplaceRequest.replacement | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(cell_ref) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBar(content) | param | RwSignal<String>	free-text	free text: user content, label, message or display string
@@ -3481,7 +3472,7 @@ ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | 
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	free-text	the raw text of a matched cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only FindText::fold hands it, or a cell's displayed text
+ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only fold_needle hands it, or a cell's displayed text
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::generator_version() | ret | u32	trait	fixture trait from the shared fixtures harness
@@ -3818,8 +3809,6 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial:
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::days_since() | ret | i64	math	calendar arithmetic: a count of days
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/logic/find.rs | crate::logic::find | FindText.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-trame | src/logic/find.rs | crate::logic::find | FindText::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
@@ -3845,6 +3834,10 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::s
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | String	newtype-inner	the case-folded text of a sheet name key
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	newtype-inner	SheetNameRefusal field: the refused character, echoed in the refusal
 ambre-bus | src/app/find.rs | crate::app::find | MatchIndex::ordinal() | ret | u32	newtype-inner	MatchIndex accessor, the 1-based number a label prints
+ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | String	newtype-inner	the find text the newtype wraps, never empty
+ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
+ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
+ambre-bus | src/app/find.rs | crate::app::find | FindQuery::new(text) | param | String	newtype-inner	the text FindText validates
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher

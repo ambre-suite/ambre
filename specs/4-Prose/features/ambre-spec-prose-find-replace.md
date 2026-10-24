@@ -99,10 +99,11 @@ thread, and nothing about a search is persisted (`ambre-spec-find.md`, `FIND-001
 **The query and a match:**
 
 ```rust
-// ambre_bus::app::prose
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FindQuery {
-    pub text:    String,
+// ambre_bus::app::prose -- the shared shape is `ambre-spec-find.md section 3`
+pub type FindQuery = find::FindQuery<FindOptions>;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FindOptions {
     pub case:    CaseMatch,
     pub word:    WordMatch,
     /// `PatternKind::Regex` asks for the regular-expression search, which is a Story of its
@@ -119,7 +120,8 @@ pub struct FindMatch { pub block_id: BlockId, pub range: DocSpan }
 // ambre-prose/src/logic/find.rs
 impl ProseState {
     /// Every match in the document, in block order (`PROSE-FEAT-033`, `PROSE-FEAT-034`).
-    fn find_all(&self, query: &FindQuery) -> Vec<FindMatch>;
+    /// No query, the emptied field, finds nothing (`FIND-005`).
+    fn find_all(&self, query: Option<&FindQuery>) -> Vec<FindMatch>;
 
     /// The replacements, from the end of the document backwards, in one commit
     /// (`PROSE-FEAT-036`).
@@ -147,7 +149,7 @@ declared in `features/ambre-spec-prose-engine.md section 3`):
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `FindStart { query }` | view to engine | the query; the engine answers with every match |
+| `FindStart { query }` | view to engine | the query, or none for an emptied field; the engine answers with every match |
 | `FindNext`, `FindPrev` | view to engine | nothing: the engine moves its own index |
 | `FindClose` | view to engine | nothing: the session ends |
 | `ReplaceOne { replacement }` | view to engine | the text replacing the current match |
@@ -157,8 +159,8 @@ declared in `features/ambre-spec-prose-engine.md section 3`):
 
 **Code:** `crates/ambre-prose/src/logic/find.rs` holds the session, `match_offsets` and both
 replacements. Two choices the model above leaves open are made there. `find_all` and `replace_all`
-are methods of the engine, which owns the document. A query with `use_regex` set is refused rather
-than read literally.
+are methods of the engine, which owns the document. A query whose `pattern` is `PatternKind::Regex` is
+refused rather than read literally.
 
 ---
 

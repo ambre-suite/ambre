@@ -616,10 +616,10 @@ pub enum TrameCommand {
     /// exact equality for [`MatchExtent::WholeCell`](super::MatchExtent), else by substring.
     /// Produces a [`FindResult`](crate::TrameEvent::FindResult) with every match on the
     /// sheet plus the index of the one to focus; no CRDT delta is emitted. The UI moves the
-    /// active cell onto the focused match, so a repeated `FindNext` advances.
+    /// active cell onto the focused match, so a repeated `FindNext` advances. `None` is the
+    /// emptied field: the reply carries no match, which clears the highlight (`FIND-005`).
     FindNext {
-        query: String,
-        options: super::FindOptions,
+        query: Option<super::FindQuery>,
     },
 
     /// Replace every match of `query` with `replacement` across the active sheet (or all
@@ -629,11 +629,11 @@ pub enum TrameCommand {
     /// is a formula (`=...`) are skipped unless the scope is
     /// [`SearchScope::Formulas`](super::SearchScope). Replies with
     /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) and a
-    /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches.
+    /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches. `None` replaces
+    /// nothing.
     ReplaceAll {
-        query: String,
+        query: Option<super::FindQuery>,
         replacement: String,
-        options: super::FindOptions,
     },
 
     /// Replace the single match at the tracked active cell, then advance to the next match
@@ -643,11 +643,10 @@ pub enum TrameCommand {
     /// scope is not read. Whether or not it matched, the reply carries a fresh
     /// [`FindResult`](crate::TrameEvent::FindResult), so the UI moves to and highlights the
     /// following match. Replies with [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0`
-    /// or `1`).
+    /// or `1`). `None` replaces nothing.
     ReplaceOne {
-        query: String,
+        query: Option<super::FindQuery>,
         replacement: String,
-        options: super::FindOptions,
     },
 
     /// Undo the last local edit (`trame-undo`). Backed by Loro's `UndoManager`. It replays
