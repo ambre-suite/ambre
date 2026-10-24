@@ -820,7 +820,7 @@ impl SyncState {
                 result,
             } => {
                 self.send_to_logic(match result {
-                    Ok((active, created)) => LogicEvent::SegmentClosed {
+                    Ok(crate::http::ClosedSegmentResponse { active, created }) => LogicEvent::SegmentClosed {
                         channel_id,
                         closing,
                         active,

@@ -1025,8 +1025,8 @@ pub(crate) struct SegmentCloseParams {
 
 /// Close the active segment of a channel (the Murmure segments spec).
 /// Create the successor under the key of `meta`, then ask the relay to close
-/// into it. Returns the active segment after the close, and whether it is
-/// this successor.
+/// into it. Returns the relay's answer: the active segment after the close,
+/// and whether it is this successor.
 ///
 /// A close that lost its race deletes the successor it created, which no
 /// channel lists (`SYNC-163`). A failed request deletes nothing: the relay
@@ -1034,7 +1034,7 @@ pub(crate) struct SegmentCloseParams {
 pub(crate) async fn close_segment_task<H: ShareHttp>(
     http: &H,
     p: SegmentCloseParams,
-) -> Result<(SegmentId, bool), http::HttpError> {
+) -> Result<http::ClosedSegmentResponse, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let successor = p.successor.document_id();
     let (doc_key_enc, entry) = creation(successor, &p.meta_key, &p.exchange_key, &p.author)?;
@@ -1062,7 +1062,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
             tracing::warn!("[Sync] the successor of a lost close stays on the relay: {e}");
         }
     }
-    Ok((closed.active, closed.created))
+    Ok(closed)
 }
 
 /// Inputs for [`amendments_task`], gathered from `SyncState` before
@@ -2530,7 +2530,13 @@ mod tests {
         let answer = |active: SegmentId, created: bool| serde_json::json!({ "active": active.to_string(), "created": created });
         let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
         let won = close_segment_task(&http, close_params(mine)).await;
-        assert_eq!(won, Ok((mine, true)));
+        assert_eq!(
+            won,
+            Ok(http::ClosedSegmentResponse {
+                active: mine,
+                created: true
+            })
+        );
         {
             let calls = http.calls();
             let [Call::Post(create, body), Call::Post(close, _)] = calls.as_slice() else {
@@ -2548,7 +2554,13 @@ mod tests {
             Ok(serde_json::Value::Null),
         ]);
         let lost = close_segment_task(&http, close_params(mine)).await;
-        assert_eq!(lost, Ok((winner, false)));
+        assert_eq!(
+            lost,
+            Ok(http::ClosedSegmentResponse {
+                active: winner,
+                created: false
+            })
+        );
         {
             let calls = http.calls();
             let Some(Call::Delete(url, _)) = calls.last() else {
@@ -2575,7 +2587,13 @@ mod tests {
         let answer = serde_json::json!({ "active": mine.to_string(), "created": true });
         let http = FakeHttp::new(vec![Ok(created), Ok(answer)]);
         let again = close_segment_task(&http, close_params(mine)).await;
-        assert_eq!(again, Ok((mine, true)));
+        assert_eq!(
+            again,
+            Ok(http::ClosedSegmentResponse {
+                active: mine,
+                created: true
+            })
+        );
         let calls = http.calls();
         let [Call::Post(_, create), Call::Post(_, close)] = calls.as_slice() else {
             panic!("expected a create then a close, got {:?}", calls.len());

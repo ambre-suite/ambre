@@ -1378,7 +1378,7 @@ pub(crate) struct CloseSegmentRequest {
 
 /// The active segment after a close. `created` is false when an earlier
 /// close registered another successor.
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub(crate) struct ClosedSegmentResponse {
     #[serde(with = "ambre_core::serde_id::segment_id")]
     pub active: ambre_core::SegmentId,

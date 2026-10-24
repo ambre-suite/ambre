@@ -263,7 +263,7 @@ pub async fn create_document(
         return Err(AppError::BadRequest("a space is a Murmure document".into()));
     }
     let client_id = req.document_id;
-    let (doc, created) = db::create_document(
+    let (doc, insertion) = db::create_document(
         &state.db,
         &s.user_id,
         req.doc_type,
@@ -271,6 +271,7 @@ pub async fn create_document(
         client_id.as_ref(),
     )
     .await?;
+    let created = insertion == db::Insertion::Inserted;
     let doc_id = doc.id;
     // Only the call that actually created the row (or an idempotent retry by the
     // same owner) registers the owner membership. A foreign caller hitting an

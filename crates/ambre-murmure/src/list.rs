@@ -265,11 +265,20 @@ pub struct BodyMark {
     pub bytes: ByteSpan,
 }
 
+/// The words of a header that opens a group: who wrote, and when.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeaderWords {
+    /// The author's display name.
+    pub author: String,
+    /// The time the group's first message was sent, as the reader shows it.
+    pub time: String,
+}
+
 /// What a row shows, in words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowWords {
-    /// The author's name and the time, on a row that opens a group.
-    pub header: Option<(String, String)>,
+    /// The header, on a row that opens a group.
+    pub header: Option<HeaderWords>,
     /// The body, or what stands in its place.
     pub body: String,
     /// The body is no text a member wrote: a deleted message or a notice.
@@ -313,7 +322,10 @@ impl<'a> Row<'a> {
                 .map(ambre_core::DisplayName::into_string)
                 .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned())
         };
-        let header = header.then(|| (name(message.author), time_of(message.ts)));
+        let header = header.then(|| HeaderWords {
+            author: name(message.author),
+            time: time_of(message.ts),
+        });
         let (body, muted, marks) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
                 let body = format!("{} joined the conversation", name(member));
@@ -986,7 +998,13 @@ pub(crate) mod tests {
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
         assert!(row.muted);
-        assert_eq!(row.header, Some(("Ada".to_owned(), "t7".to_owned())));
+        assert_eq!(
+            row.header,
+            Some(HeaderWords {
+                author: "Ada".to_owned(),
+                time: "t7".to_owned(),
+            })
+        );
     }
 
     /// An edited message ends with the marker; a plain one shows its body
@@ -1061,7 +1079,10 @@ pub(crate) mod tests {
         );
         assert_eq!(
             unknown.header,
-            Some((UNKNOWN_MEMBER.to_owned(), String::new()))
+            Some(HeaderWords {
+                author: UNKNOWN_MEMBER.to_owned(),
+                time: String::new(),
+            })
         );
     }
 

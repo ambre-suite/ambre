@@ -55,15 +55,32 @@ pub(crate) fn format_date(serial: DateSerial) -> String {
 
 /// The time of day a serial carries in its fraction, `14:05:09` (`TRAME-107`).
 pub(crate) fn format_time(serial: DateSerial) -> String {
-    let (h, m, s) = hms(serial);
+    let TimeOfDay {
+        hours: h,
+        minutes: m,
+        seconds: s,
+    } = hms(serial);
     format!("{h:02}:{m:02}:{s:02}")
+}
+
+/// A time of day on a clock face: hours from 0 to 23, minutes and seconds
+/// from 0 to 59.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimeOfDay {
+    hours: u32,
+    minutes: u32,
+    seconds: u32,
 }
 
 /// Hours, minutes and seconds of the fraction of `serial`, rounded to the
 /// second. A fraction that rounds up to midnight reads `00:00:00`.
-fn hms(serial: DateSerial) -> (u32, u32, u32) {
+fn hms(serial: DateSerial) -> TimeOfDay {
     let seconds = (serial.time_of_day() * 86_400.0).round() as u32 % 86_400;
-    (seconds / 3600, seconds / 60 % 60, seconds % 60)
+    TimeOfDay {
+        hours: seconds / 3600,
+        minutes: seconds / 60 % 60,
+        seconds: seconds % 60,
+    }
 }
 
 /// One lexed piece of a pattern section.
@@ -373,7 +390,11 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
         month: mo,
         day: d,
     } = serial.day().civil();
-    let (h, mi, s) = hms(serial);
+    let TimeOfDay {
+        hours: h,
+        minutes: mi,
+        seconds: s,
+    } = hms(serial);
     let twelve_hour = tokens.contains(&Token::AmPm);
     let month = |len: usize| -> String {
         let name = MONTHS

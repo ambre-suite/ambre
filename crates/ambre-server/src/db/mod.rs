@@ -284,10 +284,10 @@ mod tests {
         .await
         .expect("create user");
         let owner = user.id;
-        let (doc, created) = create_document(&pool, &owner, ambre_core::DocType::Trame, None, None)
+        let (doc, insertion) = create_document(&pool, &owner, ambre_core::DocType::Trame, None, None)
             .await
             .expect("create document");
-        assert!(created);
+        assert_eq!(insertion, Insertion::Inserted);
         let document_id = doc.id;
 
         let author = [5u8; 32];

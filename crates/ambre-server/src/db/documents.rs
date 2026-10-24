@@ -104,10 +104,19 @@ pub async fn list_documents_for_user(
         .collect()
 }
 
+/// Whether a create call inserted its row, or found the id already taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Insertion {
+    /// An idempotent retry, or another caller's id: the row was already there.
+    Existing,
+    /// This call inserted the row.
+    Inserted,
+}
+
 /// Creates a document, optionally with a client-supplied id, and returns the full
 /// row. Lazy creation: the WASM client generates the `DocumentId` up front, and
-/// only materializes the row on the first modification. Returns the row plus
-/// `created` = whether this call actually inserted it (false when an idempotent
+/// only materializes the row on the first modification. Returns the row and
+/// whether this call inserted it ([`Insertion::Existing`] when an idempotent
 /// retry hit an existing id).
 ///
 /// When `document_id` is provided the insert is idempotent (`ON CONFLICT DO
@@ -120,7 +129,7 @@ pub async fn create_document(
     doc_type: ambre_core::DocType,
     name_enc: Option<&ambre_core::SealedName>,
     document_id: Option<&ambre_core::DocumentId>,
-) -> Result<(DocumentRow, bool), AppError> {
+) -> Result<(DocumentRow, Insertion), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
     let doc_type = doc_type.as_str();
 
@@ -152,7 +161,7 @@ pub async fn create_document(
             .await?;
 
             match inserted {
-                Some(row) => Ok((row_to_doc(row)?, true)),
+                Some(row) => Ok((row_to_doc(row)?, Insertion::Inserted)),
                 None => {
                     // Already existed: return it untouched (owner preserved).
                     let row = sqlx::query(
@@ -161,7 +170,7 @@ pub async fn create_document(
                     .bind(did)
                     .fetch_one(pool)
                     .await?;
-                    Ok((row_to_doc(row)?, false))
+                    Ok((row_to_doc(row)?, Insertion::Existing))
                 }
             }
         }
@@ -174,7 +183,7 @@ pub async fn create_document(
             .bind(name_enc.map(|v| v.as_bytes()))
             .fetch_one(pool)
             .await?;
-            Ok((row_to_doc(row)?, true))
+            Ok((row_to_doc(row)?, Insertion::Inserted))
         }
     }
 }

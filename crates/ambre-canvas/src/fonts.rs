@@ -41,13 +41,13 @@ use rustc_hash::FxHashSet;
 /// missing file logs a warning and leaves that face absent rather than failing
 /// boot.
 #[cfg(any(test, target_arch = "wasm32"))]
-const BASE_FONTS: [(&str, &str); 6] = [
-    ("/fonts/NotoSans-Regular.ttf", "NotoSans-Regular.ttf"),
-    ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
-    ("/fonts/NotoSans-Italic.ttf", "NotoSans-Italic.ttf"),
-    ("/fonts/NotoSans-BoldItalic.ttf", "NotoSans-BoldItalic.ttf"),
-    ("/fonts/DejaVuSerif.ttf", "DejaVuSerif.ttf"),
-    ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
+const BASE_FONTS: [&str; 6] = [
+    "/fonts/NotoSans-Regular.ttf",
+    "/fonts/NotoSans-Bold.ttf",
+    "/fonts/NotoSans-Italic.ttf",
+    "/fonts/NotoSans-BoldItalic.ttf",
+    "/fonts/DejaVuSerif.ttf",
+    "/fonts/DejaVuSansMono.ttf",
 ];
 
 /// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
@@ -57,7 +57,9 @@ const BASE_FONTS: [(&str, &str); 6] = [
 #[cfg(target_arch = "wasm32")]
 pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
     let mut faces = Vec::new();
-    for (url, label) in BASE_FONTS {
+    for url in BASE_FONTS {
+        // The log names the face by its file, the last segment of its URL.
+        let label = url.rsplit('/').next().unwrap_or(url);
         match crate::host::fetch_bytes(url).await {
             Some(bytes) => {
                 tracing::info!("{label} loaded");
@@ -297,7 +299,7 @@ mod tests {
     /// which scripts a user reads.
     #[test]
     fn every_face_is_fetched_from_the_page_origin() {
-        let base = BASE_FONTS.iter().map(|(url, _)| *url);
+        let base = BASE_FONTS.iter().copied();
         let lazy = LazyFont::ALL.iter().map(|font| font.asset_url());
         for url in base.chain(lazy) {
             assert!(url.starts_with("/fonts/"), "`{url}` leaves the origin");

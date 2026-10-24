@@ -17,7 +17,7 @@ use ambre_draw::{
 };
 
 use crate::list::{
-    JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
+    HeaderWords, JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
 };
 use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
@@ -638,7 +638,7 @@ fn header_height(
     row: &RowWords,
     width: ViewPx,
 ) -> ViewPx {
-    let Some((author, time)) = &row.header else {
+    let Some(HeaderWords { author, time }) = &row.header else {
         return ViewPx::ZERO;
     };
     let author = text_height(shape(
@@ -936,7 +936,7 @@ fn draw_row<S: DrawSurface>(
 ) {
     let x = SPACE_8;
     let mut y = top + SPACE_2;
-    if let Some((author, time)) = &row.header {
+    if let Some(HeaderWords { author, time }) = &row.header {
         y += SPACE_4;
         let layout = shape(
             font_cx,

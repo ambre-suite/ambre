@@ -194,9 +194,9 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
     );
     let window_ms = ambre_core::Millis::from_duration(window.to_duration());
-    let (allowed, remaining) =
+    let verdict =
         match check_sliding_window(&state, &category, &bucket, now, window_ms, max_req).await {
-            Ok((allowed, rem)) => (allowed, rem),
+            Ok(verdict) => verdict,
             Err(e) if category.fail_closed() => {
                 tracing::error!("Rate limiter Redis error on auth tier: {e:?}, failing closed");
                 return (
@@ -217,7 +217,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 
     let reset = now.plus(window_ms).to_unix_seconds().0;
 
-    if !allowed {
+    let Verdict::Allowed { remaining } = verdict else {
         return (
             StatusCode::TOO_MANY_REQUESTS,
             [
@@ -232,7 +232,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             ),
         )
             .into_response();
-    }
+    };
 
     let mut response = next.run(req).await;
     let headers = response.headers_mut();
@@ -248,9 +248,17 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     response
 }
 
+/// What the sliding window says of one request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// The request fits, with `remaining` more allowed in the window.
+    Allowed { remaining: u64 },
+    /// The window is full.
+    Refused,
+}
+
 /// Records the current request in the sliding window of `bucket` under
-/// `category`, and returns
-/// whether it is allowed along with the remaining quota.
+/// `category`, and says whether it is allowed, with the quota left.
 ///
 /// Runs `SLIDING_WINDOW_LUA` atomically: prune-add-count-expire in one round
 /// trip, so there is no boundary burst and no TTL-less key window.
@@ -261,7 +269,7 @@ async fn check_sliding_window(
     now: ambre_core::UnixMillis,
     window: ambre_core::Millis,
     max_requests: u64,
-) -> Result<(bool, u64), AppError> {
+) -> Result<Verdict, AppError> {
     // No window bucket in the key: the sorted set is the sliding window.
     let key = format!("rate:{}:{bucket}", category.prefix());
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
@@ -280,14 +288,13 @@ async fn check_sliding_window(
         .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
 
     let count_u64 = count.max(0) as u64;
-    let allowed = count_u64 <= max_requests;
-    let remaining = if allowed {
-        max_requests.saturating_sub(count_u64)
+    Ok(if count_u64 <= max_requests {
+        Verdict::Allowed {
+            remaining: max_requests.saturating_sub(count_u64),
+        }
     } else {
-        0
-    };
-
-    Ok((allowed, remaining))
+        Verdict::Refused
+    })
 }
 
 #[cfg(test)]

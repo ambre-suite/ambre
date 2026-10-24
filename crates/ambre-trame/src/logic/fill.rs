@@ -26,6 +26,21 @@ impl Term {
     }
 }
 
+/// An arithmetic series a fill line extrapolates: the value at the source
+/// origin, and the difference between two neighbours.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Series {
+    start: f64,
+    step: f64,
+}
+
+impl Series {
+    /// The value at `term`.
+    fn at(self, term: Term) -> f64 {
+        self.start + term.0 as f64 * self.step
+    }
+}
+
 /// One tile of a merged fill along one axis (`TRAME-UI-134`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Tile<P: Line> {
@@ -215,11 +230,11 @@ impl TrameState {
         term: Term,
         src_raw: &FormulaSource,
         src_master: CellPos,
-        series: Option<(f64, f64)>,
+        series: Option<Series>,
     ) {
         let master = tile.top_left;
-        let text = if let Some((first, step)) = series {
-            FormulaSource::new(format_number(first + term.0 as f64 * step))
+        let text = if let Some(series) = series {
+            FormulaSource::new(format_number(series.at(term)))
         } else if src_raw.is_formula() {
             shift_formula(
                 src_raw,
@@ -301,12 +316,12 @@ impl TrameState {
         from: CellPos,
         term: Term,
         sources: &[FormulaSource],
-        series: Option<(f64, f64)>,
+        series: Option<Series>,
     ) {
         let _ = self.materialize(at);
 
-        let text = if let Some((first, step)) = series {
-            FormulaSource::new(format_number(first + term.0 as f64 * step))
+        let text = if let Some(series) = series {
+            FormulaSource::new(format_number(series.at(term)))
         } else {
             // Tiled source index: wrap into the source line so a fill longer
             // than the source repeats the pattern (an upward fill stays in range).
@@ -387,7 +402,7 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 }
 
 /// Decide whether a fill line extrapolates a numeric arithmetic series, and with
-/// what `(first, step)`. `first` corresponds to the source origin (index 0).
+/// what [`Series`]. Its start is the value at the source origin (index 0).
 ///
 /// - [`FillMode::Copy`]: never a series.
 /// - All-numeric source with >= 2 values forming an arithmetic progression: that
@@ -395,7 +410,7 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 /// - [`FillMode::Series`] with a single numeric source: step `1` (Excel/Sheets
 ///   "Fill Series" on a lone number).
 /// - Anything else: `None` (the line is copied).
-fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<(f64, f64)> {
+fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     if mode == FillMode::Copy {
         return None;
     }
@@ -407,14 +422,20 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<(f64, f64)
         .collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
-        [only] => (mode == FillMode::Series).then_some((*only, 1.0)),
+        [only] => (mode == FillMode::Series).then_some(Series {
+            start: *only,
+            step: 1.0,
+        }),
         [first, second, rest @ ..] => {
             let step = second - first;
             let arithmetic = rest
                 .iter()
                 .zip(nums.iter().skip(1))
                 .all(|(v, prev)| (v - prev - step).abs() < 1e-9);
-            arithmetic.then_some((*first, step))
+            arithmetic.then_some(Series {
+                start: *first,
+                step,
+            })
         }
     }
 }

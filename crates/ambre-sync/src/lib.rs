@@ -376,7 +376,7 @@ enum SyncEvent {
     SegmentClosed {
         channel_id: ChannelId,
         closing: ambre_bus::SegmentId,
-        result: Result<(ambre_bus::SegmentId, bool), http::HttpError>,
+        result: Result<http::ClosedSegmentResponse, http::HttpError>,
     },
     /// The answer to an amendments creation (`SyncCommand::CreateAmendments`):
     /// the document the relay holds for the segment.
