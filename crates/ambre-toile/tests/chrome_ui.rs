@@ -40,6 +40,7 @@ use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts, ZoomFactor};
 use ambre_commands::CommandId;
 use ambre_core::{CharCount, CharOffset};
+use ambre_draw::Rect;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
     EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
@@ -49,7 +50,6 @@ use ambre_toile::chrome::{
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
 use ambre_toile::ui::menu_bar::ZOOM_IN;
-use ambre_toile::ui::status::Bounds;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -103,12 +103,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     owner.set();
     let stats = SelStats {
         count: 3,
-        bounds: Some(Bounds {
-            x: 10.0,
-            y: 20.0,
-            w: 40.0,
-            h: 60.0,
-        }),
+        bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.5, 60.0);
 
@@ -163,12 +158,7 @@ fn single_selection_shows_count_without_bounds() {
     // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
         count: 1,
-        bounds: Some(Bounds {
-            x: 0.0,
-            y: 0.0,
-            w: 10.0,
-            h: 10.0,
-        }),
+        bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.0, 60.0);
 
@@ -422,8 +412,7 @@ fn selection_toolbar_delete_fires_command() {
     // A live single-element bar: Delete is always present; Group/Ungroup/Lock are
     // gated by the same flags as the context menu.
     let bar = RwSignal::new(Some(FloatBar {
-        x: 40.0,
-        y: 20.0,
+        at: css_point(40.0, 20.0),
         multi: false,
         has_group: false,
         any_locked: false,
@@ -506,8 +495,7 @@ fn the_button_bars_announce_the_registry_labels() {
     // A grouped selection holding a locked and an unlocked element shows every
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
-        x: 40.0,
-        y: 20.0,
+        at: css_point(40.0, 20.0),
         multi: true,
         has_group: true,
         any_locked: true,

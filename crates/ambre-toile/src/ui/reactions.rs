@@ -23,15 +23,14 @@ use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
 };
-use kurbo::{RoundedRect, Shape};
+use kurbo::{RoundedRect, Shape, Vec2};
 
 use super::viewport::ViewportTransform;
 
 /// Chip label font size, in logical pixels.
 const CHIP_FONT_PX: f32 = 13.0;
-/// Horizontal / vertical text padding inside a chip.
-const CHIP_PAD_X: f64 = 6.0;
-const CHIP_PAD_Y: f64 = 3.0;
+/// The text padding inside a chip: across, then down.
+const CHIP_PAD: Vec2 = Vec2::new(6.0, 3.0);
 /// Gap between adjacent chips and between the element edge and the chip row.
 const CHIP_GAP: f64 = 4.0;
 const ROW_MARGIN: f64 = 6.0;
@@ -82,14 +81,28 @@ fn paint_chip_row<S: DrawSurface>(
     // Emoji chips first, in the tally's stable sorted order.
     for (emoji, count) in &tally.emoji {
         let label = format!("{} {count}", emoji.as_str());
-        x = paint_chip(surface, &label, x, y, font_cx, text_cache, palette) + CHIP_GAP;
+        x = paint_chip(
+            surface,
+            &label,
+            Point::new(x, y),
+            font_cx,
+            text_cache,
+            palette,
+        ) + CHIP_GAP;
     }
 
     // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, for example "+3 (5)".
     if tally.vote_count > 0 {
         let label = vote_label(tally.vote_total, tally.vote_count);
-        paint_chip(surface, &label, x, y, font_cx, text_cache, palette);
+        paint_chip(
+            surface,
+            &label,
+            Point::new(x, y),
+            font_cx,
+            text_cache,
+            palette,
+        );
     }
 }
 
@@ -99,13 +112,12 @@ fn vote_label(total: i64, count: u32) -> String {
     format!("{total:+} ({count})")
 }
 
-/// Paint one chip (rounded pill + label) with its top-left at `(x, y)`.
+/// Paint one chip (rounded pill + label) with its top-left at `at`.
 /// Returns the chip's right edge x so the caller can place the next one.
 fn paint_chip<S: DrawSurface>(
     surface: &mut S,
     label: &str,
-    x: f64,
-    y: f64,
+    at: Point,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     palette: &Palette,
@@ -121,11 +133,14 @@ fn paint_chip<S: DrawSurface>(
     );
     let text_w = layout.width() as f64;
     let text_h = layout.height() as f64;
-    let chip_w = text_w + 2.0 * CHIP_PAD_X;
-    let chip_h = text_h + 2.0 * CHIP_PAD_Y;
+    let chip_w = text_w + 2.0 * CHIP_PAD.x;
+    let chip_h = text_h + 2.0 * CHIP_PAD.y;
 
     // Rounded pill background + hairline border, in the theme's header colours.
-    let pill = RoundedRect::from_rect(Rect::new(x, y, x + chip_w, y + chip_h), CHIP_RADIUS);
+    let pill = RoundedRect::from_rect(
+        Rect::new(at.x, at.y, at.x + chip_w, at.y + chip_h),
+        CHIP_RADIUS,
+    );
     let path = pill.to_path(0.1);
     surface.fill_path(&path, &Brush::Solid(palette.header_bg));
     surface.stroke_path(
@@ -142,12 +157,12 @@ fn paint_chip<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = x + CHIP_PAD_X + run.offset() as f64;
-            let ty = y + CHIP_PAD_Y + run.baseline() as f64;
+            let tx = at.x + CHIP_PAD.x + run.offset() as f64;
+            let ty = at.y + CHIP_PAD.y + run.baseline() as f64;
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
         }
     }
-    x + chip_w
+    at.x + chip_w
 }
 
 /// The non-emoji label colour (vote badges, counts). Emoji ignore it (they carry

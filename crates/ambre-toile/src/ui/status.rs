@@ -21,33 +21,14 @@ use ambre_draw::Rect;
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
     pub count: u32,
-    pub bounds: Option<Bounds>,
-}
-
-/// A selection's combined world-space bounds: origin (`x`, `y`) plus extent
-/// (`w`, `h`). Chrome-friendly plain floats so the DOM band never names a
-/// geometry type.
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
-pub struct Bounds {
-    pub x: f64,
-    pub y: f64,
-    pub w: f64,
-    pub h: f64,
+    pub bounds: Option<Rect>,
 }
 
 impl SelStats {
     /// Build the aggregates from a Logic-computed reply: the element tally and
     /// the optional union rectangle (world space).
     pub fn from_reply(count: u32, bounds: Option<Rect>) -> Self {
-        Self {
-            count,
-            bounds: bounds.map(|r| Bounds {
-                x: r.x0,
-                y: r.y0,
-                w: r.width(),
-                h: r.height(),
-            }),
-        }
+        Self { count, bounds }
     }
 }
 
@@ -81,10 +62,10 @@ pub fn bounds_label(stats: &SelStats) -> Option<String> {
     stats.bounds.map(|b| {
         format!(
             "x {}  y {}  w {}  h {}",
-            fmt_world(b.x),
-            fmt_world(b.y),
-            fmt_world(b.w),
-            fmt_world(b.h),
+            fmt_world(b.x0),
+            fmt_world(b.y0),
+            fmt_world(b.width()),
+            fmt_world(b.height()),
         )
     })
 }

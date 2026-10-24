@@ -158,7 +158,7 @@ pub fn SelectionToolbar(
                 .map(|b| {
                     // Anchor: fixed at the selection's top-edge midpoint; the CSS
                     // lifts the bar above it with a gap (`.ambre-selbar` transform).
-                    let pos = format!("left: {}px; top: {}px;", b.x, b.y);
+                    let pos = format!("left: {}px; top: {}px;", b.at.x.get(), b.at.y.get());
                     view! {
                         <div
                             class="ambre-selbar ambre-commandbar"

@@ -22,14 +22,14 @@
 use ambre_bus::app::toile::{
     DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
 };
-use ambre_core::Rgba;
+use ambre_core::{CssPoint, Rgba, ViewPoint, ViewPx};
 use ambre_draw::{Point, Rect};
 
 use super::style::MixedFlags;
 use super::viewport::ViewportTransform;
 
-/// The floating selection toolbar's published model (`toile-styles`): `x` / `y`
-/// are the client CSS-pixel position of the selection's top-edge midpoint. The
+/// The floating selection toolbar's published model (`toile-styles`): `at` is
+/// the client CSS-pixel position of the selection's top-edge midpoint. The
 /// bar is `position: fixed` there and lifted above the selection with a CSS gap
 /// ("air", like Miro). The flags gate the applicable buttons, mirroring the
 /// context-menu scope (`ui::menu::CtxScope`). `fill` is the selection's common
@@ -38,10 +38,8 @@ use super::viewport::ViewportTransform;
 /// Published only for a resolved, visible selection (`None` == hidden).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct FloatBar {
-    /// Client CSS-pixel x of the selection's top-edge midpoint.
-    pub x: f64,
-    /// Client CSS-pixel y of the selection's top edge.
-    pub y: f64,
+    /// The selection's top-edge midpoint on the page.
+    pub at: CssPoint,
     /// At least two elements selected -> Group applies.
     pub multi: bool,
     /// At least one selected element is a group node -> Ungroup applies.
@@ -123,16 +121,17 @@ impl StyleEdit {
 /// The client CSS-pixel anchor for the bar: the selection's top-edge midpoint.
 /// It is mapped through the camera into screen pixels, which are CSS pixels
 /// (`CANVAS-032`). A final shift by the canvas's client offset lands the
-/// `position: fixed` bar in viewport coordinates. Pure; `offset` is `(0, 0)` in
-/// host tests.
+/// `position: fixed` bar in viewport coordinates. Pure; `canvas_origin` is the
+/// page's corner in host tests.
 pub fn top_center_anchor(
     world_bounds: Rect,
     cam: &ViewportTransform,
-    offset: (f64, f64),
-) -> (f64, f64) {
+    canvas_origin: CssPoint,
+) -> CssPoint {
     let mid_top = Point::new((world_bounds.x0 + world_bounds.x1) / 2.0, world_bounds.y0);
     let screen = cam.world_to_screen() * mid_top;
-    (offset.0 + screen.x, offset.1 + screen.y)
+    ViewPoint::new(ViewPx::new(screen.x as f32), ViewPx::new(screen.y as f32))
+        .on_page(canvas_origin)
 }
 
 /// Build the floating-bar model from the UI selection and the culled viewport, or
@@ -145,7 +144,7 @@ pub fn build_floatbar(
     selection: &[ElementId],
     selected: &[DisplayElement],
     cam: &ViewportTransform,
-    offset: (f64, f64),
+    canvas_origin: CssPoint,
 ) -> Option<FloatBar> {
     if selection.is_empty() {
         return None;
@@ -196,11 +195,10 @@ pub fn build_floatbar(
 
     // Nothing in the selection is present in the culled set: hide the bar.
     let union = union?;
-    let (x, y) = top_center_anchor(union, cam, offset);
+    let at = top_center_anchor(union, cam, canvas_origin);
     let fill = base.and_then(|b| if mixed.fill { None } else { b.fill });
     Some(FloatBar {
-        x,
-        y,
+        at,
         multi: count >= 2,
         has_group,
         any_locked,
@@ -224,6 +222,10 @@ mod tests {
     };
     use ambre_draw::Size;
     use kurbo::Affine;
+
+    fn page(x: f32, y: f32) -> CssPoint {
+        CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+    }
 
     fn eid(s: &str) -> ElementId {
         ElementId(s.to_owned())
@@ -311,7 +313,10 @@ mod tests {
             false,
             None,
         )]);
-        assert_eq!(build_floatbar(&[], &els(&dv), &cam(), (0.0, 0.0)), None);
+        assert_eq!(
+            build_floatbar(&[], &els(&dv), &cam(), CssPoint::default()),
+            None
+        );
     }
 
     #[test]
@@ -324,7 +329,7 @@ mod tests {
             None,
         )]);
         assert_eq!(
-            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), (0.0, 0.0)),
+            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), CssPoint::default()),
             None
         );
     }
@@ -341,9 +346,8 @@ mod tests {
             false,
             Some(Rgba::from_bits(0x00ff_00ff)),
         )]);
-        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
-        assert!((bar.x - 520.0).abs() < 1e-9);
-        assert!((bar.y - 420.0).abs() < 1e-9);
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), CssPoint::default()).expect("bar");
+        assert_eq!(bar.at, page(520.0, 420.0));
         assert!(!bar.multi);
         assert_eq!(bar.fill, Some(Rgba::from_bits(0x00ff_00ff)));
     }
@@ -359,9 +363,8 @@ mod tests {
             false,
             None,
         )]);
-        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), (40.0, 96.0)).expect("bar");
-        assert!((bar.x - 560.0).abs() < 1e-9);
-        assert!((bar.y - 516.0).abs() < 1e-9);
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), page(40.0, 96.0)).expect("bar");
+        assert_eq!(bar.at, page(560.0, 516.0));
     }
 
     #[test]
@@ -384,10 +387,14 @@ mod tests {
                 None,
             ),
         ]);
-        let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
-        assert!((bar.x - 540.0).abs() < 1e-9);
-        assert!((bar.y - 410.0).abs() < 1e-9);
+        let bar = build_floatbar(
+            &[eid("a"), eid("b")],
+            &els(&dv),
+            &cam(),
+            CssPoint::default(),
+        )
+        .expect("bar");
+        assert_eq!(bar.at, page(540.0, 410.0));
         assert!(bar.multi);
     }
 
@@ -409,8 +416,13 @@ mod tests {
                 None,
             ),
         ]);
-        let bar =
-            build_floatbar(&[eid("g"), eid("l")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(
+            &[eid("g"), eid("l")],
+            &els(&dv),
+            &cam(),
+            CssPoint::default(),
+        )
+        .expect("bar");
         assert!(bar.has_group);
         assert!(bar.any_locked);
         assert!(bar.any_unlocked);
@@ -435,8 +447,13 @@ mod tests {
                 Some(Rgba::from_bits(0x0000_ffff)),
             ),
         ]);
-        let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(
+            &[eid("a"), eid("b")],
+            &els(&dv),
+            &cam(),
+            CssPoint::default(),
+        )
+        .expect("bar");
         assert_eq!(bar.fill, None);
     }
 
@@ -458,8 +475,13 @@ mod tests {
                 Some(Rgba::from_bits(0x1122_33ff)),
             ),
         ]);
-        let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(
+            &[eid("a"), eid("b")],
+            &els(&dv),
+            &cam(),
+            CssPoint::default(),
+        )
+        .expect("bar");
         assert_eq!(bar.fill, Some(Rgba::from_bits(0x1122_33ff)));
     }
 
@@ -633,8 +655,13 @@ mod tests {
         };
         let shared_fill = a.fill;
         let dv = viewport(vec![styled_elem("a", a), styled_elem("b", b)]);
-        let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(
+            &[eid("a"), eid("b")],
+            &els(&dv),
+            &cam(),
+            CssPoint::default(),
+        )
+        .expect("bar");
         assert!(bar.mixed.text_color);
         assert!(bar.mixed.font_family);
         assert!(bar.mixed.font_size);

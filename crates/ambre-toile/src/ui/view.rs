@@ -2176,7 +2176,10 @@ impl ToileView {
         not(target_arch = "wasm32"),
         allow(dead_code, reason = "the bar signal that reads it is wasm-only")
     )]
-    fn float_bar_at(&self, offset: (f64, f64)) -> Option<super::floatbar::FloatBar> {
+    fn float_bar_at(
+        &self,
+        canvas_origin: ambre_core::CssPoint,
+    ) -> Option<super::floatbar::FloatBar> {
         if self.selection.is_empty()
             || self.machine.is_active()
             || self.panning.is_some()
@@ -2184,7 +2187,12 @@ impl ToileView {
         {
             return None;
         }
-        super::floatbar::build_floatbar(&self.selection, &self.selection_data, &self.cam, offset)
+        super::floatbar::build_floatbar(
+            &self.selection,
+            &self.selection_data,
+            &self.cam,
+            canvas_origin,
+        )
     }
 
     /// Drain a single-field style edit the floating bar emitted (`toile-styles`)
@@ -2545,8 +2553,11 @@ impl ToileView {
     /// CSS pixels (`CANVAS-032`), so only the canvas offset applies.
     #[cfg(target_arch = "wasm32")]
     fn css_point(&self, screen: Point) -> Point {
-        let (ox, oy) = canvas_client_offset();
-        Point::new(ox + screen.x, oy + screen.y)
+        let origin = canvas_client_offset();
+        Point::new(
+            f64::from(origin.x.get()) + screen.x,
+            f64::from(origin.y.get()) + screen.y,
+        )
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn css_point(&self, screen: Point) -> Point {
@@ -4412,15 +4423,16 @@ fn wall_clock_ms() -> ambre_core::Timestamp {
 /// The canvas sits below the header / toolbar chrome, so this offset is non-zero.
 /// Off the web, or before the canvas mounts, it is `(0, 0)`.
 #[cfg(target_arch = "wasm32")]
-fn canvas_client_offset() -> (f64, f64) {
+fn canvas_client_offset() -> ambre_core::CssPoint {
     web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
         .map(|el| {
             let r = el.get_bounding_client_rect();
-            (r.left(), r.top())
+            // The DOM measures in `f64`; a CSS pixel is an `f32`.
+            ambre_core::CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
         })
-        .unwrap_or((0.0, 0.0))
+        .unwrap_or_default()
 }
 
 // Host-only: the view drives a detached text pipe, which the browser build

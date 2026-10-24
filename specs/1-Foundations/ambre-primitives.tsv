@@ -3962,17 +3962,12 @@ ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | f
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | field | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.x | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.y | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Bold.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Italic.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Opacity.0 | field | f32	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Strikethrough.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::StrokeWidth.0 | field | f32	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Underline.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | build_floatbar(offset) | param | (f64,f64)	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | top_center_anchor() | ret | (f64,f64)	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | top_center_anchor(offset) | param | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | BASE_GRID | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | MAX_SPACING_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | MIN_SPACING_PX | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -4057,14 +4052,10 @@ ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(old) | pa
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | slide_counter_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_FONT_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_GAP | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_PAD_X | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_PAD_Y | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_RADIUS | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | ROW_MARGIN | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip(label) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip(x) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | vote_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | vote_label(count) | param | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | vote_label(total) | param | i64	math	geometry, layout, count or size local to the algorithm
@@ -4075,10 +4066,6 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_bands() | ret | impl 
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_box(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret | (&str,bool)	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.h | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.w | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.x | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/status.rs | crate::ui::status | Bounds.y | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | SelStats.count | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | SelStats::from_reply(count) | param | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/status.rs | crate::ui::status | bounds_label() | ret | Option<String>	free-text	label, message or user text
@@ -4148,7 +4135,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_geometry_of() |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_input() | ret | Option<bool>	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key(key) | param | &str	generic	DOM KeyboardEvent.key text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::float_bar_at(offset) | param | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::follow_link_under() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::grab_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_double_click() | ret | bool	generic	predicate or handled-flag result
@@ -4188,7 +4174,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_down() | ret |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ZOOM_PER_WHEEL_PX | const | f64	math	log-zoom rate per wheel pixel: a step zooms by exp(-dy * rate)
-ambre-toile | src/ui/view.rs | crate::ui::view | canvas_client_offset() | ret | (f64,f64)	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | trigger_download(data) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder

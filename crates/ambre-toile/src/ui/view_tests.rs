@@ -2397,19 +2397,28 @@ fn the_bar_hides_during_a_move() {
         framed: Vec::new(),
         missing: Vec::new(),
     });
-    assert!(rig.view.float_bar_at((0.0, 0.0)).is_some(), "the bar shows");
+    assert!(
+        rig.view
+            .float_bar_at(ambre_core::CssPoint::default())
+            .is_some(),
+        "the bar shows"
+    );
     let (from, to) = (rig.screen(50.0, 50.0), rig.screen(90.0, 70.0));
     rig.press(from);
     rig.input(InputEvent::PointerMove {
         at: pointer(to.0, to.1),
     });
     assert!(
-        rig.view.float_bar_at((0.0, 0.0)).is_none(),
+        rig.view
+            .float_bar_at(ambre_core::CssPoint::default())
+            .is_none(),
         "the bar follows the drag"
     );
     rig.release(to);
     assert!(
-        rig.view.float_bar_at((0.0, 0.0)).is_some(),
+        rig.view
+            .float_bar_at(ambre_core::CssPoint::default())
+            .is_some(),
         "the bar is back"
     );
 }
