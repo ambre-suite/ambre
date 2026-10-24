@@ -535,7 +535,7 @@ mod tests {
             assert_eq!(view.tick(ambre_core::PageTime(0.0)), None);
         }
         let command = view
-            .tick(ambre_core::PageTime(RECOUNT_DELAY_MS))
+            .tick(ambre_core::PageTime(RECOUNT_DELAY_MS.get()))
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);

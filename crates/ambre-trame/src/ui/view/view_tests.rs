@@ -186,10 +186,10 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
     rig.clock.set(1_000.0);
     rig.type_text("a");
     assert!(rig.view.caret_on);
-    rig.clock.set(1_000.0 + BLINK_MS - 1.0);
+    rig.clock.set(1_000.0 + BLINK_MS.get() - 1.0);
     rig.frame();
     assert!(rig.view.caret_on, "half a period has not passed");
-    rig.clock.set(1_000.0 + BLINK_MS);
+    rig.clock.set(1_000.0 + BLINK_MS.get());
     rig.frame();
     assert!(!rig.view.caret_on, "half a period passed");
 }

@@ -14,20 +14,20 @@
 // target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
-use ambre_core::ViewPoint;
+use ambre_core::{PageMillis, ViewPoint};
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, OverlayRepaint, WheelDelta};
 
 /// Driver-measured per-frame timings, handed to the view so it can render a
-/// debug HUD. All values are wall-clock milliseconds from the *previous* frame.
+/// debug HUD. All values are spans of the page clock from the *previous* frame.
 #[derive(Default, Clone, Copy)]
 pub struct FrameStats {
     pub fps: f32,
-    pub frame_ms: f32,
-    pub drain_ms: f32,
-    pub draw_ms: f32,
-    pub gpu_ms: f32,
+    pub frame_ms: PageMillis,
+    pub drain_ms: PageMillis,
+    pub draw_ms: PageMillis,
+    pub gpu_ms: PageMillis,
 }
 
 /// A full per-frame performance snapshot, published from the canvas view to the
@@ -38,15 +38,15 @@ pub struct FrameStats {
 #[derive(Default, Clone, Copy)]
 pub struct PerfSnapshot {
     pub fps: f32,
-    pub frame_ms: f32,
-    pub drain_ms: f32,
-    pub draw_ms: f32,
-    pub gpu_ms: f32,
-    pub bg_ms: f32,
-    pub cells_ms: f32,
-    pub hdrs_ms: f32,
+    pub frame_ms: PageMillis,
+    pub drain_ms: PageMillis,
+    pub draw_ms: PageMillis,
+    pub gpu_ms: PageMillis,
+    pub bg_ms: PageMillis,
+    pub cells_ms: PageMillis,
+    pub hdrs_ms: PageMillis,
     pub cells_drawn: u32,
-    pub input_lat_ms: f32,
+    pub input_lat_ms: PageMillis,
     pub glyph_misses: u32,
 }
 

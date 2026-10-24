@@ -17,7 +17,7 @@ use crate::ui::{ProseUiState, SendResult};
 use crate::view::caret::{Direction, SelectUnit, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
-pub const MULTI_PRESS_MS: f64 = 500.0;
+pub const MULTI_PRESS_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
 /// How far a second press may land from the first and still be in place.
 const MULTI_PRESS: ViewPx = ViewPx::new(4.0);

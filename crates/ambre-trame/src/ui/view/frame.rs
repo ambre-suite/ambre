@@ -438,8 +438,8 @@ impl TrameView {
         // When the content layer is reused the renderer won't run; zero its HUD
         // sub-phase timings so they read 0 instead of stale values.
         if matches!(content, ContentRepaint::Reuse) {
-            self.draw_stats.bg_ms = 0.0;
-            self.draw_stats.cells_ms = 0.0;
+            self.draw_stats.bg_ms = ambre_core::PageMillis::ZERO;
+            self.draw_stats.cells_ms = ambre_core::PageMillis::ZERO;
             self.draw_stats.cells_drawn = 0;
         }
 
@@ -544,7 +544,7 @@ impl TrameView {
             // panel; the duration also feeds the HUD (`inlat`). A 10 KB paste
             // travels the same Text path, so it is covered too.
             if let Some(t0) = self.pending_input_mark.take() {
-                self.draw_stats.input_latency_ms = (self.clock.now_ms() - t0) as f32;
+                self.draw_stats.input_latency_ms = self.clock.now_ms() - t0;
                 performance_measure("ambre:input-to-caret", "ambre:input");
             }
         }

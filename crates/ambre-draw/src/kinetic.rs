@@ -7,30 +7,30 @@
 //! cells, a board under a zoom. A trackpad glide that stops keeps its
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
-use ambre_core::{CssVector, ViewPoint, ViewPx};
+use ambre_core::{CssVector, PageMillis, ViewPoint, ViewPx};
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
 pub const TAP_SLOP_PX: f32 = 8.0;
-/// How long a press held inside the slop lasts before it is a long press,
-/// in milliseconds (`KINETIC-014`).
-pub const LONG_PRESS_MS: f64 = 500.0;
-/// The window of samples the release speed is read over, in milliseconds.
-pub const SAMPLE_MS: f64 = 100.0;
-/// The time constant of the slowdown, in milliseconds: the speed falls to
-/// about a third of itself over this time.
-pub const DECAY_MS: f32 = 325.0;
+/// How long a press held inside the slop lasts before it is a long press
+/// (`KINETIC-014`).
+pub const LONG_PRESS_MS: PageMillis = PageMillis::new(500.0);
+/// The window of samples the release speed is read over.
+pub const SAMPLE_MS: PageMillis = PageMillis::new(100.0);
+/// The time constant of the slowdown: the speed falls to about a third of
+/// itself over this time.
+pub const DECAY_MS: PageMillis = PageMillis::new(325.0);
 /// Below this speed, in screen pixels per millisecond, a release leaves no
 /// motion and a motion stops.
 pub const STOP_SPEED: f32 = 0.02;
 /// The longest step one tick takes, so a stalled frame does not jump. It is
 /// private: a step is timed here alone (`KINETIC-013`).
-const MAX_STEP_MS: f64 = 50.0;
+const MAX_STEP_MS: PageMillis = PageMillis::new(50.0);
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
 pub const WHEEL_NOTCH_PX: f32 = 40.0;
-/// A pause between wheel events this long, in milliseconds, ends a glide.
-pub const WHEEL_GAP_MS: f64 = 60.0;
+/// A pause between wheel events this long ends a glide.
+pub const WHEEL_GAP_MS: PageMillis = PageMillis::new(60.0);
 /// A glide slower than this at its end, in screen pixels per millisecond,
 /// leaves no motion.
 pub const WHEEL_START_SPEED: f32 = 0.05;
@@ -146,7 +146,7 @@ impl EdgeScroll {
             return None;
         };
         let last = self.last_ms.replace(now_ms)?;
-        let elapsed = (now_ms - last).clamp(0.0, MAX_STEP_MS) as f32;
+        let elapsed = step_ms(now_ms - last);
         Some(ScrollStep {
             x: ViewPx::new(sx.0 * elapsed),
             y: ViewPx::new(sy.0 * elapsed),
@@ -276,7 +276,7 @@ impl Kinetic {
         let (Some(first), Some(last)) = (recent.next(), recent.next_back()) else {
             return Release::Rest;
         };
-        let span = (last.0 - first.0) as f32;
+        let span = ms_f32(last.0 - first.0);
         if span <= 0.0 {
             return Release::Rest;
         }
@@ -322,7 +322,9 @@ impl Kinetic {
         }
         let speed = match self.glide {
             Some(glide) if now_ms - glide.last_ms <= WHEEL_GAP_MS => {
-                let dt = (now_ms - glide.last_ms).clamp(1.0, 100.0) as f32;
+                let dt = ms_f32(
+                    (now_ms - glide.last_ms).clamp(PageMillis::new(1.0), PageMillis::new(100.0)),
+                );
                 let b = WHEEL_BLEND;
                 (
                     b * dx / dt + (1.0 - b) * glide.speed.0,
@@ -362,12 +364,12 @@ impl Kinetic {
         let Some(last) = motion.last_ms.replace(now_ms) else {
             return Some(ScrollStep::ZERO);
         };
-        let elapsed = (now_ms - last).clamp(0.0, MAX_STEP_MS) as f32;
+        let elapsed = step_ms(now_ms - last);
         let step = ScrollStep {
             x: ViewPx::new(motion.speed.0 * elapsed),
             y: ViewPx::new(motion.speed.1 * elapsed),
         };
-        let decay = (-elapsed / DECAY_MS).exp();
+        let decay = (-elapsed / ms_f32(DECAY_MS)).exp();
         motion.speed = (motion.speed.0 * decay, motion.speed.1 * decay);
         if motion.speed.0.hypot(motion.speed.1) < STOP_SPEED {
             self.motion = None;
@@ -397,6 +399,19 @@ impl Kinetic {
     pub fn pressed(&self) -> bool {
         self.pressed.is_some()
     }
+}
+
+/// The span one tick moves by, in the `f32` milliseconds a speed in screen
+/// pixels per millisecond scales by: never negative, and never past
+/// [`MAX_STEP_MS`].
+fn step_ms(elapsed: PageMillis) -> f32 {
+    ms_f32(elapsed.clamp(PageMillis::ZERO, MAX_STEP_MS))
+}
+
+/// The span in the `f32` milliseconds a speed scales by.
+#[allow(clippy::cast_possible_truncation)]
+fn ms_f32(span: PageMillis) -> f32 {
+    span.get() as f32
 }
 
 /// The speed a drag held near an edge scrolls at, in screen pixels per
@@ -476,23 +491,26 @@ mod tests {
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS - 1.0)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get() - 1.0)),
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get())),
             Some(pt(10.0, 20.0))
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS + 100.0)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get() + 100.0)),
             None
         );
         assert_eq!(
-            kinetic.sample(pt(60.0, 90.0), ambre_core::PageTime(LONG_PRESS_MS + 120.0)),
+            kinetic.sample(
+                pt(60.0, 90.0),
+                ambre_core::PageTime(LONG_PRESS_MS.get() + 120.0)
+            ),
             None
         );
         assert_eq!(
-            kinetic.release(ambre_core::PageTime(LONG_PRESS_MS + 200.0)),
+            kinetic.release(ambre_core::PageTime(LONG_PRESS_MS.get() + 200.0)),
             Release::Rest
         );
         assert!(!kinetic.moving());
@@ -503,9 +521,12 @@ mod tests {
                 .sample(pt(10.0, 60.0), ambre_core::PageTime(16.0))
                 .is_some()
         );
-        assert_eq!(kinetic.held(ambre_core::PageTime(LONG_PRESS_MS)), None);
         assert_eq!(
-            Kinetic::default().held(ambre_core::PageTime(LONG_PRESS_MS)),
+            kinetic.held(ambre_core::PageTime(LONG_PRESS_MS.get())),
+            None
+        );
+        assert_eq!(
+            Kinetic::default().held(ambre_core::PageTime(LONG_PRESS_MS.get())),
             None
         );
     }
@@ -574,7 +595,7 @@ mod tests {
             .expect("a step")
             .y()
             .get();
-        assert!(dy <= 2.0 * MAX_STEP_MS as f32 + 1e-3);
+        assert!(dy <= 2.0 * super::ms_f32(MAX_STEP_MS) + 1e-3);
     }
 
     /// `KINETIC-006`: a press or an edge the application met stops the

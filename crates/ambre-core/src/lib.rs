@@ -144,7 +144,8 @@ pub use schema::{
 };
 pub use seq::Seq;
 pub use span::{
-    LamportStamp, Millis, Nanos, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis, UnixSeconds,
+    LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis,
+    UnixSeconds,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,

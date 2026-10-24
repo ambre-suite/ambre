@@ -36,10 +36,10 @@ use super::codec::str_of;
 use super::names::{ConfigKey, ElementKey, Fields, Root, config};
 use super::{ToileState, write_edits};
 
-/// The slide transition length a fresh board is seeded with, in milliseconds.
+/// The slide transition length a fresh board is seeded with.
 /// The deck's `transition_ms` register carries an editable value over it, and a
 /// register holding anything else reads as this (`TOILE-FEAT-028`).
-pub const DEFAULT_TRANSITION_MS: f64 = 300.0;
+pub const DEFAULT_TRANSITION_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(300.0);
 
 impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
@@ -305,13 +305,13 @@ impl ToileState {
     /// slide change instant or unending, on a register any peer can write.
     pub(super) fn transition(&self) -> std::time::Duration {
         // The read keeps the value within `0..=10_000` ms, finite.
-        std::time::Duration::from_secs_f64(self.transition_ms() / 1000.0)
+        std::time::Duration::from_secs_f64(self.transition_ms().get() / 1000.0)
     }
 
-    /// The `transition_ms` register as the document holds it, in milliseconds,
-    /// or the default (see [`Self::transition`]).
-    pub(super) fn transition_ms(&self) -> f64 {
-        const MAX_TRANSITION_MS: f64 = 10_000.0;
+    /// The `transition_ms` register as the document holds it, or the default
+    /// (see [`Self::transition`]).
+    pub(super) fn transition_ms(&self) -> ambre_core::PageMillis {
+        const MAX_TRANSITION_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
         config(&self.doc)
             .value(ConfigKey::TransitionMs)
             .and_then(|v| match v {
@@ -319,7 +319,10 @@ impl ToileState {
                 LoroValue::I64(ms) => Some(ms as f64),
                 _ => None,
             })
-            .filter(|ms| ms.is_finite() && (0.0..=MAX_TRANSITION_MS).contains(ms))
+            .map(ambre_core::PageMillis::new)
+            .filter(|ms| {
+                ms.is_finite() && (ambre_core::PageMillis::ZERO..=MAX_TRANSITION_MS).contains(ms)
+            })
             .unwrap_or(DEFAULT_TRANSITION_MS)
     }
 
@@ -560,7 +563,7 @@ fn silent_presence_frame() -> Option<ambre_core::EphemeralBytes> {
 pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
     let cfg = config(doc);
     if cfg.get(ConfigKey::TransitionMs).is_none() {
-        let _ = cfg.insert(ConfigKey::TransitionMs, DEFAULT_TRANSITION_MS);
+        let _ = cfg.insert(ConfigKey::TransitionMs, DEFAULT_TRANSITION_MS.get());
         let _ = cfg.insert(ConfigKey::Autoplay, false);
         let _ = cfg.insert(ConfigKey::Loop, false);
     }

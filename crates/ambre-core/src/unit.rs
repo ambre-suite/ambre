@@ -30,14 +30,15 @@ use crate::zoom::ZoomFactor;
 /// CSS pixels per millimetre: a CSS pixel is 1/96 inch, an inch is 25.4 mm.
 pub const PX_PER_MM: f32 = 96.0 / 25.4;
 
-/// Writes one length type over a float.
+/// Writes one measured quantity type over a float: a length, an angle, or a
+/// span of the page clock (`crate::span::PageMillis`).
 ///
-/// The operators are the ones a length allows. Two lengths add, subtract
-/// and divide into a bare ratio. A length negates, and scales by a bare
-/// number. A product of two lengths does not compile.
+/// The operators are the ones a quantity allows. Two quantities add,
+/// subtract and divide into a bare ratio. A quantity negates, and scales by
+/// a bare number. A product of two quantities does not compile.
 ///
 /// `new` wraps the number, and `get` unwraps it for a foreign API.
-/// No rule bounds a length, so the type has no fallible constructor. The
+/// No rule bounds a quantity, so the type has no fallible constructor. The
 /// serde form is the bare float, through `#[serde(transparent)]`.
 macro_rules! define_length {
     ($(#[$meta:meta])* $name:ident($inner:ty)) => {
@@ -47,10 +48,10 @@ macro_rules! define_length {
         pub struct $name($inner);
 
         impl $name {
-            /// The length of zero.
+            /// The quantity of zero.
             pub const ZERO: Self = Self(0.0);
 
-            /// The length of `value` units.
+            /// The quantity of `value` units.
             #[must_use]
             pub const fn new(value: $inner) -> Self {
                 Self(value)
@@ -62,44 +63,44 @@ macro_rules! define_length {
                 self.0
             }
 
-            /// The smaller of the two lengths.
+            /// The smaller of the two quantities.
             #[must_use]
             pub fn min(self, other: Self) -> Self {
                 Self(self.0.min(other.0))
             }
 
-            /// The larger of the two lengths.
+            /// The larger of the two quantities.
             #[must_use]
             pub fn max(self, other: Self) -> Self {
                 Self(self.0.max(other.0))
             }
 
-            /// The length without its sign.
+            /// The quantity without its sign.
             #[must_use]
             pub fn abs(self) -> Self {
                 Self(self.0.abs())
             }
 
-            /// The length clamped into `lo ..= hi`, never a panic: a NaN reads
+            /// The quantity clamped into `lo ..= hi`, never a panic: a NaN reads
             /// as `lo`, and `hi` wins when the bounds cross.
             #[must_use]
             pub fn clamp(self, lo: Self, hi: Self) -> Self {
                 Self(self.0.max(lo.0).min(hi.0))
             }
 
-            /// The length rounded to a whole number of units.
+            /// The quantity rounded to a whole number of units.
             #[must_use]
             pub fn round(self) -> Self {
                 Self(self.0.round())
             }
 
-            /// The length rounded down to a whole number of units.
+            /// The quantity rounded down to a whole number of units.
             #[must_use]
             pub fn floor(self) -> Self {
                 Self(self.0.floor())
             }
 
-            /// Whether the length is a finite number.
+            /// Whether the quantity is a finite number.
             #[must_use]
             pub fn is_finite(self) -> bool {
                 self.0.is_finite()
@@ -139,7 +140,7 @@ macro_rules! define_length {
             }
         }
 
-        /// The length scaled by a bare number.
+        /// The quantity scaled by a bare number.
         impl std::ops::Mul<$inner> for $name {
             type Output = Self;
             fn mul(self, factor: $inner) -> Self {
@@ -147,7 +148,7 @@ macro_rules! define_length {
             }
         }
 
-        /// The length divided by a bare number.
+        /// The quantity divided by a bare number.
         impl std::ops::Div<$inner> for $name {
             type Output = Self;
             fn div(self, divisor: $inner) -> Self {
@@ -155,7 +156,7 @@ macro_rules! define_length {
             }
         }
 
-        /// The ratio of two lengths, a bare number.
+        /// The ratio of two quantities, a bare number.
         impl std::ops::Div for $name {
             type Output = $inner;
             fn div(self, other: Self) -> $inner {
@@ -165,11 +166,13 @@ macro_rules! define_length {
 
         impl std::iter::Sum for $name {
             fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-                Self(iter.map(|length| length.0).sum())
+                Self(iter.map(|quantity| quantity.0).sum())
             }
         }
     };
 }
+
+pub(crate) use define_length;
 
 define_length! {
     /// A length in pixels of the document, before the zoom: what a layout

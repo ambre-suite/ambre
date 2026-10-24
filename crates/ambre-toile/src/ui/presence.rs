@@ -50,17 +50,16 @@ const CURSOR_SIZE_PX: f64 = 14.0;
 /// Name-label font size, in logical pixels.
 const LABEL_FONT_PX: f32 = 12.0;
 
-/// How long a laser sample stays visible, in milliseconds. Long enough to read a
+/// How long a laser sample stays visible. Long enough to read a
 /// gesture across the board, short enough that a highlighter held still leaves
 /// nothing behind (`TOILE-UI-077`).
-const LASER_FADE_MS: f64 = 1_200.0;
+const LASER_FADE_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(1_200.0);
 
-/// How often the local peer sends a sample while nothing changes, in
-/// milliseconds. The heartbeat keeps this client in the others' live set
+/// How often the local peer sends a sample while nothing changes. The heartbeat keeps this client in the others' live set
 /// (`PRESENCE-009`), and it advances the Logic thread's only clock. It MUST
 /// stay well under `PRESENCE_TTL_MS`, since the network may drop several
 /// heartbeats before a peer ages out.
-pub const PRESENCE_HEARTBEAT_MS: f64 = 2_000.0;
+pub const PRESENCE_HEARTBEAT_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(2_000.0);
 
 /// The broadcast schedule for this peer's own presence (`TOILE-UI-073`). Pure:
 /// it decides whether the sample built this frame is worth sending, and holds
@@ -268,7 +267,7 @@ fn paint_laser<S: DrawSurface>(
 /// opaque when fresh, zero once [`LASER_FADE_MS`] has passed. A sample from the
 /// future (a clock that stepped back) reads as fresh rather than as invisible.
 pub fn laser_alpha(sample_ms: ambre_core::PageTime, now_ms: ambre_core::PageTime) -> f32 {
-    let age = (now_ms - sample_ms).max(0.0);
+    let age = (now_ms - sample_ms).max(ambre_core::PageMillis::ZERO);
     if age >= LASER_FADE_MS {
         return 0.0;
     }
@@ -669,7 +668,7 @@ mod tests {
             paint_at(
                 &cursors,
                 &vp_with(vec![]),
-                ambre_bus::PageTime(LASER_FADE_MS + 1.0)
+                ambre_bus::PageTime(LASER_FADE_MS.get() + 1.0)
             )
             .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
             0,
@@ -680,7 +679,10 @@ mod tests {
             1.0
         );
         assert_eq!(
-            laser_alpha(ambre_bus::PageTime(0.0), ambre_bus::PageTime(LASER_FADE_MS)),
+            laser_alpha(
+                ambre_bus::PageTime(0.0),
+                ambre_bus::PageTime(LASER_FADE_MS.get())
+            ),
             0.0
         );
         // A sample from the future reads as fresh, never as invisible.
@@ -724,7 +726,10 @@ mod tests {
         );
         assert!(
             sender
-                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS))
+                .due(
+                    at(1.0),
+                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS.get())
+                )
                 .is_some(),
             "an idle peer still says it is there"
         );
@@ -733,7 +738,10 @@ mod tests {
         sender.reset();
         assert!(
             sender
-                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS))
+                .due(
+                    at(1.0),
+                    ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT_MS.get())
+                )
                 .is_some()
         );
     }

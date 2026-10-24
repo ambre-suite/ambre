@@ -31,7 +31,7 @@ use super::ToileState;
 /// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT_MS`). A peer survives
 /// several missed samples, so a stalled frame or a slow relay does not blink a
 /// cursor out. A peer who closed the board still leaves within a few seconds.
-pub const PRESENCE_TTL_MS: f64 = 10_000.0;
+pub const PRESENCE_TTL_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
 
 impl ToileState {
     /// Encode the local peer's presence sample into an ephemeral to
@@ -124,10 +124,9 @@ impl ToileState {
     /// (an NTP correction, a suspended tab) must not age every peer out at once.
     fn expire_peers(&mut self, now_ms: ambre_core::PageTime) -> bool {
         self.now_ms = self.now_ms.max(now_ms);
-        let cutoff = self.now_ms - ambre_bus::PageTime(PRESENCE_TTL_MS);
+        let cutoff = self.now_ms.before(PRESENCE_TTL_MS);
         let before = self.presence.len();
-        self.presence
-            .retain(|_, (_, seen)| *seen > ambre_bus::PageTime(cutoff));
+        self.presence.retain(|_, (_, seen)| *seen > cutoff);
         self.presence.len() != before
     }
 

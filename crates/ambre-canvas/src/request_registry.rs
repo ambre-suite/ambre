@@ -92,7 +92,7 @@ impl<T: RequestTag> RequestRegistry<T> {
         self.pending.insert(
             id,
             PendingEntry {
-                deadline_ms: now_ms.after(timeout.0 as f64),
+                deadline_ms: now_ms.after(timeout.to_page_millis()),
             },
         );
         LogicCommand::Rest { id, cmd }

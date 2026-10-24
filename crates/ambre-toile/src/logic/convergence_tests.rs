@@ -1521,7 +1521,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS - 1.0),
+        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS.get() - 1.0),
     });
     assert!(out.display.is_empty(), "nothing left the set yet");
     assert!(rx.peer_presence(&alice).is_some());
@@ -1529,7 +1529,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Past it: the set changes, and the event that announces it is empty.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS + 1.0),
+        now_ms: ambre_core::PageTime(1_000.0 + PRESENCE_TTL_MS.get() + 1.0),
     });
     assert!(
         live_set(out.display).is_empty(),

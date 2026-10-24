@@ -82,9 +82,9 @@ pub struct Measure {
 }
 
 impl Measure {
-    /// The milliseconds from the start to the end.
+    /// The span from the start to the end.
     #[must_use]
-    pub fn duration(&self) -> f64 {
+    pub fn duration(&self) -> ambre_core::PageMillis {
         self.end - self.start
     }
 }
@@ -265,7 +265,7 @@ mod tests {
         );
         assert_eq!(echo.len(), 1);
         assert_eq!(echo[0].name, ProbeName::Echo);
-        assert!((echo[0].duration() - 0.5).abs() < 1e-9);
+        assert!((echo[0].duration().get() - 0.5).abs() < 1e-9);
 
         let caret = probe.painted(ambre_core::PageTime(14.0));
         assert_eq!(caret.len(), 1, "the draft shows the key on the next frame");
@@ -281,7 +281,7 @@ mod tests {
         let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, ProbeName::Confirm);
-        assert!((confirm[0].duration() - 10.0).abs() < 1e-9);
+        assert!((confirm[0].duration().get() - 10.0).abs() < 1e-9);
     }
 
     /// An input the draft cannot hold waits for the layout before its caret
@@ -308,7 +308,7 @@ mod tests {
         probe.answered(ambre_core::PageTime(30.0), &draft, Answer::Layout);
         let caret = probe.painted(ambre_core::PageTime(33.0));
         assert_eq!(caret.len(), 1);
-        assert!((caret[0].duration() - 33.0).abs() < 1e-9);
+        assert!((caret[0].duration().get() - 33.0).abs() < 1e-9);
     }
 
     /// An entry confirmed and still in the draft is not counted again when

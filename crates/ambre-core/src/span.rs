@@ -52,8 +52,8 @@ impl Millis {
 
     /// The span as a distance between two [`PageTime`] instants.
     #[allow(clippy::cast_precision_loss)]
-    pub const fn as_page_ms(self) -> f64 {
-        self.0 as f64
+    pub const fn to_page_millis(self) -> PageMillis {
+        PageMillis::new(self.0 as f64)
     }
 }
 
@@ -174,10 +174,22 @@ impl LamportStamp {
 pub struct PageTime(pub f64);
 
 impl PageTime {
-    /// The instant `ms` milliseconds after this one.
+    /// The instant `span` after this one.
     #[must_use]
-    pub fn after(self, ms: f64) -> Self {
-        Self(self.0 + ms)
+    pub fn after(self, span: PageMillis) -> Self {
+        Self(self.0 + span.get())
+    }
+
+    /// The instant `span` before this one.
+    #[must_use]
+    pub fn before(self, span: PageMillis) -> Self {
+        Self(self.0 - span.get())
+    }
+
+    /// The span since the page loaded: the phase a periodic animation reads.
+    #[must_use]
+    pub fn since_load(self) -> PageMillis {
+        PageMillis::new(self.0)
     }
 
     /// The later of the two instants.
@@ -187,13 +199,31 @@ impl PageTime {
     }
 }
 
-/// The milliseconds from `earlier` to this instant, negative when `earlier`
-/// is later.
+/// The span from `earlier` to this instant, negative when `earlier` is
+/// later.
 impl std::ops::Sub for PageTime {
-    type Output = f64;
+    type Output = PageMillis;
 
-    fn sub(self, earlier: Self) -> f64 {
-        self.0 - earlier.0
+    fn sub(self, earlier: Self) -> PageMillis {
+        PageMillis::new(self.0 - earlier.0)
+    }
+}
+
+crate::unit::define_length! {
+    /// A span of the page clock in milliseconds, in the `f64` the clock
+    /// reads: the distance between two [`PageTime`] instants.
+    ///
+    /// A frame's cost, a blink period and a fling's decay are each one. The
+    /// span may be fractional and negative, unlike a whole [`Millis`] of the
+    /// relay's JSON.
+    PageMillis(f64)
+}
+
+impl PageMillis {
+    /// The span `duration` covers, to the fraction of a millisecond.
+    #[must_use]
+    pub fn from_duration(duration: Duration) -> Self {
+        Self::new(duration.as_secs_f64() * 1000.0)
     }
 }
 
@@ -320,7 +350,9 @@ mod tests {
     #[test]
     fn two_page_instants_are_their_distance_in_milliseconds_apart() {
         let start = super::PageTime(100.0);
-        assert_eq!(start.after(16.5) - start, 16.5);
+        let span = super::PageMillis::new(16.5);
+        assert_eq!(start.after(span) - start, span);
+        assert_eq!(start.before(span).after(span), start);
         assert_eq!(start.max(super::PageTime(40.0)), start);
     }
 

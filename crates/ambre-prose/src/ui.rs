@@ -39,12 +39,12 @@ use crate::view::column::PageColumn;
 
 pub use crate::view::column::Viewport;
 
-/// How long the text must stay still before the four tallies are recounted,
-/// in milliseconds (`PROSE-FEAT-124`).
+/// How long the text must stay still before the four tallies are recounted
+/// (`PROSE-FEAT-124`).
 ///
 /// A fast typist then pays for one recount per pause rather than one per
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
-pub const RECOUNT_DELAY_MS: f64 = 500.0;
+pub const RECOUNT_DELAY_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
 /// What this view drew and the layout in force does not carry yet: the text
 /// typed and the text deleted. It is held apart from the document, never
@@ -1151,7 +1151,7 @@ mod tests {
         while now < stopped + 2000.0 {
             if let Some(command) = state.tick(ambre_core::PageTime(now)) {
                 assert_eq!(command, ProseCommand::CountWords);
-                assert!(now - stopped >= RECOUNT_DELAY_MS - 16.0);
+                assert!(now - stopped >= RECOUNT_DELAY_MS.get() - 16.0);
                 recounts += 1;
             }
             now += 16.0;

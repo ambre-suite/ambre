@@ -202,10 +202,10 @@ const NUDGE_LARGE: f64 = 10.0;
 /// nudge.
 const DUPLICATE_NUDGE: f64 = 10.0;
 
-/// Inline-edit caret blink half-period (ms): the caret shows for one interval,
+/// Inline-edit caret blink half-period: the caret shows for one interval,
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
 /// cadence.
-const CARET_BLINK_MS: f64 = 530.0;
+const CARET_BLINK_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
 
 /// How many trailing samples of an in-flight freehand stroke ride a presence
 /// sample (`TOILE-UI-217`). The relay forwards presence and forgets it, and a
@@ -3622,7 +3622,7 @@ impl ToileView {
                 // Blink the caret on a ~1-second cycle so it visibly signals "you can
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
-                let caret_on = (self.frame_now_ms.0 / CARET_BLINK_MS) as i64 % 2 == 0;
+                let caret_on = (self.frame_now_ms.since_load() / CARET_BLINK_MS) as i64 % 2 == 0;
                 // The guard above found an editor, and nothing since closed it.
                 let Some(ed) = self.editor.as_mut() else {
                     return;

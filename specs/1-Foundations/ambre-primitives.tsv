@@ -11,10 +11,6 @@ ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generi
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.child_sizes | field | HashMap<ElementId,(u32,u32)>	math	sizes
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.clip_published | field | Rc<std::cell::Cell<bool>>	math	flag cell
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.fatal_painted | field | bool	math	state flag
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.last_drain_ms | field | f32	math	frame-clock stats
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.last_draw_ms | field | f32	math	frame-clock stats
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.last_frame_ms | field | f32	math	frame-clock stats
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.last_gpu_ms | field | f32	math	frame-clock stats
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.render_fps | field | f32	math	frame-clock stats
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty | field | bool	math	state flag
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
@@ -66,7 +62,6 @@ ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	trait	trait
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	math	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
-ambre-app | src/host/probe.rs | crate::host::probe | SUMMARY_EVERY_MS | const | f64	math	probe period, local
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	math	flag
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline::count(values) | param | Vec<u32>	math	counts
 ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
@@ -1031,11 +1026,7 @@ ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	
 ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/view.rs | crate::view | FrameStats.drain_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | FrameStats.draw_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | FrameStats.fps | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | FrameStats.frame_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | FrameStats.gpu_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionEnd.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionUpdate.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::Key.alt | field | bool	math	named state or style flag, local
@@ -1049,17 +1040,9 @@ ambre-canvas | src/view.rs | crate::view | InputEvent::PointerDown.shift | field
 ambre-canvas | src/view.rs | crate::view | InputEvent::PointerUp.ctrl | field | bool	math	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | InputEvent::Text.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::Wheel.ctrl_key | field | bool	math	named state or style flag, local
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.bg_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.cells_drawn | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.cells_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.drain_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.draw_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.fps | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.frame_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.gpu_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.hdrs_ms | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.input_lat_ms | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PointerButton::from_dom(button) | param | i16	foreign-api	the DOM PointerEvent.button number, read into the enum here
 ambre-chrome | src/app_shell.rs | crate::app_shell | AppShell(panel_open) | param | Option<Signal<bool>>	math	local value
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
@@ -1432,17 +1415,14 @@ ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text() | ret | Res
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text(text) | param | &str	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::to_text() | ret | String	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | texts_to_ids(texts) | param | Vec<String>	generic	generic text-id serde helper
-ambre-core | src/span.rs | crate::span | <PageTime as std::ops::Sub>::sub() | ret | f64	trait	signature fixed by the trait
 ambre-core | src/span.rs | crate::span | LamportStamp.0 | field | u64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | LamportStamp::from_i64(stored) | param | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | LamportStamp::to_i64_saturating() | ret | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | Millis.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Millis::as_page_ms() | ret | f64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Millis::doubled(doublings) | param | u32	math	a count of doublings, not a span
 ambre-core | src/span.rs | crate::span | Millis::times(n) | param | u64	math	a multiplier, not a span
 ambre-core | src/span.rs | crate::span | Millis::to_timer_i32() | ret | i32	newtype-inner	time newtype accessor for the browser timer
 ambre-core | src/span.rs | crate::span | PageTime.0 | field | f64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | PageTime::after(ms) | param | f64	math	frame-clock span on PageTime
 ambre-core | src/span.rs | crate::span | Rfc3339.0 | field | String	newtype-inner	Rfc3339 newtype
 ambre-core | src/span.rs | crate::span | Rfc3339::as_str() | ret | &str	newtype-inner	Rfc3339 newtype
 ambre-core | src/span.rs | crate::span | Rfc3339::formatted(text) | param | String	newtype-inner	Rfc3339 newtype
@@ -1559,7 +1539,6 @@ ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param 
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-draw | src/kinetic.rs | crate::kinetic | DECAY_MS | const | f32	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | EDGE_BAND_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | EDGE_DEPTH_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | EDGE_GAIN | const | f32	math	geometry, layout, count or size local to the algorithm
@@ -1572,21 +1551,19 @@ ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	ge
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::speed() | ret | Option<(f32,f32)>	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::wheel(stepped) | param | bool	math	local state flag or value, not a mode selector
-ambre-draw | src/kinetic.rs | crate::kinetic | LONG_PRESS_MS | const | f64	math	frame-clock span compared with PageTime
-ambre-draw | src/kinetic.rs | crate::kinetic | MAX_STEP_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | Motion.speed | field | (f32,f32)	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	math	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	math	local state flag or value, not a mode selector
-ambre-draw | src/kinetic.rs | crate::kinetic | SAMPLE_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | STOP_SPEED | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | TAP_SLOP_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_GAP_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_NOTCH_PX | const | f32	math	wheel notch px; duplicated as view.rs WHEEL_MOUSE_NOTCH_PX, values agree (40)
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_START_SPEED | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed(at) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed(extent) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-draw | src/kinetic.rs | crate::kinetic | ms_f32() | ret | f32	math	a page-clock span as the f32 milliseconds a speed in screen pixels per millisecond scales by
+ambre-draw | src/kinetic.rs | crate::kinetic | step_ms() | ret | f32	math	one tick's clamped span as the f32 milliseconds a speed in screen pixels per millisecond scales by
 ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | DrawSurface::stroke_rect(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
@@ -2415,7 +2392,6 @@ ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	te
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	text content / label / parser input
 ambre-prose | src/events.rs | crate::events | UNNAMED | const | &str	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | MULTI_PRESS_MS | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/input.rs | crate::input | Press.count | field | u8	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	newtype-inner	newtype inner field
@@ -2880,7 +2856,6 @@ ambre-prose | src/ui.rs | crate::ui | ProseUiState.pending_export | field | Opti
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.suggesting | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.syncs | field | VecDeque<bool>	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState::take_export() | ret | Option<(String,ambre_core::MediaType,Vec<u8>)>	generic	export file name and bytes beside the typed MediaType
-ambre-prose | src/ui.rs | crate::ui | RECOUNT_DELAY_MS | const | f64	math	layout geometry local to algorithm
 ambre-prose | src/ui.rs | crate::ui | SendResult::accepted() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.characters | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.pages | field | String	free-text	text content / label / parser input
@@ -3656,14 +3631,11 @@ ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKe
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of() | ret | Option<&str>	foreign-api	the target id half of a key Loro hands back from the reactions map
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | entry(id) | param | &str	generic	dictionary lookup over every id type the board keys a root by
-ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | PRESENCE_TTL_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | ToileState::expire_peers() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | DEFAULT_TRANSITION_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::drop_slides() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::edit_notes(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::is_frame() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::notes() | ret | String	free-text	label, message or user text
-ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::transition_ms() | ret | f64	math	CRDT ms read, converted to Duration at once (transition())
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::transition_ms::MAX_TRANSITION_MS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
@@ -3765,7 +3737,6 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::render(show_caret
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | ink_color(opacity) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
-ambre-toile | src/ui/embed.rs | crate::ui::embed | EMBED_CLOSE_DEBOUNCE_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::on_release() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret | bool	generic	predicate or handled-flag result
@@ -3855,9 +3826,7 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(deg
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
 ambre-toile | src/ui/presence.rs | crate::ui::presence | CURSOR_SIZE_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LABEL_FONT_PX | const | f32	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_FADE_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/presence.rs | crate::ui::presence | PRESENCE_HEARTBEAT_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presence.rs | crate::ui::presence | laser_alpha() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
@@ -3917,7 +3886,6 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_boar
 ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&ElementId)->bool	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | CARET_BLINK_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/view.rs | crate::ui::view | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/view.rs | crate::ui::view | DUPLICATE_NUDGE | const | f64	math	nudge world units; duplicated in view.rs and menu.rs, values agree (10.0)
 ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text
@@ -4464,11 +4432,7 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.bg_ms | field | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.cells_ms | field | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.hdrs_ms | field | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.input_latency_ms | field | f32	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | ERROR_MARK_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | BADGE_RADIUS | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_DASH | const | f64	math	local geometry / pixel arithmetic
@@ -4533,7 +4497,6 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(is_multi) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(send) | param | impl FnOnce()->bool	generic	state flag
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | BLINK_MS | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.focused | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.reference | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.shown | field | String	free-text	free text: user content, label, message or display string
@@ -4604,7 +4567,6 @@ ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regi
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
-ambre-prose | src/probe.rs | crate::probe | Measure::duration() | ret | f64	math	the difference of two PageTime instants, which PageTime's Sub answers in f64 milliseconds by design (ambre-core span.rs); the value only feeds percentiles
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the frame counts kept per probe, as the f64 samples percentiles takes
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.samples | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the durations kept per probe, in milliseconds, as the f64 samples percentiles takes
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field | u64	newtype-inner	newtype inner, accessor or constructor

@@ -43,7 +43,7 @@ use super::viewport::ViewportTransform;
 /// members fetch, a key unwrap and a snapshot hydration. So an embed opens the
 /// instant it enters the cull set, and only closes after staying out for this
 /// long. Re-entering cancels the pending close.
-pub const EMBED_CLOSE_DEBOUNCE_MS: f64 = 5_000.0;
+pub const EMBED_CLOSE_DEBOUNCE_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
 
 /// One `doc_embed` in the current culled frame, projected to screen space and
 /// published for `FrameHost` (`toile-embeds` "Render").
@@ -1015,7 +1015,7 @@ mod tests {
         // Leaves the cull set: the countdown starts, and nothing leaves yet.
         assert!(sync(&mut s, &empty, ambre_bus::PageTime(1_000.0)).is_empty());
         // One millisecond short of the deadline: still nothing.
-        let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS - 1.0;
+        let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get() - 1.0;
         assert!(sync(&mut s, &empty, ambre_bus::PageTime(almost)).is_empty());
         assert!(s.is_open(&child), "closed before the debounce elapsed");
         // Deadline reached.
@@ -1023,7 +1023,7 @@ mod tests {
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::PageTime(1_000.0 + EMBED_CLOSE_DEBOUNCE_MS)
+                ambre_bus::PageTime(1_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get())
             )),
             vec![child]
         );
@@ -1078,7 +1078,7 @@ mod tests {
             closed(&sync(
                 &mut s,
                 &empty,
-                ambre_bus::PageTime(6_000.0 + EMBED_CLOSE_DEBOUNCE_MS)
+                ambre_bus::PageTime(6_000.0 + EMBED_CLOSE_DEBOUNCE_MS.get())
             )),
             vec![child]
         );
@@ -1142,7 +1142,7 @@ mod tests {
         sync(&mut s, &dv, ambre_bus::PageTime(0.0));
 
         sync(&mut s, &empty, ambre_bus::PageTime(0.0)); // countdown armed
-        let past = EMBED_CLOSE_DEBOUNCE_MS + 1.0;
+        let past = EMBED_CLOSE_DEBOUNCE_MS.get() + 1.0;
         assert_eq!(
             closed(&sync_refused(&mut s, &empty, ambre_bus::PageTime(past))),
             vec![child]

@@ -88,7 +88,7 @@ impl Transition {
         let raw = if self.dur.is_zero() {
             1.0
         } else {
-            ((now_ms - start) / (self.dur.as_secs_f64() * 1000.0)).clamp(0.0, 1.0)
+            ((now_ms - start) / ambre_core::PageMillis::from_duration(self.dur)).clamp(0.0, 1.0)
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {

@@ -295,7 +295,10 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         Root::PresentationConfig
             if ConfigKey::parse(stored.key(0)?) == Some(ConfigKey::TransitionMs) =>
         {
-            Some(format!("slides change over {} ms", reader.transition_ms()))
+            Some(format!(
+                "slides change over {} ms",
+                reader.transition_ms().get()
+            ))
         }
         Root::PresentationOrder => {
             let frame = ElementId(stored.string()?.to_owned());

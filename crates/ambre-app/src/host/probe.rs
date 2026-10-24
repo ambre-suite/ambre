@@ -17,8 +17,8 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use ambre_prose::probe::{Measure, ProbeName, percentiles};
 
-/// How often the summary is printed, in milliseconds.
-const SUMMARY_EVERY_MS: f64 = 5_000.0;
+/// How often the summary is printed.
+const SUMMARY_EVERY_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
 
 /// The page's clock, in milliseconds since the page opened.
 pub(crate) fn now_ms() -> ambre_core::PageTime {
@@ -75,7 +75,7 @@ impl Timeline {
                 samples
                     .entry(measure.name)
                     .or_default()
-                    .push(measure.duration());
+                    .push(measure.duration().get());
                 self.fresh = true;
             }
         }

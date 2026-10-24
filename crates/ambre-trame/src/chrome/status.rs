@@ -94,16 +94,16 @@ pub fn StatusBar(
                     let p = perf.get();
                     view! {
                         <div class="statusbar-perf-panel">
-                            <div>"frame " {format!("{:.1}", p.frame_ms)} " ms"</div>
-                            <div>"drain " {format!("{:.1}", p.drain_ms)}
-                                "  draw " {format!("{:.1}", p.draw_ms)}
-                                "  gpu " {format!("{:.1}", p.gpu_ms)}</div>
-                            <div>"bg " {format!("{:.2}", p.bg_ms)}
-                                "  cells " {format!("{:.2}", p.cells_ms)}
-                                "  hdrs " {format!("{:.2}", p.hdrs_ms)}</div>
+                            <div>"frame " {format!("{:.1}", p.frame_ms.get())} " ms"</div>
+                            <div>"drain " {format!("{:.1}", p.drain_ms.get())}
+                                "  draw " {format!("{:.1}", p.draw_ms.get())}
+                                "  gpu " {format!("{:.1}", p.gpu_ms.get())}</div>
+                            <div>"bg " {format!("{:.2}", p.bg_ms.get())}
+                                "  cells " {format!("{:.2}", p.cells_ms.get())}
+                                "  hdrs " {format!("{:.2}", p.hdrs_ms.get())}</div>
                             <div>"drawn " {p.cells_drawn.to_string()}
                                 "  miss " {p.glyph_misses.to_string()}
-                                "  inlat " {format!("{:.1}", p.input_lat_ms)} " ms"</div>
+                                "  inlat " {format!("{:.1}", p.input_lat_ms.get())} " ms"</div>
                         </div>
                     }
                 }}

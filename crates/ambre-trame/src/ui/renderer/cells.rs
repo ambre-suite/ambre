@@ -100,8 +100,8 @@ pub fn draw_cells<S: DrawSurface>(
         None => (cell_area, palette.content_pending),
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
-        stats.bg_ms = 0.0;
-        stats.cells_ms = 0.0;
+        stats.bg_ms = ambre_core::PageMillis::ZERO;
+        stats.cells_ms = ambre_core::PageMillis::ZERO;
         stats.cells_drawn = 0;
         return;
     }
@@ -145,8 +145,8 @@ pub fn draw_cells<S: DrawSurface>(
     );
     let t_lines = clock.now_ms();
 
-    stats.bg_ms = ((t_pending - t0) + (t_lines - t_cells)) as f32;
-    stats.cells_ms = (t_cells - t_pending) as f32;
+    stats.bg_ms = (t_pending - t0) + (t_lines - t_cells);
+    stats.cells_ms = t_cells - t_pending;
     stats.cells_drawn = walk.cells_drawn;
 }
 

@@ -523,5 +523,5 @@ pub fn draw_overlay<S: DrawSurface>(
     // to the DOM status bar (`ambre_canvas::PerfPublisher`) and rendered as
     // plain text. We never shape debug glyphs on the GPU. Only the timing the
     // view feeds the snapshot is recorded.
-    stats.hdrs_ms = (t_after_hdrs - t0) as f32;
+    stats.hdrs_ms = t_after_hdrs - t0;
 }

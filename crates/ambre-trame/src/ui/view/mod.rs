@@ -45,7 +45,7 @@ fn view_point(point: ambre_draw::Point) -> ambre_core::ViewPoint {
 }
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
-const BLINK_MS: f64 = 530.0;
+const BLINK_MS: ambre_core::PageMillis = ambre_core::PageMillis::new(530.0);
 
 /// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
 /// through [`coalesce`](Self::coalesce), so the slot holds at most one request

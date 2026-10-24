@@ -178,8 +178,8 @@ pub fn frame_at(
     for (i, frame) in picture.frames.iter().enumerate() {
         until += frame.delay_ms.0;
         if at < until {
-            #[allow(clippy::cast_precision_loss)]
-            return (i, Some(now_ms.after((until - at) as f64)));
+            let due = ambre_core::Millis(until - at).to_page_millis();
+            return (i, Some(now_ms.after(due)));
         }
     }
     (0, None)

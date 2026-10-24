@@ -211,10 +211,10 @@ pub struct FrameHost {
 
     render_times: VecDeque<ambre_core::PageTime>,
     render_fps: f32,
-    last_frame_ms: f32,
-    last_drain_ms: f32,
-    last_draw_ms: f32,
-    last_gpu_ms: f32,
+    last_frame_ms: ambre_core::PageMillis,
+    last_drain_ms: ambre_core::PageMillis,
+    last_draw_ms: ambre_core::PageMillis,
+    last_gpu_ms: ambre_core::PageMillis,
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
     last_hud_update_ms: ambre_core::PageTime,
@@ -252,10 +252,10 @@ impl FrameHost {
             cells: super::cell::Cells::default(),
             render_times: VecDeque::with_capacity(120),
             render_fps: 0.0,
-            last_frame_ms: 0.0,
-            last_drain_ms: 0.0,
-            last_draw_ms: 0.0,
-            last_gpu_ms: 0.0,
+            last_frame_ms: ambre_core::PageMillis::ZERO,
+            last_drain_ms: ambre_core::PageMillis::ZERO,
+            last_draw_ms: ambre_core::PageMillis::ZERO,
+            last_gpu_ms: ambre_core::PageMillis::ZERO,
             last_hud_update_ms: ambre_bus::PageTime(0.0),
             fatal_painted: false,
         }
@@ -444,13 +444,14 @@ impl FrameHost {
         fps: &mut f32,
         now: ambre_core::PageTime,
     ) {
+        const WINDOW: ambre_core::PageMillis = ambre_core::PageMillis::new(1000.0);
         times.push_back(now);
-        while times.front().is_some_and(|&t| now - t > 1000.0) {
+        while times.front().is_some_and(|&t| now - t > WINDOW) {
             times.pop_front();
         }
         *fps = match times.front() {
             Some(&oldest) if times.len() >= 2 => {
-                (times.len() - 1) as f32 / ((now - oldest) / 1000.0) as f32
+                (times.len() - 1) as f32 / ((now - oldest) / WINDOW) as f32
             }
             _ => 0.0,
         };
@@ -478,9 +479,9 @@ impl FrameHost {
         self.cells.settle(&mut self.view);
         self.cells.render(raf_timestamp);
 
-        let t_drain = self.perf.now();
+        let t_drain = ambre_core::PageTime(self.perf.now());
         self.view.update();
-        let t_after_drain = self.perf.now();
+        let t_after_drain = ambre_core::PageTime(self.perf.now());
 
         // Service any Paste-button read the shell decoded. The shell read the
         // clipboard inside the click gesture. The host answers rung 2 by
@@ -527,7 +528,7 @@ impl FrameHost {
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
         let mut hud_tick = false;
-        if raf_timestamp - self.last_hud_update_ms >= 500.0 {
+        if raf_timestamp - self.last_hud_update_ms >= ambre_core::PageMillis::new(500.0) {
             self.last_hud_update_ms = raf_timestamp;
             hud_tick = true;
         }
@@ -568,13 +569,13 @@ impl FrameHost {
             gpu_ms: self.last_gpu_ms,
         };
 
-        let t0 = self.perf.now();
+        let t0 = ambre_core::PageTime(self.perf.now());
 
         // -- Build CPU batches for whichever layers are being rebuilt. --------
         let t_draw_ms = if any_dirty {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
-            let t_draw_start = self.perf.now();
+            let t_draw_start = ambre_core::PageTime(self.perf.now());
             {
                 let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
                 if content_active {
@@ -627,9 +628,9 @@ impl FrameHost {
                 }
             }
             gpu.text_cache.evict_if_oversized(5_000);
-            (self.perf.now() - t_draw_start) as f32
+            ambre_core::PageTime(self.perf.now()) - t_draw_start
         } else {
-            0.0
+            ambre_core::PageMillis::ZERO
         };
 
         // -- GPU encoding + present. ------------------------------------------
@@ -637,16 +638,16 @@ impl FrameHost {
         if !phases.present {
             return;
         }
-        let t_gpu_start = self.perf.now();
+        let t_gpu_start = ambre_core::PageTime(self.perf.now());
         if !super::cell::present(gpu, &plan) {
             return;
         }
 
-        let t2 = self.perf.now();
-        self.last_frame_ms = (t2 - t0) as f32;
-        self.last_drain_ms = (t_after_drain - t_drain) as f32;
+        let t2 = ambre_core::PageTime(self.perf.now());
+        self.last_frame_ms = t2 - t0;
+        self.last_drain_ms = t_after_drain - t_drain;
         self.last_draw_ms = t_draw_ms;
-        self.last_gpu_ms = (t2 - t_gpu_start) as f32;
+        self.last_gpu_ms = t2 - t_gpu_start;
     }
 
     /// Paint the unrecoverable-error terminal screen: a dark backdrop with a
