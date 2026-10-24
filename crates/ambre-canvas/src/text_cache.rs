@@ -14,7 +14,7 @@
 use ambre_bus::ByteSpan;
 use ambre_core::{DocPx, ViewPx};
 
-use ambre_draw::{Brush, Color};
+use ambre_draw::{Brush, BundledFamily, Color};
 use parley::style::{
     FontFamily, FontFamilyName, FontStyle, FontWeight, OverflowWrap, StyleProperty,
 };
@@ -26,16 +26,22 @@ use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
 
-/// Map a font-family label to the face the application ships.
+/// Map a font family to the face the application ships. `None` names the
+/// default family.
 ///
 /// A thin wrapper over [`ambre_draw::resolve_family`], which is where the
 /// mapping lives. The canvas renderers, the inline editors and the Prose
-/// paginator all reach the same face for one label (`CANVAS-017`).
-pub fn registered_family_name(label: Option<&str>) -> &'static str {
-    let family = label
-        .map(ambre_core::FontFamily::from_label)
-        .unwrap_or_default();
-    ambre_draw::resolve_family(&family).face_name()
+/// paginator all reach the same face for one family (`CANVAS-017`).
+pub fn registered_family_name(family: Option<&ambre_core::FontFamily>) -> &'static str {
+    bundled_face(family).face_name()
+}
+
+/// The bundled face `family` resolves to, the default one for `None`.
+fn bundled_face(family: Option<&ambre_core::FontFamily>) -> BundledFamily {
+    match family {
+        Some(family) => ambre_draw::resolve_family(family),
+        None => ambre_draw::resolve_family(&ambre_core::FontFamily::Sans),
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -55,9 +61,10 @@ struct CacheKey {
     /// Whether a long unbreakable token wraps onto more lines instead of
     /// overflowing (`trame-cell-rendering`).
     word_break: WordBreak,
-    /// Font family name (`None` = the grid default). Part of the key so each
-    /// family of the same string is cached separately.
-    font: Option<Box<str>>,
+    /// The bundled face the family resolves to. Part of the key so each
+    /// face of the same string is cached separately. Two families on one
+    /// face shape the same layout, so they share the entry.
+    face: BundledFamily,
     /// The ranges shaped in a face of their own, empty for a plain text.
     spans: Box<[SpanShape]>,
 }
@@ -73,7 +80,7 @@ impl std::hash::Hash for CacheKey {
         self.weight.hash(state);
         self.slant.hash(state);
         self.word_break.hash(state);
-        self.font.hash(state);
+        self.face.hash(state);
         self.spans.hash(state);
     }
 }
@@ -140,7 +147,7 @@ pub struct SpanShape {
     pub range: ByteSpan,
     pub weight: Option<ambre_core::FontWeight>,
     pub italic: bool,
-    pub family: Option<String>,
+    pub family: Option<ambre_core::FontFamily>,
     pub underline: bool,
     /// How far right each paragraph holding bytes of the range starts, in
     /// the units of the width the text breaks to (`CANVAS-084`).
@@ -249,7 +256,7 @@ pub(crate) fn push_shape(
         builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
     }
     if let Some(family) = &shape.family {
-        let face = registered_family_name(Some(family.as_str()));
+        let face = registered_family_name(Some(family));
         let stack = FontFamily::Single(FontFamilyName::Named(face.into()));
         builder.push(StyleProperty::FontFamily(stack), range.clone());
     }
@@ -296,7 +303,7 @@ struct Look<'a, L> {
     align: Alignment,
     weight: Weight,
     slant: Slant,
-    family: Option<&'a str>,
+    family: Option<&'a ambre_core::FontFamily>,
     word_break: WordBreak,
 }
 
@@ -447,9 +454,9 @@ impl TextCache {
     }
 
     /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
-    /// (`None` = the grid default). `"Sans"`/`"Default"` map to the bundled sans
-    /// face, and `"Serif"`/`"Monospace"` to the matching generic. Any other name
-    /// is requested verbatim and falls back to the default if unavailable.
+    /// (`None` = the grid default). The family resolves to a bundled face
+    /// through [`registered_family_name`], and a family no face is named for
+    /// falls back to the default one.
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build_font<L: TextLength>(
         &mut self,
@@ -460,7 +467,7 @@ impl TextCache {
         align: Alignment,
         weight: Weight,
         slant: Slant,
-        family: Option<&str>,
+        family: Option<&ambre_core::FontFamily>,
         word_break: WordBreak,
     ) -> &Layout<Brush> {
         let plain = Look {
@@ -522,7 +529,7 @@ impl TextCache {
             weight,
             slant,
             word_break,
-            font: family.map(Box::from),
+            face: bundled_face(family),
             spans: spans.into(),
         };
 
@@ -618,6 +625,11 @@ mod tests {
     use ambre_bus::ByteSpan;
     use ambre_core::ViewPx;
     use parley::{Alignment, FontContext};
+
+    /// The face the family `label` names resolves to.
+    fn face_of(label: Option<&str>) -> &'static str {
+        registered_family_name(label.map(ambre_core::FontFamily::from_label).as_ref())
+    }
 
     /// A context holding the shipped Noto Sans face, read from the tree.
     fn font_cx() -> FontContext {
@@ -906,21 +918,21 @@ mod tests {
 
     #[test]
     fn family_labels_map_to_registered_faces() {
-        assert_eq!(registered_family_name(Some("Serif")), "DejaVu Serif");
+        assert_eq!(face_of(Some("Serif")), "DejaVu Serif");
         assert_eq!(
-            registered_family_name(Some("Monospace")),
+            face_of(Some("Monospace")),
             "DejaVu Sans Mono"
         );
         // Sans / Default / None / any unknown label fall back to the bundled sans.
-        assert_eq!(registered_family_name(Some("Sans")), "Noto Sans");
-        assert_eq!(registered_family_name(Some("Default")), "Noto Sans");
-        assert_eq!(registered_family_name(None), "Noto Sans");
-        assert_eq!(registered_family_name(Some("Comic Sans")), "Noto Sans");
+        assert_eq!(face_of(Some("Sans")), "Noto Sans");
+        assert_eq!(face_of(Some("Default")), "Noto Sans");
+        assert_eq!(face_of(None), "Noto Sans");
+        assert_eq!(face_of(Some("Comic Sans")), "Noto Sans");
         // The CSS-generic `FontSpec` default MUST resolve to a loaded face, not be
         // passed through raw. Otherwise a sticky whose family is the default
         // shapes zero glyphs and renders invisible text. Edit mode already routed
         // through here and showed it fine. The static render bypassed it.
-        assert_eq!(registered_family_name(Some("sans-serif")), "Noto Sans");
+        assert_eq!(face_of(Some("sans-serif")), "Noto Sans");
     }
 
     #[test]
@@ -928,9 +940,9 @@ mod tests {
         // A request that already names a loaded face resolves to itself.
         // Routing every family through this single authority never demotes a
         // genuine serif/mono face to the sans fallback.
-        assert_eq!(registered_family_name(Some("DejaVu Serif")), "DejaVu Serif");
+        assert_eq!(face_of(Some("DejaVu Serif")), "DejaVu Serif");
         assert_eq!(
-            registered_family_name(Some("DejaVu Sans Mono")),
+            face_of(Some("DejaVu Sans Mono")),
             "DejaVu Sans Mono"
         );
     }

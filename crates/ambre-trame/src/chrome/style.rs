@@ -69,7 +69,7 @@ pub struct StyleState {
     pub border_color: RwSignal<Option<Rgb>>,
     pub fg: RwSignal<Option<Rgb>>,
     pub bg: RwSignal<Option<Rgb>>,
-    pub font: RwSignal<Option<String>>,
+    pub font: RwSignal<Option<ambre_core::FontFamily>>,
     pub size: RwSignal<Option<ambre_core::FontSize>>,
     /// Whether the active cell is part of a merge, driving the toolbar's
     /// merge/unmerge toggle pressed state.

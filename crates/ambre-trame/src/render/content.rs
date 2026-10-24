@@ -33,8 +33,8 @@ pub struct CellContent<'a> {
     pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = the palette `content_bg`).
     pub bg: Option<Rgb>,
-    /// Font family name (`None` = the grid default).
-    pub font: Option<&'a str>,
+    /// Font family (`None` = the grid default).
+    pub font: Option<&'a ambre_core::FontFamily>,
     /// Font size (`None` = the grid default [`BODY_FONT`](super::BODY_FONT)).
     pub size: Option<ambre_core::FontSize>,
     /// Wrap onto multiple lines inside the cell instead of overflowing.

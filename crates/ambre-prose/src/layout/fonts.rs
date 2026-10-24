@@ -13,14 +13,14 @@
 use ambre_draw::{BundledFamily, ScriptSet};
 use parley::FontContext;
 
-/// Resolve a family label to the face the application ships.
+/// Resolve a family to the face the application ships.
 ///
-/// The whole of family resolution for Prose (`PROSE-108`). It reads the label
-/// and nothing else, so two peers resolve one label alike whatever faces their
+/// The whole of family resolution for Prose (`PROSE-108`). It reads the family
+/// and nothing else, so two peers resolve one family alike whatever faces their
 /// contexts hold.
 #[must_use]
-pub fn resolve(label: &str) -> BundledFamily {
-    ambre_draw::resolve_family(&ambre_core::FontFamily::from_label(label))
+pub fn resolve(family: &ambre_core::FontFamily) -> BundledFamily {
+    ambre_draw::resolve_family(family)
 }
 
 /// The scripts this text asks for that `font_cx` cannot cover (`PROSE-110`).
@@ -89,16 +89,21 @@ mod tests {
     use ambre_draw::{BundledFamily, LazyFont, ScriptSet};
     use parley::FontContext;
 
+    /// The face the family `label` names resolves to.
+    fn resolve_label(label: &str) -> BundledFamily {
+        resolve(&ambre_core::FontFamily::from_label(label))
+    }
+
     #[test]
     fn a_family_no_face_carries_still_resolves_to_a_shipped_one() {
-        assert_eq!(resolve("No Face Named This 12345"), BundledFamily::Sans);
-        assert_eq!(resolve("Serif"), BundledFamily::Serif);
+        assert_eq!(resolve_label("No Face Named This 12345"), BundledFamily::Sans);
+        assert_eq!(resolve_label("Serif"), BundledFamily::Serif);
     }
 
     #[test]
     fn a_monospace_label_falls_back_to_a_monospace_face() {
-        assert_eq!(resolve("Monospace"), BundledFamily::Mono);
-        assert_eq!(resolve("DejaVu Sans Mono"), BundledFamily::Mono);
+        assert_eq!(resolve_label("Monospace"), BundledFamily::Mono);
+        assert_eq!(resolve_label("DejaVu Sans Mono"), BundledFamily::Mono);
     }
 
     #[test]
@@ -109,7 +114,7 @@ mod tests {
         let empty = FontContext::new();
         drop(empty);
         for label in ["Serif", "Monospace", "Sans", "Unknown Face"] {
-            assert_eq!(resolve(label), resolve(label));
+            assert_eq!(resolve_label(label), resolve_label(label));
         }
     }
 

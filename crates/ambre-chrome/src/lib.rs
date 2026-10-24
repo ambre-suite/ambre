@@ -60,7 +60,7 @@ pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};
-pub use font::{FONT_FAMILIES, FontPicker};
+pub use font::{FONT_FAMILIES, FamilyChoice, FontPicker};
 pub use format::{
     FONT_SIZES, FORMAT_BAR_LIFT_PX, FontSizeSelect, FormatBar, FormatControl, FormatToggle, Pressed,
 };

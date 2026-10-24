@@ -405,7 +405,7 @@ fn paint_label<S: DrawSurface>(
         Alignment::Center,
         ambre_canvas::Weight::Regular,
         ambre_canvas::Slant::Upright,
-        Some(style.font.face().label()),
+        Some(style.font.face()),
         ambre_canvas::WordBreak::Whole,
     );
     // The plate hugs the laid-out text rather than the (fixed) caption box, so a
@@ -610,7 +610,7 @@ fn paint_text<S: DrawSurface>(
         Alignment::Start,
         ambre_canvas::Weight::bold_if(e.style.font.weight.is_bold()),
         ambre_canvas::Slant::italic_if(e.style.font.italic),
-        Some(e.style.font.face().label()),
+        Some(e.style.font.face()),
         ambre_canvas::WordBreak::Whole,
     );
     let brush = Brush::Solid(color);

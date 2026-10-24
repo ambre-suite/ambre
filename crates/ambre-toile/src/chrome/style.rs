@@ -64,7 +64,7 @@ pub fn StyleInspector(
     let opacity = RwSignal::new(ambre_core::Opacity::OPAQUE);
     // Text (foreground) colour + font controls.
     let text_color = RwSignal::new(None::<Rgba>);
-    let font_family = RwSignal::new(None::<String>);
+    let font_family = RwSignal::new(None::<FontFamily>);
     let font_size = RwSignal::new(FontSizeChoice::DEFAULT);
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
@@ -82,7 +82,8 @@ pub fn StyleInspector(
             stroke_w.set(m.base.stroke_w.get());
             opacity.set(m.base.opacity);
             text_color.set(m.base.text_color);
-            font_family.set(m.base.font.picker_label().map(str::to_owned));
+            // A family the picker does not offer shows the "Default" entry.
+            font_family.set(m.base.font.family.clone().filter(|f| f.picker_label().is_some()));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight.is_bold());
             italic.set(m.base.font.italic);
@@ -116,11 +117,11 @@ pub fn StyleInspector(
         text_color.set(c);
         commit(StyleEdit::TextColor(c));
     });
-    let on_font = Callback::new(move |f: Option<String>| {
+    let on_font = Callback::new(move |f: Option<FontFamily>| {
         font_family.set(f.clone());
         // The picker's "Default" reset is `None`: the element then names no
         // family, which keeps it apart from an explicit Sans.
-        commit(StyleEdit::Font(f.as_deref().map(FontFamily::from_label)));
+        commit(StyleEdit::Font(f));
     });
     // Size: the shared dropdown speaks sizes (`Option<FontSize>`, `None` =
     // auto), which is the choice the style holds.

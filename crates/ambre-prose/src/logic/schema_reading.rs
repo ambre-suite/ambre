@@ -341,7 +341,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             );
             match doc::DefaultsKey::parse(stored.key(1)?)? {
                 doc::DefaultsKey::FontFamily => {
-                    Some(format!("body set in {:?}", style.font_family))
+                    Some(format!("body set in {:?}", style.font_family.label()))
                 }
                 doc::DefaultsKey::FontSizePt => {
                     Some(format!("body set at {} px", style.font_size_px.get()))

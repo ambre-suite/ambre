@@ -185,11 +185,11 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
 
 /// The composed font control: a thin adapter over the shared
 /// [`ambre_chrome::FontPicker`] (the control now lives in `ambre-chrome` so Trame
-/// cells and Toile elements share it). It maps the picker's `Option<String>`
-/// family pick onto a [`StylePatch`] (`None` = the "Default" reset).
+/// cells and Toile elements share it). It maps the picker's family pick onto a
+/// [`StylePatch`] (`None` = the "Default" reset).
 #[component]
 pub(crate) fn FontPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
-    let on_pick = Callback::new(move |family: Option<String>| {
+    let on_pick = Callback::new(move |family: Option<ambre_core::FontFamily>| {
         on_style.run(StylePatch {
             font: Some(family),
             ..Default::default()

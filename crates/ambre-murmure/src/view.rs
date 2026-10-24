@@ -5281,7 +5281,7 @@ mod tests {
                 )
             })
             .collect();
-        let code = Some("Monospace".to_owned());
+        let code = Some(ambre_core::FontFamily::Mono);
         assert_eq!(
             spans,
             [
@@ -5406,7 +5406,7 @@ mod tests {
         let palette = page.view.theme.palette();
         let spans = page.view.composer().spans(channel);
         assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].family.as_deref(), Some("Monospace"));
+        assert_eq!(spans[0].family, Some(ambre_core::FontFamily::Mono));
         assert_eq!(spans[0].background, Some(palette.header_hover));
         assert_eq!(margin_marks(&mut page), 0, "code draws no margin mark");
     }

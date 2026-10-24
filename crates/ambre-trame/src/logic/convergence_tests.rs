@@ -515,7 +515,7 @@ fn base_style() -> StylePatch {
         v_align: Some(VAlign::Bottom),
         fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
         bg: Some(Some(Rgb::from_bits(0x0000_FF00))),
-        font: Some(Some("Arial".to_owned())),
+        font: Some(Some(ambre_core::FontFamily::from_label("Arial"))),
         size: Some(Some(ambre_core::FontSize::from_whole_points(18))),
         format: Some(CellFormat::Percent),
         border: Some(BorderEdit {
@@ -564,7 +564,7 @@ fn other_style() -> StylePatch {
         v_align: Some(VAlign::Top),
         fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
         bg: Some(Some(Rgb::from_bits(0x00FF_FF00))),
-        font: Some(Some("Times".to_owned())),
+        font: Some(Some(ambre_core::FontFamily::from_label("Times"))),
         size: Some(Some(ambre_core::FontSize::from_whole_points(9))),
         format: Some(CellFormat::General),
         decimals: Some(None),

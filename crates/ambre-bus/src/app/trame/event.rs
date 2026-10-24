@@ -434,8 +434,8 @@ pub struct DisplayCell {
     pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = transparent).
     pub bg: Option<Rgb>,
-    /// Font family name (`None` = grid default).
-    pub font: Option<String>,
+    /// Font family (`None` = grid default).
+    pub font: Option<ambre_core::FontFamily>,
     /// Font size (`None` = grid default).
     pub size: Option<ambre_core::FontSize>,
     /// Per-edge border (style + colour each); `None` edges are undrawn.

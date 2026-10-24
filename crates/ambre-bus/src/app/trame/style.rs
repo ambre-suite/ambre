@@ -2,7 +2,7 @@
 //! (`trame-shared-filter`, `trame-cell-styles`): filter kinds, alignment, number
 //! formats, borders, and the resolved [`CellStyle`] / sparse [`StylePatch`].
 
-use ambre_core::{FontSize, Rgb};
+use ambre_core::{FontFamily, FontSize, Rgb};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -294,8 +294,8 @@ pub struct CellStyle {
     /// Fill colour, packed `0xRRGGBB`. `None` = transparent (shows the themed
     /// sheet background).
     pub bg: Option<Rgb>,
-    /// Font family name. `None` = the grid default font.
-    pub font: Option<String>,
+    /// Font family. `None` = the grid default font.
+    pub font: Option<FontFamily>,
     /// Font size. `None` = the grid default size. Stored as whole points, the
     /// steps the size picker offers.
     #[serde(with = "ambre_core::font::whole_points")]
@@ -324,7 +324,7 @@ pub struct StylePatch {
     pub wrap: Option<bool>,
     pub fg: Option<Option<Rgb>>,
     pub bg: Option<Option<Rgb>>,
-    pub font: Option<Option<String>>,
+    pub font: Option<Option<FontFamily>>,
     pub size: Option<Option<FontSize>>,
     pub format: Option<CellFormat>,
     pub decimals: Option<Option<Decimals>>,

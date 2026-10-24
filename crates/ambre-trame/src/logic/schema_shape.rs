@@ -213,7 +213,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
             wrap: true,
             fg: Some(Rgb::from_bits(0x01_02_03)),
             bg: Some(Rgb::from_bits(0x04_05_06)),
-            font: Some("f".to_owned()),
+            font: Some(ambre_core::FontFamily::Other("f".to_owned())),
             size: Some(ambre_core::FontSize::from_whole_points(7)),
             format: CellFormat::Time,
             decimals: crate::Decimals::new(8),

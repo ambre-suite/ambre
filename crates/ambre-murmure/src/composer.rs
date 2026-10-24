@@ -59,8 +59,8 @@ pub const COMPOSER_HINT: &str = "Write a message";
 /// The height of the field when it holds no line yet.
 const MIN_LINE_PX: ViewPx = ViewPx::new(FONT_BODY.get() + SPACE_4.get());
 
-/// The family label of the composer's text, the one of the message bodies.
-const FAMILY: &str = "Sans";
+/// The family of the composer's text, the one of the message bodies.
+const FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::Sans;
 
 /// The height of the strip that names who types, above the field.
 const TYPING_PX: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_4.get());
@@ -137,7 +137,7 @@ fn body_style(color: Color) -> TextEditorStyle {
     TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: false,
-        family: FAMILY.to_owned(),
+        family: FAMILY,
         base_size: ambre_core::DocPx::new(FONT_BODY.get()),
         color,
         underline: false,

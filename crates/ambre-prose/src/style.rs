@@ -47,7 +47,7 @@ pub struct ResolvedStyle {
     pub color: Option<Rgba>,
     pub background: Option<Rgba>,
     pub font_size: FontSize,
-    pub font_family: Option<String>,
+    pub font_family: Option<ambre_core::FontFamily>,
     pub link: Option<ambre_core::LinkUrl>,
 }
 
@@ -58,7 +58,7 @@ pub struct ResolvedStyle {
 const HEADING_SCALE: [f32; 6] = [2.0, 1.5, 1.25, 1.1, 1.0, 0.9];
 
 /// The family a code block and an inline code run are drawn in.
-const MONOSPACE: &str = "monospace";
+const MONOSPACE: ambre_core::FontFamily = ambre_core::FontFamily::Mono;
 
 /// The bold a heading is drawn in, and the monospace of a code block, live here
 /// rather than in the caller. The cascade is the one reader of the block type.
@@ -88,7 +88,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
         }
         BlockType::CodeBlock => {
             resolved.code_inline = true;
-            resolved.font_family = Some(MONOSPACE.to_owned());
+            resolved.font_family = Some(MONOSPACE);
         }
         _ => {}
     }
@@ -127,7 +127,7 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
         resolved.font_size = points;
     }
     if let Some(family) = get(MarkRoot::FontFamily).filter(|family| !family.is_empty()) {
-        resolved.font_family = Some(family.clone());
+        resolved.font_family = Some(ambre_core::FontFamily::from_label(family));
     }
     resolved.link = get(MarkRoot::Link)
         .filter(|url| !url.is_empty())

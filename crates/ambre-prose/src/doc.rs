@@ -1186,7 +1186,7 @@ impl Default for PageFormat {
 /// which is what pagination needs to shape a run.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocDefaults {
-    pub font_family: String,
+    pub font_family: ambre_core::FontFamily,
     pub font_size: FontSize,
     /// A multiple of the font size, never an absolute length.
     pub line_height: LineSpacingMultiple,
@@ -1196,7 +1196,7 @@ impl Default for DocDefaults {
     /// What `seed` writes.
     fn default() -> Self {
         Self {
-            font_family: "Inter".to_string(),
+            font_family: ambre_core::FontFamily::Other("Inter".to_owned()),
             font_size: DEFAULT_FONT_SIZE,
             line_height: DEFAULT_LINE_HEIGHT,
         }
@@ -1220,7 +1220,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
     DocDefaults {
         font_family: read_string(&defaults, DefaultsKey::FontFamily)
             .filter(|name| !name.is_empty())
-            .unwrap_or(fallback.font_family),
+            .map_or(fallback.font_family, |name| {
+                ambre_core::FontFamily::from_label(&name)
+            }),
         font_size: read_f32(&defaults, DefaultsKey::FontSizePt)
             .filter(|number| *number > 0.0)
             .and_then(FontSize::new)
@@ -1337,7 +1339,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     let defaults = Fields::of(map_at(&meta, MetaKey::Defaults)?);
     let text = DocDefaults::default();
     defaults
-        .insert(DefaultsKey::FontFamily, text.font_family.as_str())
+        .insert(DefaultsKey::FontFamily, text.font_family.label())
         .ok()?;
     defaults
         .insert(DefaultsKey::FontSizePt, f64::from(text.font_size.points()))

@@ -129,12 +129,12 @@ pub enum EditIntent {
 /// The pinned visual style of an edit, captured by the host at open and re-applied
 /// to the editor's default style each frame. The in-edit body then matches the
 /// committed look. `base_size` is in world units (zoom is applied per paint);
-/// `family` is a family label resolved through [`registered_family_name`].
+/// `family` resolves to a face through [`registered_family_name`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextEditorStyle {
     pub weight: ambre_core::FontWeight,
     pub italic: bool,
-    pub family: String,
+    pub family: ambre_core::FontFamily,
     pub base_size: ambre_core::DocPx,
     pub color: Color,
     /// Draw a 1px underline under the body (`TOILE-UI-187`). Pinned from the
@@ -173,8 +173,8 @@ pub struct TextSpan {
     /// A weight in place of the pinned one.
     pub weight: Option<ambre_core::FontWeight>,
     pub italic: bool,
-    /// A family label in place of the pinned one, resolved the same way.
-    pub family: Option<String>,
+    /// A family in place of the pinned one, resolved the same way.
+    pub family: Option<ambre_core::FontFamily>,
     /// An ink in place of the pinned one.
     pub color: Option<Color>,
     pub underline: bool,
@@ -606,7 +606,7 @@ impl TextEditor {
     /// size. The family resolves to the registered face the static render
     /// uses, so the in-edit body matches its committed look.
     fn base_styles(&self, zoom: ZoomFactor) -> [StyleProperty<'static, Brush>; 5] {
-        let face = registered_family_name(Some(self.style.family.as_str()));
+        let face = registered_family_name(Some(&self.style.family));
         [
             StyleProperty::FontSize(self.style.base_size.get() * zoom.get() as f32),
             StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight.get()))),
@@ -950,7 +950,7 @@ mod tests {
         TextEditorStyle {
             weight: ambre_core::FontWeight::REGULAR,
             italic: false,
-            family: "Sans".to_owned(),
+            family: ambre_core::FontFamily::Sans,
             base_size: ambre_core::DocPx::new(16.0),
             color: Color::from_rgba8(0, 0, 0, 255),
             underline: false,
@@ -1446,7 +1446,7 @@ mod tests {
             ..span(0..2)
         };
         let code = TextSpan {
-            family: Some("Monospace".to_owned()),
+            family: Some(ambre_core::FontFamily::Mono),
             ..span(0..2)
         };
         for (look, spans) in [("weight", bold), ("slant", italic), ("family", code)] {

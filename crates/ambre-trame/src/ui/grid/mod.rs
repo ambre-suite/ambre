@@ -69,7 +69,7 @@ pub struct CellData {
     pub wrap: bool,
     pub fg: Option<Rgb>,
     pub bg: Option<Rgb>,
-    pub font: Option<String>,
+    pub font: Option<ambre_core::FontFamily>,
     pub size: Option<ambre_core::FontSize>,
     pub borders: ambre_bus::Borders,
     /// The block's extent on a merge master, `None` otherwise. Covered cells
@@ -96,7 +96,7 @@ impl CellData {
             v_align: self.v_align,
             fg: self.fg,
             bg: self.bg,
-            font: self.font.as_deref(),
+            font: self.font.as_ref(),
             size: self.size,
             wrap: self.wrap,
             borders: self.borders,
@@ -133,7 +133,7 @@ impl CellEditor {
         let style = TextEditorStyle {
             weight: ambre_core::FontWeight::REGULAR,
             italic: false,
-            family: "Sans".to_owned(),
+            family: ambre_core::FontFamily::Sans,
             base_size: BODY_SIZE,
             color: Color::from_rgba8(0, 0, 0, 255),
             underline: false,

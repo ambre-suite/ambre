@@ -169,7 +169,7 @@ fn style_reading(bold: bool, italic: bool, style: &CellStyle) -> String {
         parts.push(format!("fill {}", colour(*rgb)));
     }
     if let Some(font) = font {
-        parts.push(format!("font {font:?}"));
+        parts.push(format!("font {:?}", font.label()));
     }
     if let Some(size) = size {
         parts.push(format!("{size} pt"));

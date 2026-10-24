@@ -13,7 +13,7 @@ use parley::{
 use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
 use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, char_to_byte};
 
-use ambre_draw::{ParleyBrush, ScriptSet};
+use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
@@ -84,7 +84,7 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
 /// where their sizes will arrive.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EffectiveStyle {
-    pub font_family: String,
+    pub font_family: ambre_core::FontFamily,
     pub font_size_px: DocPx,
     pub line_height: LineHeight,
     /// The floor an `AtLeast` line height sets, in pixels. `None` for the two
@@ -474,7 +474,7 @@ pub fn shape_paragraph(
     style: &EffectiveStyle,
     width_px: DocPx,
 ) -> Layout<ParleyBrush> {
-    let family = fonts::resolve(&style.font_family).face_name();
+    let family = fonts::resolve(&style.font_family);
     let shaped = |font_cx: &mut FontContext, layout_cx: &mut _, height| {
         build(
             font_cx,
@@ -693,7 +693,7 @@ pub fn shape_draft(
     (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
 ) -> Layout<ParleyBrush> {
-    let family = fonts::resolve(&style.font_family).face_name();
+    let family = fonts::resolve(&style.font_family);
     build(
         font_cx,
         layout_cx,
@@ -711,13 +711,13 @@ fn build(
     layout_cx: &mut LayoutContext<ParleyBrush>,
     (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
-    family: &str,
+    family: BundledFamily,
     line_height: LineHeight,
     width_px: Option<DocPx>,
 ) -> Layout<ParleyBrush> {
     let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
     builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
-        family.to_string().into(),
+        family.face_name().into(),
     )));
     builder.push_default(StyleProperty::FontSize(style.font_size_px.get()));
     builder.push_default(StyleProperty::LineHeight(line_height));

@@ -56,7 +56,7 @@ pub fn SelectionToolbar(
     // re-triggers a picker.
     let fill = RwSignal::new(None::<Rgba>);
     let text_color = RwSignal::new(None::<Rgba>);
-    let font_family = RwSignal::new(None::<String>);
+    let font_family = RwSignal::new(None::<FontFamily>);
     let font_size = RwSignal::new(FontSizeChoice::DEFAULT);
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
@@ -72,7 +72,8 @@ pub fn SelectionToolbar(
     Effect::new(move |_| {
         if let Some(m) = model.get() {
             text_color.set(m.base.text_color);
-            font_family.set(m.base.font.picker_label().map(str::to_owned));
+            // A family the picker does not offer shows the "Default" entry.
+            font_family.set(m.base.font.family.clone().filter(|f| f.picker_label().is_some()));
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight.is_bold());
             italic.set(m.base.font.italic);
@@ -90,11 +91,11 @@ pub fn SelectionToolbar(
         text_color.set(c);
         on_style.run(StyleEdit::TextColor(c));
     });
-    let on_font = Callback::new(move |f: Option<String>| {
+    let on_font = Callback::new(move |f: Option<FontFamily>| {
         font_family.set(f.clone());
         // The picker's "Default" reset is `None`: the element then names no
         // family, which keeps it apart from an explicit Sans.
-        on_style.run(StyleEdit::Font(f.as_deref().map(FontFamily::from_label)));
+        on_style.run(StyleEdit::Font(f));
     });
     // Size: the shared dropdown speaks sizes (`Option<FontSize>`, `None` =
     // auto), which is the choice the style holds.

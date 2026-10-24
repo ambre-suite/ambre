@@ -13,8 +13,8 @@ use ambre_canvas::{Palette, SpanShape};
 use ambre_core::ByteSpan;
 use ambre_draw::{Affinity, Color, Cursor, Layout, ParleyBrush, Rect, Selection};
 
-/// The family label an inline code run draws in.
-pub(crate) const CODE_FAMILY: &str = "Monospace";
+/// The family an inline code run draws in.
+pub(crate) const CODE_FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::Mono;
 
 /// How far right a quote's and a list's lines start: the `space_6` step.
 /// The margin mark stands in it, and a wrapped line keeps the block's edge
@@ -36,7 +36,7 @@ pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
     match style {
         TextStyle::Bold => shape.weight = Some(ambre_core::FontWeight::BOLD),
         TextStyle::Italic => shape.italic = true,
-        TextStyle::Code | TextStyle::CodeBlock => shape.family = Some(CODE_FAMILY.to_owned()),
+        TextStyle::Code | TextStyle::CodeBlock => shape.family = Some(CODE_FAMILY),
         TextStyle::Link(_) => shape.underline = true,
         TextStyle::Quote | TextStyle::List => shape.indent = BLOCK_INDENT,
     }

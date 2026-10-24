@@ -10,33 +10,77 @@
 // Trame's cell formatting share the very same control (mirrors `ColorPopover`).
 // The control is value-agnostic: it takes the current family as a signal (`None`
 // = the app's default) and reports picks through `on_pick`. The caller owns what
-// a family label means to its renderer (`registered_family_name` in
-// `ambre-canvas` maps the labels to registered faces).
+// a family means to its renderer (`registered_family_name` in `ambre-canvas`
+// maps the families to registered faces).
 // ============================================================================
 
+use ambre_core::FontFamily;
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
-/// The font families offered by the picker. Each pairs an abstract family label
-/// with the CSS `font-family` that renders the entry in its own typeface. The
-/// label is what the renderer resolves to a face, and the CSS is the live
-/// preview. "Default" maps to `None` (no explicit family -> the app default).
-pub const FONT_FAMILIES: &[(&str, &str)] = &[
-    ("Default", "inherit"),
-    ("Sans", "'Roboto', system-ui, sans-serif"),
-    ("Serif", "Georgia, 'Times New Roman', serif"),
-    ("Monospace", "'Roboto Mono', ui-monospace, monospace"),
+/// One entry of the picker: the family it picks and the CSS `font-family`
+/// that renders the entry in its own typeface, the live preview.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FamilyChoice {
+    /// The family the entry picks. `None` is the "Default" entry: no explicit
+    /// family, so the app default applies.
+    pub family: Option<FontFamily>,
+    /// The CSS `font-family` stack the entry previews in.
+    pub css: &'static str,
+}
+
+impl FamilyChoice {
+    /// The label the entry shows.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        self.family
+            .as_ref()
+            .and_then(FontFamily::picker_label)
+            .unwrap_or(DEFAULT_LABEL)
+    }
+}
+
+/// The label of the entry that names no family.
+const DEFAULT_LABEL: &str = "Default";
+
+/// The font families offered by the picker, in the order it lists them.
+pub const FONT_FAMILIES: &[FamilyChoice] = &[
+    FamilyChoice {
+        family: None,
+        css: "inherit",
+    },
+    FamilyChoice {
+        family: Some(FontFamily::Sans),
+        css: "'Roboto', system-ui, sans-serif",
+    },
+    FamilyChoice {
+        family: Some(FontFamily::Serif),
+        css: "Georgia, 'Times New Roman', serif",
+    },
+    FamilyChoice {
+        family: Some(FontFamily::Mono),
+        css: "'Roboto Mono', ui-monospace, monospace",
+    },
 ];
 
-/// The composed font-family control. `current` is the active family label
-/// (`None` = "Default"); `on_pick` receives the chosen label (`None` for the
+/// The label the trigger shows for `current`: the entry's label, or the
+/// family's own label for a family the picker does not offer.
+fn shown_label(current: Option<&FontFamily>) -> String {
+    match current {
+        None => DEFAULT_LABEL.to_owned(),
+        Some(family) => family.picker_label().unwrap_or(family.label()).to_owned(),
+    }
+}
+
+/// The composed font-family control. `current` is the active family (`None`
+/// = "Default"); `on_pick` receives the chosen family (`None` for the
 /// "Default" reset). The popover dismisses on any pointer-down outside it.
 #[component]
 pub fn FontPicker(
-    current: Signal<Option<String>>,
-    on_pick: Callback<Option<String>>,
+    current: Signal<Option<FontFamily>>,
+    on_pick: Callback<Option<FontFamily>>,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
     // The wrapper node, so a global pointer-down can tell clicks inside the menu
@@ -58,14 +102,14 @@ pub fn FontPicker(
     on_cleanup(move || handle.remove());
 
     // The active family label ("Default" when unset).
-    let current_label = move || current.get().unwrap_or_else(|| "Default".to_owned());
+    let current_label = move || shown_label(current.get().as_ref());
     // CSS font-family for the active family, so the trigger previews it too.
     let current_css = move || {
-        let label = current_label();
+        let family = current.get();
         FONT_FAMILIES
             .iter()
-            .find(|(name, _)| *name == label)
-            .map_or("inherit", |(_, css)| css)
+            .find(|choice| choice.family == family)
+            .map_or("inherit", |choice| choice.css)
     };
 
     view! {
@@ -87,7 +131,11 @@ pub fn FontPicker(
                 <div class="ambre-font-popover">
                     {FONT_FAMILIES
                         .iter()
-                        .map(|&(name, css)| {
+                        .map(|choice| {
+                            let name = choice.label();
+                            let css = choice.css;
+                            let family = choice.family.clone();
+                            let picked = choice.family.clone();
                             view! {
                                 <button
                                     class="font-item"
@@ -95,14 +143,13 @@ pub fn FontPicker(
                                     on:mousedown=move |ev| ev.prevent_default()
                                     on:click=move |_| {
                                         // "Default" clears the explicit family (None).
-                                        let family = (name != "Default").then(|| name.to_owned());
-                                        on_pick.run(family);
+                                        on_pick.run(picked.clone());
                                         open.set(false);
                                     }
                                 >
                                     <span class="check">
                                         <Show
-                                            when=move || current_label() == name
+                                            when=move || current.get() == family
                                             fallback=|| ()
                                         >
                                             <Icon icon=icondata::BsCheck />

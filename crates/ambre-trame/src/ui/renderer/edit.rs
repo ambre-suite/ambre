@@ -38,7 +38,7 @@ pub fn draw_edit<S: DrawSurface>(
     editor.core.set_style(TextEditorStyle {
         weight: ambre_core::FontWeight::of_bold(bold),
         italic,
-        family: "Sans".to_owned(),
+        family: ambre_core::FontFamily::Sans,
         base_size: BODY_SIZE,
         color: palette.cell_text,
         underline: false,
