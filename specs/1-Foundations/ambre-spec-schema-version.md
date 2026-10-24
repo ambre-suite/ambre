@@ -4,8 +4,8 @@
 **Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the version register ships. Every document carries it from creation,
 every full-state entry point reads it, and each application carries a migration registry. Every
-registry is empty: nothing shipped before version 1, so no step exists yet. The one-register rule ships in the two applications that store a style register, and
-nothing refuses a third shape.
+registry is empty: nothing shipped before version 1, so no step exists yet. The one-register rule
+ships in the two applications that store a style register, and nothing refuses a third shape.
 
 > What a document looks like once it reaches the disk, and how a later binary knows it can still
 > read it. A stored document that opens into the wrong meaning is the worst failure available: it
@@ -195,10 +195,11 @@ foundation needs no CRDT.
 
 `crates/ambre-prose/src/schema.rs`, `crates/ambre-trame/src/logic/schema.rs` and
 `crates/ambre-toile/src/logic/schema.rs` for each application's current version, its registry and
-its gate. `crates/ambre-murmure/src/schema.rs` carries the same for Murmure. Every application is at
-version 1 and every registry is empty: no build before version 1 shipped, so no document needs a
-step. The first layout change after the release adds the first row. Until then each gate is
-tested through a registry its test defines.
+its gate. `crates/ambre-murmure/src/schema.rs` carries the same for Murmure.
+
+Every application is at version 1 and every registry is empty: no build before version 1 shipped,
+so no document needs a step. The first layout change after the release adds the first row. Until
+then each gate is tested through a registry its test defines.
 `crates/ambre-trame/src/logic/styles.rs` and
 `crates/ambre-toile/src/logic/state/derive.rs` for the two style registers and for the decode notice
 of `SCHEMA-003`. Prose appears in neither pair: it stores no style register, so it holds no record

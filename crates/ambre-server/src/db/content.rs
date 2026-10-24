@@ -608,9 +608,9 @@ pub async fn get_clock_state(
 /// refused them all.
 ///
 /// This is the delta index's only garbage collector for a long-lived document. The
-/// `updates.snapshot_id` column carries no foreign key (see the `updates` table
-/// in the initial schema), so deleting an old snapshot does not cascade its
-/// deltas away. Without this pass the table would grow without bound.
+/// `updates.snapshot_id` column carries no foreign key, as the `updates` table
+/// of the initial schema states. Deleting an old snapshot therefore does not
+/// cascade its deltas away. Without this pass the table would grow without bound.
 /// Run once per compaction cycle, independent of snapshot deletion.
 ///
 /// A batch object goes only once no row names it, so a batch that still holds
@@ -837,8 +837,8 @@ pub async fn find_compactable_snapshots(
 /// Deletes a single snapshot row.
 ///
 /// This does NOT touch `updates`. The `updates.snapshot_id` column carries no
-/// foreign key (see the `updates` table in the initial schema), so `snapshot_id`
-/// is an opaque client-side correlation tag with no cascade. Superseded deltas are trimmed
+/// foreign key, as the `updates` table of the initial schema states. The
+/// column is an opaque client-side correlation tag with no cascade. Superseded deltas are trimmed
 /// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.
 pub async fn delete_snapshot(
     pool: &PgPool,

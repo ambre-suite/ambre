@@ -324,8 +324,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle.corner | field |
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle.stroke_w | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::upgrade_unversioned() | ret | Option<Vec<u8>>	generic	byte codec
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::upgrade_unversioned(bytes) | param | &[u8]	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | EndCaps.end | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | EndCaps.start | field | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | FRAME_NAME_MAX | const | usize	generic	bound / format version constant
@@ -406,6 +404,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(end) | pa
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(start) | param | f64	math	kurbo world coordinates of the box edges the fraction runs between
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.italic | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
@@ -2089,7 +2088,6 @@ ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
-ambre-murmure | src/schema.rs | crate::schema | read_as_it_is() | ret | Result<(),String>	trait	signature dictated by SchemaMigration.apply
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	newtype-inner	Loro storage adapter for Timestamp
@@ -3329,15 +3327,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/schema.rs | crate::logic::schema | body_text_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-toile | src/logic/schema.rs | crate::logic::schema | font_points_step() | ret | Result<(),String>	free-text	migration error message
-ambre-toile | src/logic/schema.rs | crate::logic::schema | presentation_root_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers() | ret | Result<(),String>	free-text	migration error message
-ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_style_registers(rewrite) | param | &impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
-ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles() | ret | Result<(),String>	free-text	migration error message
-ambre-toile | src/logic/schema.rs | crate::logic::schema | rewrite_styles(rewrite) | param | impl Fn(&[u8])->Option<Vec<u8>>	generic	byte rewrite callback of the migration
-ambre-toile | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-toile | src/logic/schema.rs | crate::logic::schema | style_version_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
@@ -4033,7 +4022,6 @@ ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/helpers.rs | crate::logic::helpers | op_from_str(s) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::import_csv(data) | param | Vec<u8>	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
@@ -4075,11 +4063,10 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value
 ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
-ambre-trame | src/logic/schema.rs | crate::logic::schema | filter_register_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | stamp_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
-ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step() | ret | Result<(),String>	trait	fixed by ambre_core::SchemaMigration::apply fn(&D)->Result<(),String>
+ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through() | ret | Result<Cow<'a,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through(payload) | param | &'a[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
@@ -4159,10 +4146,6 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn |
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
-ambre-prose | src/schema.rs | crate::schema | V9_LANG | const | &str	foreign-api	the retired Loro map key the 9 -> 10 step reads and deletes, passed to LoroMap::get and LoroMap::delete
-ambre-prose | src/schema.rs | crate::schema | lang_to_locale() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>
-ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
-ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::cell_pixel_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
@@ -4388,8 +4371,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::as_st
 ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::parse(text) | param | &str	newtype-inner	the text the constructor checks
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableColumn.0 | field | String	free-text	the stored key text it could not read, echoed in the message
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterFoldError::UnreadableOperator.0 | field | String	free-text	the stored key text it could not read, echoed in the message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName.0 | field | String	newtype-inner	the text of a sheet display name
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	newtype-inner	the characters the SheetName rule refuses
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::MAX_CHARS | const | usize	newtype-inner	the character count the SheetName rule caps

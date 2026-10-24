@@ -167,8 +167,9 @@ both. The sheet qualifier works the same way (`TRAME-034`).
 
 A position past the used range names no line and stays a position (`TRAME-006`). A later write at
 that position dirties the formula through the position it kept (`TRAME-233`). A reload reads the
-same uids back, so each reference keeps its cell (`TRAME-226`). A range of whole lines writes `*` for the axis it takes whole: `A:C` is
-stored `{*|col}:{*|col}`, and `2:5` is `{row|*}:{row|*}` (`TRAME-048`).
+same uids back, so each reference keeps its cell (`TRAME-226`). A range of whole lines writes `*`
+for the axis it takes whole: `A:C` is stored `{*|col}:{*|col}`, and `2:5` is `{row|*}:{row|*}`
+(`TRAME-048`).
 
 **A structural edit** rewrites only what it must, in the commit of the edit, so one undo reverts
 both (`identity::reanchor`). A reference to a cell follows its lines, so its text does not change
