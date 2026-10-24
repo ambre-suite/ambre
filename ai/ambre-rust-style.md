@@ -9,16 +9,26 @@
   unit, an index or offset, a secret and a validated value each get their own type. Examples:
   `MessageId(Uuid)`, `Timestamp(u64)`, `Row(u32)`, `Emoji(String)`. A closed set of values is
   an `enum`, never a `String`. A `bool` that selects a mode is an `enum` too. A bare `String`,
-  `Uuid`, integer, float or `Vec<u8>` is allowed in three places only:
+  `Uuid`, integer, float or `Vec<u8>` is allowed in four places only:
   * free text with no rule;
   * the inside of the newtype that wraps it;
-  * the call into a foreign API that takes the primitive.
+  * the call into a foreign API that takes the primitive;
+  * a local value, which stays inside one function or one private struct.
 
   The type is unwrapped at that call and nowhere else. The compiler then refuses a message id
   passed as a document id, or a row passed as a column (`ambre-spec-testing.md section 2`).
 
   A new concept gets its newtype in the change that introduces it, never later. If no type
   exists, the change adds one.
+* **A local value keeps its primitive only when four conditions hold.** The allowlist names it
+  `local`, and its note names the reason.
+  1. The value crosses no thread, crate, wire, store or public API.
+  2. No other value of the same type in its scope means something else.
+  3. The value is not a closed set, a validated value, a unit quantity, an id, a key, a secret
+     or a version.
+  4. Its name, or the single call that reads it, states its meaning.
+
+  When one condition fails, the value takes a type. When you are not sure, give it a type.
 * **A newtype is complete, so its callers never unwrap it.**
   * **Validation.** A value with a rule has a fallible constructor, and no other way in.
     Deserialisation goes through that constructor.
@@ -42,8 +52,10 @@
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
   line of that file by hand (`ARCH-035`). The gate checks the category word, and never whether it
-  is true. A `debt` line names a value still to type: type it, and `just primitives-prune` drops
-  the line.
+  is true.
+
+  The categories are a closed set, and no category means "to type later". A value still to type
+  has no line, so the gate fails until the change types it.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.

@@ -25,7 +25,7 @@ fn file(lines: &[(&str, &str)]) -> String {
 
 #[test]
 fn a_site_no_line_names_fails_the_gate() {
-    let list = Allowlist::parse(&file(&[(SITE, "debt")])).expect("a valid file");
+    let list = Allowlist::parse(&file(&[(SITE, "local")])).expect("a valid file");
     let verdict = list.compare(&sites(&[SITE, OTHER]));
     assert_eq!(verdict.missing, [key(OTHER)]);
     assert!(!verdict.is_clean());
@@ -69,10 +69,10 @@ fn every_category_reads_back_as_itself() {
 
 #[test]
 fn a_malformed_line_is_refused() {
-    let empty_note = format!("{HEADER}\n{SITE}\tdebt\t \n");
-    let short_key = format!("{HEADER}\ndemo | src/lib.rs\tdebt\twhy\n");
-    let twice = file(&[(SITE, "debt"), (SITE, "math")]);
-    let no_header = format!("{SITE}\tdebt\twhy\n");
+    let empty_note = format!("{HEADER}\n{SITE}\tlocal\t \n");
+    let short_key = format!("{HEADER}\ndemo | src/lib.rs\tlocal\twhy\n");
+    let twice = file(&[(SITE, "local"), (SITE, "math")]);
+    let no_header = format!("{SITE}\tlocal\twhy\n");
     for text in [empty_note, short_key, twice, no_header] {
         assert!(Allowlist::parse(&text).is_err(), "accepted {text:?}");
     }
@@ -80,26 +80,33 @@ fn a_malformed_line_is_refused() {
 
 #[test]
 fn a_prune_removes_the_stale_lines_and_nothing_else() {
-    let text = file(&[(SITE, "debt"), (OTHER, "math")]);
+    let text = file(&[(SITE, "local"), (OTHER, "math")]);
     let list = Allowlist::parse(&text).expect("a valid file");
     let kept = sites(&[SITE]);
     let pruned = list.pruned(&kept);
-    assert_eq!(pruned, file(&[(SITE, "debt")]));
+    assert_eq!(pruned, file(&[(SITE, "local")]));
     let again = Allowlist::parse(&pruned).expect("a valid file");
     assert!(again.compare(&kept).is_clean());
 }
 
 #[test]
 fn a_prune_adds_no_line_for_a_new_site() {
-    let list = Allowlist::parse(&file(&[(SITE, "debt")])).expect("a valid file");
+    let list = Allowlist::parse(&file(&[(SITE, "local")])).expect("a valid file");
     let pruned = list.pruned(&sites(&[SITE, OTHER]));
     assert!(!pruned.contains(OTHER));
 }
 
 #[test]
 fn the_lines_are_counted_per_category() {
-    let list = Allowlist::parse(&file(&[(SITE, "debt"), (OTHER, "debt")])).expect("a valid file");
+    let list = Allowlist::parse(&file(&[(SITE, "local"), (OTHER, "local")])).expect("a valid file");
     let verdict = list.compare(&sites(&[SITE, OTHER]));
-    assert_eq!(verdict.counts.get(&Category::Debt), Some(&2));
+    assert_eq!(verdict.counts.get(&Category::Local), Some(&2));
     assert_eq!(verdict.counts.get(&Category::Math), None);
+}
+
+#[test]
+fn a_debt_line_is_refused() {
+    let errors = Allowlist::parse(&file(&[(SITE, "debt")])).expect_err("debt left the set");
+    assert_eq!(errors.len(), 1);
+    assert!(errors.iter().all(|error| error.contains("closed set")));
 }

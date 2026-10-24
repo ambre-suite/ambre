@@ -14,7 +14,8 @@ use crate::scan::SiteKey;
 pub const HEADER: &str = "key\tcategory\tnote";
 
 /// Why a site may keep its primitive. A closed set: a line naming another
-/// word fails the gate.
+/// word fails the gate. No word means "to type later", so a value still to
+/// type has no line, and the gate fails until it is typed (`ARCH-033`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Category {
     /// Free text with no rule: a label, a message, user content.
@@ -29,9 +30,9 @@ pub enum Category {
     Generic,
     /// Arithmetic local to an algorithm, which never crosses a boundary.
     Math,
-    /// A domain value that is not typed yet. The count of these lines is the
-    /// debt the gate prints.
-    Debt,
+    /// A value that stays inside one function or one private struct, under
+    /// the four conditions of `ai/ambre-rust-style.md`.
+    Local,
 }
 
 impl Category {
@@ -43,7 +44,7 @@ impl Category {
         Self::Trait,
         Self::Generic,
         Self::Math,
-        Self::Debt,
+        Self::Local,
     ];
 
     /// The word the allowlist writes.
@@ -55,7 +56,7 @@ impl Category {
             Self::Trait => "trait",
             Self::Generic => "generic",
             Self::Math => "math",
-            Self::Debt => "debt",
+            Self::Local => "local",
         }
     }
 

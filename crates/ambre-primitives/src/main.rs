@@ -99,7 +99,7 @@ fn check(list: &Allowlist, sites: &std::collections::BTreeSet<scan::SiteKey>) ->
     if !verdict.stale.is_empty() {
         eprintln!(
             "primitives: {} lines name no site. Remove them with `just primitives-prune`: the \
-             debt that went is the ratchet.",
+             file only shrinks on its own.",
             verdict.stale.len()
         );
     }

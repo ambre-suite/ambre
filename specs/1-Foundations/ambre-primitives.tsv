@@ -696,7 +696,7 @@ ambre-canvas | src/editor.rs | crate::editor | EditIntent::Up.select | field | b
 ambre-canvas | src/editor.rs | crate::editor | LineGoal.text | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | Styled.text | field | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.initial | field | String	free-text	text, label or message
-ambre-canvas | src/editor.rs | crate::editor | TextEditor.seeded | field | bool	math	named state or style flag, local
+ambre-canvas | src/editor.rs | crate::editor | TextEditor.seeded | field | bool	local	private latch: whether the first flush put the caret at the text end; never leaves the editor
 ambre-canvas | src/editor.rs | crate::editor | TextEditor.wrap_w | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::commit_compose(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | TextEditor::committed_text() | ret | Option<String>	free-text	text, label or message
@@ -3280,10 +3280,10 @@ ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u
 ambre-sync | src/worker.rs | crate::worker | post_bytes(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(open) | param | RwSignal<bool>	math	local state flag or value, not a mode selector
+ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(open) | param | RwSignal<bool>	local	private: the open signal of the one dialog the helper closes; the only bool signal in the call
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(open) | param | RwSignal<bool>	math	local state flag or value, not a mode selector
+ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(open) | param | RwSignal<bool>	local	private: the open signal of the one dialog the helper closes; the only bool signal in the call
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/commands.rs | crate::chrome::commands | Toggles.redo_enabled | field | RwSignal<bool>	math	local state flag or value, not a mode selector
 ambre-toile | src/chrome/commands.rs | crate::chrome::commands | Toggles.undo_enabled | field | RwSignal<bool>	math	local state flag or value, not a mode selector
@@ -3495,7 +3495,7 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	math	local state flag or value, not a mode selector
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
@@ -3539,7 +3539,7 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(m) 
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(n) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(trace) | param | &[Vec<isize>]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | cluster() | ret | (usize,usize)	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down() | ret | Option<bool>	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down() | ret | Option<bool>	local	private Myers step: whether the path comes down (an insertion), read by the two diff loops
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(d) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(offset) | param | isize	math	diff/merge algorithm index, codepoints throughout
@@ -3599,7 +3599,7 @@ ambre-toile | src/ui/comments.rs | crate::ui::comments | PIN_OFFSET | const | f6
 ambre-toile | src/ui/comments.rs | crate::ui::comments | PIN_RADIUS | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps(resolved) | param | bool	math	local state flag or value, not a mode selector
-ambre-toile | src/ui/comments.rs | crate::ui::comments | badge_color(resolved) | param | bool	math	local state flag or value, not a mode selector
+ambre-toile | src/ui/comments.rs | crate::ui::comments | badge_color(resolved) | param | bool	local	private: whether the thread is resolved, read once to pick the badge colour
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | press_target(select_tool) | param | bool	math	local state flag or value, not a mode selector
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Rename.1 | field | String	free-text	label, message or user text
@@ -3753,7 +3753,7 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | PEN_DEDUP | const | f64	math	ge
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ROTATE_OFFSET_PX | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::is_dragging() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pen_dragging | field | bool	math	local state flag or value, not a mode selector
+ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pen_dragging | field | bool	local	private state of the tool machine: whether a pen drag is under way; the only bool field
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pick | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::escape() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::is_active() | ret | bool	generic	predicate or handled-flag result
@@ -3955,7 +3955,7 @@ ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criteri
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	local	private predicate: whether a reference names the edited sheet; the only closure in the call
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_CHARS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_NESTING | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_OPERATORS | const | usize	math	count, length, local index, limit or calendar/arith helper

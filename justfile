@@ -256,8 +256,8 @@ index-write:
 # The primitive gate: every site outside a test whose type holds a bare
 # primitive is typed, or named by one line of
 # `specs/1-Foundations/ambre-primitives.tsv` with a category and a reason
-# (`ARCH-033`). A line that names no site fails too (`ARCH-034`), so the debt
-# only goes down. It prints the lines per category, the debt among them.
+# from a closed set (`ARCH-033`). No category means "to type later". A line
+# that names no site fails too (`ARCH-034`). It prints the lines per category.
 primitives:
     cargo run -q -p ambre-primitives -- check
 

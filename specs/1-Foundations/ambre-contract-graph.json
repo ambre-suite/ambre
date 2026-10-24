@@ -102,6 +102,7 @@
   {"edge": "cites-document", "from": "ARCH-033", "section": "2", "to": "ambre-spec-testing.md"},
   {"edge": "verified-by", "from": "ARCH-033", "to": "ambre_primitives::allowlist::tests::a_site_no_line_names_fails_the_gate"},
   {"edge": "verified-by", "from": "ARCH-033", "to": "::a_category_outside_the_closed_set_is_refused"},
+  {"edge": "verified-by", "from": "ARCH-033", "to": "::a_debt_line_is_refused"},
   {"edge": "verified-by", "from": "ARCH-033", "to": "ambre_primitives::scan::tests::every_kind_of_site_is_read"},
   {"edge": "verified-by", "from": "ARCH-033", "to": "::a_module_file_resolves_where_rustc_finds_it"},
   {"edge": "verified-by", "from": "ARCH-033", "to": "::a_file_no_module_reaches_fails_the_scan"},

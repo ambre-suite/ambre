@@ -67,12 +67,13 @@ the item, the kind and the type, and no line number.
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
-  `newtype-inner`, `trait`, `generic`, `math` and `debt`.
+  `newtype-inner`, `trait`, `generic`, `math` and `local`. No category means "to type later",
+  so a value still to type fails the gate until the change types it (`ARCH-033`).
 * **The file only shrinks on its own.** A site no line names fails, and so does a line that names no
   site (`ARCH-034`). `just primitives-prune` removes those lines, and no mode adds one.
 * **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, never
-  whether it is true of the site. A `debt` line names a value still to type, and the gate prints
-  their count.
+  whether it is true of the site. A `local` line meets the four conditions of
+  `ai/ambre-rust-style.md`, and its note names the reason.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. The tree walk uses
   `std` rather than a crate.
