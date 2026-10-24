@@ -19,7 +19,7 @@ use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 use crate::doc;
 use crate::events::grid::{CellPos, Col, Row};
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{EffectiveStyle, Measurer, PX_PER_PT, TextMetrics};
+use crate::layout::measure::{EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
 use crate::layout::run::{CellBorderPx, CellShape, CellStyle, ShapedRun, TableShape};
 use crate::logic::tables::{Grid, surviving_regions};
@@ -820,7 +820,7 @@ pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     let length = |key| {
         number_at(&attrs, key)
             .filter(|pt| pt.is_finite() && *pt >= 0.0)
-            .map(|pt| pt * PX_PER_PT)
+            .map(|pt| ambre_core::Pt::new(pt).to_doc_px().get())
     };
     let colour = |key| string_at(&attrs, key).and_then(|raw| crate::mark::parse_color(&raw).ok());
     let edges = [

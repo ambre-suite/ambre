@@ -112,7 +112,7 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
-pub use font::{FontSize, InvalidFontSize, PX_PER_PT};
+pub use font::{FontSize, InvalidFontSize};
 pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
@@ -157,7 +157,8 @@ pub use text_offset::{
     utf16_to_char,
 };
 pub use unit::{
-    CssPoint, CssPx, DocPoint, DocPx, Mm, PX_PER_MM, Point, Pt, Radians, ViewPoint, ViewPx,
+    CssPoint, CssPx, CssVector, DocPoint, DocPx, Mm, PX_PER_MM, Point, Pt, Radians, SurfacePx,
+    Vector, ViewPoint, ViewPx, ViewVector,
 };
 pub use uuid::Uuid;
 pub use version::Version;

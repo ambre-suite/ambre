@@ -183,7 +183,7 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
             // Row `dy` from the top spans the hypotenuse to the right edge.
             let x0 = rect.x1 - (ERROR_MARK_SIZE - dy);
             let y = rect.y0 + dy + 0.5;
-            surface.stroke_line(x0, y, rect.x1, y, err, 1.0);
+            surface.stroke_line(ambre_draw::Line::new((x0, y), (rect.x1, y)), err, 1.0);
             dy += 1.0;
         }
     }

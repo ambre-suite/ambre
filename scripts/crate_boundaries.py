@@ -443,13 +443,13 @@ KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
 # The drawing trait, and the closed list a primitive's parameters are held to.
-# A bare number is geometry only under a coordinate or a width name, so a
+# A bare number is geometry only under a width name, so a
 # `density: f64` is refused although its type is listed.
 DRAW_TRAIT = "crates/ambre-draw/src/lib.rs"
 DRAW_TRAIT_OPEN = re.compile(r"^pub trait DrawSurface\b")
 PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
-PRIMITIVE_TYPES = {"Rect", "Color", "f64", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun", "ImageSource"}
-NUMBER_NAMES = {"x0", "y0", "x1", "y1", "width"}
+PRIMITIVE_TYPES = {"Rect", "Line", "Color", "f64", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun", "ImageSource"}
+NUMBER_NAMES = {"width"}
 
 # Each view's scroll setter, the signature that keeps it on a model step, and
 # the offset a relative write elsewhere would move. A write that sets the
@@ -1535,7 +1535,7 @@ def check_primitives(errors: list[str]) -> int:
             if foreign:
                 errors.append(f"{DRAW_TRAIT}: `{name}` takes `{label}: {kind}`, which is neither geometry nor paint")
             elif kind == "f64" and label not in NUMBER_NAMES:
-                errors.append(f"{DRAW_TRAIT}: `{name}` takes a bare number `{label}`, not a coordinate or a width")
+                errors.append(f"{DRAW_TRAIT}: `{name}` takes a bare number `{label}`, not a width")
     if not held:
         errors.append(f"{DRAW_TRAIT}: the `DrawSurface` trait declares no primitive, so the boundary holds nothing")
     return held

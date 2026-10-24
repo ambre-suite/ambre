@@ -166,8 +166,8 @@ pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h
 /// available, none active" cue on an autofilter button (`trame-shared-filter`).
 pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
     let cx = bx + w / 2.0;
-    s.stroke_line(bx, by, cx, by + h, c, 1.0);
-    s.stroke_line(bx + w, by, cx, by + h, c, 1.0);
+    s.stroke_line(ambre_draw::Line::new((bx, by), (cx, by + h)), c, 1.0);
+    s.stroke_line(ambre_draw::Line::new((bx + w, by), (cx, by + h)), c, 1.0);
 }
 
 /// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
@@ -178,7 +178,7 @@ pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: C
         let a = t.max(x0);
         let b = (t + MARCHING_DASH).min(x1);
         if b > a {
-            s.stroke_line(a, y, b, y, c, 1.0);
+            s.stroke_line(ambre_draw::Line::new((a, y), (b, y)), c, 1.0);
         }
         t += MARCHING_PERIOD;
     }
@@ -191,7 +191,7 @@ pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, y0: f64, y1: f64, x: f64, c: C
         let a = t.max(y0);
         let b = (t + MARCHING_DASH).min(y1);
         if b > a {
-            s.stroke_line(x, a, x, b, c, 1.0);
+            s.stroke_line(ambre_draw::Line::new((x, a), (x, b)), c, 1.0);
         }
         t += MARCHING_PERIOD;
     }
@@ -433,16 +433,17 @@ pub fn draw_overlay<S: DrawSurface>(
     match state.resize_preview {
         Some(grid::ResizePreview::Col(x)) => {
             surface.stroke_line(
-                x,
-                layout.top,
-                x,
-                state.grid_bottom(),
+                ambre_draw::Line::new((x, layout.top), (x, state.grid_bottom())),
                 palette.selection,
                 1.0,
             );
         }
         Some(grid::ResizePreview::Row(y)) => {
-            surface.stroke_line(0.0, y, state.canvas_width, y, palette.selection, 1.0);
+            surface.stroke_line(
+                ambre_draw::Line::new((0.0, y), (state.canvas_width, y)),
+                palette.selection,
+                1.0,
+            );
         }
         None => {}
     }
@@ -454,17 +455,18 @@ pub fn draw_overlay<S: DrawSurface>(
         Some(grid::AxisPos::Col(i)) => {
             let x = state.col_x(i);
             surface.stroke_line(
-                x,
-                layout.top,
-                x,
-                state.grid_bottom(),
+                ambre_draw::Line::new((x, layout.top), (x, state.grid_bottom())),
                 palette.selection,
                 2.5,
             );
         }
         Some(grid::AxisPos::Row(i)) => {
             let y = state.row_y(i);
-            surface.stroke_line(0.0, y, state.canvas_width, y, palette.selection, 2.5);
+            surface.stroke_line(
+                ambre_draw::Line::new((0.0, y), (state.canvas_width, y)),
+                palette.selection,
+                2.5,
+            );
         }
         None => {}
     }

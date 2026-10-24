@@ -180,12 +180,20 @@ fn styled_segment<S: DrawSurface>(
         } else {
             (1.0, 0.0)
         };
-        surface.stroke_line(x0 - dx, y0 - dy, x1 - dx, y1 - dy, color, 1.0);
-        surface.stroke_line(x0 + dx, y0 + dy, x1 + dx, y1 + dy, color, 1.0);
+        surface.stroke_line(
+            ambre_draw::Line::new((x0 - dx, y0 - dy), (x1 - dx, y1 - dy)),
+            color,
+            1.0,
+        );
+        surface.stroke_line(
+            ambre_draw::Line::new((x0 + dx, y0 + dy), (x1 + dx, y1 + dy)),
+            color,
+            1.0,
+        );
         return;
     }
     if period <= 0.0 {
-        surface.stroke_line(x0, y0, x1, y1, color, width);
+        surface.stroke_line(ambre_draw::Line::new((x0, y0), (x1, y1)), color, width);
         return;
     }
     // Dashed / dotted: step along the segment drawing `on` runs.
@@ -200,10 +208,7 @@ fn styled_segment<S: DrawSurface>(
         let s = t;
         let e = (t + on).min(len);
         surface.stroke_line(
-            x0 + ux * s,
-            y0 + uy * s,
-            x0 + ux * e,
-            y0 + uy * e,
+            ambre_draw::Line::new((x0 + ux * s, y0 + uy * s), (x0 + ux * e, y0 + uy * e)),
             color,
             width,
         );

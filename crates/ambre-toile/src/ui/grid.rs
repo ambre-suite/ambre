@@ -101,14 +101,22 @@ pub fn paint_grid<S: DrawSurface>(
     let mut x = (min_x / step).ceil() * step;
     while x <= max_x {
         let sx = (w2s * Point::new(x, 0.0)).x;
-        surface.stroke_line(sx, 0.0, sx, cam.size.height, color, 1.0);
+        surface.stroke_line(
+            ambre_draw::Line::new((sx, 0.0), (sx, cam.size.height)),
+            color,
+            1.0,
+        );
         x += step;
     }
     // Horizontal lines at each world-y multiple of `step`.
     let mut y = (min_y / step).ceil() * step;
     while y <= max_y {
         let sy = (w2s * Point::new(0.0, y)).y;
-        surface.stroke_line(0.0, sy, cam.size.width, sy, color, 1.0);
+        surface.stroke_line(
+            ambre_draw::Line::new((0.0, sy), (cam.size.width, sy)),
+            color,
+            1.0,
+        );
         y += step;
     }
 }

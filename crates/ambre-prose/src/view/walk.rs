@@ -177,7 +177,11 @@ impl PageWalk<'_> {
                 surface.pop_clip();
             }
             PageItem::Rule { x0, x1, y } => {
-                surface.stroke_line(*x0, *y, *x1, *y, palette.sheet_border, 1.0);
+                surface.stroke_line(
+                    ambre_draw::Line::new((*x0, *y), (*x1, *y)),
+                    palette.sheet_border,
+                    1.0,
+                );
             }
         }
     }
@@ -211,11 +215,19 @@ impl PageWalk<'_> {
                 match mark.kind {
                     HighlightKind::Deletion => {
                         let middle = (rect.y0 + rect.y1) / 2.0;
-                        surface.stroke_line(rect.x0, middle, rect.x1, middle, palette.error, 1.0);
+                        surface.stroke_line(
+                            ambre_draw::Line::new((rect.x0, middle), (rect.x1, middle)),
+                            palette.error,
+                            1.0,
+                        );
                     }
                     HighlightKind::Insertion => {
                         let base = rect.y1 - 1.0;
-                        surface.stroke_line(rect.x0, base, rect.x1, base, palette.success, 1.0);
+                        surface.stroke_line(
+                            ambre_draw::Line::new((rect.x0, base), (rect.x1, base)),
+                            palette.success,
+                            1.0,
+                        );
                     }
                     HighlightKind::Comment | HighlightKind::Find => {}
                 }
@@ -316,7 +328,11 @@ fn draw_lines<S: DrawSurface>(
         let size = line.size.unwrap_or(size);
         let offset = line.offset.unwrap_or(offset);
         let at = y + f64::from(glyphs.baseline() - offset + size / 2.0);
-        surface.stroke_line(left, at, right, at, color, f64::from(size));
+        surface.stroke_line(
+            ambre_draw::Line::new((left, at), (right, at)),
+            color,
+            f64::from(size),
+        );
     }
 }
 

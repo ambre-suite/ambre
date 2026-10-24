@@ -10,7 +10,6 @@ pub trait HitTest {
     /// What a point lands on: a place in the text, a cell, an element.
     type Target;
 
-    /// The content under `(x, y)`, in CSS pixels from the canvas's top-left
-    /// corner. `None` over no content.
-    fn hit_test(&self, x: f64, y: f64) -> Option<Self::Target>;
+    /// The content under `at`, a point of the canvas. `None` over no content.
+    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<Self::Target>;
 }

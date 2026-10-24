@@ -256,7 +256,11 @@ fn paint_laser<S: DrawSurface>(
         }
         let a = *w2s * pa;
         let b = *w2s * pb;
-        surface.stroke_line(a.x, a.y, b.x, b.y, color.with_alpha(alpha), 3.0);
+        surface.stroke_line(
+            ambre_draw::Line::new((a.x, a.y), (b.x, b.y)),
+            color.with_alpha(alpha),
+            3.0,
+        );
     }
 }
 

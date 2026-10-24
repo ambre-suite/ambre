@@ -138,7 +138,7 @@ pub trait DrawSurface {
     fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64);
 
     /// Stroke a line segment.
-    fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64);
+    fn stroke_line(&mut self, line: Line, color: Color, width: f64);
 
     // -------------------------------------------------------------------------
     // Text

@@ -8,9 +8,11 @@
 //! number and its unit together, and [`WheelDelta::to_px`] is the one way to
 //! read it as a distance (`KINETIC-015`).
 
+use ambre_core::{CssPx, CssVector};
+
 /// The pixels one wheel line is worth, in a view whose content has no line of
 /// its own. Trame steps by a zoomed cell instead.
-pub const WHEEL_LINE_PX: f64 = 40.0;
+pub const WHEEL_LINE_PX: CssPx = CssPx::new(40.0);
 
 /// The unit of a wheel delta, as the DOM's `WheelEvent.deltaMode` names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,33 +76,44 @@ impl WheelDelta {
     }
 
     /// The delta in CSS pixels, given what one line and one page are worth on
-    /// each axis, as `(x, y)`.
+    /// each axis.
     #[must_use]
-    pub fn to_px(self, line: (f64, f64), page: (f64, f64)) -> (f64, f64) {
+    pub fn to_px(self, line: CssVector, page: CssVector) -> CssVector {
         let (sx, sy) = match self.mode {
             WheelDeltaMode::Pixel => (1.0, 1.0),
-            WheelDeltaMode::Line => line,
-            WheelDeltaMode::Page => page,
+            WheelDeltaMode::Line => (f64::from(line.dx.get()), f64::from(line.dy.get())),
+            WheelDeltaMode::Page => (f64::from(page.dx.get()), f64::from(page.dy.get())),
         };
-        (self.dx * sx, self.dy * sy)
+        CssVector::new(
+            CssPx::new((self.dx * sx) as f32),
+            CssPx::new((self.dy * sy) as f32),
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{WHEEL_LINE_PX, WheelDelta, WheelDeltaMode};
+    use ambre_core::{CssPx, CssVector};
 
-    const LINE: (f64, f64) = (WHEEL_LINE_PX, WHEEL_LINE_PX);
-    const PAGE: (f64, f64) = (800.0, 600.0);
+    const LINE: CssVector = CssVector::new(WHEEL_LINE_PX, WHEEL_LINE_PX);
+    const PAGE: CssVector = CssVector::new(CssPx::new(800.0), CssPx::new(600.0));
+
+    fn px(dx: f32, dy: f32) -> CssVector {
+        CssVector::new(CssPx::new(dx), CssPx::new(dy))
+    }
 
     /// `KINETIC-015`: each unit reads as its pixels, on both axes.
     #[test]
     fn each_unit_reads_as_its_pixels() {
-        assert_eq!(WheelDelta::pixels(3.0, -5.0).to_px(LINE, PAGE), (3.0, -5.0));
+        assert_eq!(
+            WheelDelta::pixels(3.0, -5.0).to_px(LINE, PAGE),
+            px(3.0, -5.0)
+        );
         let line = WheelDelta::new(1.0, 3.0, WheelDeltaMode::Line);
-        assert_eq!(line.to_px(LINE, PAGE), (40.0, 120.0));
+        assert_eq!(line.to_px(LINE, PAGE), px(40.0, 120.0));
         let page = WheelDelta::new(0.0, -1.0, WheelDeltaMode::Page);
-        assert_eq!(page.to_px(LINE, PAGE), (0.0, -600.0));
+        assert_eq!(page.to_px(LINE, PAGE), px(0.0, -600.0));
     }
 
     #[test]

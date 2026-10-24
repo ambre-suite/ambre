@@ -882,7 +882,7 @@ class CrateBoundaries(unittest.TestCase):
         for signature, said in (
             ("fn fill_rect(&mut self, rect: Rect, color: Color, density: f32);", "neither geometry nor paint"),
             ("fn stroke_rect(&mut self, rect: Rect, frame: &FrameStats);", "neither geometry nor paint"),
-            ("fn stroke_line(&mut self, x0: f64, zoom: f64);", "bare number `zoom`"),
+            ("fn stroke_line(&mut self, line: Line, zoom: f64);", "bare number `zoom`"),
         ):
             errors = self.breach(cb.DRAW_TRAIT, f"pub trait DrawSurface {{\n    {signature}\n}}\n")
             self.assertTrue(any(said in e for e in errors), (signature, errors))

@@ -5,7 +5,7 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
-use ambre_core::{DocPoint, DocPx, ViewPoint, ViewPx};
+use ambre_core::{DocPoint, DocPx, ViewPoint};
 use ambre_draw::HitTest;
 use loro::TreeID;
 
@@ -161,8 +161,7 @@ pub(crate) struct NoteSlot {
 impl HitTest for ProseUiState {
     type Target = (BlockId, DocOffset);
 
-    fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, DocOffset)> {
-        let at = ViewPoint::new(ViewPx::new(x as f32), ViewPx::new(y as f32));
+    fn hit_test(&self, at: ViewPoint) -> Option<(BlockId, DocOffset)> {
         let (block, offset) = self.hit(at)?;
         Some((block, self.doc_of_hit(block, offset)))
     }
@@ -381,6 +380,7 @@ impl ProseUiState {
 mod tests {
     use crate::layout::run::RunOffset;
     use ambre_bus::app::prose::DocOffset;
+    use ambre_core::{ViewPoint, ViewPx};
     use ambre_draw::HitTest;
 
     use crate::events::block_id;
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(ui.runs.built(), 0);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
-            let hit = ui.hit_test(f64::from(x), f64::from(y));
+            let hit = ui.hit_test(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)));
             let expected = block_id(ui.shaped.layout.blocks[far].block_id);
             assert_eq!(hit, Some((expected, DocOffset::new(offset))));
         }
@@ -430,6 +430,9 @@ mod tests {
     #[test]
     fn a_layout_with_no_page_resolves_no_position() {
         let ui = ProseUiState::default();
-        assert_eq!(ui.hit_test(10.0, 10.0), None);
+        assert_eq!(
+            ui.hit_test(ViewPoint::new(ViewPx::new(10.0), ViewPx::new(10.0))),
+            None
+        );
     }
 }

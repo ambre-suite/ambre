@@ -7,6 +7,7 @@ use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
 use ambre_commands::ClipboardWrite;
+use ambre_core::ViewPx;
 use ambre_draw::HitTest;
 
 use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent, TriState};
@@ -662,7 +663,9 @@ fn the_hit_test_answers_a_document_offset_while_drafts_wait() {
     let (x, y) = rig.point_of(block, 8);
     rig.ui.set_caret((block, DocOffset::ZERO));
     rig.type_text("ab");
-    let hit = rig.ui.hit_test(f64::from(x), f64::from(y));
+    let hit = rig
+        .ui
+        .hit_test(ambre_core::ViewPoint::new(ViewPx::new(x), ViewPx::new(y)));
     assert_eq!(hit, Some((block, DocOffset::new(10))));
 }
 
@@ -1041,7 +1044,9 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
         rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42, 120] {
             let (x, y) = rig.point_of(block, offset);
-            let hit = rig.ui.hit_test(f64::from(x), f64::from(y));
+            let hit = rig
+                .ui
+                .hit_test(ambre_core::ViewPoint::new(ViewPx::new(x), ViewPx::new(y)));
             assert_eq!(hit, Some((block, DocOffset::new(offset))), "zoom {zoom}");
         }
     }
@@ -2467,7 +2472,7 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
     by_line.ui.wheel(notch(2.0), ambre_core::PageTime(0.0));
     let mut by_px = long_rig();
     by_px.ui.wheel(
-        glide(2.0 * ambre_draw::WHEEL_LINE_PX),
+        glide(2.0 * f64::from(ambre_draw::WHEEL_LINE_PX.get())),
         ambre_core::PageTime(0.0),
     );
     assert!(by_px.ui.viewport.scroll_y > 0.0, "the column moved");

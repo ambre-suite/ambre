@@ -38,7 +38,11 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                 break;
             }
             if x >= area.x0 && x <= area.x1 {
-                surface.stroke_line(x, line_y0, x, line_y1, color, 1.0);
+                surface.stroke_line(
+                    ambre_draw::Line::new((x, line_y0), (x, line_y1)),
+                    color,
+                    1.0,
+                );
             }
             x += layout.col_w(col);
             col = col.next();
@@ -57,7 +61,11 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                 break;
             }
             if y >= area.y0 && y <= area.y1 {
-                surface.stroke_line(line_x0, y, line_x1, y, color, 1.0);
+                surface.stroke_line(
+                    ambre_draw::Line::new((line_x0, y), (line_x1, y)),
+                    color,
+                    1.0,
+                );
             }
             if !layout.is_hidden(row) {
                 y += layout.row_h(row);

@@ -10,8 +10,8 @@ use ambre_draw::kinetic::EdgeSpeed;
 impl HitTest for TrameUiState {
     type Target = CellPos;
 
-    fn hit_test(&self, x: f64, y: f64) -> Option<CellPos> {
-        self.cell_at(x, y)
+    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<CellPos> {
+        self.cell_at(f64::from(at.x.get()), f64::from(at.y.get()))
     }
 }
 

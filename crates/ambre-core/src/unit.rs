@@ -11,6 +11,7 @@
 //! | [`DocPx`] | a pixel of the document, before the zoom | a column width, a run offset |
 //! | [`ViewPx`] | a pixel of the zoomed view, from the canvas's top-left corner | a pointer, a caret |
 //! | [`CssPx`] | a CSS pixel of the page, outside any canvas | a wheel delta, a fixed element |
+//! | [`SurfacePx`] | a pixel of a drawing surface, in the `f64` it takes | an absolute sheet position |
 //! | [`Pt`] | a typographic point, 1/72 inch | an indent, a table column |
 //! | [`Mm`] | a millimetre | a page size, a margin |
 //! | [`Radians`] | an angle | a rotated element |
@@ -192,6 +193,18 @@ define_length! {
 }
 
 define_length! {
+    /// A coordinate or a length on a drawing surface, in the `f64` the
+    /// surface takes.
+    ///
+    /// A sheet walks its cells at absolute positions, at zoom 1: a hundred
+    /// thousand rows of twenty pixels reach two million pixels. An `f32`
+    /// steps by a quarter pixel there, so the three `f32` spaces above cannot
+    /// hold such a position. [`SurfacePx::in_view`] turns one into a
+    /// [`ViewPx`] once it is measured from the corner of the view.
+    SurfacePx(f64)
+}
+
+define_length! {
     /// A length in typographic points, 1/72 inch.
     Pt(f32)
 }
@@ -245,6 +258,24 @@ impl CssPx {
     }
 }
 
+impl SurfacePx {
+    /// The coordinate on the view, for a view whose top-left corner sits at
+    /// `view_origin` on the surface.
+    #[must_use]
+    pub fn in_view(self, view_origin: SurfacePx) -> ViewPx {
+        ViewPx((self.0 - view_origin.0) as f32)
+    }
+}
+
+impl ViewPx {
+    /// The coordinate on the surface, for a view whose top-left corner sits at
+    /// `view_origin` on it: the inverse of [`SurfacePx::in_view`].
+    #[must_use]
+    pub fn on_surface(self, view_origin: SurfacePx) -> SurfacePx {
+        SurfacePx(view_origin.0 + f64::from(self.0))
+    }
+}
+
 impl Radians {
     /// The angle in degrees, for a writer whose format takes degrees.
     #[must_use]
@@ -270,6 +301,9 @@ impl Mm {
 }
 
 /// A point of one pixel space: [`DocPoint`], [`ViewPoint`] or [`CssPoint`].
+///
+/// Two points of one space subtract into the [`Vector`] between them, and a
+/// point moves by a vector. Two points never add: the sum names no place.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Point<P> {
     pub x: P,
@@ -284,6 +318,53 @@ impl<P> Point<P> {
     }
 }
 
+/// A displacement in one pixel space: a wheel delta, a drag, a scroll step.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Vector<P> {
+    pub dx: P,
+    pub dy: P,
+}
+
+impl<P> Vector<P> {
+    /// The displacement of `dx` across and `dy` down.
+    #[must_use]
+    pub const fn new(dx: P, dy: P) -> Self {
+        Self { dx, dy }
+    }
+}
+
+/// The vector from `other` to `self`.
+impl<P: std::ops::Sub<Output = P>> std::ops::Sub for Point<P> {
+    type Output = Vector<P>;
+    fn sub(self, other: Self) -> Vector<P> {
+        Vector::new(self.x - other.x, self.y - other.y)
+    }
+}
+
+/// The point moved by `by`.
+impl<P: std::ops::Add<Output = P>> std::ops::Add<Vector<P>> for Point<P> {
+    type Output = Self;
+    fn add(self, by: Vector<P>) -> Self {
+        Point::new(self.x + by.dx, self.y + by.dy)
+    }
+}
+
+/// The point moved back by `by`.
+impl<P: std::ops::Sub<Output = P>> std::ops::Sub<Vector<P>> for Point<P> {
+    type Output = Self;
+    fn sub(self, by: Vector<P>) -> Self {
+        Point::new(self.x - by.dx, self.y - by.dy)
+    }
+}
+
+/// The two displacements one after the other.
+impl<P: std::ops::Add<Output = P>> std::ops::Add for Vector<P> {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Vector::new(self.dx + other.dx, self.dy + other.dy)
+    }
+}
+
 /// A point of the document, before the zoom, from the origin of the layout
 /// that measures it: a page, or a run.
 pub type DocPoint = Point<DocPx>;
@@ -293,6 +374,12 @@ pub type ViewPoint = Point<ViewPx>;
 
 /// A point of the page, in CSS pixels.
 pub type CssPoint = Point<CssPx>;
+
+/// A displacement of the page, in CSS pixels: a wheel delta.
+pub type CssVector = Vector<CssPx>;
+
+/// A displacement of the zoomed view.
+pub type ViewVector = Vector<ViewPx>;
 
 impl ViewPoint {
     /// The point on the page, for a canvas whose corner sits at
@@ -319,7 +406,7 @@ impl CssPoint {
 
 #[cfg(test)]
 mod tests {
-    use super::{CssPoint, CssPx, DocPx, Mm, Pt, ViewPoint, ViewPx};
+    use super::{CssPoint, CssPx, DocPx, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewVector};
     use crate::ZoomFactor;
 
     #[test]
@@ -355,6 +442,30 @@ mod tests {
             on_page.in_canvas(origin),
             ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0))
         );
+    }
+
+    #[test]
+    fn two_points_subtract_into_a_vector_that_moves_one_onto_the_other() {
+        let from = ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0));
+        let to = ViewPoint::new(ViewPx::new(4.0), ViewPx::new(-2.0));
+        let by = to - from;
+        assert_eq!(by, ViewVector::new(ViewPx::new(3.0), ViewPx::new(-4.0)));
+        assert_eq!(from + by, to);
+        assert_eq!(to - by, from);
+        assert_eq!(
+            by + by,
+            ViewVector::new(ViewPx::new(6.0), ViewPx::new(-8.0))
+        );
+    }
+
+    /// A sheet position past the reach of an `f32` keeps its fraction until it
+    /// is measured from the view's corner.
+    #[test]
+    fn a_surface_position_keeps_its_precision_until_it_reaches_the_view() {
+        let origin = SurfacePx::new(2_000_000.0);
+        let at = SurfacePx::new(2_000_010.25);
+        assert_eq!(at.in_view(origin), ViewPx::new(10.25));
+        assert_eq!(ViewPx::new(10.25).on_surface(origin), at);
     }
 
     #[test]

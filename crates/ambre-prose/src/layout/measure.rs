@@ -27,11 +27,6 @@ use crate::layout::run::{
 /// bounds the memory a run keeps.
 const MAX_SEGMENTS: usize = 16;
 
-/// Pixels per point at 96 DPI. Every length the document stores in points is
-/// converted here and nowhere else. It is the factor every view reads, so a
-/// size lays out at one height in Prose, Trame and Toile.
-pub(crate) const PX_PER_PT: f32 = ambre_core::PX_PER_PT;
-
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
 /// across them (`PROSE-UI-209`).

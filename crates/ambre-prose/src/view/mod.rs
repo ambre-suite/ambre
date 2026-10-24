@@ -148,7 +148,7 @@ impl ProseUiState {
     /// (`PROSE-UI-127`). Only the model builds a step, so a distance the view
     /// computed itself does not reach the column (`KINETIC-001`).
     pub fn scroll_by(&mut self, step: ScrollStep) {
-        let moved = self.viewport.scroll_y + step.y() / self.viewport.scale();
+        let moved = self.viewport.scroll_y + step.y().get() / self.viewport.scale();
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, moved);
     }
 
@@ -267,7 +267,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn down(dy: f32) -> ScrollStep {
-        ScrollStep::dragged((0.0, dy), (0.0, 0.0))
+        ScrollStep::dragged(view_at(0.0, dy), view_at(0.0, 0.0))
     }
 
     /// Append one block at the root, after the last one, holding `text`.

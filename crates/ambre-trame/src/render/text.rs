@@ -89,12 +89,20 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
             let adv = run.advance() as f64;
             // Underline run: a 1px line just below the glyph baseline.
             if decoration.underline == Underline::Underlined {
-                surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, deco_color, 1.0);
+                surface.stroke_line(
+                    ambre_draw::Line::new((tx, ty + 2.0), (tx + adv, ty + 2.0)),
+                    deco_color,
+                    1.0,
+                );
             }
             // Strikethrough run: a 1px line through the x-height.
             if decoration.strikethrough == Strikethrough::Struck {
                 let sy = ty - (font_size as f64) * 0.3;
-                surface.stroke_line(tx, sy, tx + adv, sy, deco_color, 1.0);
+                surface.stroke_line(
+                    ambre_draw::Line::new((tx, sy), (tx + adv, sy)),
+                    deco_color,
+                    1.0,
+                );
             }
         }
     }

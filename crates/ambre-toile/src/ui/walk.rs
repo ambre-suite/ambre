@@ -644,7 +644,7 @@ fn paint_text<S: DrawSurface>(
                         a = r * a;
                         b = r * b;
                     }
-                    surface.stroke_line(a.x, a.y, b.x, b.y, color, 1.0);
+                    surface.stroke_line(ambre_draw::Line::new((a.x, a.y), (b.x, b.y)), color, 1.0);
                 };
                 if underline {
                     line(ty + 2.0);

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// CSS pixels per typographic point: a point is 1/72 inch, a CSS pixel is
 /// 1/96 inch.
-pub const PX_PER_PT: f32 = 96.0 / 72.0;
+pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
 
 /// A font size in typographic points.
 ///

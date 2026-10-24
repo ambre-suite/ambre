@@ -2946,9 +2946,23 @@ fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
     for zoom in [0.5, 1.0, 2.0] {
         rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
         let (x, y) = rig.screen(50.0, 50.0);
-        assert_eq!(rig.view.hit_test(x, y), Some(eid("a")), "zoom {zoom}");
+        assert_eq!(
+            rig.view.hit_test(ambre_core::ViewPoint::new(
+                ambre_core::ViewPx::new(x as f32),
+                ambre_core::ViewPx::new(y as f32)
+            )),
+            Some(eid("a")),
+            "zoom {zoom}"
+        );
         let (x, y) = rig.screen(900.0, 600.0);
-        assert_eq!(rig.view.hit_test(x, y), None, "zoom {zoom}");
+        assert_eq!(
+            rig.view.hit_test(ambre_core::ViewPoint::new(
+                ambre_core::ViewPx::new(x as f32),
+                ambre_core::ViewPx::new(y as f32)
+            )),
+            None,
+            "zoom {zoom}"
+        );
     }
 }
 
@@ -2962,7 +2976,8 @@ fn a_line_wheel_pans_and_zooms_as_its_pixels_do() {
         wheel(&mut by_line, (0.0, 1.0), 1, false);
         let mut by_px = Rig::new();
         by_px.view.pointer_mode = mode;
-        wheel(&mut by_px, (0.0, ambre_canvas::WHEEL_LINE_PX), 0, false);
+        let line = f64::from(ambre_canvas::WHEEL_LINE_PX.get());
+        wheel(&mut by_px, (0.0, line), 0, false);
         assert_eq!(by_line.view.cam.zoom, by_px.view.cam.zoom, "{name}");
         assert_eq!(by_line.screen(0.0, 0.0), by_px.screen(0.0, 0.0), "{name}");
     }

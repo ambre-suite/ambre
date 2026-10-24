@@ -258,7 +258,11 @@ pub fn paint_overlay<S: DrawSurface>(
             place(Point::new(b.x0, b.y1)),
         ];
         for (a, d) in c.iter().zip(c.iter().cycle().skip(1)) {
-            surface.stroke_line(a.x, a.y, d.x, d.y, palette.selection, 1.5);
+            surface.stroke_line(
+                ambre_draw::Line::new((a.x, a.y), (d.x, d.y)),
+                palette.selection,
+                1.5,
+            );
         }
     }
 
@@ -266,10 +270,7 @@ pub fn paint_overlay<S: DrawSurface>(
     let stem_base = place(Point::new(b.center().x, b.y0));
     let knob = place(rotate_handle_point(b));
     surface.stroke_line(
-        stem_base.x,
-        stem_base.y,
-        knob.x,
-        knob.y,
+        ambre_draw::Line::new((stem_base.x, stem_base.y), (knob.x, knob.y)),
         palette.selection,
         1.0,
     );
@@ -442,18 +443,12 @@ fn paint_link_badges<S: DrawSurface>(
         let (cx, cy) = (b.center().x, b.center().y);
         let r = b.width() * 0.22;
         surface.stroke_line(
-            cx - r * 1.6,
-            cy + r,
-            cx + r * 0.4,
-            cy - r,
+            ambre_draw::Line::new((cx - r * 1.6, cy + r), (cx + r * 0.4, cy - r)),
             palette.content_bg,
             1.5,
         );
         surface.stroke_line(
-            cx - r * 0.4,
-            cy + r,
-            cx + r * 1.6,
-            cy - r,
+            ambre_draw::Line::new((cx - r * 0.4, cy + r), (cx + r * 1.6, cy - r)),
             palette.content_bg,
             1.5,
         );

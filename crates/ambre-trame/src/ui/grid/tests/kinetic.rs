@@ -2,6 +2,14 @@
 
 use super::*;
 
+/// The canvas point at `(x, y)`.
+fn view_point(x: f64, y: f64) -> ambre_core::ViewPoint {
+    ambre_core::ViewPoint::new(
+        ambre_core::ViewPx::new(x as f32),
+        ambre_core::ViewPx::new(y as f32),
+    )
+}
+
 /// `TRAME-UI-175`: a drag held past an edge of the cells scrolls towards it.
 /// It keeps reaching the nearest edge cell, and away from the edges it
 /// scrolls nothing.
@@ -36,7 +44,10 @@ fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
         let (x, y, w, h) = state
             .cell_pixel_rect(CellPos::new(Row::new(row), Col::new(col)))
             .expect("visible");
-        assert_eq!(state.hit_test(x + w / 2.0, y + h / 2.0), Some(at(row, col)));
+        assert_eq!(
+            state.hit_test(view_point(x + w / 2.0, y + h / 2.0)),
+            Some(at(row, col))
+        );
     }
-    assert_eq!(state.hit_test(1.0, 1.0), None);
+    assert_eq!(state.hit_test(view_point(1.0, 1.0)), None);
 }

@@ -25,7 +25,7 @@ use ambre_canvas::{
     TextInput, Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
-use ambre_core::{ViewPoint, ViewPx};
+use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
@@ -142,6 +142,11 @@ const AT_FRACTION: f32 = 0.25;
 /// How far a focused row may pass an edge of the viewport before the list
 /// moves to show it: a rounding, not a scroll.
 const REVEAL_SLACK_PX: f32 = 0.5;
+
+/// A step of `dy` pixels down the list, as the shared model takes a wheel.
+fn down(dy: CssPx) -> CssVector {
+    CssVector::new(CssPx::ZERO, dy)
+}
 
 /// Where the list of a region rests (`MURMURE-189`, `MURMURE-190`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -471,10 +476,10 @@ impl MurmureView {
         };
         self.rest = Rest::Row {
             key,
-            anchor_y: anchor_y - step.y(),
+            anchor_y: anchor_y - step.y().get(),
         };
         self.pending = false;
-        self.heading = step.y();
+        self.heading = step.y().get();
         self.dirty = true;
     }
 
@@ -484,7 +489,7 @@ impl MurmureView {
         let now_ms = (self.reads.now_ms)();
         let step = self
             .kinetic
-            .wheel(0.0, pages * self.list_height(), true, now_ms);
+            .wheel(down(CssPx::new(pages * self.list_height())), true, now_ms);
         self.scroll_by(step);
     }
 
@@ -890,19 +895,21 @@ impl MurmureView {
             return;
         };
         let now_ms = (self.reads.now_ms)();
-        let step = self.kinetic.wheel(0.0, over, true, now_ms);
+        let step = self.kinetic.wheel(down(CssPx::new(over)), true, now_ms);
         self.scroll_by(step);
     }
 
     /// A finger went down: it stops any motion left.
     pub fn touch_down(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
-        self.kinetic.press(x, y, now_ms);
+        self.kinetic
+            .press(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)), now_ms);
     }
 
     /// A finger moved: past the tap slop the list follows it. Answers
     /// whether the list moved.
     pub fn touch_move(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) -> bool {
-        let Some(step) = self.kinetic.sample(x, y, now_ms) else {
+        let at = ViewPoint::new(ViewPx::new(x), ViewPx::new(y));
+        let Some(step) = self.kinetic.sample(at, now_ms) else {
             return false;
         };
         self.scroll_by(step);
@@ -915,26 +922,30 @@ impl MurmureView {
     /// segment again (`MURMURE-513`). A tap in the composer puts its caret
     /// there and gives it the keys.
     pub fn touch_up(&mut self, now_ms: ambre_core::PageTime) -> Option<(f32, f32)> {
-        match self.kinetic.release(now_ms) {
-            Release::Tap { x, y } if self.on_jump(Point::new(x.into(), y.into())) => {
+        let tap = match self.kinetic.release(now_ms) {
+            Release::Tap { at } => Some((at.x.get(), at.y.get())),
+            Release::Fling | Release::Rest => None,
+        };
+        match tap {
+            Some((x, y)) if self.on_jump(Point::new(x.into(), y.into())) => {
                 self.rest_at_latest();
                 None
             }
-            Release::Tap { y, .. } if self.composer.on_also(y) => {
+            Some((_, y)) if self.composer.on_also(y) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.toggle_also(of);
                     self.dirty = true;
                 }
                 None
             }
-            Release::Tap { x, y } if self.composer.file_at(x, y).is_some() => {
+            Some((x, y)) if self.composer.file_at(x, y).is_some() => {
                 if let (Some(of), Some(index)) = (self.writes_in(), self.composer.file_at(x, y)) {
                     self.composer.uploads_mut().remove(of, index);
                     self.dirty = true;
                 }
                 None
             }
-            Release::Tap { x, y } if self.in_composer(y.into()) => {
+            Some((x, y)) if self.in_composer(y.into()) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.press(of, x, y);
                     self.composer.release();
@@ -943,13 +954,13 @@ impl MurmureView {
                 }
                 None
             }
-            Release::Tap { y, .. } if self.retry_at(y) => None,
-            Release::Tap { x, y } => {
+            Some((_, y)) if self.retry_at(y) => None,
+            Some((x, y)) => {
                 self.selecting.click = Some((x, y));
                 self.dirty = true;
                 Some((x, y))
             }
-            Release::Fling | Release::Rest => None,
+            None => None,
         }
     }
 
@@ -1003,7 +1014,7 @@ impl MurmureView {
         };
         if over != 0.0 {
             let now_ms = (self.reads.now_ms)();
-            let step = self.kinetic.wheel(0.0, over, true, now_ms);
+            let step = self.kinetic.wheel(down(CssPx::new(over)), true, now_ms);
             self.scroll_by(step);
         }
     }
@@ -1034,11 +1045,12 @@ impl MurmureView {
             self.dirty = true;
         }
         if let Some(step) = self.kinetic.tick(now_ms)
-            && step.y() != 0.0
+            && step.y() != ViewPx::ZERO
         {
             self.scroll_by(step);
         }
-        if let Some((x, y)) = self.kinetic.held(now_ms) {
+        if let Some(at) = self.kinetic.held(now_ms) {
+            let (x, y) = (at.x.get(), at.y.get());
             // A finger held still: the actions of its message open where it
             // went down (`MURMURE-423`).
             (self.reads.act_on)(self.target_at(x, y, true));
@@ -1598,10 +1610,10 @@ impl MurmureView {
                 ctrl_key: false,
             } => {
                 let line = ambre_canvas::WHEEL_LINE_PX;
-                let page = f64::from(self.list_height());
-                let (_, dy) = delta.to_px((line, line), (page, page));
+                let page = CssPx::new(self.list_height());
+                let px = delta.to_px(CssVector::new(line, line), CssVector::new(page, page));
                 let now_ms = (self.reads.now_ms)();
-                let step = self.kinetic.wheel(0.0, dy as f32, delta.is_step(), now_ms);
+                let step = self.kinetic.wheel(down(px.dy), delta.is_step(), now_ms);
                 self.scroll_by(step);
                 return true;
             }

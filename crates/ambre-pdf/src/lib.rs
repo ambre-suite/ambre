@@ -19,7 +19,7 @@
 // ============================================================================
 
 use ambre_draw::{
-    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Rect, Stroke,
+    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Rect, Stroke,
 };
 use kurbo::{BezPath, PathEl};
 
@@ -92,10 +92,10 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         }
     }
 
-    fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: f64) {
         let mut pb = PathBuilder::new();
-        pb.move_to(x0 as f32, y0 as f32);
-        pb.line_to(x1 as f32, y1 as f32);
+        pb.move_to(line.p0.x as f32, line.p0.y as f32);
+        pb.line_to(line.p1.x as f32, line.p1.y as f32);
         if let Some(path) = pb.finish() {
             self.stroke_solid(&path, color, width);
         }
@@ -381,7 +381,11 @@ mod tests {
 
             s.fill_rect(Rect::new(10.0, 10.0, 90.0, 90.0), palette::css::RED);
             s.stroke_rect(Rect::new(100.0, 10.0, 190.0, 90.0), palette::css::BLUE, 2.0);
-            s.stroke_line(10.0, 100.0, 190.0, 100.0, palette::css::BLACK, 1.0);
+            s.stroke_line(
+                ambre_draw::Line::new((10.0, 100.0), (190.0, 100.0)),
+                palette::css::BLACK,
+                1.0,
+            );
 
             // Clip + transform stacks, balanced.
             s.push_transform(Affine::translate((0.0, 100.0)));

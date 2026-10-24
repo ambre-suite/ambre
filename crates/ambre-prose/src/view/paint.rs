@@ -621,7 +621,11 @@ impl ProseUiState {
         if let Some((width, shape)) = self.composition() {
             draw_shape(surface, &shape, rect.x0, rect.y0, palette.text);
             let base = rect.y1 - 1.0;
-            surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
+            surface.stroke_line(
+                ambre_draw::Line::new((rect.x0, base), (rect.x0 + width, base)),
+                palette.text,
+                1.0,
+            );
             rect.x0 += width;
         }
         let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
@@ -1212,7 +1216,7 @@ mod tests {
         });
         let mut ui = view_of(&mut state);
         let (x1, y1) = first_text_at(&paint(&mut ui));
-        let pad = f64::from(12.0 * crate::layout::measure::PX_PER_PT);
+        let pad = f64::from(ambre_core::Pt::new(12.0).to_doc_px().get());
         assert!(
             (x1 - x0 - pad).abs() < 0.5,
             "the text moves in by the padding"
@@ -1236,7 +1240,7 @@ mod tests {
         });
         let mut ui = view_of(&mut state);
         let (_, y2) = first_text_at(&paint(&mut ui));
-        let room = 2.0 * f64::from(36.0 * crate::layout::measure::PX_PER_PT);
+        let room = 2.0 * f64::from(ambre_core::Pt::new(36.0).to_doc_px().get());
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
     }
 

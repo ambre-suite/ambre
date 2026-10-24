@@ -974,10 +974,6 @@ ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as
 ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(corners) | param | [[f32;2];4]	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(uv) | param | [[f32;2];2]	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(width) | param | f64	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(x0) | param | f64	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(x1) | param | f64	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(y0) | param | f64	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(y1) | param | f64	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_rect(width) | param | f64	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphPlacement.density | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphSink::glyph(rect) | param | [f32;4]	math	geometry, layout, GPU or count arithmetic
@@ -1622,8 +1618,6 @@ ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param 
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
-ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(x) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/hit.rs | crate::hit | HitTest::hit_test(y) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | DECAY_MS | const | f32	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | EDGE_BAND_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | EDGE_DEPTH_PX | const | f32	math	geometry, layout, count or size local to the algorithm
@@ -1633,35 +1627,17 @@ ambre-draw | src/kinetic.rs | crate::kinetic | EdgeSpeed::at(at) | param | f32	n
 ambre-draw | src/kinetic.rs | crate::kinetic | EdgeSpeed::at(extent) | param | f32	newtype-inner	EdgeSpeed constructor
 ambre-draw | src/kinetic.rs | crate::kinetic | EdgeSpeed::get() | ret | f32	newtype-inner	EdgeSpeed accessor
 ambre-draw | src/kinetic.rs | crate::kinetic | Glide.speed | field | (f32,f32)	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::held() | ret | Option<(f32,f32)>	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::press(x) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::press(y) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::sample(x) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::sample(y) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::speed() | ret | Option<(f32,f32)>	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::wheel(dx) | param | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::wheel(dy) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::wheel(stepped) | param | bool	math	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | LONG_PRESS_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | MAX_STEP_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | Motion.speed | field | (f32,f32)	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	math	local state flag or value, not a mode selector
-ambre-draw | src/kinetic.rs | crate::kinetic | Pan.last | field | (f32,f32)	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	math	local state flag or value, not a mode selector
-ambre-draw | src/kinetic.rs | crate::kinetic | Pan.samples | field | Vec<(ambre_core::PageTime,f32,f32)>	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Pan.start | field | (f32,f32)	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Release::Tap.x | field | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | Release::Tap.y | field | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | SAMPLE_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-draw | src/kinetic.rs | crate::kinetic | STOP_SPEED | const | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep.x | field | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep.y | field | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep::dragged(from) | param | (f32,f32)	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep::dragged(to) | param | (f32,f32)	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep::x() | ret | f32	newtype-inner	ScrollStep accessor
-ambre-draw | src/kinetic.rs | crate::kinetic | ScrollStep::y() | ret | f32	newtype-inner	ScrollStep accessor
 ambre-draw | src/kinetic.rs | crate::kinetic | TAP_SLOP_PX | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_GAP_MS | const | f64	math	frame-clock span compared with PageTime
@@ -1671,10 +1647,6 @@ ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed() | ret | f32	math	geo
 ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed(at) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/kinetic.rs | crate::kinetic | edge_speed(extent) | param | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(width) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(x0) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(x1) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(y0) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(y1) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | DrawSurface::stroke_rect(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
 ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str	newtype-inner	ImageKey constructor
@@ -1695,7 +1667,6 @@ ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	gene
 ambre-draw | src/text.rs | crate::text | ScriptSet::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
 ambre-draw | src/text.rs | crate::text | resolve_family(label) | param | Option<&str>	free-text	a family name from any app's store (Prose runs, Trame cells, Toile styles, imported files), an open set this maps onto the typed BundledFamily; Toile's FontFamily lives in ambre-bus, which ambre-draw may not depend on
-ambre-draw | src/wheel.rs | crate::wheel | WHEEL_LINE_PX | const | f64	math	pixels per wheel line, a conversion constant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dx | field | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dy | field | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	newtype-inner	WheelDelta field, constructor or accessor
@@ -1703,9 +1674,6 @@ ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::new(dx) | param | f64	new
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::new(dy) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dx) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dy) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::to_px() | ret | (f64,f64)	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::to_px(line) | param | (f64,f64)	math	line and page sizes in pixels for the conversion
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::to_px(page) | param | (f64,f64)	math	line and page sizes in pixels for the conversion
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	foreign-api	the DOM deltaMode code
 ambre-logic | src/bin/ambre-fixtures.rs | crate | baseline(machine) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/bin/ambre-fixtures.rs | crate | display() | ret | String	generic	generic byte/text API or codec
@@ -2420,10 +2388,6 @@ ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_watching() | 
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::tick() | ret | bool	math	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	math	state flag/predicate
 ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(width) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(x0) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(x1) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(y0) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(y1) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_rect(width) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::stroke_solid(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
@@ -2699,7 +2663,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape(w
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape_window(width_px) | param | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shaped() | ret | u64	math	count, size or local index
-ambre-prose | src/layout/measure.rs | crate::layout::measure | PX_PER_PT | const | f32	math	layout geometry local to algorithm
 ambre-prose | src/layout/measure.rs | crate::layout::measure | REACH | const | usize	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | ShapeFn | alias | dyn FnMut(&str,&[MarkedSpan],&EffectiveStyle)->Layout<ParleyBrush>+'a	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | TextMetrics.line_count | field | u32	math	count, size or local index
@@ -3179,8 +3142,6 @@ ambre-prose | src/view/column.rs | crate::view::column | Viewport::visible_heigh
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::fling_speed() | ret | Option<f32>	math	layout geometry local to algorithm
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::tick_fling() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/fling.rs | crate::view::fling | ProseUiState::touch_move() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(x) | param | f64	trait	signature fixed by foreign trait
-ambre-prose | src/view/hit.rs | crate::view::hit | <ProseUiState as HitTest>::hit_test(y) | param | f64	trait	signature fixed by foreign trait
 ambre-prose | src/view/hit.rs | crate::view::hit | BandSlot.bottom | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | BandSlot.top | field | f32	math	layout geometry local to algorithm
 ambre-prose | src/view/hit.rs | crate::view::hit | CellFrame.text_x | field | f32	math	layout geometry local to algorithm
@@ -4231,8 +4192,6 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_boar
 ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&ElementId)->bool	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | <ToileView as ambre_draw::HitTest>::hit_test(x) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/ui/view.rs | crate::ui::view | <ToileView as ambre_draw::HitTest>::hit_test(y) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/ui/view.rs | crate::ui::view | CARET_BLINK_MS | const | f64	math	frame-clock span compared with PageTime
 ambre-toile | src/ui/view.rs | crate::ui::view | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/view.rs | crate::ui::view | DUPLICATE_NUDGE | const | f64	math	nudge world units; duplicated in view.rs and menu.rs, values agree (10.0)
@@ -4762,8 +4721,6 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn |
 ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(x) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | <TrameUiState as HitTest>::hit_test(y) | param | f64	trait	HitTest trait from ambre-canvas fixes the f64 pointer signature
 ambre-prose | src/schema.rs | crate::schema | notes_to_blocks() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step body uses doc::WriteError and converts once at this edge
 ambre-prose | src/schema.rs | crate::schema | stamp_step() | ret | Result<(),String>	trait	signature dictated by ambre_core::SchemaMigration.apply, which takes fn(&LoroDoc) -> Result<(), String>; the step cannot fail
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::active_merge_rect() | ret | Option<(f64,f64,f64,f64)>	math	local geometry / pixel arithmetic
@@ -4956,10 +4913,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(data) | pa
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | trigger_download(filename) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll.accum_x | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll.accum_y | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::pan(x) | param | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::pan(y) | param | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::press(x) | param | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/view/scroll.rs | crate::ui::view::scroll | GridScroll::press(y) | param | f32	math	local geometry / pixel arithmetic
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_mark() | ret | (&'static str,&'static str)	foreign-api	the mark key and value LoroText::mark stores for a HeaderField; field_of is the one reader, so the codec lives in this file alone

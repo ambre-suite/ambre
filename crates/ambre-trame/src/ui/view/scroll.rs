@@ -3,6 +3,7 @@
 // scroll, folded into whole-cell pans of the viewport.
 
 use ambre_canvas::WheelDelta;
+use ambre_core::{CssPx, CssVector, ViewPoint};
 use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
@@ -37,18 +38,18 @@ impl GridScroll {
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let z = grid.zoom.get();
-        let line = (
-            f64::from(COL_WIDTH.get()) * z,
-            f64::from(ROW_HEIGHT.get()) * z,
+        let px = |v: f64| CssPx::new(v as f32);
+        let line = CssVector::new(
+            px(f64::from(COL_WIDTH.get()) * z),
+            px(f64::from(ROW_HEIGHT.get()) * z),
         );
-        let page = (grid.canvas_width, grid.canvas_height);
-        let (dx, dy) = delta.to_px(line, page);
+        let page = CssVector::new(px(grid.canvas_width), px(grid.canvas_height));
         // The shared model applies the step one for one, and lets a trackpad
         // glide coast once it pauses; a notch never coasts (`KINETIC-002`,
         // `KINETIC-009`).
         let step = self
             .kinetic
-            .wheel(dx as f32, dy as f32, delta.is_step(), now_ms);
+            .wheel(delta.to_px(line, page), delta.is_step(), now_ms);
         self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {
@@ -59,8 +60,8 @@ impl GridScroll {
 
     /// Add a step of the model to the sub-cell residue.
     fn accumulate(&mut self, step: ScrollStep) {
-        self.accum_x += f64::from(step.x());
-        self.accum_y += f64::from(step.y());
+        self.accum_x += f64::from(step.x().get());
+        self.accum_y += f64::from(step.y().get());
     }
 
     /// Peel whole rows and columns out of the accumulator and pan the grid,
@@ -117,20 +118,19 @@ impl GridScroll {
     }
 
     /// A finger went down: it stops any motion left (`KINETIC-006`).
-    pub(crate) fn press(&mut self, x: f32, y: f32, now_ms: ambre_core::PageTime) {
+    pub(crate) fn press(&mut self, at: ViewPoint, now_ms: ambre_core::PageTime) {
         self.stop();
-        self.kinetic.press(x, y, now_ms);
+        self.kinetic.press(at, now_ms);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
     pub(crate) fn pan(
         &mut self,
         grid: &mut TrameUiState,
-        x: f32,
-        y: f32,
+        at: ViewPoint,
         now_ms: ambre_core::PageTime,
     ) -> ScrollOutcome {
-        let Some(step) = self.kinetic.sample(x, y, now_ms) else {
+        let Some(step) = self.kinetic.sample(at, now_ms) else {
             return ScrollOutcome::Idle;
         };
         self.accumulate(step);

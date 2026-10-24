@@ -21,8 +21,8 @@
 )]
 
 use crate::{
-    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Rect,
-    Stroke,
+    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
+    Rect, Stroke,
 };
 
 /// One recorded drawing operation. Glyph runs are summarised by their glyph
@@ -174,12 +174,12 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::StrokeRect { rect, color, width });
     }
 
-    fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: f64) {
         self.ops.push(DrawOp::StrokeLine {
-            x0,
-            y0,
-            x1,
-            y1,
+            x0: line.p0.x,
+            y0: line.p0.y,
+            x1: line.p1.x,
+            y1: line.p1.y,
             color,
             width,
         });

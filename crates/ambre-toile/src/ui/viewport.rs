@@ -161,7 +161,8 @@ impl ViewportTransform {
     /// step, so a distance the board computed itself does not move the camera
     /// (`KINETIC-001`).
     pub fn pan_by_screen(&mut self, step: ScrollStep) {
-        self.center += Vec2::new(f64::from(step.x()), f64::from(step.y())) / self.zoom.get();
+        let (dx, dy) = (step.x().get(), step.y().get());
+        self.center += Vec2::new(f64::from(dx), f64::from(dy)) / self.zoom.get();
     }
 
     /// Set the logical canvas size (on resize). Keeps center and zoom.
@@ -385,7 +386,13 @@ mod tests {
         vt.zoom = ambre_core::ZoomFactor::positive(2.0);
         let world_pt = Point::new(50.0, 50.0);
         let screen_before = vt.world_to_screen() * world_pt;
-        vt.pan_by_screen(ScrollStep::dragged((0.0, 0.0), (30.0, -20.0)));
+        vt.pan_by_screen(ScrollStep::dragged(
+            ambre_core::ViewPoint::new(ambre_core::ViewPx::ZERO, ambre_core::ViewPx::ZERO),
+            ambre_core::ViewPoint::new(
+                ambre_core::ViewPx::new(30.0),
+                ambre_core::ViewPx::new(-20.0),
+            ),
+        ));
         let screen_after = vt.world_to_screen() * world_pt;
         // A pan of (30, -20) screen px moves every painted world point by the
         // same screen delta.

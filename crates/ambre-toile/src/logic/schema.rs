@@ -208,15 +208,17 @@ fn rewrite_style_registers<K: ambre_core::crdt::FieldKey>(
 ///
 /// A version 4 board stores the size the renderer lays out, in world px, which
 /// is CSS px at zoom 1. This build stores points and lays them out through
-/// [`FontSize::to_px`](ambre_core::FontSize::to_px). The step divides each
-/// size by [`PX_PER_PT`](ambre_core::PX_PER_PT), so a body keeps the height it
-/// had. Zero, an automatic size, stays automatic.
+/// [`FontSize::to_px`](ambre_core::FontSize::to_px). The step carries each
+/// size back to points through [`DocPx::to_pt`](ambre_core::DocPx::to_pt), so
+/// a body keeps the height it had. Zero, an automatic size, stays automatic.
 fn font_points_step(doc: &LoroDoc) -> Result<(), String> {
     rewrite_styles(doc, |bytes| {
         let mut style = ElementStyle::try_from_bytes(bytes)?;
         let px = f32::from(style.font.size);
-        style.font.size =
-            ambre_bus::app::toile::FontSizeChoice::try_from(px / ambre_core::PX_PER_PT).ok()?;
+        style.font.size = ambre_bus::app::toile::FontSizeChoice::try_from(
+            ambre_core::DocPx::new(px).to_pt().get(),
+        )
+        .ok()?;
         Some(style.to_bytes())
     })?;
     stamp(doc);
@@ -505,7 +507,9 @@ mod tests {
         // points.
         let mut kept = style;
         kept.font.size = ambre_bus::app::toile::FontSizeChoice::try_from(
-            f32::from(kept.font.size) / ambre_core::PX_PER_PT,
+            ambre_core::DocPx::new(f32::from(kept.font.size))
+                .to_pt()
+                .get(),
         )
         .expect("a size");
         assert_eq!(

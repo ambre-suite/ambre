@@ -7,7 +7,8 @@
 
 use super::*;
 use ambre_draw::{
-    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Point, Rect, Stroke,
+    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Point, Rect,
+    Stroke,
 };
 use kurbo::{BezPath, PathEl, Shape};
 use lyon::math::point as lpoint;
@@ -289,10 +290,10 @@ impl DrawSurface for WgpuSurface<'_> {
         }
     }
 
-    fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: f64) {
         let t = self.transform();
-        let p0 = t * Point::new(x0, y0);
-        let p1 = t * Point::new(x1, y1);
+        let p0 = t * line.p0;
+        let p1 = t * line.p1;
         let (mut x0, mut y0, mut x1, mut y1) = (p0.x, p0.y, p1.x, p1.y);
         if let Some(clip) = self.active_clip() {
             let min_x = x0.min(x1);
