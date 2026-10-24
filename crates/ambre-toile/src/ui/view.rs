@@ -42,7 +42,7 @@ use ambre_canvas::{
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
     ThemeControl, WHEEL_LINE_PX, WheelDelta,
 };
-use ambre_core::{CssPx, CssVector};
+use ambre_core::{CssPx, CssVector, ViewPx};
 use ambre_draw::kinetic::{Release, ScrollStep};
 use ambre_draw::{FontContext, Point, Rect, Vec2};
 
@@ -3179,16 +3179,16 @@ impl ToileView {
 
     /// The text origin (top-left screen corner + padding) and wrap width in
     /// screen pixels of a world box. Also its full screen rect, for hit tests.
-    fn edit_geometry_of(&self, world: Rect) -> (Point, f32, Rect) {
+    fn edit_geometry_of(&self, world: Rect) -> (Point, ViewPx, Rect) {
         let sb = world_rect_to_screen(world, &self.cam);
         let pad = InlineEditor::pad(self.cam.zoom);
         let origin = Point::new(sb.x0 + pad, sb.y0 + pad);
-        let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
+        let wrap_w = ViewPx::new((sb.width() - 2.0 * pad).max(1.0) as f32);
         (origin, wrap_w, sb)
     }
 
     /// The edited element's text origin, wrap width and screen rect.
-    fn edit_geometry(&self, e: &DisplayElement) -> (Point, f32, Rect) {
+    fn edit_geometry(&self, e: &DisplayElement) -> (Point, ViewPx, Rect) {
         self.edit_geometry_of(e.bounds)
     }
 
@@ -3205,7 +3205,7 @@ impl ToileView {
     /// overlay rides. An element's box carries the element's angle; a connector
     /// caption's box is the arrow's mid-arc box and never rotates
     /// (`toile-connectors`). `None` when the target has left the culled set.
-    fn edit_target_geometry(&self) -> Option<(Point, f32, Rect, ambre_core::Radians)> {
+    fn edit_target_geometry(&self) -> Option<(Point, ViewPx, Rect, ambre_core::Radians)> {
         match self.editor.as_ref()?.target() {
             EditTarget::Element(id) => {
                 let e = self.find_element(id)?;

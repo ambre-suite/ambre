@@ -48,14 +48,22 @@ pub fn draw_edit<S: DrawSurface>(
     // cell's content width and Alt+Enter inserts explicit newlines, so the edit
     // is multi-line (Excel/Sheets in-cell editor).
     let pad = CELL_PAD_X.zoomed_on_surface(state.zoom).get();
-    let wrap_w = (cw - 2.0 * pad).max(1.0) as f32;
+    // A length on the surface is the same length on the view: only the origin
+    // of a coordinate differs.
+    let wrap_w = ambre_core::SurfacePx::new((cw - 2.0 * pad).max(1.0))
+        .in_view(ambre_core::SurfacePx::ZERO);
     editor.core.flush(font_cx, wrap_w, state.zoom);
 
     // The field grows downward to fit every line, overflowing the cell like a
     // spreadsheet, and is never shorter than the row. A layout that fits the row
     // stays vertically centred, matching the static cell. A taller one top-aligns
     // with a small pad, so line 0 reads at the cell top.
-    let text_h = editor.core.layout_height().unwrap_or(0.0) as f64;
+    let text_h = editor
+        .core
+        .layout_height()
+        .unwrap_or(ambre_core::ViewPx::ZERO)
+        .on_surface(ambre_core::SurfacePx::ZERO)
+        .get();
     let (y_off, box_h) = if text_h + 2.0 * pad <= ch {
         (((ch - text_h) / 2.0).max(0.0), ch)
     } else {

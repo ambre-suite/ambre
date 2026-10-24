@@ -13,7 +13,7 @@
 
 use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
-use ambre_core::Rgba;
+use ambre_core::{Rgba, ViewPx};
 use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
 // Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
@@ -198,7 +198,7 @@ impl InlineEditor {
     /// Push the pinned style + geometry onto the editor for this paint, then
     /// apply every queued intent. Must run before rendering. `wrap_w` is the wrap
     /// width in screen pixels; `zoom` bakes into the font size.
-    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: f32, zoom: ambre_core::ZoomFactor) {
+    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: ViewPx, zoom: ambre_core::ZoomFactor) {
         self.core.flush(font_cx, wrap_w, zoom);
     }
 

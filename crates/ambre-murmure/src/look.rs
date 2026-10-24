@@ -19,7 +19,7 @@ pub(crate) const CODE_FAMILY: &str = "Monospace";
 /// How far right a quote's and a list's lines start: the `space_6` step.
 /// The margin mark stands in it, and a wrapped line keeps the block's edge
 /// (`MURMURE-570`).
-pub(crate) const BLOCK_INDENT: u16 = SPACE_6 as u16;
+pub(crate) const BLOCK_INDENT: u16 = SPACE_6.get() as u16;
 
 /// The left and right edges of a quote's rule, in the indent.
 const QUOTE_RULE: (f64, f64) = (2.0, 4.0);

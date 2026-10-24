@@ -208,8 +208,8 @@ pub fn paint_fatal(
     // A centered column at most 640 logical pixels wide, the stack centered.
     let column = ViewPx::new((width * 0.8).min(640.0));
     let x = (f64::from(width) - f64::from(column.get())) / 2.0;
-    let heading = ViewPx::new(FONT_HEADING);
-    let body = ViewPx::new(FONT_BODY);
+    let heading = FONT_HEADING;
+    let body = FONT_BODY;
     let title_h = text_height(font_cx, cache, TITLE_TEXT, heading, column);
     let body_h = text_height(font_cx, cache, message, body, column);
     let gap = 16.0;

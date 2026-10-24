@@ -565,6 +565,11 @@ mod tests {
     use ambre_canvas::ThemeControl;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// The size of a region, in its view pixels.
+    fn view_size(width: f32, height: f32) -> ambre_core::ViewSize {
+        ambre_core::ViewSize::new(ambre_core::ViewPx::new(width), ambre_core::ViewPx::new(height))
+    }
+
     /// A box in the page, taken out when the test ends, even on a failed
     /// assertion, so no canvas outlives its test.
     struct Mounted(web_sys::HtmlElement);
@@ -649,7 +654,7 @@ mod tests {
         let mut cells = Cells::default();
         cells.sync(&page);
         let bound = &cells.bound[&THREAD_CANVAS];
-        assert_eq!(murmure(&bound.view.borrow()).size(), (160.0, 90.0));
+        assert_eq!(murmure(&bound.view.borrow()).size(), view_size(160.0, 90.0));
         assert_ne!(
             (canvas.width(), canvas.height()),
             (300, 150),
@@ -673,7 +678,7 @@ mod tests {
 
         resize(&cell.0, 200, 120);
         sleep(50).await;
-        assert_eq!(murmure(&first.borrow()).size(), (200.0, 120.0));
+        assert_eq!(murmure(&first.borrow()).size(), view_size(200.0, 120.0));
     }
 
     /// A finger on a cell holds its list rather than pointing at it, and a
@@ -848,7 +853,7 @@ mod tests {
 
     /// A point in the field of `view`, a view `height` pixels tall.
     fn field_of(view: &MurmureView, height: f64) -> (f64, f64) {
-        (40.0, height - f64::from(view.composer().band()) / 2.0)
+        (40.0, height - f64::from(view.composer().band().get()) / 2.0)
     }
 
     /// `CANVAS-076`: the text pipe writes into the cell whose field took the

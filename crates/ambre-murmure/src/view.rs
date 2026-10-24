@@ -25,7 +25,7 @@ use ambre_canvas::{
     TextInput, Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
-use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx};
+use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
@@ -40,7 +40,7 @@ use crate::list::{Conversations, JUMP_HINT, MessageList, ReadMarks, Row, RowKey,
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
 use crate::mention_list::OfferIndex;
-use crate::paint::{Painted, Pictured, Shown, paint_jump, paint_list};
+use crate::paint::{Painted, Pictured, RowBounds, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
 use crate::uploads::{PickedFile, Uploaded};
@@ -142,7 +142,15 @@ const AT_FRACTION: f32 = 0.25;
 
 /// How far a focused row may pass an edge of the viewport before the list
 /// moves to show it: a rounding, not a scroll.
-const REVEAL_SLACK_PX: f32 = 0.5;
+const REVEAL_SLACK_PX: ViewPx = ViewPx::new(0.5);
+
+/// The size of a region, from the CSS pixels the page gives it. A view
+/// pixel is a CSS pixel in size (`CANVAS-032`).
+fn view_size(size: ambre_canvas::CssSize) -> ViewSize {
+    #[allow(clippy::cast_precision_loss)]
+    let (width, height) = (size.width as f32, size.height as f32);
+    ViewSize::new(ViewPx::new(width), ViewPx::new(height))
+}
 
 /// The point `at` in the `f64` of the shapes the list hit-tests.
 fn on_screen(at: ViewPoint) -> Point {
@@ -227,7 +235,7 @@ pub struct MurmureView {
     last: Option<Painted>,
     theme_ctl: ThemeControl,
     theme: Theme,
-    size: (f32, f32),
+    size: ViewSize,
     /// Where the pointer last was over this region, in its own pixels. `None`
     /// before it came. The hover bar of a message reads it.
     hover: Option<Point>,
@@ -239,7 +247,7 @@ pub struct MurmureView {
     /// The first row on screen at the last paint, and its top.
     top_row: Option<(RowKey, ambre_core::ViewPx)>,
     /// The way the last step went: below zero towards the oldest row.
-    heading: f32,
+    heading: ViewPx,
     /// The scroll, through the model every application shares
     /// (`MURMURE-417`).
     kinetic: Kinetic,
@@ -326,12 +334,12 @@ impl MurmureView {
             last: None,
             theme_ctl,
             theme,
-            size: (size.width as f32, size.height as f32),
+            size: view_size(size),
             hover: None,
             rest: Rest::Latest,
             pending: false,
             top_row: None,
-            heading: 0.0,
+            heading: ViewPx::ZERO,
             kinetic: Kinetic::default(),
             asked_older: None,
             jump: None,
@@ -371,13 +379,13 @@ impl MurmureView {
     }
 
     /// The size this region lays out in, in logical pixels.
-    pub fn size(&self) -> (f32, f32) {
+    pub fn size(&self) -> ViewSize {
         self.size
     }
 
     /// The height the list lays out in: the region, less the composer.
-    fn list_height(&self) -> f32 {
-        (self.size.1 - self.composer.band()).max(0.0)
+    fn list_height(&self) -> ViewPx {
+        (self.size.height - self.composer.band()).max(ViewPx::ZERO)
     }
 
     /// The channel on screen in the channel's region, `None` in the thread's
@@ -399,7 +407,7 @@ impl MurmureView {
 
     /// Whether the height `y` falls in the composer's band.
     fn in_composer(&self, y: ViewPx) -> bool {
-        self.composer.band() > 0.0 && y.get() >= self.list_height()
+        self.composer.band() > ViewPx::ZERO && y >= self.list_height()
     }
 
     /// The composer, for the page and for tests.
@@ -515,7 +523,7 @@ impl MurmureView {
             anchor_y: anchor_y - step.y(),
         };
         self.pending = false;
-        self.heading = step.y().get();
+        self.heading = step.y();
         self.dirty = true;
     }
 
@@ -524,7 +532,7 @@ impl MurmureView {
     fn page(&mut self, pages: f32) {
         let now_ms = (self.reads.now_ms)();
         let step = self.kinetic.wheel(
-            down(CssPx::new(pages * self.list_height())),
+            down((self.list_height() * pages).on_page(CssPx::ZERO)),
             WheelDeltaMode::Page,
             now_ms,
         );
@@ -797,7 +805,7 @@ impl MurmureView {
         };
         self.rest = Rest::Row {
             key: RowKey::Message(message),
-            anchor_y: ambre_core::ViewPx::new(self.list_height() * AT_FRACTION),
+            anchor_y: self.list_height() * AT_FRACTION,
         };
         self.pending = false;
         self.kinetic.stop();
@@ -859,10 +867,10 @@ impl MurmureView {
     /// of its row, where the menu opens below it (`MURMURE-511`). `None`
     /// with no focus on screen, or on a band.
     fn target_of_focus(&self) -> Option<MessageTarget> {
-        let (top, bottom) = self.last.as_ref()?.focus?;
-        let middle = ViewPoint::new(ViewPx::ZERO, ViewPx::new((top + bottom) / 2.0));
+        let RowBounds { top, bottom } = self.last.as_ref()?.focus?;
+        let middle = ViewPoint::new(ViewPx::ZERO, (top + bottom) / 2.0);
         let mut target = self.target_at(middle, Press::Click)?;
-        target.pressed = Some(ViewPoint::new(ViewPx::ZERO, ViewPx::new(bottom)));
+        target.pressed = Some(ViewPoint::new(ViewPx::ZERO, bottom));
         Some(target)
     }
 
@@ -918,7 +926,7 @@ impl MurmureView {
             self.reveal = false;
             return;
         };
-        let Some((top, bottom)) = painted.focus else {
+        let Some(RowBounds { top, bottom }) = painted.focus else {
             self.rest = Rest::Row {
                 key,
                 anchor_y: ambre_core::ViewPx::ZERO,
@@ -938,7 +946,7 @@ impl MurmureView {
         let now_ms = (self.reads.now_ms)();
         let step = self
             .kinetic
-            .wheel(down(CssPx::new(over)), WheelDeltaMode::Page, now_ms);
+            .wheel(down(over.on_page(CssPx::ZERO)), WheelDeltaMode::Page, now_ms);
         self.scroll_by(step);
     }
 
@@ -1048,7 +1056,7 @@ impl MurmureView {
     /// A drag past the top or the bottom edge scrolls the list by how far
     /// it passed.
     fn drag_past_edge(&mut self, y: ViewPx) {
-        let bottom = ViewPx::new(self.list_height());
+        let bottom = self.list_height();
         let over = if y < ViewPx::ZERO {
             y
         } else {
@@ -1204,7 +1212,7 @@ impl MurmureView {
         if let Some(text) = self.composer.take_said() {
             (self.reads.announce)(&text);
         }
-        let list_size = (self.size.0, self.list_height());
+        let list_size = ViewSize::new(self.size.width, self.list_height());
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
         let empty = MessageList::default();
@@ -1304,22 +1312,17 @@ impl MurmureView {
             self.size,
             palette,
         );
-        if let Some((x, y, tall)) = caret {
+        if let Some(caret) = caret {
             // The input method opens where the caret is (`MURMURE-430`).
-            self.reads.pipe.set_caret(
-                ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-                ViewPx::new(tall.max(1.0)),
-            );
+            self.reads
+                .pipe
+                .set_caret(caret.at, caret.tall.max(ViewPx::new(1.0)));
         }
-        self.list_mentions(caret.map(|(x, y, _)| ViewPoint::new(ViewPx::new(x), ViewPx::new(y))));
+        self.list_mentions(caret.map(|caret| caret.at));
         // The format bar hangs over a selection, and leaves with it.
-        let bar = caret.zip(writes_in).and_then(|((x, y, _), of)| {
-            self.composer.mark_bar(
-                of,
-                ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-                self.region,
-            )
-        });
+        let bar = caret
+            .zip(writes_in)
+            .and_then(|(caret, of)| self.composer.mark_bar(of, caret.at, self.region));
         if bar != self.barred {
             self.barred.clone_from(&bar);
             (self.reads.show_bar)(self.region, bar);
@@ -1495,15 +1498,15 @@ impl MurmureView {
         let at_oldest = painted
             .rest
             .is_some_and(|(i, y)| i == 0 && y >= ambre_core::ViewPx::ZERO);
-        let edge = if self.heading > 0.0 {
+        let edge = if self.heading > ViewPx::ZERO {
             at_latest
         } else {
             at_oldest || (at_latest && painted.oldest_shown)
         };
-        if self.heading != 0.0 && edge {
+        if self.heading != ViewPx::ZERO && edge {
             self.kinetic.stop();
         }
-        self.heading = 0.0;
+        self.heading = ViewPx::ZERO;
     }
 
     /// Which list the pane shows in this region, `None` when it shows none.
@@ -1540,7 +1543,7 @@ impl MurmureView {
 
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
     pub fn resize(&mut self, size: ambre_canvas::CssSize) {
-        self.size = (size.width as f32, size.height as f32);
+        self.size = view_size(size);
         self.dirty = true;
     }
 
@@ -1665,7 +1668,7 @@ impl MurmureView {
                 ctrl_key: false,
             } => {
                 let line = ambre_canvas::WHEEL_LINE_PX;
-                let page = CssPx::new(self.list_height());
+                let page = self.list_height().on_page(CssPx::ZERO);
                 let px = delta.to_px(CssVector::new(line, line), CssVector::new(page, page));
                 let now_ms = (self.reads.now_ms)();
                 let step = self.kinetic.wheel(down(px.dy), delta.mode(), now_ms);
@@ -1813,7 +1816,7 @@ mod tests {
         ChannelId, HeldReply, HeldSend, MediaRef, MediaType, Mention, MentionTarget, MessageView,
         MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
-    use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
+    use ambre_canvas::theme;
     use ambre_draw::kinetic::LONG_PRESS_MS;
     use ambre_draw::testing::RecordingSurface;
 
@@ -1824,7 +1827,28 @@ mod tests {
         ViewPoint::new(ViewPx::new(x.into() as f32), ViewPx::new(y.into() as f32))
     }
     use crate::commands::REPLY;
-    use crate::composer::ALSO_PX;
+
+    // The scale, in the floats the tests compute their points with.
+    const FONT_BODY: ViewPx = theme::FONT_BODY;
+    const FONT_UI: ViewPx = theme::FONT_UI;
+    const SPACE_2: f32 = theme::SPACE_2.get();
+    const SPACE_4: f32 = theme::SPACE_4.get();
+    const SPACE_8: f32 = theme::SPACE_8.get();
+    const ALSO_PX: f32 = crate::composer::ALSO_PX.get();
+
+    /// Each row of a paint as its index, its top and its bottom.
+    fn spans(rows: &[crate::paint::PaintedRow]) -> Vec<(usize, f32, f32)> {
+        rows.iter()
+            .map(|row| (row.index, row.bounds.top.get(), row.bounds.bottom.get()))
+            .collect()
+    }
+
+    /// The top and the bottom of the focused row of a paint.
+    fn focus_of(painted: &Painted) -> Option<(f32, f32)> {
+        painted
+            .focus
+            .map(|focus| (focus.top.get(), focus.bottom.get()))
+    }
     use crate::list::tests::message;
     use ambre_bus::ThreadHead;
 
@@ -2250,7 +2274,7 @@ mod tests {
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
         assert_eq!(reads(&page).0, 1);
-        let rows = page.view.last_painted().expect("painted").rows;
+        let rows = spans(&page.view.last_painted().expect("painted").rows);
         let [(_, _, first), (_, top, second)] = rows.as_slice() else {
             panic!("two rows: {rows:?}");
         };
@@ -2303,7 +2327,7 @@ mod tests {
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
         assert_eq!(reads(&page).0, 1);
-        let rows = page.view.last_painted().expect("painted").rows;
+        let rows = spans(&page.view.last_painted().expect("painted").rows);
         let [(_, _, first), (_, _, second)] = rows.as_slice() else {
             panic!("two rows: {rows:?}");
         };
@@ -2314,7 +2338,7 @@ mod tests {
                 &mut cache,
                 text,
                 FONT_BODY,
-                284.0,
+                ViewPx::new(284.0),
                 ambre_canvas::Weight::Regular,
             );
             f64::from(SPACE_8 + width.width())
@@ -2377,7 +2401,7 @@ mod tests {
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
         reads(&page);
-        let rows = page.view.last_painted().expect("painted").rows;
+        let rows = spans(&page.view.last_painted().expect("painted").rows);
         let [(_, _, bottom)] = rows.as_slice() else {
             panic!("one row: {rows:?}");
         };
@@ -2387,7 +2411,7 @@ mod tests {
             &mut cache,
             "\u{1F44D} 1",
             FONT_UI,
-            284.0,
+            ViewPx::new(284.0),
             ambre_canvas::Weight::Regular,
         );
         let y = f64::from(bottom - 2.0 * SPACE_2 - 2.0);
@@ -2817,7 +2841,7 @@ mod tests {
             );
             frame(&mut page.view);
             frame(&mut page.view);
-            let (top, bottom) = shown(&page.view).focus.expect("the focus on screen");
+            let (top, bottom) = focus_of(&shown(&page.view)).expect("the focus on screen");
             assert!(top >= -1.0 && bottom <= 401.0, "{step}: {top} {bottom}");
         }
         assert_eq!(page.view.focused(), row(&rows, 339));
@@ -3021,8 +3045,7 @@ mod tests {
     /// The middle height of the row at `index`, as the last paint placed it.
     fn middle_of(view: &MurmureView, index: usize) -> f32 {
         let painted = shown(view);
-        let &(_, top, bottom) = painted
-            .rows
+        let &(_, top, bottom) = spans(&painted.rows)
             .iter()
             .find(|&&(i, _, _)| i == index)
             .expect("the row on screen");
@@ -3174,7 +3197,7 @@ mod tests {
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         // The list rests on its latest row: the top of the region is empty.
-        let above = shown(&page.view).rows.first().map_or(0.0, |r| r.1) - 1.0;
+        let above = shown(&page.view).rows.first().map_or(0.0, |r| r.bounds.top.get()) - 1.0;
         assert!(above > 0.0, "room above the first row");
         button(&mut page, PointerButton::Secondary, above);
         assert_eq!(page.acted.borrow().last(), Some(&None), "off any message");
@@ -3267,7 +3290,7 @@ mod tests {
 
         assert!(key(&mut page, "ArrowUp", false, ambre_bus::PageTime(20.0)));
         frame(&mut page.view);
-        let (_, bottom) = shown(&page.view).focus.expect("the focus on screen");
+        let (_, bottom) = focus_of(&shown(&page.view)).expect("the focus on screen");
         // The paints at the bottom marked the latest message read.
         while page.commands.try_recv().is_ok() {}
         assert!(key(
@@ -3354,7 +3377,7 @@ mod tests {
         };
         assert!(!page.view.handle_input(&ev));
         assert_eq!(page.view.hover(), Some(Point::new(3.0, 4.0)));
-        assert_eq!(page.view.size(), (300.0, 400.0));
+        assert_eq!(page.view.size(), ViewSize::new(ViewPx::new(300.0), ViewPx::new(400.0)));
     }
 
     /// A page on `channel`, painted once so the composer's band exists.
@@ -3816,9 +3839,9 @@ mod tests {
     fn the_band_holds_a_field_and_no_toolbar() {
         let channel = ChannelId::new();
         let mut page = composing(channel);
-        let band = page.view.composer().band();
+        let band = page.view.composer().band().get();
         assert!(band > 0.0, "a channel region shows the composer");
-        assert_eq!(page.view.list_height(), 400.0 - band);
+        assert_eq!(page.view.list_height().get(), 400.0 - band);
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
@@ -3837,7 +3860,7 @@ mod tests {
 
         page.pane.set(MurmurePane::ChannelList);
         frame_with_fonts(&mut page.view);
-        assert_eq!(page.view.composer().band(), 0.0, "no channel, no composer");
+        assert_eq!(page.view.composer().band().get(), 0.0, "no channel, no composer");
     }
 
     /// A press in the band gives the pipe the keyboard and is consumed.
@@ -4450,8 +4473,8 @@ mod tests {
         let mut surface = RecordingSurface::new();
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
-        let top = f64::from(400.0 - page.view.composer().band());
-        let field = top + f64::from(FONT_UI + SPACE_4);
+        let top = f64::from(400.0 - page.view.composer().band().get());
+        let field = top + f64::from(FONT_UI.get() + SPACE_4);
         surface
             .ops()
             .iter()
@@ -4475,7 +4498,7 @@ mod tests {
     fn the_band_names_who_types() {
         let channel = ChannelId::new();
         let mut page = composing(channel);
-        let band = page.view.composer().band();
+        let band = page.view.composer().band().get();
         assert!(strip_runs(&mut page).is_empty(), "nobody types");
         let (ada, bob) = (UserId::new(), UserId::new());
         let watchers = |typing: Vec<UserId>| MurmureEvent::Watchers {
@@ -4485,7 +4508,7 @@ mod tests {
         };
         send(&page, channel, watchers(vec![ada]));
         assert_eq!(strip_runs(&mut page), vec!["Ada is typing".len()]);
-        assert_eq!(page.view.composer().band(), band, "the list did not move");
+        assert_eq!(page.view.composer().band().get(), band, "the list did not move");
         send(&page, channel, watchers(vec![ada, bob]));
         assert_eq!(strip_runs(&mut page), vec!["Ada and Ada are typing".len()]);
         send(&page, channel, watchers(vec![]));
@@ -4618,7 +4641,7 @@ mod tests {
         let channel = ChannelId::new();
         let (mut page, _channel_view, root, _) = threaded(channel);
         assert!(
-            page.view.composer().band() > 0.0,
+            page.view.composer().band().get() > 0.0,
             "the thread has a composer"
         );
         assert!(press_composer(&mut page));
@@ -4812,7 +4835,7 @@ mod tests {
         let channel = ChannelId::new();
         let (mut page, channel_view, root, _) = threaded(channel);
         let of = DraftOf::Thread(channel, root);
-        let bottom = page.view.size().1 - ALSO_PX / 2.0;
+        let bottom = page.view.size().height.get() - ALSO_PX / 2.0;
         assert!(press_composer(&mut page));
         assert!(press_at(&mut page, bottom), "the press on the box is taken");
         assert!(page.view.composer().also_in_channel(of) == ReplyEcho::AlsoInChannel);
@@ -4842,7 +4865,7 @@ mod tests {
         let channel = ChannelId::new();
         let (mut page, _channel_view, root, _) = threaded(channel);
         let of = DraftOf::Thread(channel, root);
-        let bottom = page.view.size().1 - ALSO_PX / 2.0;
+        let bottom = page.view.size().height.get() - ALSO_PX / 2.0;
         for checked in [true, false] {
             page.view
                 .touch_down(pointer(10.0, bottom), ambre_bus::PageTime(0.0));
@@ -5303,7 +5326,7 @@ mod tests {
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         let ink = crate::look::margin_ink(page.view.theme.palette());
-        let top = f64::from(400.0 - page.view.composer().band());
+        let top = f64::from(400.0 - page.view.composer().band().get());
         let indent = f64::from(SPACE_8) + f64::from(crate::look::BLOCK_INDENT);
         surface.count(|op| {
             matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
@@ -5391,7 +5414,7 @@ mod tests {
         page.view
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         let ink = page.view.theme.palette().cell_text;
-        let top = f64::from(400.0 - page.view.composer().band());
+        let top = f64::from(400.0 - page.view.composer().band().get());
         let mut lines: Vec<(f64, f64)> = surface
             .ops()
             .iter()

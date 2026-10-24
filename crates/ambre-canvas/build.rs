@@ -287,7 +287,11 @@ fn main() {
 
     for (name, value) in &tokens.scale {
         let rust_name = name.to_ascii_uppercase();
-        rs.push_str(&format!("pub const {rust_name}: f32 = {value}.0;\n"));
+        // A scale step is a length on the canvas's view (`CANVAS-032`): a
+        // spacing, a radius or a font size the canvas draws at.
+        rs.push_str(&format!(
+            "pub const {rust_name}: ambre_core::ViewPx = ambre_core::ViewPx::new({value}.0);\n"
+        ));
     }
 
     fs::write(Path::new(&out_dir).join("theme_gen.rs"), rs).expect("write theme_gen.rs");

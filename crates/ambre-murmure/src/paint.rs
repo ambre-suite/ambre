@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
     Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
@@ -27,7 +27,7 @@ use crate::select::{Selecting, Spot, TextSelection};
 const SELECTION_ALPHA: f32 = 0.3;
 /// The height of the box an image previews in. A picture not decoded yet
 /// takes the same, so its row keeps its height when it lands.
-pub const PREVIEW_TALL: f32 = 160.0;
+pub const PREVIEW_TALL: ViewPx = ViewPx::new(160.0);
 /// The aspect of the box a picture not decoded yet holds.
 const PLACEHOLDER_ASPECT: f32 = 4.0 / 3.0;
 
@@ -58,6 +58,76 @@ struct Played {
     next: Option<ambre_core::PageTime>,
 }
 
+/// The top and the bottom of a row on screen.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowBounds {
+    pub top: ViewPx,
+    pub bottom: ViewPx,
+}
+
+impl RowBounds {
+    /// Whether the height `y` falls on the row, its bottom left out.
+    pub fn holds(self, y: ViewPx) -> bool {
+        self.top <= y && y < self.bottom
+    }
+}
+
+/// A row on screen: its index in the list, and where it lies.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PaintedRow {
+    pub index: usize,
+    pub bounds: RowBounds,
+}
+
+/// A row the paint laid out: its index in the list, its top and its height.
+#[derive(Debug, Clone, Copy)]
+struct LaidRow {
+    index: usize,
+    top: ViewPx,
+    tall: ViewPx,
+}
+
+impl LaidRow {
+    /// Whether the height `y` falls on the row, its bottom left out.
+    fn holds(self, y: ViewPx) -> bool {
+        self.top <= y && y < self.top + self.tall
+    }
+}
+
+/// A length of the painter, as the float a rectangle of the surface takes.
+pub(crate) fn surface_px(length: ViewPx) -> f64 {
+    f64::from(length.get())
+}
+
+/// A coordinate of the surface, as a length of the painter. The surface
+/// draws in the same logical pixels; only the float narrows.
+fn painter_px(at: f64) -> ViewPx {
+    #[allow(clippy::cast_possible_truncation)]
+    let at = at as f32;
+    ViewPx::new(at)
+}
+
+/// The rectangle of the surface between the edges `left`, `top`, `right`
+/// and `bottom` of the painter.
+pub(crate) fn view_rect(left: ViewPx, top: ViewPx, right: ViewPx, bottom: ViewPx) -> Rect {
+    Rect::new(
+        surface_px(left),
+        surface_px(top),
+        surface_px(right),
+        surface_px(bottom),
+    )
+}
+
+/// The width a shaped text takes, in the painter's pixels.
+pub(crate) fn text_width(layout: &Layout<ParleyBrush>) -> ViewPx {
+    ViewPx::new(layout.width())
+}
+
+/// The height a shaped text takes, in the painter's pixels.
+pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> ViewPx {
+    ViewPx::new(layout.height())
+}
+
 /// What one paint of the list did.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Painted {
@@ -78,10 +148,10 @@ pub struct Painted {
     pub bottom: Option<usize>,
     /// The top and the bottom of the focused row, `None` when it is off
     /// screen (`MURMURE-205`).
-    pub focus: Option<(f32, f32)>,
+    pub focus: Option<RowBounds>,
     /// Each row on screen, top first: its index, its top and its bottom. A
     /// press finds the row under it here.
-    pub rows: Vec<(usize, f32, f32)>,
+    pub rows: Vec<PaintedRow>,
     /// The selection, with the points the paint resolved into it
     /// (`MURMURE-425`).
     pub selection: Option<TextSelection>,
@@ -104,11 +174,10 @@ impl Painted {
     /// The index of the row under the height `y`, `None` between rows or
     /// past them.
     pub fn row_at(&self, y: ViewPx) -> Option<usize> {
-        let y = y.get();
         self.rows
             .iter()
-            .find(|&&(_, top, bottom)| top <= y && y < bottom)
-            .map(|&(i, _, _)| i)
+            .find(|row| row.bounds.holds(y))
+            .map(|row| row.index)
     }
 }
 
@@ -141,18 +210,18 @@ pub fn paint_list<S: DrawSurface>(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     shown: Shown<'_>,
-    size: (f32, f32),
+    size: ViewSize,
     palette: &Palette,
     name_of: &dyn Fn(UserId) -> Option<ambre_core::DisplayName>,
     time_of: &dyn Fn(Timestamp) -> String,
 ) -> Painted {
-    let (width, height) = size;
-    let backdrop = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+    let (width, height) = (size.width, size.height);
+    let backdrop = view_rect(ViewPx::ZERO, ViewPx::ZERO, width, height);
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
-    let text_width = (width - 2.0 * SPACE_8).max(1.0);
+    let text_width = (width - SPACE_8 * 2.0).max(ViewPx::new(1.0));
     let mut words: HashMap<usize, (RowWords, bool)> = HashMap::new();
-    let reached = window(rows.len(), ViewPx::new(height), shown.anchor, |i| {
+    let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return ViewPx::ZERO;
         };
@@ -163,13 +232,13 @@ pub fn paint_list<S: DrawSurface>(
             tall += line_height(font_cx, cache, text_width);
         }
         words.insert(i, (row, line));
-        ViewPx::new(tall)
+        tall
     });
-    // The rows the paint draws and hit-tests, in the floats its layout takes.
-    let laid: Vec<(usize, f32, f32)> = reached
+    // The rows the paint draws and hit-tests.
+    let laid: Vec<LaidRow> = reached
         .rows
         .iter()
-        .map(|&(i, top, tall)| (i, top.get(), tall.get()))
+        .map(|&(index, top, tall)| LaidRow { index, top, tall })
         .collect();
     let selecting = shown.selecting;
     let active = selecting != Selecting::default();
@@ -204,7 +273,7 @@ pub fn paint_list<S: DrawSurface>(
     let mut played = Played::default();
     let mut line_shown = false;
     let mut focus = None;
-    for &(i, top, tall) in &laid {
+    for &LaidRow { index: i, top, tall } in &laid {
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
@@ -225,9 +294,9 @@ pub fn paint_list<S: DrawSurface>(
             let layout = body(font_cx, cache, row, text_width);
             // The tints go first, so a selection band stays visible over code.
             for (bytes, color) in tints {
-                fill_bytes(surface, layout, bytes, ViewPx::new(body_y), color);
+                fill_bytes(surface, layout, bytes, body_y, color);
             }
-            let (x, y) = (f64::from(SPACE_8), f64::from(body_y));
+            let (x, y) = (surface_px(SPACE_8), surface_px(body_y));
             for mark in &row.marks {
                 for at in look::margin(layout, &row.body, &mark.style, mark.bytes) {
                     let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
@@ -236,7 +305,7 @@ pub fn paint_list<S: DrawSurface>(
             }
             if let Some(band) = band {
                 let tint = palette.selection.with_alpha(SELECTION_ALPHA);
-                fill_bytes(surface, layout, band, ViewPx::new(body_y), tint);
+                fill_bytes(surface, layout, band, body_y, tint);
             }
         }
         let bottom = top + tall;
@@ -258,14 +327,9 @@ pub fn paint_list<S: DrawSurface>(
             &mut played,
         );
         if shown.focus == Some(i) {
-            let ring = Rect::new(
-                f64::from(SPACE_2),
-                f64::from(top),
-                f64::from(width - SPACE_2),
-                f64::from(bottom),
-            );
+            let ring = view_rect(SPACE_2, top, width - SPACE_2, bottom);
             surface.stroke_rect(ring, palette.selection, 2.0);
-            focus = Some((top, bottom));
+            focus = Some(RowBounds { top, bottom });
         }
     }
     Painted {
@@ -279,7 +343,13 @@ pub fn paint_list<S: DrawSurface>(
         focus,
         rows: laid
             .iter()
-            .map(|&(i, top, tall)| (i, top, top + tall))
+            .map(|row| PaintedRow {
+                index: row.index,
+                bounds: RowBounds {
+                    top: row.top,
+                    bottom: row.top + row.tall,
+                },
+            })
             .collect(),
         selection,
         link,
@@ -295,27 +365,25 @@ pub fn paint_list<S: DrawSurface>(
 fn chip_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    rows: &[(usize, f32, f32)],
+    rows: &[LaidRow],
     words: &HashMap<usize, (RowWords, bool)>,
     at: ViewPoint,
-    width: f32,
+    width: ViewPx,
     pics: Option<Pictured<'_>>,
 ) -> Option<(usize, Emoji)> {
-    let (x, y) = (at.x.get(), at.y.get());
-    let &(i, top, _) = rows
-        .iter()
-        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (x, y) = (at.x, at.y);
+    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
     let (row, line) = words.get(&i)?;
     if row.reactions.is_empty() {
         return None;
     }
     // The reactions sit under the previews and the files.
     let chips_y = body_top(font_cx, cache, row, *line, top, width)
-        + body(font_cx, cache, row, width).height()
+        + text_height(body(font_cx, cache, row, width))
         + previews_height(row, pics)
         + file_chips(font_cx, cache, row, width).1;
     let (boxes, _) = chips(font_cx, cache, row, width);
-    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - chips_y));
+    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - chips_y));
     boxes
         .iter()
         .zip(&row.reactions)
@@ -330,8 +398,8 @@ fn chips(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    width: f32,
-) -> (Vec<Rect>, f32) {
+    width: ViewPx,
+) -> (Vec<Rect>, ViewPx) {
     let labels: Vec<String> = row.reactions.iter().map(chip_label).collect();
     chip_boxes(font_cx, cache, &labels, width)
 }
@@ -341,8 +409,8 @@ fn file_chips(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    width: f32,
-) -> (Vec<Rect>, f32) {
+    width: ViewPx,
+) -> (Vec<Rect>, ViewPx) {
     let labels: Vec<String> = row.files.iter().map(file_label).collect();
     chip_boxes(font_cx, cache, &labels, width)
 }
@@ -353,13 +421,13 @@ fn chip_boxes(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     labels: &[String],
-    width: f32,
-) -> (Vec<Rect>, f32) {
+    width: ViewPx,
+) -> (Vec<Rect>, ViewPx) {
     if labels.is_empty() {
-        return (Vec::new(), 0.0);
+        return (Vec::new(), ViewPx::ZERO);
     }
     let mut boxes = Vec::with_capacity(labels.len());
-    let (mut x, mut y, mut line) = (0.0_f32, SPACE_2, 0.0_f32);
+    let (mut x, mut y, mut line) = (ViewPx::ZERO, SPACE_2, ViewPx::ZERO);
     for label in labels {
         let layout = shape(
             font_cx,
@@ -370,19 +438,14 @@ fn chip_boxes(
             ambre_canvas::Weight::Regular,
         );
         let (wide, tall) = (
-            layout.width() + 2.0 * SPACE_4,
-            layout.height() + 2.0 * SPACE_2,
+            text_width(layout) + SPACE_4 * 2.0,
+            text_height(layout) + SPACE_2 * 2.0,
         );
-        if x > 0.0 && x + wide > width {
-            (x, y) = (0.0, y + line + SPACE_2);
-            line = 0.0;
+        if x > ViewPx::ZERO && x + wide > width {
+            (x, y) = (ViewPx::ZERO, y + line + SPACE_2);
+            line = ViewPx::ZERO;
         }
-        boxes.push(Rect::new(
-            f64::from(x),
-            f64::from(y),
-            f64::from(x + wide),
-            f64::from(y + tall),
-        ));
+        boxes.push(view_rect(x, y, x + wide, y + tall));
         x += wide + SPACE_4;
         line = line.max(tall);
     }
@@ -398,7 +461,7 @@ fn draw_chips<S: DrawSurface>(
     cache: &mut TextCache,
     row: &RowWords,
     at: Point,
-    width: f32,
+    width: ViewPx,
     palette: &Palette,
     me: Option<UserId>,
 ) {
@@ -422,14 +485,8 @@ fn draw_chips<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        #[allow(clippy::cast_possible_truncation)]
-        let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
-        draw(
-            surface,
-            layout,
-            ViewPoint::new(ViewPx::new(left), ViewPx::new(top)),
-            palette.cell_text,
-        );
+        let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
+        draw(surface, layout, ViewPoint::new(left, top), palette.cell_text);
     }
 }
 
@@ -441,7 +498,7 @@ fn draw_files<S: DrawSurface>(
     cache: &mut TextCache,
     row: &RowWords,
     at: Point,
-    width: f32,
+    width: ViewPx,
     palette: &Palette,
 ) {
     let (boxes, _) = file_chips(font_cx, cache, row, width);
@@ -458,14 +515,8 @@ fn draw_files<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        #[allow(clippy::cast_possible_truncation)]
-        let (left, top) = (at.x0 as f32 + SPACE_4, at.y0 as f32 + SPACE_2);
-        draw(
-            surface,
-            layout,
-            ViewPoint::new(ViewPx::new(left), ViewPx::new(top)),
-            palette.selection,
-        );
+        let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
+        draw(surface, layout, ViewPoint::new(left, top), palette.selection);
     }
 }
 
@@ -474,23 +525,21 @@ fn draw_files<S: DrawSurface>(
 fn file_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    rows: &[(usize, f32, f32)],
+    rows: &[LaidRow],
     words: &HashMap<usize, (RowWords, bool)>,
     at: ViewPoint,
-    width: f32,
+    width: ViewPx,
     pics: Option<Pictured<'_>>,
 ) -> Option<Attachment> {
-    let (x, y) = (at.x.get(), at.y.get());
-    let &(i, top, _) = rows
-        .iter()
-        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (x, y) = (at.x, at.y);
+    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
     let (row, line) = words.get(&i)?;
     if row.files.is_empty() {
         return None;
     }
     let previews_y = body_top(font_cx, cache, row, *line, top, width)
-        + body(font_cx, cache, row, width).height();
-    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - previews_y));
+        + text_height(body(font_cx, cache, row, width));
+    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - previews_y));
     let hit = |b: &Rect| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1;
     if let Some((file, _)) = preview_boxes(row, pics, width)
         .into_iter()
@@ -498,7 +547,7 @@ fn file_at(
     {
         return Some(file.clone());
     }
-    let y = y - f64::from(previews_height(row, pics));
+    let y = y - surface_px(previews_height(row, pics));
     let (boxes, _) = file_chips(font_cx, cache, row, width);
     boxes
         .iter()
@@ -512,19 +561,17 @@ fn file_at(
 fn link_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    rows: &[(usize, f32, f32)],
+    rows: &[LaidRow],
     words: &HashMap<usize, (RowWords, bool)>,
     at: ViewPoint,
-    width: f32,
+    width: ViewPx,
 ) -> Option<ambre_core::LinkUrl> {
-    let (x, y) = (at.x.get(), at.y.get());
-    let &(i, top, _) = rows
-        .iter()
-        .find(|&&(_, top, tall)| top <= y && y < top + tall)?;
+    let (x, y) = (at.x, at.y);
+    let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
     let (row, line) = words.get(&i)?;
     let body_y = body_top(font_cx, cache, row, *line, top, width);
     let layout = body(font_cx, cache, row, width);
-    let (x, y) = (f64::from(x - SPACE_8), f64::from(y - body_y));
+    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - body_y));
     row.marks.iter().find_map(|mark| {
         let TextStyle::Link(address) = &mark.style else {
             return None;
@@ -545,21 +592,21 @@ fn link_at(
 fn spot_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    rows: &[(usize, f32, f32)],
+    rows: &[LaidRow],
     words: &HashMap<usize, (RowWords, bool)>,
     keys: &[RowKey],
     at: ViewPoint,
-    width: f32,
+    width: ViewPx,
 ) -> Option<Spot> {
-    let (x, y) = (at.x.get(), at.y.get());
-    let &(i, top, _) = rows
+    let (x, y) = (at.x, at.y);
+    let &LaidRow { index: i, top, .. } = rows
         .iter()
-        .find(|&&(_, top, tall)| y < top + tall)
+        .find(|row| y < row.top + row.tall)
         .or_else(|| rows.last())?;
     let (row, line) = words.get(&i)?;
     let body_y = body_top(font_cx, cache, row, *line, top, width);
     let layout = body(font_cx, cache, row, width);
-    let cursor = Cursor::from_point(layout, x - SPACE_8, y - body_y);
+    let cursor = Cursor::from_point(layout, (x - SPACE_8).get(), (y - body_y).get());
     Some(Spot {
         row: *keys.get(i)?,
         byte: ByteOffset::from_usize(cursor.index()),
@@ -573,9 +620,9 @@ fn body_top(
     cache: &mut TextCache,
     row: &RowWords,
     line: bool,
-    top: f32,
-    width: f32,
-) -> f32 {
+    top: ViewPx,
+    width: ViewPx,
+) -> ViewPx {
     let mut y = top + SPACE_2;
     if line {
         y += line_height(font_cx, cache, width);
@@ -589,29 +636,27 @@ fn header_height(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    width: f32,
-) -> f32 {
+    width: ViewPx,
+) -> ViewPx {
     let Some((author, time)) = &row.header else {
-        return 0.0;
+        return ViewPx::ZERO;
     };
-    let author = shape(
+    let author = text_height(shape(
         font_cx,
         cache,
         author,
         FONT_UI,
         width,
         ambre_canvas::Weight::Bold,
-    )
-    .height();
-    let time = shape(
+    ));
+    let time = text_height(shape(
         font_cx,
         cache,
         time,
         FONT_UI,
         width,
         ambre_canvas::Weight::Regular,
-    )
-    .height();
+    ));
     SPACE_4 + author.max(time)
 }
 
@@ -622,53 +667,47 @@ pub fn paint_jump<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    size: (f32, f32),
+    size: ViewSize,
     palette: &Palette,
 ) -> Rect {
-    let (width, height) = size;
+    let (width, height) = (size.width, size.height);
     let layout = shape(
         font_cx,
         cache,
         JUMP_TO_LATEST,
         FONT_UI,
-        width.max(1.0),
+        width.max(ViewPx::new(1.0)),
         ambre_canvas::Weight::Bold,
     );
     let (wide, tall) = (
-        2.0 * SPACE_8 + layout.width(),
-        2.0 * SPACE_4 + layout.height(),
+        SPACE_8 * 2.0 + text_width(layout),
+        SPACE_4 * 2.0 + text_height(layout),
     );
-    let x = ((width - wide) / 2.0).max(0.0);
-    let y = (height - tall - SPACE_8).max(0.0);
-    let rect = Rect::new(
-        f64::from(x),
-        f64::from(y),
-        f64::from(x + wide),
-        f64::from(y + tall),
-    );
+    let x = ((width - wide) / 2.0).max(ViewPx::ZERO);
+    let y = (height - tall - SPACE_8).max(ViewPx::ZERO);
+    let rect = view_rect(x, y, x + wide, y + tall);
     surface.fill_rect(rect, palette.header_bg);
     surface.stroke_rect(rect, palette.header_border, 1.0);
     draw(
         surface,
         layout,
-        ViewPoint::new(ViewPx::new(x + SPACE_8), ViewPx::new(y + SPACE_4)),
+        ViewPoint::new(x + SPACE_8, y + SPACE_4),
         palette.selection,
     );
     rect
 }
 
 /// The height of the unread line: its words and the space above them.
-fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: f32) -> f32 {
+fn line_height(font_cx: &mut FontContext, cache: &mut TextCache, width: ViewPx) -> ViewPx {
     SPACE_4
-        + shape(
+        + text_height(shape(
             font_cx,
             cache,
             UNREAD_LINE,
             FONT_UI,
             width,
             ambre_canvas::Weight::Bold,
-        )
-        .height()
+        ))
 }
 
 /// Paint the unread line whose top is at `top`: a rule across the list in
@@ -677,29 +716,29 @@ fn draw_line<S: DrawSurface>(
     surface: &mut S,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    top: f32,
-    width: f32,
+    top: ViewPx,
+    width: ViewPx,
     palette: &Palette,
-) -> f32 {
-    let text_width = (width - 2.0 * SPACE_8).max(1.0);
+) -> ViewPx {
+    let wrap = (width - SPACE_8 * 2.0).max(ViewPx::new(1.0));
     let y = top + SPACE_4;
     let layout = shape(
         font_cx,
         cache,
         UNREAD_LINE,
         FONT_UI,
-        text_width,
+        wrap,
         ambre_canvas::Weight::Bold,
     );
-    let (wide, tall) = (layout.width(), layout.height());
-    let middle = f64::from(y + tall / 2.0);
-    let rule_from = f64::from(SPACE_8 + wide + SPACE_4);
-    let rule = Rect::new(rule_from, middle, f64::from(width - SPACE_8), middle + 1.0);
+    let (wide, tall) = (text_width(layout), text_height(layout));
+    let middle = surface_px(y + tall / 2.0);
+    let rule_from = surface_px(SPACE_8 + wide + SPACE_4);
+    let rule = Rect::new(rule_from, middle, surface_px(width - SPACE_8), middle + 1.0);
     surface.fill_rect(rule, palette.selection);
     draw(
         surface,
         layout,
-        ViewPoint::new(ViewPx::new(SPACE_8), ViewPx::new(y)),
+        ViewPoint::new(SPACE_8, y),
         palette.selection,
     );
     y + tall
@@ -710,15 +749,15 @@ pub(crate) fn shape<'c>(
     font_cx: &mut FontContext,
     cache: &'c mut TextCache,
     text: &str,
-    size: f32,
-    width: f32,
+    size: ViewPx,
+    width: ViewPx,
     weight: ambre_canvas::Weight,
 ) -> &'c Layout<ParleyBrush> {
     cache.get_or_build(
         font_cx,
         text,
-        ViewPx::new(size),
-        ViewPx::new(width),
+        size,
+        width,
         Alignment::Start,
         weight,
         ambre_canvas::Slant::Upright,
@@ -731,7 +770,7 @@ fn body<'c>(
     font_cx: &mut FontContext,
     cache: &'c mut TextCache,
     row: &RowWords,
-    width: f32,
+    width: ViewPx,
 ) -> &'c Layout<ParleyBrush> {
     let spans: Vec<SpanShape> = row
         .marks
@@ -741,8 +780,8 @@ fn body<'c>(
     cache.get_or_build_spans(
         font_cx,
         &row.body,
-        ViewPx::new(FONT_BODY),
-        ViewPx::new(width),
+        FONT_BODY,
+        width,
         &spans,
     )
 }
@@ -757,7 +796,7 @@ fn fill_bytes<S: DrawSurface>(
 ) {
     let from = Cursor::from_byte_index(layout, bytes.start.get(), Affinity::Downstream);
     let to = Cursor::from_byte_index(layout, bytes.end.get(), Affinity::Upstream);
-    let (x, y) = (f64::from(SPACE_8), f64::from(body_y.get()));
+    let (x, y) = (surface_px(SPACE_8), surface_px(body_y));
     for (bb, _) in Selection::new(from, to).geometry(layout) {
         surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
     }
@@ -781,9 +820,9 @@ fn previewed<'r>(row: &'r RowWords, pics: Option<Pictured<'_>>) -> Vec<&'r Attac
 fn preview_boxes<'r>(
     row: &'r RowWords,
     pics: Option<Pictured<'_>>,
-    width: f32,
+    width: ViewPx,
 ) -> Vec<(&'r Attachment, Rect)> {
-    let mut y = 0.0_f32;
+    let mut y = ViewPx::ZERO;
     let mut boxes = Vec::new();
     for file in previewed(row, pics) {
         let aspect = pics
@@ -800,10 +839,7 @@ fn preview_boxes<'r>(
         if wide > width {
             (wide, tall) = (width, width / aspect);
         }
-        boxes.push((
-            file,
-            Rect::new(0.0, f64::from(y), f64::from(wide), f64::from(y + tall)),
-        ));
+        boxes.push((file, view_rect(ViewPx::ZERO, y, wide, y + tall)));
         y += PREVIEW_TALL;
     }
     boxes
@@ -811,10 +847,10 @@ fn preview_boxes<'r>(
 
 /// The height the previews of a row take, the space above each included.
 /// Each takes [`PREVIEW_TALL`], so a row keeps its height when one lands.
-fn previews_height(row: &RowWords, pics: Option<Pictured<'_>>) -> f32 {
+fn previews_height(row: &RowWords, pics: Option<Pictured<'_>>) -> ViewPx {
     #[allow(clippy::cast_precision_loss)]
     let count = previewed(row, pics).len() as f32;
-    count * (SPACE_2 + PREVIEW_TALL)
+    (SPACE_2 + PREVIEW_TALL) * count
 }
 
 /// Paint the previews of a row, their top-left at `at`. A decoded
@@ -825,7 +861,7 @@ fn draw_previews<S: DrawSurface>(
     row: &RowWords,
     pics: Option<Pictured<'_>>,
     at: Point,
-    width: f32,
+    width: ViewPx,
     palette: &Palette,
     played: &mut Played,
 ) {
@@ -864,23 +900,22 @@ fn measure(
     cache: &mut TextCache,
     row: &RowWords,
     pics: Option<Pictured<'_>>,
-    width: f32,
-) -> f32 {
-    let mut tall = 2.0 * SPACE_2 + header_height(font_cx, cache, row, width);
-    tall += body(font_cx, cache, row, width).height();
+    width: ViewPx,
+) -> ViewPx {
+    let mut tall = SPACE_2 * 2.0 + header_height(font_cx, cache, row, width);
+    tall += text_height(body(font_cx, cache, row, width));
     tall += previews_height(row, pics);
     tall += file_chips(font_cx, cache, row, width).1;
     tall += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
-        tall += shape(
+        tall += text_height(shape(
             font_cx,
             cache,
             replies,
             FONT_UI,
             width,
             ambre_canvas::Weight::Regular,
-        )
-        .height();
+        ));
     }
     tall
 }
@@ -892,8 +927,8 @@ fn draw_row<S: DrawSurface>(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    top: f32,
-    width: f32,
+    top: ViewPx,
+    width: ViewPx,
     palette: &Palette,
     me: Option<UserId>,
     pics: Option<Pictured<'_>>,
@@ -911,13 +946,8 @@ fn draw_row<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Bold,
         );
-        let (wide, author_tall) = (layout.width(), layout.height());
-        draw(
-            surface,
-            layout,
-            ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-            palette.cell_text,
-        );
+        let (wide, author_tall) = (text_width(layout), text_height(layout));
+        draw(surface, layout, ViewPoint::new(x, y), palette.cell_text);
         let layout = shape(
             font_cx,
             cache,
@@ -926,11 +956,11 @@ fn draw_row<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        let time_tall = layout.height();
+        let time_tall = text_height(layout);
         draw(
             surface,
             layout,
-            ViewPoint::new(ViewPx::new(x + wide + SPACE_4), ViewPx::new(y)),
+            ViewPoint::new(x + wide + SPACE_4, y),
             palette.header_text,
         );
         y += author_tall.max(time_tall);
@@ -941,22 +971,16 @@ fn draw_row<S: DrawSurface>(
         palette.cell_text
     };
     let layout = body(font_cx, cache, row, width);
-    let body_tall = layout.height();
-    draw_body(
-        surface,
-        layout,
-        ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-        ink,
-        palette,
-    );
+    let body_tall = text_height(layout);
+    draw_body(surface, layout, ViewPoint::new(x, y), ink, palette);
     y += body_tall;
-    let at = Point::new(f64::from(x), f64::from(y));
+    let at = Point::new(surface_px(x), surface_px(y));
     draw_previews(surface, row, pics, at, width, palette, played);
     y += previews_height(row, pics);
-    let at = Point::new(f64::from(x), f64::from(y));
+    let at = Point::new(surface_px(x), surface_px(y));
     draw_files(surface, font_cx, cache, row, at, width, palette);
     y += file_chips(font_cx, cache, row, width).1;
-    let at = Point::new(f64::from(x), f64::from(y));
+    let at = Point::new(surface_px(x), surface_px(y));
     draw_chips(surface, font_cx, cache, row, at, width, palette, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
@@ -968,12 +992,7 @@ fn draw_row<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        draw(
-            surface,
-            layout,
-            ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-            palette.selection,
-        );
+        draw(surface, layout, ViewPoint::new(x, y), palette.selection);
     }
 }
 
@@ -1096,7 +1115,7 @@ pub(crate) mod tests {
             &mut font_cx,
             &mut cache,
             shown,
-            (400.0, height),
+            ViewSize::new(ViewPx::new(400.0), ViewPx::new(height)),
             &LIGHT,
             &|_| ambre_core::DisplayName::new("Ada").ok(),
             &|_| "t".to_owned(),
@@ -1133,7 +1152,7 @@ pub(crate) mod tests {
             &mut surface,
             &mut font_cx,
             &mut cache,
-            (400.0, 300.0),
+            ViewSize::new(ViewPx::new(400.0), ViewPx::new(300.0)),
             &LIGHT,
         );
         assert!(
@@ -1178,9 +1197,9 @@ pub(crate) mod tests {
         let [ring] = rings.as_slice() else {
             panic!("one ring: {rings:?}");
         };
-        let (top, bottom) = painted.focus.expect("the focused row is on screen");
-        assert_eq!((ring.y0, ring.y1), (f64::from(top), f64::from(bottom)));
-        assert!(top >= 0.0 && bottom <= 300.0 && bottom > top);
+        let RowBounds { top, bottom } = painted.focus.expect("the focused row is on screen");
+        assert_eq!((ring.y0, ring.y1), (surface_px(top), surface_px(bottom)));
+        assert!(top >= ViewPx::ZERO && bottom <= ViewPx::new(300.0) && bottom > top);
         assert_eq!(painted.bottom, Some(99), "the latest row is the last one");
         let body = runs(&surface, LIGHT.cell_text);
         assert!(body.iter().any(|&(y, _)| y > ring.y0 && y < ring.y1));
@@ -1307,12 +1326,12 @@ pub(crate) mod tests {
             SegmentId::new(),
             vec![message(ada, ambre_bus::Timestamp(0), "hello")],
         );
-        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let tall = |painted: &Painted| painted.rows[0].bounds.bottom - painted.rows[0].bounds.top;
         let (_, plain) = paint(&bare, 600.0);
 
         let (_, at) = paint(&list, 600.0);
-        let bottom = at.rows[0].2;
-        let click = (SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0);
+        let bottom = at.rows[0].bounds.bottom.get();
+        let click = (SPACE_8.get() + 2.0, bottom - 2.0 * SPACE_2.get() - 2.0);
         let selecting = Selecting {
             click: Some(view_at(click)),
             ..Selecting::default()
@@ -1381,14 +1400,14 @@ pub(crate) mod tests {
             SegmentId::new(),
             vec![message(ada, ambre_bus::Timestamp(0), "hello")],
         );
-        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let tall = |painted: &Painted| painted.rows[0].bounds.bottom - painted.rows[0].bounds.top;
         let (_, plain) = paint(&bare, 600.0);
         let (_, at) = paint(&list, 600.0);
         assert!(tall(&at) > tall(&plain), "the chip takes room");
 
-        let bottom = at.rows[0].2;
+        let bottom = at.rows[0].bounds.bottom.get();
         let selecting = Selecting {
-            click: Some(view_at((SPACE_8 + 2.0, bottom - 2.0 * SPACE_2 - 2.0))),
+            click: Some(view_at((SPACE_8.get() + 2.0, bottom - 2.0 * SPACE_2.get() - 2.0))),
             ..Selecting::default()
         };
         let shown = Shown {
@@ -1449,7 +1468,7 @@ pub(crate) mod tests {
                 .filter(|op| matches!(op, DrawOp::DrawImage { .. }))
                 .count()
         };
-        let tall = |painted: &Painted| painted.rows[0].2 - painted.rows[0].1;
+        let tall = |painted: &Painted| painted.rows[0].bounds.bottom - painted.rows[0].bounds.top;
         let (_, chip_only) = paint(&list, 600.0);
         let (surface, waiting) = at(
             &shelf,
@@ -1514,7 +1533,7 @@ pub(crate) mod tests {
                 &mut font_cx,
                 &mut cache,
                 shown,
-                (400.0, 600.0),
+                ViewSize::new(ViewPx::new(400.0), ViewPx::new(600.0)),
                 palette,
                 &|_| ambre_core::DisplayName::new("Ada").ok(),
                 &|_| "t".to_owned(),
@@ -1585,11 +1604,11 @@ pub(crate) mod tests {
             &mut cache,
             &row.body,
             FONT_BODY,
-            384.0,
+            ViewPx::new(384.0),
             ambre_canvas::Weight::Regular,
         )
         .width();
-        assert!(body(&mut font_cx, &mut cache, &row, 384.0).width() > plain);
+        assert!(body(&mut font_cx, &mut cache, &row, ViewPx::new(384.0)).width() > plain);
 
         let (surface, _) = paint(&list, 600.0);
         let ops = surface.ops();
@@ -1625,11 +1644,11 @@ pub(crate) mod tests {
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
             let (surface, _) = paint(&list, 600.0);
-            let indent = f64::from(SPACE_8) + f64::from(look::BLOCK_INDENT);
+            let indent = surface_px(SPACE_8) + f64::from(look::BLOCK_INDENT);
             let marks = surface.count(|op| {
                 matches!(op, DrawOp::FillRect { color, rect }
                     if *color == LIGHT.header_text
-                        && rect.x0 >= f64::from(SPACE_8) && rect.x1 <= indent)
+                        && rect.x0 >= surface_px(SPACE_8) && rect.x1 <= indent)
             });
             let tints = surface.count(
                 |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
@@ -1685,7 +1704,7 @@ pub(crate) mod tests {
             let [_, block @ .., (_, after)] = lines.as_slice() else {
                 panic!("the author and the body, got {lines:?}");
             };
-            let edge = f64::from(SPACE_8);
+            let edge = surface_px(SPACE_8);
             let indent = edge + f64::from(look::BLOCK_INDENT);
             assert!(block.len() >= 2, "the block wraps, got {block:?}");
             assert!(
@@ -1776,9 +1795,14 @@ pub(crate) mod tests {
         list.absorb(SegmentId::new(), messages);
         let keys = list.keys();
         let (_, plain) = paint(&list, 600.0);
-        let [(_, _, first), (_, top, second), ..] = plain.rows.as_slice() else {
+        let [one, two, ..] = plain.rows.as_slice() else {
             panic!("three rows: {plain:?}");
         };
+        let (first, top, second) = (
+            one.bounds.bottom.get(),
+            two.bounds.top.get(),
+            two.bounds.bottom.get(),
+        );
         let drag = |press, drag| Shown {
             list: &list,
             unread: None,
@@ -1793,7 +1817,7 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let press = (SPACE_8, first - SPACE_2 - 2.0);
+        let press = (SPACE_8.get(), first - SPACE_2.get() - 2.0);
         let (surface, painted) = paint_from(drag(press, (399.0, (top + second) / 2.0)), 600.0);
         let selection = painted.selection.expect("a selection");
         assert_eq!(
