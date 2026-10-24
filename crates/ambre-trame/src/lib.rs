@@ -45,7 +45,7 @@ pub use ambre_bus::{
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
     CondFormatKind, CondStyle, CsvDelimiter, DefinedName, DisplayCell, EditSessionId, FillMode,
     FilterKind, FilterOp, HAlign, HeaderRow, MergeSpan, Row, RowCount, RowDelta, RowSpan, RowVec,
-    SelectionKind, SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign,
+    SelectionKind, SheetTabPos, SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign,
     ValidationKind, ValidationOnInvalid,
 };
 use ambre_core::DocPx;

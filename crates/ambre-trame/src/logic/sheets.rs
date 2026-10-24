@@ -554,12 +554,12 @@ impl TrameState {
     /// implicit default and unmerged entries are otherwise absent) so positions
     /// are well-defined, then issues one move op. A no-op if the id is unknown or
     /// already at the target position.
-    pub(super) fn move_sheet(&mut self, sheet_id: &SheetId, to_index: u32) -> TrameOutcome {
+    pub(super) fn move_sheet(&mut self, sheet_id: &SheetId, to_index: SheetTabPos) -> TrameOutcome {
         let order = self.sheet_order_ids();
         let Some(from) = order.iter().position(|id| id == sheet_id) else {
             return TrameOutcome::display_only(vec![]);
         };
-        let to = (to_index as usize).min(order.len().saturating_sub(1));
+        let to = to_index.to_usize().min(order.len().saturating_sub(1));
         if from == to {
             return TrameOutcome::display_only(vec![]);
         }

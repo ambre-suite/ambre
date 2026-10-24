@@ -765,7 +765,7 @@ fn move_sheet_reorders_tabs() {
     // Order is [s0, B]; move B to the front.
     let evts = state.handle_command(TrameCommand::MoveSheet {
         sheet_id: b.clone(),
-        to_index: 0,
+        to_index: crate::SheetTabPos::ZERO,
     });
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
         panic!()

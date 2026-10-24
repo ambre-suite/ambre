@@ -108,7 +108,7 @@ impl TrameRelay {
             TrameIntent::DeleteSheet(sheet_id) => TrameCommand::DeleteSheet { sheet_id },
             TrameIntent::ReorderSheet(req) => TrameCommand::MoveSheet {
                 sheet_id: req.id,
-                to_index: req.to_index as u32,
+                to_index: req.to_index,
             },
         })
     }

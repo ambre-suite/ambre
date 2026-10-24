@@ -731,11 +731,11 @@ fn concurrent_tab_moves_converge_on_one_order() {
 
     a.handle_command(TrameCommand::MoveSheet {
         sheet_id: ambre_bus::SheetId(ids[2].clone()),
-        to_index: 0,
+        to_index: crate::SheetTabPos::ZERO,
     });
     b.handle_command(TrameCommand::MoveSheet {
         sheet_id: ambre_bus::SheetId(ids[0].clone()),
-        to_index: 2,
+        to_index: crate::SheetTabPos::new(2),
     });
 
     let sa = a.export_snapshot();

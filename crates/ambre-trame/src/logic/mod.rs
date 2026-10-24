@@ -30,7 +30,7 @@ use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
     ClipboardPayload, Col, ColCount, FilterKind, FilterOp, MergeSpan, Row, RowCount, RowSpan,
-    SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, SortKey, StylePatch,
+    SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, SheetTabPos, SortKey, StylePatch,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};

@@ -64,8 +64,8 @@ pub use app::trame::{
     ColVec, CondFormatId, CondFormatKind, CondStyle, CsvDelimiter, DateSerial, DaySerial,
     DefinedName, DisplayCell, EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign,
     HeaderRow, MergeSpan, Percent, Row, RowCount, RowDelta, RowSpan, RowVec, SelectionKind,
-    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SortKey, SortOrder, StylePatch,
-    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
+    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, SortKey, SortOrder,
+    StylePatch, TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};

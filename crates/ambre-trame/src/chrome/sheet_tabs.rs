@@ -13,7 +13,7 @@
 // signals, mirrored from `TrameEvent::SheetList`.
 // ============================================================================
 
-use ambre_bus::{SheetId, SheetName, SheetTab};
+use ambre_bus::{SheetId, SheetName, SheetTab, SheetTabPos};
 use leptos::prelude::*;
 use leptos::web_sys;
 
@@ -21,7 +21,7 @@ use leptos::web_sys;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReorderSheet {
     pub id: SheetId,
-    pub to_index: usize,
+    pub to_index: SheetTabPos,
 }
 
 /// The sheet-tab strip. `sheets` is in display order, `active` the active
@@ -44,7 +44,7 @@ pub fn SheetTabs(
     // Id of the tab currently being dragged, or `None`.
     let dragging = RwSignal::new(None::<SheetId>);
     // Index a drop would land on (the tab currently hovered during a drag).
-    let drop_idx = RwSignal::new(None::<usize>);
+    let drop_idx = RwSignal::new(None::<SheetTabPos>);
 
     // Dismiss the context menu on any outside pointer-down.
     let menu_handle = window_event_listener(leptos::ev::pointerdown, move |_| {
@@ -69,6 +69,7 @@ pub fn SheetTabs(
             .into_iter()
             .enumerate()
             .map(|(index, SheetTab { id, name })| {
+                let index = SheetTabPos::from_usize(index);
                 let is_active = {
                     let id = id.clone();
                     move || active.with(|a| *a == id)

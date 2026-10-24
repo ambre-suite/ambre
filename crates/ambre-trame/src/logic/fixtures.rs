@@ -402,7 +402,7 @@ fn build_multi_sheet(state: &mut TrameState) {
             // walked the `sheets` map instead of the order list is visible.
             state.handle_command(TrameCommand::MoveSheet {
                 sheet_id,
-                to_index: 0,
+                to_index: SheetTabPos::ZERO,
             });
         }
     }

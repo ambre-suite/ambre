@@ -447,7 +447,6 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::DefineName.reference | field | String	free-text	A1 reference text, parsed by the formula engine
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::FindNext.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ImportCsv.data | field | Vec<u8>	generic	imported CSV bytes
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::MoveSheet.to_index | field | u32	math	sheet tab index
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::PasteText.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.query | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::ReplaceAll.replacement | field | String	free-text	cell text / query / user message
@@ -3993,7 +3992,6 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/sheet_tabs.rs | crate::chrome::sheet_tabs | ReorderSheet.to_index | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.avg | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.count_num | field | u64	math	count, length, local index, limit or calendar/arith helper
@@ -4046,7 +4044,7 @@ ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	local: the 1-based number argument of INDEX; its axis, row or column, is known only after the arity is read
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor() | ret | f64	math	local geometry / pixel arithmetic
@@ -4266,7 +4264,6 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | stored_reference_step
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::move_sheet(to_index) | param | u32	math	tab order position, a count
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return
@@ -4286,11 +4283,11 @@ ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecoda
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::reseed_after_merge(origin) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Col::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Row::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	math	count, size or local index: a Loro list index or length
+ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	newtype-inner	the axis newtype conversion to a Loro list index, one per axis
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	foreign-api	the stored cell key, for the Loro call into the map
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return

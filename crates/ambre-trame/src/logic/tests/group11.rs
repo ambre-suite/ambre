@@ -508,7 +508,7 @@ fn a_tab_reorder_changes_no_content() {
     let before = contents(&state, &ids);
     state.handle_command(TrameCommand::MoveSheet {
         sheet_id: ids[2].clone(),
-        to_index: 0,
+        to_index: crate::SheetTabPos::ZERO,
     });
     assert_eq!(state.sheet_order_ids()[0], ids[2]);
     assert_eq!(contents(&state, &ids), before);

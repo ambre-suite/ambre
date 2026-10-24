@@ -355,6 +355,20 @@ pub struct FilterViewId(pub String);
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct CondFormatId(pub String);
 
+ambre_core::define_index! {
+    /// A place in the sheet tab strip, 0-based from the left. It orders the
+    /// tabs and names no sheet.
+    pub struct SheetTabPos(u32);
+    /// A number of tabs.
+    pub struct SheetTabCount;
+    /// The signed gap between two tabs.
+    pub struct SheetTabDelta(i64);
+    /// A run of tabs.
+    pub struct SheetTabSpan;
+    /// A list indexed by tab.
+    pub struct SheetTabVec;
+}
+
 /// One tab of the sheet strip: the sheet's id and its display name.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SheetTab {

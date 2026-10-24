@@ -770,7 +770,7 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
     // Reorder: pure presentation, value unchanged.
     state.handle_command(TrameCommand::MoveSheet {
         sheet_id: s2.clone(),
-        to_index: 0,
+        to_index: crate::SheetTabPos::ZERO,
     });
     assert_eq!(read_cell(&mut state, 0, 1), "10", "reorder is inert");
 

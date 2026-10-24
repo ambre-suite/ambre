@@ -688,7 +688,10 @@ pub enum TrameCommand {
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
     /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
-    MoveSheet { sheet_id: SheetId, to_index: u32 },
+    MoveSheet {
+        sheet_id: SheetId,
+        to_index: SheetTabPos,
+    },
 
     /// Sort the rows of the rectangle `rect` by the values in its column
     /// `sort_col`, counted from its left edge
