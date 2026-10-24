@@ -34,17 +34,18 @@ use crate::ui::walk::{BoardView, BoardWalk, ImageStore};
 /// straight onto the page with no extra scaling. Defaults to a 16:9 slide.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PageSize {
-    pub width: f64,
-    pub height: f64,
+    pub width: ambre_core::Pt,
+    pub height: ambre_core::Pt,
 }
 
 impl PageSize {
     /// A page of `width` x `height` points, each clamped to a positive minimum so
     /// `PageSettings::from_wh` never rejects it.
-    pub fn new(width: f64, height: f64) -> Self {
+    pub fn new(width: ambre_core::Pt, height: ambre_core::Pt) -> Self {
+        let least = ambre_core::Pt::new(1.0);
         Self {
-            width: width.max(1.0),
-            height: height.max(1.0),
+            width: width.max(least),
+            height: height.max(least),
         }
     }
 }
@@ -52,7 +53,7 @@ impl PageSize {
 impl Default for PageSize {
     fn default() -> Self {
         // 1280x720: a 16:9 slide, matching the default presentation aspect.
-        Self::new(1280.0, 720.0)
+        Self::new(ambre_core::Pt::new(1280.0), ambre_core::Pt::new(720.0))
     }
 }
 
@@ -115,7 +116,7 @@ pub fn export_pdf(
     for pdf_page in pages {
         // `from_wh` only rejects a non-positive extent; `PageSize::new` clamps to
         // a positive minimum, so this is infallible in practice.
-        let settings = PageSettings::from_wh(page.width as f32, page.height as f32)
+        let settings = PageSettings::from_wh(page.width.get(), page.height.get())
             .or_else(|| PageSettings::from_wh(1.0, 1.0))
             .unwrap_or_default();
         let mut kpage = doc.start_page_with(settings);

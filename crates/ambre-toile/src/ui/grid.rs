@@ -32,8 +32,8 @@ pub fn board_unit(register: f64) -> f64 {
 /// Comfortable on-screen spacing band (logical pixels): the adaptive step keeps
 /// the line spacing at or above `MIN_SPACING_PX`, doubling the world step until
 /// it does.
-const MIN_SPACING_PX: f64 = 24.0;
-const MAX_SPACING_PX: f64 = 96.0;
+const MIN_SPACING_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(24.0);
+const MAX_SPACING_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
 
 /// Choose the grid step (world units) for `zoom`: the smallest power-of-two
 /// multiple of `base` whose screen spacing (`step * zoom`) is at least
@@ -42,14 +42,19 @@ const MAX_SPACING_PX: f64 = 96.0;
 /// unit.
 pub fn grid_step(zoom: ambre_core::ZoomFactor, base: f64) -> f64 {
     let zoom = zoom.get();
+    // The band, in the f64 of the board's screen geometry.
+    let (min, max) = (
+        f64::from(MIN_SPACING_PX.get()),
+        f64::from(MAX_SPACING_PX.get()),
+    );
     debug_assert!(base > 0.0);
     let mut step = base;
     // Zoomed out: coarsen until the spacing is legible.
-    while step * zoom < MIN_SPACING_PX {
+    while step * zoom < min {
         step *= 2.0;
     }
     // Zoomed in: refine toward the band, but never finer than `base`.
-    while step > base && step * zoom > MAX_SPACING_PX {
+    while step > base && step * zoom > max {
         step /= 2.0;
     }
     step
@@ -130,12 +135,13 @@ mod tests {
     fn spacing_never_illegible_across_zoom_sweep() {
         // For any zoom, the chosen step keeps the on-screen spacing at or above
         // the minimum legible band.
-        let mut z = MIN_SPACING_PX / (BASE_GRID * 64.0); // very zoomed out
+        let min = f64::from(MIN_SPACING_PX.get());
+        let mut z = min / (BASE_GRID * 64.0); // very zoomed out
         while z <= MAX_ZOOM_SWEEP {
             let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);
             let spacing = step * z;
             assert!(
-                spacing >= MIN_SPACING_PX - 1e-9,
+                spacing >= min - 1e-9,
                 "zoom {z}: spacing {spacing} below min"
             );
             z *= 1.3;

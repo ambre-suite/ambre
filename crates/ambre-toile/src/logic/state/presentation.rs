@@ -460,7 +460,10 @@ impl ToileState {
         // The camera that frames `rect` into the page, padded like the live
         // present glide so the slide never touches the page edge.
         let fit = |rect: Rect| {
-            let mut cam = ViewportTransform::new(ambre_draw::Size::new(page.width, page.height));
+            let mut cam = ViewportTransform::new(ambre_draw::Size::new(
+                f64::from(page.width.get()),
+                f64::from(page.height.get()),
+            ));
             cam.fit_bounds(rect, FIT_PAD);
             cam
         };

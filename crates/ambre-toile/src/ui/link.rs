@@ -18,7 +18,7 @@ use ambre_draw::{Point, Rect};
 
 /// Side of the link badge, in screen pixels. Painted in screen space so it is
 /// the same size at every zoom, like the selection handles.
-pub const BADGE_PX: f64 = 14.0;
+pub const BADGE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Gap between the badge and the element's top-right corner, in screen pixels.
 const BADGE_GAP: f64 = 3.0;
@@ -106,9 +106,10 @@ pub fn wants_follow(mods: Modifiers, mode: PresentMode) -> bool {
 /// The badge of a linked element, in screen space: a small square just outside
 /// its top-right corner.
 pub fn badge_rect(screen_bounds: Rect) -> Rect {
-    let x1 = screen_bounds.x1 + BADGE_GAP + BADGE_PX;
-    let y0 = screen_bounds.y0 - BADGE_GAP - BADGE_PX;
-    Rect::new(x1 - BADGE_PX, y0, x1, y0 + BADGE_PX)
+    let side = f64::from(BADGE_PX.get());
+    let x1 = screen_bounds.x1 + BADGE_GAP + side;
+    let y0 = screen_bounds.y0 - BADGE_GAP - side;
+    Rect::new(x1 - side, y0, x1, y0 + side)
 }
 
 /// The link of the top-most element under `world`, with its id. Locked and
@@ -267,8 +268,8 @@ mod tests {
     #[test]
     fn the_badge_sits_outside_the_top_right_corner() {
         let b = badge_rect(Rect::new(10.0, 20.0, 110.0, 120.0));
-        assert_eq!(b.width(), BADGE_PX);
-        assert_eq!(b.height(), BADGE_PX);
+        assert_eq!(b.width(), f64::from(BADGE_PX.get()));
+        assert_eq!(b.height(), f64::from(BADGE_PX.get()));
         assert!(b.x0 > 110.0, "to the right of the element");
         assert!(b.y1 < 20.0, "above the element");
     }

@@ -3338,8 +3338,7 @@ impl ToileView {
         // scaled by the zoom at paint. Dividing here opens the edited text at
         // the size the band reads today. A zoom during the edit then drifts,
         // which `toile-frames` section 6 records.
-        let base_size =
-            ambre_core::DocPx::new((render::FRAME_TITLE_PX / self.cam.zoom.get()) as f32);
+        let base_size = render::FRAME_TITLE_PX.unzoomed(self.cam.zoom);
         self.editor = Some(InlineEditor::open_frame_title(
             id,
             &title,

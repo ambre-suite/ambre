@@ -45,7 +45,7 @@ use super::viewport::ViewportTransform;
 const LASER_TRAIL_MAX: usize = 24;
 
 /// Screen size of a remote cursor arrow, in logical pixels.
-const CURSOR_SIZE_PX: f64 = 14.0;
+const CURSOR_SIZE_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Name-label font size, in logical pixels.
 const LABEL_FONT_PX: ambre_core::ViewPx = ambre_core::ViewPx::new(12.0);
@@ -294,7 +294,7 @@ fn paint_cursor<S: DrawSurface>(
 ) {
     // Arrowhead: a filled triangle whose tip sits on the pointer, opening down-
     // right (a conventional cursor silhouette), drawn in screen space.
-    let s = CURSOR_SIZE_PX;
+    let s = f64::from(CURSOR_SIZE_PX.get());
     let mut arrow = BezPath::new();
     arrow.move_to((at.x, at.y));
     arrow.line_to((at.x, at.y + s));
