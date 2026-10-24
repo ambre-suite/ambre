@@ -1643,8 +1643,7 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
 pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
     move || {
         relay.mark_bar.get().map(|bar| {
-            let at = bar.at.on_page(canvas_origin(bar.region));
-            let anchor = (f64::from(at.x.get()), f64::from(at.y.get()));
+            let anchor = bar.at.on_page(canvas_origin(bar.region));
             let controls = bar
                 .controls
                 .into_iter()

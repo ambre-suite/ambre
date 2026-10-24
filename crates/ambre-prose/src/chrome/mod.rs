@@ -317,7 +317,7 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
 pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
     move || {
         let bar = signals.toolbar.get();
-        let at = bar.anchor?.on_page(signals.canvas_origin.get());
+        let anchor = bar.anchor?.on_page(signals.canvas_origin.get());
         let controls = crate::commands::FORMAT_BAR
             .map(|(id, key)| {
                 let pressed = match bar.active.as_ref().map(|m| state_of(m, key)) {
@@ -328,7 +328,6 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
                 control(signals, id, pressed)
             })
             .to_vec();
-        let anchor = (f64::from(at.x.get()), f64::from(at.y.get()));
         Some(view! { <FormatBar anchor=anchor controls=controls /> })
     }
 }

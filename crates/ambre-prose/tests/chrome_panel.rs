@@ -25,6 +25,11 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The page point at `(x, y)`, in CSS px.
+fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
+    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+}
+
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
@@ -299,7 +304,7 @@ fn disabled_rows(root: &web_sys::Element) -> Vec<String> {
 #[wasm_bindgen_test]
 async fn the_history_rows_follow_the_reported_state() {
     let signals = ProseSignals::new();
-    let pos = RwSignal::new(Some((10.0, 10.0)));
+    let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
     let entries = Signal::derive(move || chrome::context_entries(signals.history.get()));
     let root = mount_in_container(move || {
         view! { <ambre_chrome::ContextMenu pos=pos entries=entries on_command=Callback::new(|_| ()) /> }

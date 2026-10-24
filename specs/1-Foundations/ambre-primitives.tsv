@@ -121,7 +121,6 @@ ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
 ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	dev username
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
-ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(ctx_menu) | param | RwSignal<Option<(f64,f64)>>	math	css position
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	math	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	math	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(on_bytes) | param | impl Fn(Vec<u8>)+Clone+'static	generic	bytes callback
@@ -1085,17 +1084,9 @@ ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | Stri
 ambre-chrome | src/composed.rs | crate::composed | ComposedName::or_placeholder(name) | param | Option<&str>	free-text	text, label or user content
 ambre-chrome | src/composed.rs | crate::composed | ComposedName::tab_title(doc) | param | Option<(&'static str,Option<&str>)>	free-text	text, label or user content
 ambre-chrome | src/composed.rs | crate::composed | UNTITLED | const | &str	free-text	UI text/label const
-ambre-chrome | src/context_menu.rs | crate::context_menu | ContextMenu(pos) | param | RwSignal<Option<(f64,f64)>>	math	layout geometry in logical px
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.disabled | field | bool	math	state flag/predicate
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.label | field | String	free-text	text, label or user content
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem::label() | ret | &str	free-text	text, label or user content
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu() | ret | (f64,f64)	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(h) | param | f64	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(vh) | param | f64	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(vw) | param | f64	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(w) | param | f64	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(x) | param | f64	math	layout geometry in logical px
-ambre-chrome | src/context_menu.rs | crate::context_menu | place_menu(y) | param | f64	math	layout geometry in logical px
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(class) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(label) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(open) | param | RwSignal<bool>	math	state flag/predicate
@@ -1105,11 +1096,9 @@ ambre-chrome | src/font.rs | crate::font | FONT_FAMILIES | const | &[(&str,&str)
 ambre-chrome | src/font.rs | crate::font | FontPicker(current) | param | Signal<Option<String>>	free-text	text, label or user content
 ambre-chrome | src/font.rs | crate::font | FontPicker(on_pick) | param | Callback<Option<String>>	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FONT_SIZES | const | &[u16]	math	local count/index/counter
-ambre-chrome | src/format.rs | crate::format | FORMAT_BAR_LIFT_PX | const | f64	math	layout geometry in logical px
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(auto_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(current) | param | Signal<Option<u16>>	math	local count/index/counter
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(on_pick) | param | Callback<Option<u16>>	math	local count/index/counter
-ambre-chrome | src/format.rs | crate::format | FormatBar(anchor) | param | (f64,f64)	math	layout geometry in logical px
 ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	math	state flag/predicate
@@ -1870,7 +1859,6 @@ ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | Stri
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.deleted | field | bool	math	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.notice | field | bool	math	state flag/predicate
-ambre-murmure | src/commands.rs | crate::commands | MessageTarget.pressed | field | Option<(f32,f32)>	math	layout geometry in logical px
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | RegionKey.action | field | &'static str	free-text	text, label or user content

@@ -25,6 +25,7 @@
 // appears. It relies on `on:change` instead.
 // ============================================================================
 
+use ambre_core::{CssPoint, CssPx};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -97,7 +98,7 @@ pub fn FormatToggle(
 }
 
 /// How far above its anchor the format bar sits, in CSS pixels.
-pub const FORMAT_BAR_LIFT_PX: f64 = 40.0;
+pub const FORMAT_BAR_LIFT_PX: CssPx = CssPx::new(40.0);
 
 /// Whether a control's mark covers the selection, as `aria-pressed` reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,11 +131,11 @@ pub struct FormatControl {
 /// The format bar over a selection, centred on `anchor` in the viewport
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
 #[component]
-pub fn FormatBar(anchor: (f64, f64), controls: Vec<FormatControl>) -> impl IntoView {
-    let (x, y) = anchor;
+pub fn FormatBar(anchor: CssPoint, controls: Vec<FormatControl>) -> impl IntoView {
     let style = format!(
-        "position: fixed; left: {x}px; top: {}px; transform: translateX(-50%); z-index: 62;",
-        (y - FORMAT_BAR_LIFT_PX).max(0.0)
+        "position: fixed; left: {}px; top: {}px; transform: translateX(-50%); z-index: 62;",
+        anchor.x.get(),
+        (anchor.y - FORMAT_BAR_LIFT_PX).max(CssPx::ZERO).get()
     );
     let controls = controls.into_iter().map(|control| {
         let on_press = control.on_press;

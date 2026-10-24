@@ -55,6 +55,11 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The page point at `(x, y)`, in CSS px.
+fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
+    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+}
+
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn document() -> web_sys::Document {
@@ -191,7 +196,7 @@ fn single_selection_shows_count_without_bounds() {
 /// (so a test can click a row and read back the fired `CommandId`).
 fn mount_ctx_menu(scope: CtxScope) -> (web_sys::Element, RwSignal<Option<CommandId>>) {
     let entries = RwSignal::new(ambre_toile::chrome::context_entries_for(&scope));
-    let pos = RwSignal::new(Some((10.0, 10.0)));
+    let pos = RwSignal::new(Some(css_point(10.0, 10.0)));
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
     let root = mount_in_container(

@@ -94,7 +94,7 @@ pub fn TopMenuBar(
     // `ContextMenu` clears `pos` on select / Escape / click-outside; an effect
     // then clears `open_menu` so the title un-presses.
     let open_menu = RwSignal::new(None::<MenuId>);
-    let pos = RwSignal::new(None::<(f64, f64)>);
+    let pos = RwSignal::new(None::<ambre_core::CssPoint>);
     Effect::new(move |_| {
         if pos.get().is_none() {
             open_menu.set(None);
@@ -134,11 +134,14 @@ pub fn TopMenuBar(
                             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
                         {
                             let r = el.get_bounding_client_rect();
-                            x = r.left();
-                            y = r.bottom();
+                            x = r.left() as f32;
+                            y = r.bottom() as f32;
                         }
                         open_menu.set(Some(id));
-                        pos.set(Some((x, y)));
+                        pos.set(Some(ambre_core::CssPoint::new(
+                            ambre_core::CssPx::new(x),
+                            ambre_core::CssPx::new(y),
+                        )));
                     }
                 >
                     <span class="ambre-menu-title">{*title}</span>

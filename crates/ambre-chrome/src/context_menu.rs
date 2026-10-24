@@ -14,6 +14,7 @@
 // ============================================================================
 
 use ambre_commands::{Command, CommandId, KeyBinding, Locale};
+use ambre_core::{CssPoint, CssPx, CssVector};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -116,12 +117,12 @@ impl MenuEntry {
     }
 }
 
-/// Context menu opened at viewport coordinates. `pos` is `Some((x, y))` to open,
+/// Context menu opened at a viewport point. `pos` is `Some(point)` to open,
 /// `None` to close; the component flips it back to `None` on Escape, selection
 /// and click-outside.
 #[component]
 pub fn ContextMenu(
-    pos: RwSignal<Option<(f64, f64)>>,
+    pos: RwSignal<Option<CssPoint>>,
     /// The menu rows, reactive so the launcher can swap a cell-scoped layout for
     /// a header-scoped one between right-clicks (`trame-context-menu`).
     #[prop(into)]
@@ -130,8 +131,7 @@ pub fn ContextMenu(
 ) -> impl IntoView {
     let menu_ref = NodeRef::<html::Ul>::new();
     let focused = RwSignal::new(0usize);
-    let menu_x = RwSignal::new(0.0_f64);
-    let menu_y = RwSignal::new(0.0_f64);
+    let menu_at = RwSignal::new(CssPoint::default());
 
     // The menu takes the focus, so it gives it back to what held it before it
     // opened (`CHROME-027`). Created before the effect that moves the focus in,
@@ -176,9 +176,9 @@ pub fn ContextMenu(
     // On open: reset highlight, then place at the click point and flip if the
     // menu would overflow the viewport (measured after it renders).
     Effect::new(move |_| {
-        let Some((x, y)) = pos.get() else { return };
+        let Some(at) = pos.get() else { return };
         focused.set(0);
-        let (mut lx, mut ty) = (x, y);
+        let mut placed = at;
         if let Some(menu) = menu_ref.get()
             && let Some(win) = web_sys::window()
         {
@@ -193,10 +193,12 @@ pub fn ContextMenu(
                 .ok()
                 .and_then(|v| v.as_f64())
                 .unwrap_or(rect.height());
-            (lx, ty) = place_menu(x, y, rect.width(), rect.height(), vw, vh);
+            // The DOM measures in f64 CSS px; a menu is placed in f32 ones.
+            let css = |v: f64| CssPx::new(v as f32);
+            let size = CssVector::new(css(rect.width()), css(rect.height()));
+            placed = place_menu(at, size, CssPoint::new(css(vw), css(vh)));
         }
-        menu_x.set(lx);
-        menu_y.set(ty);
+        menu_at.set(placed);
     });
 
     // Close on any pointerdown outside the menu. A document-level capture
@@ -356,7 +358,10 @@ pub fn ContextMenu(
                 aria-orientation="vertical"
                 aria-label="Context menu"
                 tabindex="-1"
-                style=move || format!("left:{}px; top:{}px;", menu_x.get(), menu_y.get())
+                style=move || {
+                    let at = menu_at.get();
+                    format!("left:{}px; top:{}px;", at.x.get(), at.y.get())
+                }
                 on:keydown=on_keydown
             >
                 {items}
@@ -365,30 +370,56 @@ pub fn ContextMenu(
     }
 }
 
-/// Place a `w` x `h` menu opened at click point `(x, y)` inside a `vw` x `vh`
-/// viewport. Each axis that would overflow is flipped, so the menu stays
-/// visible.
+/// Place a menu of extent `size` opened at click point `at`, in a viewport
+/// whose far corner is `viewport`. Each axis that would overflow is flipped,
+/// so the menu stays visible.
 ///
 /// Pure geometry (no DOM). The `Effect` above reads the real rect/viewport from
 /// `web-sys` and delegates the decision here, so it is host-testable. The
 /// `cfg(wasm32)` boundary stays at the DOM read. On the flipped axis the menu is
 /// anchored at `point - size`, clamped to `0`. A menu taller/wider than the
 /// viewport pins to the top/left edge rather than going off-screen.
-pub(crate) fn place_menu(x: f64, y: f64, w: f64, h: f64, vw: f64, vh: f64) -> (f64, f64) {
-    let lx = if x + w > vw { (x - w).max(0.0) } else { x };
-    let ty = if y + h > vh { (y - h).max(0.0) } else { y };
-    (lx, ty)
+pub(crate) fn place_menu(at: CssPoint, size: CssVector, viewport: CssPoint) -> CssPoint {
+    let far = at + size;
+    let back = at - size;
+    CssPoint::new(
+        if far.x > viewport.x {
+            back.x.max(CssPx::ZERO)
+        } else {
+            at.x
+        },
+        if far.y > viewport.y {
+            back.y.max(CssPx::ZERO)
+        } else {
+            at.y
+        },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::place_menu;
+    use ambre_core::{CssPoint, CssPx, CssVector};
+
+    /// The point at `(x, y)`, in CSS px.
+    fn pt(x: f32, y: f32) -> CssPoint {
+        CssPoint::new(CssPx::new(x), CssPx::new(y))
+    }
+
+    /// Place a `w` x `h` menu at `(x, y)` in a `vw` x `vh` viewport.
+    fn place(x: f32, y: f32, w: f32, h: f32, vw: f32, vh: f32) -> CssPoint {
+        place_menu(
+            pt(x, y),
+            CssVector::new(CssPx::new(w), CssPx::new(h)),
+            pt(vw, vh),
+        )
+    }
 
     #[test]
     fn no_overflow_keeps_click_point() {
         assert_eq!(
-            place_menu(10.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
-            (10.0, 20.0)
+            place(10.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
+            pt(10.0, 20.0)
         );
     }
 
@@ -396,8 +427,8 @@ mod tests {
     fn right_overflow_flips_horizontally() {
         // x + w = 960 + 100 = 1060 > 1000 -> anchor at x - w = 860.
         assert_eq!(
-            place_menu(960.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
-            (860.0, 20.0)
+            place(960.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
+            pt(860.0, 20.0)
         );
     }
 
@@ -405,16 +436,16 @@ mod tests {
     fn bottom_overflow_flips_vertically() {
         // y + h = 700 + 200 = 900 > 800 -> anchor at y - h = 500.
         assert_eq!(
-            place_menu(10.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
-            (10.0, 500.0)
+            place(10.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
+            pt(10.0, 500.0)
         );
     }
 
     #[test]
     fn corner_overflow_flips_both_axes() {
         assert_eq!(
-            place_menu(960.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
-            (860.0, 500.0)
+            place(960.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
+            pt(860.0, 500.0)
         );
     }
 
@@ -422,8 +453,8 @@ mod tests {
     fn menu_larger_than_viewport_pins_to_origin() {
         // Flipping would push negative; clamp to 0 (pin to top/left edge).
         assert_eq!(
-            place_menu(50.0, 50.0, 2000.0, 2000.0, 1000.0, 800.0),
-            (0.0, 0.0)
+            place(50.0, 50.0, 2000.0, 2000.0, 1000.0, 800.0),
+            pt(0.0, 0.0)
         );
     }
 }

@@ -431,7 +431,7 @@ pub(crate) const MENU_CANVASES: [ambre_core::CanvasId; 2] =
 /// menu shut, since its point is not the page's. A key's event lands on
 /// whatever holds the focus, the text pipe or the body as well as a canvas.
 pub(crate) fn install_canvas_context_menu(
-    ctx_menu: RwSignal<Option<(f64, f64)>>,
+    ctx_menu: RwSignal<Option<ambre_core::CssPoint>>,
     silent: Signal<bool>,
     placed: Signal<bool>,
 ) {
@@ -456,7 +456,10 @@ pub(crate) fn install_canvas_context_menu(
         if silent || placed {
             return;
         }
-        ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
+        ctx_menu.set(Some(ambre_core::CssPoint::new(
+            ambre_core::CssPx::new(e.client_x() as f32),
+            ambre_core::CssPx::new(e.client_y() as f32),
+        )));
     });
     let _ = leptos::prelude::document()
         .add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
@@ -810,6 +813,11 @@ mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// The page point at `(x, y)`, in CSS px.
+    fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
+        ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+    }
+
     /// The document's `data-theme`, as the stylesheet reads it.
     fn document_theme() -> Option<String> {
         web_sys::window()?
@@ -953,7 +961,11 @@ mod tests {
                 right_click(id.as_str()),
                 "{id}: the browser menu stays shut"
             );
-            assert_eq!(ctx_menu.get_untracked(), Some((12.0, 34.0)), "{id}");
+            assert_eq!(
+                ctx_menu.get_untracked(),
+                Some(css_point(12.0, 34.0)),
+                "{id}"
+            );
         }
         ctx_menu.set(None);
         silent.set(true);
@@ -983,7 +995,7 @@ mod tests {
         assert_eq!(ctx_menu.get_untracked(), None);
 
         placed.set(true);
-        ctx_menu.set(Some((1.0, 2.0)));
+        ctx_menu.set(Some(css_point(1.0, 2.0)));
         assert!(menu_key_on_the_pipe(), "the pipe's browser menu stays shut");
         assert!(
             right_click(crate::host::THREAD_CANVAS.as_str()),
@@ -991,7 +1003,7 @@ mod tests {
         );
         assert_eq!(
             ctx_menu.get_untracked(),
-            Some((1.0, 2.0)),
+            Some(css_point(1.0, 2.0)),
             "the point stays"
         );
     }

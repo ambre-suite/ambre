@@ -10,6 +10,11 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+/// The page point at `(x, y)`, in CSS px.
+fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
+    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+}
+
 /// The shell stylesheet, as the page loads it.
 const STYLES: &str = include_str!("../../styles.css");
 
@@ -32,7 +37,7 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
     sheet.set_text_content(Some(STYLES));
     inner.head().unwrap().append_child(&sheet).unwrap();
 
-    let pos = RwSignal::new(Some((150.0, 60.0)));
+    let pos = RwSignal::new(Some(css_point(150.0, 60.0)));
     let copy = Command {
         id: CommandId("clipboard.copy"),
         title: |_| "Copy".to_owned(),

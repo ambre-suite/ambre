@@ -34,6 +34,11 @@ use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
+/// The page point at `(x, y)`, in CSS px.
+fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
+    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+}
+
 wasm_bindgen_test_configure!(run_in_browser);
 
 const A: CommandId = CommandId("test.a");
@@ -385,8 +390,9 @@ async fn the_format_bar_hangs_its_controls_and_reports_a_press() {
         control("Italic", Pressed::Mixed),
         control("Code", Pressed::Off),
     ];
-    let root =
-        mount_in_container(move || view! { <FormatBar anchor=(200.0, 100.0) controls=controls /> });
+    let root = mount_in_container(
+        move || view! { <FormatBar anchor=css_point(200.0, 100.0) controls=controls /> },
+    );
 
     let bar = root.query_selector("[role=\"toolbar\"]").unwrap().unwrap();
     let style = bar.get_attribute("style").unwrap_or_default();
@@ -581,7 +587,7 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
 async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     let owner = Owner::new();
     owner.set();
-    let pos = RwSignal::new(None::<(f64, f64)>);
+    let pos = RwSignal::new(None::<ambre_core::CssPoint>);
     let item = ambre_commands::Command {
         id: CommandId("test.item"),
         title: |_| "Item".to_owned(),
@@ -604,7 +610,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
         .dyn_into()
         .unwrap();
     opener.focus().unwrap();
-    pos.set(Some((10.0, 10.0)));
+    pos.set(Some(css_point(10.0, 10.0)));
     leptos::task::tick().await;
     let menu = root.query_selector(".ambre-ctx-menu").unwrap().unwrap();
     let inside = active().is_some_and(|el| menu.contains(Some(&el)));
@@ -614,7 +620,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     assert!(root.query_selector(".ambre-ctx-menu").unwrap().is_none());
     assert_eq!(active().as_ref(), opener.dyn_ref(), "the focus came back");
 
-    pos.set(Some((10.0, 10.0)));
+    pos.set(Some(css_point(10.0, 10.0)));
     leptos::task::tick().await;
     let elsewhere: web_sys::HtmlElement = root
         .query_selector(".test-elsewhere")

@@ -521,7 +521,7 @@ impl MurmureView {
         }
         let i = self.last.as_ref()?.row_at(at.y.get())?;
         let mut target = self.target_of_row(i)?;
-        target.pressed = pressed.then_some((at.x.get(), at.y.get()));
+        target.pressed = pressed.then_some(at);
         Some(target)
     }
 
@@ -833,7 +833,7 @@ impl MurmureView {
         let (top, bottom) = self.last.as_ref()?.focus?;
         let middle = ViewPoint::new(ViewPx::ZERO, ViewPx::new((top + bottom) / 2.0));
         let mut target = self.target_at(middle, false)?;
-        target.pressed = Some((0.0, bottom));
+        target.pressed = Some(ViewPoint::new(ViewPx::ZERO, ViewPx::new(bottom)));
         Some(target)
     }
 
@@ -3182,7 +3182,7 @@ mod tests {
             styles: Vec::new(),
             notice: false,
             deleted: false,
-            pressed: Some((10.0, y)),
+            pressed: Some(pointer(10.0, y)),
             canvas: THREAD_CANVAS,
             from_thread: None,
         };
@@ -3241,7 +3241,7 @@ mod tests {
             let target = target.as_ref().expect("the focused message");
             assert_eq!(target.channel, channel);
             assert_eq!(target.message, rows[399].id);
-            assert_eq!(target.pressed, Some((0.0, bottom)));
+            assert_eq!(target.pressed, Some(pointer(0.0, bottom)));
             assert_eq!(target.canvas, CHANNEL_CANVAS);
         }
         assert!(page.commands.try_recv().is_err(), "nothing was sent");
