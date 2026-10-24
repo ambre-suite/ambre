@@ -951,7 +951,7 @@
   {"edge": "cites-document", "from": "CHROME-049", "to": "ambre-spec-zero-knowledge.md"},
   {"edge": "cites-rule", "from": "CHROME-049", "to": "ZK-001"},
   {"edge": "cites-section", "from": "CHROME-053", "section": "3", "to": "1-Foundations/ambre-spec-key-verification.md"},
-  {"edge": "verified-by", "from": "CHROME-053", "to": "ambre_logic::persistence::wasm_tests::upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots"},
+  {"edge": "verified-by", "from": "CHROME-053", "to": "ambre_logic::persistence::wasm_tests::an_upgrade_adds_trusted_keys_and_keeps_snapshots"},
   {"edge": "verified-by", "from": "CHROME-053", "to": "::trusted_key_roundtrips_and_absent_is_none"},
   {"edge": "cites-section", "from": "CHROME-054", "section": "3", "to": "1-Foundations/ambre-spec-key-verification.md"},
   {"edge": "cites-document", "from": "CHROME-054", "to": "ambre-spec-server.md"},
