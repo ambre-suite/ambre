@@ -170,7 +170,7 @@ fn element_shape(el: &ExportElement) -> Option<String> {
             // (`TOILE-IO-088`). A size the style leaves automatic is the
             // default the board draws a free text at.
             let body = xml_escape(el.text.as_deref().unwrap_or(""));
-            let size = f64::from(el.style.font.size.or_default().to_px());
+            let size = f64::from(el.style.font.size.or_default().to_px().get());
             let paint = SvgPaint {
                 attribute: PaintAttribute::Fill,
                 colour: el.style.text_color.unwrap_or(Rgba::from_bits(0x0000_00FF)),

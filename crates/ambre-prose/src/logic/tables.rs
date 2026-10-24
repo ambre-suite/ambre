@@ -639,7 +639,7 @@ impl ProseState {
             writes.push((doc::AttrKey::VAlign, i64::from(valign.code()).into()));
         }
         if let Some(border) = border {
-            let width = Pt::new(border.width_pt);
+            let width = border.width_pt;
             if !usable(width, Floor::ZeroAllowed) {
                 return Self::err_table(TableValue::Border(width));
             }
@@ -649,7 +649,7 @@ impl ProseState {
                 doc::AttrKey::EdgeLeft,
                 doc::AttrKey::EdgeRight,
             ] {
-                writes.push((key, f64::from(border.width_pt).into()));
+                writes.push((key, f64::from(width.get()).into()));
             }
             writes.push((doc::AttrKey::EdgeColor, border.color.to_string().into()));
         }
@@ -1337,7 +1337,7 @@ pub(crate) mod tests {
             bg: Some(Rgb::from_bits(0x00ff_8800)),
             valign: Some(VAlign::Middle),
             border: Some(CellBorder {
-                width_pt: 1.5,
+                width_pt: ambre_core::Pt::new(1.5),
                 color: Rgb::from_bits(0x0012_3456),
             }),
             padding_pt: Some(ambre_core::Pt::new(4.0)),

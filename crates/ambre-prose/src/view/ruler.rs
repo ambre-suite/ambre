@@ -194,7 +194,7 @@ impl ProseUiState {
         }
         let block_id = self.cursor.as_ref()?.block_id;
         let mut style = ParagraphStyle::default();
-        let points = Some(release.points.get());
+        let points = Some(release.points);
         match release.handle {
             RulerHandle::IndentFirst if release.points != ruler.indent_first => {
                 style.indent_first = points;
@@ -234,9 +234,9 @@ mod tests {
         state.handle_command(ProseCommand::SetParagraphStyle {
             block_id: quoted,
             style: ParagraphStyle {
-                indent_first: Some(24.0),
-                indent_left: Some(36.0),
-                indent_right: Some(18.0),
+                indent_first: Some(ambre_core::Pt::new(24.0)),
+                indent_left: Some(ambre_core::Pt::new(36.0)),
+                indent_right: Some(ambre_core::Pt::new(18.0)),
                 ..ParagraphStyle::default()
             },
         });
@@ -337,7 +337,7 @@ mod tests {
             ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_left: Some(72.0),
+                    indent_left: Some(ambre_core::Pt::new(72.0)),
                     ..ParagraphStyle::default()
                 },
             }
@@ -412,7 +412,7 @@ mod tests {
             Some(ProseCommand::SetParagraphStyle {
                 block_id: quoted,
                 style: ParagraphStyle {
-                    indent_first: Some(48.0),
+                    indent_first: Some(ambre_core::Pt::new(48.0)),
                     ..ParagraphStyle::default()
                 },
             })

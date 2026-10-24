@@ -588,11 +588,11 @@ impl LineHeight {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ParagraphStyle {
     pub align: Option<Align>,
-    pub indent_first: Option<f32>,
-    pub indent_left: Option<f32>,
-    pub indent_right: Option<f32>,
-    pub space_before: Option<f32>,
-    pub space_after: Option<f32>,
+    pub indent_first: Option<Pt>,
+    pub indent_left: Option<Pt>,
+    pub indent_right: Option<Pt>,
+    pub space_before: Option<Pt>,
+    pub space_after: Option<Pt>,
     pub line_height: Option<LineHeight>,
     pub keep_together: Option<bool>,
     pub keep_with_next: Option<bool>,
@@ -717,7 +717,7 @@ impl VAlign {
 /// uses.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CellBorder {
-    pub width_pt: f32,
+    pub width_pt: Pt,
     pub color: Rgb,
 }
 

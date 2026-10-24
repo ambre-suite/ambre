@@ -45,7 +45,7 @@ pub const BODY_SIZE: f32 = 12.0;
 /// every other view.
 #[must_use]
 pub fn cell_font_px(size: Option<FontSize>) -> f32 {
-    size.map_or(BODY_SIZE, FontSize::to_px)
+    size.map_or(BODY_SIZE, |size| size.to_px().get())
 }
 /// Header label font size (column letters + row numbers).
 pub const HEADER_SIZE: f32 = 11.0;

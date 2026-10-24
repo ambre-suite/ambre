@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::unit::DocPx;
+
 /// CSS pixels per typographic point: a point is 1/72 inch, a CSS pixel is
 /// 1/96 inch.
 pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
@@ -45,10 +47,10 @@ impl FontSize {
         self.0
     }
 
-    /// The size in CSS pixels, the unit the layout engine reads.
+    /// The size in document pixels, the unit the layout engine reads.
     #[must_use]
-    pub fn to_px(self) -> f32 {
-        self.0 * PX_PER_PT
+    pub fn to_px(self) -> DocPx {
+        DocPx::new(self.0 * PX_PER_PT)
     }
 
     /// The size rounded to whole points, as a picker of whole points lists it.
@@ -114,12 +116,12 @@ pub mod whole_points {
 
 #[cfg(test)]
 mod tests {
-    use super::FontSize;
+    use super::{DocPx, FontSize};
 
     #[test]
     fn twelve_points_are_sixteen_pixels() {
-        assert_eq!(FontSize::from_whole_points(12).to_px(), 16.0);
-        assert_eq!(FontSize::from_whole_points(9).to_px(), 12.0);
+        assert_eq!(FontSize::from_whole_points(12).to_px(), DocPx::new(16.0));
+        assert_eq!(FontSize::from_whole_points(9).to_px(), DocPx::new(12.0));
     }
 
     #[test]

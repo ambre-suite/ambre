@@ -1164,7 +1164,7 @@ mod tests {
             if let ProseCommand::SetCellStyle { bg, border, .. } = command {
                 *bg = Some(ambre_core::Rgb::from_bits(0x00ff_8800));
                 *border = Some(CellBorder {
-                    width_pt: 3.0,
+                    width_pt: ambre_core::Pt::new(3.0),
                     color: ambre_core::Rgb::from_bits(0x0012_3456),
                 });
             }

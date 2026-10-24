@@ -649,7 +649,7 @@ mod tests {
         let e1 = size_of("e1").as_fixed();
         assert_eq!(
             e1.map(ambre_core::FontSize::to_px),
-            Some(16.0),
+            Some(ambre_core::DocPx::new(16.0)),
             "16 px read back as 16 px"
         );
         assert_eq!(e1, Some(ambre_core::FontSize::from_whole_points(12)));

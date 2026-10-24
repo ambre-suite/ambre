@@ -221,7 +221,9 @@ pub enum TextHost {
 pub(crate) fn sticky_or_style_font_size(host: TextHost, style: &ElementStyle, bounds: Rect) -> f32 {
     match (host, style.font.size.as_fixed()) {
         (TextHost::Sticky, None) => sticky_font_size(bounds),
-        (TextHost::Text, _) | (TextHost::Sticky, Some(_)) => style.font.size.or_default().to_px(),
+        (TextHost::Text, _) | (TextHost::Sticky, Some(_)) => {
+            style.font.size.or_default().to_px().get()
+        }
     }
 }
 

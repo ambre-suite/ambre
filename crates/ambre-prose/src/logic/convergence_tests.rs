@@ -94,7 +94,7 @@ fn two_peers_setting_two_paragraph_properties_lose_neither() {
         .handle_command(ProseCommand::SetParagraphStyle {
             block_id: block,
             style: ParagraphStyle {
-                space_after: Some(12.0),
+                space_after: Some(ambre_core::Pt::new(12.0)),
                 ..ParagraphStyle::default()
             },
         })
@@ -105,7 +105,7 @@ fn two_peers_setting_two_paragraph_properties_lose_neither() {
     for state in [&alice, &bob] {
         let style = state.paragraph_style_of(&block);
         assert_eq!(style.align, Some(Align::Center));
-        assert_eq!(style.space_after, Some(12.0));
+        assert_eq!(style.space_after, Some(ambre_core::Pt::new(12.0)));
     }
 }
 
@@ -534,7 +534,7 @@ fn two_peers_setting_two_paragraph_properties_both_keep_theirs() {
         .handle_command(ProseCommand::SetParagraphStyle {
             block_id: block,
             style: ParagraphStyle {
-                space_before: Some(6.0),
+                space_before: Some(ambre_core::Pt::new(6.0)),
                 ..ParagraphStyle::default()
             },
         })
@@ -554,7 +554,7 @@ fn two_peers_setting_two_paragraph_properties_both_keep_theirs() {
 
     let style = alice.paragraph_style_of(&block);
     assert_eq!(style, bob.paragraph_style_of(&block));
-    assert_eq!(style.space_before, Some(6.0));
+    assert_eq!(style.space_before, Some(ambre_core::Pt::new(6.0)));
     assert_eq!(style.align, Some(Align::Center));
 }
 

@@ -940,7 +940,7 @@ pub(crate) fn write_paragraph_style(
         (NodeKey::SpaceAfter, style.space_after),
     ] {
         if let Some(points) = value {
-            node.insert(key, f64::from(points))?;
+            node.insert(key, f64::from(points.get()))?;
         }
     }
     for (key, value) in [
@@ -1003,11 +1003,11 @@ pub fn read_paragraph_style(tree: &LoroTree, id: &TreeID) -> ParagraphStyle {
         align: read_i64(&node, NodeKey::Align)
             .and_then(|n| u8::try_from(n).ok())
             .and_then(Align::from_code),
-        indent_first: read_f32(&node, NodeKey::IndentFirst),
-        indent_left: read_f32(&node, NodeKey::IndentLeft),
-        indent_right: read_f32(&node, NodeKey::IndentRight),
-        space_before: read_f32(&node, NodeKey::SpaceBefore),
-        space_after: read_f32(&node, NodeKey::SpaceAfter),
+        indent_first: read_pt(&node, NodeKey::IndentFirst),
+        indent_left: read_pt(&node, NodeKey::IndentLeft),
+        indent_right: read_pt(&node, NodeKey::IndentRight),
+        space_before: read_pt(&node, NodeKey::SpaceBefore),
+        space_after: read_pt(&node, NodeKey::SpaceAfter),
         line_height: read_line_height(&node),
         keep_together: read_bool(&node, NodeKey::KeepTogether),
         keep_with_next: read_bool(&node, NodeKey::KeepWithNext),
@@ -1540,6 +1540,11 @@ fn read_f64<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f64> {
 
 fn read_f32<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f32> {
     read_f64(map, key).map(|n| n as f32)
+}
+
+/// A length in points stored under `key`.
+fn read_pt<K: FieldKey>(map: &Fields<K>, key: K) -> Option<Pt> {
+    read_f32(map, key).map(Pt::new)
 }
 
 pub(crate) fn read_bool<K: FieldKey>(map: &Fields<K>, key: K) -> Option<bool> {

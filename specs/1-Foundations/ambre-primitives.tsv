@@ -219,7 +219,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | 
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::has_body() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | CellBorder.width_pt | field | f32	math	paragraph / table geometry in points
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.orphaned | field | bool	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentThread.resolved | field | bool	generic	named setting or fact flag, selects no mode
@@ -247,13 +246,8 @@ ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::new(text) | param | 
 ambre-bus | src/app/prose.rs | crate::app::prose | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.indent_first | field | Option<f32>	math	paragraph / table geometry in points
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.indent_left | field | Option<f32>	math	paragraph / table geometry in points
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.indent_right | field | Option<f32>	math	paragraph / table geometry in points
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.keep_together | field | Option<bool>	generic	named setting or fact flag, selects no mode
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.keep_with_next | field | Option<bool>	generic	named setting or fact flag, selects no mode
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.space_after | field | Option<f32>	math	paragraph / table geometry in points
-ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle.space_before | field | Option<f32>	math	paragraph / table geometry in points
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	the raw value the UI sends, checked in Logic by validate_value, which lives in ambre-prose; the bus carries the text before its check
@@ -1295,10 +1289,9 @@ ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	
 ambre-core | src/font.rs | crate::font | FontSize::from_whole_points(points) | param | u16	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::new(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::points() | ret | f32	newtype-inner	FontSize field, constructor or accessor
-ambre-core | src/font.rs | crate::font | FontSize::to_px() | ret | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::whole_points() | ret | u16	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | InvalidFontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
-ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	unit conversion factor, points to pixels
+ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	newtype-inner	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_ID_LEN]	newtype-inner	KeyId newtype

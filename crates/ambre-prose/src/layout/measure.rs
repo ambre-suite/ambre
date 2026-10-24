@@ -134,7 +134,7 @@ impl EffectiveStyle {
     ) -> Self {
         // A stored size outside the range of a font size lays out at zero
         // rather than at a negative height.
-        let font_size_px = DocPx::new(defaults.font_size.to_px());
+        let font_size_px = defaults.font_size.to_px();
         Self {
             font_family: defaults.font_family.clone(),
             font_size_px,
@@ -143,11 +143,11 @@ impl EffectiveStyle {
             bold: weight == Weight::Bold,
             italic: false,
             align: paragraph.align.unwrap_or(Align::Left),
-            indent_first_px: Pt::new(paragraph.indent_first.unwrap_or(0.0)).to_doc_px(),
-            indent_left_px: Pt::new(paragraph.indent_left.unwrap_or(0.0)).to_doc_px(),
-            indent_right_px: Pt::new(paragraph.indent_right.unwrap_or(0.0)).to_doc_px(),
-            space_before_px: Pt::new(paragraph.space_before.unwrap_or(0.0)).to_doc_px(),
-            space_after_px: Pt::new(paragraph.space_after.unwrap_or(0.0)).to_doc_px(),
+            indent_first_px: paragraph.indent_first.unwrap_or(Pt::ZERO).to_doc_px(),
+            indent_left_px: paragraph.indent_left.unwrap_or(Pt::ZERO).to_doc_px(),
+            indent_right_px: paragraph.indent_right.unwrap_or(Pt::ZERO).to_doc_px(),
+            space_before_px: paragraph.space_before.unwrap_or(Pt::ZERO).to_doc_px(),
+            space_after_px: paragraph.space_after.unwrap_or(Pt::ZERO).to_doc_px(),
             keep_together: paragraph.keep_together.unwrap_or(false),
             keep_with_next: paragraph.keep_with_next.unwrap_or(false),
         }
@@ -1135,7 +1135,7 @@ mod tests {
         let style =
             EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), Weight::Regular);
         let twelve = ambre_core::FontSize::from_whole_points(12);
-        assert_eq!(style.font_size_px, DocPx::new(twelve.to_px()));
+        assert_eq!(style.font_size_px, twelve.to_px());
         assert_eq!(style.font_size_px, DocPx::new(16.0));
     }
 
