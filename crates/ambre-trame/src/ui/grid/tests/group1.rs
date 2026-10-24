@@ -338,7 +338,10 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
     );
 
     // Hit-testing the interior of that cell returns it.
-    assert_eq!(state.cell_at(pointer(cell.x0 + 5.0, cell.y0 + 5.0)), Some(at(1, 1)));
+    assert_eq!(
+        state.cell_at(pointer(cell.x0 + 5.0, cell.y0 + 5.0)),
+        Some(at(1, 1))
+    );
     // A point inside the tall row 0 / wide col 0 maps to (0, 0).
     assert_eq!(
         state.cell_at(pointer(
@@ -631,16 +634,8 @@ fn fill_handle_sits_on_merge_extent_corner() {
         .cell_pixel_rect(CellPos::new(Row::new(2), Col::new(2)))
         .expect("extent corner visible");
     let s = super::super::FILL_HANDLE_SIZE;
-    assert_eq!(
-        handle.x0,
-        extent.x1 - s / 2.0,
-        "handle x on extent"
-    );
-    assert_eq!(
-        handle.y0,
-        extent.y1 - s / 2.0,
-        "handle y on extent"
-    );
+    assert_eq!(handle.x0, extent.x1 - s / 2.0, "handle x on extent");
+    assert_eq!(handle.y0, extent.y1 - s / 2.0, "handle y on extent");
 }
 
 /// Bug 3: a drag-selection that touches part of a merge selects the whole

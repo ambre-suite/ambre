@@ -289,7 +289,11 @@ impl ProseUiState {
                 Some((camera * Affine::translate((0.0, top.get()))).transform_rect_bbox(bar));
         }
         // Last, so a collaborator's caret never hides the text under it.
-        for block in frame.blocks.iter().filter(|block| block.remote_carets == RemoteCarets::Shown) {
+        for block in frame
+            .blocks
+            .iter()
+            .filter(|block| block.remote_carets == RemoteCarets::Shown)
+        {
             surface.push_transform(Affine::translate((0.0, block.top.get())));
             self.paint_carets(surface, block.id, block.run.data(), &block.placed);
             surface.pop_transform();
@@ -585,7 +589,9 @@ impl ProseUiState {
     ) -> Option<(RunLine, ambre_draw::BoundingBox)> {
         self.cursor
             .as_ref()
-            .filter(|cursor| local == LocalCaret::Shown && cursor.block_id == id && cursor.anchor.is_none())
+            .filter(|cursor| {
+                local == LocalCaret::Shown && cursor.block_id == id && cursor.anchor.is_none()
+            })
             // Parted and not yet answered, the block leaves its caret to the
             // paragraph drawn below it (`PROSE-UI-203`).
             .filter(|_| {

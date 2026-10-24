@@ -154,7 +154,9 @@ fn filtered_rows_collapse_geometry_and_nav() {
     let CellPos {
         row: hit_row,
         col: _,
-    } = state.cell_at(pointer(r4.x0 + 1.0, r4.y0 + 1.0)).expect("hit");
+    } = state
+        .cell_at(pointer(r4.x0 + 1.0, r4.y0 + 1.0))
+        .expect("hit");
     assert_eq!(hit_row, Row::new(4));
 
     // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.

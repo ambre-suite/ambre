@@ -567,7 +567,10 @@ mod tests {
 
     /// The size of a region, in its view pixels.
     fn view_size(width: f32, height: f32) -> ambre_core::ViewSize {
-        ambre_core::ViewSize::new(ambre_core::ViewPx::new(width), ambre_core::ViewPx::new(height))
+        ambre_core::ViewSize::new(
+            ambre_core::ViewPx::new(width),
+            ambre_core::ViewPx::new(height),
+        )
     }
 
     /// A box in the page, taken out when the test ends, even on a failed

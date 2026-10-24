@@ -198,7 +198,12 @@ impl InlineEditor {
     /// Push the pinned style + geometry onto the editor for this paint, then
     /// apply every queued intent. Must run before rendering. `wrap_w` is the wrap
     /// width in screen pixels; `zoom` bakes into the font size.
-    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: ViewPx, zoom: ambre_core::ZoomFactor) {
+    pub fn flush(
+        &mut self,
+        font_cx: &mut FontContext,
+        wrap_w: ViewPx,
+        zoom: ambre_core::ZoomFactor,
+    ) {
         self.core.flush(font_cx, wrap_w, zoom);
     }
 

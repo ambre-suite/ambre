@@ -35,8 +35,8 @@ use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, Modifiers};
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize, ZoomFactor,
-    byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
+    ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize,
+    ZoomFactor, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
 };
 use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 

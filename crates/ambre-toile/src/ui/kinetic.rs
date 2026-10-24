@@ -173,7 +173,11 @@ mod tests {
         assert_eq!(kinetic.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and the next one moves.
         coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0));
-        let vy = kinetic.speed().expect("the paused glide carries on").dy.get();
+        let vy = kinetic
+            .speed()
+            .expect("the paused glide carries on")
+            .dy
+            .get();
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         assert!(coast(
             &mut cam,
@@ -228,6 +232,9 @@ mod tests {
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         assert_eq!(edge_pan_speed(&cam, Point::new(400.0, 300.0)), still);
         let (sx, sy) = edge_pan_speed(&cam, Point::new(799.0, 2.0));
-        assert!(sx.get().get() > 0.0 && sy.get().get() < 0.0, "{sx:?} {sy:?}");
+        assert!(
+            sx.get().get() > 0.0 && sy.get().get() < 0.0,
+            "{sx:?} {sy:?}"
+        );
     }
 }

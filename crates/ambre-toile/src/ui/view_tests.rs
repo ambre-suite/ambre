@@ -999,13 +999,21 @@ fn the_board_editor_drives_the_shared_core() {
     let style = rig.view.editor.as_ref().expect("open").style().clone();
     let mut core = TextEditor::new("hi", style);
     let mut font_cx = FontContext::new();
-    core.flush(&mut font_cx, ambre_core::ViewPx::new(1000.0), ambre_core::ZoomFactor::ONE);
+    core.flush(
+        &mut font_cx,
+        ambre_core::ViewPx::new(1000.0),
+        ambre_core::ZoomFactor::ONE,
+    );
 
     for (step, (event, intent)) in corpus.into_iter().enumerate() {
         rig.input(event);
         rig.paint();
         core.push(intent);
-        core.flush(&mut font_cx, ambre_core::ViewPx::new(1000.0), ambre_core::ZoomFactor::ONE);
+        core.flush(
+            &mut font_cx,
+            ambre_core::ViewPx::new(1000.0),
+            ambre_core::ZoomFactor::ONE,
+        );
         let ed = rig.view.editor.as_ref().expect("still open");
         let board_text = ed
             .committed_text()
@@ -2779,7 +2787,8 @@ fn a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke() {
 fn a_thread_brings_the_camera_to_its_anchor() {
     let mut rig = Rig::new();
     rig.sent();
-    rig.view.focus_thread(&CommentAnchor::Point(kurbo::Point::new(700.0, -300.0)));
+    rig.view
+        .focus_thread(&CommentAnchor::Point(kurbo::Point::new(700.0, -300.0)));
     assert_eq!(rig.view.cam.center, kurbo::Point::new(700.0, -300.0));
 
     rig.view.focus_thread(&CommentAnchor::Element(eid("far")));

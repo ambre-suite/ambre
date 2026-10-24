@@ -944,9 +944,11 @@ impl MurmureView {
             return;
         };
         let now_ms = (self.reads.now_ms)();
-        let step = self
-            .kinetic
-            .wheel(down(over.on_page(CssPx::ZERO)), WheelDeltaMode::Page, now_ms);
+        let step = self.kinetic.wheel(
+            down(over.on_page(CssPx::ZERO)),
+            WheelDeltaMode::Page,
+            now_ms,
+        );
         self.scroll_by(step);
     }
 
@@ -3197,7 +3199,11 @@ mod tests {
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         // The list rests on its latest row: the top of the region is empty.
-        let above = shown(&page.view).rows.first().map_or(0.0, |r| r.bounds.top.get()) - 1.0;
+        let above = shown(&page.view)
+            .rows
+            .first()
+            .map_or(0.0, |r| r.bounds.top.get())
+            - 1.0;
         assert!(above > 0.0, "room above the first row");
         button(&mut page, PointerButton::Secondary, above);
         assert_eq!(page.acted.borrow().last(), Some(&None), "off any message");
@@ -3377,7 +3383,10 @@ mod tests {
         };
         assert!(!page.view.handle_input(&ev));
         assert_eq!(page.view.hover(), Some(Point::new(3.0, 4.0)));
-        assert_eq!(page.view.size(), ViewSize::new(ViewPx::new(300.0), ViewPx::new(400.0)));
+        assert_eq!(
+            page.view.size(),
+            ViewSize::new(ViewPx::new(300.0), ViewPx::new(400.0))
+        );
     }
 
     /// A page on `channel`, painted once so the composer's band exists.
@@ -3860,7 +3869,11 @@ mod tests {
 
         page.pane.set(MurmurePane::ChannelList);
         frame_with_fonts(&mut page.view);
-        assert_eq!(page.view.composer().band().get(), 0.0, "no channel, no composer");
+        assert_eq!(
+            page.view.composer().band().get(),
+            0.0,
+            "no channel, no composer"
+        );
     }
 
     /// A press in the band gives the pipe the keyboard and is consumed.
@@ -4508,7 +4521,11 @@ mod tests {
         };
         send(&page, channel, watchers(vec![ada]));
         assert_eq!(strip_runs(&mut page), vec!["Ada is typing".len()]);
-        assert_eq!(page.view.composer().band().get(), band, "the list did not move");
+        assert_eq!(
+            page.view.composer().band().get(),
+            band,
+            "the list did not move"
+        );
         send(&page, channel, watchers(vec![ada, bob]));
         assert_eq!(strip_runs(&mut page), vec!["Ada and Ada are typing".len()]);
         send(&page, channel, watchers(vec![]));

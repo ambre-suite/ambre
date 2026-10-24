@@ -2514,7 +2514,11 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     );
     // The frame past the pause launches the motion, and the next one moves.
     rig.ui.tick_fling(ambre_core::PageTime(64.0 + 70.0));
-    let speed = rig.ui.fling_speed().expect("the paused glide carries on").get();
+    let speed = rig
+        .ui
+        .fling_speed()
+        .expect("the paused glide carries on")
+        .get();
     assert!((speed - 1.0).abs() < 0.05, "the glide's speed, {speed}");
     assert!(rig.ui.tick_fling(ambre_core::PageTime(64.0 + 86.0)));
     assert!(rig.ui.viewport.scroll_y > glided);

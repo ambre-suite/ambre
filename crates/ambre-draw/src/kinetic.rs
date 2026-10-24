@@ -317,10 +317,8 @@ impl Kinetic {
         self.motion = None;
         // The wheel delta is already in screen pixels, and a view pixel is a
         // CSS pixel in size (`CANVAS-032`): the step takes it one for one.
-        let moved = ambre_core::ViewVector::new(
-            ViewPx::new(delta.dx.get()),
-            ViewPx::new(delta.dy.get()),
-        );
+        let moved =
+            ambre_core::ViewVector::new(ViewPx::new(delta.dx.get()), ViewPx::new(delta.dy.get()));
         let step = ScrollStep {
             x: moved.dx,
             y: moved.dy,
@@ -430,9 +428,7 @@ fn edge_speed(at: ViewPx, extent: ViewPx) -> ViewSpeed {
     } else {
         ViewPx::ZERO
     };
-    depth
-        .clamp(-EDGE_DEPTH_PX, EDGE_DEPTH_PX)
-        .per(EDGE_SPAN_MS)
+    depth.clamp(-EDGE_DEPTH_PX, EDGE_DEPTH_PX).per(EDGE_SPAN_MS)
 }
 
 #[cfg(test)]

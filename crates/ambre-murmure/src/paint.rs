@@ -17,7 +17,8 @@ use ambre_draw::{
 };
 
 use crate::list::{
-    HeaderWords, JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
+    HeaderWords, JUMP_TO_LATEST, MessageList, RowKey, RowWords, UNREAD_LINE, chip_label,
+    file_label, window,
 };
 use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
@@ -273,7 +274,12 @@ pub fn paint_list<S: DrawSurface>(
     let mut played = Played::default();
     let mut line_shown = false;
     let mut focus = None;
-    for &LaidRow { index: i, top, tall } in &laid {
+    for &LaidRow {
+        index: i,
+        top,
+        tall,
+    } in &laid
+    {
         let Some((row, line)) = words.get(&i) else {
             continue;
         };
@@ -486,7 +492,12 @@ fn draw_chips<S: DrawSurface>(
             ambre_canvas::Weight::Regular,
         );
         let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
-        draw(surface, layout, ViewPoint::new(left, top), palette.cell_text);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(left, top),
+            palette.cell_text,
+        );
     }
 }
 
@@ -516,7 +527,12 @@ fn draw_files<S: DrawSurface>(
             ambre_canvas::Weight::Regular,
         );
         let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
-        draw(surface, layout, ViewPoint::new(left, top), palette.selection);
+        draw(
+            surface,
+            layout,
+            ViewPoint::new(left, top),
+            palette.selection,
+        );
     }
 }
 
@@ -777,13 +793,7 @@ fn body<'c>(
         .iter()
         .map(|mark| look::shape(&mark.style, mark.bytes))
         .collect();
-    cache.get_or_build_spans(
-        font_cx,
-        &row.body,
-        FONT_BODY,
-        width,
-        &spans,
-    )
+    cache.get_or_build_spans(font_cx, &row.body, FONT_BODY, width, &spans)
 }
 
 /// Fill the boxes `layout` gives the bytes `bytes`, its top at `body_y`.
@@ -1407,7 +1417,10 @@ pub(crate) mod tests {
 
         let bottom = at.rows[0].bounds.bottom.get();
         let selecting = Selecting {
-            click: Some(view_at((SPACE_8.get() + 2.0, bottom - 2.0 * SPACE_2.get() - 2.0))),
+            click: Some(view_at((
+                SPACE_8.get() + 2.0,
+                bottom - 2.0 * SPACE_2.get() - 2.0,
+            ))),
             ..Selecting::default()
         };
         let shown = Shown {

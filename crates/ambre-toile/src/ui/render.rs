@@ -518,12 +518,7 @@ pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
     let tall = f64::from(FRAME_TITLE_PX.get());
     let w = (title.chars().count() as f64) * tall * 0.6;
     let bottom = screen.y0 - FRAME_TITLE_GAP;
-    Some(Rect::new(
-        screen.x0,
-        bottom - tall,
-        screen.x0 + w,
-        bottom,
-    ))
+    Some(Rect::new(screen.x0, bottom - tall, screen.x0 + w, bottom))
 }
 
 /// Paint each visible frame's title above it, in screen space (`TOILE-253`).

@@ -615,8 +615,18 @@ impl QuadRenderer {
 
         // -- Ping-pong offscreen pair (initial dummy 1x1, sized on first frame) --
         let offscreens = [
-            OffscreenTarget::new(device, offscreen_format, DeviceSize::new(1, 1), "cells_offscreen_a"),
-            OffscreenTarget::new(device, offscreen_format, DeviceSize::new(1, 1), "cells_offscreen_b"),
+            OffscreenTarget::new(
+                device,
+                offscreen_format,
+                DeviceSize::new(1, 1),
+                "cells_offscreen_a",
+            ),
+            OffscreenTarget::new(
+                device,
+                offscreen_format,
+                DeviceSize::new(1, 1),
+                "cells_offscreen_b",
+            ),
         ];
         let blit_bind_groups = [
             make_blit_bg(
@@ -862,11 +872,7 @@ impl QuadRenderer {
         if image.size.width == 0 || image.size.height == 0 {
             return;
         }
-        if self
-            .images
-            .get(image.key, image.size)
-            .is_none()
-        {
+        if self.images.get(image.key, image.size).is_none() {
             let Some(uploaded) = self.upload_image(device, queue, image) else {
                 return;
             };

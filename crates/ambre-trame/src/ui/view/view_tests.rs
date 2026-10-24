@@ -1057,11 +1057,8 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
             ..Default::default()
         },
     ];
-    let expected = super::interact::fit_column_width(
-        &cells,
-        &mut FontContext::new(),
-        &mut TextCache::new(),
-    );
+    let expected =
+        super::interact::fit_column_width(&cells, &mut FontContext::new(), &mut TextCache::new());
     rig.answer(TrameEvent::ColumnContent {
         col: Col::new(0),
         cells,
@@ -1103,7 +1100,12 @@ fn a_merged_fill_previews_whole_blocks() {
         ],
     });
     rig.sent();
-    let handle = rig.view.state.fill_handle_rect().expect("a handle").center();
+    let handle = rig
+        .view
+        .state
+        .fill_handle_rect()
+        .expect("a handle")
+        .center();
     rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
@@ -1586,7 +1588,12 @@ fn a_refused_fill_leaves_the_selection() {
     let mut rig = Rig::new();
     rig.frame();
     rig.sent();
-    let handle = rig.view.state.fill_handle_rect().expect("a handle").center();
+    let handle = rig
+        .view
+        .state
+        .fill_handle_rect()
+        .expect("a handle")
+        .center();
     rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,

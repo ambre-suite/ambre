@@ -725,7 +725,10 @@ impl TextEditor {
         };
         let layout = &styled.layout;
         let focus = laid_on(self.editor.raw_selection(), layout).focus();
-        Some(on_its_line(layout, focus.geometry(layout, CARET_WIDTH.get())))
+        Some(on_its_line(
+            layout,
+            focus.geometry(layout, CARET_WIDTH.get()),
+        ))
     }
 
     /// The bytes of the line drawn around the caret: a wrapped line, not the
