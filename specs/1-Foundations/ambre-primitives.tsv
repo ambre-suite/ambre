@@ -1419,6 +1419,7 @@ ambre-core | src/span.rs | crate::span | UnixSeconds.0 | field | u64	newtype-inn
 ambre-core | src/span.rs | crate::span | UnixSeconds::to_i64_saturating() | ret | i64	newtype-inner	time newtype accessor
 ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
 ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-inner	HttpStatus field or accessor
+ambre-core | src/status.rs | crate::status | HttpStatus::is_client_error() | ret | bool	generic	predicate result
 ambre-core | src/status.rs | crate::status | HttpStatus::is_success() | ret | bool	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | SnapshotStatus::as_str() | ret | &'static str	newtype-inner	SnapshotStatus codec / StatusError
 ambre-core | src/status.rs | crate::status | StatusError.0 | field | String	newtype-inner	SnapshotStatus codec / StatusError
@@ -4414,10 +4415,10 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field |
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | ret | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
-ambre-prose | src/doc.rs | crate::doc | WriteError::Refused.0 | field | &'static str	free-text	a diagnostic sentence naming what the document could not do; it only reaches ProseRefusal::WriteFailed as text
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Refused.command | field | &'static str	free-text	the literal name of the fixture command, printed in the failure message only
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName.0 | field | String	newtype-inner	the text of a validated defined name
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor

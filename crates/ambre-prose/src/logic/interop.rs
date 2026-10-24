@@ -469,9 +469,7 @@ impl ProseState {
     pub(super) fn export_document(&self, format: ExportFormat) -> ProseOutcome {
         let ExportFormat::Markdown(flavor) = format else {
             // The native file is the Logic dispatcher's (`PROSE-IO-028`).
-            return Self::err_write(doc::WriteError::Refused(
-                "the file is written by the Logic thread, not by the document",
-            ));
+            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic));
         };
         let ir = self.walk();
         let stem = ir
@@ -519,7 +517,7 @@ impl ProseState {
         }
         let Some(mut rehearsal) = Self::new() else {
             return Self::err_write(doc::WriteError::Refused(
-                "the scratch document for the import was not built",
+                doc::RefusalCause::NoScratchDocument,
             ));
         };
         if let Err(refused) = rehearsal.write_import(ops) {

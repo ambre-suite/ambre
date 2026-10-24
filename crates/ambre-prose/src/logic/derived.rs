@@ -66,7 +66,7 @@ impl ProseState {
         let attrs = doc::node_of(&tree, id).and_then(|node| doc::attrs_at(&node));
         let Some(attrs) = attrs else {
             return Self::err_write(doc::WriteError::Refused(
-                "the block refused its attribute map",
+                doc::RefusalCause::BlockAttrsRefused,
             ));
         };
         let level = i64::from(max_level.get());

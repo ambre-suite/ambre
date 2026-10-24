@@ -224,7 +224,9 @@ impl ProseState {
             _ => return Self::err_no_block(id),
         };
         let Some(new_block) = doc::create_block(&self.doc, parent, block_type) else {
-            return Self::err_write(doc::WriteError::Refused("the tree refused a block"));
+            return Self::err_write(doc::WriteError::Refused(
+                doc::RefusalCause::TreeRefusedBlock,
+            ));
         };
         if let Err(e) = tree.mov_after(new_block, *id) {
             return Self::err_write(e);

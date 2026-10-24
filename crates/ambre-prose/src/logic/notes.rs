@@ -144,12 +144,13 @@ pub(crate) fn write_note_block(
     document: &loro::LoroDoc,
     text: &str,
 ) -> Result<TreeID, doc::WriteError> {
-    let block = doc::create_block(document, None, BlockType::Paragraph)
-        .ok_or(doc::WriteError::Refused("the tree refused a note block"))?;
+    let block = doc::create_block(document, None, BlockType::Paragraph).ok_or(
+        doc::WriteError::Refused(doc::RefusalCause::TreeRefusedNoteBlock),
+    )?;
     let tree = doc::blocks(document);
     doc::node_of(&tree, &block)
         .ok_or(doc::WriteError::Refused(
-            "the note block is not in the tree",
+            doc::RefusalCause::NoteBlockMissing,
         ))?
         .insert(doc::NodeKey::Note, true)?;
     doc::get_block_text(document, &block).insert(0, text)?;

@@ -1475,6 +1475,7 @@
   {"edge": "verified-by", "from": "SYNC-173", "to": "ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing"},
   {"edge": "verified-by", "from": "SYNC-173", "to": "ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused"},
   {"edge": "verified-by", "from": "SYNC-173", "to": "ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open"},
+  {"edge": "verified-by", "from": "SYNC-173", "to": "ambre_sync::updates::tests::a_refused_members_request_fails_the_open_as_refused"},
   {"edge": "cites-section", "from": "SYNC-014", "section": "3", "to": "1-Foundations/ambre-spec-membership.md"},
   {"edge": "verified-by", "from": "SYNC-014", "to": "ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key"},
   {"edge": "verified-by", "from": "SYNC-014", "to": "ambre_sync::sharing::tests::presence_directory_maps_valid_entries"},

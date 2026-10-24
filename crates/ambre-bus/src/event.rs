@@ -461,6 +461,12 @@ pub enum OpenFailure {
     /// The relay could not be reached, the session was not ready, or the
     /// replay stopped. A later open may succeed.
     Transient,
+    /// The relay answered the open with a refusal of the request itself, a
+    /// `4xx`. `code` is the refusal code its body named, if any. Asking again
+    /// meets the same answer.
+    Refused {
+        code: Option<ambre_core::RefusalCode>,
+    },
 }
 
 /// The relay's answer to a finalize lease request (the Murmure segments

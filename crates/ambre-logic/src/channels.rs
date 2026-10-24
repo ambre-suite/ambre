@@ -905,12 +905,13 @@ impl LogicState {
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
             // A missing key earns a band in the list. A transient failure
-            // earns none: asking again may open it.
+            // earns none: asking again may open it. A refusal earns none
+            // either: the band names a key, and the relay's answer is told.
             let band = match cause {
                 OpenFailure::KeyNotReceived => {
                     channel.band(document_id, Unreadable::KeyNotReceived)
                 }
-                OpenFailure::Transient => None,
+                OpenFailure::Transient | OpenFailure::Refused { .. } => None,
             };
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.

@@ -82,9 +82,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         let Some(attrs) = doc::attrs_at(&node) else {
-            return Self::err_write(doc::WriteError::Refused(
-                "the attribute map refused a container",
-            ));
+            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused));
         };
         if let Err(e) = Self::write_list_style(&attrs, style) {
             return Self::err_write(e);

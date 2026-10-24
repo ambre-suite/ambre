@@ -584,7 +584,7 @@ impl SyncState {
                     MembersAnswer::Failed(error) => {
                         let _ = tx.send(SyncEvent::OpenDocumentFailed {
                             document_id: doc_id,
-                            cause: OpenFailure::Transient,
+                            cause: members_failure_cause(&error),
                             message: members_failure_message(&error),
                         });
                         return;
@@ -1692,6 +1692,19 @@ impl<T> MembersAnswer<T> {
     }
 }
 
+/// Why an open that met `error` on its members request failed. A relay that
+/// refused the request itself refused the open. Any other failure may clear
+/// on a later open (`SYNC-173`).
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) fn members_failure_cause(error: &crate::http::HttpError) -> OpenFailure {
+    match error.failure() {
+        ApiFailure::Relay { status, code } if status.is_client_error() => {
+            OpenFailure::Refused { code }
+        }
+        _ => OpenFailure::Transient,
+    }
+}
+
 /// What an open that met `error` on its members request tells the user. A
 /// relay that refused, or whose answer does not read, was reached.
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -1758,6 +1771,36 @@ mod tests {
             members_failure_message(&lost),
             "the server could not be reached: GET /members: timeout"
         );
+    }
+
+    /// A relay that refuses the members request with a `4xx` refused the
+    /// open: asking again meets the same answer, so the open fails as
+    /// refused, with the relay's code. A lost answer, or a `5xx`, stays
+    /// transient (`SYNC-173`).
+    #[test]
+    fn a_refused_members_request_fails_the_open_as_refused() {
+        let at = crate::http::Target::relay("https://relay.test/api/documents/d/members");
+        let refused = crate::http::HttpError::refused(
+            crate::http::Method::Get,
+            &at,
+            ambre_core::HttpStatus(403),
+            Some(ambre_core::RefusalCode::Forbidden),
+        );
+        assert_eq!(
+            members_failure_cause(&refused),
+            OpenFailure::Refused {
+                code: Some(ambre_core::RefusalCode::Forbidden)
+            }
+        );
+        let down = crate::http::HttpError::refused(
+            crate::http::Method::Get,
+            &at,
+            ambre_core::HttpStatus(503),
+            None,
+        );
+        assert_eq!(members_failure_cause(&down), OpenFailure::Transient);
+        let lost = crate::http::HttpError::from("GET /members: timeout");
+        assert_eq!(members_failure_cause(&lost), OpenFailure::Transient);
     }
 
     /// One members row for `uid`, its key wrapped by `wrapper` for `holder`.

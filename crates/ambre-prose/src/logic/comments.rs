@@ -56,8 +56,8 @@ impl ProseState {
             end,
         };
         let written = self.write_thread(&id, span).and_then(|entry| {
-            let replies =
-                comment::replies_of(&entry).ok_or(doc::WriteError::Refused("no reply list"))?;
+            let replies = comment::replies_of(&entry)
+                .ok_or(doc::WriteError::Refused(doc::RefusalCause::NoReplyList))?;
             self.write_reply(&replies, text, now_ms)
         });
         if let Err(e) = written {
@@ -89,7 +89,7 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::NoIdentity);
         }
         let Some(replies) = comment::replies_of(&entry) else {
-            return Self::err_write(doc::WriteError::Refused("no reply list"));
+            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::NoReplyList));
         };
         if let Err(e) = self.write_reply(&replies, text, now_ms) {
             return Self::err_write(e);
@@ -163,7 +163,7 @@ impl ProseState {
                 _ => None,
             });
         let Some(body) = body else {
-            return Self::err_write(doc::WriteError::Refused("the reply holds no text"));
+            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::ReplyEmpty));
         };
         if let Err(e) = body.update(text, UpdateOptions::default()) {
             return Self::err_write(e);

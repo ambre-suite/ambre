@@ -70,7 +70,7 @@ impl ProseState {
             .and_then(|map| map.insert(doc::BandKey::Enabled, enabled).ok());
         if written.is_none() {
             return Self::err_write(doc::WriteError::Refused(
-                "the band register refused the setting",
+                doc::RefusalCause::BandSettingRefused,
             ));
         }
         self.commit_bands()
@@ -136,7 +136,7 @@ impl ProseState {
             .and_then(|map| map.insert(doc::BandKey::Align, band_align.as_str()).ok());
         if written.is_none() {
             return Self::err_write(doc::WriteError::Refused(
-                "the band register refused the alignment",
+                doc::RefusalCause::BandAlignRefused,
             ));
         }
         self.commit_bands()
@@ -193,7 +193,7 @@ impl ProseState {
         }
         let Some(id) = doc::create_block(&self.doc, None, BlockType::Paragraph) else {
             return Err(Self::err_write(doc::WriteError::Refused(
-                "the tree refused a band block",
+                doc::RefusalCause::TreeRefusedBandBlock,
             )));
         };
         let tree = doc::blocks(&self.doc);
@@ -204,7 +204,7 @@ impl ProseState {
             .and_then(|map| map.insert(doc::BandKey::Block, id.to_string()).ok());
         if marked.is_none() || named.is_none() {
             return Err(Self::err_write(doc::WriteError::Refused(
-                "the band block could not be named",
+                doc::RefusalCause::BandBlockUnnamed,
             )));
         }
         Ok(id)

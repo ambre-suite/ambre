@@ -164,7 +164,7 @@ impl ProseState {
         }
         let Some(id) = doc::create_block(&self.doc, parent_id, block_type) else {
             return Err(Self::err_write(doc::WriteError::Refused(
-                "the tree refused a block",
+                doc::RefusalCause::TreeRefusedBlock,
             )));
         };
         if let Some(after) = after_id
@@ -179,14 +179,11 @@ impl ProseState {
     pub(super) fn write_init(&self, id: &TreeID, init: &BlockInit) -> Result<(), doc::WriteError> {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
-            return Err(doc::WriteError::Refused(
-                "the block vanished before its attributes landed",
-            ));
+            return Err(doc::WriteError::Refused(doc::RefusalCause::BlockVanished));
         };
         let attrs = |key: doc::AttrKey, value: loro::LoroValue| -> Result<(), doc::WriteError> {
-            let map = doc::attrs_at(&node).ok_or(doc::WriteError::Refused(
-                "the attribute map refused a container",
-            ))?;
+            let map = doc::attrs_at(&node)
+                .ok_or(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused))?;
             map.insert(key, value).map_err(doc::WriteError::from)
         };
         match init {
@@ -195,9 +192,8 @@ impl ProseState {
             }
             BlockInit::CodeBlock { lang } => attrs(doc::AttrKey::Lang, lang.as_str().into()),
             BlockInit::ListItem { style } => {
-                let map = doc::attrs_at(&node).ok_or(doc::WriteError::Refused(
-                    "the attribute map refused a container",
-                ))?;
+                let map = doc::attrs_at(&node)
+                    .ok_or(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused))?;
                 Self::write_list_style(&map, *style)
             }
             // The three remaining types carry no attribute, so they carry no
@@ -405,9 +401,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         let Some(attrs) = doc::attrs_at(&node) else {
-            return Self::err_write(doc::WriteError::Refused(
-                "the attribute map refused a container",
-            ));
+            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused));
         };
         if let Err(e) = attrs.insert(key, value) {
             return Self::err_write(e);
@@ -454,7 +448,7 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         let Some(target_node) = doc::node_of(&tree, target) else {
             return Err(doc::WriteError::Refused(
-                "the new block vanished before its style landed",
+                doc::RefusalCause::NewBlockVanished,
             ));
         };
         if let Some(style_id) = doc::style_of(&tree, source) {
@@ -466,9 +460,8 @@ impl ProseState {
         let level = self.heading_level_of(&crate::events::block_id(*source));
         let lang = self.code_lang_of(&crate::events::block_id(*source));
         if level.is_some() || lang.is_some() {
-            let attrs = doc::attrs_at(&target_node).ok_or(doc::WriteError::Refused(
-                "the attribute map refused a container",
-            ))?;
+            let attrs = doc::attrs_at(&target_node)
+                .ok_or(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused))?;
             if let Some(level) = level {
                 attrs.insert(doc::AttrKey::Level, i64::from(level.get()))?;
             }

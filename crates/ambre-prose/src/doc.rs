@@ -37,10 +37,94 @@ pub(crate) enum WriteError {
     /// The engine gave up diffing a whole body's new text.
     TextUpdate(loro::UpdateTimeoutError),
     /// A part of the document the write needs was not there, or could not be
-    /// made. The sentence names it, for the log and the refusal alike.
-    Refused(&'static str),
+    /// made. The cause names it, and its sentence reads in the log and the
+    /// refusal alike.
+    Refused(RefusalCause),
     /// A write that names its author, made before the session named its user.
     NoIdentity,
+}
+
+/// Which part of the document a refused write needed: one variant per cause,
+/// so a caller and a test match the cause, never its sentence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RefusalCause {
+    /// A comment entry carries no reply list.
+    NoReplyList,
+    /// A row appended to a table holds no cell.
+    AppendedRowEmpty,
+    /// A block's attribute map refused a child container.
+    AttrMapRefused,
+    /// A band block got no name.
+    BandBlockUnnamed,
+    /// A band register refused its alignment.
+    BandAlignRefused,
+    /// A band register refused a setting.
+    BandSettingRefused,
+    /// A block refused its attribute map.
+    BlockAttrsRefused,
+    /// A block left the tree before its attributes landed.
+    BlockVanished,
+    /// An export the Logic thread writes reached the document.
+    FileByLogic,
+    /// A new block left the tree before its style landed.
+    NewBlockVanished,
+    /// A note block is not in the tree.
+    NoteBlockMissing,
+    /// A table's region map refused a child container.
+    RegionMapRefused,
+    /// A reply holds no text container.
+    ReplyEmpty,
+    /// The scratch document of an import was not built.
+    NoScratchDocument,
+    /// A table carries no column width list.
+    NoWidthList,
+    /// The tree refused a band block.
+    TreeRefusedBandBlock,
+    /// The tree refused a block.
+    TreeRefusedBlock,
+    /// The tree refused a table cell.
+    TreeRefusedCell,
+    /// The tree refused a note block.
+    TreeRefusedNoteBlock,
+    /// The tree refused a table row.
+    TreeRefusedRow,
+    /// A table's width list refused a child container.
+    WidthListRefused,
+}
+
+impl RefusalCause {
+    /// The sentence the log and the refusal carry.
+    pub(crate) const fn sentence(self) -> &'static str {
+        match self {
+            Self::NoReplyList => "no reply list",
+            Self::AppendedRowEmpty => "the appended row holds no cell",
+            Self::AttrMapRefused => "the attribute map refused a container",
+            Self::BandBlockUnnamed => "the band block could not be named",
+            Self::BandAlignRefused => "the band register refused the alignment",
+            Self::BandSettingRefused => "the band register refused the setting",
+            Self::BlockAttrsRefused => "the block refused its attribute map",
+            Self::BlockVanished => "the block vanished before its attributes landed",
+            Self::FileByLogic => "the file is written by the Logic thread, not by the document",
+            Self::NewBlockVanished => "the new block vanished before its style landed",
+            Self::NoteBlockMissing => "the note block is not in the tree",
+            Self::RegionMapRefused => "the region map refused a container",
+            Self::ReplyEmpty => "the reply holds no text",
+            Self::NoScratchDocument => "the scratch document for the import was not built",
+            Self::NoWidthList => "the table carries no width list",
+            Self::TreeRefusedBandBlock => "the tree refused a band block",
+            Self::TreeRefusedBlock => "the tree refused a block",
+            Self::TreeRefusedCell => "the tree refused a cell",
+            Self::TreeRefusedNoteBlock => "the tree refused a note block",
+            Self::TreeRefusedRow => "the tree refused a row",
+            Self::WidthListRefused => "the width list refused a container",
+        }
+    }
+}
+
+impl std::fmt::Display for RefusalCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.sentence())
+    }
 }
 
 impl From<loro::LoroError> for WriteError {
@@ -61,7 +145,7 @@ impl std::fmt::Display for WriteError {
             // The engine's refusal reads as it always has: its debug form.
             Self::Engine(error) => write!(f, "{error:?}"),
             Self::TextUpdate(error) => write!(f, "{error:?}"),
-            Self::Refused(what) => f.write_str(what),
+            Self::Refused(cause) => cause.fmt(f),
             Self::NoIdentity => f.write_str("the session has no user"),
         }
     }
@@ -1633,6 +1717,24 @@ pub(crate) fn anchors(document: &LoroDoc, root: crate::mark::MarkRoot) -> Vec<An
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A refused write names its cause by variant, and the refusal the
+    /// command answers with still reads the sentence the log reads.
+    #[test]
+    fn a_refused_write_reads_its_cause_sentence() {
+        let error = WriteError::Refused(RefusalCause::NoWidthList);
+        assert!(matches!(
+            error,
+            WriteError::Refused(RefusalCause::NoWidthList)
+        ));
+        assert_eq!(error.to_string(), "the table carries no width list");
+        assert_eq!(
+            ambre_bus::app::prose::ProseRefusal::from(WriteError::Refused(
+                RefusalCause::TreeRefusedRow
+            )),
+            ambre_bus::app::prose::ProseRefusal::WriteFailed("the tree refused a row".to_owned())
+        );
+    }
 
     #[test]
     fn a_seeded_document_reads_back_the_a4_format_it_was_written_with() {

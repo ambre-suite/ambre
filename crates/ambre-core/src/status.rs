@@ -260,6 +260,13 @@ impl HttpStatus {
     pub const fn is_success(self) -> bool {
         self.0 >= 200 && self.0 < 300
     }
+
+    /// Whether the status refuses the request itself, `4xx`: the same
+    /// request meets the same answer.
+    #[must_use]
+    pub const fn is_client_error(self) -> bool {
+        self.0 >= 400 && self.0 < 500
+    }
 }
 
 impl fmt::Display for HttpStatus {
