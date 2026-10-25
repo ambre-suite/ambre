@@ -451,9 +451,9 @@ fn a_phantom_marker_is_no_field_of_a_newtype() {
     assert!(scan.newtype_inner(&site(&scan, "Size.width")).is_err());
 }
 
-/// The tree of `demo`, plus a crate `user` that depends on `demo` and whose
-/// `src/lib.rs` reads `user`, plus a crate `other` that declares an `enum Row`
-/// which `user` cannot reach.
+/// The tree of `demo` and two more crates. The crate `user` depends on `demo`,
+/// and its `src/lib.rs` reads `user`. The crate `other` declares an `enum Row`
+/// that `user` cannot reach.
 fn with_user(demo_lib: &str, user: &str) -> Scan {
     let mut tree = demo(&[("src/lib.rs", demo_lib)]);
     tree.0.insert(

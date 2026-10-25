@@ -2,8 +2,8 @@
 //! `enum` of two named variants (`ai/ambre-rust-style.md`, the `bool` rule).
 //!
 //! A reader of `Flag::On` sees what the value picks; a reader of `true` does
-//! not. The stored and wire bytes stay those of the `bool`, so a field moves
-//! from `bool` to a flag with no migration and no change to a frame.
+//! not. The stored bytes and the wire bytes stay those of the `bool`. A field
+//! thus moves from `bool` to a flag with no migration and no change to a frame.
 
 /// Defines one two-variant `enum` per item, the variant that was `false`
 /// first.

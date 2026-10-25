@@ -5,10 +5,13 @@
 //! fails the gate, and so does a line that names no site (`ARCH-033`,
 //! `ARCH-034`). Adding a line is a hand edit, held by a reviewer (`ARCH-035`).
 //! Two categories claim a shape the code shows, so the gate refutes them
-//! from the site itself (`ARCH-036`). Three refusals hold whatever the line
-//! says: a `local` line on a site that is not private (`ARCH-038`), a `bool`
-//! field that is not private (`ARCH-039`), and a `bool` parameter that is not
-//! private and that a caller writes as a literal (`ARCH-040`).
+//! from the site itself (`ARCH-036`). Three refusals read the privacy of the
+//! site, whatever the category:
+//!
+//!   1. a `local` line on a site that is not private (`ARCH-038`);
+//!   2. a `bool` field that is not private, outside `foreign-api` (`ARCH-039`);
+//!   3. a `bool` parameter that is not private and that a caller writes as a
+//!      literal (`ARCH-040`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

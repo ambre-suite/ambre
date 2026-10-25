@@ -109,9 +109,11 @@
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
-  line of that file by hand (`ARCH-035`). The gate checks the category word. It also refutes a
-  `newtype-inner` or a `trait` line whose site lacks the shape stated below (`ARCH-036`). It
-  refuses four more defects, whatever the line says:
+  line of that file by hand (`ARCH-035`).
+
+  The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
+  site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line
+  says:
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
   3. a `bool` field that is not private, unless its line is `foreign-api` (`ARCH-039`);
@@ -122,8 +124,9 @@
   * A `foreign-api` line names the site of the foreign call, never an accessor that wraps it.
   * A `newtype-inner` line names a site in the newtype's own impl. The newtype is a struct with
     exactly one field, or a type that a workspace `define_*!` macro writes. A `PhantomData`
-    marker is not a field in that count. An impl of a workspace trait for the newtype is its own
-    impl too, when the orphan rule puts it in the crate of the trait. The site is one of three:
+    marker is not a field in that count. The orphan rule may put the impl of a workspace trait
+    for the newtype in the crate of the trait. That impl is the newtype's own too. The site is one
+    of three:
     1. that field;
     2. a parameter of an associated function of the newtype that returns `Self`, `Option<Self>`
        or `Result<Self, _>`;

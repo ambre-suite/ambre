@@ -410,9 +410,9 @@ impl Declared {
         }
     }
 
-    /// Where a newtype claim looks for the type of `host`. An impl of a
-    /// trait that the crate of the site declares may implement it for a type
-    /// of another crate: the orphan rule puts that impl there.
+    /// Where a newtype claim looks for the type of `host`. The orphan rule
+    /// puts the impl of a trait in the crate that declares the trait. That
+    /// impl may name a type of another crate.
     fn reach(&self, site: &Place, host: &Host) -> Reach {
         let Some(path) = &host.of_trait else {
             return Reach::OwnCrate;
@@ -437,14 +437,14 @@ impl Declared {
     /// the site. The declaration in the module of the site wins; with none
     /// there, every declaration of the crate must be one.
     ///
-    /// Under [`Reach::TraitCrate`], a type the crate of the site does not
-    /// declare is read in the other crates, and every declaration there must
-    /// be a newtype.
+    /// Under [`Reach::TraitCrate`], a type the crate of the site lacks is
+    /// read in the crates it depends on. Every declaration there must be a
+    /// newtype.
     fn single_field(&self, site: &Place, name: &str, reach: Reach) -> Result<(), String> {
         let (krate, module) = (&site.krate, &site.module);
         let found = self.types.get(krate).and_then(|names| names.get(name));
         if found.is_none() && reach == Reach::TraitCrate {
-            // The newtype comes from a crate this one depends on: a type of
+            // The newtype comes from a crate this one depends on. A type of
             // the same name in any other crate is not the one the impl names.
             let deps = self.deps.get(krate);
             let elsewhere: Vec<Decl> = self
@@ -633,9 +633,9 @@ impl Scan {
     ///
     /// # Errors
     ///
-    /// The first literal, how many there are, and how many of them match
-    /// another site too: a name match cannot tell them apart, so each match
-    /// is refused.
+    /// The first literal and the count of the others. It also counts the
+    /// calls that match another site too. A name cannot tell those apart,
+    /// so each match is refused.
     pub fn bool_literal(&self, key: &SiteKey, listed: &BTreeSet<SiteKey>) -> Result<(), String> {
         let Some(place) = self.places.get(key) else {
             return Ok(());

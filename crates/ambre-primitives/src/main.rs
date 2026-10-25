@@ -8,10 +8,11 @@
 //!
 //! Two modes, one per recipe:
 //!
-//!   * `check`, the default, fails on four defects, then prints the lines
-//!     per category. The defects are a site no line names, a line that names
-//!     no site, a line whose site refutes its category, and a `Deref` of a
-//!     workspace type to a primitive;
+//!   * `check`, the default, fails on five defects, then prints the lines
+//!     per category. Two defects compare the file with the sites: a site no
+//!     line names, and a line that names no site. Three read the site. A
+//!     line may claim a shape its site lacks, or the privacy checks may
+//!     refuse it. A `Deref` of a workspace type to a primitive fails too;
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;
