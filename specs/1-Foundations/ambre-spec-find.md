@@ -120,8 +120,8 @@ pub type FindQuery = find::FindQuery<FindOptions>;
 
 1. answer with nothing when the field is empty and no query came, which is how the panel clears
    its highlight and closes the search (`FIND-005`). Prose drops its open session, so a later step
-   or replace answers `NoSearch`. Trame and Toile keep no session, so they hold the rule by
-   construction: each step carries the field, and an emptied field leaves nothing to step;
+   or replace answers `NoSearch`. Trame and Toile hold the rule because they keep no
+   session. Each step carries the field, and an emptied field leaves nothing to step;
 2. walk the whole scope in the application's stable order, and keep each text-bearing item that
    matches. Both sides fold to lower case unless the case option is set (`FIND-002`);
 3. resolve the reveal target: the hit after the resume point, or the one before it when stepping

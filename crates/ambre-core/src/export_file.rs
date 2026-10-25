@@ -51,9 +51,9 @@ pub enum ExportFilenameError {
     /// The name holds a control character.
     #[error("an export file name holds a control character")]
     ControlCharacter,
-    /// The name holds a deceptive character: a bidirectional control, such
-    /// as an override that shows `exe.pdf` for a name that ends in `.exe`, or
-    /// an invisible character with no linguistic role.
+    /// The name holds a deceptive character: a bidirectional control, or an
+    /// invisible character with no linguistic role. An override, for example,
+    /// shows `exe.pdf` for a name that ends in `.exe`.
     #[error("an export file name holds a deceptive character")]
     DeceptiveCharacter,
     /// The name is longer than [`ExportFilename::MAX_SIZE`].
@@ -210,8 +210,8 @@ fn clean_stem(text: &str, room: ByteSize) -> String {
 /// override U+202E shows `facture<U+202E>fdp.exe` as `facture` then
 /// `exe.pdf`. An invisible character, such as the zero-width space, makes two
 /// different names look the same. Other format characters stay. The
-/// zero-width non-joiner U+200C spells Persian and Indic words, the
-/// zero-width joiner U+200D joins emoji sequences, and the tag characters
+/// zero-width non-joiner U+200C spells Persian and Indic words. The
+/// zero-width joiner U+200D joins emoji sequences. The tag characters
 /// U+E0020 to U+E007F spell subdivision flags.
 const fn is_deceptive_character(c: char) -> bool {
     matches!(
@@ -339,19 +339,18 @@ mod tests {
         }
     }
 
-    /// Every deceptive character: the Arabic letter mark, the direction
-    /// marks, the embeddings and overrides, the isolates, the soft hyphen,
-    /// the zero-width space, the word joiner, the invisible operators and the
-    /// byte order mark.
+    /// Every deceptive character. The bidirectional controls come first,
+    /// then the invisible characters with no linguistic role.
     const DECEPTIVE_CHARACTERS: [char; 20] = [
         '\u{61c}', '\u{200e}', '\u{200f}', '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}',
         '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{ad}', '\u{200b}',
         '\u{2060}', '\u{2061}', '\u{2062}', '\u{2063}', '\u{2064}', '\u{feff}',
     ];
 
-    /// Texts whose format characters carry meaning: a Persian word with a
-    /// zero-width non-joiner, an emoji family with zero-width joiners, and
-    /// the flag of England with its tag characters.
+    /// Texts whose format characters carry meaning. The first is a Persian
+    /// word with a zero-width non-joiner. The second is an emoji family with
+    /// zero-width joiners. The third is the flag of England, which tag
+    /// characters spell.
     const MEANINGFUL_TEXTS: [&str; 3] = [
         "\u{645}\u{6cc}\u{200c}\u{62e}\u{648}\u{627}\u{647}\u{645}",
         "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}",

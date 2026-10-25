@@ -39,12 +39,12 @@ The set is closed:
 
 | Kind | Code points |
 |---|---|
-| bidirectional control | U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069 |
-| invisible character with no linguistic role | U+00AD, U+200B, U+2060 to U+2064, U+FEFF |
+| bidirectional control | `U+061C`, `U+200E`, `U+200F`, `U+202A` to `U+202E`, `U+2066` to `U+2069` |
+| invisible character with no linguistic role | `U+00AD`, `U+200B`, `U+2060` to `U+2064`, `U+FEFF` |
 
-Every other format character stays in a name. The zero-width non-joiner U+200C spells Persian and
-Indic words. The zero-width joiner U+200D joins emoji sequences. The tag characters U+E0020 to
-U+E007F spell subdivision flags.
+Every other format character stays in a name. The zero-width non-joiner `U+200C` spells Persian and
+Indic words. The zero-width joiner `U+200D` joins emoji sequences. The tag characters `U+E0020` to
+`U+E007F` spell subdivision flags.
 
 `DOCFILE-019` and `DOCFILE-020` name every file the suite writes. That is a `.ambre` file, a CSV,
 a Markdown, an SVG, a PDF, and a file another user sent. An application import and export spec that
