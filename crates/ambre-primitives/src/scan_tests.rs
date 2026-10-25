@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use super::{Tree, scan};
+use super::{Scan, SiteKey, Tree, scan};
 
 /// A source tree held in memory, so a test states every file it reads.
 struct Memory(BTreeMap<PathBuf, String>);
@@ -258,4 +258,152 @@ fn two_cfg_twins_keep_a_key_each() {
             "demo | src/lib.rs | crate | f(x)#2 | param | u32"
         ]
     );
+}
+
+/// The scan of one `src/lib.rs`, read without an error.
+fn scanned(source: &str) -> Scan {
+    let result = scan(&demo(&[("src/lib.rs", source)]), Path::new(CRATES));
+    assert_eq!(result.errors, Vec::<String>::new());
+    result
+}
+
+/// The one key whose item field reads `item`.
+fn site(scan: &Scan, item: &str) -> SiteKey {
+    let found: Vec<&SiteKey> = scan
+        .sites
+        .iter()
+        .filter(|key| key.to_string().split(SiteKey::SEPARATOR).nth(3) == Some(item))
+        .collect();
+    assert_eq!(found.len(), 1, "{item} in {:?}", scan.sites);
+    found.into_iter().next().cloned().expect("one key")
+}
+
+#[test]
+fn a_newtype_inner_line_holds_on_the_field_the_constructor_and_the_accessor() {
+    let scan = scanned(
+        "pub struct Row(u32);\n\
+         pub struct Name { text: String }\n\
+         impl Row {\n\
+             pub fn new(index: u32) -> Self { Row(index) }\n\
+             pub fn checked(index: u32) -> Option<Self> { None }\n\
+             pub fn parse(text: &str) -> Result<Row, Error> { todo() }\n\
+             pub fn get(self) -> u32 { self.0 }\n\
+             pub fn plus(self, step: u32) -> Self { self }\n\
+         }\n\
+         impl TryFrom<u8> for Row { fn try_from(value: u8) -> Result<Self, Self::Error> { x() } }\n\
+         impl Name { pub fn as_str(&self) -> &str { &self.text } }",
+    );
+    for item in [
+        "Row.0",
+        "Name.text",
+        "Row::new(index)",
+        "Row::checked(index)",
+        "Row::parse(text)",
+        "Row::get()",
+        "Row::plus(step)",
+        "<Row as TryFrom<u8>>::try_from(value)",
+        "Name::as_str()",
+    ] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_holds_on_a_type_a_define_macro_writes() {
+    let scan = scanned(
+        "define_index! { /// A row.\n pub struct Row(u32); }\n\
+         define_length! { /// A length.\n DocPx(f32) }\n\
+         impl Row { pub fn get(self) -> u32 { 0 } }\n\
+         impl DocPx { pub fn new(value: f32) -> Self { x() } }",
+    );
+    for item in ["Row::get()", "DocPx::new(value)"] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_is_refuted_off_a_single_field_struct() {
+    let scan = scanned(
+        "pub struct Rect { w: u32, h: u32 }\n\
+         pub struct Row(u32);\n\
+         pub enum Key { Char(char) }\n\
+         pub enum Align { Left }\n\
+         impl Align { pub fn code(self) -> u8 { 0 } }\n\
+         impl Rect { pub fn new(w: u32) -> Self { x() } }\n\
+         define_layout_version! { pub enum Shape { V1 = 1 } }\n\
+         impl Shape { pub fn get(self) -> u8 { 1 } }\n\
+         impl Row {\n\
+             pub const MAX: u32 = 9;\n\
+             pub fn width(index: u32) -> u32 { index }\n\
+             pub fn zero() -> u32 { 0 }\n\
+             pub fn get(self) -> u32 { fn inner(x: u32) {} 0 }\n\
+         }\n\
+         pub const TAG: u8 = 1;\n\
+         pub fn free(index: u32) -> Row { Row(index) }",
+    );
+    for item in [
+        "Rect.w",
+        "Key::Char.0",
+        "Align::code()",
+        "Rect::new(w)",
+        "Shape::get()",
+        "Row::MAX",
+        "Row::width(index)",
+        "Row::zero()",
+        "Row::get::inner(x)",
+        "TAG",
+        "free(index)",
+    ] {
+        assert!(scan.newtype_inner(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn a_trait_line_holds_on_a_foreign_trait_and_a_foreign_closure() {
+    let scan = scanned(
+        "pub struct Row(u32);\n\
+         impl From<u32> for Row { fn from(value: u32) -> Self { Row(value) } }\n\
+         impl std::str::FromStr for Row { fn from_str(s: &str) -> Result<Self, E> { x() } }\n\
+         impl serde::Serialize for Row { const NAME: &'static str = \"row\"; }\n\
+         pub fn open(go: &impl Fn(&str, leptos_router::NavigateOptions)) {}\n\
+         pub fn hook(f: fn(u32, other::Event)) {}",
+    );
+    for item in [
+        "<Row as From<u32>>::from(value)",
+        "<Row as std::str::FromStr>::from_str(s)",
+        "<Row as serde::Serialize>::NAME",
+        "open(go)",
+        "hook(f)",
+    ] {
+        assert_eq!(scan.foreign_signature(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_trait_line_is_refuted_off_a_foreign_signature() {
+    let scan = scanned(
+        "pub trait Sink { fn put(&self, line: u64); }\n\
+         pub struct Row(u32);\n\
+         pub struct Session { sent: i32 }\n\
+         impl Sink for Row { fn put(&self, line: u64) {} }\n\
+         impl crate::glyph::Glyph for Row { fn size(&self) -> f32 { 0.0 } }\n\
+         impl demo::Fixture for Row { fn seed(&self) -> u64 { 0 } }\n\
+         impl From<u32> for Row { fn from(value: u32) -> Self { fn inner(step: u8) {} Row(value) } }\n\
+         pub fn follow(go: impl FnOnce(&str)) {}\n\
+         pub fn wait(f: impl Fn(std::time::Duration, u32)) {}\n\
+         pub fn plain(text: &str) {}",
+    );
+    for item in [
+        "Sink::put(line)",
+        "<Row as Sink>::put(line)",
+        "<Row as crate::glyph::Glyph>::size()",
+        "<Row as demo::Fixture>::seed()",
+        "<Row as From<u32>>::from::inner(step)",
+        "Session.sent",
+        "follow(go)",
+        "wait(f)",
+        "plain(text)",
+    ] {
+        assert!(scan.foreign_signature(&site(&scan, item)).is_err(), "{item}");
+    }
 }

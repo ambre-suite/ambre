@@ -86,8 +86,8 @@
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
-  line of that file by hand (`ARCH-035`). The gate checks the category word, and never whether it
-  is true.
+  line of that file by hand (`ARCH-035`). The gate checks the category word. It also refutes a
+  `newtype-inner` or a `trait` line whose site lacks the shape stated below (`ARCH-036`).
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.

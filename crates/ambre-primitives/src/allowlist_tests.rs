@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 use super::{Allowlist, Category, HEADER};
-use crate::scan::SiteKey;
+use crate::scan::{SiteKey, Tree, scan};
 
 const SITE: &str = "demo | src/lib.rs | crate | Thing.id | field | u32";
 const OTHER: &str = "demo | src/lib.rs | crate | get(index) | param | usize";
@@ -109,4 +110,55 @@ fn a_debt_line_is_refused() {
     let errors = Allowlist::parse(&file(&[(SITE, "debt")])).expect_err("debt left the set");
     assert_eq!(errors.len(), 1);
     assert!(errors.iter().all(|error| error.contains("closed set")));
+}
+
+/// One crate `demo` with one `src/lib.rs`, the tree a refutation reads.
+struct OneFile(String);
+
+impl Tree for OneFile {
+    fn read(&self, path: &Path) -> Option<String> {
+        if path == Path::new("/w/crates/demo/src/lib.rs") {
+            Some(self.0.clone())
+        } else {
+            (path == Path::new("/w/crates/demo/Cargo.toml")).then(String::new)
+        }
+    }
+
+    fn files(&self, dir: &Path) -> Vec<PathBuf> {
+        ["/w/crates/demo/Cargo.toml", "/w/crates/demo/src/lib.rs"]
+            .map(PathBuf::from)
+            .into_iter()
+            .filter(|path| path.starts_with(dir))
+            .collect()
+    }
+}
+
+#[test]
+fn a_line_whose_site_refutes_its_category_is_reported() {
+    const FIELD: &str = "demo | src/lib.rs | crate | Rect.w | field | u32";
+    const FROM: &str = "demo | src/lib.rs | crate | <Rect as From<u32>>::from(w) | param | u32";
+    const LOCAL: &str = "demo | src/lib.rs | crate | Rect.h | field | u32";
+    let scan = scan(
+        &OneFile(
+            "pub struct Rect { w: u32, h: u32 }\n\
+             impl From<u32> for Rect { fn from(w: u32) -> Self { x() } }"
+                .to_owned(),
+        ),
+        Path::new("/w/crates"),
+    );
+    let list = Allowlist::parse(&file(&[
+        (FIELD, "newtype-inner"),
+        (FROM, "trait"),
+        (LOCAL, "local"),
+    ]))
+    .expect("a valid file");
+    assert!(list.compare(&scan.sites).is_clean());
+    let refuted = list.refuted(&scan);
+    assert_eq!(
+        refuted
+            .iter()
+            .map(|line| (line.key.clone(), line.category))
+            .collect::<Vec<_>>(),
+        [(key(FIELD), Category::NewtypeInner)]
+    );
 }

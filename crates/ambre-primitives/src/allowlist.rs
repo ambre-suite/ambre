@@ -4,11 +4,13 @@
 //! The file only shrinks on its own. A site the scan finds and no line names
 //! fails the gate, and so does a line that names no site (`ARCH-033`,
 //! `ARCH-034`). Adding a line is a hand edit, held by a reviewer (`ARCH-035`).
+//! Two categories claim a shape the code shows, so the gate refutes them
+//! from the site itself (`ARCH-036`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::scan::SiteKey;
+use crate::scan::{Scan, SiteKey};
 
 /// The header line, the first line of the file that is not a comment.
 pub const HEADER: &str = "key\tcategory\tnote";
@@ -22,9 +24,11 @@ pub enum Category {
     FreeText,
     /// The call into a foreign API that takes the primitive.
     ForeignApi,
-    /// The inside of a newtype, or its own constructor or accessor.
+    /// The field of a single-field struct, a parameter of an associated
+    /// `fn` that returns it, or the return of its method.
     NewtypeInner,
-    /// A signature that a foreign trait dictates.
+    /// A signature that a foreign trait dictates, or a closure type that a
+    /// foreign signature requires.
     Trait,
     /// A truly generic helper over the primitive: a codec, a hash, a parser.
     Generic,
@@ -119,6 +123,16 @@ pub struct Verdict {
     pub stale: Vec<(LineNo, SiteKey)>,
     /// The lines per category, stale ones included.
     pub counts: BTreeMap<Category, usize>,
+}
+
+/// A line whose category claims a shape that its site does not have.
+#[derive(Debug)]
+pub struct Refuted {
+    pub line: LineNo,
+    pub key: SiteKey,
+    pub category: Category,
+    /// What the site is instead, from the code.
+    pub reason: String,
 }
 
 impl Verdict {
@@ -231,6 +245,35 @@ impl Allowlist {
             .cloned()
             .collect();
         verdict
+    }
+
+    /// The lines whose site refutes their category (`ARCH-036`). Only
+    /// `newtype-inner` and `trait` claim a shape the code shows; the other
+    /// categories claim a meaning, which a reviewer holds (`ARCH-035`).
+    pub fn refuted(&self, scan: &Scan) -> Vec<Refuted> {
+        self.lines
+            .iter()
+            .filter_map(|line| match line {
+                Line::Entry {
+                    key,
+                    category,
+                    line,
+                } => {
+                    let claim = match category {
+                        Category::NewtypeInner => scan.newtype_inner(key),
+                        Category::Trait => scan.foreign_signature(key),
+                        _ => Ok(()),
+                    };
+                    claim.err().map(|reason| Refuted {
+                        line: *line,
+                        key: key.clone(),
+                        category: *category,
+                        reason,
+                    })
+                }
+                Line::Text(_) => None,
+            })
+            .collect()
     }
 
     /// The file without the lines that name no site. Every other line is

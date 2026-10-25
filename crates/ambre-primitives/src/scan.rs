@@ -30,6 +30,13 @@ const TEST_FEATURES: &[&str] = &["testing", "test-helpers"];
 /// The attribute macros that turn a `fn` into a test.
 const TEST_MACROS: &[&str] = &["test", "wasm_bindgen_test"];
 
+/// The crates of the toolchain. A closure that names only their types is
+/// no evidence that a foreign signature dictates it.
+const TOOLCHAIN: &[&str] = &["std", "core", "alloc"];
+
+/// The first segments of a path that stay inside the crate that writes it.
+const LOCAL_ROOTS: &[&str] = &["crate", "self", "super", "Self"];
+
 /// One site, written as one line: the crate, the file, the module path, the
 /// item path, the kind and the type, joined by [`SiteKey::SEPARATOR`].
 ///
@@ -133,6 +140,187 @@ impl Tree for Disk {
 pub struct Scan {
     pub sites: BTreeSet<SiteKey>,
     pub errors: Vec<String>,
+    /// Where each site sits, for the categories the gate refutes from the
+    /// code (`ARCH-036`).
+    places: BTreeMap<SiteKey, Place>,
+    declared: Declared,
+}
+
+/// Where one site sits: what a `newtype-inner` or a `trait` line claims of
+/// it, read from the code and never from the note.
+#[derive(Clone, Debug)]
+struct Place {
+    /// The crate directory, as the key names it.
+    krate: String,
+    kind: SiteKind,
+    /// The struct that declares the field. `None` for a field of an enum
+    /// variant or of a union, and for every other kind.
+    owner: Option<String>,
+    /// The impl whose signature or constant the site is. `None` outside an
+    /// impl, and in a body nested inside one.
+    host: Option<Host>,
+    /// Whether the type is a closure bound or a function pointer.
+    callable: bool,
+    /// The first segment of each path of the type with two or more.
+    roots: BTreeSet<String>,
+}
+
+/// The impl item that holds a site.
+#[derive(Clone, Debug)]
+struct Host {
+    /// The last segment of the implementing type, without its generics.
+    self_ty: String,
+    /// The trait the impl implements, `None` for an inherent impl.
+    of_trait: Option<TraitPath>,
+    /// Whether the `fn` takes `self`, by value or by reference. False for a
+    /// constant.
+    receiver: bool,
+    /// Whether the `fn` returns the type itself: `Self`, `Option<Self>` or
+    /// `Result<Self, _>`, or the same with the type's own name.
+    makes_self: bool,
+}
+
+/// The trait of an impl, as the impl writes its path.
+#[derive(Clone, Debug)]
+struct TraitPath {
+    /// The last segment, without its generics.
+    name: String,
+    /// The first segment, when the path has two or more.
+    root: Option<String>,
+}
+
+/// What the workspace declares, across every crate the scan reads.
+#[derive(Debug, Default)]
+struct Declared {
+    /// The crate names, as a path writes them.
+    crates: BTreeSet<String>,
+    /// The name of every trait.
+    traits: BTreeSet<String>,
+    /// The field count of every struct, per crate directory and name. A
+    /// type that a `define_*!` macro writes counts one field.
+    structs: BTreeMap<(String, String), Vec<usize>>,
+}
+
+impl Declared {
+    /// Whether a path that starts with `root` names an item of the
+    /// workspace.
+    fn owns_root(&self, root: &str) -> bool {
+        LOCAL_ROOTS.contains(&root) || self.crates.contains(root)
+    }
+
+    /// Whether the workspace declares the trait. A path of one segment is
+    /// looked up by name, so a workspace trait that shares a name with a
+    /// foreign one counts as the workspace's.
+    fn owns_trait(&self, path: &TraitPath) -> bool {
+        match &path.root {
+            Some(root) => self.owns_root(root),
+            None => self.traits.contains(&path.name),
+        }
+    }
+
+    /// Whether `name` is a struct of `krate` with exactly one field.
+    fn single_field(&self, krate: &str, name: &str) -> Result<(), String> {
+        match self.structs.get(&(krate.to_owned(), name.to_owned())) {
+            None => Err(format!(
+                "{name} is no struct of {krate}: an enum, an alias or a foreign type"
+            )),
+            Some(counts) if counts.iter().all(|count| *count == 1) => Ok(()),
+            Some(counts) => {
+                let counts: Vec<String> = counts.iter().map(ToString::to_string).collect();
+                Err(format!(
+                    "{name} is a struct of {} fields, not exactly one",
+                    counts.join(" or ")
+                ))
+            }
+        }
+    }
+}
+
+impl Scan {
+    /// Checks the claim of a `newtype-inner` line. The site is the field of
+    /// a struct with exactly one field, a parameter of an associated `fn`
+    /// of that struct that returns it, or the return of a method of that
+    /// struct (`ai/ambre-rust-style.md`).
+    ///
+    /// A key the scan did not find passes: the stale check reports it.
+    ///
+    /// # Errors
+    ///
+    /// Why the site has another shape, in words a reviewer reads beside the
+    /// key.
+    pub fn newtype_inner(&self, key: &SiteKey) -> Result<(), String> {
+        let Some(place) = self.places.get(key) else {
+            return Ok(());
+        };
+        match place.kind {
+            SiteKind::Field => match &place.owner {
+                Some(owner) => self.declared.single_field(&place.krate, owner),
+                None => Err("a field of an enum variant or of a union, not of a struct".to_owned()),
+            },
+            SiteKind::Param | SiteKind::Ret => {
+                let Some(host) = &place.host else {
+                    return Err("a signature outside an impl, or nested in a body".to_owned());
+                };
+                self.declared.single_field(&place.krate, &host.self_ty)?;
+                match place.kind {
+                    SiteKind::Param if host.makes_self => Ok(()),
+                    SiteKind::Param => Err(format!(
+                        "a parameter of a fn of {} that returns neither Self, Option<Self> \
+                         nor Result<Self, _>",
+                        host.self_ty
+                    )),
+                    _ if host.receiver => Ok(()),
+                    _ => Err(format!(
+                        "the return of a fn of {} that takes no self",
+                        host.self_ty
+                    )),
+                }
+            }
+            kind => Err(format!(
+                "a {} is never the inside of a newtype",
+                kind.as_str()
+            )),
+        }
+    }
+
+    /// Checks the claim of a `trait` line. The site is a signature or a
+    /// constant of an impl of a trait the workspace does not declare. Or
+    /// its type is a closure or a function pointer that names a type of a
+    /// foreign crate, outside the toolchain.
+    ///
+    /// A key the scan did not find passes: the stale check reports it.
+    ///
+    /// # Errors
+    ///
+    /// Why no foreign signature dictates the site.
+    pub fn foreign_signature(&self, key: &SiteKey) -> Result<(), String> {
+        let Some(place) = self.places.get(key) else {
+            return Ok(());
+        };
+        if let Some(path) = place.host.as_ref().and_then(|host| host.of_trait.as_ref()) {
+            return if self.declared.owns_trait(path) {
+                Err(format!(
+                    "the trait {} is declared in the workspace, so its signature takes types",
+                    path.name
+                ))
+            } else {
+                Ok(())
+            };
+        }
+        let foreign = place
+            .roots
+            .iter()
+            .any(|root| !self.declared.owns_root(root) && !TOOLCHAIN.contains(&root.as_str()));
+        match (place.callable, foreign) {
+            (true, true) => Ok(()),
+            (true, false) => {
+                Err("a closure type that names no type of a foreign crate".to_owned())
+            }
+            (false, _) => Err(
+                "neither in an impl of a foreign trait nor a closure type".to_owned(),
+            ),
+        }
+    }
 }
 
 /// Scans every crate under `crates`, a directory holding one directory per
@@ -153,6 +341,127 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     result
 }
 
+/// The facts a type gives a [`Place`]: whether it is callable, and the
+/// roots of its paths.
+#[derive(Default)]
+struct TypeFacts {
+    callable: bool,
+    roots: BTreeSet<String>,
+}
+
+impl<'ast> Visit<'ast> for TypeFacts {
+    fn visit_type_bare_fn(&mut self, f: &'ast syn::TypeBareFn) {
+        self.callable = true;
+        syn::visit::visit_type_bare_fn(self, f);
+    }
+
+    fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+        if matches!(segment.arguments, syn::PathArguments::Parenthesized(_))
+            && ["Fn", "FnMut", "FnOnce"]
+                .iter()
+                .any(|name| segment.ident == name)
+        {
+            self.callable = true;
+        }
+        syn::visit::visit_path_segment(self, segment);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        if path.segments.len() >= 2
+            && let Some(first) = path.segments.first()
+        {
+            self.roots.insert(first.ident.to_string());
+        }
+        syn::visit::visit_path(self, path);
+    }
+}
+
+/// The last segment of a type path, without its generics, or the whole type
+/// as text for any other type.
+fn type_name(ty: &syn::Type) -> String {
+    match ty {
+        syn::Type::Path(path) => path
+            .path
+            .segments
+            .last()
+            .map_or_else(String::new, |last| last.ident.to_string()),
+        other => normalise(&other.to_token_stream().to_string()),
+    }
+}
+
+/// Whether a return type is the implementing type: `Self` or `owner`, bare
+/// or as the first argument of an `Option` or a `Result`.
+fn makes_self(output: &syn::ReturnType, owner: &str) -> bool {
+    let syn::ReturnType::Type(_, ty) = output else {
+        return false;
+    };
+    names_self(ty, owner, true)
+}
+
+fn names_self(ty: &syn::Type, owner: &str, wrapped: bool) -> bool {
+    let syn::Type::Path(path) = ty else {
+        return false;
+    };
+    let Some(last) = path.path.segments.last() else {
+        return false;
+    };
+    if last.ident == "Self" {
+        return path.qself.is_none() && path.path.segments.len() == 1;
+    }
+    if last.ident == owner {
+        return path.qself.is_none();
+    }
+    if !wrapped || !(last.ident == "Option" || last.ident == "Result") {
+        return false;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+        return false;
+    };
+    args.args.iter().find_map(|arg| match arg {
+        syn::GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    })
+    .is_some_and(|inner| names_self(inner, owner, false))
+}
+
+/// The types a `define_*!` invocation writes: each name after a `struct`,
+/// or, with no `struct`, each top-level word in `UpperCamelCase`. A macro
+/// that writes an `enum` writes no newtype.
+fn macro_types(mac: &syn::Macro) -> Vec<String> {
+    let words = mac
+        .parse_body_with(|input: syn::parse::ParseStream<'_>| {
+            input.step(|cursor| {
+                let mut words = Vec::new();
+                let mut rest = *cursor;
+                while let Some((_, next)) = rest.token_tree() {
+                    if let Some((ident, _)) = rest.ident() {
+                        words.push(ident.to_string());
+                    }
+                    rest = next;
+                }
+                Ok((words, rest))
+            })
+        })
+        .unwrap_or_default();
+    if words.iter().any(|word| word == "enum") {
+        return Vec::new();
+    }
+    if words.iter().any(|word| word == "struct") {
+        return words
+            .windows(2)
+            .filter(|pair| pair.first().is_some_and(|word| word == "struct"))
+            .filter_map(|pair| pair.get(1).cloned())
+            .collect();
+    }
+    words
+        .into_iter()
+        .filter(|word| {
+            word.starts_with(|c: char| c.is_ascii_uppercase())
+                && word.chars().any(|c| c.is_ascii_lowercase())
+        })
+        .collect()
+}
+
 /// A file the walk still has to read, and the module it holds. A `mod x;`
 /// names two candidates, `x.rs` and `x/mod.rs`, and the first that exists is
 /// the file.
@@ -168,6 +477,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
+    result.declared.crates.insert(name.replace('-', "_"));
     let all = tree.files(dir);
     let src = dir.join("src");
     let roots = all.iter().filter(|path| {
@@ -222,11 +532,23 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         let mut visit = FileVisit::new(&name, relative, &path, next.module);
         visit.visit_file(&file);
         keys.append(&mut visit.keys);
+        result.declared.traits.append(&mut visit.traits);
+        for (owner, count) in visit.structs {
+            result
+                .declared
+                .structs
+                .entry((name.clone(), owner))
+                .or_default()
+                .push(count);
+        }
         pending.extend(visit.children);
         skipped.files.append(&mut visit.skipped.files);
         skipped.dirs.append(&mut visit.skipped.dirs);
     }
-    result.sites.extend(dedup(keys));
+    for (key, place) in dedup(keys) {
+        result.sites.insert(key.clone());
+        result.places.insert(key, place);
+    }
     for path in all.iter().filter(|path| path.starts_with(&src)) {
         let is_rs = path.extension().is_some_and(|ext| ext == "rs");
         if is_rs && !reached.contains(path) && !skipped.covers(path) && !is_test_file(path) {
@@ -264,11 +586,12 @@ struct RawKey {
     head: String,
     item: String,
     tail: String,
+    place: Place,
 }
 
 /// Numbers the second and later sites that share one key, `#2` and on, so two
 /// `cfg` twins of one `fn` keep a key each.
-fn dedup(keys: Vec<RawKey>) -> Vec<SiteKey> {
+fn dedup(keys: Vec<RawKey>) -> Vec<(SiteKey, Place)> {
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     keys.into_iter()
         .map(|raw| {
@@ -276,14 +599,15 @@ fn dedup(keys: Vec<RawKey>) -> Vec<SiteKey> {
             let base = format!("{}{sep}{}{sep}{}", raw.head, raw.item, raw.tail);
             let count = seen.entry(base.clone()).or_insert(0);
             *count += 1;
-            if *count == 1 {
+            let key = if *count == 1 {
                 SiteKey(base)
             } else {
                 SiteKey(format!(
                     "{}{sep}{}#{count}{sep}{}",
                     raw.head, raw.item, raw.tail
                 ))
-            }
+            };
+            (key, raw.place)
         })
         .collect()
 }
@@ -425,6 +749,14 @@ struct FileVisit<'a> {
     keys: Vec<RawKey>,
     children: Vec<Pending>,
     skipped: Skipped,
+    /// The impl item whose signature the visit reads, `None` elsewhere.
+    host: Option<Host>,
+    /// The struct whose fields the visit reads, `None` elsewhere.
+    owner: Option<String>,
+    /// Every trait the file declares.
+    traits: BTreeSet<String>,
+    /// Every struct the file declares, with its field count.
+    structs: Vec<(String, usize)>,
 }
 
 impl<'a> FileVisit<'a> {
@@ -454,6 +786,10 @@ impl<'a> FileVisit<'a> {
             keys: Vec::new(),
             children: Vec::new(),
             skipped: Skipped::default(),
+            host: None,
+            owner: None,
+            traits: BTreeSet::new(),
+            structs: Vec::new(),
         }
     }
 
@@ -466,10 +802,21 @@ impl<'a> FileVisit<'a> {
     }
 
     fn emit(&mut self, item: String, kind: SiteKind, ty: &syn::Type) {
-        let ty = normalise(&ty.to_token_stream().to_string());
-        if !holds_primitive(&ty) {
+        let text = normalise(&ty.to_token_stream().to_string());
+        if !holds_primitive(&text) {
             return;
         }
+        let mut facts = TypeFacts::default();
+        facts.visit_type(ty);
+        let place = Place {
+            krate: self.krate.to_owned(),
+            kind,
+            owner: self.owner.clone(),
+            host: self.host.clone(),
+            callable: facts.callable,
+            roots: facts.roots,
+        };
+        let ty = text;
         let sep = SiteKey::SEPARATOR;
         self.keys.push(RawKey {
             head: format!(
@@ -480,6 +827,7 @@ impl<'a> FileVisit<'a> {
             ),
             item,
             tail: format!("{}{sep}{ty}", kind.as_str()),
+            place,
         });
     }
 
@@ -603,6 +951,22 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             return;
         }
         let ty = normalise(&i.self_ty.to_token_stream().to_string());
+        let self_ty = type_name(&i.self_ty);
+        let of_trait = i.trait_.as_ref().map(|(_, path, _)| TraitPath {
+            name: path
+                .segments
+                .last()
+                .map_or_else(String::new, |last| last.ident.to_string()),
+            root: (path.segments.len() >= 2)
+                .then(|| path.segments.first().map(|first| first.ident.to_string()))
+                .flatten(),
+        });
+        let host = |receiver: bool, makes_self: bool| Host {
+            self_ty: self_ty.clone(),
+            of_trait: of_trait.clone(),
+            receiver,
+            makes_self,
+        };
         let label = match &i.trait_ {
             Some((_, path, _)) => format!(
                 "<{ty} as {}>",
@@ -614,11 +978,18 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         for item in &i.items {
             match item {
                 syn::ImplItem::Fn(f) if !test_only(&f.attrs) => {
+                    self.host = Some(host(
+                        f.sig.receiver().is_some(),
+                        makes_self(&f.sig.output, &self_ty),
+                    ));
                     self.signature(&f.sig);
+                    self.host = None;
                     self.body(f.sig.ident.to_string(), &f.block);
                 }
                 syn::ImplItem::Const(c) if !test_only(&c.attrs) => {
+                    self.host = Some(host(false, false));
                     self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
+                    self.host = None;
                 }
                 _ => {}
             }
@@ -630,6 +1001,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if test_only(&t.attrs) {
             return;
         }
+        self.traits.insert(t.ident.to_string());
         self.scope.push(t.ident.to_string());
         for item in &t.items {
             if let syn::TraitItem::Fn(f) = item {
@@ -647,7 +1019,11 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
 
     fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
         if !test_only(&s.attrs) {
-            self.fields(&s.ident.to_string(), &s.fields);
+            let name = s.ident.to_string();
+            self.structs.push((name.clone(), s.fields.len()));
+            self.owner = Some(name.clone());
+            self.fields(&name, &s.fields);
+            self.owner = None;
         }
     }
 
@@ -689,8 +1065,24 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
     }
 
     // A macro's tokens are not items until it expands, and the scan expands
-    // nothing: what a macro writes is out of reach by construction.
-    fn visit_item_macro(&mut self, _: &'ast syn::ItemMacro) {}
+    // nothing: what a macro writes is out of reach by construction. A
+    // `define_*!` macro of the workspace writes newtypes, so the scan notes
+    // their names for the `newtype-inner` check.
+    fn visit_item_macro(&mut self, m: &'ast syn::ItemMacro) {
+        if test_only(&m.attrs) {
+            return;
+        }
+        let defines = m
+            .mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|last| last.ident.to_string().starts_with("define_"));
+        if defines {
+            self.structs
+                .extend(macro_types(&m.mac).into_iter().map(|name| (name, 1)));
+        }
+    }
 
     // A foreign block declares the foreign API itself.
     fn visit_item_foreign_mod(&mut self, _: &'ast syn::ItemForeignMod) {}

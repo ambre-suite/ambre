@@ -71,9 +71,12 @@ the item, the kind and the type, and no line number.
   so a value still to type fails the gate until the change types it (`ARCH-033`).
 * **The file only shrinks on its own.** A site no line names fails, and so does a line that names no
   site (`ARCH-034`). `just primitives-prune` removes those lines, and no mode adds one.
-* **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, never
-  whether it is true of the site. A `local` line meets the four conditions of
+* **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, and
+  never the meaning a line claims. A `local` line meets the four conditions of
   `ai/ambre-rust-style.md`, and its note names the reason.
+* **Two categories claim a shape, and the gate checks it from the site** (`ARCH-036`). A
+  `newtype-inner` site sits in the impl of a struct with one field. A `trait` site sits in an impl
+  of a foreign trait, or is a closure type that names a foreign type.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. The tree walk uses
   `std` rather than a crate.

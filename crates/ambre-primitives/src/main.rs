@@ -8,8 +8,9 @@
 //!
 //! Two modes, one per recipe:
 //!
-//!   * `check`, the default, fails on a site no line names and on a line that
-//!     names no site, then prints the lines per category;
+//!   * `check`, the default, fails on a site no line names, on a line that
+//!     names no site and on a line whose site refutes its category, then
+//!     prints the lines per category;
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use allowlist::{Allowlist, Category, HEADER};
+use scan::Scan;
 
 /// The allowlist, relative to the workspace root. It sits beside the other
 /// files the gates of the corpus read.
@@ -64,7 +66,7 @@ fn main() -> ExitCode {
         }
     };
     match mode {
-        Mode::Check => check(&list, &scan.sites),
+        Mode::Check => check(&list, &scan),
         Mode::Prune => prune(&list, &scan.sites, &path),
     }
 }
@@ -79,7 +81,8 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn check(list: &Allowlist, sites: &std::collections::BTreeSet<scan::SiteKey>) -> ExitCode {
+fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
+    let sites = &scan.sites;
     let verdict = list.compare(sites);
     for key in &verdict.missing {
         eprintln!("primitives: no line names the site\n  {key}");
@@ -103,6 +106,20 @@ fn check(list: &Allowlist, sites: &std::collections::BTreeSet<scan::SiteKey>) ->
             verdict.stale.len()
         );
     }
+    let refuted = list.refuted(scan);
+    for refuted in &refuted {
+        eprintln!(
+            "primitives: {ALLOWLIST}:{} is not {}: {}\n  {}",
+            refuted.line, refuted.category, refuted.reason, refuted.key
+        );
+    }
+    if !refuted.is_empty() {
+        eprintln!(
+            "primitives: {} lines claim a shape their site does not have. Type the value, or give \
+             the line the category true of its site.",
+            refuted.len()
+        );
+    }
     let counts: Vec<String> = Category::ALL
         .iter()
         .map(|category| {
@@ -113,7 +130,7 @@ fn check(list: &Allowlist, sites: &std::collections::BTreeSet<scan::SiteKey>) ->
         })
         .collect();
     println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean() {
+    if verdict.is_clean() && refuted.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
