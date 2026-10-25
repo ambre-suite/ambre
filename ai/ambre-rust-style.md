@@ -23,6 +23,8 @@
     quantity.
   * A byte count or a byte size is a unit quantity, `ByteSize`. Opaque bytes are never `math`:
     a blob is a newtype, or `foreign-api` at the foreign call.
+  * The length of a constant array stays a `usize`. It becomes a `ByteSize` when another crate
+    frames bytes with it at run time.
   * A value with a parse into a type carries the parsed type, never the text.
   * A parse that needs a runtime context still types the parts that parse without it. Only the
     part that needs the context stays text, and the note of its line names that context.
@@ -33,11 +35,17 @@
   * A `[T; 2]` array that crosses a function boundary is swap-prone like a tuple. So are two
     parameters of one type with different meanings. Each takes a struct, or a type per meaning.
 
-  Two cases keep the primitive, each under one category:
+  These cases keep the primitive, each under one category:
   * A scalar multiplier is `math`, on a public API too: a factor, a ratio or a zoom scale. A
     length, a position, a count, an index or a size is never a multiplier.
+  * A formula number is `math` inside the formula engine. It is a `CellNumber` once it crosses a
+    public struct or the bus.
   * A closed set stays an `enum` on every path up to its display label. The site that turns the
     `enum` into text for display or for the wire is `free-text`.
+  * A SQL query, a Lua script and a whole markup document are `free-text`.
+  * An error that echoes the refused raw value is `generic`.
+  * A vertex layout that the GPU dictates is `foreign-api`. So is a constant that one foreign call
+    alone reads.
 
   A new concept gets its newtype in the change that introduces it, never later. If no type
   exists, the change adds one.
@@ -50,18 +58,28 @@
   4. Its name, or the single call that reads it, states its meaning.
 
   When one condition fails, the value takes a type. When you are not sure, give it a type.
+
+  A `local` line names a private site. A site is not private when one of these holds:
+  1. its item, field or `fn` is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`;
+  2. it is a field of a type of `ambre-bus`;
+  3. it is a field of a type that derives `Serialize`, `Deserialize` or `FromRow`.
+
+  A field of an enum variant is as private as its `enum`. A method of a trait impl is never
+  private: the trait reaches it wherever the type goes.
 * **A `bool` that a caller writes as a literal is an `enum`.** At `f(true)` the reader sees `true`,
   never what it picks. Such a parameter becomes an `enum` of two variants, each named for what it
-  picks. Tests are callers too: a literal in a test makes the parameter an `enum`. A field is a
-  parameter too: `s.flag = true` and a struct literal make the field an `enum`.
+  picks. Tests are callers too: a literal in a test makes the parameter an `enum`.
   * A predicate returns a `bool`: `is_empty()` reads as a question, and its answer stays a `bool`.
   * A `bool` that crosses a thread, crate, wire or store and names a mode or a state is an `enum`
     too. The variant that was `false` comes first, so a postcard frame reads the same.
-  * A `bool` field of a bus command or event crosses a thread. It names a state or a mode, so it
-    is an `enum`, never `local`.
-  * A store column that records a fact may stay a `bool`. Its allowlist line names the fact.
-  * A JSON `bool` that mirrors a store column stays a `bool`. Its line is `generic`, and its note
-    names the column.
+  * A `bool` field that is not private is an `enum`, whatever its line says. A wrapped `bool`
+    counts too: `Option<bool>`, `Cell<bool>`, `RwSignal<bool>`.
+  * A store column or a JSON value that records a fact maps to that `enum`. A serde or sqlx
+    mapping keeps its stored bytes and its wire bytes, for example `#[serde(from = "bool")]`.
+  * A private `bool` field stays a `bool` under `local` when two conditions hold. Only the impl
+    of its own struct writes it, and the four `local` conditions hold.
+  * A `bool` parameter or return at a store call or a JSON call may stay a `bool`. Its line is
+    `generic`, and its note names the column.
   * Any other `bool` is a fact that selects no mode. Its allowlist line is `generic`, never
     `math`: a `bool` is not arithmetic.
 * **A newtype is complete, so its callers never unwrap it.**
@@ -79,22 +97,29 @@
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
     hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
     plaintext type prints only its length through `Debug`.
-  * **Two bans.** Never implement `Deref` to the primitive, and never implement `From` in both
-    directions. Either one turns the newtype back into the primitive silently.
+  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive, to a slice of one or to
+    `str`. Never implement `From` in both directions. Either one turns the newtype back into the
+    primitive silently. The gate refuses such a `Deref`, whatever the allowlist says.
   * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
     Hand-written copies drift.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
   line of that file by hand (`ARCH-035`). The gate checks the category word. It also refutes a
-  `newtype-inner` or a `trait` line whose site lacks the shape stated below (`ARCH-036`).
+  `newtype-inner` or a `trait` line whose site lacks the shape stated below (`ARCH-036`). It
+  refuses four more defects, whatever the line says:
+  1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
+  2. a `local` line on a site that is not private (`ARCH-038`);
+  3. a `bool` field that is not private (`ARCH-039`);
+  4. a `bool` parameter that is not private and that a caller writes as a literal (`ARCH-040`).
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.
   * A `foreign-api` line names the site of the foreign call, never an accessor that wraps it.
   * A `newtype-inner` line names a site in the newtype's own impl. The newtype is a struct with
-    exactly one field, or a type that a workspace `define_*!` macro writes. The site is one of
-    three:
+    exactly one field, or a type that a workspace `define_*!` macro writes. A `PhantomData`
+    marker is not a field in that count. An impl of a workspace trait for the newtype is its own
+    impl too, when the orphan rule puts it in the crate of the trait. The site is one of three:
     1. that field;
     2. a parameter of an associated function of the newtype that returns `Self`, `Option<Self>`
        or `Result<Self, _>`;
