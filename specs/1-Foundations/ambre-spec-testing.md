@@ -77,20 +77,32 @@ file, the module, the item, the kind and the type, and no line number.
 * **Two categories claim a shape, and the gate checks it from the site** (`ARCH-036`). A
   `newtype-inner` site sits in the impl of a struct with one field, a `PhantomData` marker apart.
   The orphan rule may put that impl in the crate of a workspace trait. A `trait` site sits in an
-  impl of a foreign trait, or is a closure type that names a foreign type.
+  impl of a foreign trait, or is a closure type that names a foreign type. A primitive that the
+  impl writes as a generic argument of the trait refutes the line, since the workspace chose it.
+  A `use ... as` rename of a trait is undone before the lookup.
+* **An alias reads as its target.** Each `type` alias of the workspace resolves in the module that
+  names it, across crates, before any check reads the type. The key keeps the type as written.
 * **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
-  `Target` of each `Deref` impl, and a `DerefMut` takes the target of its `Deref`.
+  `Target` of each `Deref` impl, and a `DerefMut` takes the target of its `Deref`. A reference, a
+  slice, an array and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` expose their element. A generic target
+  fails when a bound names a primitive, or when a site writes an instance with one. A target the
+  gate cannot read fails too.
 * **A site that is not private fails three checks, whatever its category.** A site is not private
-  when it is `pub`, `pub(crate)` or `pub(super)`, or sits in a trait impl. A field is not private
-  either on a type of `ambre-bus`, or on a type that derives `Serialize`, `Deserialize` or
-  `FromRow`.
+  when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`, or sits in a trait impl. A field
+  is not private either on a type of `ambre-bus`, or on a type that derives `Serialize`,
+  `Deserialize` or `FromRow`.
   1. A `local` line on such a site fails (`ARCH-038`).
-  2. Such a field that holds a `bool` fails, unless its line is `foreign-api` (`ARCH-039`).
-  3. Such a `bool` parameter fails when a call passes it a literal (`ARCH-040`).
+  2. Such a field that holds a `bool` fails, unless its line is `foreign-api` (`ARCH-039`). A
+     `bool` in a callable's signature is not held. The one field of a tuple variant with exactly
+     one field may be a `bool`.
+  3. Such a `bool` parameter fails when a call passes it a literal, unless its line is `trait`
+     (`ARCH-040`).
 * **The literal check reads every file of a crate, tests included.** A call matches a parameter by
-  the name of its `fn` and by its position. A call in a crate that depends on the site's crate
-  matches a `pub` site too. A call that matches two sites refutes both, since a name cannot tell
-  them apart.
+  the name of its `fn` and by its position, and a `view!` prop matches a component parameter by
+  name. A call in a crate that reaches the site's crate matches a `pub` site too. A crate reaches
+  its dependencies, a renamed one included, and the crates they re-export. A call that matches two
+  sites refutes both, since a name cannot tell them apart. A call through a value, and code a
+  macro writes, stay out of reach (`ARCH-041`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
@@ -123,14 +135,16 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**The three obstacles.** Each holds one row today: the frame on the phone, the page a deployment
-serves, and what an allowlist line means.
+**The four obstacles.** The first three hold one row each today: the frame on the phone, the page a
+deployment serves, and what an allowlist line means. The fourth holds two rows of the primitive
+gate, what rustc resolves and syn does not.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
+| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, and what a macro writes. The primitive gate parses with `syn` and expands nothing | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so

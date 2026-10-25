@@ -68,12 +68,19 @@
   private: the trait reaches it wherever the type goes.
 * **A `bool` that a caller writes as a literal is an `enum`.** At `f(true)` the reader sees `true`,
   never what it picks. Such a parameter becomes an `enum` of two variants, each named for what it
-  picks. Tests are callers too: a literal in a test makes the parameter an `enum`.
+  picks. Tests are callers too: a literal in a test makes the parameter an `enum`. This holds
+  whatever the category of its line, with one exception. A `trait` line keeps its `bool`, because
+  the foreign signature fixes the type.
   * A predicate returns a `bool`: `is_empty()` reads as a question, and its answer stays a `bool`.
   * A `bool` that crosses a thread, crate, wire or store and names a mode or a state is an `enum`
     too. The variant that was `false` comes first, so a postcard frame reads the same.
   * A `bool` field that is not private is an `enum`, unless a foreign schema fixes it. A wrapped
-    `bool` counts too: `Option<bool>`, `Cell<bool>`, `RwSignal<bool>`.
+    `bool` counts too: `Option<bool>`, `Cell<bool>`, `RwSignal<bool>`. A `bool` in the signature
+    of a closure or a function pointer is no value the field holds: `Box<dyn Fn(bool)>` is a
+    callable.
+  * The one field of a tuple variant with exactly one field stays a `bool`. The variant names the
+    value, as `CellValue::Boolean(bool)` does, so the `bool` selects no mode. A variant with two
+    fields, a named field or an `Option<bool>` does not qualify.
   * A store column or a JSON value that records a fact maps to that `enum`. A serde or sqlx
     mapping keeps its stored bytes and its wire bytes. `ambre_core::define_flag!` writes such an
     `enum`: its serde form is a plain `bool`, and its `@sqlx` arm maps it to `BOOLEAN`.
@@ -82,8 +89,9 @@
     claims such as `email_verified` and the response of a third-party API are such schemas.
   * A private `bool` field stays a `bool` under `local` when two conditions hold. Only the impl
     of its own struct writes it, and the four `local` conditions hold.
-  * A `bool` parameter or return at a store call or a JSON call may stay a `bool`. Its line is
-    `generic`, and its note names the column.
+  * A `bool` parameter or return at a store call or a JSON call may stay a `bool` under
+    `generic`, when no caller writes it as a literal. One literal at any caller makes it an
+    `enum` (`ARCH-040`).
   * Any other `bool` is a fact that selects no mode. Its allowlist line is `generic`, never
     `math`: a `bool` is not arithmetic.
 * **A newtype is complete, so its callers never unwrap it.**
@@ -101,15 +109,18 @@
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
     hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
     plaintext type prints only its length through `Debug`.
-  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive, to a slice of one or to
-    `str`. Never implement `From` in both directions. Either one turns the newtype back into the
-    primitive silently. The gate refuses such a `Deref`, whatever the allowlist says.
+  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive or to a type that hands
+    one out. Such a type is a slice, an array, a reference, or a `Vec`, `Box`, `Rc`, `Arc` or
+    `Cow` of a primitive. A generic `Target = T` counts when a bound or an instance makes `T` a
+    primitive. Never implement `From` in both directions. Either one turns the newtype back into
+    the primitive silently. The gate refuses such a `Deref`, whatever the allowlist says.
   * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
     Hand-written copies drift.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
-  line of that file by hand (`ARCH-035`).
+  line of that file by hand (`ARCH-035`). The gate reads a workspace `type` alias as its target,
+  so an alias hides no primitive and no `bool` from a check.
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
   site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line
@@ -117,7 +128,8 @@
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
   3. a `bool` field that is not private, unless its line is `foreign-api` (`ARCH-039`);
-  4. a `bool` parameter that is not private and that a caller writes as a literal (`ARCH-040`).
+  4. a `bool` parameter that is not private and that a caller writes as a literal, unless its
+     line is `trait` (`ARCH-040`).
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.
@@ -136,7 +148,9 @@
   * A `trait` line names a signature that the workspace cannot change. A trait the workspace does
     not own fixes it, or a generic bound the workspace cannot change. A closure or function
     pointer type that a foreign signature requires is `trait` too. A trait the workspace declares
-    is ordinary code, and its signatures take types.
+    is ordinary code, and its signatures take types. A primitive that the impl writes as a
+    generic argument of the trait is the workspace's choice, as in `impl Add<u32> for Px`. Its
+    site takes a type.
   * The note of a line describes the value truthfully. A reviewer reads the note as code.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
