@@ -285,8 +285,8 @@ impl Allowlist {
     /// `trait` claim a shape the code shows (`ARCH-036`); the other
     /// categories claim a meaning, which a reviewer holds (`ARCH-035`). The
     /// privacy refusals hold for every category (`ARCH-038` to `ARCH-040`),
-    /// except two: a `foreign-api` line takes no `bool` field refusal, and a
-    /// `trait` line takes no literal refusal.
+    /// with two exceptions. A `foreign-api` line takes no `bool` field
+    /// refusal. A `trait` line takes no literal refusal.
     pub fn refuted(&self, scan: &Scan) -> Vec<Refuted> {
         let listed: BTreeSet<SiteKey> = self.raw.keys().cloned().collect();
         let mut found = Vec::new();

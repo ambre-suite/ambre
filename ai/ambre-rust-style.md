@@ -90,8 +90,8 @@
   * A private `bool` field stays a `bool` under `local` when two conditions hold. Only the impl
     of its own struct writes it, and the four `local` conditions hold.
   * A `bool` parameter or return at a store call or a JSON call may stay a `bool` under
-    `generic`, when no caller writes it as a literal. One literal at any caller makes it an
-    `enum` (`ARCH-040`).
+    `generic`. This holds while no caller writes it as a literal. One literal at any caller makes
+    it an `enum` (`ARCH-040`).
   * Any other `bool` is a fact that selects no mode. Its allowlist line is `generic`, never
     `math`: a `bool` is not arithmetic.
 * **A newtype is complete, so its callers never unwrap it.**
@@ -109,11 +109,11 @@
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
     hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
     plaintext type prints only its length through `Debug`.
-  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive or to a type that hands
-    one out. Such a type is a slice, an array, a reference, or a `Vec`, `Box`, `Rc`, `Arc` or
-    `Cow` of a primitive. A generic `Target = T` counts when a bound or an instance makes `T` a
+  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive, or to a type that hands
+    one out. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` hand out
+    their element. A generic `Target = T` counts when a bound or an instance makes `T` a
     primitive. Never implement `From` in both directions. Either one turns the newtype back into
-    the primitive silently. The gate refuses such a `Deref`, whatever the allowlist says.
+    the primitive silently, and the gate refuses such a `Deref` whatever the allowlist says.
   * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
     Hand-written copies drift.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose

@@ -92,6 +92,8 @@ constrains, and the table below lists them.
 | Row | What the reviewer holds | Spec |
 | :--- | :--- | :--- |
 | `ARCH-035` | Each line of the primitive allowlist MUST carry the category true of its site. A `local` line MUST meet the four conditions of `ai/ambre-rust-style.md`. | `ambre-spec-architecture.md` |
+| `ARCH-041` | A `bool` parameter that is not private MUST NOT take a literal through a call that does not name its `fn`: through a value, a closure or a trait object, or in code a macro writes. | `ambre-spec-architecture.md` |
+| `ARCH-042` | A `trait` line on a closure type or a function pointer type MUST name one that a foreign signature requires. | `ambre-spec-architecture.md` |
 <!-- end of the human-review rows -->
 
 The table is written from the rows by `just contracts-write`, and `just contracts` fails when it is

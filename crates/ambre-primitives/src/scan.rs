@@ -558,8 +558,8 @@ impl Declared {
     /// the module a qualified path writes. The declaration in that module
     /// wins. A private alias reaches its own module and the modules under
     /// it. With no declaration in reach, a bare name may name a `pub` alias
-    /// of a crate `krate` depends on, unless `module` declares a struct or
-    /// an enum of that name.
+    /// of a crate that `krate` reaches. A struct or an enum of that name in
+    /// `module` shadows it.
     fn alias(
         &self,
         krate: &str,
@@ -741,9 +741,9 @@ struct Resolver<'d> {
 }
 
 impl Resolver<'_> {
-    /// The target of the alias `ty` names, its parameters replaced by the
-    /// arguments of the use, with the crate and module the target is
-    /// written in.
+    /// The target of the alias `ty` names, with the crate and the module
+    /// that write it. Each parameter of the alias reads as the argument of
+    /// the use.
     fn target(&self, ty: &syn::Type) -> Option<(syn::Type, String, String)> {
         let syn::Type::Path(path) = ty else {
             return None;
@@ -954,10 +954,10 @@ impl Scan {
     }
 
     /// Checks the claim of a `trait` line. The site is a signature or a
-    /// constant of an impl of a trait the workspace does not declare, and
-    /// takes no primitive from a generic argument the impl writes. Or its
-    /// type is a closure or a function pointer that names a type of a
-    /// foreign crate, outside the toolchain.
+    /// constant of an impl of a trait the workspace does not declare. Its
+    /// primitive is no generic argument the impl writes. Or its type is a
+    /// closure or a function pointer that names a type of a foreign crate,
+    /// outside the toolchain.
     ///
     /// A key the scan did not find passes: the stale check reports it.
     ///
@@ -1059,8 +1059,8 @@ impl Scan {
     /// as a literal (`ARCH-040`). A call matches a parameter by the name of
     /// its `fn` and by position; a `view!` prop matches a parameter of a
     /// component by name. A wrapped `bool` takes `Some(true)`. The call sits
-    /// in the crate of the site, or, for a `pub` site, in a crate that
-    /// reaches it: a dependency, or a crate a dependency re-exports. `listed`
+    /// in the crate of the site. For a `pub` site, it may sit in a crate
+    /// that reaches it: a dependency, or a crate a dependency re-exports. `listed`
     /// holds the keys of the allowlist, the other sites a call may match.
     ///
     /// # Errors
@@ -1455,8 +1455,8 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
         };
         scan_crate(tree, dir, &mut result, &mut found);
     }
-    // An alias of one crate may name a type of another, and a call may reach
-    // a crate through a re-export: both are read once every crate is.
+    // An alias of one crate may name a type of another. A call may reach a
+    // crate through a re-export. Both are read once every crate is.
     result.declared.close_reach();
     let mut keys = Vec::new();
     let mut resolved = Vec::new();
