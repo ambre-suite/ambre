@@ -72,10 +72,14 @@
   * A predicate returns a `bool`: `is_empty()` reads as a question, and its answer stays a `bool`.
   * A `bool` that crosses a thread, crate, wire or store and names a mode or a state is an `enum`
     too. The variant that was `false` comes first, so a postcard frame reads the same.
-  * A `bool` field that is not private is an `enum`, whatever its line says. A wrapped `bool`
-    counts too: `Option<bool>`, `Cell<bool>`, `RwSignal<bool>`.
+  * A `bool` field that is not private is an `enum`, unless a foreign schema fixes it. A wrapped
+    `bool` counts too: `Option<bool>`, `Cell<bool>`, `RwSignal<bool>`.
   * A store column or a JSON value that records a fact maps to that `enum`. A serde or sqlx
-    mapping keeps its stored bytes and its wire bytes, for example `#[serde(from = "bool")]`.
+    mapping keeps its stored bytes and its wire bytes. `ambre_core::define_flag!` writes such an
+    `enum`: its serde form is a plain `bool`, and its `@sqlx` arm maps it to `BOOLEAN`.
+  * A struct that mirrors a schema the workspace does not control keeps its `bool` fields. Its
+    lines are `foreign-api`, and the boundary turns each value into the workspace `enum`. OIDC
+    claims such as `email_verified` and the response of a third-party API are such schemas.
   * A private `bool` field stays a `bool` under `local` when two conditions hold. Only the impl
     of its own struct writes it, and the four `local` conditions hold.
   * A `bool` parameter or return at a store call or a JSON call may stay a `bool`. Its line is
@@ -110,7 +114,7 @@
   refuses four more defects, whatever the line says:
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
-  3. a `bool` field that is not private (`ARCH-039`);
+  3. a `bool` field that is not private, unless its line is `foreign-api` (`ARCH-039`);
   4. a `bool` parameter that is not private and that a caller writes as a literal (`ARCH-040`).
 
   The categories are a closed set, and no category means "to type later". A value still to type

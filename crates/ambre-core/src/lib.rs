@@ -45,6 +45,8 @@ pub mod fingerprint;
 /// `fixtures` feature so no client build can reach it (I4).
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
+/// Two-variant enums for a `bool` that crosses a store, a wire or a public struct.
+pub mod flag;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
 pub mod generation;

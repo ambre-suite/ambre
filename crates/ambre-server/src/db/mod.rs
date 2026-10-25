@@ -499,4 +499,44 @@ mod tests {
             .collect();
         assert_eq!(seqs, vec![4, 5, 6, 7, 8, 9, 10]);
     }
+
+    ambre_core::define_flag! {
+        /// A stored flag, for the round trip of `define_flag!` through Postgres.
+        pub enum Pin {
+            /// The value that was `false`.
+            Loose,
+            /// The value that was `true`.
+            Fixed,
+        }
+    }
+    ambre_core::define_flag!(@sqlx Pin);
+
+    /// A flag is a `BOOLEAN` to sqlx, so a column keeps its type.
+    #[test]
+    fn a_flag_is_a_boolean_to_postgres() {
+        assert_eq!(
+            <Pin as sqlx::Type<sqlx::Postgres>>::type_info(),
+            <bool as sqlx::Type<sqlx::Postgres>>::type_info()
+        );
+    }
+
+    /// A flag binds as the `bool` of its variant and reads back from one.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_flag_round_trips_through_a_boolean(pool: PgPool) {
+        for (flag, value) in [(Pin::Loose, false), (Pin::Fixed, true)] {
+            let stored: bool = sqlx::query_scalar("SELECT $1::boolean")
+                .bind(flag)
+                .fetch_one(&pool)
+                .await
+                .expect("a flag binds");
+            assert_eq!(stored, value);
+            let read: Pin = sqlx::query_scalar("SELECT $1::boolean")
+                .bind(value)
+                .fetch_one(&pool)
+                .await
+                .expect("a boolean reads as a flag");
+            assert_eq!(read, flag);
+        }
+    }
 }
