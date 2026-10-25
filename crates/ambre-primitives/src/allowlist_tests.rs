@@ -215,7 +215,8 @@ fn a_privacy_refusal_holds_whatever_the_category() {
 
 #[test]
 fn a_trait_line_takes_no_literal_refusal() {
-    const FOREIGN: &str = "demo | src/lib.rs | crate | <Px as gloo::Handler>::call(on) | param | bool";
+    const FOREIGN: &str =
+        "demo | src/lib.rs | crate | <Px as gloo::Handler>::call(on) | param | bool";
     const OWN: &str = "demo | src/lib.rs | crate | Px::call(on) | param | bool";
     let found = refusals(
         "pub struct Px;\n\

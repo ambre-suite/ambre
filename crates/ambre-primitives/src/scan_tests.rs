@@ -702,8 +702,14 @@ fn a_literal_reaches_a_pub_site_of_a_crate_it_depends_on() {
 fn a_trait_imported_under_another_name_is_the_workspace_trait() {
     let scan = crates(&[
         ("demo/Cargo.toml", ""),
-        ("demo/src/lib.rs", "pub trait Tree { fn at(&self, i: u32); }"),
-        ("user/Cargo.toml", "[dependencies]\ndemo = { path = \"../demo\" }"),
+        (
+            "demo/src/lib.rs",
+            "pub trait Tree { fn at(&self, i: u32); }",
+        ),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
         (
             "user/src/lib.rs",
             "use demo::Tree as T;\npub struct P;\nimpl T for P { fn at(&self, i: u32) {} }",
@@ -730,7 +736,10 @@ fn an_alias_resolves_to_its_target_before_every_check() {
              pub mod inner { pub type Id = u32; pub struct B { pub id: Id, pub up: super::Flag } }\n\
              fn run() { set(true); }",
         ),
-        ("user/Cargo.toml", "[dependencies]\ndemo = { path = \"../demo\" }"),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
         ("user/src/lib.rs", "pub struct U { pub g: demo::Flag }"),
     ]);
     let keys: Vec<String> = scan.sites.iter().map(ToString::to_string).collect();
@@ -741,7 +750,10 @@ fn an_alias_resolves_to_its_target_before_every_check() {
         "demo | src/lib.rs | crate::inner | B.up | field | super::Flag",
         "user | src/lib.rs | crate | U.g | field | demo::Flag",
     ] {
-        assert!(keys.iter().any(|key| key == written), "{written} in {keys:?}");
+        assert!(
+            keys.iter().any(|key| key == written),
+            "{written} in {keys:?}"
+        );
     }
     for item in ["A.f", "B.up", "U.g"] {
         assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
@@ -769,13 +781,24 @@ fn a_deref_target_is_read_through_paths_wrappers_aliases_generics_and_macros() {
          pub struct Editor { core: Core }\nimpl Deref for Editor { type Target = Core; }",
     );
     let refused = [
-        "A", "B", "C", "D", "E", "F", "G", "W<T>", "V<T>", "Q<T>", "__ambre_meta_name",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "W<T>",
+        "V<T>",
+        "Q<T>",
+        "__ambre_meta_name",
     ];
     for ty in refused {
         assert!(
             scan.derefs
                 .iter()
-                .any(|refusal| refusal.contains(&format!("Deref of {ty} to")) || refusal.contains(&format!("Deref of {ty}:"))),
+                .any(|refusal| refusal.contains(&format!("Deref of {ty} to"))
+                    || refusal.contains(&format!("Deref of {ty}:"))),
             "{ty} in {:?}",
             scan.derefs
         );
@@ -797,9 +820,15 @@ fn a_literal_is_found_through_reexports_renames_macros_and_props() {
              #[component]\npub fn Toggle(checked: bool, label: u32) -> impl IntoView { () }\n\
              pub fn quiet(on: bool) {}",
         ),
-        ("mid/Cargo.toml", "[dependencies]\ncore-a = { path = \"../core-a\" }"),
+        (
+            "mid/Cargo.toml",
+            "[dependencies]\ncore-a = { path = \"../core-a\" }",
+        ),
         ("mid/src/lib.rs", "pub use core_a::real;"),
-        ("far/Cargo.toml", "[dependencies]\nmid = { path = \"../mid\" }"),
+        (
+            "far/Cargo.toml",
+            "[dependencies]\nmid = { path = \"../mid\" }",
+        ),
         ("far/src/lib.rs", "fn go() { mid::real(true); }"),
         (
             "app/Cargo.toml",
@@ -830,7 +859,10 @@ fn a_literal_is_found_through_reexports_renames_macros_and_props() {
             "{item}"
         );
     }
-    assert_eq!(scan.bool_literal(&site(&scan, "quiet(on)"), &listed), Ok(()));
+    assert_eq!(
+        scan.bool_literal(&site(&scan, "quiet(on)"), &listed),
+        Ok(())
+    );
 }
 
 #[test]

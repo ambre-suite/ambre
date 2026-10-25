@@ -534,7 +534,13 @@ impl Declared {
         let mut reach = BTreeMap::new();
         for krate in self.deps.keys() {
             let mut found: BTreeSet<String> = BTreeSet::new();
-            let mut pending: Vec<String> = self.deps.get(krate).into_iter().flatten().cloned().collect();
+            let mut pending: Vec<String> = self
+                .deps
+                .get(krate)
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect();
             while let Some(next) = pending.pop() {
                 if !found.insert(next.clone()) {
                     continue;
@@ -554,7 +560,13 @@ impl Declared {
     /// it. With no declaration in reach, a bare name may name a `pub` alias
     /// of a crate `krate` depends on, unless `module` declares a struct or
     /// an enum of that name.
-    fn alias(&self, krate: &str, module: &str, name: &str, hint: Option<&str>) -> Option<(String, Alias)> {
+    fn alias(
+        &self,
+        krate: &str,
+        module: &str,
+        name: &str,
+        hint: Option<&str>,
+    ) -> Option<(String, Alias)> {
         let visible = |alias: &&Alias| {
             alias.privacy != Privacy::Private
                 || module == alias.module
@@ -761,14 +773,26 @@ impl Resolver<'_> {
                         .map_or_else(|| self.module.to_owned(), |(parent, _)| parent.to_owned()),
                     _ => "crate".to_owned(),
                 };
-                let rest: Vec<String> = middle.iter().map(|segment| segment.ident.to_string()).collect();
-                let hint = std::iter::once(base).chain(rest).collect::<Vec<_>>().join("::");
+                let rest: Vec<String> = middle
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect();
+                let hint = std::iter::once(base)
+                    .chain(rest)
+                    .collect::<Vec<_>>()
+                    .join("::");
                 (krate, Some(hint))
             }
             [] => return None,
         };
-        let module = if krate == self.krate { self.module } else { "crate" };
-        let (home, alias) = self.declared.alias(&krate, module, &name, hint.as_deref())?;
+        let module = if krate == self.krate {
+            self.module
+        } else {
+            "crate"
+        };
+        let (home, alias) = self
+            .declared
+            .alias(&krate, module, &name, hint.as_deref())?;
         let mut target = syn::parse_str::<syn::Type>(&alias.target).ok()?;
         if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
             let given: Vec<&syn::Type> = args
@@ -842,7 +866,9 @@ fn primitives_of(ty: &syn::Type) -> BTreeSet<String> {
 /// callable.
 fn shape_of(ty: &syn::Type) -> Shape {
     let mut bare = ty;
-    while let syn::Type::Paren(syn::TypeParen { elem, .. }) | syn::Type::Group(syn::TypeGroup { elem, .. }) = bare {
+    while let syn::Type::Paren(syn::TypeParen { elem, .. })
+    | syn::Type::Group(syn::TypeGroup { elem, .. }) = bare
+    {
         bare = elem;
     }
     if let syn::Type::Path(path) = bare
@@ -1136,9 +1162,7 @@ fn dependencies(manifest: &str) -> Manifest {
     fn add(found: &mut Manifest, key: &str, package: Option<String>) {
         let package = package.unwrap_or_else(|| key.to_owned());
         if package != key {
-            found
-                .renamed
-                .insert(key.replace('-', "_"), package.clone());
+            found.renamed.insert(key.replace('-', "_"), package.clone());
         }
         found.packages.insert(package);
     }
@@ -1239,7 +1263,9 @@ fn literal_of(arg: &syn::Expr) -> Option<&syn::LitBool> {
         syn::Expr::Paren(inner) => literal_of(&inner.expr),
         syn::Expr::Group(inner) => literal_of(&inner.expr),
         syn::Expr::Call(call) => match (&*call.func, call.args.first()) {
-            (syn::Expr::Path(path), Some(only)) if call.args.len() == 1 && path.path.is_ident("Some") => {
+            (syn::Expr::Path(path), Some(only))
+                if call.args.len() == 1 && path.path.is_ident("Some") =>
+            {
                 literal_of(only)
             }
             _ => None,
@@ -1322,11 +1348,15 @@ impl LiteralVisit {
                         Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Brace => {
                             let inner: Vec<TokenTree> = group.stream().into_iter().collect();
                             match inner.as_slice() {
-                                [TokenTree::Ident(word)] if word == "true" || word == "false" => Some(word.clone()),
+                                [TokenTree::Ident(word)] if word == "true" || word == "false" => {
+                                    Some(word.clone())
+                                }
                                 _ => None,
                             }
                         }
-                        Some(TokenTree::Ident(word)) if word == "true" || word == "false" => Some(word.clone()),
+                        Some(TokenTree::Ident(word)) if word == "true" || word == "false" => {
+                            Some(word.clone())
+                        }
                         _ => None,
                     };
                     if mode == Tokens::View
@@ -1353,8 +1383,8 @@ impl LiteralVisit {
                     tag = None;
                     while let Some(TokenTree::Ident(word)) = tokens.get(at) {
                         tag = Some(word.to_string());
-                        let more = is_punct(tokens.get(at + 1), ':')
-                            && is_punct(tokens.get(at + 2), ':');
+                        let more =
+                            is_punct(tokens.get(at + 1), ':') && is_punct(tokens.get(at + 2), ':');
                         if !more {
                             break;
                         }
@@ -1988,7 +2018,9 @@ fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
                         syn::GenericArgument::Type(inner) => Some(exposure(inner, generics)),
                         _ => None,
                     })
-                    .unwrap_or_else(|| Exposure::Unsure(format!("a {name} with no type argument")));
+                    .unwrap_or_else(|| {
+                        Exposure::Unsure(format!("a {name} with no type argument"))
+                    });
             }
             Exposure::Opaque
         }
@@ -2085,10 +2117,16 @@ fn deref_refusal(
                 .split(|c: char| !(c.is_alphanumeric() || c == '_'))
                 .find(|word| PRIMITIVES.contains(word))
             {
-                return Some(exposes(primitive, format!(", whose bound {bound} names {primitive},")));
+                return Some(exposes(
+                    primitive,
+                    format!(", whose bound {bound} names {primitive},"),
+                ));
             }
             let Some(index) = source.self_args.iter().position(|arg| *arg == param) else {
-                return Some(unsure(&format!("{param} is no type argument of {}", source.ty)));
+                return Some(unsure(&format!(
+                    "{param} is no type argument of {}",
+                    source.ty
+                )));
             };
             let mut instances = Instances {
                 name: &source.self_ty,
@@ -2098,17 +2136,20 @@ fn deref_refusal(
             for ty in sites {
                 instances.visit_type(ty);
             }
-            instances.args.iter().find_map(|arg| match exposure(arg, &BTreeMap::new()) {
-                Exposure::Primitive(primitive) => Some(exposes(
-                    &primitive,
-                    format!(
-                        ", which a site writes as {}<..{}..>,",
-                        source.self_ty,
-                        normalise(&arg.to_token_stream().to_string())
-                    ),
-                )),
-                _ => None,
-            })
+            instances
+                .args
+                .iter()
+                .find_map(|arg| match exposure(arg, &BTreeMap::new()) {
+                    Exposure::Primitive(primitive) => Some(exposes(
+                        &primitive,
+                        format!(
+                            ", which a site writes as {}<..{}..>,",
+                            source.self_ty,
+                            normalise(&arg.to_token_stream().to_string())
+                        ),
+                    )),
+                    _ => None,
+                })
         }
     }
 }
@@ -2234,7 +2275,12 @@ fn deref_impl(
             .join("+");
         bounds.insert(param.ident.to_string(), text);
     }
-    for predicate in i.generics.where_clause.iter().flat_map(|clause| &clause.predicates) {
+    for predicate in i
+        .generics
+        .where_clause
+        .iter()
+        .flat_map(|clause| &clause.predicates)
+    {
         if let syn::WherePredicate::Type(predicate) = predicate
             && let syn::Type::Path(path) = &predicate.bounded_ty
             && let Some(ident) = path.path.get_ident()
@@ -2282,11 +2328,11 @@ fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
     tokens
         .windows(3)
         .filter_map(|window| match window {
-            [TokenTree::Punct(eq), TokenTree::Punct(gt), TokenTree::Group(body)]
-                if eq.as_char() == '=' && gt.as_char() == '>' =>
-            {
-                Some(unmeta(body.stream()))
-            }
+            [
+                TokenTree::Punct(eq),
+                TokenTree::Punct(gt),
+                TokenTree::Group(body),
+            ] if eq.as_char() == '=' && gt.as_char() == '>' => Some(unmeta(body.stream())),
             _ => None,
         })
         .collect()
@@ -2309,15 +2355,16 @@ fn unmeta(stream: TokenStream) -> TokenStream {
                     } else {
                         format!("{META}{name}")
                     };
-                    out.push(TokenTree::Ident(proc_macro2::Ident::new(&word, name.span())));
+                    out.push(TokenTree::Ident(proc_macro2::Ident::new(
+                        &word,
+                        name.span(),
+                    )));
                 }
                 Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => {
                     i += 1;
                     out.extend(unmeta(group.stream()));
                     // The separator, if any, then the operator.
-                    let op = |token: Option<&TokenTree>| {
-                        matches!(token, Some(TokenTree::Punct(p)) if matches!(p.as_char(), '*' | '+' | '?'))
-                    };
+                    let op = |token: Option<&TokenTree>| matches!(token, Some(TokenTree::Punct(p)) if matches!(p.as_char(), '*' | '+' | '?'));
                     if op(tokens.get(i)) {
                         i += 1;
                     } else if op(tokens.get(i + 1)) {
