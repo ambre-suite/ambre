@@ -152,6 +152,8 @@ pub struct Scan {
 struct Place {
     /// The crate directory, as the key names it.
     krate: String,
+    /// The module path, as the key names it.
+    module: String,
     kind: SiteKind,
     /// The struct that declares the field. `None` for a field of an enum
     /// variant or of a union, and for every other kind.
@@ -159,10 +161,56 @@ struct Place {
     /// The impl whose signature or constant the site is. `None` outside an
     /// impl, and in a body nested inside one.
     host: Option<Host>,
-    /// Whether the type is a closure bound or a function pointer.
-    callable: bool,
+    form: TypeForm,
     /// The first segment of each path of the type with two or more.
     roots: BTreeSet<String>,
+}
+
+/// Whether a type is called or held.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum TypeForm {
+    /// Any type that is not a closure or a function pointer.
+    #[default]
+    Value,
+    /// A closure bound or a function pointer.
+    Callable,
+}
+
+/// Whether an associated `fn` takes `self`, by value or by reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Receiver {
+    /// No `self`: a constructor, or a constant.
+    Without,
+    /// A method.
+    With,
+}
+
+/// What an associated `fn` returns, as a newtype claim reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Output {
+    /// Anything else, or nothing.
+    Other,
+    /// The implementing type: `Self`, `Option<Self>` or `Result<Self, _>`,
+    /// or the same with the type's own name.
+    Itself,
+}
+
+/// What a type declaration is, as a newtype claim reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Decl {
+    /// A struct with exactly one field, or a type a `define_*!` macro
+    /// writes.
+    Newtype,
+    /// A struct with no field, or with two or more.
+    Struct,
+    Enum,
+}
+
+/// One struct or enum, with the module that declares it.
+#[derive(Clone, Debug)]
+struct Declaration {
+    module: String,
+    decl: Decl,
 }
 
 /// The impl item that holds a site.
@@ -172,12 +220,10 @@ struct Host {
     self_ty: String,
     /// The trait the impl implements, `None` for an inherent impl.
     of_trait: Option<TraitPath>,
-    /// Whether the `fn` takes `self`, by value or by reference. False for a
-    /// constant.
-    receiver: bool,
-    /// Whether the `fn` returns the type itself: `Self`, `Option<Self>` or
-    /// `Result<Self, _>`, or the same with the type's own name.
-    makes_self: bool,
+    /// `Without` for a constant.
+    receiver: Receiver,
+    /// `Other` for a constant.
+    output: Output,
 }
 
 /// The trait of an impl, as the impl writes its path.
@@ -196,9 +242,9 @@ struct Declared {
     crates: BTreeSet<String>,
     /// The name of every trait.
     traits: BTreeSet<String>,
-    /// The field count of every struct, per crate directory and name. A
-    /// type that a `define_*!` macro writes counts one field.
-    structs: BTreeMap<(String, String), Vec<usize>>,
+    /// Every struct and enum, per crate directory, then per name. A name
+    /// declared twice in one crate keeps both.
+    types: BTreeMap<String, BTreeMap<String, Vec<Declaration>>>,
 }
 
 impl Declared {
@@ -218,20 +264,38 @@ impl Declared {
         }
     }
 
-    /// Whether `name` is a struct of `krate` with exactly one field.
-    fn single_field(&self, krate: &str, name: &str) -> Result<(), String> {
-        match self.structs.get(&(krate.to_owned(), name.to_owned())) {
-            None => Err(format!(
-                "{name} is no struct of {krate}: an enum, an alias or a foreign type"
-            )),
-            Some(counts) if counts.iter().all(|count| *count == 1) => Ok(()),
-            Some(counts) => {
-                let counts: Vec<String> = counts.iter().map(ToString::to_string).collect();
-                Err(format!(
-                    "{name} is a struct of {} fields, not exactly one",
-                    counts.join(" or ")
-                ))
+    /// Whether `name` is a struct with exactly one field, in the crate of
+    /// the site. The declaration in the module of the site wins; with none
+    /// there, every declaration of the crate must be one.
+    fn single_field(&self, site: &Place, name: &str) -> Result<(), String> {
+        let (krate, module) = (&site.krate, &site.module);
+        let found = self.types.get(krate).and_then(|names| names.get(name));
+        let here: Option<Vec<Decl>> = found.map(|all| {
+            let local: Vec<Decl> = all
+                .iter()
+                .filter(|declaration| declaration.module == *module)
+                .map(|declaration| declaration.decl)
+                .collect();
+            if local.is_empty() {
+                all.iter().map(|declaration| declaration.decl).collect()
+            } else {
+                local
             }
+        });
+        match here {
+            None if self.types.values().any(|names| names.contains_key(name)) => Err(format!(
+                "{name} is a type of another crate, so this impl is not the newtype's own"
+            )),
+            None => Err(format!(
+                "{name} is no type of {krate}: an alias or a foreign type"
+            )),
+            Some(decls) if decls.iter().all(|decl| *decl == Decl::Newtype) => Ok(()),
+            Some(decls) if decls.contains(&Decl::Enum) => {
+                Err(format!("{name} is an enum, not a struct"))
+            }
+            Some(_) => Err(format!(
+                "{name} is a struct with no field, or with two or more"
+            )),
         }
     }
 }
@@ -254,22 +318,22 @@ impl Scan {
         };
         match place.kind {
             SiteKind::Field => match &place.owner {
-                Some(owner) => self.declared.single_field(&place.krate, owner),
+                Some(owner) => self.declared.single_field(place, owner),
                 None => Err("a field of an enum variant or of a union, not of a struct".to_owned()),
             },
             SiteKind::Param | SiteKind::Ret => {
                 let Some(host) = &place.host else {
                     return Err("a signature outside an impl, or nested in a body".to_owned());
                 };
-                self.declared.single_field(&place.krate, &host.self_ty)?;
+                self.declared.single_field(place, &host.self_ty)?;
                 match place.kind {
-                    SiteKind::Param if host.makes_self => Ok(()),
+                    SiteKind::Param if host.output == Output::Itself => Ok(()),
                     SiteKind::Param => Err(format!(
                         "a parameter of a fn of {} that returns neither Self, Option<Self> \
                          nor Result<Self, _>",
                         host.self_ty
                     )),
-                    _ if host.receiver => Ok(()),
+                    _ if host.receiver == Receiver::With => Ok(()),
                     _ => Err(format!(
                         "the return of a fn of {} that takes no self",
                         host.self_ty
@@ -311,14 +375,14 @@ impl Scan {
             .roots
             .iter()
             .any(|root| !self.declared.owns_root(root) && !TOOLCHAIN.contains(&root.as_str()));
-        match (place.callable, foreign) {
-            (true, true) => Ok(()),
-            (true, false) => {
+        match (place.form, foreign) {
+            (TypeForm::Callable, true) => Ok(()),
+            (TypeForm::Callable, false) => {
                 Err("a closure type that names no type of a foreign crate".to_owned())
             }
-            (false, _) => Err(
-                "neither in an impl of a foreign trait nor a closure type".to_owned(),
-            ),
+            (TypeForm::Value, _) => {
+                Err("neither in an impl of a foreign trait nor a closure type".to_owned())
+            }
         }
     }
 }
@@ -341,17 +405,17 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     result
 }
 
-/// The facts a type gives a [`Place`]: whether it is callable, and the
-/// roots of its paths.
+/// The facts a type gives a [`Place`]: its form, and the roots of its
+/// paths.
 #[derive(Default)]
 struct TypeFacts {
-    callable: bool,
+    form: TypeForm,
     roots: BTreeSet<String>,
 }
 
 impl<'ast> Visit<'ast> for TypeFacts {
     fn visit_type_bare_fn(&mut self, f: &'ast syn::TypeBareFn) {
-        self.callable = true;
+        self.form = TypeForm::Callable;
         syn::visit::visit_type_bare_fn(self, f);
     }
 
@@ -361,7 +425,7 @@ impl<'ast> Visit<'ast> for TypeFacts {
                 .iter()
                 .any(|name| segment.ident == name)
         {
-            self.callable = true;
+            self.form = TypeForm::Callable;
         }
         syn::visit::visit_path_segment(self, segment);
     }
@@ -389,39 +453,47 @@ fn type_name(ty: &syn::Type) -> String {
     }
 }
 
-/// Whether a return type is the implementing type: `Self` or `owner`, bare
-/// or as the first argument of an `Option` or a `Result`.
-fn makes_self(output: &syn::ReturnType, owner: &str) -> bool {
+/// What a return type is: the implementing type, `Self` or `owner`, bare or
+/// as the first argument of an `Option` or a `Result`, or anything else.
+fn output(output: &syn::ReturnType, owner: &str) -> Output {
     let syn::ReturnType::Type(_, ty) = output else {
-        return false;
+        return Output::Other;
     };
-    names_self(ty, owner, true)
+    if is_self(ty, owner) || wrapped(ty).is_some_and(|inner| is_self(inner, owner)) {
+        Output::Itself
+    } else {
+        Output::Other
+    }
 }
 
-fn names_self(ty: &syn::Type, owner: &str, wrapped: bool) -> bool {
+/// Whether a type is `Self` or `owner`, bare.
+fn is_self(ty: &syn::Type, owner: &str) -> bool {
     let syn::Type::Path(path) = ty else {
         return false;
     };
     let Some(last) = path.path.segments.last() else {
         return false;
     };
-    if last.ident == "Self" {
-        return path.qself.is_none() && path.path.segments.len() == 1;
-    }
-    if last.ident == owner {
-        return path.qself.is_none();
-    }
-    if !wrapped || !(last.ident == "Option" || last.ident == "Result") {
-        return false;
+    path.qself.is_none()
+        && ((last.ident == "Self" && path.path.segments.len() == 1) || last.ident == owner)
+}
+
+/// The first type argument of an `Option` or a `Result`.
+fn wrapped(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    let last = path.path.segments.last()?;
+    if !(last.ident == "Option" || last.ident == "Result") {
+        return None;
     }
     let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
-        return false;
+        return None;
     };
     args.args.iter().find_map(|arg| match arg {
         syn::GenericArgument::Type(inner) => Some(inner),
         _ => None,
     })
-    .is_some_and(|inner| names_self(inner, owner, false))
 }
 
 /// The types a `define_*!` invocation writes: each name after a `struct`,
@@ -533,13 +605,15 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         visit.visit_file(&file);
         keys.append(&mut visit.keys);
         result.declared.traits.append(&mut visit.traits);
-        for (owner, count) in visit.structs {
+        for (owner, decl) in visit.types {
             result
                 .declared
-                .structs
-                .entry((name.clone(), owner))
+                .types
+                .entry(name.clone())
                 .or_default()
-                .push(count);
+                .entry(owner)
+                .or_default()
+                .push(decl);
         }
         pending.extend(visit.children);
         skipped.files.append(&mut visit.skipped.files);
@@ -755,8 +829,8 @@ struct FileVisit<'a> {
     owner: Option<String>,
     /// Every trait the file declares.
     traits: BTreeSet<String>,
-    /// Every struct the file declares, with its field count.
-    structs: Vec<(String, usize)>,
+    /// Every struct and enum the file declares, by name.
+    types: Vec<(String, Declaration)>,
 }
 
 impl<'a> FileVisit<'a> {
@@ -789,7 +863,7 @@ impl<'a> FileVisit<'a> {
             host: None,
             owner: None,
             traits: BTreeSet::new(),
-            structs: Vec::new(),
+            types: Vec::new(),
         }
     }
 
@@ -810,10 +884,11 @@ impl<'a> FileVisit<'a> {
         facts.visit_type(ty);
         let place = Place {
             krate: self.krate.to_owned(),
+            module: self.module.join("::"),
             kind,
             owner: self.owner.clone(),
             host: self.host.clone(),
-            callable: facts.callable,
+            form: facts.form,
             roots: facts.roots,
         };
         let ty = text;
@@ -873,6 +948,11 @@ impl<'a> FileVisit<'a> {
         self.scope.push(name);
         self.visit_block(block);
         self.scope.pop();
+    }
+
+    fn declare(&mut self, name: String, decl: Decl) {
+        let module = self.module.join("::");
+        self.types.push((name, Declaration { module, decl }));
     }
 
     /// Keeps a test module's file, and every file under its directory, out of
@@ -961,11 +1041,11 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 .then(|| path.segments.first().map(|first| first.ident.to_string()))
                 .flatten(),
         });
-        let host = |receiver: bool, makes_self: bool| Host {
+        let host = |receiver: Receiver, output: Output| Host {
             self_ty: self_ty.clone(),
             of_trait: of_trait.clone(),
             receiver,
-            makes_self,
+            output,
         };
         let label = match &i.trait_ {
             Some((_, path, _)) => format!(
@@ -978,16 +1058,18 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         for item in &i.items {
             match item {
                 syn::ImplItem::Fn(f) if !test_only(&f.attrs) => {
-                    self.host = Some(host(
-                        f.sig.receiver().is_some(),
-                        makes_self(&f.sig.output, &self_ty),
-                    ));
+                    let receiver = if f.sig.receiver().is_some() {
+                        Receiver::With
+                    } else {
+                        Receiver::Without
+                    };
+                    self.host = Some(host(receiver, output(&f.sig.output, &self_ty)));
                     self.signature(&f.sig);
                     self.host = None;
                     self.body(f.sig.ident.to_string(), &f.block);
                 }
                 syn::ImplItem::Const(c) if !test_only(&c.attrs) => {
-                    self.host = Some(host(false, false));
+                    self.host = Some(host(Receiver::Without, Output::Other));
                     self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
                     self.host = None;
                 }
@@ -1020,7 +1102,12 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
     fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
         if !test_only(&s.attrs) {
             let name = s.ident.to_string();
-            self.structs.push((name.clone(), s.fields.len()));
+            let decl = if s.fields.len() == 1 {
+                Decl::Newtype
+            } else {
+                Decl::Struct
+            };
+            self.declare(name.clone(), decl);
             self.owner = Some(name.clone());
             self.fields(&name, &s.fields);
             self.owner = None;
@@ -1037,6 +1124,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if test_only(&e.attrs) {
             return;
         }
+        self.declare(e.ident.to_string(), Decl::Enum);
         for variant in e
             .variants
             .iter()
@@ -1079,8 +1167,9 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             .last()
             .is_some_and(|last| last.ident.to_string().starts_with("define_"));
         if defines {
-            self.structs
-                .extend(macro_types(&m.mac).into_iter().map(|name| (name, 1)));
+            for name in macro_types(&m.mac) {
+                self.declare(name, Decl::Newtype);
+            }
         }
     }
 

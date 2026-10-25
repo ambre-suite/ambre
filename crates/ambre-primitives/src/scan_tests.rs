@@ -359,6 +359,36 @@ fn a_newtype_inner_line_is_refuted_off_a_single_field_struct() {
 }
 
 #[test]
+fn a_newtype_inner_line_reads_the_type_its_own_module_declares() {
+    let scan = scanned(
+        "mod a { pub struct Media(String); impl Media { pub fn as_str(&self) -> &str { x() } } }\n\
+         mod b { pub enum Media { Image } impl Media { pub fn tag(self) -> &'static str { x() } } }",
+    );
+    assert_eq!(scan.newtype_inner(&site(&scan, "Media.0")), Ok(()));
+    assert_eq!(scan.newtype_inner(&site(&scan, "Media::as_str()")), Ok(()));
+    assert!(scan.newtype_inner(&site(&scan, "Media::tag()")).is_err());
+}
+
+#[test]
+fn a_newtype_inner_line_is_refuted_in_an_impl_of_another_crate() {
+    let mut tree = demo(&[("src/lib.rs", "pub struct Row(u32);")]);
+    tree.0
+        .insert(PathBuf::from(CRATES).join("user/Cargo.toml"), String::new());
+    tree.0.insert(
+        PathBuf::from(CRATES).join("user/src/lib.rs"),
+        "impl Line for demo::Row { fn index(&self) -> usize { 0 } }".to_owned(),
+    );
+    let scan = scan(&tree, Path::new(CRATES));
+    let refusal = scan.newtype_inner(&site(&scan, "<demo::Row as Line>::index()"));
+    assert!(
+        refusal
+            .as_ref()
+            .is_err_and(|reason| reason.contains("another crate")),
+        "{refusal:?}"
+    );
+}
+
+#[test]
 fn a_trait_line_holds_on_a_foreign_trait_and_a_foreign_closure() {
     let scan = scanned(
         "pub struct Row(u32);\n\
@@ -404,6 +434,9 @@ fn a_trait_line_is_refuted_off_a_foreign_signature() {
         "wait(f)",
         "plain(text)",
     ] {
-        assert!(scan.foreign_signature(&site(&scan, item)).is_err(), "{item}");
+        assert!(
+            scan.foreign_signature(&site(&scan, item)).is_err(),
+            "{item}"
+        );
     }
 }
