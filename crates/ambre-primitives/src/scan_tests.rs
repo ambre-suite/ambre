@@ -440,3 +440,58 @@ fn a_trait_line_is_refuted_off_a_foreign_signature() {
         );
     }
 }
+
+#[test]
+fn a_phantom_marker_is_no_field_of_a_newtype() {
+    let scan = scanned(
+        "pub struct Length<P> { pub value: f32, space: std::marker::PhantomData<P> }\n\
+         pub struct Size<P> { pub width: u32, pub height: u32, space: PhantomData<P> }",
+    );
+    assert_eq!(scan.newtype_inner(&site(&scan, "Length.value")), Ok(()));
+    assert!(scan.newtype_inner(&site(&scan, "Size.width")).is_err());
+}
+
+/// The tree of `demo`, plus a crate `user` whose `src/lib.rs` reads `user`.
+fn with_user(demo_lib: &str, user: &str) -> Scan {
+    let mut tree = demo(&[("src/lib.rs", demo_lib)]);
+    tree.0
+        .insert(PathBuf::from(CRATES).join("user/Cargo.toml"), String::new());
+    tree.0
+        .insert(PathBuf::from(CRATES).join("user/src/lib.rs"), user.to_owned());
+    scan(&tree, Path::new(CRATES))
+}
+
+#[test]
+fn a_newtype_inner_line_holds_in_an_impl_the_orphan_rule_places_in_the_trait_crate() {
+    let scan = with_user(
+        "pub struct Row(u32);\npub struct Rect { w: u32, h: u32 }",
+        "pub trait Line { fn index(&self) -> usize; }\n\
+         impl Line for demo::Row { fn index(&self) -> usize { 0 } }\n\
+         impl crate::Line for demo::Rect { fn index(&self) -> usize { 0 } }",
+    );
+    assert_eq!(
+        scan.newtype_inner(&site(&scan, "<demo::Row as Line>::index()")),
+        Ok(())
+    );
+    assert!(
+        scan.newtype_inner(&site(&scan, "<demo::Rect as crate::Line>::index()"))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_deref_to_a_primitive_is_refused_whatever_the_allowlist_says() {
+    let scan = scanned(
+        "pub struct Secret(Vec<u8>);\n\
+         pub struct Name(String);\n\
+         pub struct Editor { core: Core }\n\
+         impl Deref for Secret { type Target = [u8]; fn deref(&self) -> &[u8] { &self.0 } }\n\
+         impl DerefMut for Secret { fn deref_mut(&mut self) -> &mut [u8] { &mut self.0 } }\n\
+         impl std::ops::Deref for Name { type Target = str; fn deref(&self) -> &str { &self.0 } }\n\
+         impl Deref for Editor { type Target = Core; fn deref(&self) -> &Core { &self.core } }\n\
+         impl DerefMut for Editor { fn deref_mut(&mut self) -> &mut Core { &mut self.core } }",
+    );
+    assert_eq!(scan.derefs.len(), 3, "{:?}", scan.derefs);
+    assert!(scan.derefs.iter().any(|refusal| refusal.contains("DerefMut of Secret")));
+    assert!(scan.derefs.iter().all(|refusal| !refusal.contains("Editor")));
+}

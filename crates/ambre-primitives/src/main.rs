@@ -8,9 +8,10 @@
 //!
 //! Two modes, one per recipe:
 //!
-//!   * `check`, the default, fails on three defects, then prints the lines
+//!   * `check`, the default, fails on four defects, then prints the lines
 //!     per category. The defects are a site no line names, a line that names
-//!     no site, and a line whose site refutes its category;
+//!     no site, a line whose site refutes its category, and a `Deref` of a
+//!     workspace type to a primitive;
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;
@@ -120,6 +121,16 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
             refuted.len()
         );
     }
+    for deref in &scan.derefs {
+        eprintln!("primitives: {deref}");
+    }
+    if !scan.derefs.is_empty() {
+        eprintln!(
+            "primitives: {} impls dereference a workspace type to a primitive. No line of \
+             {ALLOWLIST} admits one: remove the impl.",
+            scan.derefs.len()
+        );
+    }
     let counts: Vec<String> = Category::ALL
         .iter()
         .map(|category| {
@@ -130,7 +141,7 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
         })
         .collect();
     println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean() && refuted.is_empty() {
+    if verdict.is_clean() && refuted.is_empty() && scan.derefs.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

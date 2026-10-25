@@ -140,6 +140,10 @@ impl Tree for Disk {
 pub struct Scan {
     pub sites: BTreeSet<SiteKey>,
     pub errors: Vec<String>,
+    /// Each `Deref` or `DerefMut` of a workspace type to a primitive, in
+    /// words a reviewer reads (`ARCH-037`). No line of the allowlist admits
+    /// one.
+    pub derefs: Vec<String>,
     /// Where each site sits, for the categories the gate refutes from the
     /// code (`ARCH-036`).
     places: BTreeMap<SiteKey, Place>,
@@ -206,11 +210,53 @@ enum Decl {
     Enum,
 }
 
+/// Which crates a newtype claim reads to find the type of an impl.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reach {
+    /// The crate of the site alone.
+    OwnCrate,
+    /// The crate of the site, then the other crates of the workspace: the
+    /// impl implements a trait of its own crate (the orphan rule).
+    TraitCrate,
+}
+
 /// One struct or enum, with the module that declares it.
 #[derive(Clone, Debug)]
 struct Declaration {
     module: String,
     decl: Decl,
+}
+
+/// Which of the two dereference traits an impl implements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DerefTrait {
+    Deref,
+    DerefMut,
+}
+
+impl fmt::Display for DerefTrait {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Deref => "Deref",
+            Self::DerefMut => "DerefMut",
+        })
+    }
+}
+
+/// One impl of `Deref` or `DerefMut`, before its target is resolved.
+#[derive(Clone, Debug)]
+struct DerefImpl {
+    /// The file, relative to the crate directory.
+    file: String,
+    /// The implementing type, as the impl writes it.
+    ty: String,
+    /// The last segment of the implementing type, the name `DerefMut` is
+    /// matched by.
+    self_ty: String,
+    of: DerefTrait,
+    /// The `Target` of a `Deref`, normalised. `None` for a `DerefMut`,
+    /// whose target its `Deref` states.
+    target: Option<String>,
 }
 
 /// The impl item that holds a site.
@@ -240,8 +286,8 @@ struct TraitPath {
 struct Declared {
     /// The crate names, as a path writes them.
     crates: BTreeSet<String>,
-    /// The name of every trait.
-    traits: BTreeSet<String>,
+    /// The name of every trait, per crate directory.
+    traits: BTreeMap<String, BTreeSet<String>>,
     /// Every struct and enum, per crate directory, then per name. A name
     /// declared twice in one crate keeps both.
     types: BTreeMap<String, BTreeMap<String, Vec<Declaration>>>,
@@ -260,16 +306,62 @@ impl Declared {
     fn owns_trait(&self, path: &TraitPath) -> bool {
         match &path.root {
             Some(root) => self.owns_root(root),
-            None => self.traits.contains(&path.name),
+            None => self.traits.values().any(|names| names.contains(&path.name)),
+        }
+    }
+
+    /// Where a newtype claim looks for the type of `host`. An impl of a
+    /// trait that the crate of the site declares may implement it for a type
+    /// of another crate: the orphan rule puts that impl there.
+    fn reach(&self, site: &Place, host: &Host) -> Reach {
+        let Some(path) = &host.of_trait else {
+            return Reach::OwnCrate;
+        };
+        let here = match &path.root {
+            Some(root) => {
+                LOCAL_ROOTS.contains(&root.as_str()) || *root == site.krate.replace('-', "_")
+            }
+            None => self
+                .traits
+                .get(&site.krate)
+                .is_some_and(|names| names.contains(&path.name)),
+        };
+        if here {
+            Reach::TraitCrate
+        } else {
+            Reach::OwnCrate
         }
     }
 
     /// Whether `name` is a struct with exactly one field, in the crate of
     /// the site. The declaration in the module of the site wins; with none
     /// there, every declaration of the crate must be one.
-    fn single_field(&self, site: &Place, name: &str) -> Result<(), String> {
+    ///
+    /// Under [`Reach::TraitCrate`], a type the crate of the site does not
+    /// declare is read in the other crates, and every declaration there must
+    /// be a newtype.
+    fn single_field(&self, site: &Place, name: &str, reach: Reach) -> Result<(), String> {
         let (krate, module) = (&site.krate, &site.module);
         let found = self.types.get(krate).and_then(|names| names.get(name));
+        if found.is_none() && reach == Reach::TraitCrate {
+            let elsewhere: Vec<Decl> = self
+                .types
+                .iter()
+                .filter(|(other, _)| *other != krate)
+                .filter_map(|(_, names)| names.get(name))
+                .flatten()
+                .map(|declaration| declaration.decl)
+                .collect();
+            return match elsewhere.as_slice() {
+                [] => Err(format!(
+                    "{name} is no type of the workspace: an alias or a foreign type"
+                )),
+                decls if decls.iter().all(|decl| *decl == Decl::Newtype) => Ok(()),
+                _ => Err(format!(
+                    "{name} of another crate is not a struct with exactly one field"
+                )),
+            };
+        }
         let here: Option<Vec<Decl>> = found.map(|all| {
             let local: Vec<Decl> = all
                 .iter()
@@ -317,14 +409,15 @@ impl Scan {
         };
         match place.kind {
             SiteKind::Field => match &place.owner {
-                Some(owner) => self.declared.single_field(place, owner),
+                Some(owner) => self.declared.single_field(place, owner, Reach::OwnCrate),
                 None => Err("a field of an enum variant or of a union, not of a struct".to_owned()),
             },
             SiteKind::Param | SiteKind::Ret => {
                 let Some(host) = &place.host else {
                     return Err("a signature outside an impl, or nested in a body".to_owned());
                 };
-                self.declared.single_field(place, &host.self_ty)?;
+                let reach = self.declared.reach(place, host);
+                self.declared.single_field(place, &host.self_ty, reach)?;
                 match place.kind {
                     SiteKind::Param if host.output == Output::Itself => Ok(()),
                     SiteKind::Param => Err(format!(
@@ -567,6 +660,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
     let mut reached = BTreeSet::new();
     let mut skipped = Skipped::default();
     let mut keys: Vec<RawKey> = Vec::new();
+    let mut derefs: Vec<DerefImpl> = Vec::new();
     while let Some(next) = pending.pop() {
         let Some((path, text)) = next
             .candidates
@@ -603,7 +697,13 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         let mut visit = FileVisit::new(&name, relative, &path, next.module);
         visit.visit_file(&file);
         keys.append(&mut visit.keys);
-        result.declared.traits.append(&mut visit.traits);
+        derefs.append(&mut visit.derefs);
+        result
+            .declared
+            .traits
+            .entry(name.clone())
+            .or_default()
+            .append(&mut visit.traits);
         for (owner, decl) in visit.types {
             result
                 .declared
@@ -618,6 +718,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         skipped.files.append(&mut visit.skipped.files);
         skipped.dirs.append(&mut visit.skipped.dirs);
     }
+    result.derefs.extend(refused_derefs(&name, &derefs));
     for (key, place) in dedup(keys) {
         result.sites.insert(key.clone());
         result.places.insert(key, place);
@@ -800,6 +901,47 @@ fn normalise(tokens: &str) -> String {
     out
 }
 
+/// The primitive a dereference target exposes: the target itself, or the
+/// element of a slice, an array or a `Vec` of it. `None` for any other
+/// target.
+fn primitive_target(target: &str) -> Option<&str> {
+    let inner = target
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .map(|rest| rest.split(';').next().unwrap_or(rest))
+        .or_else(|| {
+            target
+                .strip_prefix("Vec<")
+                .and_then(|rest| rest.strip_suffix('>'))
+        })
+        .unwrap_or(target);
+    PRIMITIVES.contains(&inner).then_some(inner)
+}
+
+/// The refusal of each impl of `derefs` whose target is a primitive. A
+/// `DerefMut` takes the target of the `Deref` of the same type in the crate.
+fn refused_derefs(krate: &str, derefs: &[DerefImpl]) -> Vec<String> {
+    derefs
+        .iter()
+        .filter_map(|deref| {
+            let target = match &deref.target {
+                Some(target) => target.as_str(),
+                None => derefs
+                    .iter()
+                    .filter(|other| other.of == DerefTrait::Deref && other.self_ty == deref.self_ty)
+                    .find_map(|other| other.target.as_deref())?,
+            };
+            let primitive = primitive_target(target)?;
+            Some(format!(
+                "{krate} | {}: {} of {} to {target} exposes the primitive {primitive}. A newtype \
+                 never dereferences to its primitive: name an accessor for the one foreign call \
+                 that needs it (ARCH-037)",
+                deref.file, deref.of, deref.ty
+            ))
+        })
+        .collect()
+}
+
 /// Whether a normalised type names one of [`PRIMITIVES`] as a whole word.
 fn holds_primitive(ty: &str) -> bool {
     ty.split(|c: char| !(c.is_alphanumeric() || c == '_'))
@@ -830,6 +972,8 @@ struct FileVisit<'a> {
     traits: BTreeSet<String>,
     /// Every struct and enum the file declares, by name.
     types: Vec<(String, Declaration)>,
+    /// Every impl of `Deref` or `DerefMut` the file writes.
+    derefs: Vec<DerefImpl>,
 }
 
 impl<'a> FileVisit<'a> {
@@ -863,6 +1007,7 @@ impl<'a> FileVisit<'a> {
             owner: None,
             traits: BTreeSet::new(),
             types: Vec::new(),
+            derefs: Vec::new(),
         }
     }
 
@@ -1046,6 +1191,26 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             receiver,
             output,
         };
+        let deref = match of_trait.as_ref().map(|path| path.name.as_str()) {
+            Some("Deref") => Some(DerefTrait::Deref),
+            Some("DerefMut") => Some(DerefTrait::DerefMut),
+            _ => None,
+        };
+        if let Some(of) = deref {
+            let target = i.items.iter().find_map(|item| match item {
+                syn::ImplItem::Type(t) if t.ident == "Target" => {
+                    Some(normalise(&t.ty.to_token_stream().to_string()))
+                }
+                _ => None,
+            });
+            self.derefs.push(DerefImpl {
+                file: self.file.clone(),
+                ty: ty.clone(),
+                self_ty: self_ty.clone(),
+                of,
+                target: (of == DerefTrait::Deref).then_some(target).flatten(),
+            });
+        }
         let label = match &i.trait_ {
             Some((_, path, _)) => format!(
                 "<{ty} as {}>",
@@ -1101,7 +1266,17 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
     fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
         if !test_only(&s.attrs) {
             let name = s.ident.to_string();
-            let decl = if s.fields.len() == 1 {
+            // A `PhantomData` marker carries a type, never a value: it is no
+            // field in the count that makes a newtype.
+            let counted = s
+                .fields
+                .iter()
+                .filter(|field| {
+                    !matches!(&field.ty, syn::Type::Path(path)
+                        if path.path.segments.last().is_some_and(|last| last.ident == "PhantomData"))
+                })
+                .count();
+            let decl = if counted == 1 {
                 Decl::Newtype
             } else {
                 Decl::Struct

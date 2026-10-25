@@ -75,8 +75,11 @@ the item, the kind and the type, and no line number.
   never the meaning a line claims. A `local` line meets the four conditions of
   `ai/ambre-rust-style.md`, and its note names the reason.
 * **Two categories claim a shape, and the gate checks it from the site** (`ARCH-036`). A
-  `newtype-inner` site sits in the impl of a struct with one field. A `trait` site sits in an impl
-  of a foreign trait, or is a closure type that names a foreign type.
+  `newtype-inner` site sits in the impl of a struct with one field, a `PhantomData` marker apart.
+  The orphan rule may put that impl in the crate of a workspace trait. A `trait` site sits in an
+  impl of a foreign trait, or is a closure type that names a foreign type.
+* **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
+  `Target` of each `Deref` impl, and a `DerefMut` takes the target of its `Deref`.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. The tree walk uses
   `std` rather than a crate.
