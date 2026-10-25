@@ -156,10 +156,13 @@ mod tests {
     #[test]
     fn a_flag_has_no_from_bool_so_from_bool_is_the_one_way_in() {
         // The probe answers true for a type that has the conversion.
-        assert!(Probe::<bool>::FROM_BOOL);
-        assert!(!Probe::<Pin>::FROM_BOOL);
-        assert!(!Probe::<Shared>::FROM_BOOL);
-        assert!(!Probe::<Own>::FROM_BOOL);
+        let answers = [
+            Probe::<bool>::FROM_BOOL,
+            Probe::<Pin>::FROM_BOOL,
+            Probe::<Shared>::FROM_BOOL,
+            Probe::<Own>::FROM_BOOL,
+        ];
+        assert_eq!(answers, [true, false, false, false]);
     }
 
     #[test]
