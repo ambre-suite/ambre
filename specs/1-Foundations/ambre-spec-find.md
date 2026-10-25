@@ -96,8 +96,10 @@ other features own, which is why one replace-all is one undo item rather than on
 | `<App>Command::Replace{One,All} { query, replacement }` | UI to Logic | the query with its options, and its replacement; text applications only |
 | `<App>Event::ReplaceDone { replaced }` | Logic to UI | how many matches were rewritten |
 
-**The query**, held by the panel and sent on the bus, never written to the document. The shape is
-one, in `ambre-bus` (`app/find.rs`); the options are each application's:
+**The query**, held by the panel and sent on the bus, never written to the document.
+The *find text* is the query as typed, never empty (`FindText`). The *find options* are the
+refinements a find applies to it. The shape is one, in `ambre-bus` (`app/find.rs`); the options are
+each application's:
 
 ```rust
 // ambre_bus::app::find
