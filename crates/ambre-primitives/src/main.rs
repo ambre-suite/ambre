@@ -8,9 +8,9 @@
 //!
 //! Two modes, one per recipe:
 //!
-//!   * `check`, the default, fails on a site no line names, on a line that
-//!     names no site and on a line whose site refutes its category, then
-//!     prints the lines per category;
+//!   * `check`, the default, fails on three defects, then prints the lines
+//!     per category. The defects are a site no line names, a line that names
+//!     no site, and a line whose site refutes its category;
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;

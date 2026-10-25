@@ -255,8 +255,8 @@ impl Declared {
     }
 
     /// Whether the workspace declares the trait. A path of one segment is
-    /// looked up by name, so a workspace trait that shares a name with a
-    /// foreign one counts as the workspace's.
+    /// looked up by name. A foreign trait with the name of a workspace trait
+    /// then counts as the workspace's.
     fn owns_trait(&self, path: &TraitPath) -> bool {
         match &path.root {
             Some(root) => self.owns_root(root),
@@ -301,10 +301,9 @@ impl Declared {
 }
 
 impl Scan {
-    /// Checks the claim of a `newtype-inner` line. The site is the field of
-    /// a struct with exactly one field, a parameter of an associated `fn`
-    /// of that struct that returns it, or the return of a method of that
-    /// struct (`ai/ambre-rust-style.md`).
+    /// Checks the claim of a `newtype-inner` line (`ai/ambre-rust-style.md`).
+    /// The site sits in a struct with exactly one field. It is that field, a
+    /// parameter of a `fn` that returns the struct, or a method's return.
     ///
     /// A key the scan did not find passes: the stale check reports it.
     ///
@@ -453,8 +452,8 @@ fn type_name(ty: &syn::Type) -> String {
     }
 }
 
-/// What a return type is: the implementing type, `Self` or `owner`, bare or
-/// as the first argument of an `Option` or a `Result`, or anything else.
+/// What a return type is. `Itself` is `Self` or `owner`, bare or as the
+/// first argument of an `Option` or a `Result`.
 fn output(output: &syn::ReturnType, owner: &str) -> Output {
     let syn::ReturnType::Type(_, ty) = output else {
         return Output::Other;
