@@ -667,9 +667,7 @@ impl Scan {
         };
         let collision = match shared {
             0 => String::new(),
-            n => format!(
-                "; {n} of these calls match another site too, so each match is refused"
-            ),
+            n => format!("; {n} of these calls match another site too, so each match is refused"),
         };
         Err(format!(
             "a caller writes this bool parameter as a literal at {}:{}{more}, and the site is {}: \
@@ -692,9 +690,7 @@ impl Scan {
                     .is_some_and(|deps| deps.contains(&place.krate)));
         let (ArgPosition(at), ArgPosition(param)) = (call.position, slot.position);
         let aligned = match (call.form, slot.receiver) {
-            (CallForm::Method, Receiver::With) | (CallForm::Path, Receiver::Without) => {
-                at == param
-            }
+            (CallForm::Method, Receiver::With) | (CallForm::Path, Receiver::Without) => at == param,
             (CallForm::Path, Receiver::With) => at == param + 1,
             (CallForm::Method, Receiver::Without) => false,
         };
@@ -708,7 +704,10 @@ fn dependencies(manifest: &str) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut table = String::new();
     for line in manifest.lines().map(str::trim) {
-        if let Some(header) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+        if let Some(header) = line
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
             table = header.trim().to_owned();
             if let Some((_, name)) = table.split_once("dependencies.") {
                 found.insert(name.trim_matches('"').to_owned());
@@ -719,7 +718,12 @@ fn dependencies(manifest: &str) -> BTreeSet<String> {
             continue;
         }
         if let Some((key, _)) = line.split_once('=') {
-            let name = key.split('.').next().unwrap_or(key).trim().trim_matches('"');
+            let name = key
+                .split('.')
+                .next()
+                .unwrap_or(key)
+                .trim()
+                .trim_matches('"');
             if !name.is_empty() {
                 found.insert(name.to_owned());
             }
@@ -1091,7 +1095,10 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         let relative = path.strip_prefix(dir).unwrap_or(path);
         let mut visit = LiteralVisit {
             krate: name.clone(),
-            file: format!("crates/{name}/{}", relative.to_string_lossy().replace('\\', "/")),
+            file: format!(
+                "crates/{name}/{}",
+                relative.to_string_lossy().replace('\\', "/")
+            ),
             calls: Vec::new(),
         };
         visit.visit_file(&file);

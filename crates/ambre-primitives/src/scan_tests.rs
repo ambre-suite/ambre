@@ -460,14 +460,18 @@ fn with_user(demo_lib: &str, user: &str) -> Scan {
         PathBuf::from(CRATES).join("user/Cargo.toml"),
         "[dependencies]\ndemo = { path = \"../demo\" }\n".to_owned(),
     );
-    tree.0
-        .insert(PathBuf::from(CRATES).join("other/Cargo.toml"), String::new());
+    tree.0.insert(
+        PathBuf::from(CRATES).join("other/Cargo.toml"),
+        String::new(),
+    );
     tree.0.insert(
         PathBuf::from(CRATES).join("other/src/lib.rs"),
         "pub enum Row { A, B }".to_owned(),
     );
-    tree.0
-        .insert(PathBuf::from(CRATES).join("user/src/lib.rs"), user.to_owned());
+    tree.0.insert(
+        PathBuf::from(CRATES).join("user/src/lib.rs"),
+        user.to_owned(),
+    );
     scan(&tree, Path::new(CRATES))
 }
 
@@ -502,8 +506,16 @@ fn a_deref_to_a_primitive_is_refused_whatever_the_allowlist_says() {
          impl DerefMut for Editor { fn deref_mut(&mut self) -> &mut Core { &mut self.core } }",
     );
     assert_eq!(scan.derefs.len(), 3, "{:?}", scan.derefs);
-    assert!(scan.derefs.iter().any(|refusal| refusal.contains("DerefMut of Secret")));
-    assert!(scan.derefs.iter().all(|refusal| !refusal.contains("Editor")));
+    assert!(
+        scan.derefs
+            .iter()
+            .any(|refusal| refusal.contains("DerefMut of Secret"))
+    );
+    assert!(
+        scan.derefs
+            .iter()
+            .all(|refusal| !refusal.contains("Editor"))
+    );
 }
 
 /// A tree of several crates, each path given from the crates directory.
@@ -553,7 +565,10 @@ fn a_local_line_holds_on_a_private_site_only() {
 fn a_field_of_a_bus_type_is_not_private() {
     let scan = crates(&[
         ("ambre-bus/Cargo.toml", ""),
-        ("ambre-bus/src/lib.rs", "struct Cmd { flag: bool, size: u32 }"),
+        (
+            "ambre-bus/src/lib.rs",
+            "struct Cmd { flag: bool, size: u32 }",
+        ),
     ]);
     let flag = site(&scan, "Cmd.flag");
     assert!(scan.local_site(&flag).is_err());
@@ -569,7 +584,12 @@ fn a_bool_field_that_is_not_private_is_refused() {
          pub enum Event { Moved { done: bool } }\n\
          struct Latch { set: bool }",
     );
-    for item in ["A.on", "A.cell", "Claims.email_verified", "Event::Moved.done"] {
+    for item in [
+        "A.on",
+        "A.cell",
+        "Claims.email_verified",
+        "Event::Moved.done",
+    ] {
         assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
     }
     for item in ["A.open", "A.n", "Latch.set"] {
@@ -656,7 +676,10 @@ fn a_literal_reaches_a_pub_site_of_a_crate_it_depends_on() {
             "user/Cargo.toml",
             "[package]\nname = \"user\"\n\n[dev-dependencies]\ndemo = { path = \"../demo\" }",
         ),
-        ("user/src/lib.rs", "fn go() { demo::far(true); near(true); }"),
+        (
+            "user/src/lib.rs",
+            "fn go() { demo::far(true); near(true); }",
+        ),
         ("stranger/Cargo.toml", "[dependencies]\nother = \"1\""),
         ("stranger/src/lib.rs", "fn go() { lone(false); }"),
     ]);
