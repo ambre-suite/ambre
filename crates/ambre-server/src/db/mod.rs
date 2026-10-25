@@ -539,4 +539,33 @@ mod tests {
             assert_eq!(read, flag);
         }
     }
+
+    /// A `Vec` of flags is a `BOOLEAN[]` to sqlx, the array type of `bool`.
+    #[test]
+    fn a_vec_of_flags_is_a_boolean_array_to_postgres() {
+        assert_eq!(
+            <Vec<Pin> as sqlx::Type<sqlx::Postgres>>::type_info(),
+            <Vec<bool> as sqlx::Type<sqlx::Postgres>>::type_info()
+        );
+    }
+
+    /// A `Vec` of flags binds as the `BOOLEAN[]` of its variants and reads
+    /// back from one.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_vec_of_flags_round_trips_through_a_boolean_array(pool: PgPool) {
+        let flags = vec![Pin::Loose, Pin::Fixed];
+        let stored: Vec<bool> = sqlx::query_scalar("SELECT $1::boolean[]")
+            .bind(flags.clone())
+            .fetch_one(&pool)
+            .await
+            .expect("a vec of flags binds");
+        assert_eq!(stored, vec![false, true]);
+        let read: Vec<Pin> = sqlx::query_scalar("SELECT $1::boolean[]")
+            .bind(stored)
+            .fetch_one(&pool)
+            .await
+            .expect("a boolean array reads as flags");
+        assert_eq!(read, flags);
+    }
 }
