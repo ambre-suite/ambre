@@ -495,3 +495,168 @@ fn a_deref_to_a_primitive_is_refused_whatever_the_allowlist_says() {
     assert!(scan.derefs.iter().any(|refusal| refusal.contains("DerefMut of Secret")));
     assert!(scan.derefs.iter().all(|refusal| !refusal.contains("Editor")));
 }
+
+/// A tree of several crates, each path given from the crates directory.
+fn crates(files: &[(&str, &str)]) -> Scan {
+    let tree = Memory(
+        files
+            .iter()
+            .map(|(path, text)| (PathBuf::from(CRATES).join(path), (*text).to_owned()))
+            .collect(),
+    );
+    let result = scan(&tree, Path::new(CRATES));
+    assert_eq!(result.errors, Vec::<String>::new());
+    result
+}
+
+#[test]
+fn a_local_line_holds_on_a_private_site_only() {
+    let scan = scanned(
+        "pub struct A { pub x: u32, y: u32 }\n\
+         pub(crate) fn f(n: u32) {}\n\
+         fn g(n: u32) {}\n\
+         pub(self) fn s(n: u32) {}\n\
+         impl A { pub(super) fn h(&self, n: u32) {} fn k(&self, n: u32) {} }\n\
+         impl From<u32> for A { fn from(v: u32) -> Self { x() } }\n\
+         pub enum E { V(u32) }\n\
+         enum F { W(u32) }\n\
+         #[derive(Debug, serde::Serialize)]\nstruct S { z: u32 }\n\
+         #[derive(sqlx::FromRow)]\nstruct R { z: u32 }",
+    );
+    for item in [
+        "A.x",
+        "f(n)",
+        "A::h(n)",
+        "<A as From<u32>>::from(v)",
+        "E::V.0",
+        "S.z",
+        "R.z",
+    ] {
+        assert!(scan.local_site(&site(&scan, item)).is_err(), "{item}");
+    }
+    for item in ["A.y", "g(n)", "s(n)", "A::k(n)", "F::W.0"] {
+        assert_eq!(scan.local_site(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_field_of_a_bus_type_is_not_private() {
+    let scan = crates(&[
+        ("ambre-bus/Cargo.toml", ""),
+        ("ambre-bus/src/lib.rs", "struct Cmd { flag: bool, size: u32 }"),
+    ]);
+    let flag = site(&scan, "Cmd.flag");
+    assert!(scan.local_site(&flag).is_err());
+    assert!(scan.bool_field(&flag).is_err());
+    assert!(scan.local_site(&site(&scan, "Cmd.size")).is_err());
+}
+
+#[test]
+fn a_bool_field_that_is_not_private_is_refused() {
+    let scan = scanned(
+        "pub struct A { pub on: bool, pub(crate) cell: Cell<bool>, open: Option<bool>, pub n: u32 }\n\
+         #[derive(Debug, serde::Deserialize)]\nstruct Claims { email_verified: bool }\n\
+         pub enum Event { Moved { done: bool } }\n\
+         struct Latch { set: bool }",
+    );
+    for item in ["A.on", "A.cell", "Claims.email_verified", "Event::Moved.done"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+    for item in ["A.open", "A.n", "Latch.set"] {
+        assert_eq!(scan.bool_field(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+/// Every key of the scan, the allowlist a literal check reads beside.
+fn all(scan: &Scan) -> std::collections::BTreeSet<SiteKey> {
+    scan.sites.clone()
+}
+
+#[test]
+fn a_literal_passed_to_a_bool_parameter_that_is_not_private_is_refused() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub fn set(on: bool) {}\n\
+             fn quiet(on: bool) {}\n\
+             pub fn pair(n: u32, on: bool) {}\n\
+             pub fn never(on: bool) {}\n\
+             pub struct W;\n\
+             impl W { pub fn show(&self, on: bool) {} pub fn make(on: bool) -> W { W } }\n\
+             fn run() { quiet(true); pair(true, 1); W::show(&W, false); }",
+        ),
+        (
+            "demo/tests/t.rs",
+            "fn t() {\n    assert!(set(true) == ());\n    W.show(true);\n    W::make(false);\n}",
+        ),
+    ]);
+    let listed = all(&scan);
+    for item in ["set(on)", "W::show(on)", "W::make(on)"] {
+        assert!(
+            scan.bool_literal(&site(&scan, item), &listed).is_err(),
+            "{item}"
+        );
+    }
+    for item in ["quiet(on)", "pair(on)", "never(on)"] {
+        assert_eq!(
+            scan.bool_literal(&site(&scan, item), &listed),
+            Ok(()),
+            "{item}"
+        );
+    }
+    let refusal = scan.bool_literal(&site(&scan, "set(on)"), &listed);
+    assert!(
+        refusal
+            .as_ref()
+            .is_err_and(|reason| reason.contains("crates/demo/tests/t.rs:2")),
+        "{refusal:?}"
+    );
+}
+
+#[test]
+fn a_literal_that_matches_two_sites_refutes_both() {
+    let scan = scanned(
+        "pub struct A;\npub struct B;\n\
+         impl A { pub fn set_on(&self, on: bool) {} }\n\
+         impl B { pub fn set_on(&self, on: bool) {} }\n\
+         fn run(a: A) { a.set_on(true); }",
+    );
+    let listed = all(&scan);
+    for item in ["A::set_on(on)", "B::set_on(on)"] {
+        let refusal = scan.bool_literal(&site(&scan, item), &listed);
+        assert!(
+            refusal
+                .as_ref()
+                .is_err_and(|reason| reason.contains("match another site")),
+            "{item}: {refusal:?}"
+        );
+    }
+}
+
+#[test]
+fn a_literal_reaches_a_pub_site_of_a_crate_it_depends_on() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub fn far(on: bool) {}\npub(crate) fn near(on: bool) {}\npub fn lone(on: bool) {}",
+        ),
+        (
+            "user/Cargo.toml",
+            "[package]\nname = \"user\"\n\n[dev-dependencies]\ndemo = { path = \"../demo\" }",
+        ),
+        ("user/src/lib.rs", "fn go() { demo::far(true); near(true); }"),
+        ("stranger/Cargo.toml", "[dependencies]\nother = \"1\""),
+        ("stranger/src/lib.rs", "fn go() { lone(false); }"),
+    ]);
+    let listed = all(&scan);
+    assert!(scan.bool_literal(&site(&scan, "far(on)"), &listed).is_err());
+    for item in ["near(on)", "lone(on)"] {
+        assert_eq!(
+            scan.bool_literal(&site(&scan, item), &listed),
+            Ok(()),
+            "{item}"
+        );
+    }
+}

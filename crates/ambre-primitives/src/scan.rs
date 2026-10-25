@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 use quote::ToTokens;
 use syn::visit::Visit;
 
+use crate::allowlist::LineNo;
+
 /// The types the rule names: a bare one of these needs a newtype or a reason
 /// (`ai/ambre-rust-style.md`).
 const PRIMITIVES: &[&str] = &[
@@ -144,6 +146,9 @@ pub struct Scan {
     /// words a reviewer reads (`ARCH-037`). No line of the allowlist admits
     /// one.
     pub derefs: Vec<String>,
+    /// Every call of the workspace, tests included, that passes a `bool`
+    /// literal (`ARCH-040`).
+    literals: Vec<BoolCall>,
     /// Where each site sits, for the categories the gate refutes from the
     /// code (`ARCH-036`).
     places: BTreeMap<SiteKey, Place>,
@@ -168,6 +173,98 @@ struct Place {
     form: TypeForm,
     /// The first segment of each path of the type with two or more.
     roots: BTreeSet<String>,
+    /// Who can reach the site (`ARCH-038`).
+    privacy: Privacy,
+    /// Whether the type is a `bool`, or holds one.
+    shape: Shape,
+    /// The `fn` and the position of a parameter. `None` for every other
+    /// kind.
+    slot: Option<Slot>,
+}
+
+/// Who can reach a site, as the `local` rule and the `bool` rule read it
+/// (`ai/ambre-rust-style.md`). Every variant but `Private` is a site that is
+/// not private.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Privacy {
+    /// No `pub`, on a type of no wire.
+    #[default]
+    Private,
+    /// `pub(crate)`, `pub(super)` or `pub(in path)`.
+    Restricted,
+    /// `pub`.
+    Public,
+    /// A signature or a constant of a trait impl: the trait reaches it
+    /// wherever the type goes.
+    TraitImpl,
+    /// A field of a type of `ambre-bus`, which crosses a thread.
+    BusType,
+    /// A field of a type that derives `Serialize`, `Deserialize` or
+    /// `FromRow`, which crosses a wire or a store.
+    Serialised,
+}
+
+impl fmt::Display for Privacy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Private => "private",
+            Self::Restricted => "pub(crate), pub(super) or pub(in path)",
+            Self::Public => "pub",
+            Self::TraitImpl => "in a trait impl",
+            Self::BusType => "a field of a type of ambre-bus",
+            Self::Serialised => "a field of a type that derives Serialize, Deserialize or FromRow",
+        })
+    }
+}
+
+/// How a type holds a `bool`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Shape {
+    /// Any type without a `bool`.
+    #[default]
+    Other,
+    /// A bare `bool`.
+    Bool,
+    /// A type that wraps a `bool`: `Option<bool>`, `Cell<bool>`.
+    HoldsBool,
+}
+
+/// The position of an argument in a call, or of a parameter in a signature,
+/// `self` left out. The first is 0.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ArgPosition(usize);
+
+/// Where a parameter sits: its `fn`, and its position there.
+#[derive(Clone, Debug)]
+struct Slot {
+    /// The name of the `fn`, the name a call writes.
+    name: String,
+    position: ArgPosition,
+    receiver: Receiver,
+}
+
+/// How a call names its `fn`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CallForm {
+    /// `g(..)` or `Type::g(..)`: a method's receiver, if any, is the first
+    /// argument.
+    Path,
+    /// `x.g(..)`: the receiver sits before the dot.
+    Method,
+}
+
+/// One `bool` literal passed to a call, anywhere in a crate, tests included.
+#[derive(Clone, Debug)]
+struct BoolCall {
+    /// The crate directory of the call.
+    krate: String,
+    /// The file of the call, from the workspace root.
+    file: String,
+    line: LineNo,
+    /// The last segment of the called path, or the method name.
+    name: String,
+    position: ArgPosition,
+    form: CallForm,
 }
 
 /// Whether a type is called or held.
@@ -288,6 +385,9 @@ struct Declared {
     crates: BTreeSet<String>,
     /// The name of every trait, per crate directory.
     traits: BTreeMap<String, BTreeSet<String>>,
+    /// The dependencies each crate directory names in its manifest, dev and
+    /// build ones included.
+    deps: BTreeMap<String, BTreeSet<String>>,
     /// Every struct and enum, per crate directory, then per name. A name
     /// declared twice in one crate keeps both.
     types: BTreeMap<String, BTreeMap<String, Vec<Declaration>>>,
@@ -479,6 +579,248 @@ impl Scan {
     }
 }
 
+impl Scan {
+    /// Checks that a `local` line names a private site (`ARCH-038`).
+    ///
+    /// A key the scan did not find passes: the stale check reports it.
+    ///
+    /// # Errors
+    ///
+    /// Who else reaches the site.
+    pub fn local_site(&self, key: &SiteKey) -> Result<(), String> {
+        match self.places.get(key).map(|place| place.privacy) {
+            None | Some(Privacy::Private) => Ok(()),
+            Some(privacy) => Err(format!(
+                "the site is not private, it is {privacy}: a local line names a private site \
+                 only (ARCH-038)"
+            )),
+        }
+    }
+
+    /// Checks that a field holding a `bool` is private (`ARCH-039`). The
+    /// caller skips a `foreign-api` line, the one category that admits a
+    /// field a foreign schema fixes.
+    ///
+    /// # Errors
+    ///
+    /// Who else reaches the field.
+    pub fn bool_field(&self, key: &SiteKey) -> Result<(), String> {
+        let Some(place) = self.places.get(key) else {
+            return Ok(());
+        };
+        if place.kind != SiteKind::Field
+            || place.shape == Shape::Other
+            || place.privacy == Privacy::Private
+        {
+            return Ok(());
+        }
+        Err(format!(
+            "a bool field that is {}: it is an enum, define_flag! writes one, unless the field \
+             mirrors a schema the workspace does not control, under foreign-api (ARCH-039)",
+            place.privacy
+        ))
+    }
+
+    /// Checks that no caller writes a `bool` parameter that is not private
+    /// as a literal (`ARCH-040`). A call matches a parameter by the name of
+    /// its `fn` and by position. The call sits in the crate of the site, or,
+    /// for a `pub` site, in a crate that depends on it. `listed` holds the
+    /// keys of the allowlist, the other sites a call may match.
+    ///
+    /// # Errors
+    ///
+    /// The first literal, how many there are, and how many of them match
+    /// another site too: a name match cannot tell them apart, so each match
+    /// is refused.
+    pub fn bool_literal(&self, key: &SiteKey, listed: &BTreeSet<SiteKey>) -> Result<(), String> {
+        let Some(place) = self.places.get(key) else {
+            return Ok(());
+        };
+        if place.shape != Shape::Bool || place.privacy == Privacy::Private {
+            return Ok(());
+        }
+        let hits: Vec<&BoolCall> = self
+            .literals
+            .iter()
+            .filter(|call| self.writes(place, call))
+            .collect();
+        let Some(first) = hits.first() else {
+            return Ok(());
+        };
+        let others: Vec<&Place> = listed
+            .iter()
+            .filter(|other| *other != key)
+            .filter_map(|other| self.places.get(other))
+            .filter(|other| other.shape == Shape::Bool && other.slot.is_some())
+            .collect();
+        let shared = hits
+            .iter()
+            .filter(|call| others.iter().any(|other| self.writes(other, call)))
+            .count();
+        let more = match hits.len() {
+            1 => String::new(),
+            n => format!(" and {} more", n - 1),
+        };
+        let collision = match shared {
+            0 => String::new(),
+            n => format!(
+                "; {n} of these calls match another site too, so each match is refused"
+            ),
+        };
+        Err(format!(
+            "a caller writes this bool parameter as a literal at {}:{}{more}, and the site is {}: \
+             it is an enum (ARCH-040){collision}",
+            first.file, first.line, place.privacy
+        ))
+    }
+
+    /// Whether `call` passes its literal to the parameter at `place`.
+    fn writes(&self, place: &Place, call: &BoolCall) -> bool {
+        let Some(slot) = &place.slot else {
+            return false;
+        };
+        let reached = call.krate == place.krate
+            || (matches!(place.privacy, Privacy::Public | Privacy::TraitImpl)
+                && self
+                    .declared
+                    .deps
+                    .get(&call.krate)
+                    .is_some_and(|deps| deps.contains(&place.krate)));
+        let (ArgPosition(at), ArgPosition(param)) = (call.position, slot.position);
+        let aligned = match (call.form, slot.receiver) {
+            (CallForm::Method, Receiver::With) | (CallForm::Path, Receiver::Without) => {
+                at == param
+            }
+            (CallForm::Path, Receiver::With) => at == param + 1,
+            (CallForm::Method, Receiver::Without) => false,
+        };
+        reached && aligned && call.name == slot.name
+    }
+}
+
+/// The dependencies a manifest names, in every table whose name ends with
+/// `dependencies`, and in every `[...dependencies.name]` table.
+fn dependencies(manifest: &str) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    let mut table = String::new();
+    for line in manifest.lines().map(str::trim) {
+        if let Some(header) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+            table = header.trim().to_owned();
+            if let Some((_, name)) = table.split_once("dependencies.") {
+                found.insert(name.trim_matches('"').to_owned());
+            }
+            continue;
+        }
+        if !table.ends_with("dependencies") || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, _)) = line.split_once('=') {
+            let name = key.split('.').next().unwrap_or(key).trim().trim_matches('"');
+            if !name.is_empty() {
+                found.insert(name.to_owned());
+            }
+        }
+    }
+    found
+}
+
+/// Who can reach an item of visibility `vis`. `pub(self)` is private.
+fn privacy(vis: &syn::Visibility) -> Privacy {
+    match vis {
+        syn::Visibility::Public(_) => Privacy::Public,
+        syn::Visibility::Restricted(restricted) if restricted.path.is_ident("self") => {
+            Privacy::Private
+        }
+        syn::Visibility::Restricted(_) => Privacy::Restricted,
+        syn::Visibility::Inherited => Privacy::Private,
+    }
+}
+
+/// `Serialised` for a type that derives `Serialize`, `Deserialize` or
+/// `FromRow`, under `derive` or `cfg_attr`; `Private` otherwise.
+fn derived(attrs: &[syn::Attribute]) -> Privacy {
+    let wire = attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("derive") || attr.path().is_ident("cfg_attr"))
+        .any(|attr| {
+            attr.meta
+                .to_token_stream()
+                .to_string()
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .any(|word| ["Serialize", "Deserialize", "FromRow"].contains(&word))
+        });
+    if wire {
+        Privacy::Serialised
+    } else {
+        Privacy::Private
+    }
+}
+
+/// The scan of one file for the `bool` literals its calls pass, macro
+/// arguments that parse as expressions included.
+struct LiteralVisit {
+    /// The crate directory.
+    krate: String,
+    /// The file, from the workspace root.
+    file: String,
+    calls: Vec<BoolCall>,
+}
+
+impl LiteralVisit {
+    fn record<'e>(
+        &mut self,
+        form: CallForm,
+        name: &syn::Ident,
+        args: impl IntoIterator<Item = &'e syn::Expr>,
+    ) {
+        for (i, arg) in args.into_iter().enumerate() {
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Bool(literal),
+                ..
+            }) = arg
+            {
+                self.calls.push(BoolCall {
+                    krate: self.krate.clone(),
+                    file: self.file.clone(),
+                    line: LineNo(literal.span.start().line),
+                    name: name.to_string(),
+                    position: ArgPosition(i),
+                    form,
+                });
+            }
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for LiteralVisit {
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(path) = &*call.func
+            && let Some(last) = path.path.segments.last()
+        {
+            self.record(CallForm::Path, &last.ident, &call.args);
+        }
+        syn::visit::visit_expr_call(self, call);
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        self.record(CallForm::Method, &call.method, &call.args);
+        syn::visit::visit_expr_method_call(self, call);
+    }
+
+    // syn leaves a macro's tokens unparsed. The arguments of `assert!`,
+    // `assert_eq!`, `vec!` and `format!` parse as expressions, and a test
+    // writes many of its calls there.
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if let Ok(args) = mac.parse_body_with(
+            syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated,
+        ) {
+            for arg in &args {
+                self.visit_expr(arg);
+            }
+        }
+    }
+}
+
 /// Scans every crate under `crates`, a directory holding one directory per
 /// crate.
 pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
@@ -642,6 +984,12 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     result.declared.crates.insert(name.replace('-', "_"));
+    if let Some(manifest) = tree.read(&dir.join("Cargo.toml")) {
+        result
+            .declared
+            .deps
+            .insert(name.clone(), dependencies(&manifest));
+    }
     let all = tree.files(dir);
     let src = dir.join("src");
     let roots = all.iter().filter(|path| {
@@ -719,6 +1067,32 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         skipped.dirs.append(&mut visit.skipped.dirs);
     }
     result.derefs.extend(refused_derefs(&name, &derefs));
+    // Tests are callers too: every file of the crate is read for literals,
+    // whether a `mod` reaches it or not.
+    for path in all
+        .iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+    {
+        let Some(text) = tree.read(path) else {
+            continue;
+        };
+        let Ok(file) = syn::parse_file(&text) else {
+            if !reached.contains(path) {
+                result
+                    .errors
+                    .push(format!("{}: syn cannot parse it", path.display()));
+            }
+            continue;
+        };
+        let relative = path.strip_prefix(dir).unwrap_or(path);
+        let mut visit = LiteralVisit {
+            krate: name.clone(),
+            file: format!("crates/{name}/{}", relative.to_string_lossy().replace('\\', "/")),
+            calls: Vec::new(),
+        };
+        visit.visit_file(&file);
+        result.literals.append(&mut visit.calls);
+    }
     for (key, place) in dedup(keys) {
         result.sites.insert(key.clone());
         result.places.insert(key, place);
@@ -974,6 +1348,10 @@ struct FileVisit<'a> {
     types: Vec<(String, Declaration)>,
     /// Every impl of `Deref` or `DerefMut` the file writes.
     derefs: Vec<DerefImpl>,
+    /// Who reaches the next site.
+    privacy: Privacy,
+    /// The `fn` and position of the next site, when it is a parameter.
+    slot: Option<Slot>,
 }
 
 impl<'a> FileVisit<'a> {
@@ -1008,6 +1386,8 @@ impl<'a> FileVisit<'a> {
             traits: BTreeSet::new(),
             types: Vec::new(),
             derefs: Vec::new(),
+            privacy: Privacy::Private,
+            slot: None,
         }
     }
 
@@ -1034,6 +1414,18 @@ impl<'a> FileVisit<'a> {
             host: self.host.clone(),
             form: facts.form,
             roots: facts.roots,
+            privacy: self.privacy,
+            shape: if text == "bool" {
+                Shape::Bool
+            } else if text
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .any(|word| word == "bool")
+            {
+                Shape::HoldsBool
+            } else {
+                Shape::Other
+            },
+            slot: self.slot.clone(),
         };
         let ty = text;
         let sep = SiteKey::SEPARATOR;
@@ -1050,31 +1442,62 @@ impl<'a> FileVisit<'a> {
         });
     }
 
-    fn signature(&mut self, sig: &syn::Signature) {
+    fn signature(&mut self, sig: &syn::Signature, privacy: Privacy) {
         let name = sig.ident.to_string();
-        for input in &sig.inputs {
-            if let syn::FnArg::Typed(arg) = input {
-                let param = match &*arg.pat {
-                    syn::Pat::Ident(ident) => ident.ident.to_string(),
-                    other => normalise(&other.to_token_stream().to_string()),
-                };
-                self.emit(
-                    self.item(&format!("{name}({param})")),
-                    SiteKind::Param,
-                    &arg.ty,
-                );
-            }
+        let receiver = if sig.receiver().is_some() {
+            Receiver::With
+        } else {
+            Receiver::Without
+        };
+        self.privacy = privacy;
+        let typed = sig.inputs.iter().filter_map(|input| match input {
+            syn::FnArg::Typed(arg) => Some(arg),
+            syn::FnArg::Receiver(_) => None,
+        });
+        for (i, arg) in typed.enumerate() {
+            self.slot = Some(Slot {
+                name: name.clone(),
+                position: ArgPosition(i),
+                receiver,
+            });
+            let param = match &*arg.pat {
+                syn::Pat::Ident(ident) => ident.ident.to_string(),
+                other => normalise(&other.to_token_stream().to_string()),
+            };
+            self.emit(
+                self.item(&format!("{name}({param})")),
+                SiteKind::Param,
+                &arg.ty,
+            );
         }
+        self.slot = None;
         if let syn::ReturnType::Type(_, ty) = &sig.output {
             self.emit(self.item(&format!("{name}()")), SiteKind::Ret, ty);
         }
     }
 
-    fn fields<'f>(&mut self, owner: &str, fields: impl IntoIterator<Item = &'f syn::Field>) {
+    /// The fields of `owner`. `base` is the privacy of an enum, which its
+    /// variant fields share; `holder` is what the owner derives.
+    fn fields<'f>(
+        &mut self,
+        owner: &str,
+        fields: impl IntoIterator<Item = &'f syn::Field>,
+        base: Privacy,
+        holder: Privacy,
+    ) {
+        let holder = if self.krate == "ambre-bus" {
+            Privacy::BusType
+        } else {
+            holder
+        };
         for (i, field) in fields.into_iter().enumerate() {
             if test_only(&field.attrs) {
                 continue;
             }
+            self.privacy = [privacy(&field.vis), base, holder]
+                .into_iter()
+                .find(|reach| *reach != Privacy::Private)
+                .unwrap_or_default();
             let name = field
                 .ident
                 .as_ref()
@@ -1166,7 +1589,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if test_only(&f.attrs) {
             return;
         }
-        self.signature(&f.sig);
+        self.signature(&f.sig, privacy(&f.vis));
         self.body(f.sig.ident.to_string(), &f.block);
     }
 
@@ -1228,12 +1651,22 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                         Receiver::Without
                     };
                     self.host = Some(host(receiver, output(&f.sig.output, &self_ty)));
-                    self.signature(&f.sig);
+                    let reach = if of_trait.is_some() {
+                        Privacy::TraitImpl
+                    } else {
+                        privacy(&f.vis)
+                    };
+                    self.signature(&f.sig, reach);
                     self.host = None;
                     self.body(f.sig.ident.to_string(), &f.block);
                 }
                 syn::ImplItem::Const(c) if !test_only(&c.attrs) => {
                     self.host = Some(host(Receiver::Without, Output::Other));
+                    self.privacy = if of_trait.is_some() {
+                        Privacy::TraitImpl
+                    } else {
+                        privacy(&c.vis)
+                    };
                     self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
                     self.host = None;
                 }
@@ -1254,7 +1687,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 if test_only(&f.attrs) {
                     continue;
                 }
-                self.signature(&f.sig);
+                self.signature(&f.sig, privacy(&t.vis));
                 if let Some(block) = &f.default {
                     self.body(f.sig.ident.to_string(), block);
                 }
@@ -1283,14 +1716,19 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             };
             self.declare(name.clone(), decl);
             self.owner = Some(name.clone());
-            self.fields(&name, &s.fields);
+            self.fields(&name, &s.fields, Privacy::Private, derived(&s.attrs));
             self.owner = None;
         }
     }
 
     fn visit_item_union(&mut self, u: &'ast syn::ItemUnion) {
         if !test_only(&u.attrs) {
-            self.fields(&u.ident.to_string(), &u.fields.named);
+            self.fields(
+                &u.ident.to_string(),
+                &u.fields.named,
+                Privacy::Private,
+                derived(&u.attrs),
+            );
         }
     }
 
@@ -1304,24 +1742,32 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             .iter()
             .filter(|variant| !test_only(&variant.attrs))
         {
-            self.fields(&format!("{}::{}", e.ident, variant.ident), &variant.fields);
+            self.fields(
+                &format!("{}::{}", e.ident, variant.ident),
+                &variant.fields,
+                privacy(&e.vis),
+                derived(&e.attrs),
+            );
         }
     }
 
     fn visit_item_const(&mut self, c: &'ast syn::ItemConst) {
         if !test_only(&c.attrs) {
+            self.privacy = privacy(&c.vis);
             self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
         }
     }
 
     fn visit_item_static(&mut self, s: &'ast syn::ItemStatic) {
         if !test_only(&s.attrs) {
+            self.privacy = privacy(&s.vis);
             self.emit(self.item(&s.ident.to_string()), SiteKind::Static, &s.ty);
         }
     }
 
     fn visit_item_type(&mut self, t: &'ast syn::ItemType) {
         if !test_only(&t.attrs) {
+            self.privacy = privacy(&t.vis);
             self.emit(self.item(&t.ident.to_string()), SiteKind::Alias, &t.ty);
         }
     }

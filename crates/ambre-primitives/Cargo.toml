@@ -10,8 +10,9 @@ description = "The primitive gate: every site whose type holds a primitive is ty
 # tree, and no client build reaches it. `just primitives` runs it.
 
 [dependencies]
-quote = { workspace = true }
-syn   = { workspace = true }
+proc-macro2 = { workspace = true }
+quote       = { workspace = true }
+syn         = { workspace = true }
 
 [lints]
 workspace = true

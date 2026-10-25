@@ -5,7 +5,10 @@
 //! fails the gate, and so does a line that names no site (`ARCH-033`,
 //! `ARCH-034`). Adding a line is a hand edit, held by a reviewer (`ARCH-035`).
 //! Two categories claim a shape the code shows, so the gate refutes them
-//! from the site itself (`ARCH-036`).
+//! from the site itself (`ARCH-036`). Three refusals hold whatever the line
+//! says: a `local` line on a site that is not private (`ARCH-038`), a `bool`
+//! field that is not private (`ARCH-039`), and a `bool` parameter that is not
+//! private and that a caller writes as a literal (`ARCH-040`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -97,7 +100,7 @@ enum Line {
 
 /// The 1-based number of a line in the file, for the error messages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LineNo(usize);
+pub struct LineNo(pub(crate) usize);
 
 impl fmt::Display for LineNo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -125,12 +128,39 @@ pub struct Verdict {
     pub counts: BTreeMap<Category, usize>,
 }
 
-/// A line whose category claims a shape that its site does not have.
+/// What a refused line breaks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Defect {
+    /// A `newtype-inner` or a `trait` line whose site has another shape
+    /// (`ARCH-036`).
+    Shape,
+    /// A `local` line on a site that is not private (`ARCH-038`).
+    LocalSite,
+    /// A `bool` field that is not private, off `foreign-api` (`ARCH-039`).
+    BoolField,
+    /// A `bool` parameter that is not private, written as a literal by a
+    /// caller (`ARCH-040`).
+    BoolLiteral,
+}
+
+impl fmt::Display for Defect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Shape => "shape",
+            Self::LocalSite => "local-site",
+            Self::BoolField => "bool-field",
+            Self::BoolLiteral => "bool-literal",
+        })
+    }
+}
+
+/// A line the gate refuses from its site.
 #[derive(Debug)]
 pub struct Refuted {
     pub line: LineNo,
     pub key: SiteKey,
     pub category: Category,
+    pub defect: Defect,
     /// What the site is instead, from the code.
     pub reason: String,
 }
@@ -247,33 +277,54 @@ impl Allowlist {
         verdict
     }
 
-    /// The lines whose site refutes their category (`ARCH-036`). Only
-    /// `newtype-inner` and `trait` claim a shape the code shows; the other
-    /// categories claim a meaning, which a reviewer holds (`ARCH-035`).
+    /// The lines the gate refuses from their site. Only `newtype-inner` and
+    /// `trait` claim a shape the code shows (`ARCH-036`); the other
+    /// categories claim a meaning, which a reviewer holds (`ARCH-035`). The
+    /// privacy refusals hold for every category (`ARCH-038` to `ARCH-040`).
     pub fn refuted(&self, scan: &Scan) -> Vec<Refuted> {
-        self.lines
-            .iter()
-            .filter_map(|line| match line {
-                Line::Entry {
-                    key,
-                    category,
-                    line,
-                } => {
-                    let claim = match category {
-                        Category::NewtypeInner => scan.newtype_inner(key),
-                        Category::Trait => scan.foreign_signature(key),
-                        _ => Ok(()),
-                    };
-                    claim.err().map(|reason| Refuted {
-                        line: *line,
-                        key: key.clone(),
-                        category: *category,
-                        reason,
-                    })
-                }
-                Line::Text(_) => None,
-            })
-            .collect()
+        let listed: BTreeSet<SiteKey> = self.raw.keys().cloned().collect();
+        let mut found = Vec::new();
+        for line in &self.lines {
+            let Line::Entry {
+                key,
+                category,
+                line,
+            } = line
+            else {
+                continue;
+            };
+            let shape = match category {
+                Category::NewtypeInner => scan.newtype_inner(key),
+                Category::Trait => scan.foreign_signature(key),
+                _ => Ok(()),
+            };
+            let local = match category {
+                Category::Local => scan.local_site(key),
+                _ => Ok(()),
+            };
+            // A field that mirrors a schema the workspace does not control
+            // keeps its bool under foreign-api, converted at that boundary.
+            let field = match category {
+                Category::ForeignApi => Ok(()),
+                _ => scan.bool_field(key),
+            };
+            let claims = [
+                (Defect::Shape, shape),
+                (Defect::LocalSite, local),
+                (Defect::BoolField, field),
+                (Defect::BoolLiteral, scan.bool_literal(key, &listed)),
+            ];
+            found.extend(claims.into_iter().filter_map(|(defect, claim)| {
+                claim.err().map(|reason| Refuted {
+                    line: *line,
+                    key: key.clone(),
+                    category: *category,
+                    defect,
+                    reason,
+                })
+            }));
+        }
+        found
     }
 
     /// The file without the lines that name no site. Every other line is

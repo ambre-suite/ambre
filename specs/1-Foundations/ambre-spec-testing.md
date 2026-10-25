@@ -61,9 +61,9 @@ compiler needs no test, no run and no reading.
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
 **The primitive gate reads the items rustc reads.** It parses each crate from its roots without
-expanding a macro, and never opens test code. A site is a field, a parameter, a return, a constant,
-a static or an alias whose type holds a primitive. Its key names the crate, the file, the module,
-the item, the kind and the type, and no line number.
+expanding a macro, and never takes a site from test code. A site is a field, a parameter, a
+return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
+file, the module, the item, the kind and the type, and no line number.
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
@@ -80,9 +80,21 @@ the item, the kind and the type, and no line number.
   impl of a foreign trait, or is a closure type that names a foreign type.
 * **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
   `Target` of each `Deref` impl, and a `DerefMut` takes the target of its `Deref`.
+* **A site that is not private fails three checks, whatever its category.** A site is not private
+  when it is `pub`, `pub(crate)` or `pub(super)`, or sits in a trait impl. A field is not private
+  either on a type of `ambre-bus`, or on a type that derives `Serialize`, `Deserialize` or
+  `FromRow`.
+  1. A `local` line on such a site fails (`ARCH-038`).
+  2. Such a field that holds a `bool` fails, unless its line is `foreign-api` (`ARCH-039`).
+  3. Such a `bool` parameter fails when a call passes it a literal (`ARCH-040`).
+* **The literal check reads every file of a crate, tests included.** A call matches a parameter by
+  the name of its `fn` and by its position. A call in a crate that depends on the site's crate
+  matches a `pub` site too. A call that matches two sites refutes both, since a name cannot tell
+  them apart.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
-  over the source cannot. `quote` prints a parsed type back as text for the key. The tree walk uses
-  `std` rather than a crate.
+  over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
+  already under both, gives the line of a `bool` literal through its `span-locations` feature.
+  The tree walk uses `std` rather than a crate.
 
 ---
 

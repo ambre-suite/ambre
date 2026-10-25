@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use super::{Allowlist, Category, HEADER};
+use super::{Allowlist, Category, Defect, HEADER};
 use crate::scan::{SiteKey, Tree, scan};
 
 const SITE: &str = "demo | src/lib.rs | crate | Thing.id | field | u32";
@@ -160,5 +160,50 @@ fn a_line_whose_site_refutes_its_category_is_reported() {
             .map(|line| (line.key.clone(), line.category))
             .collect::<Vec<_>>(),
         [(key(FIELD), Category::NewtypeInner)]
+    );
+}
+
+/// The refusals of `lines` against one `src/lib.rs`, as key and defect.
+fn refusals(source: &str, lines: &[(&str, &str)]) -> Vec<(SiteKey, Defect)> {
+    let scan = scan(&OneFile(source.to_owned()), Path::new("/w/crates"));
+    let list = Allowlist::parse(&file(lines)).expect("a valid file");
+    assert!(list.compare(&scan.sites).is_clean());
+    list.refuted(&scan)
+        .into_iter()
+        .map(|refuted| (refuted.key, refuted.defect))
+        .collect()
+}
+
+#[test]
+fn a_bool_field_of_a_foreign_schema_holds_under_foreign_api() {
+    const VERIFIED: &str = "demo | src/lib.rs | crate | Claims.email_verified | field | bool";
+    const ADMIN: &str = "demo | src/lib.rs | crate | Claims.admin | field | bool";
+    let found = refusals(
+        "#[derive(serde::Deserialize)]\npub struct Claims { pub email_verified: bool, pub admin: bool }",
+        &[(VERIFIED, "foreign-api"), (ADMIN, "generic")],
+    );
+    assert_eq!(found, [(key(ADMIN), Defect::BoolField)]);
+}
+
+#[test]
+fn a_privacy_refusal_holds_whatever_the_category() {
+    const FLAG: &str = "demo | src/lib.rs | crate | Toggle.on | field | bool";
+    const SET: &str = "demo | src/lib.rs | crate | set(on) | param | bool";
+    const COUNT: &str = "demo | src/lib.rs | crate | count(n) | param | u32";
+    let found = refusals(
+        "pub struct Toggle { pub on: bool }\n\
+         pub fn set(on: bool) {}\n\
+         pub fn count(n: u32) {}\n\
+         fn run() { set(false); }",
+        &[(FLAG, "local"), (SET, "generic"), (COUNT, "local")],
+    );
+    assert_eq!(
+        found,
+        [
+            (key(FLAG), Defect::LocalSite),
+            (key(FLAG), Defect::BoolField),
+            (key(SET), Defect::BoolLiteral),
+            (key(COUNT), Defect::LocalSite),
+        ]
     );
 }

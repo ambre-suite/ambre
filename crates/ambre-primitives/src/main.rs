@@ -20,7 +20,7 @@ mod scan;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use allowlist::{Allowlist, Category, HEADER};
+use allowlist::{Allowlist, Category, Defect, HEADER};
 use scan::Scan;
 
 /// The allowlist, relative to the workspace root. It sits beside the other
@@ -109,16 +109,32 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
     }
     let refuted = list.refuted(scan);
     for refuted in &refuted {
+        match refuted.defect {
+            Defect::Shape => eprintln!(
+                "primitives: {ALLOWLIST}:{} is not {}: {}\n  {}",
+                refuted.line, refuted.category, refuted.reason, refuted.key
+            ),
+            defect => eprintln!(
+                "primitives: {ALLOWLIST}:{} ({}) is refused, {defect}: {}\n  {}",
+                refuted.line, refuted.category, refuted.reason, refuted.key
+            ),
+        }
+    }
+    let shapes = refuted
+        .iter()
+        .filter(|refuted| refuted.defect == Defect::Shape)
+        .count();
+    if shapes > 0 {
         eprintln!(
-            "primitives: {ALLOWLIST}:{} is not {}: {}\n  {}",
-            refuted.line, refuted.category, refuted.reason, refuted.key
+            "primitives: {shapes} lines claim a shape their site does not have. Type the value, or \
+             give the line the category true of its site."
         );
     }
-    if !refuted.is_empty() {
+    let private = refuted.len() - shapes;
+    if private > 0 {
         eprintln!(
-            "primitives: {} lines claim a shape their site does not have. Type the value, or give \
-             the line the category true of its site.",
-            refuted.len()
+            "primitives: {private} lines name a site that is not private, where the rule wants a \
+             private one. Type the value: no category admits it."
         );
     }
     for deref in &scan.derefs {

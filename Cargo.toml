@@ -83,6 +83,9 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 # section 2): a Rust parser, so the gate reads the items rustc reads. Host only.
 syn   = { version = "2.0.117", default-features = false, features = ["full", "visit", "parsing", "printing"] }
 quote = { version = "1.0.45", default-features = false }
+# Already under syn and quote. Its `span-locations` feature gives the line of a
+# token, which a refusal of a bool literal names.
+proc-macro2 = { version = "1.0.106", default-features = false, features = ["span-locations"] }
 
 # Test-only
 proptest = "1"
