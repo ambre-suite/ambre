@@ -51,14 +51,18 @@ pub enum ExportFilenameError {
     /// The name holds a control character.
     #[error("an export file name holds a control character")]
     ControlCharacter,
+    /// The name holds an invisible format character, such as a bidirectional
+    /// override that shows `exe.pdf` for a name that ends in `.exe`.
+    #[error("an export file name holds a format character")]
+    FormatCharacter,
     /// The name is longer than [`ExportFilename::MAX_SIZE`].
     #[error("an export file name is too long")]
     TooLong,
 }
 
 /// The name an export file is saved under. It is never empty, never `.` or
-/// `..`, and holds no path separator and no control character
-/// (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
+/// `..`, and holds no path separator, no control character and no format
+/// character (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
 /// (`DOCFILE-020`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ExportFilename(String);
@@ -88,6 +92,9 @@ impl ExportFilename {
         }
         if text.chars().any(char::is_control) {
             return Err(ExportFilenameError::ControlCharacter);
+        }
+        if text.chars().any(is_format_character) {
+            return Err(ExportFilenameError::FormatCharacter);
         }
         if ByteSize::of_len(text.len()) > Self::MAX_SIZE {
             return Err(ExportFilenameError::TooLong);
@@ -168,13 +175,16 @@ impl std::fmt::Display for ExportFilename {
 /// on a character boundary to at most `room` bytes.
 ///
 /// The refused set is the Windows one, which holds the POSIX one: every
-/// control character, both separators, and `: * ? " < > |`. A stem of dots
-/// alone is dropped, so `..` never reaches a name.
+/// control character, both separators, and `: * ? " < > |`. Every format
+/// character goes too. A stem of dots alone is dropped, so `..` never
+/// reaches a name.
 fn clean_stem(text: &str, room: usize) -> String {
     let kept: String = text
         .chars()
-        .filter(|c| {
-            !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        .filter(|&c| {
+            !c.is_control()
+                && !is_format_character(c)
+                && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
         })
         .collect();
     let mut stem = String::new();
@@ -190,6 +200,39 @@ fn clean_stem(text: &str, room: usize) -> String {
     } else {
         stem
     }
+}
+
+/// Whether `c` is a format character, the Unicode general category `Cf`.
+///
+/// A format character is invisible, yet it changes how a name shows: the
+/// right-to-left override U+202E shows `facture<U+202E>fdp.exe` as
+/// `facture` then `exe.pdf`. The standard library has no predicate for the
+/// category, so the ranges below list the `Cf` set of Unicode 15.1 by hand.
+const fn is_format_character(c: char) -> bool {
+    matches!(
+        c,
+        '\u{ad}'
+            | '\u{600}'..='\u{605}'
+            | '\u{61c}'
+            | '\u{6dd}'
+            | '\u{70f}'
+            | '\u{890}'..='\u{891}'
+            | '\u{8e2}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206f}'
+            | '\u{feff}'
+            | '\u{fff9}'..='\u{fffb}'
+            | '\u{110bd}'
+            | '\u{110cd}'
+            | '\u{13430}'..='\u{1343f}'
+            | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}'
+            | '\u{e0001}'
+            | '\u{e0020}'..='\u{e007f}'
+    )
 }
 
 /// Whether a received name's `extension` survives whole: letters and digits
@@ -296,6 +339,52 @@ mod tests {
                 Err(ExportFilenameError::ControlCharacter),
                 "{text:?}"
             );
+        }
+    }
+
+    /// The format characters a spoofed name hides: the bidirectional
+    /// overrides, embeddings and isolates, the zero-width characters, the
+    /// direction marks and the byte order mark.
+    const SPOOFING_CHARACTERS: [char; 12] = [
+        '\u{202e}', '\u{202d}', '\u{200b}', '\u{200c}', '\u{200d}', '\u{200e}', '\u{200f}',
+        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{feff}',
+    ];
+
+    /// `DOCFILE-019`: a format character is refused, so a right-to-left
+    /// override never shows `exe.pdf` for a name ending in `.exe`.
+    #[test]
+    fn a_format_character_is_refused() {
+        for c in SPOOFING_CHARACTERS {
+            let text = format!("facture{c}fdp.exe");
+            assert_eq!(
+                ExportFilename::new(&text),
+                Err(ExportFilenameError::FormatCharacter),
+                "{text:?}"
+            );
+        }
+    }
+
+    /// `DOCFILE-019`: a title loses its format characters.
+    #[test]
+    fn a_title_loses_its_format_characters() {
+        for c in SPOOFING_CHARACTERS {
+            let title = format!("{c}plan{c}Q3{c}");
+            let name = ExportFilename::from_title(&title, "x", ExportExtension::Markdown);
+            assert_eq!(name.as_str(), "planQ3.md", "{title:?}");
+        }
+    }
+
+    /// `DOCFILE-019`: a received name loses its format characters, so the
+    /// extension it shows is the extension it has.
+    #[test]
+    fn a_received_name_loses_its_format_characters() {
+        for c in SPOOFING_CHARACTERS {
+            let sent = format!("facture{c}fdp.exe");
+            let name = ExportFilename::from_received(&sent, "attachment");
+            assert_eq!(name.as_str(), "facturefdp.exe", "sent as {sent:?}");
+            let sent = format!("{c}");
+            let name = ExportFilename::from_received(&sent, "attachment");
+            assert_eq!(name.as_str(), "attachment", "sent as {sent:?}");
         }
     }
 
