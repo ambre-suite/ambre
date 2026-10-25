@@ -117,7 +117,7 @@ impl ExportFilename {
     pub fn from_title(title: &str, fallback: &'static str, extension: ExportExtension) -> Self {
         let suffix = extension.as_str();
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_SIZE.as_len().saturating_sub(suffix.len() + 1);
+        let room = Self::MAX_SIZE.saturating_sub(ByteSize::of_len(suffix.len() + 1));
         let stem = [title, fallback, Self::FALLBACK_STEM]
             .into_iter()
             .map(|text| clean_stem(text, room))
@@ -144,9 +144,9 @@ impl ExportFilename {
             _ => (base, None),
         };
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_SIZE
-            .as_len()
-            .saturating_sub(extension.map_or(0, |extension| extension.len() + 1));
+        let room = Self::MAX_SIZE.saturating_sub(ByteSize::of_len(
+            extension.map_or(0, |extension| extension.len() + 1),
+        ));
         let stem = [stem, fallback, Self::FALLBACK_STEM]
             .into_iter()
             .map(|text| clean_stem(text, room))
@@ -172,13 +172,13 @@ impl std::fmt::Display for ExportFilename {
 }
 
 /// `text` without the characters a host refuses in a name, trimmed, and cut
-/// on a character boundary to at most `room` bytes.
+/// on a character boundary to fit `room`.
 ///
 /// The refused set is the Windows one, which holds the POSIX one: every
 /// control character, both separators, and `: * ? " < > |`. Every format
 /// character goes too. A stem of dots alone is dropped, so `..` never
 /// reaches a name.
-fn clean_stem(text: &str, room: usize) -> String {
+fn clean_stem(text: &str, room: ByteSize) -> String {
     let kept: String = text
         .chars()
         .filter(|&c| {
@@ -189,7 +189,7 @@ fn clean_stem(text: &str, room: usize) -> String {
         .collect();
     let mut stem = String::new();
     for c in kept.trim().chars() {
-        if stem.len() + c.len_utf8() > room {
+        if ByteSize::of_len(stem.len() + c.len_utf8()) > room {
             break;
         }
         stem.push(c);

@@ -3967,7 +3967,6 @@ ambre-core | src/export_file.rs | crate::export_file | is_format_character(c) | 
 ambre-core | src/export_file.rs | crate::export_file | is_format_character() | ret | bool	generic	predicate
 ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | clean_stem(room) | param | usize	math	byte budget of the stem
 ambre-core | src/export_file.rs | crate::export_file | FileBytes.0 | field | Vec<u8>	newtype-inner	the file bytes the newtype wraps
 ambre-core | src/export_file.rs | crate::export_file | FileBytes::as_bytes() | ret | &[u8]	newtype-inner	the file bytes the newtype wraps
 ambre-core | src/export_file.rs | crate::export_file | FileBytes::into_bytes() | ret | Vec<u8>	newtype-inner	the file bytes the newtype wraps

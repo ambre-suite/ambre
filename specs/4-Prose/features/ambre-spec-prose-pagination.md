@@ -339,7 +339,10 @@ one to store (`PROSE-112`).
 family label to a shipped face. `measure` shapes one block and reports its line heights, `pass`
 walks the tree, and `place` is pass 2. `reflow` holds the layout between edits.
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
-lives. Pass 0 and pass 3 are not built, and section 5 says what that costs.
+lives. `pass` runs pass 0 too: it measures the bands and reads the note plan before placement.
+Pass 3 is in the view. `ambre_prose::view::hit` places the footnote band from the foot of the body
+upward, and each band on its page. `ambre_prose::band` resolves each field of a band from the page
+that draws it.
 
 ---
 

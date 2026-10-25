@@ -181,5 +181,5 @@
 | civil date | a calendar year, month and day | | `2-Trame/features/ambre-spec-trame-function-library.md` |
 | cell rect | a rectangle of cells, both corners included | | `2-Trame/features/ambre-spec-trame-selection.md` |
 | grid cursor | the pointer shape the grid sets on the canvas | | `2-Trame/features/ambre-spec-trame-resize.md` |
-| find text | the query of a find, as typed, never empty | | `2-Trame/features/ambre-spec-trame-find-replace.md` |
-| find options | the refinements a find applies to its query | | `2-Trame/features/ambre-spec-trame-find-replace.md` |
+| find text | the query of a find, as typed, never empty | | `1-Foundations/ambre-spec-find.md section 3` |
+| find options | the refinements a find applies to its query | | `1-Foundations/ambre-spec-find.md section 3` |
