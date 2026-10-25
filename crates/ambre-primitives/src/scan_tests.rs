@@ -399,7 +399,6 @@ fn a_trait_line_holds_on_a_foreign_trait_and_a_foreign_closure() {
          pub fn hook(f: fn(u32, other::Event)) {}",
     );
     for item in [
-        "<Row as From<u32>>::from(value)",
         "<Row as std::str::FromStr>::from_str(s)",
         "<Row as serde::Serialize>::NAME",
         "open(go)",
@@ -419,6 +418,8 @@ fn a_trait_line_is_refuted_off_a_foreign_signature() {
          impl crate::glyph::Glyph for Row { fn size(&self) -> f32 { 0.0 } }\n\
          impl demo::Fixture for Row { fn seed(&self) -> u64 { 0 } }\n\
          impl From<u32> for Row { fn from(value: u32) -> Self { fn inner(step: u8) {} Row(value) } }\n\
+         pub struct Px(f32);\n\
+         impl core::ops::Add<u32> for Px { type Output = Px; fn add(self, rhs: u32) -> Px { self } }\n\
          pub fn follow(go: impl FnOnce(&str)) {}\n\
          pub fn wait(f: impl Fn(std::time::Duration, u32)) {}\n\
          pub fn plain(text: &str) {}",
@@ -429,6 +430,8 @@ fn a_trait_line_is_refuted_off_a_foreign_signature() {
         "<Row as crate::glyph::Glyph>::size()",
         "<Row as demo::Fixture>::seed()",
         "<Row as From<u32>>::from::inner(step)",
+        "<Row as From<u32>>::from(value)",
+        "<Px as core::ops::Add<u32>>::add(rhs)",
         "Session.sent",
         "follow(go)",
         "wait(f)",
@@ -579,7 +582,8 @@ fn a_field_of_a_bus_type_is_not_private() {
 #[test]
 fn a_bool_field_that_is_not_private_is_refused() {
     let scan = scanned(
-        "pub struct A { pub on: bool, pub(crate) cell: Cell<bool>, open: Option<bool>, pub n: u32 }\n\
+        "pub struct A { pub on: bool, pub(crate) cell: Cell<bool>, open: Option<bool>, pub n: u32,\n\
+         pub cb: Box<dyn Fn(bool)>, pub hook: fn(bool) -> u8 }\n\
          #[derive(Debug, serde::Deserialize)]\nstruct Claims { email_verified: bool }\n\
          pub enum Event { Moved { done: bool } }\n\
          struct Latch { set: bool }",
@@ -592,7 +596,7 @@ fn a_bool_field_that_is_not_private_is_refused() {
     ] {
         assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
     }
-    for item in ["A.open", "A.n", "Latch.set"] {
+    for item in ["A.open", "A.n", "Latch.set", "A.cb", "A.hook"] {
         assert_eq!(scan.bool_field(&site(&scan, item)), Ok(()), "{item}");
     }
 }
@@ -692,4 +696,168 @@ fn a_literal_reaches_a_pub_site_of_a_crate_it_depends_on() {
             "{item}"
         );
     }
+}
+
+#[test]
+fn a_trait_imported_under_another_name_is_the_workspace_trait() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        ("demo/src/lib.rs", "pub trait Tree { fn at(&self, i: u32); }"),
+        ("user/Cargo.toml", "[dependencies]\ndemo = { path = \"../demo\" }"),
+        (
+            "user/src/lib.rs",
+            "use demo::Tree as T;\npub struct P;\nimpl T for P { fn at(&self, i: u32) {} }",
+        ),
+    ]);
+    let refusal = scan.foreign_signature(&site(&scan, "<P as T>::at(i)"));
+    assert!(
+        refusal
+            .as_ref()
+            .is_err_and(|reason| reason.contains("declared in the workspace")),
+        "{refusal:?}"
+    );
+}
+
+#[test]
+fn an_alias_resolves_to_its_target_before_every_check() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub type Flag = bool;\n\
+             pub struct A { pub f: Flag }\n\
+             pub fn set(on: Flag) {}\n\
+             pub mod inner { pub type Id = u32; pub struct B { pub id: Id, pub up: super::Flag } }\n\
+             fn run() { set(true); }",
+        ),
+        ("user/Cargo.toml", "[dependencies]\ndemo = { path = \"../demo\" }"),
+        ("user/src/lib.rs", "pub struct U { pub g: demo::Flag }"),
+    ]);
+    let keys: Vec<String> = scan.sites.iter().map(ToString::to_string).collect();
+    for written in [
+        "demo | src/lib.rs | crate | A.f | field | Flag",
+        "demo | src/lib.rs | crate | set(on) | param | Flag",
+        "demo | src/lib.rs | crate::inner | B.id | field | Id",
+        "demo | src/lib.rs | crate::inner | B.up | field | super::Flag",
+        "user | src/lib.rs | crate | U.g | field | demo::Flag",
+    ] {
+        assert!(keys.iter().any(|key| key == written), "{written} in {keys:?}");
+    }
+    for item in ["A.f", "B.up", "U.g"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+    let listed = all(&scan);
+    assert!(scan.bool_literal(&site(&scan, "set(on)"), &listed).is_err());
+}
+
+#[test]
+fn a_deref_target_is_read_through_paths_wrappers_aliases_generics_and_macros() {
+    let scan = scanned(
+        "pub struct A(String);\nimpl std::ops::Deref for A { type Target = std::string::String; }\n\
+         pub struct B(u32);\nimpl Deref for B { type Target = std::primitive::u32; }\n\
+         pub struct C(Box<str>);\nimpl Deref for C { type Target = Box<str>; }\n\
+         pub struct D(Rc<str>);\nimpl Deref for D { type Target = Rc<str>; }\n\
+         pub struct E(Vec<u8>);\nimpl Deref for E { type Target = std::vec::Vec<u8>; }\n\
+         pub struct F([[u8; 4]; 4]);\nimpl Deref for F { type Target = [[u8; 4]; 4]; }\n\
+         type Raw = u64;\npub struct G(Raw);\nimpl Deref for G { type Target = Raw; }\n\
+         pub struct W<T>(T);\nimpl<T> Deref for W<T> { type Target = T; }\n\
+         pub struct Uses { w: W<u32> }\n\
+         pub struct V<T>(T);\nimpl<T: AsRef<str>> Deref for V<T> { type Target = T; }\n\
+         pub struct Q<T>(T);\nimpl<T: Shape> Deref for Q<T> { type Target = <T as Shape>::Out; }\n\
+         macro_rules! wrap { ($name:ident) => { impl Deref for $name { type Target = str; } }; }\n\
+         pub struct M<T>(T);\nimpl<T> Deref for M<T> { type Target = T; }\n\
+         pub struct Editor { core: Core }\nimpl Deref for Editor { type Target = Core; }",
+    );
+    let refused = [
+        "A", "B", "C", "D", "E", "F", "G", "W<T>", "V<T>", "Q<T>", "__ambre_meta_name",
+    ];
+    for ty in refused {
+        assert!(
+            scan.derefs
+                .iter()
+                .any(|refusal| refusal.contains(&format!("Deref of {ty} to")) || refusal.contains(&format!("Deref of {ty}:"))),
+            "{ty} in {:?}",
+            scan.derefs
+        );
+    }
+    assert_eq!(scan.derefs.len(), refused.len(), "{:?}", scan.derefs);
+}
+
+#[test]
+fn a_literal_is_found_through_reexports_renames_macros_and_props() {
+    let scan = crates(&[
+        ("core-a/Cargo.toml", ""),
+        (
+            "core-a/src/lib.rs",
+            "pub fn real(on: bool) {}\n\
+             pub fn opt(on: Option<bool>) {}\n\
+             pub fn three(on: bool) {}\n\
+             pub fn sel(on: bool) {}\n\
+             pub fn rep(on: bool) -> u8 { 0 }\n\
+             #[component]\npub fn Toggle(checked: bool, label: u32) -> impl IntoView { () }\n\
+             pub fn quiet(on: bool) {}",
+        ),
+        ("mid/Cargo.toml", "[dependencies]\ncore-a = { path = \"../core-a\" }"),
+        ("mid/src/lib.rs", "pub use core_a::real;"),
+        ("far/Cargo.toml", "[dependencies]\nmid = { path = \"../mid\" }"),
+        ("far/src/lib.rs", "fn go() { mid::real(true); }"),
+        (
+            "app/Cargo.toml",
+            "[dependencies]\nrenamed = { package = \"core-a\", path = \"../core-a\" }",
+        ),
+        (
+            "app/src/lib.rs",
+            "fn go() {\n\
+             renamed::opt(Some(false));\n\
+             renamed::three((true));\n\
+             let v = vec![renamed::rep(true); 2];\n\
+             tokio::select! { _ = x => renamed::sel(false), }\n\
+             view! { <renamed::Toggle checked=true label=1/> <Other on:click=true/> }\n\
+             }",
+        ),
+    ]);
+    let listed = all(&scan);
+    for item in [
+        "real(on)",
+        "opt(on)",
+        "three(on)",
+        "sel(on)",
+        "rep(on)",
+        "Toggle(checked)",
+    ] {
+        assert!(
+            scan.bool_literal(&site(&scan, item), &listed).is_err(),
+            "{item}"
+        );
+    }
+    assert_eq!(scan.bool_literal(&site(&scan, "quiet(on)"), &listed), Ok(()));
+}
+
+#[test]
+fn the_one_bool_of_a_tuple_variant_is_the_value_it_names() {
+    let scan = scanned(
+        "pub enum CellValue { Boolean(bool), Maybe(Option<bool>), Pair(bool, u8), Named { on: bool } }",
+    );
+    assert_eq!(
+        scan.bool_field(&site(&scan, "CellValue::Boolean.0")),
+        Ok(())
+    );
+    for item in [
+        "CellValue::Maybe.0",
+        "CellValue::Pair.0",
+        "CellValue::Named.on",
+    ] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn a_private_field_of_a_pub_struct_is_private_off_every_wire() {
+    let scan = scanned(
+        "pub struct P { on: bool, n: u32 }\n\
+         #[derive(serde::Serialize)]\npub struct Q { on: bool }",
+    );
+    assert_eq!(scan.bool_field(&site(&scan, "P.on")), Ok(()));
+    assert_eq!(scan.local_site(&site(&scan, "P.n")), Ok(()));
+    assert!(scan.bool_field(&site(&scan, "Q.on")).is_err());
 }

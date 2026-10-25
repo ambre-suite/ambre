@@ -11,7 +11,8 @@
 //!   1. a `local` line on a site that is not private (`ARCH-038`);
 //!   2. a `bool` field that is not private, outside `foreign-api` (`ARCH-039`);
 //!   3. a `bool` parameter that is not private and that a caller writes as a
-//!      literal (`ARCH-040`).
+//!      literal, outside `trait`, whose foreign signature fixes the type
+//!      (`ARCH-040`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -283,7 +284,9 @@ impl Allowlist {
     /// The lines the gate refuses from their site. Only `newtype-inner` and
     /// `trait` claim a shape the code shows (`ARCH-036`); the other
     /// categories claim a meaning, which a reviewer holds (`ARCH-035`). The
-    /// privacy refusals hold for every category (`ARCH-038` to `ARCH-040`).
+    /// privacy refusals hold for every category (`ARCH-038` to `ARCH-040`),
+    /// except two: a `foreign-api` line takes no `bool` field refusal, and a
+    /// `trait` line takes no literal refusal.
     pub fn refuted(&self, scan: &Scan) -> Vec<Refuted> {
         let listed: BTreeSet<SiteKey> = self.raw.keys().cloned().collect();
         let mut found = Vec::new();
@@ -311,11 +314,17 @@ impl Allowlist {
                 Category::ForeignApi => Ok(()),
                 _ => scan.bool_field(key),
             };
+            // A foreign signature fixes the type of a `trait` site, so a
+            // literal its callers write cannot be typed there.
+            let literal = match category {
+                Category::Trait => Ok(()),
+                _ => scan.bool_literal(key, &listed),
+            };
             let claims = [
                 (Defect::Shape, shape),
                 (Defect::LocalSite, local),
                 (Defect::BoolField, field),
-                (Defect::BoolLiteral, scan.bool_literal(key, &listed)),
+                (Defect::BoolLiteral, literal),
             ];
             found.extend(claims.into_iter().filter_map(|(defect, claim)| {
                 claim.err().map(|reason| Refuted {

@@ -13,8 +13,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::ToTokens;
+use syn::parse::Parser;
 use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
 
 use crate::allowlist::LineNo;
 
@@ -38,6 +41,18 @@ const TOOLCHAIN: &[&str] = &["std", "core", "alloc"];
 
 /// The first segments of a path that stay inside the crate that writes it.
 const LOCAL_ROOTS: &[&str] = &["crate", "self", "super", "Self"];
+
+/// The owning wrappers a dereference target exposes its element through:
+/// a `Box<str>` hands out a `str` as surely as a `str` target does.
+const WRAPPERS: &[&str] = &["Vec", "Box", "Rc", "Arc", "Cow"];
+
+/// The prefix of the word that stands for a metavariable, once the body of a
+/// `macro_rules!` is read as Rust. No source identifier starts with it.
+const META: &str = "__ambre_meta_";
+
+/// How deep one alias may lead to another before the walk stops. A cycle
+/// fails to compile, so the bound only keeps a broken tree from looping.
+const ALIAS_DEPTH: usize = 8;
 
 /// One site, written as one line: the crate, the file, the module path, the
 /// item path, the kind and the type, joined by [`SiteKey::SEPARATOR`].
@@ -175,11 +190,28 @@ struct Place {
     roots: BTreeSet<String>,
     /// Who can reach the site (`ARCH-038`).
     privacy: Privacy,
-    /// Whether the type is a `bool`, or holds one.
+    /// Whether the type is a `bool`, or holds one outside a callable's
+    /// signature. Read from the type once each alias is resolved.
     shape: Shape,
+    /// Each primitive the type names once its aliases are resolved.
+    primitives: BTreeSet<String>,
     /// The `fn` and the position of a parameter. `None` for every other
     /// kind.
     slot: Option<Slot>,
+    /// What a field is to its owner.
+    role: FieldRole,
+}
+
+/// What a field is to the type that declares it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum FieldRole {
+    /// A field of a struct or a union, a named field of a variant, or one of
+    /// two or more fields of a tuple variant. Every other kind of site too.
+    #[default]
+    Member,
+    /// The one field of a tuple variant. The variant names the value, as
+    /// `CellValue::Boolean(bool)` does, so that `bool` selects no mode.
+    VariantValue,
 }
 
 /// Who can reach a site, as the `local` rule and the `bool` rule read it
@@ -241,6 +273,18 @@ struct Slot {
     name: String,
     position: ArgPosition,
     receiver: Receiver,
+    /// The name of the parameter, the name a component prop writes.
+    param: String,
+    kind: FnKind,
+}
+
+/// Whether a `fn` is a Leptos component, which `view!` calls by props.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FnKind {
+    Plain,
+    /// A `fn` under `#[component]`: `<Name prop=value/>` writes its
+    /// parameters by name.
+    Component,
 }
 
 /// How a call names its `fn`.
@@ -251,6 +295,8 @@ enum CallForm {
     Path,
     /// `x.g(..)`: the receiver sits before the dot.
     Method,
+    /// `<Name prop=true/>` inside `view!`: the prop names the parameter.
+    Prop,
 }
 
 /// One `bool` literal passed to a call, anywhere in a crate, tests included.
@@ -261,10 +307,13 @@ struct BoolCall {
     /// The file of the call, from the workspace root.
     file: String,
     line: LineNo,
-    /// The last segment of the called path, or the method name.
+    /// The last segment of the called path, the method name, or the
+    /// component a `view!` tag names.
     name: String,
     position: ArgPosition,
     form: CallForm,
+    /// The prop a `view!` tag writes, `None` for a call.
+    prop: Option<String>,
 }
 
 /// Whether a type is called or held.
@@ -343,6 +392,10 @@ impl fmt::Display for DerefTrait {
 /// One impl of `Deref` or `DerefMut`, before its target is resolved.
 #[derive(Clone, Debug)]
 struct DerefImpl {
+    /// The crate directory.
+    krate: String,
+    /// The module path, where an alias in the target resolves.
+    module: String,
     /// The file, relative to the crate directory.
     file: String,
     /// The implementing type, as the impl writes it.
@@ -350,10 +403,30 @@ struct DerefImpl {
     /// The last segment of the implementing type, the name `DerefMut` is
     /// matched by.
     self_ty: String,
+    /// The type arguments of the last segment of the implementing type, as
+    /// text, in order: where a generic target sits in an instance.
+    self_args: Vec<String>,
+    /// Each type parameter of the impl, with the text of its bounds, the
+    /// `where` clause included.
+    bounds: BTreeMap<String, String>,
     of: DerefTrait,
     /// The `Target` of a `Deref`, normalised. `None` for a `DerefMut`,
-    /// whose target its `Deref` states.
+    /// whose target its `Deref` states, and for a `Deref` that writes none.
     target: Option<String>,
+}
+
+/// What a dereference target hands out, as `ARCH-037` reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Exposure {
+    /// A primitive, bare or through a slice, an array, a reference or a
+    /// [`WRAPPERS`] type.
+    Primitive(String),
+    /// A type parameter of the impl, whose instances decide.
+    Generic(String),
+    /// A target the gate cannot read, which fails closed: why.
+    Unsure(String),
+    /// Any other type.
+    Opaque,
 }
 
 /// The impl item that holds a site.
@@ -369,13 +442,29 @@ struct Host {
     output: Output,
 }
 
-/// The trait of an impl, as the impl writes its path.
+/// The trait of an impl, as the impl writes its path once a `use ... as`
+/// rename of the file is undone.
 #[derive(Clone, Debug)]
 struct TraitPath {
     /// The last segment, without its generics.
     name: String,
     /// The first segment, when the path has two or more.
     root: Option<String>,
+    /// The type arguments the impl writes on the last segment, as text. The
+    /// workspace chose each one, not the trait.
+    args: Vec<String>,
+}
+
+/// One `type` alias, as a use of its name resolves it.
+#[derive(Clone, Debug)]
+struct Alias {
+    /// The module path that declares it.
+    module: String,
+    privacy: Privacy,
+    /// The names of its type parameters, in order.
+    params: Vec<String>,
+    /// The aliased type, normalised.
+    target: String,
 }
 
 /// What the workspace declares, across every crate the scan reads.
@@ -385,19 +474,150 @@ struct Declared {
     crates: BTreeSet<String>,
     /// The name of every trait, per crate directory.
     traits: BTreeMap<String, BTreeSet<String>>,
-    /// The dependencies each crate directory names in its manifest, dev and
-    /// build ones included.
+    /// The packages each crate directory depends on in its manifest, dev and
+    /// build ones included. A renamed dependency counts under its package.
     deps: BTreeMap<String, BTreeSet<String>>,
+    /// Per crate directory, each dependency the manifest renames: the name a
+    /// path writes, then the package.
+    renamed: BTreeMap<String, BTreeMap<String, String>>,
+    /// Per crate directory, the first segment of each path a `pub use`
+    /// re-exports.
+    reexports: BTreeMap<String, BTreeSet<String>>,
+    /// Per crate directory, the crates whose `pub` items its code can
+    /// call: its dependencies, and the crates they re-export. Written once
+    /// every crate is read.
+    reach: BTreeMap<String, BTreeSet<String>>,
     /// Every struct and enum, per crate directory, then per name. A name
     /// declared twice in one crate keeps both.
     types: BTreeMap<String, BTreeMap<String, Vec<Declaration>>>,
+    /// Every `type` alias, per crate directory, then per name.
+    aliases: BTreeMap<String, BTreeMap<String, Vec<Alias>>>,
+    /// The name of every alias, in any crate: a type that names none needs
+    /// no resolution.
+    alias_names: BTreeSet<String>,
 }
 
 impl Declared {
     /// Whether a path that starts with `root` names an item of the
-    /// workspace.
+    /// workspace. A dependency the manifest renames counts under its new
+    /// name.
     fn owns_root(&self, root: &str) -> bool {
-        LOCAL_ROOTS.contains(&root) || self.crates.contains(root)
+        LOCAL_ROOTS.contains(&root)
+            || self.crates.contains(root)
+            || self.renamed.values().any(|names| {
+                names
+                    .get(root)
+                    .is_some_and(|package| self.crates.contains(&package.replace('-', "_")))
+            })
+    }
+
+    /// The crate directory a path root names from `krate`: the crate itself
+    /// for a local root, a workspace crate, or a renamed one. `None` for a
+    /// foreign crate.
+    fn crate_of(&self, krate: &str, root: &str) -> Option<String> {
+        if LOCAL_ROOTS.contains(&root) {
+            return Some(krate.to_owned());
+        }
+        if let Some(package) = self.renamed.get(krate).and_then(|names| names.get(root)) {
+            return Some(package.clone());
+        }
+        self.types
+            .keys()
+            .chain(self.deps.keys())
+            .find(|dir| dir.replace('-', "_") == root)
+            .cloned()
+    }
+
+    /// Writes [`Declared::reach`]: the dependencies of each crate, then
+    /// every crate a reached crate re-exports, until none is added.
+    fn close_reach(&mut self) {
+        let mut reach = BTreeMap::new();
+        for krate in self.deps.keys() {
+            let mut found: BTreeSet<String> = BTreeSet::new();
+            let mut pending: Vec<String> = self.deps.get(krate).into_iter().flatten().cloned().collect();
+            while let Some(next) = pending.pop() {
+                if !found.insert(next.clone()) {
+                    continue;
+                }
+                let roots = self.reexports.get(&next).into_iter().flatten();
+                pending.extend(roots.filter_map(|root| self.crate_of(&next, root)));
+            }
+            found.remove(krate);
+            reach.insert(krate.clone(), found);
+        }
+        self.reach = reach;
+    }
+
+    /// The alias a use of `name` names, from `module` of `krate`. `hint` is
+    /// the module a qualified path writes. The declaration in that module
+    /// wins. A private alias reaches its own module and the modules under
+    /// it. With no declaration in reach, a bare name may name a `pub` alias
+    /// of a crate `krate` depends on, unless `module` declares a struct or
+    /// an enum of that name.
+    fn alias(&self, krate: &str, module: &str, name: &str, hint: Option<&str>) -> Option<(String, Alias)> {
+        let visible = |alias: &&Alias| {
+            alias.privacy != Privacy::Private
+                || module == alias.module
+                || module.starts_with(&format!("{}::", alias.module))
+        };
+        let shadowed = self
+            .types
+            .get(krate)
+            .and_then(|names| names.get(name))
+            .is_some_and(|decls| decls.iter().any(|decl| decl.module == module));
+        if let Some(decls) = self.aliases.get(krate).and_then(|names| names.get(name)) {
+            let at = hint.unwrap_or(module);
+            if let Some(exact) = decls.iter().find(|alias| alias.module == at) {
+                return Some((krate.to_owned(), exact.clone()));
+            }
+            if !shadowed && let Some(seen) = decls.iter().find(visible) {
+                return Some((krate.to_owned(), seen.clone()));
+            }
+        }
+        if hint.is_some() || shadowed {
+            return None;
+        }
+        self.reach.get(krate).into_iter().flatten().find_map(|dep| {
+            self.aliases
+                .get(dep)
+                .and_then(|names| names.get(name))
+                .and_then(|decls| decls.iter().find(|alias| alias.privacy == Privacy::Public))
+                .map(|alias| (dep.clone(), alias.clone()))
+        })
+    }
+
+    /// `ty` with every workspace alias it names replaced by its target, as
+    /// seen from `module` of `krate`.
+    fn resolve(&self, ty: &syn::Type, krate: &str, module: &str) -> syn::Type {
+        let mut resolved = ty.clone();
+        if self.names_alias(ty) {
+            Resolver {
+                declared: self,
+                krate,
+                module,
+                depth: 0,
+            }
+            .visit_type_mut(&mut resolved);
+        }
+        resolved
+    }
+
+    /// Whether a type writes a word that some alias of the workspace is
+    /// named.
+    fn names_alias(&self, ty: &syn::Type) -> bool {
+        normalise(&ty.to_token_stream().to_string())
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .any(|word| self.alias_names.contains(word))
+    }
+
+    /// The primitives the generic arguments of a trait name, aliases
+    /// resolved from `module` of `krate`.
+    fn chosen(&self, path: &TraitPath, krate: &str, module: &str) -> BTreeSet<String> {
+        path.args
+            .iter()
+            .filter_map(|arg| syn::parse_str::<syn::Type>(arg).ok())
+            .flat_map(|arg| primitives_of(&self.resolve(&arg, krate, module)))
+            .collect()
     }
 
     /// Whether the workspace declares the trait. A path of one segment is
@@ -496,6 +716,170 @@ impl Declared {
     }
 }
 
+/// Replaces each workspace alias a type names with its target, the type
+/// rustc reads. An alias hides no `bool` and no primitive from a check.
+struct Resolver<'d> {
+    declared: &'d Declared,
+    /// The crate directory the type is written in.
+    krate: &'d str,
+    /// The module path the type is written in.
+    module: &'d str,
+    /// How many aliases led here, bounded by [`ALIAS_DEPTH`].
+    depth: usize,
+}
+
+impl Resolver<'_> {
+    /// The target of the alias `ty` names, its parameters replaced by the
+    /// arguments of the use, with the crate and module the target is
+    /// written in.
+    fn target(&self, ty: &syn::Type) -> Option<(syn::Type, String, String)> {
+        let syn::Type::Path(path) = ty else {
+            return None;
+        };
+        if path.qself.is_some() {
+            return None;
+        }
+        let segments: Vec<&syn::PathSegment> = path.path.segments.iter().collect();
+        let last = segments.last()?;
+        let name = last.ident.to_string();
+        if !self.declared.alias_names.contains(&name) {
+            return None;
+        }
+        let (krate, hint) = match segments.as_slice() {
+            [_] => (self.krate.to_owned(), None),
+            [first, middle @ .., _] => {
+                let root = first.ident.to_string();
+                if root == "Self" {
+                    return None;
+                }
+                let krate = self.declared.crate_of(self.krate, &root)?;
+                let base = match root.as_str() {
+                    "self" => self.module.to_owned(),
+                    "super" => self
+                        .module
+                        .rsplit_once("::")
+                        .map_or_else(|| self.module.to_owned(), |(parent, _)| parent.to_owned()),
+                    _ => "crate".to_owned(),
+                };
+                let rest: Vec<String> = middle.iter().map(|segment| segment.ident.to_string()).collect();
+                let hint = std::iter::once(base).chain(rest).collect::<Vec<_>>().join("::");
+                (krate, Some(hint))
+            }
+            [] => return None,
+        };
+        let module = if krate == self.krate { self.module } else { "crate" };
+        let (home, alias) = self.declared.alias(&krate, module, &name, hint.as_deref())?;
+        let mut target = syn::parse_str::<syn::Type>(&alias.target).ok()?;
+        if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
+            let given: Vec<&syn::Type> = args
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    syn::GenericArgument::Type(ty) => Some(ty),
+                    _ => None,
+                })
+                .collect();
+            let map: BTreeMap<String, syn::Type> = alias
+                .params
+                .iter()
+                .cloned()
+                .zip(given.into_iter().cloned())
+                .collect();
+            Substitute(&map).visit_type_mut(&mut target);
+        }
+        Some((target, home, alias.module))
+    }
+}
+
+impl VisitMut for Resolver<'_> {
+    fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+        if self.depth < ALIAS_DEPTH
+            && let Some((target, krate, module)) = self.target(ty)
+        {
+            *ty = target;
+            Resolver {
+                declared: self.declared,
+                krate: &krate,
+                module: &module,
+                depth: self.depth + 1,
+            }
+            .visit_type_mut(ty);
+            return;
+        }
+        syn::visit_mut::visit_type_mut(self, ty);
+    }
+}
+
+/// Replaces each type parameter of an alias with the argument its use
+/// writes.
+struct Substitute<'m>(&'m BTreeMap<String, syn::Type>);
+
+impl VisitMut for Substitute<'_> {
+    fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+        if let syn::Type::Path(path) = ty
+            && path.qself.is_none()
+            && let Some(ident) = path.path.get_ident()
+            && let Some(arg) = self.0.get(&ident.to_string())
+        {
+            *ty = arg.clone();
+            return;
+        }
+        syn::visit_mut::visit_type_mut(self, ty);
+    }
+}
+
+/// Each primitive a type names, as a whole word.
+fn primitives_of(ty: &syn::Type) -> BTreeSet<String> {
+    normalise(&ty.to_token_stream().to_string())
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|word| PRIMITIVES.contains(word))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// How a type holds a `bool`. A `bool` in the signature of a closure or of
+/// a function pointer is no value the type holds: `Box<dyn Fn(bool)>` is a
+/// callable.
+fn shape_of(ty: &syn::Type) -> Shape {
+    let mut bare = ty;
+    while let syn::Type::Paren(syn::TypeParen { elem, .. }) | syn::Type::Group(syn::TypeGroup { elem, .. }) = bare {
+        bare = elem;
+    }
+    if let syn::Type::Path(path) = bare
+        && path.qself.is_none()
+        && path.path.is_ident("bool")
+    {
+        return Shape::Bool;
+    }
+    let mut seek = BoolSeek(Shape::Other);
+    seek.visit_type(ty);
+    seek.0
+}
+
+/// Finds a `bool` a type holds outside every callable signature.
+struct BoolSeek(Shape);
+
+impl<'ast> Visit<'ast> for BoolSeek {
+    fn visit_type_bare_fn(&mut self, _: &'ast syn::TypeBareFn) {}
+
+    fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+        let callable = matches!(segment.arguments, syn::PathArguments::Parenthesized(_))
+            && ["Fn", "FnMut", "FnOnce"]
+                .iter()
+                .any(|name| segment.ident == name);
+        if !callable {
+            syn::visit::visit_path_segment(self, segment);
+        }
+    }
+
+    fn visit_type_path(&mut self, path: &'ast syn::TypePath) {
+        if path.qself.is_none() && path.path.is_ident("bool") {
+            self.0 = Shape::HoldsBool;
+        }
+        syn::visit::visit_type_path(self, path);
+    }
+}
+
 impl Scan {
     /// Checks the claim of a `newtype-inner` line (`ai/ambre-rust-style.md`).
     /// The site sits in a struct with exactly one field. It is that field, a
@@ -544,8 +928,9 @@ impl Scan {
     }
 
     /// Checks the claim of a `trait` line. The site is a signature or a
-    /// constant of an impl of a trait the workspace does not declare. Or
-    /// its type is a closure or a function pointer that names a type of a
+    /// constant of an impl of a trait the workspace does not declare, and
+    /// takes no primitive from a generic argument the impl writes. Or its
+    /// type is a closure or a function pointer that names a type of a
     /// foreign crate, outside the toolchain.
     ///
     /// A key the scan did not find passes: the stale check reports it.
@@ -558,13 +943,29 @@ impl Scan {
             return Ok(());
         };
         if let Some(path) = place.host.as_ref().and_then(|host| host.of_trait.as_ref()) {
-            return if self.declared.owns_trait(path) {
-                Err(format!(
+            if self.declared.owns_trait(path) {
+                return Err(format!(
                     "the trait {} is declared in the workspace, so its signature takes types",
                     path.name
-                ))
-            } else {
+                ));
+            }
+            // `impl Add<u32> for Px`: the trait takes any argument, and the
+            // workspace picked the primitive.
+            let chosen = self.declared.chosen(path, &place.krate, &place.module);
+            let shared: Vec<&str> = place
+                .primitives
+                .intersection(&chosen)
+                .map(String::as_str)
+                .collect();
+            return if shared.is_empty() {
                 Ok(())
+            } else {
+                Err(format!(
+                    "the impl writes {} as a generic argument of {}, so the workspace chose the \
+                     primitive, not the trait: the site takes a type",
+                    shared.join(", "),
+                    path.name
+                ))
             };
         }
         let foreign = place
@@ -603,7 +1004,8 @@ impl Scan {
 
     /// Checks that a field holding a `bool` is private (`ARCH-039`). The
     /// caller skips a `foreign-api` line, the one category that admits a
-    /// field a foreign schema fixes.
+    /// field a foreign schema fixes. The one `bool` of a tuple variant is
+    /// the value its variant names, and passes.
     ///
     /// # Errors
     ///
@@ -612,9 +1014,11 @@ impl Scan {
         let Some(place) = self.places.get(key) else {
             return Ok(());
         };
+        let value = place.role == FieldRole::VariantValue && place.shape == Shape::Bool;
         if place.kind != SiteKind::Field
             || place.shape == Shape::Other
             || place.privacy == Privacy::Private
+            || value
         {
             return Ok(());
         }
@@ -627,9 +1031,11 @@ impl Scan {
 
     /// Checks that no caller writes a `bool` parameter that is not private
     /// as a literal (`ARCH-040`). A call matches a parameter by the name of
-    /// its `fn` and by position. The call sits in the crate of the site, or,
-    /// for a `pub` site, in a crate that depends on it. `listed` holds the
-    /// keys of the allowlist, the other sites a call may match.
+    /// its `fn` and by position; a `view!` prop matches a parameter of a
+    /// component by name. A wrapped `bool` takes `Some(true)`. The call sits
+    /// in the crate of the site, or, for a `pub` site, in a crate that
+    /// reaches it: a dependency, or a crate a dependency re-exports. `listed`
+    /// holds the keys of the allowlist, the other sites a call may match.
     ///
     /// # Errors
     ///
@@ -640,7 +1046,7 @@ impl Scan {
         let Some(place) = self.places.get(key) else {
             return Ok(());
         };
-        if place.shape != Shape::Bool || place.privacy == Privacy::Private {
+        if place.shape == Shape::Other || place.privacy == Privacy::Private {
             return Ok(());
         }
         let hits: Vec<&BoolCall> = self
@@ -655,7 +1061,7 @@ impl Scan {
             .iter()
             .filter(|other| *other != key)
             .filter_map(|other| self.places.get(other))
-            .filter(|other| other.shape == Shape::Bool && other.slot.is_some())
+            .filter(|other| other.shape != Shape::Other && other.slot.is_some())
             .collect();
         let shared = hits
             .iter()
@@ -685,11 +1091,14 @@ impl Scan {
             || (matches!(place.privacy, Privacy::Public | Privacy::TraitImpl)
                 && self
                     .declared
-                    .deps
+                    .reach
                     .get(&call.krate)
-                    .is_some_and(|deps| deps.contains(&place.krate)));
+                    .is_some_and(|reach| reach.contains(&place.krate)));
         let (ArgPosition(at), ArgPosition(param)) = (call.position, slot.position);
         let aligned = match (call.form, slot.receiver) {
+            (CallForm::Prop, _) => {
+                slot.kind == FnKind::Component && call.prop.as_deref() == Some(slot.param.as_str())
+            }
             (CallForm::Method, Receiver::With) | (CallForm::Path, Receiver::Without) => at == param,
             (CallForm::Path, Receiver::With) => at == param + 1,
             (CallForm::Method, Receiver::Without) => false,
@@ -698,23 +1107,68 @@ impl Scan {
     }
 }
 
-/// The dependencies a manifest names, in every table whose name ends with
-/// `dependencies`, and in every `[...dependencies.name]` table.
-fn dependencies(manifest: &str) -> BTreeSet<String> {
-    let mut found = BTreeSet::new();
+/// What a manifest says of its dependencies.
+#[derive(Debug, Default)]
+struct Manifest {
+    /// The package of each dependency, in every table whose name ends with
+    /// `dependencies`, and in every `[...dependencies.name]` table.
+    packages: BTreeSet<String>,
+    /// Each dependency whose key differs from its `package`: the key as a
+    /// path writes it, then the package.
+    renamed: BTreeMap<String, String>,
+}
+
+/// The `package = "..."` of a manifest line, if it writes one.
+fn package_of(line: &str) -> Option<String> {
+    let at = line.find("package")?;
+    let rest = line.get(at + "package".len()..)?.trim_start();
+    let rest = rest.strip_prefix('=')?.trim_start().strip_prefix('"')?;
+    rest.split_once('"').map(|(name, _)| name.to_owned())
+}
+
+/// Reads the dependencies of a manifest, a renamed one under its package.
+fn dependencies(manifest: &str) -> Manifest {
+    let mut found = Manifest::default();
     let mut table = String::new();
+    // The key of a `[...dependencies.name]` table, whose `package` line may
+    // come later.
+    let mut open: Option<String> = None;
+    fn add(found: &mut Manifest, key: &str, package: Option<String>) {
+        let package = package.unwrap_or_else(|| key.to_owned());
+        if package != key {
+            found
+                .renamed
+                .insert(key.replace('-', "_"), package.clone());
+        }
+        found.packages.insert(package);
+    }
     for line in manifest.lines().map(str::trim) {
         if let Some(header) = line
             .strip_prefix('[')
             .and_then(|rest| rest.strip_suffix(']'))
         {
             table = header.trim().to_owned();
-            if let Some((_, name)) = table.split_once("dependencies.") {
-                found.insert(name.trim_matches('"').to_owned());
+            open = table
+                .split_once("dependencies.")
+                .map(|(_, name)| name.trim_matches('"').to_owned());
+            if let Some(key) = &open {
+                add(&mut found, key, None);
             }
             continue;
         }
-        if !table.ends_with("dependencies") || line.starts_with('#') {
+        if line.starts_with('#') {
+            continue;
+        }
+        if let Some(key) = &open {
+            if line.starts_with("package")
+                && let Some(package) = package_of(line)
+            {
+                found.packages.remove(key);
+                add(&mut found, key, Some(package));
+            }
+            continue;
+        }
+        if !table.ends_with("dependencies") {
             continue;
         }
         if let Some((key, _)) = line.split_once('=') {
@@ -725,7 +1179,7 @@ fn dependencies(manifest: &str) -> BTreeSet<String> {
                 .trim()
                 .trim_matches('"');
             if !name.is_empty() {
-                found.insert(name.to_owned());
+                add(&mut found, name, package_of(line));
             }
         }
     }
@@ -774,6 +1228,40 @@ struct LiteralVisit {
     calls: Vec<BoolCall>,
 }
 
+/// The `bool` literal an argument writes: bare, in parentheses, or as the
+/// one argument of `Some`, the literal of an `Option<bool>`.
+fn literal_of(arg: &syn::Expr) -> Option<&syn::LitBool> {
+    match arg {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Bool(literal),
+            ..
+        }) => Some(literal),
+        syn::Expr::Paren(inner) => literal_of(&inner.expr),
+        syn::Expr::Group(inner) => literal_of(&inner.expr),
+        syn::Expr::Call(call) => match (&*call.func, call.args.first()) {
+            (syn::Expr::Path(path), Some(only)) if call.args.len() == 1 && path.path.is_ident("Some") => {
+                literal_of(only)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Whether a token is the punctuation `c`.
+fn is_punct(token: Option<&TokenTree>, c: char) -> bool {
+    matches!(token, Some(TokenTree::Punct(punct)) if punct.as_char() == c)
+}
+
+/// What a macro's tokens are, for the literal scan.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tokens {
+    /// Any macro: a call is a name before a parenthesised group.
+    Plain,
+    /// The body of `view!`, where `<Tag prop=true/>` writes a prop too.
+    View,
+}
+
 impl LiteralVisit {
     fn record<'e>(
         &mut self,
@@ -782,11 +1270,7 @@ impl LiteralVisit {
         args: impl IntoIterator<Item = &'e syn::Expr>,
     ) {
         for (i, arg) in args.into_iter().enumerate() {
-            if let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Bool(literal),
-                ..
-            }) = arg
-            {
+            if let Some(literal) = literal_of(arg) {
                 self.calls.push(BoolCall {
                     krate: self.krate.clone(),
                     file: self.file.clone(),
@@ -794,7 +1278,91 @@ impl LiteralVisit {
                     name: name.to_string(),
                     position: ArgPosition(i),
                     form,
+                    prop: None,
                 });
+            }
+        }
+    }
+
+    /// Reads the tokens of a macro that do not parse as a list of
+    /// expressions, `vec![x; n]` and `tokio::select!` among them. A name
+    /// before a parenthesised group that parses as arguments is a call. In
+    /// `view!`, `prop=true` after a `<Tag` writes the prop of a component.
+    fn tokens(&mut self, stream: TokenStream, mode: Tokens) {
+        let tokens: Vec<TokenTree> = stream.into_iter().collect();
+        let mut tag: Option<String> = None;
+        let mut taken: BTreeSet<usize> = BTreeSet::new();
+        for (i, token) in tokens.iter().enumerate() {
+            if taken.contains(&i) {
+                continue;
+            }
+            let next = tokens.get(i + 1);
+            match token {
+                TokenTree::Ident(name) => {
+                    if let Some(TokenTree::Group(group)) = next
+                        && group.delimiter() == Delimiter::Parenthesis
+                        && let Ok(args) = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                            .parse2(group.stream())
+                    {
+                        let form = if i > 0 && is_punct(tokens.get(i - 1), '.') {
+                            CallForm::Method
+                        } else {
+                            CallForm::Path
+                        };
+                        self.record(form, name, &args);
+                        for arg in &args {
+                            self.visit_expr(arg);
+                        }
+                        taken.insert(i + 1);
+                        continue;
+                    }
+                    let after_colon = i > 0 && is_punct(tokens.get(i - 1), ':');
+                    let value = tokens.get(i + 2);
+                    let literal = match value {
+                        Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Brace => {
+                            let inner: Vec<TokenTree> = group.stream().into_iter().collect();
+                            match inner.as_slice() {
+                                [TokenTree::Ident(word)] if word == "true" || word == "false" => Some(word.clone()),
+                                _ => None,
+                            }
+                        }
+                        Some(TokenTree::Ident(word)) if word == "true" || word == "false" => Some(word.clone()),
+                        _ => None,
+                    };
+                    if mode == Tokens::View
+                        && !after_colon
+                        && is_punct(next, '=')
+                        && !is_punct(tokens.get(i + 2), '=')
+                        && let (Some(component), Some(literal)) = (&tag, literal)
+                    {
+                        self.calls.push(BoolCall {
+                            krate: self.krate.clone(),
+                            file: self.file.clone(),
+                            line: LineNo(literal.span().start().line),
+                            name: component.clone(),
+                            position: ArgPosition(0),
+                            form: CallForm::Prop,
+                            prop: Some(name.to_string()),
+                        });
+                    }
+                }
+                TokenTree::Punct(punct) if punct.as_char() == '<' && mode == Tokens::View => {
+                    // `<a::Comp`: the tag is the last word of the path. A
+                    // `</` closes a tag and opens none.
+                    let mut at = i + 1;
+                    tag = None;
+                    while let Some(TokenTree::Ident(word)) = tokens.get(at) {
+                        tag = Some(word.to_string());
+                        let more = is_punct(tokens.get(at + 1), ':')
+                            && is_punct(tokens.get(at + 2), ':');
+                        if !more {
+                            break;
+                        }
+                        at += 3;
+                    }
+                }
+                TokenTree::Group(group) => self.tokens(group.stream(), mode),
+                _ => {}
             }
         }
     }
@@ -817,14 +1385,26 @@ impl<'ast> Visit<'ast> for LiteralVisit {
 
     // syn leaves a macro's tokens unparsed. The arguments of `assert!`,
     // `assert_eq!`, `vec!` and `format!` parse as expressions, and a test
-    // writes many of its calls there.
+    // writes many of its calls there. Any other body is read as tokens.
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        if let Ok(args) = mac.parse_body_with(
+        let view = mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|last| last.ident == "view");
+        if view {
+            self.tokens(mac.tokens.clone(), Tokens::View);
+            return;
+        }
+        match mac.parse_body_with(
             syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated,
         ) {
-            for arg in &args {
-                self.visit_expr(arg);
+            Ok(args) => {
+                for arg in &args {
+                    self.visit_expr(arg);
+                }
             }
+            Err(_) => self.tokens(mac.tokens.clone(), Tokens::Plain),
         }
     }
 }
@@ -833,6 +1413,7 @@ impl<'ast> Visit<'ast> for LiteralVisit {
 /// crate.
 pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     let mut result = Scan::default();
+    let mut found = Found::default();
     let manifests = tree
         .files(crates)
         .into_iter()
@@ -842,9 +1423,65 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
         let Some(dir) = manifest.parent() else {
             continue;
         };
-        scan_crate(tree, dir, &mut result);
+        scan_crate(tree, dir, &mut result, &mut found);
     }
+    // An alias of one crate may name a type of another, and a call may reach
+    // a crate through a re-export: both are read once every crate is.
+    result.declared.close_reach();
+    let mut keys = Vec::new();
+    let mut resolved = Vec::new();
+    for raw in found.keys {
+        if let Some((key, ty)) = settle(&result.declared, raw) {
+            keys.push(key);
+            resolved.push(ty);
+        }
+    }
+    for (key, place) in dedup(keys) {
+        result.sites.insert(key.clone());
+        result.places.insert(key, place);
+    }
+    result.derefs = refused_derefs(&result.declared, &found.derefs, &resolved);
     result
+}
+
+/// What the walk of every crate gathers before an alias resolves: each
+/// type a site writes, and each dereference impl.
+#[derive(Default)]
+struct Found {
+    keys: Vec<RawKey>,
+    derefs: Vec<DerefImpl>,
+}
+
+/// The key of a site once its type is resolved, with that type. `None` for
+/// a type that holds no primitive, alias or not.
+fn settle(declared: &Declared, raw: RawKey) -> Option<(RawKey, syn::Type)> {
+    let RawKey {
+        head,
+        item,
+        tail,
+        ty,
+        mut place,
+    } = raw;
+    let resolved = declared.resolve(&ty, &place.krate, &place.module);
+    if !holds_primitive(&normalise(&resolved.to_token_stream().to_string())) {
+        return None;
+    }
+    let mut facts = TypeFacts::default();
+    facts.visit_type(&resolved);
+    place.form = facts.form;
+    place.roots = facts.roots;
+    place.shape = shape_of(&resolved);
+    place.primitives = primitives_of(&resolved);
+    Some((
+        RawKey {
+            head,
+            item,
+            tail,
+            ty,
+            place,
+        },
+        resolved,
+    ))
 }
 
 /// The facts a type gives a [`Place`]: its form, and the roots of its
@@ -986,17 +1623,16 @@ struct Pending {
 
 /// Scans one crate from its roots: the library, the binaries and the build
 /// script.
-fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
+fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found) {
     let name = dir
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     result.declared.crates.insert(name.replace('-', "_"));
     if let Some(manifest) = tree.read(&dir.join("Cargo.toml")) {
-        result
-            .declared
-            .deps
-            .insert(name.clone(), dependencies(&manifest));
+        let Manifest { packages, renamed } = dependencies(&manifest);
+        result.declared.deps.insert(name.clone(), packages);
+        result.declared.renamed.insert(name.clone(), renamed);
     }
     let all = tree.files(dir);
     let src = dir.join("src");
@@ -1015,8 +1651,6 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         .collect();
     let mut reached = BTreeSet::new();
     let mut skipped = Skipped::default();
-    let mut keys: Vec<RawKey> = Vec::new();
-    let mut derefs: Vec<DerefImpl> = Vec::new();
     while let Some(next) = pending.pop() {
         let Some((path, text)) = next
             .candidates
@@ -1051,9 +1685,27 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         }
         let relative = path.strip_prefix(dir).unwrap_or(&path);
         let mut visit = FileVisit::new(&name, relative, &path, next.module);
+        visit.uses(&file);
         visit.visit_file(&file);
-        keys.append(&mut visit.keys);
-        derefs.append(&mut visit.derefs);
+        found.keys.append(&mut visit.keys);
+        found.derefs.append(&mut visit.derefs);
+        result
+            .declared
+            .reexports
+            .entry(name.clone())
+            .or_default()
+            .append(&mut visit.reexports);
+        for (alias, declared) in visit.aliases {
+            result.declared.alias_names.insert(alias.clone());
+            result
+                .declared
+                .aliases
+                .entry(name.clone())
+                .or_default()
+                .entry(alias)
+                .or_default()
+                .push(declared);
+        }
         result
             .declared
             .traits
@@ -1074,7 +1726,6 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         skipped.files.append(&mut visit.skipped.files);
         skipped.dirs.append(&mut visit.skipped.dirs);
     }
-    result.derefs.extend(refused_derefs(&name, &derefs));
     // Tests are callers too: every file of the crate is read for literals,
     // whether a `mod` reaches it or not.
     for path in all
@@ -1103,10 +1754,6 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan) {
         };
         visit.visit_file(&file);
         result.literals.append(&mut visit.calls);
-    }
-    for (key, place) in dedup(keys) {
-        result.sites.insert(key.clone());
-        result.places.insert(key, place);
     }
     for path in all.iter().filter(|path| path.starts_with(&src)) {
         let is_rs = path.extension().is_some_and(|ext| ext == "rs");
@@ -1145,6 +1792,8 @@ struct RawKey {
     head: String,
     item: String,
     tail: String,
+    /// The type as the site writes it, before an alias resolves.
+    ty: syn::Type,
     place: Place,
 }
 
@@ -1286,44 +1935,191 @@ fn normalise(tokens: &str) -> String {
     out
 }
 
-/// The primitive a dereference target exposes: the target itself, or the
-/// element of a slice, an array or a `Vec` of it. `None` for any other
-/// target.
-fn primitive_target(target: &str) -> Option<&str> {
-    let inner = target
-        .strip_prefix('[')
-        .and_then(|rest| rest.strip_suffix(']'))
-        .map(|rest| rest.split(';').next().unwrap_or(rest))
-        .or_else(|| {
-            target
-                .strip_prefix("Vec<")
-                .and_then(|rest| rest.strip_suffix('>'))
-        })
-        .unwrap_or(target);
-    PRIMITIVES.contains(&inner).then_some(inner)
+/// What a dereference target hands out (`ARCH-037`). A reference, a slice,
+/// an array at any depth and a [`WRAPPERS`] type expose their element. A
+/// path is read by its last segment, so `std::primitive::u32` is a `u32`.
+/// `generics` holds the type parameters of the impl.
+fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
+    match ty {
+        syn::Type::Paren(syn::TypeParen { elem, .. })
+        | syn::Type::Group(syn::TypeGroup { elem, .. })
+        | syn::Type::Reference(syn::TypeReference { elem, .. })
+        | syn::Type::Slice(syn::TypeSlice { elem, .. })
+        | syn::Type::Array(syn::TypeArray { elem, .. })
+        | syn::Type::Ptr(syn::TypePtr { elem, .. }) => exposure(elem, generics),
+        syn::Type::Tuple(tuple) => {
+            let parts: Vec<Exposure> = tuple
+                .elems
+                .iter()
+                .map(|elem| exposure(elem, generics))
+                .collect();
+            parts
+                .iter()
+                .find(|part| matches!(part, Exposure::Primitive(_)))
+                .or_else(|| parts.iter().find(|part| !matches!(part, Exposure::Opaque)))
+                .cloned()
+                .unwrap_or(Exposure::Opaque)
+        }
+        syn::Type::Path(path) => {
+            if path.qself.is_some() {
+                return Exposure::Unsure("a qualified path".to_owned());
+            }
+            let Some(last) = path.path.segments.last() else {
+                return Exposure::Unsure("an empty path".to_owned());
+            };
+            let name = last.ident.to_string();
+            if name.starts_with(META) {
+                return Exposure::Unsure("a metavariable of a macro_rules! body".to_owned());
+            }
+            if path.path.segments.len() == 1 && generics.contains_key(&name) {
+                return Exposure::Generic(name);
+            }
+            if PRIMITIVES.contains(&name.as_str()) {
+                return Exposure::Primitive(name);
+            }
+            if WRAPPERS.contains(&name.as_str()) {
+                let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+                    return Exposure::Unsure(format!("a {name} with no type argument"));
+                };
+                return args
+                    .args
+                    .iter()
+                    .find_map(|arg| match arg {
+                        syn::GenericArgument::Type(inner) => Some(exposure(inner, generics)),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| Exposure::Unsure(format!("a {name} with no type argument")));
+            }
+            Exposure::Opaque
+        }
+        syn::Type::BareFn(_)
+        | syn::Type::TraitObject(_)
+        | syn::Type::ImplTrait(_)
+        | syn::Type::Never(_) => Exposure::Opaque,
+        _ => Exposure::Unsure("a type the gate cannot read without expansion".to_owned()),
+    }
 }
 
-/// The refusal of each impl of `derefs` whose target is a primitive. A
-/// `DerefMut` takes the target of the `Deref` of the same type in the crate.
-fn refused_derefs(krate: &str, derefs: &[DerefImpl]) -> Vec<String> {
+/// The type arguments written at position `index` of each use of the type
+/// `name`, across the types of every site.
+struct Instances<'n> {
+    name: &'n str,
+    index: usize,
+    args: Vec<syn::Type>,
+}
+
+impl<'ast> Visit<'ast> for Instances<'_> {
+    fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+        if segment.ident == self.name
+            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+            && let Some(arg) = args
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    syn::GenericArgument::Type(ty) => Some(ty),
+                    _ => None,
+                })
+                .nth(self.index)
+        {
+            self.args.push(arg.clone());
+        }
+        syn::visit::visit_path_segment(self, segment);
+    }
+}
+
+/// Why one dereference impl exposes a primitive, or `None` when it does
+/// not. `derefs` holds every impl, where a `DerefMut` finds its `Deref`.
+/// `sites` holds the resolved type of every site, where a generic target
+/// finds its instances.
+fn deref_refusal(
+    declared: &Declared,
+    deref: &DerefImpl,
+    derefs: &[DerefImpl],
+    sites: &[syn::Type],
+) -> Option<String> {
+    let source = match &deref.target {
+        Some(_) => Some(deref.clone()),
+        None if deref.of == DerefTrait::DerefMut => derefs
+            .iter()
+            .find(|other| {
+                other.of == DerefTrait::Deref
+                    && other.krate == deref.krate
+                    && other.self_ty == deref.self_ty
+            })
+            .cloned(),
+        None => None,
+    };
+    let unsure = |why: &str| {
+        format!(
+            "{} | {}: {} of {}: {why}, so the gate cannot show that it exposes no primitive and \
+             fails closed. A newtype never dereferences to its primitive (ARCH-037)",
+            deref.krate, deref.file, deref.of, deref.ty
+        )
+    };
+    let Some(source) = source else {
+        return Some(unsure(match deref.of {
+            DerefTrait::Deref => "the impl writes no Target",
+            DerefTrait::DerefMut => "no Deref of the type is in its crate",
+        }));
+    };
+    let target_text = source.target.clone().unwrap_or_default();
+    let Ok(target) = syn::parse_str::<syn::Type>(&target_text) else {
+        return Some(unsure("the Target does not parse as a type"));
+    };
+    let target = declared.resolve(&target, &source.krate, &source.module);
+    let exposes = |primitive: &str, how: String| {
+        format!(
+            "{} | {}: {} of {} to {target_text}{how} exposes the primitive {primitive}. A newtype \
+             never dereferences to its primitive: name an accessor for the one foreign call that \
+             needs it (ARCH-037)",
+            deref.krate, deref.file, deref.of, deref.ty
+        )
+    };
+    match exposure(&target, &source.bounds) {
+        Exposure::Opaque => None,
+        Exposure::Primitive(primitive) => Some(exposes(&primitive, String::new())),
+        Exposure::Unsure(why) => Some(unsure(&format!("its Target {target_text} is {why}"))),
+        Exposure::Generic(param) => {
+            let bound = source.bounds.get(&param).cloned().unwrap_or_default();
+            if let Some(primitive) = bound
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .find(|word| PRIMITIVES.contains(word))
+            {
+                return Some(exposes(primitive, format!(", whose bound {bound} names {primitive},")));
+            }
+            let Some(index) = source.self_args.iter().position(|arg| *arg == param) else {
+                return Some(unsure(&format!("{param} is no type argument of {}", source.ty)));
+            };
+            let mut instances = Instances {
+                name: &source.self_ty,
+                index,
+                args: Vec::new(),
+            };
+            for ty in sites {
+                instances.visit_type(ty);
+            }
+            instances.args.iter().find_map(|arg| match exposure(arg, &BTreeMap::new()) {
+                Exposure::Primitive(primitive) => Some(exposes(
+                    &primitive,
+                    format!(
+                        ", which a site writes as {}<..{}..>,",
+                        source.self_ty,
+                        normalise(&arg.to_token_stream().to_string())
+                    ),
+                )),
+                _ => None,
+            })
+        }
+    }
+}
+
+/// The refusal of each impl of `derefs` whose target exposes a primitive,
+/// or that the gate cannot read. A `DerefMut` takes the target of the
+/// `Deref` of the same type in its crate.
+fn refused_derefs(declared: &Declared, derefs: &[DerefImpl], sites: &[syn::Type]) -> Vec<String> {
     derefs
         .iter()
-        .filter_map(|deref| {
-            let target = match &deref.target {
-                Some(target) => target.as_str(),
-                None => derefs
-                    .iter()
-                    .filter(|other| other.of == DerefTrait::Deref && other.self_ty == deref.self_ty)
-                    .find_map(|other| other.target.as_deref())?,
-            };
-            let primitive = primitive_target(target)?;
-            Some(format!(
-                "{krate} | {}: {} of {} to {target} exposes the primitive {primitive}. A newtype \
-                 never dereferences to its primitive: name an accessor for the one foreign call \
-                 that needs it (ARCH-037)",
-                deref.file, deref.of, deref.ty
-            ))
-        })
+        .filter_map(|deref| deref_refusal(declared, deref, derefs, sites))
         .collect()
 }
 
@@ -1331,6 +2127,214 @@ fn refused_derefs(krate: &str, derefs: &[DerefImpl]) -> Vec<String> {
 fn holds_primitive(ty: &str) -> bool {
     ty.split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .any(|word| PRIMITIVES.contains(&word))
+}
+
+/// The `use` items of one file: what each `as` renames, and what each
+/// `pub use` re-exports.
+#[derive(Default)]
+struct UseSeek {
+    renames: BTreeMap<String, Vec<String>>,
+    reexports: BTreeSet<String>,
+}
+
+impl UseSeek {
+    /// Walks one use tree under the segments `prefix`.
+    fn tree(&mut self, tree: &syn::UseTree, prefix: &[String], public: Privacy) {
+        match tree {
+            syn::UseTree::Path(path) => {
+                let ident = path.ident.to_string();
+                if prefix.is_empty() && public == Privacy::Public {
+                    self.reexports.insert(ident.clone());
+                }
+                let mut next = prefix.to_vec();
+                next.push(ident);
+                self.tree(&path.tree, &next, public);
+            }
+            syn::UseTree::Rename(rename) => {
+                let ident = rename.ident.to_string();
+                if prefix.is_empty() && public == Privacy::Public {
+                    self.reexports.insert(ident.clone());
+                }
+                let mut full = prefix.to_vec();
+                full.push(ident);
+                self.renames.insert(rename.rename.to_string(), full);
+            }
+            syn::UseTree::Name(name) => {
+                if prefix.is_empty() && public == Privacy::Public {
+                    self.reexports.insert(name.ident.to_string());
+                }
+            }
+            syn::UseTree::Group(group) => {
+                for item in &group.items {
+                    self.tree(item, prefix, public);
+                }
+            }
+            syn::UseTree::Glob(_) => {}
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for UseSeek {
+    fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
+        self.tree(&u.tree, &[], privacy(&u.vis));
+    }
+}
+
+/// The trait of an impl: `path` as written, `segments` once a rename is
+/// undone.
+fn trait_path(path: &syn::Path, segments: &[String]) -> TraitPath {
+    let args = match path.segments.last().map(|last| &last.arguments) {
+        Some(syn::PathArguments::AngleBracketed(args)) => args
+            .args
+            .iter()
+            .filter_map(|arg| match arg {
+                syn::GenericArgument::Type(ty) => {
+                    Some(normalise(&ty.to_token_stream().to_string()))
+                }
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    TraitPath {
+        name: segments.last().cloned().unwrap_or_default(),
+        root: (segments.len() >= 2)
+            .then(|| segments.first().cloned())
+            .flatten(),
+        args,
+    }
+}
+
+/// The dereference impl `i` writes, `None` for an impl of any other trait.
+fn deref_impl(
+    i: &syn::ItemImpl,
+    of_trait: Option<&TraitPath>,
+    krate: &str,
+    module: &str,
+    file: &str,
+) -> Option<DerefImpl> {
+    let of = match of_trait.map(|path| path.name.as_str()) {
+        Some("Deref") => DerefTrait::Deref,
+        Some("DerefMut") => DerefTrait::DerefMut,
+        _ => return None,
+    };
+    let target = i.items.iter().find_map(|item| match item {
+        syn::ImplItem::Type(t) if t.ident == "Target" => {
+            Some(normalise(&t.ty.to_token_stream().to_string()))
+        }
+        _ => None,
+    });
+    let mut bounds: BTreeMap<String, String> = BTreeMap::new();
+    for param in i.generics.type_params() {
+        let text = param
+            .bounds
+            .iter()
+            .map(|bound| normalise(&bound.to_token_stream().to_string()))
+            .collect::<Vec<_>>()
+            .join("+");
+        bounds.insert(param.ident.to_string(), text);
+    }
+    for predicate in i.generics.where_clause.iter().flat_map(|clause| &clause.predicates) {
+        if let syn::WherePredicate::Type(predicate) = predicate
+            && let syn::Type::Path(path) = &predicate.bounded_ty
+            && let Some(ident) = path.path.get_ident()
+            && let Some(bound) = bounds.get_mut(&ident.to_string())
+        {
+            let text = predicate
+                .bounds
+                .iter()
+                .map(|bound| normalise(&bound.to_token_stream().to_string()))
+                .collect::<Vec<_>>()
+                .join("+");
+            bound.push('+');
+            bound.push_str(&text);
+        }
+    }
+    let self_args = match &*i.self_ty {
+        syn::Type::Path(path) => match path.path.segments.last().map(|last| &last.arguments) {
+            Some(syn::PathArguments::AngleBracketed(args)) => args
+                .args
+                .iter()
+                .map(|arg| normalise(&arg.to_token_stream().to_string()))
+                .filter(|arg| !arg.starts_with('\''))
+                .collect(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    };
+    Some(DerefImpl {
+        krate: krate.to_owned(),
+        module: module.to_owned(),
+        file: file.to_owned(),
+        ty: normalise(&i.self_ty.to_token_stream().to_string()),
+        self_ty: type_name(&i.self_ty),
+        self_args,
+        bounds,
+        of,
+        target: (of == DerefTrait::Deref).then_some(target).flatten(),
+    })
+}
+
+/// The body of each rule of a `macro_rules!`, the group after each `=>`,
+/// with its metavariables made words syn parses (see [`unmeta`]).
+fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
+    let tokens: Vec<TokenTree> = tokens.into_iter().collect();
+    tokens
+        .windows(3)
+        .filter_map(|window| match window {
+            [TokenTree::Punct(eq), TokenTree::Punct(gt), TokenTree::Group(body)]
+                if eq.as_char() == '=' && gt.as_char() == '>' =>
+            {
+                Some(unmeta(body.stream()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A `macro_rules!` body as Rust: `$x` reads `__ambre_meta_x`, `$crate`
+/// reads `crate`, and a repetition `$( .. ) sep op` reads its contents once.
+fn unmeta(stream: TokenStream) -> TokenStream {
+    let tokens: Vec<TokenTree> = stream.into_iter().collect();
+    let mut out: Vec<TokenTree> = Vec::new();
+    let mut i = 0;
+    while let Some(token) = tokens.get(i) {
+        i += 1;
+        match token {
+            TokenTree::Punct(dollar) if dollar.as_char() == '$' => match tokens.get(i) {
+                Some(TokenTree::Ident(name)) => {
+                    i += 1;
+                    let word = if name == "crate" {
+                        "crate".to_owned()
+                    } else {
+                        format!("{META}{name}")
+                    };
+                    out.push(TokenTree::Ident(proc_macro2::Ident::new(&word, name.span())));
+                }
+                Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => {
+                    i += 1;
+                    out.extend(unmeta(group.stream()));
+                    // The separator, if any, then the operator.
+                    let op = |token: Option<&TokenTree>| {
+                        matches!(token, Some(TokenTree::Punct(p)) if matches!(p.as_char(), '*' | '+' | '?'))
+                    };
+                    if op(tokens.get(i)) {
+                        i += 1;
+                    } else if op(tokens.get(i + 1)) {
+                        i += 2;
+                    }
+                }
+                _ => out.push(token.clone()),
+            },
+            TokenTree::Group(group) => {
+                let mut inner = Group::new(group.delimiter(), unmeta(group.stream()));
+                inner.set_span(group.span());
+                out.push(TokenTree::Group(inner));
+            }
+            other => out.push(other.clone()),
+        }
+    }
+    out.into_iter().collect()
 }
 
 /// The scan of one file: the sites it declares, and the module files it
@@ -1363,6 +2367,15 @@ struct FileVisit<'a> {
     privacy: Privacy,
     /// The `fn` and position of the next site, when it is a parameter.
     slot: Option<Slot>,
+    /// What the next field is to its owner.
+    role: FieldRole,
+    /// Every `type` alias the file declares, by name.
+    aliases: Vec<(String, Alias)>,
+    /// The first segment of each path a `pub use` of the file re-exports.
+    reexports: BTreeSet<String>,
+    /// Each `use ... as` of the file: the new name, then the segments of
+    /// the path it renames.
+    renames: BTreeMap<String, Vec<String>>,
 }
 
 impl<'a> FileVisit<'a> {
@@ -1399,6 +2412,37 @@ impl<'a> FileVisit<'a> {
             derefs: Vec::new(),
             privacy: Privacy::Private,
             slot: None,
+            role: FieldRole::Member,
+            aliases: Vec::new(),
+            reexports: BTreeSet::new(),
+            renames: BTreeMap::new(),
+        }
+    }
+
+    /// Reads the `use` items of a file, inline modules included, before the
+    /// visit: a rename applies above the `use` that writes it too.
+    fn uses(&mut self, file: &syn::File) {
+        let mut seek = UseSeek::default();
+        seek.visit_file(file);
+        self.renames = seek.renames;
+        self.reexports = seek.reexports;
+    }
+
+    /// The segments of a trait path once a `use ... as` rename of the file
+    /// is undone: `use ambre_core::Tree as T` makes `T` read
+    /// `ambre_core::Tree`.
+    fn unrename(&self, path: &syn::Path) -> Vec<String> {
+        let segments: Vec<String> = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect();
+        match segments.split_first() {
+            Some((first, rest)) => match self.renames.get(first) {
+                Some(full) => full.iter().chain(rest).cloned().collect(),
+                None => segments,
+            },
+            None => segments,
         }
     }
 
@@ -1410,35 +2454,24 @@ impl<'a> FileVisit<'a> {
         }
     }
 
+    /// Records the type of a site. Whether it holds a primitive is read
+    /// once every alias of the workspace is known, after the walk.
     fn emit(&mut self, item: String, kind: SiteKind, ty: &syn::Type) {
         let text = normalise(&ty.to_token_stream().to_string());
-        if !holds_primitive(&text) {
-            return;
-        }
-        let mut facts = TypeFacts::default();
-        facts.visit_type(ty);
         let place = Place {
             krate: self.krate.to_owned(),
             module: self.module.join("::"),
             kind,
             owner: self.owner.clone(),
             host: self.host.clone(),
-            form: facts.form,
-            roots: facts.roots,
+            form: TypeForm::Value,
+            roots: BTreeSet::new(),
             privacy: self.privacy,
-            shape: if text == "bool" {
-                Shape::Bool
-            } else if text
-                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .any(|word| word == "bool")
-            {
-                Shape::HoldsBool
-            } else {
-                Shape::Other
-            },
+            shape: Shape::Other,
+            primitives: BTreeSet::new(),
             slot: self.slot.clone(),
+            role: self.role,
         };
-        let ty = text;
         let sep = SiteKey::SEPARATOR;
         self.keys.push(RawKey {
             head: format!(
@@ -1448,12 +2481,13 @@ impl<'a> FileVisit<'a> {
                 self.module.join("::")
             ),
             item,
-            tail: format!("{}{sep}{ty}", kind.as_str()),
+            tail: format!("{}{sep}{text}", kind.as_str()),
+            ty: ty.clone(),
             place,
         });
     }
 
-    fn signature(&mut self, sig: &syn::Signature, privacy: Privacy) {
+    fn signature(&mut self, sig: &syn::Signature, privacy: Privacy, kind: FnKind) {
         let name = sig.ident.to_string();
         let receiver = if sig.receiver().is_some() {
             Receiver::With
@@ -1466,15 +2500,17 @@ impl<'a> FileVisit<'a> {
             syn::FnArg::Receiver(_) => None,
         });
         for (i, arg) in typed.enumerate() {
-            self.slot = Some(Slot {
-                name: name.clone(),
-                position: ArgPosition(i),
-                receiver,
-            });
             let param = match &*arg.pat {
                 syn::Pat::Ident(ident) => ident.ident.to_string(),
                 other => normalise(&other.to_token_stream().to_string()),
             };
+            self.slot = Some(Slot {
+                name: name.clone(),
+                position: ArgPosition(i),
+                receiver,
+                param: param.clone(),
+                kind,
+            });
             self.emit(
                 self.item(&format!("{name}({param})")),
                 SiteKind::Param,
@@ -1600,7 +2636,18 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if test_only(&f.attrs) {
             return;
         }
-        self.signature(&f.sig, privacy(&f.vis));
+        let component = f.attrs.iter().any(|attr| {
+            attr.path()
+                .segments
+                .last()
+                .is_some_and(|last| last.ident == "component")
+        });
+        let kind = if component {
+            FnKind::Component
+        } else {
+            FnKind::Plain
+        };
+        self.signature(&f.sig, privacy(&f.vis), kind);
         self.body(f.sig.ident.to_string(), &f.block);
     }
 
@@ -1610,40 +2657,19 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         }
         let ty = normalise(&i.self_ty.to_token_stream().to_string());
         let self_ty = type_name(&i.self_ty);
-        let of_trait = i.trait_.as_ref().map(|(_, path, _)| TraitPath {
-            name: path
-                .segments
-                .last()
-                .map_or_else(String::new, |last| last.ident.to_string()),
-            root: (path.segments.len() >= 2)
-                .then(|| path.segments.first().map(|first| first.ident.to_string()))
-                .flatten(),
-        });
+        let of_trait = i
+            .trait_
+            .as_ref()
+            .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
         let host = |receiver: Receiver, output: Output| Host {
             self_ty: self_ty.clone(),
             of_trait: of_trait.clone(),
             receiver,
             output,
         };
-        let deref = match of_trait.as_ref().map(|path| path.name.as_str()) {
-            Some("Deref") => Some(DerefTrait::Deref),
-            Some("DerefMut") => Some(DerefTrait::DerefMut),
-            _ => None,
-        };
-        if let Some(of) = deref {
-            let target = i.items.iter().find_map(|item| match item {
-                syn::ImplItem::Type(t) if t.ident == "Target" => {
-                    Some(normalise(&t.ty.to_token_stream().to_string()))
-                }
-                _ => None,
-            });
-            self.derefs.push(DerefImpl {
-                file: self.file.clone(),
-                ty: ty.clone(),
-                self_ty: self_ty.clone(),
-                of,
-                target: (of == DerefTrait::Deref).then_some(target).flatten(),
-            });
+        let module = self.module.join("::");
+        if let Some(deref) = deref_impl(i, of_trait.as_ref(), self.krate, &module, &self.file) {
+            self.derefs.push(deref);
         }
         let label = match &i.trait_ {
             Some((_, path, _)) => format!(
@@ -1667,7 +2693,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     } else {
                         privacy(&f.vis)
                     };
-                    self.signature(&f.sig, reach);
+                    self.signature(&f.sig, reach, FnKind::Plain);
                     self.host = None;
                     self.body(f.sig.ident.to_string(), &f.block);
                 }
@@ -1698,7 +2724,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 if test_only(&f.attrs) {
                     continue;
                 }
-                self.signature(&f.sig, privacy(&t.vis));
+                self.signature(&f.sig, privacy(&t.vis), FnKind::Plain);
                 if let Some(block) = &f.default {
                     self.body(f.sig.ident.to_string(), block);
                 }
@@ -1753,12 +2779,19 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             .iter()
             .filter(|variant| !test_only(&variant.attrs))
         {
+            self.role = match &variant.fields {
+                syn::Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                    FieldRole::VariantValue
+                }
+                _ => FieldRole::Member,
+            };
             self.fields(
                 &format!("{}::{}", e.ident, variant.ident),
                 &variant.fields,
                 privacy(&e.vis),
                 derived(&e.attrs),
             );
+            self.role = FieldRole::Member;
         }
     }
 
@@ -1780,6 +2813,23 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if !test_only(&t.attrs) {
             self.privacy = privacy(&t.vis);
             self.emit(self.item(&t.ident.to_string()), SiteKind::Alias, &t.ty);
+            // An alias nested in a `fn` body is out of reach of the module.
+            if self.scope.is_empty() {
+                let params = t
+                    .generics
+                    .type_params()
+                    .map(|param| param.ident.to_string())
+                    .collect();
+                self.aliases.push((
+                    t.ident.to_string(),
+                    Alias {
+                        module: self.module.join("::"),
+                        privacy: self.privacy,
+                        params,
+                        target: normalise(&t.ty.to_token_stream().to_string()),
+                    },
+                ));
+            }
         }
     }
 
@@ -1800,6 +2850,29 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if defines {
             for name in macro_types(&m.mac) {
                 self.declare(name, Decl::Newtype);
+            }
+        }
+        if m.mac.path.is_ident("macro_rules") {
+            let module = self.module.join("::");
+            for body in rule_bodies(m.mac.tokens.clone()) {
+                // A body that is no list of items, an expression for one,
+                // does not parse and holds no impl.
+                let Ok(file) = syn::parse2::<syn::File>(body) else {
+                    continue;
+                };
+                for item in &file.items {
+                    if let syn::Item::Impl(i) = item {
+                        let of_trait = i
+                            .trait_
+                            .as_ref()
+                            .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
+                        if let Some(deref) =
+                            deref_impl(i, of_trait.as_ref(), self.krate, &module, &self.file)
+                        {
+                            self.derefs.push(deref);
+                        }
+                    }
+                }
             }
         }
     }

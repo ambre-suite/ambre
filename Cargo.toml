@@ -81,7 +81,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 # The primitive gate (`crates/ambre-primitives`, `ambre-spec-testing.md`
 # section 2): a Rust parser, so the gate reads the items rustc reads. Host only.
-syn   = { version = "2.0.117", default-features = false, features = ["full", "visit", "parsing", "printing"] }
+syn   = { version = "2.0.117", default-features = false, features = ["full", "visit", "visit-mut", "clone-impls", "parsing", "printing"] }
 quote = { version = "1.0.45", default-features = false }
 # Already under syn and quote. Its `span-locations` feature gives the line of a
 # token, which a refusal of a bool literal names.

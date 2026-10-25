@@ -133,6 +133,8 @@ impl Tree for OneFile {
     }
 }
 
+// `From<u32>` is a foreign trait, but the impl chose the `u32`: the site
+// takes a type (`ARCH-036`).
 #[test]
 fn a_line_whose_site_refutes_its_category_is_reported() {
     const FIELD: &str = "demo | src/lib.rs | crate | Rect.w | field | u32";
@@ -159,7 +161,10 @@ fn a_line_whose_site_refutes_its_category_is_reported() {
             .iter()
             .map(|line| (line.key.clone(), line.category))
             .collect::<Vec<_>>(),
-        [(key(FIELD), Category::NewtypeInner)]
+        [
+            (key(FIELD), Category::NewtypeInner),
+            (key(FROM), Category::Trait)
+        ]
     );
 }
 
@@ -206,4 +211,18 @@ fn a_privacy_refusal_holds_whatever_the_category() {
             (key(COUNT), Defect::LocalSite),
         ]
     );
+}
+
+#[test]
+fn a_trait_line_takes_no_literal_refusal() {
+    const FOREIGN: &str = "demo | src/lib.rs | crate | <Px as gloo::Handler>::call(on) | param | bool";
+    const OWN: &str = "demo | src/lib.rs | crate | Px::call(on) | param | bool";
+    let found = refusals(
+        "pub struct Px;\n\
+         impl gloo::Handler for Px { fn call(&self, on: bool) {} }\n\
+         impl Px { pub fn call(&self, on: bool) {} }\n\
+         fn run(p: Px) { p.call(true); }",
+        &[(FOREIGN, "trait"), (OWN, "generic")],
+    );
+    assert_eq!(found, [(key(OWN), Defect::BoolLiteral)]);
 }
