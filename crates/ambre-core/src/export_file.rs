@@ -51,17 +51,18 @@ pub enum ExportFilenameError {
     /// The name holds a control character.
     #[error("an export file name holds a control character")]
     ControlCharacter,
-    /// The name holds an invisible format character, such as a bidirectional
-    /// override that shows `exe.pdf` for a name that ends in `.exe`.
-    #[error("an export file name holds a format character")]
-    FormatCharacter,
+    /// The name holds a deceptive character: a bidirectional control, such
+    /// as an override that shows `exe.pdf` for a name that ends in `.exe`, or
+    /// an invisible character with no linguistic role.
+    #[error("an export file name holds a deceptive character")]
+    DeceptiveCharacter,
     /// The name is longer than [`ExportFilename::MAX_SIZE`].
     #[error("an export file name is too long")]
     TooLong,
 }
 
 /// The name an export file is saved under. It is never empty, never `.` or
-/// `..`, and holds no path separator, no control character and no format
+/// `..`, and holds no path separator, no control character and no deceptive
 /// character (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
 /// (`DOCFILE-020`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -93,8 +94,8 @@ impl ExportFilename {
         if text.chars().any(char::is_control) {
             return Err(ExportFilenameError::ControlCharacter);
         }
-        if text.chars().any(is_format_character) {
-            return Err(ExportFilenameError::FormatCharacter);
+        if text.chars().any(is_deceptive_character) {
+            return Err(ExportFilenameError::DeceptiveCharacter);
         }
         if ByteSize::of_len(text.len()) > Self::MAX_SIZE {
             return Err(ExportFilenameError::TooLong);
@@ -175,7 +176,7 @@ impl std::fmt::Display for ExportFilename {
 /// on a character boundary to fit `room`.
 ///
 /// The refused set is the Windows one, which holds the POSIX one: every
-/// control character, both separators, and `: * ? " < > |`. Every format
+/// control character, both separators, and `: * ? " < > |`. Every deceptive
 /// character goes too. A stem of dots alone is dropped, so `..` never
 /// reaches a name.
 fn clean_stem(text: &str, room: ByteSize) -> String {
@@ -183,7 +184,7 @@ fn clean_stem(text: &str, room: ByteSize) -> String {
         .chars()
         .filter(|&c| {
             !c.is_control()
-                && !is_format_character(c)
+                && !is_deceptive_character(c)
                 && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
         })
         .collect();
@@ -202,36 +203,32 @@ fn clean_stem(text: &str, room: ByteSize) -> String {
     }
 }
 
-/// Whether `c` is a format character, the Unicode general category `Cf`.
+/// Whether `c` deceives the eye in a name: a bidirectional control, or an
+/// invisible character with no linguistic role.
 ///
-/// A format character is invisible, yet it changes how a name shows: the
-/// right-to-left override U+202E shows `facture<U+202E>fdp.exe` as
-/// `facture` then `exe.pdf`. The standard library has no predicate for the
-/// category, so the ranges below list the `Cf` set of Unicode 15.1 by hand.
-const fn is_format_character(c: char) -> bool {
+/// A bidirectional control reorders what a name shows: the right-to-left
+/// override U+202E shows `facture<U+202E>fdp.exe` as `facture` then
+/// `exe.pdf`. An invisible character, such as the zero-width space, makes two
+/// different names look the same. Other format characters stay. The
+/// zero-width non-joiner U+200C spells Persian and Indic words, the
+/// zero-width joiner U+200D joins emoji sequences, and the tag characters
+/// U+E0020 to U+E007F spell subdivision flags.
+const fn is_deceptive_character(c: char) -> bool {
     matches!(
         c,
-        '\u{ad}'
-            | '\u{600}'..='\u{605}'
-            | '\u{61c}'
-            | '\u{6dd}'
-            | '\u{70f}'
-            | '\u{890}'..='\u{891}'
-            | '\u{8e2}'
-            | '\u{180e}'
-            | '\u{200b}'..='\u{200f}'
+        // The bidirectional controls: the Arabic letter mark, the two
+        // direction marks, the embeddings and overrides, and the isolates.
+        '\u{61c}'
+            | '\u{200e}'..='\u{200f}'
             | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+            // The invisible characters with no linguistic role: the soft
+            // hyphen, the zero-width space, the word joiner, the invisible
+            // operators and the byte order mark.
+            | '\u{ad}'
+            | '\u{200b}'
             | '\u{2060}'..='\u{2064}'
-            | '\u{2066}'..='\u{206f}'
             | '\u{feff}'
-            | '\u{fff9}'..='\u{fffb}'
-            | '\u{110bd}'
-            | '\u{110cd}'
-            | '\u{13430}'..='\u{1343f}'
-            | '\u{1bca0}'..='\u{1bca3}'
-            | '\u{1d173}'..='\u{1d17a}'
-            | '\u{e0001}'
-            | '\u{e0020}'..='\u{e007f}'
     )
 }
 
@@ -342,49 +339,92 @@ mod tests {
         }
     }
 
-    /// The format characters a spoofed name hides: the bidirectional
-    /// overrides, embeddings and isolates, the zero-width characters, the
-    /// direction marks and the byte order mark.
-    const SPOOFING_CHARACTERS: [char; 12] = [
-        '\u{202e}', '\u{202d}', '\u{200b}', '\u{200c}', '\u{200d}', '\u{200e}', '\u{200f}',
-        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{feff}',
+    /// Every deceptive character: the Arabic letter mark, the direction
+    /// marks, the embeddings and overrides, the isolates, the soft hyphen,
+    /// the zero-width space, the word joiner, the invisible operators and the
+    /// byte order mark.
+    const DECEPTIVE_CHARACTERS: [char; 20] = [
+        '\u{61c}', '\u{200e}', '\u{200f}', '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}',
+        '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{ad}', '\u{200b}',
+        '\u{2060}', '\u{2061}', '\u{2062}', '\u{2063}', '\u{2064}', '\u{feff}',
     ];
 
-    /// `DOCFILE-019`: a format character is refused, so a right-to-left
+    /// Texts whose format characters carry meaning: a Persian word with a
+    /// zero-width non-joiner, an emoji family with zero-width joiners, and
+    /// the flag of England with its tag characters.
+    const MEANINGFUL_TEXTS: [&str; 3] = [
+        "\u{645}\u{6cc}\u{200c}\u{62e}\u{648}\u{627}\u{647}\u{645}",
+        "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}",
+        "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
+    ];
+
+    /// `DOCFILE-019`: a deceptive character is refused, so a right-to-left
     /// override never shows `exe.pdf` for a name ending in `.exe`.
     #[test]
-    fn a_format_character_is_refused() {
-        for c in SPOOFING_CHARACTERS {
+    fn a_deceptive_character_is_refused() {
+        for c in DECEPTIVE_CHARACTERS {
             let text = format!("facture{c}fdp.exe");
             assert_eq!(
                 ExportFilename::new(&text),
-                Err(ExportFilenameError::FormatCharacter),
+                Err(ExportFilenameError::DeceptiveCharacter),
                 "{text:?}"
             );
         }
     }
 
-    /// `DOCFILE-019`: a title loses its format characters.
+    /// `DOCFILE-019`: a joiner or a tag character is no deceptive character,
+    /// so the checked constructor takes a name that holds one as written.
     #[test]
-    fn a_title_loses_its_format_characters() {
-        for c in SPOOFING_CHARACTERS {
+    fn a_joiner_or_a_tag_is_taken_as_written() {
+        for text in MEANINGFUL_TEXTS {
+            let text = format!("{text}.md");
+            let name = ExportFilename::new(&text).expect("a valid name");
+            assert_eq!(name.as_str(), text);
+        }
+    }
+
+    /// `DOCFILE-019`: a title loses its deceptive characters.
+    #[test]
+    fn a_title_loses_its_deceptive_characters() {
+        for c in DECEPTIVE_CHARACTERS {
             let title = format!("{c}plan{c}Q3{c}");
             let name = ExportFilename::from_title(&title, "x", ExportExtension::Markdown);
             assert_eq!(name.as_str(), "planQ3.md", "{title:?}");
         }
     }
 
-    /// `DOCFILE-019`: a received name loses its format characters, so the
+    /// `DOCFILE-019`: a title keeps its joiners and its tag characters, so a
+    /// Persian word, an emoji family and a flag survive in the name.
+    #[test]
+    fn a_title_keeps_its_joiners_and_tags() {
+        for title in MEANINGFUL_TEXTS {
+            let name = ExportFilename::from_title(title, "x", ExportExtension::Markdown);
+            assert_eq!(name.as_str(), format!("{title}.md"), "{title:?}");
+        }
+    }
+
+    /// `DOCFILE-019`: a received name loses its deceptive characters, so the
     /// extension it shows is the extension it has.
     #[test]
-    fn a_received_name_loses_its_format_characters() {
-        for c in SPOOFING_CHARACTERS {
+    fn a_received_name_loses_its_deceptive_characters() {
+        for c in DECEPTIVE_CHARACTERS {
             let sent = format!("facture{c}fdp.exe");
             let name = ExportFilename::from_received(&sent, "attachment");
             assert_eq!(name.as_str(), "facturefdp.exe", "sent as {sent:?}");
             let sent = format!("{c}");
             let name = ExportFilename::from_received(&sent, "attachment");
             assert_eq!(name.as_str(), "attachment", "sent as {sent:?}");
+        }
+    }
+
+    /// `DOCFILE-019`: a received name keeps its joiners and its tag
+    /// characters, with its extension.
+    #[test]
+    fn a_received_name_keeps_its_joiners_and_tags() {
+        for text in MEANINGFUL_TEXTS {
+            let sent = format!("{text}.pdf");
+            let name = ExportFilename::from_received(&sent, "attachment");
+            assert_eq!(name.as_str(), sent, "sent as {sent:?}");
         }
     }
 

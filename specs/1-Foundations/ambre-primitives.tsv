@@ -3963,8 +3963,8 @@ ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_rece
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::from_received(fallback) | param | &'static str	free-text	a stem the suite names itself
 ambre-core | src/export_file.rs | crate::export_file | is_kept_extension(extension) | param | &str	free-text	the extension a received name ends with
 ambre-core | src/export_file.rs | crate::export_file | is_kept_extension() | ret | bool	generic	predicate
-ambre-core | src/export_file.rs | crate::export_file | is_format_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
-ambre-core | src/export_file.rs | crate::export_file | is_format_character() | ret | bool	generic	predicate
+ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character(c) | param | char	free-text	a character of the title or the received name the stem is cleaned from
+ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character() | ret | bool	generic	predicate
 ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | FileBytes.0 | field | Vec<u8>	newtype-inner	the file bytes the newtype wraps
