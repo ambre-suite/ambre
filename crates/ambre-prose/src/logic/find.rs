@@ -19,10 +19,10 @@ use crate::events::{
 use super::ProseState;
 
 /// The open search: the query, what it found, and the match the walk is on.
-/// No query is the emptied field, which finds nothing (`FIND-005`).
-#[derive(Debug, Default)]
+/// An emptied field opens none: it closes the open one (`FIND-005`).
+#[derive(Debug)]
 pub(super) struct FindSession {
-    query: Option<FindQuery>,
+    query: FindQuery,
     matches: Vec<FindMatch>,
     current: Option<MatchIndex>,
 }
@@ -77,10 +77,7 @@ pub(crate) fn match_offsets(hay: &str, query: &FindQuery) -> Vec<DocSpan> {
 impl ProseState {
     /// Every match in the document, in block order: body blocks only
     /// (`PROSE-FEAT-033`, `PROSE-FEAT-150`).
-    pub(super) fn find_all(&self, query: Option<&FindQuery>) -> Vec<FindMatch> {
-        let Some(query) = query else {
-            return Vec::new();
-        };
+    pub(super) fn find_all(&self, query: &FindQuery) -> Vec<FindMatch> {
         let tree = doc::blocks(&self.doc);
         self.document_order()
             .into_iter()
@@ -98,15 +95,17 @@ impl ProseState {
     }
 
     /// Open a search. It reads the document and writes nothing
-    /// (`PROSE-FEAT-151`).
+    /// (`PROSE-FEAT-151`). No query is the emptied field: it closes the open
+    /// search and clears the highlight, so a step after it answers
+    /// [`FindRefusal::NoSearch`] (`FIND-005`).
     pub(super) fn find_start(&mut self, query: Option<FindQuery>) -> ProseOutcome {
-        if query
-            .as_ref()
-            .is_some_and(|q| q.options.pattern == crate::events::PatternKind::Regex)
-        {
+        let Some(query) = query else {
+            return self.find_close();
+        };
+        if query.options.pattern == crate::events::PatternKind::Regex {
             return ProseOutcome::refused(ProseRefusal::FindRefused(FindRefusal::RegexUnbuilt));
         }
-        let matches = self.find_all(query.as_ref());
+        let matches = self.find_all(&query);
         let current = (!matches.is_empty()).then_some(MatchIndex::ZERO);
         self.find = Some(FindSession {
             query,
@@ -156,7 +155,7 @@ impl ProseState {
         // A collaborator's change may have moved or removed the match since
         // the view saw it. A range no fresh search reports is not replaced:
         // the view gets the fresh list instead.
-        if !self.find_all(session.query.as_ref()).contains(&hit) {
+        if !self.find_all(&session.query).contains(&hit) {
             return ProseOutcome::display_only(self.refresh_matches(at));
         }
         if let Err(outcome) = self.replace_range(&tree_id(hit.block_id), hit.range, replacement) {
@@ -175,7 +174,7 @@ impl ProseState {
         };
         // Search again first: the list the view saw may predate a remote
         // change, and a stale range would replace the wrong characters.
-        let matches = self.find_all(session.query.as_ref());
+        let matches = self.find_all(&session.query);
         if matches.is_empty() {
             return ProseOutcome::display_only(self.refresh_matches(None));
         }
@@ -220,7 +219,7 @@ impl ProseState {
         let Some(query) = self.find.as_ref().map(|s| s.query.clone()) else {
             return Vec::new();
         };
-        let matches = self.find_all(query.as_ref());
+        let matches = self.find_all(&query);
         let count = MatchCount::from_len(matches.len());
         let current = match keep {
             Some(at) if at < count.as_end() => Some(at),
@@ -251,7 +250,7 @@ impl ProseState {
     /// The open query, for a test.
     #[cfg(test)]
     fn find_query(&self) -> Option<&FindQuery> {
-        self.find.as_ref().and_then(|s| s.query.as_ref())
+        self.find.as_ref().map(|s| &s.query)
     }
 }
 
@@ -461,6 +460,42 @@ mod tests {
         let cleared = state.handle_command(ProseCommand::FindStart { query: query("") });
         assert_eq!(results(&cleared), (Vec::new(), None));
         assert!(cleared.update.is_none());
+    }
+
+    /// An emptied field closes the search, as in Trame and Toile: a step or a
+    /// replace after it answers that no search is open (`FIND-005`).
+    #[test]
+    fn an_emptied_field_closes_the_search() {
+        let (mut state, _) = document(&["needle"]);
+        state.handle_command(ProseCommand::FindStart {
+            query: query("needle"),
+        });
+        let cleared = state.handle_command(ProseCommand::FindStart { query: None });
+        assert_eq!(results(&cleared), (Vec::new(), None));
+        assert!(cleared.update.is_none());
+        let after = [
+            ProseCommand::FindNext,
+            ProseCommand::FindPrev,
+            ProseCommand::ReplaceOne {
+                replacement: "pin".to_owned(),
+            },
+            ProseCommand::ReplaceAll {
+                replacement: "pin".to_owned(),
+            },
+        ];
+        for command in after {
+            let label = format!("{command:?}");
+            let outcome = state.handle_command(command);
+            assert!(
+                matches!(
+                    outcome.display.as_slice(),
+                    [ProseEvent::Error(e)]
+                        if e.reason == ProseRefusal::FindRefused(FindRefusal::NoSearch)
+                ),
+                "{label}: {:?}",
+                outcome.display
+            );
+        }
     }
 
     /// A fresh search starts at the first hit. A resume point an edit took out

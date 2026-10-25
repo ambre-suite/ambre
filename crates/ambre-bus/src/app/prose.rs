@@ -1549,8 +1549,8 @@ pub enum ProseCommand {
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     /// Open a search, or replace the one open. It writes nothing
-    /// (`PROSE-FEAT-151`). `None` is the emptied field: the search finds
-    /// nothing and the highlight clears (`FIND-005`).
+    /// (`PROSE-FEAT-151`). `None` is the emptied field: it closes the open
+    /// search and the highlight clears (`FIND-005`).
     FindStart {
         query: Option<FindQuery>,
     },

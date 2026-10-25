@@ -120,8 +120,11 @@ pub struct FindMatch { pub block_id: BlockId, pub range: DocSpan }
 // ambre-prose/src/logic/find.rs
 impl ProseState {
     /// Every match in the document, in block order (`PROSE-FEAT-033`, `PROSE-FEAT-034`).
-    /// No query, the emptied field, finds nothing (`FIND-005`).
-    fn find_all(&self, query: Option<&FindQuery>) -> Vec<FindMatch>;
+    fn find_all(&self, query: &FindQuery) -> Vec<FindMatch>;
+
+    /// Open a search. No query, the emptied field, closes the open one, so a
+    /// step after it is refused as `FindRefusal::NoSearch` (`FIND-005`).
+    fn find_start(&mut self, query: Option<FindQuery>) -> ProseOutcome;
 
     /// The replacements, from the end of the document backwards, in one commit
     /// (`PROSE-FEAT-036`).
