@@ -133,8 +133,9 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
     let private = refuted.len() - shapes;
     if private > 0 {
         eprintln!(
-            "primitives: {private} lines name a site that is not private, where the rule wants a \
-             private one. Type the value: no category admits it."
+            "primitives: {private} refusals name a site that is not private, where the rule wants \
+             a private one. Type the value: only a bool field that mirrors a foreign schema may \
+             move to foreign-api."
         );
     }
     for deref in &scan.derefs {

@@ -451,11 +451,21 @@ fn a_phantom_marker_is_no_field_of_a_newtype() {
     assert!(scan.newtype_inner(&site(&scan, "Size.width")).is_err());
 }
 
-/// The tree of `demo`, plus a crate `user` whose `src/lib.rs` reads `user`.
+/// The tree of `demo`, plus a crate `user` that depends on `demo` and whose
+/// `src/lib.rs` reads `user`, plus a crate `other` that declares an `enum Row`
+/// which `user` cannot reach.
 fn with_user(demo_lib: &str, user: &str) -> Scan {
     let mut tree = demo(&[("src/lib.rs", demo_lib)]);
+    tree.0.insert(
+        PathBuf::from(CRATES).join("user/Cargo.toml"),
+        "[dependencies]\ndemo = { path = \"../demo\" }\n".to_owned(),
+    );
     tree.0
-        .insert(PathBuf::from(CRATES).join("user/Cargo.toml"), String::new());
+        .insert(PathBuf::from(CRATES).join("other/Cargo.toml"), String::new());
+    tree.0.insert(
+        PathBuf::from(CRATES).join("other/src/lib.rs"),
+        "pub enum Row { A, B }".to_owned(),
+    );
     tree.0
         .insert(PathBuf::from(CRATES).join("user/src/lib.rs"), user.to_owned());
     scan(&tree, Path::new(CRATES))

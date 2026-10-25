@@ -444,17 +444,21 @@ impl Declared {
         let (krate, module) = (&site.krate, &site.module);
         let found = self.types.get(krate).and_then(|names| names.get(name));
         if found.is_none() && reach == Reach::TraitCrate {
+            // The newtype comes from a crate this one depends on: a type of
+            // the same name in any other crate is not the one the impl names.
+            let deps = self.deps.get(krate);
             let elsewhere: Vec<Decl> = self
                 .types
                 .iter()
                 .filter(|(other, _)| *other != krate)
+                .filter(|(other, _)| deps.is_some_and(|deps| deps.contains(*other)))
                 .filter_map(|(_, names)| names.get(name))
                 .flatten()
                 .map(|declaration| declaration.decl)
                 .collect();
             return match elsewhere.as_slice() {
                 [] => Err(format!(
-                    "{name} is no type of the workspace: an alias or a foreign type"
+                    "{name} is no type of a crate {krate} depends on: an alias or a foreign type"
                 )),
                 decls if decls.iter().all(|decl| *decl == Decl::Newtype) => Ok(()),
                 _ => Err(format!(
