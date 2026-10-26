@@ -251,3 +251,90 @@ fn a_dependency_that_renames_zeroize_is_refused() {
         found[0]
     );
 }
+
+#[test]
+fn the_relay_reads_a_secret_in_its_secrets_module_alone() {
+    let read = "pub fn refresh_key(t: &RefreshToken) -> String { t.secret().expose().clone() }";
+    assert_eq!(
+        refused("ambre-server", "src/secrets/token.rs", read),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-server", "src/secrets/mod.rs", read),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-server", "src/redis_ops.rs", read),
+        ["crates/ambre-server/src/redis_ops.rs:1: `expose`"]
+    );
+    // The admission is the relay's alone, and it reads no wipe.
+    assert_eq!(
+        refused("ambre-sync", "src/secrets/token.rs", read),
+        ["crates/ambre-sync/src/secrets/token.rs:1: `expose`"]
+    );
+    assert_eq!(
+        refused(
+            "ambre-server",
+            "src/secrets/oidc.rs",
+            "use zeroize::Zeroizing;"
+        ),
+        [
+            "crates/ambre-server/src/secrets/oidc.rs:1: `zeroize`",
+            "crates/ambre-server/src/secrets/oidc.rs:1: `Zeroizing`",
+        ]
+    );
+}
+
+#[test]
+fn a_sink_is_named_in_the_file_that_makes_its_call_alone() {
+    let call = "fn send(t: &SecretToken, b: B) -> B { t.present_bearer(|v| b.header(v)) }";
+    assert_eq!(
+        refused("ambre-sync", "src/http.rs", call),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-sync", "src/websocket.rs", call),
+        ["crates/ambre-sync/src/websocket.rs:1: `present_bearer`"]
+    );
+    let state = "fn keep(s: &OidcState) -> String { s.present_state(str::to_owned) }";
+    assert_eq!(
+        refused("ambre-app", "src/signin.rs", state),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-app", "src/lib.rs", state),
+        ["crates/ambre-app/src/lib.rs:1: `present_state`"]
+    );
+    assert_eq!(
+        refused(
+            "ambre-server",
+            "src/secrets/mod.rs",
+            "fn f(u: &PresignedUrl) -> String { u.present_link(str::to_owned) }"
+        ),
+        ["crates/ambre-server/src/secrets/mod.rs:1: `present_link`"]
+    );
+}
+
+#[test]
+fn every_sink_has_its_name_and_its_file() {
+    let named: Vec<&str> = super::SINKS.iter().map(|(name, _)| *name).collect();
+    assert_eq!(named, super::SINK_NAMES);
+}
+
+#[test]
+fn an_include_is_refused_unless_it_names_the_build_output() {
+    let found = refused(
+        "ambre-sync",
+        "src/lib.rs",
+        "include!(\"../../../leak_inc.rs\");\n\
+         include!(concat!(env!(\"OUT_DIR\"), \"/theme_gen.rs\"));\n\
+         include!(concat!(\"/tmp\", \"/x.rs\"));",
+    );
+    assert_eq!(
+        found,
+        [
+            "crates/ambre-sync/src/lib.rs:1: `include!`",
+            "crates/ambre-sync/src/lib.rs:3: `include!`",
+        ]
+    );
+}

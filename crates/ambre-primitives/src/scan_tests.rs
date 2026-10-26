@@ -171,15 +171,28 @@ fn a_module_only_a_test_build_compiles_is_skipped() {
     let found = keys(&[
         (
             "src/lib.rs",
-            "#[cfg(any(test, feature = \"testing\"))]\nmod a;\n\
-             #[cfg(all(test, feature = \"pdf\"))]\nmod b;\n\
-             #[cfg(feature = \"test-helpers\")]\nmod c;",
+            "#[cfg(test)]\nmod a;\n\
+             #[cfg(all(test, feature = \"pdf\"))]\nmod b;",
         ),
         ("src/a.rs", "pub fn f(x: u32) {}"),
         ("src/b.rs", "pub fn f(x: u32) {}"),
-        ("src/c.rs", "pub fn f(x: u32) {}"),
     ]);
     assert_eq!(found, Vec::<String>::new());
+}
+
+#[test]
+fn a_feature_named_for_tests_is_no_test_build() {
+    // A feature can be turned on in a release build, whatever its name.
+    let found = keys(&[
+        (
+            "src/lib.rs",
+            "#[cfg(any(test, feature = \"testing\"))]\nmod a;\n\
+             #[cfg(feature = \"test-helpers\")]\nmod c;",
+        ),
+        ("src/a.rs", "pub fn f(x: u32) {}"),
+        ("src/c.rs", "pub fn f(x: u32) {}"),
+    ]);
+    assert_eq!(found.len(), 2);
 }
 
 #[test]
@@ -212,12 +225,55 @@ fn a_test_function_and_a_test_item_are_skipped() {
 }
 
 #[test]
-fn a_tests_file_is_skipped_by_its_name() {
+fn a_tests_module_with_no_test_cfg_is_scanned() {
+    // The name is no test gate: `mod grid_tests;` alone is built.
     let found = keys(&[
         ("src/lib.rs", "mod grid_tests;"),
         ("src/grid_tests.rs", "fn f(x: u32) {}"),
     ]);
+    assert_eq!(found, ["demo | src/grid_tests.rs | crate::grid_tests | f(x) | param | u32"]);
+    let skipped = keys(&[
+        ("src/lib.rs", "#[cfg(test)]\nmod grid_tests;"),
+        ("src/grid_tests.rs", "fn f(x: u32) {}"),
+    ]);
+    assert_eq!(skipped, Vec::<String>::new());
+}
+
+#[test]
+fn a_secret_read_in_a_tests_module_with_no_test_cfg_is_refused() {
+    // Probe p2 of the SEC-1 review: this module is built, so its read counts.
+    let result = scan(
+        &demo(&[
+            ("src/lib.rs", "mod leak_tests;\n#[cfg(test)]\nmod real_tests;"),
+            (
+                "src/leak_tests.rs",
+                "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",
+            ),
+            (
+                "src/real_tests.rs",
+                "pub fn b(s: &Secret<String>) -> String { s.expose().clone() }",
+            ),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
+    assert!(
+        result.secrets[0].starts_with("crates/demo/src/leak_tests.rs:1: `expose`"),
+        "{}",
+        result.secrets[0]
+    );
+}
+
+#[test]
+fn a_test_only_file_keeps_the_modules_it_declares_out() {
+    let (found, errors) = run(&[
+        ("src/lib.rs", "mod probe;"),
+        ("src/probe.rs", "#![cfg(test)]\nmod deeper;"),
+        ("src/probe/deeper.rs", "fn f(x: u32) {}"),
+    ]);
     assert_eq!(found, Vec::<String>::new());
+    assert_eq!(errors, Vec::<String>::new());
 }
 
 #[test]

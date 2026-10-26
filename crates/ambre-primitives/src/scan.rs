@@ -29,10 +29,6 @@ const PRIMITIVES: &[&str] = &[
     "isize", "f32", "f64", "bool", "char", "Uuid",
 ];
 
-/// The Cargo features that only a test build turns on. A `cfg` that needs one
-/// gates test support, like a `cfg(test)`.
-const TEST_FEATURES: &[&str] = &["testing", "test-helpers"];
-
 /// The attribute macros that turn a `fn` into a test.
 const TEST_MACROS: &[&str] = &["test", "wasm_bindgen_test"];
 
@@ -2564,7 +2560,15 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
                 continue;
             }
         };
+        // A file under `#![cfg(test)]` is test code, and so is every module
+        // it declares.
         if test_only(&file.attrs) {
+            let own = if path.file_name().is_some_and(|f| f == "mod.rs") {
+                path.parent().map(Path::to_path_buf)
+            } else {
+                Some(path.with_extension(""))
+            };
+            skipped.dirs.extend(own);
             continue;
         }
         let relative = path.strip_prefix(dir).unwrap_or(&path);
@@ -2950,17 +2954,12 @@ impl Tri {
     }
 }
 
-/// Evaluates a `cfg` predicate in a build that is not a test.
+/// Evaluates a `cfg` predicate in a build that is not a test. Only `test`
+/// is known false there. A feature, even one named for tests, can be turned
+/// on in a release build, so it is unknown, and its code is scanned.
 fn evaluate(meta: &syn::Meta) -> Tri {
     match meta {
         syn::Meta::Path(path) if path.is_ident("test") => Tri::False,
-        syn::Meta::NameValue(pair) if pair.path.is_ident("feature") => match &pair.value {
-            syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(name),
-                ..
-            }) if TEST_FEATURES.contains(&name.value().as_str()) => Tri::False,
-            _ => Tri::Unknown,
-        },
         syn::Meta::List(list) => {
             let Ok(args) = list.parse_args_with(
                 syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
@@ -3994,7 +3993,9 @@ impl<'a> FileVisit<'a> {
 impl<'ast> Visit<'ast> for FileVisit<'_> {
     fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
         let name = m.ident.to_string();
-        if test_only(&m.attrs) || name.ends_with("_tests") {
+        // A module is test code by its `cfg` alone, never by its name: a
+        // `mod x_tests;` with no test `cfg` is built and scanned.
+        if test_only(&m.attrs) {
             self.skip_module(m);
             return;
         }

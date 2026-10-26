@@ -1,13 +1,22 @@
-//! The secret checks of the gate (`ARCH-045`, `ARCH-046`).
+//! The secret checks of the gate (`ARCH-045`, `ARCH-046`, `ARCH-048`,
+//! `ARCH-049`).
 //!
 //! Every secret of the workspace sits in an `ambre_core::Secret`, and its
-//! value is read in `ambre-crypto` alone. Two checks hold that, on every file
-//! the scan reaches, outside test code:
+//! value is read in `ambre-crypto`, in the Secret module, and in the secrets
+//! module of the relay alone. These checks hold that, on every file the scan
+//! reaches, outside test code:
 //!
 //!   * a reader, `expose`, `expose_mut` or `clone_secret`, is named only in
-//!     `ambre-crypto` and in the Secret module (`ARCH-045`);
+//!     `ambre-crypto`, in the Secret module (`ARCH-045`), and in the
+//!     `src/secrets/` module of `ambre-server` (`ARCH-048`);
 //!   * the `zeroize` crate is named only in the Secret module, so no type
-//!     wipes itself beside the wrapper (`ARCH-046`).
+//!     wipes itself beside the wrapper (`ARCH-046`);
+//!   * a sink that lends a secret to one foreign call is named only in the
+//!     file that makes that call (`ARCH-049`);
+//!   * `include!` is refused, since the gate reads no file it includes. The
+//!     one form admitted is the output of the crate's build script,
+//!     `include!(concat!(env!("OUT_DIR"), ..))`: the script is scanned, its
+//!     output is not (`ARCH-047`).
 //!
 //! The gate reads names, not types: syn resolves no receiver. So a method of
 //! another type that bears a reader's name is refused too, called or
@@ -19,6 +28,7 @@ use std::collections::BTreeMap;
 
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::ToTokens;
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 
 use crate::scan::test_only;
@@ -33,8 +43,23 @@ const WIPERS: &[&str] = &["zeroize", "Zeroize", "ZeroizeOnDrop", "Zeroizing"];
 /// The crate whose code reads the value of a secret.
 const CRYPTO: &str = "ambre-crypto";
 
-/// The crate and the file of the Secret module, which both checks admit.
+/// The crate and the file of the Secret module, which every check admits.
 const SECRET_MODULE: (&str, &str) = ("ambre-core", "src/secret.rs");
+
+/// The crate and the directory of the relay's secrets module, the one place
+/// the relay reads a secret (`ARCH-048`).
+const RELAY_SECRETS: (&str, &str) = ("ambre-server", "src/secrets/");
+
+/// The sinks that lend a secret to one foreign call, each with the one file
+/// that makes the call (`ARCH-049`).
+const SINKS: &[(&str, (&str, &str))] = &[
+    ("present_bearer", ("ambre-sync", "src/http.rs")),
+    ("present_link", ("ambre-sync", "src/http.rs")),
+    ("present_state", ("ambre-app", "src/signin.rs")),
+];
+
+/// The names of the sinks.
+const SINK_NAMES: &[&str] = &["present_bearer", "present_link", "present_state"];
 
 /// One check, and the rule that states it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +68,8 @@ enum Check {
     Reader,
     /// The `zeroize` crate named outside the Secret module.
     Wiper,
+    /// A sink named outside the file that makes its call.
+    Sink,
 }
 
 impl Check {
@@ -51,6 +78,7 @@ impl Check {
         match self {
             Self::Reader => READERS,
             Self::Wiper => WIPERS,
+            Self::Sink => SINK_NAMES,
         }
     }
 
@@ -58,8 +86,13 @@ impl Check {
     fn reason(self) -> &'static str {
         match self {
             Self::Reader => {
-                "a secret is read only in ambre-crypto and the Secret module (ARCH-045): move \
-                 the call into ambre-crypto, or give the newtype a typed method there"
+                "a secret is read only in ambre-crypto and the Secret module (ARCH-045), and in \
+                 the relay's src/secrets/ (ARCH-048): move the call there, or give the newtype a \
+                 typed method there"
+            }
+            Self::Sink => {
+                "a sink lends a secret to one foreign call, and is named only in the file that \
+                 makes that call (ARCH-049): call it there, or write a typed sink for this call"
             }
             Self::Wiper => {
                 "only the Secret module names zeroize (ARCH-046): hold the value in an \
@@ -76,9 +109,29 @@ fn checks(krate: &str, relative: &str) -> Vec<Check> {
         Vec::new()
     } else if krate == CRYPTO {
         vec![Check::Wiper]
+    } else if krate == RELAY_SECRETS.0 && relative.starts_with(RELAY_SECRETS.1) {
+        vec![Check::Wiper, Check::Sink]
     } else {
-        vec![Check::Reader, Check::Wiper]
+        vec![Check::Reader, Check::Wiper, Check::Sink]
     }
+}
+
+/// Whether `name` is a sink this file makes the call of.
+fn admits_sink(name: &str, krate: &str, relative: &str) -> bool {
+    SINKS
+        .iter()
+        .any(|(sink, file)| *sink == name && *file == (krate, relative))
+}
+
+/// Whether the tokens of an `include!` name the output of the build script:
+/// `concat!(env!("OUT_DIR"), ..)`.
+fn includes_build_output(tokens: &TokenStream) -> bool {
+    let text: String = tokens
+        .to_string()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    text.starts_with("concat!(env!(\"OUT_DIR\"),")
 }
 
 /// Every refusal of the two checks in one file, test code left out. `file`
@@ -86,6 +139,8 @@ fn checks(krate: &str, relative: &str) -> Vec<Check> {
 pub(crate) fn refusals(krate: &str, relative: &str, file: &str, tree: &syn::File) -> Vec<String> {
     let mut seek = Seek {
         checks: checks(krate, relative),
+        krate: krate.to_owned(),
+        relative: relative.to_owned(),
         file: file.to_owned(),
         found: Vec::new(),
     };
@@ -114,6 +169,8 @@ pub(crate) fn renamed_wipers(krate: &str, renamed: &BTreeMap<String, String>) ->
 /// The walk of one file.
 struct Seek {
     checks: Vec<Check>,
+    krate: String,
+    relative: String,
     file: String,
     found: Vec<String>,
 }
@@ -124,6 +181,9 @@ impl Seek {
         let text = ident.to_string();
         let text = text.trim_start_matches("r#");
         for check in &self.checks {
+            if *check == Check::Sink && admits_sink(text, &self.krate, &self.relative) {
+                continue;
+            }
             if check.names().contains(&text) {
                 self.found.push(format!(
                     "{}:{}: `{text}` is named here; {}",
@@ -257,7 +317,18 @@ impl<'ast> Visit<'ast> for Seek {
         self.tokens(attr.meta.to_token_stream());
     }
 
+    // An included file is out of the scan's reach, so the call fails
+    // closed. The one admitted form is the build script's output.
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if mac.path.is_ident("include") && !includes_build_output(&mac.tokens) {
+            self.found.push(format!(
+                "{}:{}: `include!` is named here; the gate reads no file it includes, so it \
+                 cannot show that the file reads no secret (ARCH-047): declare a `mod`, or \
+                 include the build script's output through `concat!(env!(\"OUT_DIR\"), ..)`",
+                self.file,
+                mac.path.span().start().line,
+            ));
+        }
         self.tokens(mac.to_token_stream());
     }
 }
