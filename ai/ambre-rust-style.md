@@ -123,8 +123,11 @@
   line of that file by hand (`ARCH-035`).
 
   The gate reads a `type` alias a module of the workspace declares as its target. Such an alias
-  hides no primitive and no `bool` from a check. An alias of a foreign crate, and a site a macro
-  writes, are a reviewer's to read (`ARCH-043`, `ARCH-044`).
+  hides no primitive and no `bool` from a check. The gate reads aliases and `use` items by module
+  only. So a site whose path starts with an alias or a rename that a block declares fails the scan.
+  So does a site whose path starts with a block import of an alias, a rename or a primitive. An
+  alias of a foreign crate, and a site a macro writes, are a reviewer's to read (`ARCH-043`,
+  `ARCH-044`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
   site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line

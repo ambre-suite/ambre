@@ -93,8 +93,11 @@ file, the module, the item, the kind and the type, and no line number.
   * A `use ... as` that renames a primitive of the toolchain, through any chain of imports, reads
     as that primitive.
   * A path that ends in an alias name and cannot be placed fails the scan, and so does a glob `use`
-    the gate cannot place. A site that names an alias or a `use` that a block declares fails too:
-    the gate reads both by module only. So do a chain past 32 aliases and an expansion past 4096.
+    the gate cannot place. So do a chain past 32 aliases and an expansion past 4096.
+  * The gate reads aliases and `use` items by module only. So a site that names an alias a block
+    declares fails the scan. A path that starts with a name a block `use` or `extern crate` brings
+    in fails when that item renames. It fails too when the item imports an alias, a rename or a
+    primitive, or when the path ends in an alias name.
   * An alias of a foreign crate reads as itself (`ARCH-044`), and the gate reads no site a macro
     writes (`ARCH-043`).
 * **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
