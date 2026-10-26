@@ -26,9 +26,12 @@ serde = { workspace = true, features = ["derive"] }
 serde_bytes = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-# A passphrase (`passphrase`) is wiped when its last copy drops, whichever
-# thread drops it.
+# `Secret` (`secret`) wipes every secret of the workspace when it drops,
+# whichever thread drops it.
 zeroize = { workspace = true }
+# `Secret` compares two secrets in constant time. Already in the tree through
+# the RustCrypto stack; named here so the comparison is ours, not a `==`.
+subtle = { workspace = true }
 # `serde` feature: the manifest digest is `#[serde(with = "hex")]`, which reads
 # `hex::serialize` / `hex::deserialize` off the crate root (`FIXTURE-011`). A
 # raw `[u8; 32]` would serialize as 32 JSON integers and defeat the readable

@@ -67,7 +67,6 @@ pub mod mode;
 pub mod name;
 pub mod object_key;
 pub mod ordinal;
-pub mod passphrase;
 pub mod payload;
 pub mod provider;
 pub mod public_key;
@@ -143,7 +142,6 @@ pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
-pub use passphrase::Passphrase;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
     PlaintextContainer, SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes,
@@ -155,7 +153,7 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
 };
-pub use secret::SecretString;
+pub use secret::{Passphrase, Secret, SecretBytes, SecretString};
 pub use seq::Seq;
 pub use span::{
     LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis,
