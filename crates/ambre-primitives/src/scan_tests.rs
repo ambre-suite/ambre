@@ -1288,9 +1288,17 @@ fn an_alias_or_a_use_a_block_declares_fails_the_scan() {
          pub fn f() { type Flag = bool; pub struct S { pub on: Flag } }\n\
          pub fn g() { use crate::flags::Yes; pub struct T { pub on: Yes } }\n\
          pub fn h() { use crate::flags as fl; pub struct U { pub on: fl::Yes } }\n\
-         pub fn i() { use crate::flags::*; pub struct V { pub on: Yes } }",
+         pub fn i() { use crate::flags::*; pub struct V { pub on: Yes } }\n\
+         pub fn j() { use crate::flags::Yes as Other; pub struct W { pub on: Other } }\n\
+         pub fn k() { use std::primitive::bool as B; pub struct X { pub on: B } }\n\
+         pub fn l() { use crate::flags::Yes as Other; pub fn set(on: Other) {} set(true); }\n\
+         pub fn m() { use crate::flags::Yes as Other; pub fn get() -> Other { true } }\n\
+         pub fn n() { extern crate core as s2; pub struct Y { pub on: s2::primitive::bool } }",
     )]);
-    for item in ["f::S.on", "g::T.on", "h::U.on", "i::V.on"] {
+    for item in [
+        "f::S.on", "g::T.on", "h::U.on", "i::V.on", "j::W.on", "k::X.on", "set(on)", "get()",
+        "n::Y.on",
+    ] {
         assert!(
             errors
                 .iter()
@@ -1298,7 +1306,7 @@ fn an_alias_or_a_use_a_block_declares_fails_the_scan() {
             "{item} in {errors:?}"
         );
     }
-    assert_eq!(errors.len(), 4, "{errors:?}");
+    assert_eq!(errors.len(), 9, "{errors:?}");
 }
 
 #[test]

@@ -2737,6 +2737,9 @@ struct Shadow {
     /// The names the `use` items of the enclosing blocks bring in, and
     /// [`GLOB`] for a glob.
     uses: BTreeSet<String>,
+    /// What each name of `uses` imports, the innermost block's last. An
+    /// `extern crate` counts: its path is the crate.
+    imports: BTreeMap<String, Import>,
 }
 
 /// The word that stands for a glob `use` among the names a block brings in.
@@ -2750,6 +2753,8 @@ struct BlockNames {
     /// The names its `use` and `extern crate` items bring in, and [`GLOB`]
     /// for a glob.
     uses: BTreeSet<String>,
+    /// What each name of `uses` imports, and whether the item renames it.
+    imports: BTreeMap<String, Import>,
     /// Every other item it declares.
     items: BTreeSet<String>,
 }
@@ -2771,15 +2776,26 @@ impl BlockNames {
                     let mut found = Vec::new();
                     let mut globs = Vec::new();
                     use_entries(&u.tree, &[], &mut found, &mut globs);
-                    names.uses.extend(found.into_iter().map(|(name, _)| name));
+                    for (name, import) in found {
+                        names.uses.insert(name.clone());
+                        names.imports.insert(name, import);
+                    }
                     if !globs.is_empty() {
                         names.uses.insert(GLOB.to_owned());
                     }
                     continue;
                 }
                 syn::Item::ExternCrate(e) => {
-                    let name = e.rename.as_ref().map_or(&e.ident, |(_, rename)| rename);
+                    let (name, how) = match &e.rename {
+                        Some((_, rename)) => (rename, ImportName::Renamed),
+                        None => (&e.ident, ImportName::Kept),
+                    };
                     names.uses.insert(name.to_string());
+                    let import = Import {
+                        path: vec![e.ident.to_string()],
+                        name: how,
+                    };
+                    names.imports.insert(name.to_string(), import);
                     continue;
                 }
                 syn::Item::Struct(i) => &i.ident,
@@ -2826,6 +2842,22 @@ fn shadowed(declared: &Declared, ty: &syn::Type, shadow: &Shadow) -> Option<Stri
                 "it names {first}, an alias a block declares, and the gate reads aliases by \
                  module only"
             ));
+        }
+        // The module reading masks a name a block imports. That holds only
+        // for an import kept under its own name that ends in no alias, no
+        // rename and no primitive.
+        if let Some(import) = shadow.imports.get(first) {
+            let end = import.path.last().map_or("", String::as_str);
+            if import.name == ImportName::Renamed
+                || opens(end)
+                || PRIMITIVES.contains(&end)
+            {
+                return Some(format!(
+                    "it names {first}, which a use or extern crate item of a block brings in \
+                     for {}, and the gate reads use items by module only",
+                    import.path.join("::")
+                ));
+            }
         }
         if shadow.uses.contains(first) && (opens(first) || opens(last)) {
             return Some(format!(
@@ -3754,6 +3786,12 @@ impl<'a> FileVisit<'a> {
                 .extend(block.uses.iter().filter(|name| *name != GLOB).cloned());
             shadow.aliases.extend(block.aliases.iter().cloned());
             shadow.uses.extend(block.uses.iter().cloned());
+            shadow.imports.extend(
+                block
+                    .imports
+                    .iter()
+                    .map(|(name, import)| (name.clone(), import.clone())),
+            );
         }
         shadow
     }
@@ -4308,7 +4346,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
     }
 
     // A `use` inside a `fn` body reaches that body alone, so only a `use`
-    // of a module is recorded.
+    // of a module is recorded here. `BlockNames` reads the others.
     fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
         if test_only(&u.attrs) || !self.scope.is_empty() {
             return;
