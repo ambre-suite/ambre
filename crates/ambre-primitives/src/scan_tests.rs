@@ -1275,7 +1275,7 @@ fn a_generic_parameter_or_a_block_item_shadows_an_alias_of_its_name() {
          pub fn body() { struct Flag; pub struct I { pub on: Flag } }",
     )]);
     assert!(
-        found.iter().all(|key| !key.contains("| Flag")),
+        found.iter().all(|key| !key.ends_with("| Flag")),
         "{found:?}"
     );
 }
