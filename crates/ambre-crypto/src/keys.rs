@@ -154,6 +154,36 @@ impl MasterSeed {
         wrapped.extend_from_slice(&ciphertext.0);
         Ok(WrappedMasterKey::new(wrapped))
     }
+
+    /// Opens a seed that [`Self::wrap_for_storage`] sealed under `key` with the
+    /// same `aad`. The seed opens into a [`Secret`] and is copied from there
+    /// into its own, so no bare copy of it is left behind.
+    ///
+    /// # Errors
+    ///
+    /// * [`CryptoError::AeadFailed`] when `key` or `aad` is not the one that
+    ///   sealed the seed, or the bytes were changed.
+    /// * [`CryptoError::InvalidKeyLength`] when `wrapped` is too short to hold
+    ///   a nonce, or the opened seed is not 32 bytes long.
+    pub fn open_from_storage(
+        wrapped: &WrappedMasterKey,
+        key: &crate::passphrase::UserKey,
+        aad: &ambre_core::Aad,
+    ) -> Result<Self, CryptoError> {
+        let (nonce, ciphertext) = wrapped
+            .as_bytes()
+            .split_first_chunk::<{ aead::NONCE_LEN }>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let opened = Secret::new(aead::open(
+            &ambre_core::Nonce(*nonce),
+            &ambre_core::Ciphertext(ciphertext.to_vec()),
+            aad,
+            &key.document_key(),
+        )?);
+        key_of(opened.expose())
+            .map(Self)
+            .ok_or(CryptoError::InvalidKeyLength)
+    }
 }
 
 /// A 32-byte symmetric key scoped to a single document. Used for AEAD encryption

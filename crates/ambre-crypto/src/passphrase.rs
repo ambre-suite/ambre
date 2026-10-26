@@ -36,7 +36,7 @@ pub struct UserKey(Secret<[u8; USER_KEY_LEN]>);
 impl UserKey {
     /// The key as the AEAD that wraps the master seed reads it.
     pub fn document_key(&self) -> DocumentKey {
-        DocumentKey::from_array(*self.0.expose())
+        DocumentKey::from_secret(self.0.clone_secret())
     }
 
     /// The raw key bytes, for a test that compares two derivations.

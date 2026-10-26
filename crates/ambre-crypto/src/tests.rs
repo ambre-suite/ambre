@@ -397,6 +397,42 @@ fn a_wrap_has_a_length_the_wire_reads() {
 }
 
 #[test]
+fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
+    // The login path opens the seed this way, so it must give back the seed
+    // that was sealed, and refuse a wrong passphrase with the AEAD error the
+    // login screen reads as "incorrect passphrase".
+    let salt = MasterKeySalt::from_array([0xAB; 32]);
+    let user = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
+    let seed = MasterSeed::from_array([0x03; 32]);
+    let aad = Aad::of(b"ambre-master-seed");
+    let wrapped = seed.wrap_for_storage(&user.document_key(), &aad).unwrap();
+
+    let opened = MasterSeed::open_from_storage(&wrapped, &user, &aad).unwrap();
+    assert_eq!(
+        opened.recovery_words().secret().expose(),
+        seed.recovery_words().secret().expose()
+    );
+
+    let wrong = passphrase::derive_user_key(&pass("wrong passphrase"), &salt).unwrap();
+    assert!(matches!(
+        MasterSeed::open_from_storage(&wrapped, &wrong, &aad),
+        Err(CryptoError::AeadFailed)
+    ));
+    assert!(matches!(
+        MasterSeed::open_from_storage(&wrapped, &user, &Aad::of(b"other")),
+        Err(CryptoError::AeadFailed)
+    ));
+    assert!(matches!(
+        MasterSeed::open_from_storage(
+            &ambre_core::WrappedMasterKey::new(vec![0; 10]),
+            &user,
+            &aad
+        ),
+        Err(CryptoError::InvalidKeyLength)
+    ));
+}
+
+#[test]
 fn weak_peer_public_key_rejected() {
     // The all-zero u-coordinate is a low-order point: the X25519 output is the
     // predictable all-zero secret. Both the raw exchange and the wrap must reject

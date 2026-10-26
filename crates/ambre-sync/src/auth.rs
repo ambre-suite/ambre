@@ -45,18 +45,6 @@ impl SyncState {
                             });
                             return;
                         };
-                        let master_key_enc = master_key_enc.as_bytes();
-                        let Some((nonce, ciphertext)) = master_key_enc.split_first_chunk::<24>()
-                        else {
-                            tracing::warn!(
-                                "Sync: master_key_enc too short ({} bytes)",
-                                master_key_enc.len()
-                            );
-                            let _ = logic_tx.send(LogicEvent::AuthError {
-                                message: CORRUPT.into(),
-                            });
-                            return;
-                        };
                         let user_key =
                             match ambre_crypto::passphrase::derive_user_key(&passphrase, salt) {
                                 Ok(k) => k,
@@ -68,15 +56,15 @@ impl SyncState {
                                     return;
                                 }
                             };
-                        let user_doc_key = user_key.document_key();
-                        let seed_bytes = match ambre_crypto::aead::open(
-                            &ambre_core::Nonce(*nonce),
-                            &ambre_core::Ciphertext(ciphertext.to_vec()),
+                        // The seed opens straight into its wrapper, so no bare
+                        // copy of it is left on this path (`ZK-019`).
+                        let master_seed = match MasterSeed::open_from_storage(
+                            master_key_enc,
+                            &user_key,
                             &ambre_core::Aad::of(b"ambre-master-seed"),
-                            &user_doc_key,
                         ) {
-                            Ok(bytes) => bytes,
-                            Err(e) => {
+                            Ok(seed) => seed,
+                            Err(e @ ambre_crypto::CryptoError::AeadFailed) => {
                                 // Almost always the wrong passphrase (AEAD auth
                                 // failure); could also be a tampered/corrupt row.
                                 tracing::warn!("Sync: master-seed AEAD open failed: {e}");
@@ -85,18 +73,14 @@ impl SyncState {
                                 });
                                 return;
                             }
-                        };
-                        let seed_arr: [u8; 32] = match seed_bytes.try_into() {
-                            Ok(arr) => arr,
-                            Err(_) => {
-                                tracing::warn!("Sync: decrypted master seed has unexpected length");
+                            Err(e) => {
+                                tracing::warn!("Sync: the stored master seed does not open: {e}");
                                 let _ = logic_tx.send(LogicEvent::AuthError {
                                     message: CORRUPT.into(),
                                 });
                                 return;
                             }
                         };
-                        let master_seed = MasterSeed::from_array(seed_arr);
                         let signing_key = master_seed.derive_signing_key();
                         let exchange_key = master_seed.derive_exchange_key();
 
