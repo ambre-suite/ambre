@@ -30,27 +30,30 @@ that component's prefix instead.
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
-| `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
-| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | none | verified |
+| `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `ambre_core::Passphrase`, and the recovery words a `SecretString`. Each holds an `ambre_core::Secret`, which wipes its value when the last owner drops it, so a plain `String` on that path does not compile; `ambre_core::secret::tests::a_secret_wipes_its_value_once_when_it_drops`; `::a_shared_secret_wipes_when_its_last_owner_drops` | none | verified |
+| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` holds an `ambre_core::Secret`, which implements no `Clone`, so a duplicate is a compile error rather than a review finding. The `compile_fail` doctests of `ambre_core::secret` show a derived `Clone` refused. The recovery words are spelled in place inside a `SecretString`, so no bare copy of the seed is left; `ambre_crypto::tests::the_recovery_words_spell_the_seed_in_hex` | none | verified |
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a serialized struct of the worker crates that names a passphrase field or carries a `Secret` type | none | verified |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, which documents are spaces, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `ZK-018` | `INV` | What the relay learns of a user in the clear MUST be limited to `{the address and whether a provider verified it, the display name, the avatar picture, the provider and its subject, the two public keys}`. | this spec section 2; `ambre-spec-session.md section 3`; `ambre-spec-profile.md section 3` | `ambre_server::db::users::tests::the_account_table_holds_only_what_the_relay_may_learn` -- database tier, and beside these fields it finds only the identifier the relay mints and the sealed key material | none | verified |
+| `ZK-019` | `INV` | Every secret of the workspace -- a key, a seed, a passphrase, a session token -- MUST be held in an `ambre_core::Secret`, which wipes its value when it is dropped and whose debug form prints no byte and no length of it. | this spec section 2, the key separation | type-level -- each secret type of the workspace is a newtype over `Secret` or `Arc<Secret<T>>`, and only the Secret module may name the `zeroize` crate (`ARCH-046`), so no type wipes itself another way; `ambre_core::secret::tests::a_secret_prints_neither_its_bytes_nor_its_length`; `::a_secret_wipes_its_value_once_when_it_drops`; `::a_shared_secret_wipes_when_its_last_owner_drops`; `::a_failed_fill_wipes_the_partial_value`; `::a_secret_is_zeroize_on_drop`; `ambre_crypto::tests::a_shared_secret_is_wiped_and_never_printed` | none | verified |
+| `ZK-020` | `INV` | A type that holds a `Secret` MUST NOT be copied, serialized, compared with `==` or displayed except by code that reads the value through `expose`. Two secrets MUST be compared in constant time. | this spec section 2, the key separation | type-level -- `Secret` implements no `Clone`, `Serialize`, `Deserialize`, `PartialEq`, `Hash`, `Ord` or `Display`, so a derive of one on a type that holds it does not compile. Three `compile_fail` doctests of `ambre_core::secret` show a derived `Clone`, `Serialize` and `PartialEq` refused; a derived `Debug` compiles and prints `Secret([REDACTED])`. A hand-written impl reads `expose`, which `ARCH-045` keeps in `ambre-crypto` and the Secret module. Equality is `subtle::ConstantTimeEq`; `ambre_core::secret::tests::a_secret_has_no_display_clone_serialize_or_partial_eq`; `::equality_is_constant_time_and_reads_every_byte`; `::expose_reads_the_value_and_clone_secret_copies_it` | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 17 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 19 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
   them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
   crate is linked into the relay. No presence sample leaves unsealed, no passphrase sits in a type
-  that does not wipe itself, and no seed is copied.
+  that does not wipe itself, and no seed is copied. Every secret sits in one wrapper that wipes it,
+  prints nothing of it and copies it only on request (`ZK-019`, `ZK-020`).
 
   What is loose is every rule stated as an absence. `ZK-001` covers the nominal path and forbids no
   unsealed send. `ZK-007` is a whitelist with no natural test. `ZK-008` has no test for the refusal
@@ -127,8 +130,23 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 
 **Key separation.**
 
-* `DocumentKey` and `MasterSeed` are `ZeroizeOnDrop` and are never serialized into `ambre-protocol`
-  or `ambre-bus`.
+* Every secret is a domain newtype over `ambre_core::Secret<T>`: `MasterSeed`, `UserKey`,
+  `DocumentKey`, `StoreKey`, `FileKey`, `SharedSecret`, `SecretToken`, `Passphrase`, `SecretString`,
+  `SecretBytes` and the relay's `JwtSeed`. The newtype keeps the name and the meaning, and `Secret`
+  carries the hygiene (`ZK-019`, `ZK-020`):
+  * the value sits in a `Box`, so a move copies no byte of it, and it is wiped on drop;
+  * its debug form is `Secret([REDACTED])`, with no length, and it has no `Display`;
+  * it has no `Clone`, no serde, no `PartialEq`, `Hash` or `Ord`. A value two owners share is an
+    `Arc<Secret<T>>`, wiped when the last owner drops it. `clone_secret` is the one explicit copy;
+  * two secrets compare in constant time through `subtle`'s `ConstantTimeEq`. `subtle` is pure
+    Rust and already sat in the tree under the RustCrypto stack;
+  * a value is built in place with `Secret::filled` or `Secret::try_filled`, so no unwiped copy
+    is left on the stack;
+  * the value is read through `expose` in `ambre-crypto` alone (`ARCH-045`). A crate outside it
+    calls a typed method there: `MasterSeed::recovery_words`, `SecretToken::present`,
+    `seal_row` and `seal_file`. Only the Secret module names `zeroize` (`ARCH-046`).
+* No secret is serialized into `ambre-protocol`. One that crosses the bus or the store does so
+  through the hand-written serde of its newtype, never a derive.
 * The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
   because a structured clone stays inside the user's own browser process. The Main instance compiles
   no cryptography, so the keys live only in the Sync worker's own memory.
@@ -164,11 +182,11 @@ only thing that separates them. They are a frozen constant, not a name: change o
 that already exists derives a different key pair, which is `ZK-009`.
 
 ```rust
-pub struct MasterSeed([u8; 32]); // ZeroizeOnDrop, not Clone, 24 BIP39 words
+pub struct MasterSeed(Secret<[u8; 32]>); // wiped on drop, not Clone
 impl MasterSeed {
     pub fn derive_signing_key(&self) -> ed25519_dalek::SigningKey;
     pub fn derive_exchange_key(&self) -> x25519_dalek::StaticSecret;
-    pub fn recovery_bytes(&self) -> &[u8; 32];
+    pub fn recovery_words(&self) -> SecretString; // the seed in lowercase hex
 }
 ```
 

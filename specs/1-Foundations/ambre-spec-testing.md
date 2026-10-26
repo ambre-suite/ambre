@@ -368,7 +368,7 @@ whether it blocks the current MVP.
 
 | Mechanism | State | Gap |
 | :--- | :--- | :--- |
-| Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`, `SecretString` | not the mechanism, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible |
+| Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, and `Secret` under every secret type | not the mechanism, the *statement*: outside `Secret` (`ZK-019`, `ZK-020`), nothing says which invariants these types hold, so the guarantee is invisible |
 | `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 18 crates refuse an `unsafe` block |
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
