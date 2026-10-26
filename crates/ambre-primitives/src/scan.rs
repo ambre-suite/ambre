@@ -2836,7 +2836,8 @@ fn shadowed(declared: &Declared, ty: &syn::Type, shadow: &Shadow) -> Option<Stri
     paths.visit_type(ty);
     paths.found.iter().find_map(|segments| {
         let (first, last) = (segments.first()?, segments.last()?);
-        let opens = |name: &str| declared.alias_names.contains(name) || declared.renames.contains(name);
+        let opens =
+            |name: &str| declared.alias_names.contains(name) || declared.renames.contains(name);
         if shadow.aliases.contains(first) {
             return Some(format!(
                 "it names {first}, an alias a block declares, and the gate reads aliases by \
@@ -2848,10 +2849,7 @@ fn shadowed(declared: &Declared, ty: &syn::Type, shadow: &Shadow) -> Option<Stri
         // rename and no primitive.
         if let Some(import) = shadow.imports.get(first) {
             let end = import.path.last().map_or("", String::as_str);
-            if import.name == ImportName::Renamed
-                || opens(end)
-                || PRIMITIVES.contains(&end)
-            {
+            if import.name == ImportName::Renamed || opens(end) || PRIMITIVES.contains(&end) {
                 return Some(format!(
                     "it names {first}, which a use or extern crate item of a block brings in \
                      for {}, and the gate reads use items by module only",
