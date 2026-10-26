@@ -231,7 +231,10 @@ fn a_tests_module_with_no_test_cfg_is_scanned() {
         ("src/lib.rs", "mod grid_tests;"),
         ("src/grid_tests.rs", "fn f(x: u32) {}"),
     ]);
-    assert_eq!(found, ["demo | src/grid_tests.rs | crate::grid_tests | f(x) | param | u32"]);
+    assert_eq!(
+        found,
+        ["demo | src/grid_tests.rs | crate::grid_tests | f(x) | param | u32"]
+    );
     let skipped = keys(&[
         ("src/lib.rs", "#[cfg(test)]\nmod grid_tests;"),
         ("src/grid_tests.rs", "fn f(x: u32) {}"),
@@ -244,7 +247,10 @@ fn a_secret_read_in_a_tests_module_with_no_test_cfg_is_refused() {
     // Probe p2 of the SEC-1 review: this module is built, so its read counts.
     let result = scan(
         &demo(&[
-            ("src/lib.rs", "mod leak_tests;\n#[cfg(test)]\nmod real_tests;"),
+            (
+                "src/lib.rs",
+                "mod leak_tests;\n#[cfg(test)]\nmod real_tests;",
+            ),
             (
                 "src/leak_tests.rs",
                 "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",

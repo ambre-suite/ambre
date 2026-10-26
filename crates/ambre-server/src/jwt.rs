@@ -116,7 +116,7 @@ impl JwtSeed {
     ///
     /// The error of `getrandom` when the platform has no CSPRNG.
     pub fn generate() -> Result<Self, getrandom::Error> {
-        signing_key(getrandom::fill).map(Self)
+        signing_key(|seed| getrandom::fill(seed)).map(Self)
     }
 }
 
@@ -172,7 +172,10 @@ impl JwtKeys {
     /// Verify a token's signature and expiry, returning its claims. A `sub`
     /// that is not a user id fails the decode.
     pub fn verify(&self, token: &AccessToken) -> Result<Claims, jsonwebtoken::errors::Error> {
-        Ok(crate::secrets::decode_access::<Claims>(token, &self.decoding, &self.validation)?.claims)
+        Ok(
+            crate::secrets::decode_access::<Claims>(token, &self.decoding, &self.validation)?
+                .claims,
+        )
     }
 }
 

@@ -220,10 +220,10 @@ mod tests {
     fn the_provider_address_is_followed_and_its_state_kept() {
         let _ = take_pending_state();
         let mut went = None;
-        let text = "https://accounts.example.org/o/oauth2/auth?state=st9";
-        let url = ambre_core::ProviderUrl::new(text.to_owned());
+        let address = "https://accounts.example.org/o/oauth2/auth?state=st9";
+        let url = ambre_core::ProviderUrl::new(address.to_owned());
         assert!(follow_address(&url, &state("st9"), |u| went = Some(u.to_owned())));
-        assert_eq!(went.as_deref(), Some(text));
+        assert_eq!(went.as_deref(), Some(address));
         assert_eq!(text(take_pending_state()).as_deref(), Some("st9"));
         assert!(take_pending_state().is_none(), "a state serves one return");
 

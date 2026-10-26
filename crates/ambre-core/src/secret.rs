@@ -371,7 +371,8 @@ impl PresignedUrl {
     #[must_use]
     pub fn object_address(&self) -> &str {
         let text = self.0.expose();
-        text.split_once('?').map_or(text.as_str(), |(address, _)| address)
+        text.split_once('?')
+            .map_or(text.as_str(), |(address, _)| address)
     }
 }
 
@@ -610,7 +611,10 @@ mod tests {
         let url = PresignedUrl::new("https://store.test/o?sig=s3cr3t".to_owned());
         assert_eq!(format!("{url:?}"), "PresignedUrl(Secret([REDACTED]))");
         assert_eq!(url.object_address(), "https://store.test/o");
-        assert_eq!(url.present_link(str::to_owned), "https://store.test/o?sig=s3cr3t");
+        assert_eq!(
+            url.present_link(str::to_owned),
+            "https://store.test/o?sig=s3cr3t"
+        );
         let state = OidcState::new("st4te".to_owned());
         assert!(state.matches(&OidcState::new("st4te".to_owned())));
         assert!(!state.matches(&OidcState::new("st4tf".to_owned())));

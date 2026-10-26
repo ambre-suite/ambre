@@ -423,11 +423,7 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
         Err(CryptoError::AeadFailed)
     ));
     assert!(matches!(
-        MasterSeed::open_from_storage(
-            &ambre_core::WrappedMasterKey::new(vec![0; 10]),
-            &user,
-            &aad
-        ),
+        MasterSeed::open_from_storage(&ambre_core::WrappedMasterKey::new(vec![0; 10]), &user, &aad),
         Err(CryptoError::InvalidKeyLength)
     ));
 }
