@@ -1,11 +1,12 @@
 //! The address of an identity provider's sign-in page.
 //!
 //! The relay answers it for a sign-in, and the page follows it. It is no
-//! secret of its own: the browser keeps it whole in the address bar and in
-//! the history, and the state its query carries comes back in clear in the
-//! callback address. The state itself is an [`crate::OidcState`], which is a
-//! secret, and the code the provider answers is an [`crate::OidcCode`]. So
-//! this type holds a bare `String`. Its `Debug` still prints no byte of it,
+//! secret of its own. The browser keeps it whole in the address bar and in
+//! the history. The state its query carries comes back in clear in the
+//! callback address. So this type holds a bare `String`.
+//!
+//! The state itself is an [`crate::OidcState`], which is a secret, and the
+//! code the provider answers is an [`crate::OidcCode`]. Its `Debug` still prints no byte of it,
 //! so a log line keeps no sign-in state.
 
 use serde::{Deserialize, Serialize};

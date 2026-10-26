@@ -1,9 +1,9 @@
 //! The secret checks of the gate (`ARCH-045`, `ARCH-046`, `ARCH-048`,
 //! `ARCH-049`).
 //!
-//! Every secret of the workspace sits in an `ambre_core::Secret`, and its
-//! value is read in `ambre-crypto`, in the Secret module, and in the secrets
-//! module of the relay alone. These checks hold that, on every file the scan
+//! Every secret of the workspace sits in an `ambre_core::Secret`. Its value
+//! is read in `ambre-crypto`, in the Secret module, and in the secrets module
+//! of the relay alone. These checks hold that, on every file the scan
 //! reaches, outside test code:
 //!
 //!   * a reader, `expose`, `expose_mut` or `clone_secret`, is named only in

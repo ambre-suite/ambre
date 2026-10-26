@@ -86,8 +86,8 @@ impl JwtSeed {
     }
 
     /// Reads the seed from its hex text, which is a secret too. The bytes
-    /// decode in place into a wrapper, and the text is wiped once it is read,
-    /// so no copy of either is left behind, whether the seed is accepted or
+    /// decode in place into a wrapper, and the text is wiped once it is read.
+    /// So no copy of either is left behind, whether the seed is accepted or
     /// refused.
     ///
     /// # Errors

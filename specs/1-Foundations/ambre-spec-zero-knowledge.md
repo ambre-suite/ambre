@@ -130,10 +130,11 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 
 **Key separation.**
 
-* Every secret is a domain newtype over `ambre_core::Secret<T>`: `MasterSeed`, `UserKey`,
-  `DocumentKey`, `StoreKey`, `FileKey`, `SharedSecret`, `SecretToken`, `Passphrase`, `SecretString`,
-  `SecretBytes`, the bearer credentials `AccessToken`, `RefreshToken`, `PresignedUrl`, `OidcCode`
-  and `OidcState`, and the relay's `OidcSecret`. The relay's `JwtSeed` holds an
+* Every secret is a domain newtype over `ambre_core::Secret<T>`. The keys are `MasterSeed`,
+  `UserKey`, `DocumentKey`, `StoreKey`, `FileKey` and `SharedSecret`. The text and bytes are
+  `SecretToken`, `Passphrase`, `SecretString` and `SecretBytes`. Then come the bearer
+  credentials `AccessToken`, `RefreshToken`, `PresignedUrl`, `OidcCode` and `OidcState`, and the
+  relay's `OidcSecret`. The relay's `JwtSeed` holds an
   `ed25519_dalek::SigningKey`, which wipes itself, and the seed text is decoded inside
   `Secret::try_filled`. The newtype keeps the name and the meaning, and `Secret` carries the
   hygiene (`ZK-019`, `ZK-020`):

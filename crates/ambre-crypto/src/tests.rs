@@ -399,7 +399,7 @@ fn a_wrap_has_a_length_the_wire_reads() {
 #[test]
 fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
     // The login path opens the seed this way, so it must give back the seed
-    // that was sealed, and refuse a wrong passphrase with the AEAD error the
+    // that was sealed. A wrong passphrase gives the AEAD error, which the
     // login screen reads as "incorrect passphrase".
     let salt = MasterKeySalt::from_array([0xAB; 32]);
     let user = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();

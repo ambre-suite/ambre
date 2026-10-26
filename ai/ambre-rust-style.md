@@ -113,11 +113,11 @@
   * **Secrets.** A key, a seed, a passphrase or a token is a domain newtype over
     `ambre_core::Secret`, which wipes the value on drop. `Secret` has no `Clone`, no serde, no
     `PartialEq` and no `Display`, so a derive of one on the newtype does not compile. A value two
-    owners share is an `Arc<Secret<T>>`; `clone_secret` is the one copy. Equality is
-    `ConstantTimeEq`. The value is read through `expose` in `ambre-crypto`, in the Secret module
-    and, for the relay, in `crates/ambre-server/src/secrets/` alone: other code calls a typed
-    method there (`ambre-spec-zero-knowledge.md section 2`). A sink that lends the text to one
-    foreign call is named in the file of that call alone (`ARCH-049`).
+    owners share is an `Arc<Secret<T>>`, `clone_secret` is the one copy, and equality is
+    `ConstantTimeEq`. The value is read through `expose` in three places alone: `ambre-crypto`,
+    the Secret module and the relay's `src/secrets/`. Other code calls a typed method there, and
+    a sink is named in the file of its one foreign call alone (`ambre-spec-zero-knowledge.md
+    section 2`, `ARCH-049`).
   * **Two bans.** Never implement `From` in both directions, and never implement `Deref` or
     `DerefMut` to a primitive, or to a type that hands one out. Either one turns the newtype back
     into the primitive silently. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc`

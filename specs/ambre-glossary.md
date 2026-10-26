@@ -107,8 +107,8 @@
 | key hierarchy | the derivation tree of every key a client holds | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
-| Secret | the one wrapper that holds and wipes each secret value the workspace types | | `1-Foundations/ambre-spec-zero-knowledge.md` |
-| sink | a function that lends the text of a secret to one foreign call | | `1-Foundations/ambre-spec-architecture.md` |
+| Secret | the one wrapper that holds and wipes a typed secret value | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| sink | a function that lends secret text to one foreign call | | `1-Foundations/ambre-spec-architecture.md` |
 | bearer credential | a token or an address that grants access to whoever holds it | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |

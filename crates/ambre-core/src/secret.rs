@@ -23,7 +23,7 @@
 //! on `ambre-crypto`. Their serde form is written here by hand, for the same
 //! reason. Each serde form is a door to the value, and `ARCH-047` names it.
 //!
-//! Three of them carry what a person types or reads, and five carry a bearer
+//! Three of them carry what a person types or reads. Five carry a bearer
 //! credential: a session token, a presigned link, an OIDC code and state.
 //! One macro writes the five, so they share one form.
 //!

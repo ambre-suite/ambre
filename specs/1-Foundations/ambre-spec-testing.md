@@ -62,7 +62,7 @@ compiler needs no test, no run and no reading.
 
 **The primitive gate reads the items rustc reads.** It parses each crate from its roots without
 expanding a macro, and never takes a site from test code. Test code is what `cfg(test)`, a
-`cfg(all(test, ..))` or a test macro marks; a module name and a feature such as `test-helpers`
+`cfg(all(test, ..))` or a test macro marks. A module name and a feature such as `test-helpers`
 mark none, since a release build can compile either. A site is a field, a parameter, a
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
 file, the module, the item, the kind and the type, and no line number.
@@ -136,17 +136,17 @@ file, the module, the item, the kind and the type, and no line number.
   `ARCH-048`). Outside test code, the gate refuses `expose`, `expose_mut` and `clone_secret`
   outside `ambre-crypto`, `crates/ambre-core/src/secret.rs` and the relay's
   `crates/ambre-server/src/secrets/`. It refuses a name of the `zeroize` crate outside that one
-  file, in `ambre-crypto` and the relay's module too, and a manifest that renames the crate.
-  * It refuses a sink, which lends the text to one foreign call, outside the file of that call
-    (`ARCH-049`), and an `include!` that names other than the output of a build script.
+  file, and a manifest that renames the crate. The two other places that read get no wipe.
+  * It refuses a sink outside the file of its one foreign call (`ARCH-049`). It refuses an
+    `include!` that names other than the output of a build script.
   * It reads names, not types. A method call, a path, a `use` item, a signature, an attribute and
     every token of a macro count. So a method of another type with a refused name fails closed.
   * A hand-written `Display`, `Clone` or `Serialize` of a type that holds a `Secret` reads the
     value through `expose`, and so does a `serialize_with` function. Each is refused outside the
     places that read. A derive of one of them does not compile, since `Secret` implements none.
-  * A type that holds a newtype with a serde form of its own derives it with no refused name. That
-    door, a function that lends out the bare value under another name, and code a macro or a
-    derive writes, stay a reviewer's to read (`ARCH-047`).
+  * A type that holds a newtype with a serde form of its own derives it with no refused name. A
+    reviewer reads that door (`ARCH-047`). So also a function that lends out the bare value under
+    another name, and code a macro or a derive writes.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.

@@ -11,7 +11,7 @@
 //! Each sits in an [`ambre_core::Secret`]. The primitive gate admits a read
 //! of one here, and nowhere else in the relay. The rest of the relay calls
 //! the typed functions below. The relay links no `ambre-crypto` (`ZK-004`),
-//! so no key of a document is read here: this module reads a credential only
+//! so no key of a document is read here. This module reads a credential only
 //! to hand it to the one foreign call that needs it.
 //!
 //! The foreign call owns its copy. `jsonwebtoken`, `openidconnect` and
