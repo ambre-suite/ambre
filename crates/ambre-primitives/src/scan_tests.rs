@@ -1128,6 +1128,22 @@ fn a_deref_mut_takes_the_target_of_the_deref_in_its_own_module() {
          mod b { pub struct T(Core); impl Deref for T { type Target = Core; } impl DerefMut for T {} }",
     );
     assert_eq!(scan.derefs.len(), 2, "{:?}", scan.derefs);
+    for refused in ["Deref of T to u32", "DerefMut of T to u32"] {
+        assert_eq!(
+            scan.derefs
+                .iter()
+                .filter(|refusal| refusal.contains(refused))
+                .count(),
+            1,
+            "{refused} in {:?}",
+            scan.derefs
+        );
+    }
+    assert!(
+        scan.derefs.iter().all(|refusal| !refusal.contains("Core")),
+        "{:?}",
+        scan.derefs
+    );
 }
 
 #[test]
@@ -1208,4 +1224,277 @@ fn a_trait_line_is_refuted_on_an_impl_for_a_primitive() {
             .is_err_and(|reason| reason.contains("implements for")),
         "{refusal:?}"
     );
+}
+
+#[test]
+fn an_alias_parameter_takes_its_default_when_the_use_writes_none() {
+    let scan = scanned(
+        "pub type A<T = bool> = Option<T>;\n\
+         pub struct S { pub on: A }\n\
+         pub type B<T = Flag> = Vec<T>;\n\
+         type Flag = bool;\n\
+         pub struct E { pub on: B }",
+    );
+    for item in ["S.on", "E.on"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn an_alias_argument_pairs_with_a_parameter_of_its_own_kind() {
+    let scan = scanned(
+        "pub type Arr<'a, const N: usize, T> = &'a [T; N];\n\
+         pub const N: usize = 3;\n\
+         pub struct S<'a> { pub a: Arr<'a, N, bool> }",
+    );
+    assert!(scan.bool_field(&site(&scan, "S.a")).is_err());
+}
+
+#[test]
+fn an_alias_parameter_takes_its_value_in_its_own_frame_only() {
+    // `Deep` names the struct `U`, never the parameter `U` of `Inner`.
+    let found = keys(&[(
+        "src/lib.rs",
+        "pub struct U;\n\
+         pub type Deep = Vec<U>;\n\
+         pub type Inner<U> = Deep;\n\
+         pub struct S { pub s: Inner<bool> }",
+    )]);
+    assert!(found.iter().all(|key| !key.contains("S.s")), "{found:?}");
+}
+
+#[test]
+fn a_generic_parameter_or_a_block_item_shadows_an_alias_of_its_name() {
+    let found = keys(&[(
+        "src/lib.rs",
+        "type Flag = bool;\n\
+         pub struct G<Flag> { pub on: Flag }\n\
+         pub struct H<T>(T);\n\
+         impl<Flag> H<Flag> { pub fn f(x: Flag) {} pub fn g<Flag>(y: Flag) {} }\n\
+         pub fn k<Flag>(z: Flag) {}\n\
+         pub fn body() { struct Flag; pub struct I { pub on: Flag } }",
+    )]);
+    assert!(
+        found.iter().all(|key| !key.contains("| Flag")),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn an_alias_or_a_use_a_block_declares_fails_the_scan() {
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "mod flags { pub type Yes = bool; }\n\
+         pub fn f() { type Flag = bool; pub struct S { pub on: Flag } }\n\
+         pub fn g() { use crate::flags::Yes; pub struct T { pub on: Yes } }\n\
+         pub fn h() { use crate::flags as fl; pub struct U { pub on: fl::Yes } }\n\
+         pub fn i() { use crate::flags::*; pub struct V { pub on: Yes } }",
+    )]);
+    for item in ["f::S.on", "g::T.on", "h::U.on", "i::V.on"] {
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains(item) && error.contains("fails closed")),
+            "{item} in {errors:?}"
+        );
+    }
+    assert_eq!(errors.len(), 4, "{errors:?}");
+}
+
+#[test]
+fn a_glob_chain_resolves_at_any_depth_and_a_glob_it_cannot_place_fails_the_scan() {
+    let mut chain = String::new();
+    for i in 0..7 {
+        chain.push_str(&format!("pub mod m{i} {{ pub use super::m{}::*; }}\n", i + 1));
+    }
+    chain.push_str(
+        "pub mod m7 { pub type Flag = u32; }\n\
+         pub mod user { use super::m0::*; pub struct S { pub on: Flag } }\n\
+         pub mod a { pub use super::b::*; }\n\
+         pub mod b { pub use super::a::*; }\n\
+         pub mod looped { use super::a::*; pub struct L { pub on: Flag } }",
+    );
+    let found = keys(&[("src/lib.rs", &chain)]);
+    assert!(
+        found
+            .iter()
+            .any(|key| key == "demo | src/lib.rs | crate::user | S.on | field | Flag"),
+        "{found:?}"
+    );
+    assert!(found.iter().all(|key| !key.contains("L.on")), "{found:?}");
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "pub mod m { pub type Flag = bool; }\n\
+         pub mod user { use super::nowhere::*; pub struct S { pub on: Flag } }",
+    )]);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("S.on") && error.contains("fails closed")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn a_glob_search_runs_once_per_module_and_name() {
+    // Sixty modules that each glob the root, which globs each of them: a
+    // walk that reads a module twice opens the sixty again at each step,
+    // and took twenty seconds. The bound is a hundred times what one search
+    // per module and name takes.
+    let started = std::time::Instant::now();
+    let mut tree = String::new();
+    for i in 1..=60 {
+        tree.push_str(&format!("pub use m{i}::*;\n"));
+    }
+    for i in 1..=60 {
+        tree.push_str(&format!(
+            "pub mod m{i} {{ use super::*; pub struct T{i}; pub fn f() -> Result<(), ()> {{ Ok(()) }} }}\n"
+        ));
+    }
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        ("demo/src/lib.rs", &tree),
+        ("other/Cargo.toml", ""),
+        (
+            "other/src/lib.rs",
+            "pub type Result<T> = core::result::Result<T, ()>;",
+        ),
+    ]);
+    assert!(scan.sites.is_empty(), "{:?}", scan.sites);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn a_renamed_toolchain_primitive_is_read_through_an_import_chain() {
+    let scan = scanned(
+        "pub mod a { pub use std::primitive::bool as Flag; }\n\
+         pub mod b { use crate::a::Flag; pub struct S { pub on: Flag } }\n\
+         pub mod c { use crate::a; pub struct T { pub on: a::Flag } }",
+    );
+    for item in ["S.on", "T.on"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn an_extern_crate_rename_names_the_crate() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        ("demo/src/lib.rs", "pub type Flag = bool;"),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
+        (
+            "user/src/lib.rs",
+            "extern crate demo as d;\npub struct U { pub on: d::Flag }",
+        ),
+    ]);
+    assert!(scan.bool_field(&site(&scan, "U.on")).is_err());
+}
+
+#[test]
+fn a_literal_is_found_in_a_prop_expression_an_unsafe_block_and_a_branch() {
+    let scan = scanned(
+        "pub fn h(on: bool) {}\n\
+         pub fn j(on: bool) {}\n\
+         pub fn k(on: bool) {}\n\
+         #[component]\n\
+         pub fn Toggle(checked: Option<bool>, other: bool, third: bool) -> impl IntoView { () }\n\
+         fn calls(x: u8) {\n\
+             h(unsafe { true });\n\
+             j(if x > 1 { false } else { true });\n\
+             k(match x { 0 => true, _ => false });\n\
+             view! { <Toggle checked=Some(true) other=!false third=(true)/> };\n\
+         }",
+    );
+    let listed = all(&scan);
+    for item in [
+        "h(on)",
+        "j(on)",
+        "k(on)",
+        "Toggle(checked)",
+        "Toggle(other)",
+        "Toggle(third)",
+    ] {
+        assert!(
+            scan.bool_literal(&site(&scan, item), &listed).is_err(),
+            "{item}"
+        );
+    }
+}
+
+#[test]
+fn a_literal_reaches_a_fn_under_the_name_a_pub_use_gives_it() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "mod inner { pub fn ctrl(on: bool) {} }\npub use inner::ctrl as switch;",
+        ),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
+        ("user/src/lib.rs", "fn f() { demo::switch(true); }"),
+    ]);
+    let listed = all(&scan);
+    assert!(scan.bool_literal(&site(&scan, "ctrl(on)"), &listed).is_err());
+}
+
+#[test]
+fn a_fn_rename_holds_in_its_own_module_only() {
+    let scan = scanned(
+        "pub mod x { pub fn set(on: bool) {} }\n\
+         mod a { use crate::x::set as go; }\n\
+         pub mod b { pub fn go(on: bool) {} fn f() { go(true); } }",
+    );
+    let listed = all(&scan);
+    assert!(scan.bool_literal(&site(&scan, "go(on)"), &listed).is_err());
+    assert_eq!(scan.bool_literal(&site(&scan, "set(on)"), &listed), Ok(()));
+}
+
+#[test]
+fn a_deref_any_macro_call_writes_fails_closed() {
+    let scan = scanned(
+        "pub struct K(u8);\n\
+         cfg_if::cfg_if! { if #[cfg(unix)] { impl core::ops::Deref for K { type Target = u8; } } }\n\
+         macro_rules! m { ($t:ty) => { paste::paste! { impl core::ops::Deref for $t { type Target = u8; } } }; }\n\
+         fn f() { macro_rules! n { () => { impl core::ops::Deref for crate::K { type Target = u8; } }; } }\n\
+         fn g() { other!(impl core::ops::DerefMut for K {}); }\n\
+         fn h() { println!(\"no impl here\"); }",
+    );
+    for refused in [
+        "a call of cfg_if::cfg_if!",
+        "a call of paste::paste!",
+        "Deref of crate::K to u8",
+        "a call of other!",
+    ] {
+        assert!(
+            scan.derefs.iter().any(|refusal| refusal.contains(refused)),
+            "{refused} in {:?}",
+            scan.derefs
+        );
+    }
+    assert_eq!(scan.derefs.len(), 4, "{:?}", scan.derefs);
+}
+
+#[test]
+fn a_deref_to_an_associated_type_of_self_or_in_a_discriminant_is_read() {
+    let scan = scanned(
+        "pub struct K<T>(T);\n\
+         impl<T> core::ops::Deref for K<T> { type Target = Self::Inner; }\n\
+         enum E { A = { struct Y(u8); impl core::ops::Deref for Y { type Target = u8; } 0 } }",
+    );
+    for refused in ["an associated type of Self", "Deref of Y to u8"] {
+        assert!(
+            scan.derefs.iter().any(|refusal| refusal.contains(refused)),
+            "{refused} in {:?}",
+            scan.derefs
+        );
+    }
 }

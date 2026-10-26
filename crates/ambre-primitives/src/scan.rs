@@ -9,7 +9,8 @@
 //! syn parses and never expands. An item that a macro writes, and the output
 //! of a build script, are therefore outside the scan by construction.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -46,28 +47,63 @@ const LOCAL_ROOTS: &[&str] = &["crate", "self", "super", "Self"];
 /// a `Box<str>` hands out a `str` as surely as a `str` target does.
 const WRAPPERS: &[&str] = &["Vec", "Box", "Rc", "Arc", "Cow"];
 
-/// The prefix of the word that stands for a metavariable, once the body of a
-/// `macro_rules!` is read as Rust. No source identifier starts with it.
+/// The prefix of each word the gate writes in place of a source name: a
+/// metavariable, once the body of a `macro_rules!` is read as Rust, and a
+/// parameter of an alias while its target resolves. No source identifier
+/// starts with it.
 const META: &str = "__ambre_meta_";
 
 /// How deep one alias may lead to another. A cycle fails to compile, so the
 /// bound keeps a broken tree from looping. Reaching it fails the scan, since
 /// the type past it stays unread.
-const ALIAS_DEPTH: usize = 32;
+const ALIAS_DEPTH: Hops = Hops(32);
 
 /// How many aliases one type may open, nested ones included. An alias that
 /// names another twice doubles the walk at each level, so the bound keeps
 /// the walk finite. Reaching it fails the scan.
-const ALIAS_EXPANSIONS: usize = 4096;
+const ALIAS_EXPANSIONS: AliasCount = AliasCount(4096);
 
 /// How many `use` items and modules one path may lead through before the
 /// lookup stops. A loop of imports fails to compile, so reaching it fails
 /// the scan.
-const RESOLVE_HOPS: usize = 16;
+const RESOLVE_HOPS: Hops = Hops(16);
 
-/// How many glob `use` items one lookup may lead through. Two modules may
-/// glob each other, so a search past the bound brings in nothing.
-const GLOB_HOPS: usize = 6;
+/// How many `use` items, modules or aliases one walk has led through,
+/// checked against [`RESOLVE_HOPS`] or [`ALIAS_DEPTH`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct Hops(usize);
+
+impl Hops {
+    /// One step further.
+    fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for Hops {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// How many aliases one type has opened, checked against
+/// [`ALIAS_EXPANSIONS`]. Each opening takes the next count, so the count
+/// also names the opening.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct AliasCount(usize);
+
+impl AliasCount {
+    /// The count once one more alias opens.
+    fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for AliasCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// One site, written as one line: the crate, the file, the module path, the
 /// item path, the kind and the type, joined by [`SiteKey::SEPARATOR`].
@@ -476,10 +512,38 @@ struct TraitPath {
 struct Alias {
     /// The module path that declares it.
     module: String,
-    /// The names of its type parameters, in order.
-    params: Vec<String>,
+    /// Its generic parameters, in order.
+    params: Vec<Param>,
     /// The aliased type, normalised.
     target: String,
+}
+
+/// One generic parameter of an alias.
+#[derive(Clone, Debug)]
+struct Param {
+    name: String,
+    kind: ParamKind,
+    /// The default a type parameter writes, normalised. A use that writes
+    /// no argument for the parameter takes it.
+    default: Option<String>,
+}
+
+/// What a generic parameter of an alias stands for. An argument of a use
+/// takes the place of a parameter of the same kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParamKind {
+    Lifetime,
+    Type,
+    Const,
+}
+
+/// Whether a `use` gives the item it imports a new name with `as`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ImportName {
+    /// `use a::B;` brings `B` in as `B`.
+    Kept,
+    /// `use a::B as C;` brings `B` in as `C`.
+    Renamed,
 }
 
 /// One name a `use` item brings into a module.
@@ -487,15 +551,19 @@ struct Alias {
 struct Import {
     /// The path the `use` writes, read from the module that holds it.
     path: Vec<String>,
-    /// Whether the `use` gives the item a new name with `as`.
-    renamed: bool,
+    name: ImportName,
 }
 
 /// What the last segment of a path names, as the alias lookup reads it.
 enum Named {
     /// A workspace alias, with the crate directory that declares it.
     Alias(String, Alias),
-    /// Anything else: a struct, an enum, a trait, a module, a foreign item.
+    /// An item of a foreign crate, by the whole path that leads to it once
+    /// every `use` of the workspace on the way is undone:
+    /// `std::primitive::bool` for a `Flag` that a `use ... as` renames.
+    Foreign(Vec<String>),
+    /// Anything else: a struct, an enum, a trait, a module, a generic
+    /// parameter.
     Other,
 }
 
@@ -517,6 +585,19 @@ enum Step {
     /// whose associated item the path names, or a generic parameter.
     Outside,
     /// Nothing the module declares or imports.
+    Absent,
+}
+
+/// Where the glob `use` items of a module lead one name.
+#[derive(Clone, Debug)]
+enum Through {
+    /// The first module of the workspace, in breadth order, that declares
+    /// or imports the name: the crate directory and the module path.
+    Module(String, String),
+    /// No module of the workspace, while a glob of a foreign crate may
+    /// bring the name in.
+    Foreign,
+    /// No glob brings it in.
     Absent,
 }
 
@@ -561,6 +642,14 @@ struct Declared {
     /// The new name of every `use ... as`, in any crate: a type that writes
     /// one may hide an alias or a primitive under it.
     renames: BTreeSet<String>,
+    /// Per crate directory, each `use ... as` that is not private: the new
+    /// name, then the last segment of each path it renames. A call of the
+    /// new name, from any module, calls that `fn`.
+    exported: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
+    /// What each glob search found, per crate directory, module path and
+    /// name. `None` while the search runs, so a search that leads back to
+    /// itself is caught. Two lookups that share a step read it once.
+    searched: RefCell<BTreeMap<(String, String, String), Option<Through>>>,
 }
 
 /// The module above `module`. The crate root has none, and stays itself.
@@ -682,7 +771,7 @@ impl Declared {
 
     /// Where the segments `prefix` of a path lead from `module` of `krate`.
     /// They are read in rustc's order: `crate`, `self` and `super`, a child
-    /// module, a `use`, a glob `use`, then a crate. `Ok(None)` when they
+    /// module, a `use`, a crate, then a glob `use`. `Ok(None)` when they
     /// leave the workspace's modules.
     ///
     /// # Errors
@@ -693,7 +782,7 @@ impl Declared {
         krate: &str,
         module: &str,
         prefix: &[String],
-        hops: usize,
+        hops: Hops,
     ) -> Result<Option<(String, String)>, String> {
         if hops > RESOLVE_HOPS {
             return Err(format!(
@@ -713,7 +802,7 @@ impl Declared {
                 Step::Absent => match self.crate_of(krate, first) {
                     Some(dir) => Step::Module(dir, "crate".to_owned()),
                     None if self.foreign_crate(krate, first) => Step::Outside,
-                    None => match self.glob_child(krate, module, first, hops) {
+                    None => match self.glob_child(krate, module, first, hops)? {
                         Step::Absent if first.starts_with(|c: char| c.is_ascii_uppercase()) => {
                             Step::Outside
                         }
@@ -759,7 +848,7 @@ impl Declared {
         krate: &str,
         module: &str,
         name: &str,
-        hops: usize,
+        hops: Hops,
         globs: Globs,
     ) -> Result<Step, String> {
         let path = format!("{module}::{name}");
@@ -770,7 +859,7 @@ impl Declared {
         if let Some(import) = self.import(krate, module, name)
             && import.path.first().map(String::as_str) != Some(name)
         {
-            return Ok(match self.place(krate, module, &import.path, hops + 1)? {
+            return Ok(match self.place(krate, module, &import.path, hops.next())? {
                 Some((dir, found)) => Step::Module(dir, found),
                 None => Step::Outside,
             });
@@ -778,36 +867,119 @@ impl Declared {
         if self.has_item(krate, module, name) || self.alias_at(krate, module, name).is_some() {
             return Ok(Step::Outside);
         }
-        Ok(match globs {
+        match globs {
             Globs::Follow => self.glob_child(krate, module, name, hops),
-            Globs::Skip => Step::Absent,
-        })
+            Globs::Skip => Ok(Step::Absent),
+        }
     }
 
     /// Where the segment `name` leads through the glob `use` items of
-    /// `module` of `krate`. A glob that names its own module back, or one
-    /// past [`GLOB_HOPS`], brings in nothing: its search ends there.
-    fn glob_child(&self, krate: &str, module: &str, name: &str, hops: usize) -> Step {
-        if hops >= GLOB_HOPS {
-            return Step::Absent;
-        }
-        let mut foreign = false;
-        for glob in self.globs_of(krate, module) {
-            if glob.first().map(String::as_str) == Some(name) {
-                continue;
-            }
-            match self.place(krate, module, glob, hops + 1) {
-                Ok(Some((dir, found))) => {
-                    match self.child(&dir, &found, name, hops + 1, Globs::Follow) {
-                        Ok(Step::Absent) | Err(_) => {}
-                        Ok(step) => return step,
-                    }
+    /// `module` of `krate` (see [`Declared::through_globs`]).
+    ///
+    /// # Errors
+    ///
+    /// A glob the gate cannot place, or a search that leads back to itself.
+    fn glob_child(&self, krate: &str, module: &str, name: &str, hops: Hops) -> Result<Step, String> {
+        Ok(match self.through_globs(krate, module, name, hops)? {
+            Through::Module(dir, found) => {
+                match self.child(&dir, &found, name, hops.next(), Globs::Skip)? {
+                    // `use serde;` in the module the glob reaches.
+                    Step::Absent => match self.crate_of(&dir, name) {
+                        Some(named) => Step::Module(named, "crate".to_owned()),
+                        None => Step::Outside,
+                    },
+                    step => step,
                 }
-                Ok(None) => foreign = true,
-                Err(_) => {}
+            }
+            Through::Foreign => Step::Outside,
+            Through::Absent => Step::Absent,
+        })
+    }
+
+    /// Whether `module` of `krate` declares or imports `name`, glob `use`
+    /// items apart.
+    fn declares(&self, krate: &str, module: &str, name: &str) -> bool {
+        self.alias_at(krate, module, name).is_some()
+            || self.has_item(krate, module, name)
+            || self.has_module(krate, &format!("{module}::{name}"))
+            || self.import(krate, module, name).is_some()
+    }
+
+    /// Where the glob `use` items of `module` of `krate` lead `name`: to the
+    /// first module, in breadth order, that declares or imports it. A glob
+    /// whose path starts with `name` brings in what `name` holds, never
+    /// `name`, and is passed over. The answer is kept, so each search runs
+    /// once per scan.
+    ///
+    /// # Errors
+    ///
+    /// A glob the gate cannot place, or a search that leads back to itself.
+    /// The name stays unread, so the lookup fails closed.
+    fn through_globs(
+        &self,
+        krate: &str,
+        module: &str,
+        name: &str,
+        hops: Hops,
+    ) -> Result<Through, String> {
+        let key = (krate.to_owned(), module.to_owned(), name.to_owned());
+        let known = self.searched.borrow().get(&key).cloned();
+        match known {
+            Some(Some(found)) => return Ok(found),
+            Some(None) => {
+                return Err(format!(
+                    "the search of the glob use items of {module} of {krate} for {name} leads \
+                     back to itself"
+                ));
+            }
+            None => {}
+        }
+        self.searched.borrow_mut().insert(key.clone(), None);
+        let found = self.search_globs(krate, module, name, hops);
+        let mut searched = self.searched.borrow_mut();
+        match &found {
+            Ok(through) => searched.insert(key, Some(through.clone())),
+            Err(_) => searched.remove(&key),
+        };
+        found
+    }
+
+    /// The breadth-first walk of [`Declared::through_globs`]. Each module
+    /// is read once, so two modules that glob each other end it.
+    fn search_globs(
+        &self,
+        krate: &str,
+        module: &str,
+        name: &str,
+        hops: Hops,
+    ) -> Result<Through, String> {
+        let start = (krate.to_owned(), module.to_owned());
+        let mut seen = BTreeSet::from([start.clone()]);
+        let mut pending = VecDeque::from([start]);
+        let mut foreign = false;
+        while let Some((at_crate, at)) = pending.pop_front() {
+            for glob in self.globs_of(&at_crate, &at) {
+                if glob.first().map(String::as_str) == Some(name) {
+                    continue;
+                }
+                match self.place(&at_crate, &at, glob, hops.next())? {
+                    Some((dir, found)) => {
+                        if self.declares(&dir, &found, name) {
+                            return Ok(Through::Module(dir, found));
+                        }
+                        if seen.insert((dir.clone(), found.clone())) {
+                            pending.push_back((dir, found));
+                        }
+                    }
+                    None => foreign = true,
+                }
             }
         }
-        if foreign { Step::Outside } else { Step::Absent }
+        Ok(if foreign {
+            Through::Foreign
+        } else {
+            Through::Absent
+        })
     }
 
     /// What `name` names in `module` of `krate`. It is an alias or a type
@@ -818,7 +990,25 @@ impl Declared {
         krate: &str,
         module: &str,
         name: &str,
-        hops: usize,
+        hops: Hops,
+    ) -> Result<Option<Named>, String> {
+        if let Some(named) = self.direct(krate, module, name, hops)? {
+            return Ok(Some(named));
+        }
+        match self.through_globs(krate, module, name, hops)? {
+            Through::Module(dir, found) => self.direct(&dir, &found, name, hops.next()),
+            Through::Foreign => Ok(Some(Named::Other)),
+            Through::Absent => Ok(None),
+        }
+    }
+
+    /// What `name` names in `module` of `krate`, glob `use` items apart.
+    fn direct(
+        &self,
+        krate: &str,
+        module: &str,
+        name: &str,
+        hops: Hops,
     ) -> Result<Option<Named>, String> {
         if let Some(alias) = self.alias_at(krate, module, name) {
             return Ok(Some(Named::Alias(krate.to_owned(), alias.clone())));
@@ -828,28 +1018,14 @@ impl Declared {
         {
             return Ok(Some(Named::Other));
         }
-        if let Some(import) = self.import(krate, module, name) {
-            if import.path.len() == 1 && import.path.first().map(String::as_str) == Some(name) {
-                return Ok(Some(Named::Other));
-            }
-            return self.lookup(krate, module, &import.path, hops + 1).map(Some);
-        }
-        if hops >= GLOB_HOPS {
+        let Some(import) = self.import(krate, module, name) else {
             return Ok(None);
+        };
+        if import.path.len() == 1 && import.path.first().map(String::as_str) == Some(name) {
+            return Ok(Some(Named::Other));
         }
-        let mut foreign = false;
-        for glob in self.globs_of(krate, module) {
-            match self.place(krate, module, glob, hops + 1) {
-                Ok(Some((dir, found))) => {
-                    if let Ok(Some(named)) = self.member(&dir, &found, name, hops + 1) {
-                        return Ok(Some(named));
-                    }
-                }
-                Ok(None) => foreign = true,
-                Err(_) => {}
-            }
-        }
-        Ok(foreign.then_some(Named::Other))
+        self.lookup(krate, module, &import.path, hops.next())
+            .map(Some)
     }
 
     /// What the path `segments`, written in `module` of `krate`, names.
@@ -867,7 +1043,7 @@ impl Declared {
         krate: &str,
         module: &str,
         segments: &[String],
-        hops: usize,
+        hops: Hops,
     ) -> Result<Named, String> {
         if hops > RESOLVE_HOPS {
             return Err(format!(
@@ -884,7 +1060,7 @@ impl Declared {
                 .unwrap_or(Named::Other));
         }
         let Some((dir, found)) = self.place(krate, module, prefix, hops)? else {
-            return Ok(Named::Other);
+            return self.outside(krate, module, segments, hops);
         };
         match self.member(&dir, &found, name, hops)? {
             Some(named) => Ok(named),
@@ -896,15 +1072,59 @@ impl Declared {
         }
     }
 
+    /// What a path of two or more segments names once its module leaves the
+    /// workspace's modules. A first segment that a `use` of `module`
+    /// imports reads as the path it imports, so `use std::primitive as p`
+    /// makes `p::bool` read `std::primitive::bool`. A first segment that
+    /// names a foreign crate makes the path [`Named::Foreign`].
+    ///
+    /// # Errors
+    ///
+    /// Imports that loop.
+    fn outside(
+        &self,
+        krate: &str,
+        module: &str,
+        segments: &[String],
+        hops: Hops,
+    ) -> Result<Named, String> {
+        let Some((first, rest)) = segments.split_first() else {
+            return Ok(Named::Other);
+        };
+        if let Some(import) = self.import(krate, module, first)
+            && import.path.first() != Some(first)
+        {
+            let full: Vec<String> = import.path.iter().chain(rest).cloned().collect();
+            return self.lookup(krate, module, &full, hops.next());
+        }
+        let foreign = !LOCAL_ROOTS.contains(&first.as_str())
+            && !self.has_module(krate, &format!("{module}::{first}"))
+            && self.crate_of(krate, first).is_none()
+            && self.foreign_crate(krate, first);
+        Ok(if foreign {
+            Named::Foreign(segments.to_vec())
+        } else {
+            Named::Other
+        })
+    }
+
     /// `ty` with every workspace alias it names replaced by its target, and
     /// each `use ... as` rename undone, as seen from `module` of `krate`.
+    /// A one-segment path that `masked` holds names a generic parameter, or
+    /// an item of an enclosing block, and stays as written.
     ///
     /// # Errors
     ///
     /// Why the gate cannot read the type whole: an alias path it cannot
     /// place, a chain past [`ALIAS_DEPTH`], or more than
     /// [`ALIAS_EXPANSIONS`] aliases opened.
-    fn resolve(&self, ty: &syn::Type, krate: &str, module: &str) -> Result<syn::Type, String> {
+    fn resolve(
+        &self,
+        ty: &syn::Type,
+        krate: &str,
+        module: &str,
+        masked: &BTreeSet<String>,
+    ) -> Result<syn::Type, String> {
         let mut resolved = ty.clone();
         if self.names_alias(ty) {
             let mut expansion = Expansion::default();
@@ -912,8 +1132,8 @@ impl Declared {
                 declared: self,
                 krate: krate.to_owned(),
                 module: module.to_owned(),
-                masked: BTreeSet::new(),
-                depth: 0,
+                masked: masked.clone(),
+                depth: Hops::default(),
                 expansion: &mut expansion,
             }
             .visit_type_mut(&mut resolved);
@@ -949,7 +1169,12 @@ impl Declared {
         let mut chosen = BTreeSet::new();
         for written in path.args.iter().chain(std::iter::once(&host.self_full)) {
             if let Ok(ty) = syn::parse_str::<syn::Type>(written) {
-                chosen.extend(primitives_of(&self.resolve(&ty, krate, module)?));
+                chosen.extend(primitives_of(&self.resolve(
+                    &ty,
+                    krate,
+                    module,
+                    &BTreeSet::new(),
+                )?));
             }
         }
         Ok(chosen)
@@ -1055,41 +1280,35 @@ impl Declared {
 #[derive(Debug, Default)]
 struct Expansion {
     /// The aliases opened so far, bounded by [`ALIAS_EXPANSIONS`].
-    opened: usize,
+    opened: AliasCount,
     /// Why the resolution stopped, if it did.
     failure: Option<String>,
 }
 
-/// What one type path reads as, once opened.
-enum Opened {
-    /// The target of the alias it names, resolved whole.
-    Alias(syn::Type),
-    /// The path a `use ... as` renames, still to resolve.
-    Renamed(syn::Type),
-}
-
 /// Replaces each workspace alias a type names with its target, the type
-/// rustc reads. An alias hides no `bool` and no primitive from a check.
+/// rustc reads, and each path a `use ... as` renames with the path it
+/// names.
 struct Resolver<'d, 'e> {
     declared: &'d Declared,
     /// The crate directory the type is written in.
     krate: String,
     /// The module path the type is written in.
     module: String,
-    /// The type parameters of the alias whose target this reads. Each one
-    /// stands for an argument the use writes, resolved where the use sits,
-    /// so none resolves here.
+    /// The one-segment names that stand for no item of the module: a
+    /// generic parameter of the enclosing item or alias, or an item of an
+    /// enclosing block. None resolves here.
     masked: BTreeSet<String>,
     /// How many aliases led here, bounded by [`ALIAS_DEPTH`].
-    depth: usize,
+    depth: Hops,
     expansion: &'e mut Expansion,
 }
 
 impl Resolver<'_, '_> {
-    /// What the type path `ty` reads as: the target of the alias it names,
-    /// or the path a `use ... as` of its first segment renames. `Ok(None)`
-    /// for any other type.
-    fn open(&mut self, ty: &syn::Type) -> Result<Option<Opened>, String> {
+    /// What the type path `ty` reads as, resolved whole: the target of the
+    /// alias it names, the foreign path it names under a `use ... as`, or
+    /// the path a `use ... as` of its first segment renames. `Ok(None)` for
+    /// any other type.
+    fn open(&mut self, ty: &syn::Type) -> Result<Option<syn::Type>, String> {
         let syn::Type::Path(path) = ty else {
             return Ok(None);
         };
@@ -1109,30 +1328,50 @@ impl Resolver<'_, '_> {
         if segments.len() == 1 && self.masked.contains(&name) {
             return Ok(None);
         }
-        let renamed = self.declared.renames.contains(first);
+        let renamed = self.declared.renames.contains(first) || self.declared.renames.contains(&name);
         if !renamed && !self.declared.alias_names.contains(&name) {
             return Ok(None);
         }
-        let named = self
+        match self
             .declared
-            .lookup(&self.krate, &self.module, &segments, 0)?;
-        if let Named::Alias(home, alias) = named {
-            return self
+            .lookup(&self.krate, &self.module, &segments, Hops::default())?
+        {
+            Named::Alias(home, alias) => self
                 .expand(&home, &alias, &name, &last.arguments)
-                .map(|target| Some(Opened::Alias(target)));
-        }
-        match self.declared.import(&self.krate, &self.module, first) {
-            Some(import) if renamed && import.renamed => {
-                unrenamed(path, &import.path).map(|full| Some(Opened::Renamed(full)))
+                .map(Some),
+            Named::Foreign(full) => {
+                let mut opened = foreign_path(&full, &last.arguments)?;
+                syn::visit_mut::visit_type_mut(self, &mut opened);
+                Ok(Some(opened))
             }
-            _ => Ok(None),
+            Named::Other => match self.declared.import(&self.krate, &self.module, first) {
+                Some(import) if import.name == ImportName::Renamed => {
+                    if self.depth >= ALIAS_DEPTH {
+                        return Err(format!(
+                            "the renames lead through more than {ALIAS_DEPTH} paths"
+                        ));
+                    }
+                    let mut full = unrenamed(path, &import.path)?;
+                    self.depth = self.depth.next();
+                    self.visit_type_mut(&mut full);
+                    self.depth = Hops(self.depth.0.saturating_sub(1));
+                    Ok(Some(full))
+                }
+                _ => Ok(None),
+            },
         }
     }
 
     /// The target of `alias`, declared in `home` and named `name`, for a
-    /// use that writes `arguments`. Each argument resolves where the use
-    /// sits, the target where the alias sits, and each argument then takes
-    /// the place of its parameter.
+    /// use that writes `arguments`.
+    ///
+    /// Each argument resolves where the use sits, and pairs with the next
+    /// parameter of its kind: a lifetime with none, a const with a const, a
+    /// type with a type. A type parameter with no argument takes its
+    /// default, which resolves where the alias sits. The target resolves
+    /// there too, with each type parameter held by a word of its own frame,
+    /// and each word then takes the value of its parameter. Two frames
+    /// never swap their values, even when their parameters share a name.
     fn expand(
         &mut self,
         home: &str,
@@ -1140,8 +1379,9 @@ impl Resolver<'_, '_> {
         name: &str,
         arguments: &syn::PathArguments,
     ) -> Result<syn::Type, String> {
-        self.expansion.opened += 1;
-        if self.expansion.opened > ALIAS_EXPANSIONS {
+        let frame = self.expansion.opened.next();
+        self.expansion.opened = frame;
+        if frame > ALIAS_EXPANSIONS {
             return Err(format!(
                 "the type opens more than {ALIAS_EXPANSIONS} aliases, so the gate cannot read it \
                  whole"
@@ -1153,38 +1393,114 @@ impl Resolver<'_, '_> {
                  cannot read the type it names"
             ));
         }
-        let mut given: Vec<syn::Type> = match arguments {
+        let mut given: VecDeque<syn::GenericArgument> = match arguments {
             syn::PathArguments::AngleBracketed(args) => args
                 .args
                 .iter()
-                .filter_map(|arg| match arg {
-                    syn::GenericArgument::Type(ty) => Some(ty.clone()),
-                    _ => None,
-                })
+                .filter(|arg| !matches!(arg, syn::GenericArgument::Lifetime(_)))
+                .cloned()
                 .collect(),
-            _ => Vec::new(),
+            _ => VecDeque::new(),
         };
-        for arg in &mut given {
-            self.visit_type_mut(arg);
+        let mut consts = BTreeSet::new();
+        let mut stand_ins: BTreeMap<String, syn::Type> = BTreeMap::new();
+        let mut bound: BTreeMap<String, syn::Type> = BTreeMap::new();
+        for (i, param) in alias.params.iter().enumerate() {
+            match param.kind {
+                ParamKind::Lifetime => {}
+                ParamKind::Const => {
+                    given.pop_front();
+                    consts.insert(param.name.clone());
+                }
+                ParamKind::Type => {
+                    let word = format!("{META}{frame}_{i}");
+                    let value = match given.pop_front() {
+                        Some(syn::GenericArgument::Type(mut ty)) => {
+                            self.visit_type_mut(&mut ty);
+                            if let Some(why) = self.expansion.failure.take() {
+                                return Err(why);
+                            }
+                            ty
+                        }
+                        Some(_) => syn::Type::Infer(syn::TypeInfer {
+                            underscore_token: syn::token::Underscore::default(),
+                        }),
+                        None => match &param.default {
+                            Some(default) => {
+                                let mut ty = syn::parse_str::<syn::Type>(default).map_err(|e| {
+                                    format!(
+                                        "the default of {} of the alias {name} does not parse: {e}",
+                                        param.name
+                                    )
+                                })?;
+                                Substitute(&stand_ins).visit_type_mut(&mut ty);
+                                self.at_home(home, alias, &consts, &mut ty)?;
+                                Substitute(&bound).visit_type_mut(&mut ty);
+                                ty
+                            }
+                            None => syn::Type::Infer(syn::TypeInfer {
+                                underscore_token: syn::token::Underscore::default(),
+                            }),
+                        },
+                    };
+                    let stand_in = syn::parse_str::<syn::Type>(&word)
+                        .map_err(|e| format!("the word {word} does not parse: {e}"))?;
+                    stand_ins.insert(param.name.clone(), stand_in);
+                    bound.insert(word, value);
+                }
+            }
         }
         let mut target = syn::parse_str::<syn::Type>(&alias.target)
             .map_err(|e| format!("the target of the alias {name} does not parse: {e}"))?;
+        Substitute(&stand_ins).visit_type_mut(&mut target);
+        self.at_home(home, alias, &consts, &mut target)?;
+        Substitute(&bound).visit_type_mut(&mut target);
+        Ok(target)
+    }
+
+    /// Resolves `ty` where `alias` sits, in the crate directory `home`, one
+    /// alias deeper. `consts` names its const parameters.
+    fn at_home(
+        &mut self,
+        home: &str,
+        alias: &Alias,
+        consts: &BTreeSet<String>,
+        ty: &mut syn::Type,
+    ) -> Result<(), String> {
         Resolver {
             declared: self.declared,
             krate: home.to_owned(),
             module: alias.module.clone(),
-            masked: alias.params.iter().cloned().collect(),
-            depth: self.depth + 1,
+            masked: consts.clone(),
+            depth: self.depth.next(),
             expansion: &mut *self.expansion,
         }
-        .visit_type_mut(&mut target);
-        if let Some(why) = self.expansion.failure.take() {
-            return Err(why);
+        .visit_type_mut(ty);
+        match self.expansion.failure.take() {
+            Some(why) => Err(why),
+            None => Ok(()),
         }
-        let map: BTreeMap<String, syn::Type> = alias.params.iter().cloned().zip(given).collect();
-        Substitute(&map).visit_type_mut(&mut target);
-        Ok(target)
     }
+}
+
+/// The foreign path `full` as a type, with the generics `arguments` its
+/// use writes on the last segment. A primitive the toolchain names, as
+/// `std::primitive::bool` does, reads bare.
+fn foreign_path(full: &[String], arguments: &syn::PathArguments) -> Result<syn::Type, String> {
+    let bare = full
+        .first()
+        .is_some_and(|root| TOOLCHAIN.contains(&root.as_str()))
+        && full
+            .last()
+            .is_some_and(|last| PRIMITIVES.contains(&last.as_str()));
+    let mut text = if bare {
+        full.last().cloned().unwrap_or_default()
+    } else {
+        full.join("::")
+    };
+    text.push_str(&arguments.to_token_stream().to_string());
+    syn::parse_str::<syn::Type>(&text)
+        .map_err(|e| format!("the path {text} a use ... as names does not parse: {e}"))
 }
 
 /// The type path `path` once its first segment reads as `full`, the path a
@@ -1220,27 +1536,16 @@ impl VisitMut for Resolver<'_, '_> {
             return;
         }
         match self.open(ty) {
-            Ok(Some(Opened::Alias(target))) => *ty = target,
-            Ok(Some(Opened::Renamed(mut full))) => {
-                if self.depth >= ALIAS_DEPTH {
-                    self.expansion.failure = Some(format!(
-                        "the renames lead through more than {ALIAS_DEPTH} paths"
-                    ));
-                    return;
-                }
-                self.depth += 1;
-                self.visit_type_mut(&mut full);
-                self.depth -= 1;
-                *ty = full;
-            }
+            Ok(Some(opened)) => *ty = opened,
             Ok(None) => syn::visit_mut::visit_type_mut(self, ty),
             Err(why) => self.expansion.failure = Some(why),
         }
     }
 }
 
-/// Replaces each type parameter of an alias with the argument its use
-/// writes.
+/// Replaces each one-segment type path the map names with its value: a
+/// parameter of an alias with the word of its frame, or a word with the
+/// value of its parameter.
 struct Substitute<'m>(&'m BTreeMap<String, syn::Type>);
 
 impl VisitMut for Substitute<'_> {
@@ -1545,7 +1850,23 @@ impl Scan {
             (CallForm::Path, Receiver::With) => at == param + 1,
             (CallForm::Method, Receiver::Without) => false,
         };
-        reached && aligned && call.name == slot.name
+        reached && aligned && self.names(place, call, &slot.name)
+    }
+
+    /// Whether the name `call` writes names the `fn` `name` of `place`:
+    /// as itself, or under a `pub use ... as` of the crate of the `fn`, of
+    /// the caller, or of a crate the caller reaches.
+    fn names(&self, place: &Place, call: &BoolCall, name: &str) -> bool {
+        if call.name == name {
+            return true;
+        }
+        let reach = self.declared.reach.get(&call.krate);
+        [&place.krate, &call.krate]
+            .into_iter()
+            .chain(reach.into_iter().flatten())
+            .filter_map(|krate| self.declared.exported.get(krate))
+            .filter_map(|renames| renames.get(&call.name))
+            .any(|old| old.contains(name))
     }
 }
 
@@ -1666,16 +1987,19 @@ struct LiteralVisit {
     /// The file, from the workspace root.
     file: String,
     calls: Vec<BoolCall>,
-    /// Each `use ... as` of the file: the new name, then the segments of
-    /// the path it renames. A call of the new name calls the last one.
-    renames: BTreeMap<String, Vec<String>>,
+    /// Each `use ... as` of the file, per module. A call of the new name
+    /// calls the last segment of the path it renames.
+    renames: Renames,
+    /// The module path the walk is in, from the file.
+    module: Vec<String>,
 }
 
 /// The line of the `bool` literal an argument writes. The literal may sit
-/// bare, in parentheses or in a block of one expression. It may sit behind
-/// a `&` or a `!`, or as the one argument of `Some`, the literal of an
-/// `Option<bool>`. It may also be an element of a tuple, of an array or of
-/// a `vec![..]` list, or the value an array repeats.
+/// bare, in parentheses, or as the one expression of a block, an `unsafe`
+/// block included. It may sit behind a `&` or a `!`, or as the one argument
+/// of `Some`, the literal of an `Option<bool>`. It may also be an element
+/// of a tuple, of an array or of a `vec![..]` list, the value an array
+/// repeats, or the value a branch of an `if` or an arm of a `match` gives.
 fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
     match arg {
         syn::Expr::Lit(syn::ExprLit {
@@ -1690,10 +2014,15 @@ fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
             expr,
             ..
         }) => literal_of(expr),
-        syn::Expr::Block(block) => match block.block.stmts.as_slice() {
-            [syn::Stmt::Expr(only, None)] => literal_of(only),
-            _ => None,
-        },
+        syn::Expr::Block(block) => block_literal(&block.block),
+        syn::Expr::Unsafe(block) => block_literal(&block.block),
+        syn::Expr::If(branch) => block_literal(&branch.then_branch).or_else(|| {
+            branch
+                .else_branch
+                .as_ref()
+                .and_then(|(_, other)| literal_of(other))
+        }),
+        syn::Expr::Match(arms) => arms.arms.iter().find_map(|arm| literal_of(&arm.body)),
         syn::Expr::Tuple(tuple) => tuple.elems.iter().find_map(literal_of),
         syn::Expr::Array(array) => array.elems.iter().find_map(literal_of),
         syn::Expr::Repeat(repeat) => literal_of(&repeat.expr),
@@ -1725,6 +2054,30 @@ fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
     }
 }
 
+/// The line of the `bool` literal a block of one expression gives.
+fn block_literal(block: &syn::Block) -> Option<LineNo> {
+    match block.stmts.as_slice() {
+        [syn::Stmt::Expr(only, None)] => literal_of(only),
+        _ => None,
+    }
+}
+
+/// The line of the `bool` literal a `view!` prop gives: the first one to
+/// three tokens after its `=`, the longest that parses as an expression.
+/// `checked=Some(true)`, `checked=!false` and `checked=(true)` each write
+/// one, as `checked=true` and `checked={true}` do.
+fn prop_literal(tokens: &[TokenTree]) -> Option<LineNo> {
+    (1..=3).rev().find_map(|count| {
+        let taken: TokenStream = tokens.iter().take(count).cloned().collect();
+        if tokens.len() < count {
+            return None;
+        }
+        syn::parse2::<syn::Expr>(taken)
+            .ok()
+            .and_then(|expr| literal_of(&expr))
+    })
+}
+
 /// Whether a token is the punctuation `c`.
 fn is_punct(token: Option<&TokenTree>, c: char) -> bool {
     matches!(token, Some(TokenTree::Punct(punct)) if punct.as_char() == c)
@@ -1745,7 +2098,8 @@ impl LiteralVisit {
     /// makes `c` call `ctrl`.
     fn called(&self, name: &syn::Ident) -> syn::Ident {
         self.renames
-            .get(&name.to_string())
+            .get(&self.module)
+            .and_then(|renames| renames.get(&name.to_string()))
             .and_then(|full| full.last())
             .and_then(|last| syn::parse_str::<syn::Ident>(last).ok())
             .unwrap_or_else(|| name.clone())
@@ -1808,32 +2162,17 @@ impl LiteralVisit {
                         continue;
                     }
                     let after_colon = i > 0 && is_punct(tokens.get(i - 1), ':');
-                    let value = tokens.get(i + 2);
-                    let literal = match value {
-                        Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Brace => {
-                            let inner: Vec<TokenTree> = group.stream().into_iter().collect();
-                            match inner.as_slice() {
-                                [TokenTree::Ident(word)] if word == "true" || word == "false" => {
-                                    Some(word.clone())
-                                }
-                                _ => None,
-                            }
-                        }
-                        Some(TokenTree::Ident(word)) if word == "true" || word == "false" => {
-                            Some(word.clone())
-                        }
-                        _ => None,
-                    };
                     if mode == Tokens::View
                         && !after_colon
                         && is_punct(next, '=')
                         && !is_punct(tokens.get(i + 2), '=')
-                        && let (Some(component), Some(literal)) = (&tag, literal)
+                        && let Some(component) = &tag
+                        && let Some(line) = prop_literal(tokens.get(i + 2..).unwrap_or_default())
                     {
                         self.calls.push(BoolCall {
                             krate: self.krate.clone(),
                             file: self.file.clone(),
-                            line: LineNo(literal.span().start().line),
+                            line,
                             name: component.clone(),
                             position: ArgPosition(0),
                             form: CallForm::Prop,
@@ -1864,6 +2203,12 @@ impl LiteralVisit {
 }
 
 impl<'ast> Visit<'ast> for LiteralVisit {
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        self.module.push(m.ident.to_string());
+        syn::visit::visit_item_mod(self, m);
+        self.module.pop();
+    }
+
     fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
         if let syn::Expr::Path(path) = &*call.func
             && let Some(last) = path.path.segments.last()
@@ -1967,11 +2312,16 @@ fn settle(declared: &Declared, raw: RawKey, errors: &mut Vec<String>) -> Option<
         tail,
         ty,
         mut place,
+        shadow,
     } = raw;
-    let resolved = match declared.resolve(&ty, &place.krate, &place.module) {
+    let sep = SiteKey::SEPARATOR;
+    let read = match shadowed(declared, &ty, &shadow) {
+        Some(why) => Err(why),
+        None => declared.resolve(&ty, &place.krate, &place.module, &shadow.masked),
+    };
+    let resolved = match read {
         Ok(resolved) => resolved,
         Err(why) => {
-            let sep = SiteKey::SEPARATOR;
             errors.push(format!(
                 "{head}{sep}{item}{sep}{tail}: {why}, so the gate fails closed"
             ));
@@ -1993,6 +2343,7 @@ fn settle(declared: &Declared, raw: RawKey, errors: &mut Vec<String>) -> Option<
         tail,
         ty,
         place,
+        shadow,
     })
 }
 
@@ -2220,7 +2571,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             .or_default()
             .append(&mut visit.items);
         for (module, new_name, import) in visit.imports.drain(..) {
-            if import.renamed {
+            if import.name == ImportName::Renamed {
                 declared.renames.insert(new_name.clone());
             }
             declared
@@ -2246,6 +2597,16 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             .entry(name.clone())
             .or_default()
             .append(&mut visit.reexports);
+        for (new_name, old_name) in visit.exported.drain(..) {
+            result
+                .declared
+                .exported
+                .entry(name.clone())
+                .or_default()
+                .entry(new_name)
+                .or_default()
+                .insert(old_name);
+        }
         for (alias, declared) in visit.aliases {
             result.declared.alias_names.insert(alias.clone());
             result
@@ -2305,6 +2666,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             ),
             calls: Vec::new(),
             renames: seek.renames,
+            module: Vec::new(),
         };
         visit.visit_file(&file);
         result.literals.append(&mut visit.calls);
@@ -2349,6 +2711,146 @@ struct RawKey {
     /// The type as the site writes it, before an alias resolves.
     ty: syn::Type,
     place: Place,
+    shadow: Shadow,
+}
+
+/// What the items and blocks around a site declare. The gate reads aliases
+/// and `use` items by module, so a name a block declares either stands for
+/// no alias of the module or stops the scan.
+#[derive(Clone, Debug, Default)]
+struct Shadow {
+    /// The generic parameters of the enclosing items, and the names the
+    /// enclosing blocks declare or import: none names an item of the
+    /// module.
+    masked: BTreeSet<String>,
+    /// The `type` aliases the enclosing blocks declare.
+    aliases: BTreeSet<String>,
+    /// The names the `use` items of the enclosing blocks bring in, and
+    /// [`GLOB`] for a glob.
+    uses: BTreeSet<String>,
+}
+
+/// The word that stands for a glob `use` among the names a block brings in.
+const GLOB: &str = "*";
+
+/// The names one block declares as statements.
+#[derive(Debug, Default)]
+struct BlockNames {
+    /// Its `type` aliases.
+    aliases: BTreeSet<String>,
+    /// The names its `use` and `extern crate` items bring in, and [`GLOB`]
+    /// for a glob.
+    uses: BTreeSet<String>,
+    /// Every other item it declares.
+    items: BTreeSet<String>,
+}
+
+impl BlockNames {
+    /// The names the statements of `block` declare.
+    fn of(block: &syn::Block) -> Self {
+        let mut names = Self::default();
+        for stmt in &block.stmts {
+            let syn::Stmt::Item(item) = stmt else {
+                continue;
+            };
+            let ident = match item {
+                syn::Item::Type(t) => {
+                    names.aliases.insert(t.ident.to_string());
+                    continue;
+                }
+                syn::Item::Use(u) => {
+                    let mut found = Vec::new();
+                    let mut globs = Vec::new();
+                    use_entries(&u.tree, &[], &mut found, &mut globs);
+                    names.uses.extend(found.into_iter().map(|(name, _)| name));
+                    if !globs.is_empty() {
+                        names.uses.insert(GLOB.to_owned());
+                    }
+                    continue;
+                }
+                syn::Item::ExternCrate(e) => {
+                    let name = e.rename.as_ref().map_or(&e.ident, |(_, rename)| rename);
+                    names.uses.insert(name.to_string());
+                    continue;
+                }
+                syn::Item::Struct(i) => &i.ident,
+                syn::Item::Enum(i) => &i.ident,
+                syn::Item::Union(i) => &i.ident,
+                syn::Item::Trait(i) => &i.ident,
+                syn::Item::TraitAlias(i) => &i.ident,
+                syn::Item::Mod(i) => &i.ident,
+                syn::Item::Const(i) => &i.ident,
+                syn::Item::Static(i) => &i.ident,
+                syn::Item::Fn(i) => &i.sig.ident,
+                _ => continue,
+            };
+            names.items.insert(ident.to_string());
+        }
+        names
+    }
+}
+
+/// The type and const parameters `generics` declares.
+fn generic_names(generics: &syn::Generics) -> BTreeSet<String> {
+    generics
+        .params
+        .iter()
+        .filter_map(|param| match param {
+            syn::GenericParam::Type(t) => Some(t.ident.to_string()),
+            syn::GenericParam::Const(c) => Some(c.ident.to_string()),
+            syn::GenericParam::Lifetime(_) => None,
+        })
+        .collect()
+}
+
+/// Why the gate cannot read `ty` under `shadow`: it names an alias, or a
+/// path a `use` brings in, that a block declares. The gate reads both by
+/// module only. `None` when the module's reading holds.
+fn shadowed(declared: &Declared, ty: &syn::Type, shadow: &Shadow) -> Option<String> {
+    let mut paths = PathSeek::default();
+    paths.visit_type(ty);
+    paths.found.iter().find_map(|segments| {
+        let (first, last) = (segments.first()?, segments.last()?);
+        let opens = |name: &str| declared.alias_names.contains(name) || declared.renames.contains(name);
+        if shadow.aliases.contains(first) {
+            return Some(format!(
+                "it names {first}, an alias a block declares, and the gate reads aliases by                  module only"
+            ));
+        }
+        if shadow.uses.contains(first) && (opens(first) || opens(last)) {
+            return Some(format!(
+                "it names {}, which a use item of a block brings in, and the gate reads use                  items by module only",
+                segments.join("::")
+            ));
+        }
+        if segments.len() == 1 && shadow.uses.contains(GLOB) && opens(first) {
+            return Some(format!(
+                "it names {first}, which a glob use item of a block may bring in, and the gate                  reads use items by module only"
+            ));
+        }
+        None
+    })
+}
+
+/// The segments of every type path a type writes.
+#[derive(Default)]
+struct PathSeek {
+    found: Vec<Vec<String>>,
+}
+
+impl<'ast> Visit<'ast> for PathSeek {
+    fn visit_type_path(&mut self, path: &'ast syn::TypePath) {
+        if path.qself.is_none() {
+            self.found.push(
+                path.path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect(),
+            );
+        }
+        syn::visit::visit_type_path(self, path);
+    }
 }
 
 /// Numbers the second and later sites that share one key, `#2` and on, so two
@@ -2536,6 +3038,13 @@ fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
                     first.ident
                 ));
             }
+            // `Self::Inner` names an associated type of the impl's own type,
+            // which the gate does not read.
+            if path.path.segments.len() >= 2
+                && path.path.segments.first().is_some_and(|first| first.ident == "Self")
+            {
+                return Exposure::Unsure("an associated type of Self".to_owned());
+            }
             if path.path.segments.len() == 1 && generics.contains_key(&name) {
                 return Exposure::Generic(name);
             }
@@ -2604,7 +3113,8 @@ fn deref_refusal(declared: &Declared, deref: &DerefImpl, derefs: &[DerefImpl]) -
     let Ok(target) = syn::parse_str::<syn::Type>(&target_text) else {
         return Some(unsure("the Target does not parse as a type"));
     };
-    let target = match declared.resolve(&target, &source.krate, &source.module) {
+    let params: BTreeSet<String> = source.bounds.keys().cloned().collect();
+    let target = match declared.resolve(&target, &source.krate, &source.module, &params) {
         Ok(target) => target,
         Err(why) => {
             return Some(unsure(&format!(
@@ -2658,12 +3168,22 @@ fn holds_primitive(ty: &str) -> bool {
         .any(|word| PRIMITIVES.contains(&word))
 }
 
+/// Each `use ... as` of a file, per module path: the new name, then the
+/// segments of the path it renames. A rename holds in the module that
+/// writes it, and in no other.
+type Renames = BTreeMap<Vec<String>, BTreeMap<String, Vec<String>>>;
+
 /// The `use` items of one file: what each `as` renames, and what each
 /// `pub use` re-exports.
 #[derive(Default)]
 struct UseSeek {
-    renames: BTreeMap<String, Vec<String>>,
+    /// The module path the walk is in.
+    module: Vec<String>,
+    renames: Renames,
     reexports: BTreeSet<String>,
+    /// Each `use ... as` that is not private: the new name, then the last
+    /// segment of the path it renames.
+    exported: Vec<(String, String)>,
 }
 
 impl UseSeek {
@@ -2684,9 +3204,15 @@ impl UseSeek {
                 if prefix.is_empty() && public == Privacy::Public {
                     self.reexports.insert(ident.clone());
                 }
+                if public != Privacy::Private {
+                    self.exported.push((rename.rename.to_string(), ident.clone()));
+                }
                 let mut full = prefix.to_vec();
                 full.push(ident);
-                self.renames.insert(rename.rename.to_string(), full);
+                self.renames
+                    .entry(self.module.clone())
+                    .or_default()
+                    .insert(rename.rename.to_string(), full);
             }
             syn::UseTree::Name(name) => {
                 if prefix.is_empty() && public == Privacy::Public {
@@ -2706,6 +3232,12 @@ impl UseSeek {
 impl<'ast> Visit<'ast> for UseSeek {
     fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
         self.tree(&u.tree, &[], privacy(&u.vis));
+    }
+
+    fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+        self.module.push(m.ident.to_string());
+        syn::visit::visit_item_mod(self, m);
+        self.module.pop();
     }
 }
 
@@ -2935,6 +3467,9 @@ fn writes_deref(stream: TokenStream) -> bool {
 struct MacroItems {
     impls: Vec<syn::ItemImpl>,
     rules: Vec<TokenStream>,
+    /// The path of each other macro the body calls whose tokens write a
+    /// dereference impl.
+    opaque: Vec<String>,
 }
 
 impl<'ast> Visit<'ast> for MacroItems {
@@ -2946,6 +3481,9 @@ impl<'ast> Visit<'ast> for MacroItems {
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         if mac.path.is_ident("macro_rules") {
             self.rules.push(mac.tokens.clone());
+        } else if writes_deref(mac.tokens.clone()) {
+            self.opaque
+                .push(normalise(&mac.path.to_token_stream().to_string()));
         }
     }
 }
@@ -2986,9 +3524,15 @@ struct FileVisit<'a> {
     aliases: Vec<(String, Alias)>,
     /// The first segment of each path a `pub use` of the file re-exports.
     reexports: BTreeSet<String>,
-    /// Each `use ... as` of the file: the new name, then the segments of
-    /// the path it renames.
-    renames: BTreeMap<String, Vec<String>>,
+    /// Each `use ... as` of the file, per module.
+    renames: Renames,
+    /// Each `use ... as` of the file that is not private: the new name,
+    /// then the last segment of the path it renames.
+    exported: Vec<(String, String)>,
+    /// The generic parameters of each enclosing item, the innermost last.
+    generics: Vec<BTreeSet<String>>,
+    /// The names each enclosing block declares, the innermost last.
+    blocks: Vec<BlockNames>,
     /// The path of every module the file declares.
     modules: BTreeSet<String>,
     /// Every struct, enum, union and trait the file declares, and every
@@ -3031,7 +3575,7 @@ fn use_entries(
             if let Some(last) = path.last().cloned() {
                 let import = Import {
                     path,
-                    renamed: false,
+                    name: ImportName::Kept,
                 };
                 names.push((last, import));
             }
@@ -3040,7 +3584,7 @@ fn use_entries(
             if rename.rename != "_" {
                 let import = Import {
                     path: joined(&rename.ident),
-                    renamed: true,
+                    name: ImportName::Renamed,
                 };
                 names.push((rename.rename.to_string(), import));
             }
@@ -3092,6 +3636,9 @@ impl<'a> FileVisit<'a> {
             aliases: Vec::new(),
             reexports: BTreeSet::new(),
             renames: BTreeMap::new(),
+            exported: Vec::new(),
+            generics: Vec::new(),
+            blocks: Vec::new(),
             modules: BTreeSet::new(),
             items: BTreeSet::new(),
             imports: Vec::new(),
@@ -3103,10 +3650,14 @@ impl<'a> FileVisit<'a> {
     /// Reads the `use` items of a file, inline modules included, before the
     /// visit: a rename applies above the `use` that writes it too.
     fn uses(&mut self, file: &syn::File) {
-        let mut seek = UseSeek::default();
+        let mut seek = UseSeek {
+            module: self.module.clone(),
+            ..UseSeek::default()
+        };
         seek.visit_file(file);
         self.renames = seek.renames;
         self.reexports = seek.reexports;
+        self.exported = seek.exported;
     }
 
     /// The segments of a trait path once a `use ... as` rename of the file
@@ -3119,7 +3670,11 @@ impl<'a> FileVisit<'a> {
             .map(|segment| segment.ident.to_string())
             .collect();
         match segments.split_first() {
-            Some((first, rest)) => match self.renames.get(first) {
+            Some((first, rest)) => match self
+                .renames
+                .get(&self.module)
+                .and_then(|renames| renames.get(first))
+            {
                 Some(full) => full.iter().chain(rest).cloned().collect(),
                 None => segments,
             },
@@ -3165,7 +3720,33 @@ impl<'a> FileVisit<'a> {
             tail: format!("{}{sep}{text}", kind.as_str()),
             ty: ty.clone(),
             place,
+            shadow: self.shadow(),
         });
+    }
+
+    /// What the enclosing items and blocks declare, for the next site.
+    fn shadow(&self) -> Shadow {
+        let mut shadow = Shadow::default();
+        for names in &self.generics {
+            shadow.masked.extend(names.iter().cloned());
+        }
+        for block in &self.blocks {
+            shadow.masked.extend(block.items.iter().cloned());
+            shadow
+                .masked
+                .extend(block.uses.iter().filter(|name| *name != GLOB).cloned());
+            shadow.aliases.extend(block.aliases.iter().cloned());
+            shadow.uses.extend(block.uses.iter().cloned());
+        }
+        shadow
+    }
+
+    /// Visits what `visit` reads with the generic parameters of `generics`
+    /// in scope.
+    fn within(&mut self, generics: &syn::Generics, visit: impl FnOnce(&mut Self)) {
+        self.generics.push(generic_names(generics));
+        visit(self);
+        self.generics.pop();
     }
 
     fn signature(&mut self, sig: &syn::Signature, privacy: Privacy, kind: FnKind) {
@@ -3296,10 +3877,33 @@ impl<'a> FileVisit<'a> {
                     self.derefs.push(deref);
                 }
             }
+            for path in &walk.opaque {
+                self.unread.push(self.opaque_refusal(path, &module));
+            }
             for rules in walk.rules {
                 self.macro_rules(rules);
             }
         }
+    }
+
+    /// Fails closed on a call of the macro `mac` whose tokens write a
+    /// dereference impl: the gate expands no macro, so it cannot read the
+    /// impl the call writes.
+    fn opaque_deref(&mut self, mac: &syn::Macro) {
+        if writes_deref(mac.tokens.clone()) {
+            let path = normalise(&mac.path.to_token_stream().to_string());
+            let refusal = self.opaque_refusal(&path, &self.module.join("::"));
+            self.unread.push(refusal);
+        }
+    }
+
+    /// The refusal of a call of the macro `path` in `module` that writes a
+    /// dereference impl.
+    fn opaque_refusal(&self, path: &str, module: &str) -> String {
+        format!(
+            "{} | {}: a call of {path}! in {module} writes an impl of Deref or DerefMut, and              the gate expands no macro, so it cannot show that the impl exposes no primitive              and fails closed. A newtype never dereferences to its primitive (ARCH-037)",
+            self.krate, self.file
+        )
     }
 
     /// Keeps a test module's file, and every file under its directory, out of
@@ -3335,6 +3939,8 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     self.dir.clone(),
                     self.file_dir.take(),
                     std::mem::take(&mut self.scope),
+                    std::mem::take(&mut self.generics),
+                    std::mem::take(&mut self.blocks),
                 );
                 self.dir = self.dir.join(&name);
                 self.module.push(name);
@@ -3342,7 +3948,13 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     self.visit_item(item);
                 }
                 self.module.pop();
-                (self.dir, self.file_dir, self.scope) = saved;
+                (
+                    self.dir,
+                    self.file_dir,
+                    self.scope,
+                    self.generics,
+                    self.blocks,
+                ) = saved;
             }
             None => {
                 let candidates = match path_attr(&m.attrs) {
@@ -3381,8 +3993,43 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         } else {
             FnKind::Plain
         };
-        self.signature(&f.sig, privacy(&f.vis), kind);
-        self.body(f.sig.ident.to_string(), &f.block);
+        self.within(&f.sig.generics, |visit| {
+            visit.signature(&f.sig, privacy(&f.vis), kind);
+            visit.body(f.sig.ident.to_string(), &f.block);
+        });
+    }
+
+    fn visit_block(&mut self, b: &'ast syn::Block) {
+        self.blocks.push(BlockNames::of(b));
+        syn::visit::visit_block(self, b);
+        self.blocks.pop();
+    }
+
+    // A macro called inside a body or an expression writes what the gate
+    // does not expand. One that writes a dereference impl fails closed.
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if mac.path.is_ident("macro_rules") {
+            self.macro_rules(mac.tokens.clone());
+            return;
+        }
+        self.opaque_deref(mac);
+    }
+
+    // `extern crate x as y;` names the crate `x` as `y`.
+    fn visit_item_extern_crate(&mut self, e: &'ast syn::ItemExternCrate) {
+        if test_only(&e.attrs) || !self.scope.is_empty() {
+            return;
+        }
+        if let Some((_, rename)) = &e.rename {
+            self.imports.push((
+                self.module.join("::"),
+                rename.to_string(),
+                Import {
+                    path: vec![e.ident.to_string()],
+                    name: ImportName::Renamed,
+                },
+            ));
+        }
     }
 
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
@@ -3415,9 +4062,11 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             None => ty,
         };
         self.scope.push(label);
+        self.generics.push(generic_names(&i.generics));
         for item in &i.items {
             match item {
                 syn::ImplItem::Fn(f) if !test_only(&f.attrs) => {
+                    self.generics.push(generic_names(&f.sig.generics));
                     let receiver = if f.sig.receiver().is_some() {
                         Receiver::With
                     } else {
@@ -3432,6 +4081,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     self.signature(&f.sig, reach, FnKind::Plain);
                     self.host = None;
                     self.body(f.sig.ident.to_string(), &f.block);
+                    self.generics.pop();
                 }
                 syn::ImplItem::Const(c) if !test_only(&c.attrs) => {
                     self.host = Some(host(Receiver::Without, Output::Other));
@@ -3447,6 +4097,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 _ => {}
             }
         }
+        self.generics.pop();
         self.scope.pop();
     }
 
@@ -3458,17 +4109,21 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         self.items
             .insert(format!("{}::{}", self.module.join("::"), t.ident));
         self.scope.push(t.ident.to_string());
+        self.generics.push(generic_names(&t.generics));
         for item in &t.items {
             if let syn::TraitItem::Fn(f) = item {
                 if test_only(&f.attrs) {
                     continue;
                 }
-                self.signature(&f.sig, privacy(&t.vis), FnKind::Plain);
-                if let Some(block) = &f.default {
-                    self.body(f.sig.ident.to_string(), block);
-                }
+                self.within(&f.sig.generics, |visit| {
+                    visit.signature(&f.sig, privacy(&t.vis), FnKind::Plain);
+                    if let Some(block) = &f.default {
+                        visit.body(f.sig.ident.to_string(), block);
+                    }
+                });
             }
         }
+        self.generics.pop();
         self.scope.pop();
     }
 
@@ -3492,7 +4147,9 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             };
             self.declare(name.clone(), decl);
             self.owner = Some(name.clone());
-            self.fields(&name, &s.fields, Privacy::Private, derived(&s.attrs));
+            self.within(&s.generics, |visit| {
+                visit.fields(&name, &s.fields, Privacy::Private, derived(&s.attrs));
+            });
             self.owner = None;
         }
     }
@@ -3501,12 +4158,14 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if !test_only(&u.attrs) {
             self.items
                 .insert(format!("{}::{}", self.module.join("::"), u.ident));
-            self.fields(
-                &u.ident.to_string(),
-                &u.fields.named,
-                Privacy::Private,
-                derived(&u.attrs),
-            );
+            self.within(&u.generics, |visit| {
+                visit.fields(
+                    &u.ident.to_string(),
+                    &u.fields.named,
+                    Privacy::Private,
+                    derived(&u.attrs),
+                );
+            });
         }
     }
 
@@ -3515,11 +4174,15 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             return;
         }
         self.declare(e.ident.to_string(), Decl::Enum);
+        self.generics.push(generic_names(&e.generics));
         for variant in e
             .variants
             .iter()
             .filter(|variant| !test_only(&variant.attrs))
         {
+            if let Some((_, discriminant)) = &variant.discriminant {
+                self.initialiser(format!("{}::{}", e.ident, variant.ident), discriminant);
+            }
             self.role = match &variant.fields {
                 syn::Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                     FieldRole::VariantValue
@@ -3534,6 +4197,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             );
             self.role = FieldRole::Member;
         }
+        self.generics.pop();
     }
 
     fn visit_item_const(&mut self, c: &'ast syn::ItemConst) {
@@ -3555,13 +4219,36 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
     fn visit_item_type(&mut self, t: &'ast syn::ItemType) {
         if !test_only(&t.attrs) {
             self.privacy = privacy(&t.vis);
-            self.emit(self.item(&t.ident.to_string()), SiteKind::Alias, &t.ty);
-            // An alias nested in a `fn` body is out of reach of the module.
+            self.within(&t.generics, |visit| {
+                visit.emit(visit.item(&t.ident.to_string()), SiteKind::Alias, &t.ty);
+            });
+            // An alias nested in a `fn` body is out of reach of the module:
+            // a site that names it fails closed.
             if self.scope.is_empty() {
                 let params = t
                     .generics
-                    .type_params()
-                    .map(|param| param.ident.to_string())
+                    .params
+                    .iter()
+                    .map(|param| match param {
+                        syn::GenericParam::Lifetime(l) => Param {
+                            name: l.lifetime.ident.to_string(),
+                            kind: ParamKind::Lifetime,
+                            default: None,
+                        },
+                        syn::GenericParam::Type(t) => Param {
+                            name: t.ident.to_string(),
+                            kind: ParamKind::Type,
+                            default: t
+                                .default
+                                .as_ref()
+                                .map(|ty| normalise(&ty.to_token_stream().to_string())),
+                        },
+                        syn::GenericParam::Const(c) => Param {
+                            name: c.ident.to_string(),
+                            kind: ParamKind::Const,
+                            default: None,
+                        },
+                    })
                     .collect();
                 self.aliases.push((
                     t.ident.to_string(),
@@ -3596,6 +4283,8 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         }
         if m.mac.path.is_ident("macro_rules") {
             self.macro_rules(m.mac.tokens.clone());
+        } else if !defines {
+            self.opaque_deref(&m.mac);
         }
     }
 
