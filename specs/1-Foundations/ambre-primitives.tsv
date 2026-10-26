@@ -4203,7 +4203,7 @@ ambre-primitives | src/secrets.rs | crate::secrets | CRYPTO | const | &str	gener
 ambre-primitives | src/secrets.rs | crate::secrets | Check::names() | ret | &'static[&'static str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | Check::reason() | ret | &'static str	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | READERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/secrets.rs | crate::secrets | SECRET_MODULE | const | (&str,&str)	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | SECRET_MODULE | const | (&str,&str)	generic	the crate name and the file path a check admits, matched against the scanned file
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.found | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | WIPERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
@@ -4223,30 +4223,12 @@ ambre-core | src/secret.rs | crate::secret | AccessToken::from_shared(secret) | 
 ambre-core | src/secret.rs | crate::secret | OidcState::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
 ambre-core | src/secret.rs | crate::secret | PresignedUrl::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | PresignedUrl::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
-ambre-draw | src/testing.rs | crate::testing | <RecordingSurface as DrawSurface>::stroke_line(width) | param | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | <RecordingSurface as DrawSurface>::stroke_rect(width) | param | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::DrawImage.height | field | u32	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::DrawImage.width | field | u32	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::Glyphs.glyph_count | field | usize	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.width | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.x0 | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.x1 | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.y0 | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.y1 | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokePath.width | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeRect.width | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | FixedClock.ms | field | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | FixedClock::new(ms) | param | f64	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | RecordingSurface.clip_depth | field | usize	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | RecordingSurface.transform_depth | field | usize	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clip_depth() | ret | usize	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count() | ret | usize	math	geometry or count a test double records
-ambre-draw | src/testing.rs | crate::testing | RecordingSurface::transform_depth() | ret | usize	math	geometry or count a test double records
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
 ambre-murmure | src/testing.rs | crate::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
-ambre-primitives | src/secrets.rs | crate::secrets | RELAY_SECRETS | const | (&str,&str)	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/secrets.rs | crate::secrets | SINKS | const | &[(&str,(&str,&str))]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | RELAY_SECRETS | const | (&str,&str)	generic	the crate name and the directory path a check admits, matched against the scanned file
+ambre-primitives | src/secrets.rs | crate::secrets | INCLUDE | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | SINKS | const | &[(&str,&[(&str,&str)])]	generic	each sink name with the crate names and file paths that may name it, matched against the scanned file
 ambre-primitives | src/secrets.rs | crate::secrets | SINK_NAMES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.relative | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -4254,13 +4236,13 @@ ambre-primitives | src/secrets.rs | crate::secrets | admits_sink() | ret | bool	
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/secrets.rs | crate::secrets | includes_build_output() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | String	foreign-api	the JWT_SIGNING_SEED environment value, decoded here once and wiped
 ambre-server | src/jwt.rs | crate::jwt | signing_key(fill) | param | impl FnOnce(&mut[u8;32])->Result<(),E>	generic	writes the seed into the wrapper the key is built in
 ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret.0 | field | Arc<Secret<String>>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::stored_text() | ret | String	foreign-api	the PKCE verifier text the Redis hash stores (ARCH-047)
-ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key() | ret | String	foreign-api	the Redis key of a sign-in state (ARCH-047)
-ambre-server | src/secrets/token.rs | crate::secrets::token | refresh_key() | ret | String	foreign-api	the Redis key of a refresh token (ARCH-047)
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::present_stored(store) | param | impl FnOnce(&str)->R	generic	lends the PKCE verifier text to the one Redis call that stores it (ARCH-049)
+ambre-server | src/secrets/seed.rs | crate::secrets::seed | SeedText.0 | field | Secret<String>	newtype-inner	the JWT_SIGNING_SEED text the newtype wraps
+ambre-server | src/secrets/seed.rs | crate::secrets::seed | SeedText::new(text) | param | String	newtype-inner	the JWT_SIGNING_SEED text the newtype wraps
+ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key(send) | param | impl FnOnce(&str)->R	generic	lends the Redis key of a sign-in state to the one Redis call that takes it (ARCH-049)
+ambre-server | src/secrets/token.rs | crate::secrets::token | refresh_key(send) | param | impl FnOnce(&str)->R	generic	lends the Redis key of a refresh token to the one Redis call that takes it (ARCH-049)
 ambre-sync | src/http.rs | crate::http | ShownTarget.0 | field | String	newtype-inner	the address an error shows, with no signed query
 ambre-sync | src/http.rs | crate::http | Target::open(send) | param | impl FnOnce(&str)->R	generic	lends the full address to the one foreign call that fetches it
