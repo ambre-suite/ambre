@@ -120,10 +120,11 @@
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
-  line of that file by hand (`ARCH-035`). The gate reads a `type` alias a module of the
-  workspace declares as its target, so such an alias hides no primitive and no `bool` from a
-  check. An alias of a foreign crate, and a site a macro writes, are a reviewer's to read
-  (`ARCH-043`, `ARCH-044`).
+  line of that file by hand (`ARCH-035`).
+
+  The gate reads a `type` alias a module of the workspace declares as its target. Such an alias
+  hides no primitive and no `bool` from a check. An alias of a foreign crate, and a site a macro
+  writes, are a reviewer's to read (`ARCH-043`, `ARCH-044`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
   site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line

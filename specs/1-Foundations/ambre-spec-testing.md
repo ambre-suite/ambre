@@ -85,7 +85,7 @@ file, the module, the item, the kind and the type, and no line number.
   declares resolves in the module that names it, across crates, before any check reads the type.
   The key keeps the type as written.
   * The path is placed through child modules, `use` items, `use ... as` and `extern crate`
-    renames, and globs. A name a `use` imports that is no alias shadows one, and so do a generic
+    renames, and globs. A name a `use` imports that is no alias shadows one. So do a generic
     parameter of an enclosing item and an item an enclosing block declares.
   * An argument resolves where the use writes it, and takes the place of the next parameter of its
     kind. A parameter with no argument takes its default, and the target resolves in the module of
@@ -104,7 +104,7 @@ file, the module, the item, the kind and the type, and no line number.
   instance makes it a primitive is rustc's to resolve. A target the gate cannot read fails too.
 
   The impls nested in a constant, a static or an enum discriminant, and those a `macro_rules!`
-  body writes, are read. A body that writes `impl ... Deref` and does not parse fails, and so does
+  body writes, are read. A body that writes `impl ... Deref` and does not parse fails. So does
   a call of any other macro whose tokens write one, since the gate expands no macro.
 * **A site that is not private fails three checks, whatever its category.** A site is not private
   when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`, or sits in a trait impl. A field
@@ -123,10 +123,10 @@ file, the module, the item, the kind and the type, and no line number.
   sites refutes both, since a name cannot tell them apart.
 
   A literal counts bare, in parentheses, or in a block or an `unsafe` block of one expression. It
-  counts behind `&` or `!`, under `Some`, in a tuple, an array or a `vec!`, and in a branch of an
-  `if` or an arm of a `match`. A `use ... as` rename holds in its own module, and a `pub use ...
-  as` names the `fn` to every crate that reaches it. A call through a value, a literal in any other
-  shape, and code a macro writes, stay out of reach (`ARCH-041`).
+  counts behind `&` or `!`, under `Some`, and in a tuple, an array or a `vec!`. It counts in a
+  branch of an `if` and in an arm of a `match`. A `use ... as` rename holds in its own module,
+  and a `pub use ... as` names the `fn` to every crate that reaches it. A call through a value,
+  a literal in any other shape, and code a macro writes, stay out of reach (`ARCH-041`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
