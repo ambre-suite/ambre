@@ -15,6 +15,7 @@ mod redis_keys;
 mod redis_ops;
 mod routes;
 mod s3;
+mod secrets;
 mod state;
 mod supervise;
 mod ws;
@@ -130,8 +131,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // (dev), generate an ephemeral one so a restart simply forces clients to
     // refresh.
     let jwt_seed = match std::env::var("JWT_SIGNING_SEED") {
-        // The hex text is the seed too, so it is wiped like the bytes.
-        Ok(hex_seed) => jwt::JwtSeed::from_hex(&ambre_core::Secret::new(hex_seed))?,
+        // The hex text is the seed too, so `from_hex` wipes it once read.
+        Ok(hex_seed) => jwt::JwtSeed::from_hex(hex_seed)?,
         Err(_) if dev_mode => {
             tracing::warn!(
                 "JWT_SIGNING_SEED not set: generating an ephemeral signing key (tokens \

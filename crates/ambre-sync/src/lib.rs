@@ -1852,7 +1852,8 @@ mod setup_tests {
         use ambre_core::UnreadableCause;
         let unreadable = |cause| http::HttpError::Unreadable {
             method: http::Method::Get,
-            url: crate::http::Target::relay("https://relay.example/api/documents/d/members"),
+            url: crate::http::Target::relay("https://relay.example/api/documents/d/members")
+                .shown(),
             reason: "unknown variant `auditor`".into(),
             cause,
         };

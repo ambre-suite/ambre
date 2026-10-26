@@ -201,7 +201,7 @@ mod tests {
         let (mut parts, ()) = axum::http::Request::get("/api/documents")
             .header(
                 AUTHORIZATION,
-                format!("Bearer {}", pair.access_token.reveal()),
+                format!("Bearer {}", pair.access_token.secret().expose()),
             )
             .body(())
             .unwrap()

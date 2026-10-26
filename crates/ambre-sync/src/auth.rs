@@ -541,9 +541,9 @@ mod provider_tests {
 
         let stored = state.tokens.borrow();
         let stored = stored.as_ref().expect("the worker holds the session");
-        assert_eq!(stored.access_token.present(str::to_owned), "access-s3cr3t");
+        assert_eq!(stored.access_token.secret().expose(), "access-s3cr3t");
         assert_eq!(
-            stored.refresh_token.present(str::to_owned),
+            stored.refresh_token.secret().expose(),
             "refresh-s3cr3t"
         );
         assert_eq!(state.socket_opens, 0);

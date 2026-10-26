@@ -1,7 +1,6 @@
 use super::*;
 use crate::rekey::Refusal;
 use ambre_core::RefusalCode;
-use ambre_protocol::ws::AccessToken;
 
 /// The delay before Sync asks again for the first stopped replay of a
 /// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
@@ -34,10 +33,13 @@ impl SyncState {
     /// Sends the access token as the socket's first frame. The relay reads
     /// nothing else until this frame opens the session (`SRV-031`).
     pub(crate) fn authenticate_socket(&mut self) {
-        let Some(token) = self.tokens.borrow().as_ref().map(|t| {
-            t.access_token
-                .present(|text| AccessToken::new(text.to_owned()))
-        }) else {
+        // The frame shares the token's wrapper; no bare copy of it is made.
+        let Some(token) = self
+            .tokens
+            .borrow()
+            .as_ref()
+            .map(|t| t.access_token.to_access_token())
+        else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
         };
@@ -1998,7 +2000,7 @@ mod tests {
         let WsClientMsg::Authenticate { token } = &sent[0] else {
             panic!("the first frame is {:?}", sent[0]);
         };
-        assert_eq!(token.reveal(), "acc-s3cr3t");
+        assert_eq!(token.secret().expose(), "acc-s3cr3t");
         assert!(!format!("{:?}", sent[0]).contains("s3cr3t"));
         assert!(matches!(sent[1], WsClientMsg::Subscribe { document_id } if document_id == id));
     }

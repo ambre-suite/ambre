@@ -367,7 +367,7 @@ mod tests {
         };
         (
             user,
-            format!("Bearer {}", jwt.mint(&claims).unwrap().reveal()),
+            format!("Bearer {}", jwt.mint(&claims).unwrap().secret().expose()),
         )
     }
 

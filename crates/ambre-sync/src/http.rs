@@ -157,7 +157,10 @@ impl std::fmt::Display for RelayUrl {
 /// link names. Only a relay route ever carries the access token. A presigned
 /// link is a credential of its own, so its text never reaches a log: the
 /// target reads as the link without its query.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// It derives no `PartialEq`: a link compares in constant time only, and a
+/// test compares the [`ShownTarget`] or the text it opens.
+#[derive(Debug, Clone)]
 pub(crate) enum Target {
     /// A route of the relay.
     Relay(RelayUrl),
@@ -166,12 +169,19 @@ pub(crate) enum Target {
 }
 
 impl Target {
-    /// The full address, for the one call that sends the request.
-    pub(crate) fn reveal(&self) -> &str {
+    /// Lends the full address to `send`, the one call that sends the
+    /// request. A presigned link is lent from its wrapper, and no copy of it
+    /// is kept here.
+    pub(crate) fn open<R>(&self, send: impl FnOnce(&str) -> R) -> R {
         match self {
-            Self::Relay(url) => url.as_str(),
-            Self::Object(link) => link.reveal(),
+            Self::Relay(url) => send(url.as_str()),
+            Self::Object(link) => link.present_link(send),
         }
+    }
+
+    /// The target as a log and an error show it, with no credential in it.
+    pub(crate) fn shown(&self) -> ShownTarget {
+        ShownTarget(self.to_string())
     }
 }
 
@@ -180,6 +190,14 @@ impl Target {
     /// A relay route spelled out, for a test that builds an error by hand.
     pub(crate) fn relay(text: &str) -> Self {
         Self::Relay(RelayUrl(text.to_owned()))
+    }
+
+    /// The full address, for a test that reads where a request went.
+    pub(crate) fn reveal(&self) -> &str {
+        match self {
+            Self::Relay(url) => url.as_str(),
+            Self::Object(link) => link.secret().expose(),
+        }
     }
 }
 
@@ -199,11 +217,20 @@ impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Relay(url) => url.fmt(f),
-            Self::Object(link) => {
-                let text = link.reveal();
-                f.write_str(text.split_once('?').map_or(text, |(address, _)| address))
-            }
+            Self::Object(link) => f.write_str(link.object_address()),
         }
+    }
+}
+
+/// A [`Target`] as a log and an error show it: a relay route whole, an
+/// object link without its query. It holds no credential, so an error that
+/// keeps it compares and clones freely.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ShownTarget(String);
+
+impl std::fmt::Display for ShownTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -446,7 +473,9 @@ impl Transport for Fetch {
         let signal = web_sys::AbortSignal::timeout_with_u32(
             u32::try_from(request.timeout.0).unwrap_or(u32::MAX),
         );
-        let mut builder = gloo_net::http::RequestBuilder::new(request.url.reveal())
+        let mut builder = request
+            .url
+            .open(gloo_net::http::RequestBuilder::new)
             .method(request.method.gloo())
             .abort_signal(Some(&signal));
         if let Some(token) = &request.bearer {
@@ -519,7 +548,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: Target,
+        url: ShownTarget,
         /// What the transport said.
         reason: TransportError,
     },
@@ -532,7 +561,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: Target,
+        url: ShownTarget,
         /// The status the relay answered.
         status: HttpStatus,
         /// The code its body named, on a status that may carry one.
@@ -544,7 +573,7 @@ pub(crate) enum HttpError {
         /// The method.
         method: Method,
         /// Where it went.
-        url: Target,
+        url: ShownTarget,
         /// What the parser said.
         reason: String,
         /// Whether the body was malformed, or named a word this build does
@@ -570,7 +599,7 @@ impl HttpError {
         };
         Self::Refused {
             method,
-            url: url.clone(),
+            url: url.shown(),
             status,
             code,
         }
@@ -752,7 +781,7 @@ fn read_json<R: serde::de::DeserializeOwned>(
     expect_ok(request, resp)?;
     serde_json::from_slice(&resp.body).map_err(|e| HttpError::Unreadable {
         method: request.method,
-        url: request.url.clone(),
+        url: request.url.shown(),
         // A word of a closed set this build does not know means the relay is
         // newer (`SYNC-152`).
         cause: if e.is_data() && e.to_string().starts_with("unknown variant `") {
@@ -779,7 +808,7 @@ async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Inco
     };
     answer.map_err(|reason| HttpError::NoAnswer {
         method: request.method,
-        url: request.url.clone(),
+        url: request.url.shown(),
         reason,
     })
 }
@@ -2133,8 +2162,8 @@ mod tests {
         assert_eq!(asked, serde_json::json!({ "refresh_token": "refresh-1" }));
         assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
         assert_eq!(
-            (replay.method, &replay.url, &replay.body),
-            (first.method, &first.url, &first.body)
+            (replay.method, replay.url.reveal(), &replay.body),
+            (first.method, first.url.reveal(), &first.body)
         );
         assert!(sent.iter().all(|r| r.timeout == REQUEST_TIMEOUT));
     }

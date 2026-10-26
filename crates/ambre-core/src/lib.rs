@@ -98,7 +98,7 @@ pub use authorship::{OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, Sess
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{InvalidOpacity, Opacity, Rgb, Rgba};
-pub use credential::{OidcCode, OidcState, PresignedUrl, ProviderUrl};
+pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, ContainerVersion,
@@ -153,7 +153,10 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
 };
-pub use secret::{Passphrase, Secret, SecretBytes, SecretString};
+pub use secret::{
+    AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret, SecretBytes,
+    SecretString,
+};
 pub use seq::Seq;
 pub use span::{
     LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis,

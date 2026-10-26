@@ -2,9 +2,8 @@ use openidconnect::core::{
     CoreAuthenticationFlow, CoreClient, CoreIdTokenClaims, CoreProviderMetadata,
 };
 use openidconnect::{
-    AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet, EndpointNotSet,
-    EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
-    TokenResponse,
+    ClientId, CsrfToken, EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
+    PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -86,29 +85,7 @@ pub struct CallbackResponse {
     pub access_expires_in: ambre_core::Seconds,
 }
 
-/// A secret of the OIDC exchange: the client secret the provider issued, or
-/// a PKCE verifier. `Debug` prints no byte of it, so a logged `Config` or
-/// sign-in state carries none.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct OidcSecret(String);
-
-impl OidcSecret {
-    /// Wraps the secret text.
-    pub fn new(secret: String) -> Self {
-        Self(secret)
-    }
-
-    /// The secret text, for the one call that presents it.
-    pub fn reveal(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for OidcSecret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("OidcSecret(<redacted>)")
-    }
-}
+pub use crate::secrets::OidcSecret;
 
 /// Transient OIDC authorization state stored in Redis (TTL 10 min).
 ///
@@ -184,7 +161,7 @@ async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, App
     let client = OidcClient::from_provider_metadata(
         provider_metadata,
         google.client_id.clone(),
-        Some(ClientSecret::new(google.client_secret.reveal().to_owned())),
+        Some(google.client_secret.client_secret()),
     );
 
     let mut map = HashMap::new();
@@ -253,9 +230,8 @@ pub async fn exchange_code(
     code: &ambre_core::OidcCode,
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
-    let auth_code = AuthorizationCode::new(code.reveal().to_owned());
-    let pkce_verifier =
-        PkceCodeVerifier::new(stored_state.pkce_verifier_secret.reveal().to_owned());
+    let auth_code = crate::secrets::authorization_code(code);
+    let pkce_verifier = stored_state.pkce_verifier_secret.pkce_verifier();
 
     let http_client = &provider.http_client;
     let client_with_redirect = provider

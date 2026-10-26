@@ -56,52 +56,11 @@ pub enum WsClientMsg {
     },
 }
 
-/// An access token on the wire. `Debug` prints no byte of it, so a logged
-/// frame logs no token (`SRV-031`).
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub struct AccessToken(String);
-
-impl AccessToken {
-    /// Wraps the token text.
-    pub fn new(token: String) -> Self {
-        Self(token)
-    }
-
-    /// The token text, for the one call that verifies it.
-    pub fn reveal(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for AccessToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("AccessToken(<redacted>)")
-    }
-}
-
-/// A refresh token on the wire: the opaque credential `/auth/refresh` trades
-/// for a new pair. `Debug` prints no byte of it, as for [`AccessToken`].
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(transparent)]
-pub struct RefreshToken(String);
-
-impl RefreshToken {
-    /// Wraps the token text.
-    pub fn new(token: String) -> Self {
-        Self(token)
-    }
-
-    /// The token text, for the one call that redeems it.
-    pub fn reveal(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for RefreshToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("RefreshToken(<redacted>)")
-    }
-}
+/// The session tokens on the wire. Each holds its text in an
+/// [`ambre_core::Secret`], so `Debug` prints no byte of it and a logged frame
+/// logs no token (`SRV-031`). They live in the Secret module of `ambre-core`,
+/// whose hand-written serde keeps the bare text this wire carried before.
+pub use ambre_core::{AccessToken, RefreshToken};
 
 /// The code of a WebSocket close frame, 1000 to 4999 (RFC 6455 section 7.4).
 /// The relay closes a refused upgrade with a code of the application range,

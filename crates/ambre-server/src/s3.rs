@@ -801,7 +801,7 @@ mod tests {
         )
         .await
         .expect("presign")
-        .reveal()
+        .secret().expose()
         .to_owned();
         let lower = url.to_lowercase();
         // SigV4 lists signed headers in `X-Amz-SignedHeaders`; content-length
@@ -831,7 +831,7 @@ mod tests {
         )
         .await
         .expect("presign")
-        .reveal()
+        .secret().expose()
         .to_owned();
         let down = generate_presigned_download_url(
             &s3,
@@ -841,7 +841,7 @@ mod tests {
         )
         .await
         .expect("presign")
-        .reveal()
+        .secret().expose()
         .to_owned();
         for url in [up, down] {
             assert!(url.contains("X-Amz-Expires=900"), "{url}");
@@ -854,7 +854,7 @@ mod tests {
         )
         .await
         .expect("presign")
-        .reveal()
+        .secret().expose()
         .to_owned();
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }

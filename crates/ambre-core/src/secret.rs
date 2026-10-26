@@ -18,10 +18,14 @@
 //! this module (`ARCH-045`). It refuses `zeroize` named anywhere outside this
 //! module too (`ARCH-046`).
 //!
-//! The three newtypes below live here, not in `ambre-crypto`. The bus, the
-//! interface and the relay carry them, and none of these may depend on
-//! `ambre-crypto`. Their serde form is written here by hand, for the same
-//! reason.
+//! The newtypes below live here, not in `ambre-crypto`. The bus, the
+//! interface, the wire and the relay carry them, and none of these may depend
+//! on `ambre-crypto`. Their serde form is written here by hand, for the same
+//! reason. Each serde form is a door to the value, and `ARCH-047` names it.
+//!
+//! Three of them carry what a person types or reads, and five carry a bearer
+//! credential: a session token, a presigned link, an OIDC code and state.
+//! One macro writes the five, so they share one form.
 //!
 //! A type that holds a [`Secret`] derives `Debug`, because the wrapper's own
 //! form is redacted. It cannot derive `Clone`, `Serialize` or `PartialEq`:
@@ -283,6 +287,113 @@ impl<'de> Deserialize<'de> for Passphrase {
     }
 }
 
+/// Writes one bearer credential: a text that grants access to whoever holds
+/// it. The text sits in one shared [`Secret`], so a clone copies the pointer,
+/// never the text. Equality is constant-time, through `matches`. The serde
+/// form is the bare text, as the wire carried it before the wrapper.
+macro_rules! define_credential {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
+        #[derive(Clone, Debug)]
+        pub struct $name(Arc<Secret<String>>);
+
+        impl $name {
+            /// Wraps the credential text.
+            #[must_use]
+            pub fn new(text: String) -> Self {
+                Self(Arc::new(Secret::new(text)))
+            }
+
+            /// The wrapper, for the code the gate admits to read the text.
+            #[must_use]
+            pub fn secret(&self) -> &Secret<String> {
+                &self.0
+            }
+
+            /// Whether `other` holds the same text, in constant time.
+            #[must_use]
+            pub fn matches(&self, other: &Self) -> bool {
+                self.0.ct_eq(&other.0).into()
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                self.0.expose().as_str().serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                Ok(Self::new(String::deserialize(deserializer)?))
+            }
+        }
+    };
+}
+
+define_credential! {
+    /// An access token: the short-lived credential the relay mints, which a
+    /// request header and the first frame of the socket present (`SRV-031`).
+    AccessToken
+}
+
+impl AccessToken {
+    /// Takes a wrapper another owner shares, such as the token store of the
+    /// Sync worker. No copy of the text is made.
+    #[must_use]
+    pub fn from_shared(secret: Arc<Secret<String>>) -> Self {
+        Self(secret)
+    }
+}
+
+define_credential! {
+    /// A refresh token: the opaque credential `/auth/refresh` trades for a new
+    /// pair.
+    RefreshToken
+}
+
+define_credential! {
+    /// A presigned object-store URL: it reads or writes one object until it
+    /// expires.
+    PresignedUrl
+}
+
+impl PresignedUrl {
+    /// Lends the full URL to `send`, the one call that sends the request.
+    /// Nothing of the text outlives the call but what `send` copies. The
+    /// primitive gate admits this name in the transport alone (`ARCH-049`).
+    pub fn present_link<R>(&self, send: impl FnOnce(&str) -> R) -> R {
+        send(self.0.expose())
+    }
+
+    /// The address without its query, which holds the signature. A log and
+    /// an error show this part alone.
+    #[must_use]
+    pub fn object_address(&self) -> &str {
+        let text = self.0.expose();
+        text.split_once('?').map_or(text.as_str(), |(address, _)| address)
+    }
+}
+
+define_credential! {
+    /// The authorization code an identity provider hands back to the client.
+    OidcCode
+}
+
+define_credential! {
+    /// The CSRF state that binds a sign-in callback to the sign-in it began.
+    OidcState
+}
+
+impl OidcState {
+    /// Lends the state to `store`, the one call that keeps it until the
+    /// callback: the page's session storage. The primitive gate admits this
+    /// name in that one file (`ARCH-049`).
+    pub fn present_state<R>(&self, store: impl FnOnce(&str) -> R) -> R {
+        store(self.0.expose())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::marker::PhantomData;
@@ -292,7 +403,10 @@ mod tests {
     use subtle::ConstantTimeEq;
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
-    use super::{Passphrase, Secret, SecretBytes, SecretString};
+    use super::{
+        AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret,
+        SecretBytes, SecretString,
+    };
 
     /// A value that counts the wipes it receives, so a test sees the drop
     /// wipe it without reading freed memory.
@@ -458,5 +572,66 @@ mod tests {
         assert_eq!(bytes, postcard::to_allocvec(b"plain".as_slice()).unwrap());
         let back: SecretBytes = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(back.to_plaintext(), b"plain");
+    }
+
+    /// The form each credential had on the wire before its wrapper: a
+    /// newtype over the bare text, as serde derived it.
+    #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+    struct Before(String);
+
+    #[test]
+    fn a_credential_travels_as_the_text_it_had_before_its_wrapper() {
+        let text = "https://store.test/o?sig=s3cr3t".to_owned();
+        let before = Before(text.clone());
+        let json = serde_json::to_string(&before).unwrap();
+        let bytes = postcard::to_allocvec(&before).unwrap();
+
+        macro_rules! round_trip {
+            ($($name:ident),+) => {$(
+                let value = $name::new(text.clone());
+                assert_eq!(serde_json::to_string(&value).unwrap(), json);
+                assert_eq!(postcard::to_allocvec(&value).unwrap(), bytes);
+                let back: $name = serde_json::from_str(&json).unwrap();
+                assert!(back.matches(&value));
+                let back: $name = postcard::from_bytes(&bytes).unwrap();
+                assert_eq!(back.secret().expose(), &text);
+                assert_eq!(
+                    serde_json::from_str::<Before>(&serde_json::to_string(&back).unwrap())
+                        .unwrap(),
+                    before
+                );
+            )+};
+        }
+        round_trip!(AccessToken, RefreshToken, PresignedUrl, OidcCode, OidcState);
+    }
+
+    #[test]
+    fn a_credential_prints_no_byte_and_compares_in_constant_time() {
+        let url = PresignedUrl::new("https://store.test/o?sig=s3cr3t".to_owned());
+        assert_eq!(format!("{url:?}"), "PresignedUrl(Secret([REDACTED]))");
+        assert_eq!(url.object_address(), "https://store.test/o");
+        assert_eq!(url.present_link(str::to_owned), "https://store.test/o?sig=s3cr3t");
+        let state = OidcState::new("st4te".to_owned());
+        assert!(state.matches(&OidcState::new("st4te".to_owned())));
+        assert!(!state.matches(&OidcState::new("st4tf".to_owned())));
+        assert_eq!(state.present_state(str::to_owned), "st4te");
+        assert_eq!(
+            [
+                Probe::<AccessToken>::PARTIAL_EQ,
+                Probe::<RefreshToken>::PARTIAL_EQ,
+                Probe::<PresignedUrl>::PARTIAL_EQ,
+                Probe::<OidcCode>::PARTIAL_EQ,
+                Probe::<OidcState>::PARTIAL_EQ,
+                Probe::<AccessToken>::DISPLAY,
+            ],
+            [false; 6]
+        );
+    }
+
+    #[test]
+    fn a_shared_access_token_is_the_same_wrapper() {
+        let shared = Arc::new(Secret::new("acc".to_owned()));
+        let token = AccessToken::from_shared(Arc::clone(&shared));
+        assert!(std::ptr::eq(token.secret(), shared.as_ref()));
     }
 }

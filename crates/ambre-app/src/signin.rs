@@ -17,8 +17,10 @@ const PENDING_STATE_KEY: &str = "ambre.signin.state";
 /// `/signin/<provider>` as the provider's redirect address.
 const RETURN_PREFIX: &str = "/signin/";
 
-/// A return from the provider, as read from the page's address.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A return from the provider, as read from the page's address. Its code and
+/// state are secrets, so it derives no `PartialEq`: the state compares in
+/// constant time, through [`ambre_core::OidcState::matches`].
+#[derive(Debug, Clone)]
 pub(crate) struct ProviderReturn {
     pub provider: ambre_core::OidcProvider,
     pub code: ambre_core::OidcCode,
@@ -56,13 +58,15 @@ pub(crate) fn accept_return(
     ret: ProviderReturn,
     pending: Option<ambre_core::OidcState>,
 ) -> Option<ProviderReturn> {
-    (pending.as_ref() == Some(&ret.state)).then_some(ret)
+    pending
+        .is_some_and(|pending| pending.matches(&ret.state))
+        .then_some(ret)
 }
 
 /// Whether `url` may be followed: an `https` address. The address is data from
 /// the relay, and a `javascript:` one would run in this page's origin.
 pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
-    web_sys::Url::new(url.reveal()).is_ok_and(|u| u.protocol() == "https:")
+    web_sys::Url::new(url.as_str()).is_ok_and(|u| u.protocol() == "https:")
 }
 
 /// Follow the provider's address: remember its `state` for the return, then
@@ -80,10 +84,13 @@ pub(crate) fn follow_address(
     let Some(storage) = session_storage() else {
         return false;
     };
-    if storage.set_item(PENDING_STATE_KEY, state.reveal()).is_err() {
+    if state
+        .present_state(|text| storage.set_item(PENDING_STATE_KEY, text))
+        .is_err()
+    {
         return false;
     }
-    navigate(url.reveal());
+    navigate(url.as_str());
     true
 }
 
@@ -147,6 +154,22 @@ mod tests {
         ambre_core::OidcState::new(text.to_owned())
     }
 
+    /// A return as its parts read, for a test that compares two.
+    fn read(ret: Option<ProviderReturn>) -> Option<(ambre_core::OidcProvider, String, String)> {
+        ret.map(|ret| {
+            (
+                ret.provider,
+                ret.code.secret().expose().clone(),
+                ret.state.secret().expose().clone(),
+            )
+        })
+    }
+
+    /// A state as its text reads.
+    fn text(state: Option<ambre_core::OidcState>) -> Option<String> {
+        state.map(|state| state.secret().expose().clone())
+    }
+
     fn google(state: &str) -> ProviderReturn {
         ProviderReturn {
             provider: ambre_core::OidcProvider::Google,
@@ -160,21 +183,21 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_provider_return_is_read_from_its_address() {
         assert_eq!(
-            parse_return("/signin/google", "?code=4%2F0Ab&state=st1&scope=email"),
-            Some(google("st1"))
+            read(parse_return(
+                "/signin/google",
+                "?code=4%2F0Ab&state=st1&scope=email"
+            )),
+            read(Some(google("st1")))
         );
         assert_eq!(
-            parse_return("/signin/google/", "?state=st1&code=4%2F0Ab"),
-            Some(google("st1"))
+            read(parse_return("/signin/google/", "?state=st1&code=4%2F0Ab")),
+            read(Some(google("st1")))
         );
-        assert_eq!(
-            parse_return("/signin/google", "?error=access_denied&state=st1"),
-            None
-        );
-        assert_eq!(parse_return("/signin/google", "?code=c"), None);
-        assert_eq!(parse_return("/signin/..%2Fkeys", "?code=c&state=s"), None);
-        assert_eq!(parse_return("/signin/Google", "?code=c&state=s"), None);
-        assert_eq!(parse_return("/trame/x", "?code=c&state=s"), None);
+        assert!(parse_return("/signin/google", "?error=access_denied&state=st1").is_none());
+        assert!(parse_return("/signin/google", "?code=c").is_none());
+        assert!(parse_return("/signin/..%2Fkeys", "?code=c&state=s").is_none());
+        assert!(parse_return("/signin/Google", "?code=c&state=s").is_none());
+        assert!(parse_return("/trame/x", "?code=c&state=s").is_none());
         assert!(is_return_path("/signin/google"));
         assert!(!is_return_path("/"));
     }
@@ -184,11 +207,11 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_return_this_tab_did_not_start_is_refused() {
         assert_eq!(
-            accept_return(google("st1"), Some(state("st1"))),
-            Some(google("st1"))
+            read(accept_return(google("st1"), Some(state("st1")))),
+            read(Some(google("st1")))
         );
-        assert_eq!(accept_return(google("st1"), Some(state("st2"))), None);
-        assert_eq!(accept_return(google("st1"), None), None);
+        assert!(accept_return(google("st1"), Some(state("st2"))).is_none());
+        assert!(accept_return(google("st1"), None).is_none());
     }
 
     /// Following the address remembers its state for the return and sends the
@@ -201,8 +224,8 @@ mod tests {
         let url = ambre_core::ProviderUrl::new(text.to_owned());
         assert!(follow_address(&url, &state("st9"), |u| went = Some(u.to_owned())));
         assert_eq!(went.as_deref(), Some(text));
-        assert_eq!(take_pending_state(), Some(state("st9")));
-        assert_eq!(take_pending_state(), None, "a state serves one return");
+        assert_eq!(text(take_pending_state()).as_deref(), Some("st9"));
+        assert!(take_pending_state().is_none(), "a state serves one return");
 
         for bad in [
             "javascript:alert(1)",
@@ -219,7 +242,7 @@ mod tests {
                 "{bad} was followed"
             );
             assert!(!went);
-            assert_eq!(take_pending_state(), None);
+            assert!(take_pending_state().is_none());
         }
     }
 
@@ -237,6 +260,6 @@ mod tests {
         leave_session(|u| went = Some(u.to_owned()));
         assert_eq!(went.as_deref(), Some("/"));
         assert_eq!(crate::platform::stored_dev_user(), None);
-        assert_eq!(take_pending_state(), None);
+        assert!(take_pending_state().is_none());
     }
 }

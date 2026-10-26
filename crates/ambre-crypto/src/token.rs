@@ -4,8 +4,10 @@
 //! token in the worker's memory (`SYNC-100`). Its `Debug` prints no byte of
 //! it, so no log can carry one (`SYNC-061`). It lives here because the text
 //! is read through [`ambre_core::Secret::expose`], which the primitive gate
-//! admits in this crate alone (`ARCH-045`). The worker hands it to a foreign
-//! call through [`SecretToken::present`], and never holds the text itself.
+//! admits in this crate alone (`ARCH-045`). The worker hands it on through
+//! two typed sinks only: [`SecretToken::present_bearer`] for a request header,
+//! and [`SecretToken::to_access_token`] for the first frame of the socket. It
+//! never holds the text itself.
 
 use std::sync::Arc;
 
@@ -24,11 +26,10 @@ impl SecretToken {
         &self.0
     }
 
-    /// Hands the token's text to `read`, the one foreign call that carries
-    /// it: a socket frame, a query. Nothing of the text outlives the call
-    /// but what `read` copies.
-    pub fn present<R>(&self, read: impl FnOnce(&str) -> R) -> R {
-        read(self.0.expose())
+    /// The token as the wire type of the socket's `Authenticate` frame. The
+    /// two share one wrapper, so no copy of the text is made.
+    pub fn to_access_token(&self) -> ambre_core::AccessToken {
+        ambre_core::AccessToken::from_shared(Arc::clone(&self.0))
     }
 
     /// Hands the `Authorization` header value, `Bearer` and the token, to
@@ -71,11 +72,22 @@ mod tests {
     fn a_token_prints_nothing_and_travels_as_its_text() {
         let token = SecretToken::from("acc-s3cr3t".to_owned());
         assert_eq!(format!("{token:?}"), "SecretToken(Secret([REDACTED]))");
-        assert_eq!(token.present(str::to_owned), "acc-s3cr3t");
+        assert_eq!(token.secret().expose(), "acc-s3cr3t");
         assert_eq!(token.present_bearer(str::to_owned), "Bearer acc-s3cr3t");
         let wire = serde_json::to_string(&token).unwrap();
         assert_eq!(wire, "\"acc-s3cr3t\"");
         let back: SecretToken = serde_json::from_str(&wire).unwrap();
-        assert_eq!(back.present(str::to_owned), "acc-s3cr3t");
+        assert_eq!(back.secret().expose(), "acc-s3cr3t");
+    }
+
+    #[test]
+    fn the_socket_frame_shares_the_wrapper_of_the_token() {
+        let token = SecretToken::from("acc-s3cr3t".to_owned());
+        let frame = token.to_access_token();
+        assert!(std::ptr::eq(frame.secret(), token.secret()));
+        assert_eq!(
+            serde_json::to_string(&frame).unwrap(),
+            serde_json::to_string(&token).unwrap()
+        );
     }
 }
