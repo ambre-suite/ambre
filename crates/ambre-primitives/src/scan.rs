@@ -680,10 +680,10 @@ impl Declared {
             .find(|alias| alias.module == module)
     }
 
-    /// Where the segments `prefix` of a path lead, read from `module` of
-    /// `krate` the way rustc reads them: `crate`, `self` and `super`, a
-    /// child module, a `use` of the module, a glob `use`, then a crate.
-    /// `Ok(None)` when they leave the workspace's modules.
+    /// Where the segments `prefix` of a path lead from `module` of `krate`.
+    /// They are read in rustc's order: `crate`, `self` and `super`, a child
+    /// module, a `use`, a glob `use`, then a crate. `Ok(None)` when they
+    /// leave the workspace's modules.
     ///
     /// # Errors
     ///
@@ -750,10 +750,10 @@ impl Declared {
         Ok(Some((at_crate, at)))
     }
 
-    /// Where the segment `name` leads from `module` of `krate`: a child
-    /// module, a module a `use` imports, or, when `globs` holds, one a glob
-    /// `use` brings in. A type of that name, or a foreign glob, leads
-    /// outside.
+    /// Where the segment `name` leads from `module` of `krate`. It leads to
+    /// a child module or to a module a `use` imports. Under
+    /// [`Globs::Follow`] it may lead to one a glob `use` brings in. A type
+    /// of that name, or a foreign glob, leads outside.
     fn child(
         &self,
         krate: &str,
@@ -808,9 +808,9 @@ impl Declared {
         if foreign { Step::Outside } else { Step::Absent }
     }
 
-    /// What `name` names in `module` of `krate`: an alias it declares, a
-    /// type it declares, what a `use` of it imports, or what a glob `use`
-    /// brings in. `Ok(None)` when none does.
+    /// What `name` names in `module` of `krate`. It is an alias or a type
+    /// the module declares, what a `use` of it imports, or what a glob
+    /// `use` brings in. `Ok(None)` when none does.
     fn member(
         &self,
         krate: &str,
@@ -1670,8 +1670,8 @@ struct LiteralVisit {
 }
 
 /// The line of the `bool` literal an argument writes. The literal may sit
-/// bare, in parentheses, in a block of one expression, behind a `&` or a
-/// `!`, or as the one argument of `Some`, the literal of an
+/// bare, in parentheses or in a block of one expression. It may sit behind
+/// a `&` or a `!`, or as the one argument of `Some`, the literal of an
 /// `Option<bool>`. It may also be an element of a tuple, of an array or of
 /// a `vec![..]` list, or the value an array repeats.
 fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
@@ -2568,9 +2568,9 @@ fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
 /// Why one dereference impl exposes a primitive, or `None` when it does
 /// not. `derefs` holds every impl, where a `DerefMut` finds its `Deref`.
 ///
-/// A generic target fails closed: a bound that names a primitive, as
-/// `T: AsRef<str>` does, refuses it by design, and so does a bare `T`,
-/// whose instances rustc resolves and the tokens do not show.
+/// A generic target fails closed. A bound that names a primitive, as
+/// `T: AsRef<str>` does, refuses it by design. So does a bare `T`, whose
+/// instances rustc resolves and the tokens do not show.
 fn deref_refusal(declared: &Declared, deref: &DerefImpl, derefs: &[DerefImpl]) -> Option<String> {
     let source = match &deref.target {
         Some(_) => Some(deref.clone()),
@@ -2840,10 +2840,10 @@ fn fragments_of(matcher: TokenStream, fragments: &mut BTreeMap<String, String>) 
 }
 
 /// What a metavariable `$name` of the fragment `fragment` reads as, so the
-/// body parses: a `vis`, an `item` or a `stmt` reads as nothing, a
-/// `lifetime` as a lifetime, a `block` as an empty block, a `literal` as
-/// `0`. Any other reads as the word `__ambre_meta_name`, a name, a type,
-/// an expression or a pattern alike.
+/// body parses. A `vis`, an `item` or a `stmt` reads as nothing. A
+/// `lifetime` reads as a lifetime, a `block` as an empty block, a
+/// `literal` as `0`. Any other reads as the word `__ambre_meta_name`, a
+/// name, a type, an expression or a pattern alike.
 fn metavariable(name: &proc_macro2::Ident, fragment: Option<&str>) -> Vec<TokenTree> {
     let word = || proc_macro2::Ident::new(&format!("{META}{name}"), name.span());
     match fragment {
@@ -2861,8 +2861,8 @@ fn metavariable(name: &proc_macro2::Ident, fragment: Option<&str>) -> Vec<TokenT
     }
 }
 
-/// A `macro_rules!` body as Rust: `$x` reads as [`metavariable`] says for
-/// the fragment `fragments` gives it, `$crate` reads `crate`, and a
+/// A `macro_rules!` body as Rust. A `$x` reads as [`metavariable`] says
+/// for the fragment `fragments` gives it. `$crate` reads `crate`, and a
 /// repetition `$( .. ) sep op` reads its contents once.
 fn unmeta(stream: TokenStream, fragments: &BTreeMap<String, String>) -> TokenStream {
     let tokens: Vec<TokenTree> = stream.into_iter().collect();
@@ -2926,9 +2926,9 @@ fn writes_deref(stream: TokenStream) -> bool {
     })
 }
 
-/// The impls a parsed `macro_rules!` body writes at any depth, in a
-/// constant, a `fn` body or a module, and the rules of each
-/// `macro_rules!` it declares.
+/// The impls a parsed `macro_rules!` body writes at any depth: in a
+/// constant, a `fn` body or a module. It also keeps the rules of each
+/// `macro_rules!` the body declares.
 #[derive(Default)]
 struct MacroItems {
     impls: Vec<syn::ItemImpl>,

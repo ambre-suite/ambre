@@ -92,8 +92,10 @@ constrains, and the table below lists them.
 | Row | What the reviewer holds | Spec |
 | :--- | :--- | :--- |
 | `ARCH-035` | Each line of the primitive allowlist MUST carry the category true of its site. A `local` line MUST meet the four conditions of `ai/ambre-rust-style.md`. | `ambre-spec-architecture.md` |
-| `ARCH-041` | A `bool` parameter that is not private MUST NOT take a literal through a call that does not name its `fn`: through a value, a closure or a trait object, or in code a macro writes. | `ambre-spec-architecture.md` |
+| `ARCH-041` | A `bool` parameter that is not private MUST NOT take a literal through a call that does not name its `fn`: through a value, a closure or a trait object, or in code a macro writes. Nor MAY it take one in a shape the gate does not read as a literal: a branch of an `if` or a `match`, a block of more than one statement, the argument of a call other than `Some`, a field of a struct literal, or a cast. | `ambre-spec-architecture.md` |
 | `ARCH-042` | A `trait` line on a closure type or a function pointer type MUST name one that a foreign signature requires. | `ambre-spec-architecture.md` |
+| `ARCH-043` | A field, parameter, return, constant, static, alias or `Deref` impl that a macro writes MUST obey `ARCH-033`, `ARCH-037` and `ARCH-039` as one the source writes does. | `ambre-spec-architecture.md` |
+| `ARCH-044` | A site whose type names an alias of a foreign crate MUST obey `ARCH-033` and `ARCH-039` as the alias's target does. | `ambre-spec-architecture.md` |
 <!-- end of the human-review rows -->
 
 The table is written from the rows by `just contracts-write`, and `just contracts` fails when it is

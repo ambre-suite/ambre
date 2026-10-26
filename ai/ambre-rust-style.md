@@ -149,9 +149,9 @@
   * A `trait` line names a signature that the workspace cannot change. A trait the workspace does
     not own fixes it, or a generic bound the workspace cannot change. A closure or function
     pointer type that a foreign signature requires is `trait` too. A trait the workspace declares
-    is ordinary code, and its signatures take types. A primitive that the impl writes as a
-    generic argument of the trait, or as the type it implements for, is the workspace's choice,
-    as in `impl Add<u32> for Px` or `impl Add<Px> for u32`. Its site takes a type.
+    is ordinary code, and its signatures take types. The workspace chooses a primitive that the
+    impl writes as a generic argument of the trait, or as the type it implements for. So
+    `impl Add<u32> for Px` and `impl Add<Px> for u32` both take a type at the site.
   * The note of a line describes the value truthfully. A reviewer reads the note as code.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
