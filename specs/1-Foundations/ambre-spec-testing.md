@@ -78,15 +78,23 @@ file, the module, the item, the kind and the type, and no line number.
   `newtype-inner` site sits in the impl of a struct with one field, a `PhantomData` marker apart.
   The orphan rule may put that impl in the crate of a workspace trait. A `trait` site sits in an
   impl of a foreign trait, or is a closure type that names a foreign type. A primitive that the
-  impl writes as a generic argument of the trait refutes the line, since the workspace chose it.
-  A `use ... as` rename of a trait is undone before the lookup.
+  impl writes as a generic argument of the trait, or as the type it implements for, refutes the
+  line, since the workspace chose it. A `use ... as` rename of a trait is undone before the lookup.
 * **An alias reads as its target.** Each `type` alias of the workspace resolves in the module that
-  names it, across crates, before any check reads the type. The key keeps the type as written.
+  names it, across crates, before any check reads the type. The path is placed through child
+  modules, `use` items, `use ... as` renames and globs, and a name a `use` imports that is no
+  alias shadows one. An argument resolves where the use writes it, and the target in the module
+  of the alias. A path that ends in an alias name and cannot be placed, a chain past 32 aliases,
+  and an expansion past 4096, fail the scan. The key keeps the type as written. An alias of a
+  foreign crate reads as itself (`ARCH-044`), and the gate reads no site a macro writes
+  (`ARCH-043`).
 * **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
-  `Target` of each `Deref` impl, and a `DerefMut` takes the target of its `Deref`. A reference, a
-  slice, an array and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` expose their element. A generic target
-  fails when a bound names a primitive, or when a site writes an instance with one. A target the
-  gate cannot read fails too.
+  `Target` of each `Deref` impl, and a `DerefMut` takes the target of the `Deref` of its type in
+  its module. A reference, a slice, an array and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` expose their
+  element. A generic target fails closed, a bound that names a primitive included, since which
+  instance makes it a primitive is rustc's to resolve. A target the gate cannot read fails too.
+  The impls nested in a constant or a static, and those a `macro_rules!` body writes, are read. A
+  body that writes `impl ... Deref` and does not parse fails.
 * **A site that is not private fails three checks, whatever its category.** A site is not private
   when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`, or sits in a trait impl. A field
   is not private either on a type of `ambre-bus`, or on a type that derives `Serialize`,
@@ -101,8 +109,10 @@ file, the module, the item, the kind and the type, and no line number.
   the name of its `fn` and by its position, and a `view!` prop matches a component parameter by
   name. A call in a crate that reaches the site's crate matches a `pub` site too. A crate reaches
   its dependencies, a renamed one included, and the crates they re-export. A call that matches two
-  sites refutes both, since a name cannot tell them apart. A call through a value, and code a
-  macro writes, stay out of reach (`ARCH-041`).
+  sites refutes both, since a name cannot tell them apart. A literal counts bare, in parentheses,
+  in a block of one expression, behind `&` or `!`, under `Some`, and in a tuple, an array or a
+  `vec!`. A call through a value, a literal in any other shape, and code a macro writes, stay out
+  of reach (`ARCH-041`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.

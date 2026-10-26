@@ -111,9 +111,10 @@
     plaintext type prints only its length through `Debug`.
   * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive, or to a type that hands
     one out. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` hand out
-    their element. A generic `Target = T` counts when a bound or an instance makes `T` a
-    primitive. Never implement `From` in both directions. Either one turns the newtype back into
-    the primitive silently, and the gate refuses such a `Deref` whatever the allowlist says.
+    their element. A generic `Target = T` counts, bound or not: the gate cannot see which
+    instance makes `T` a primitive, so it fails closed. Never implement `From` in both
+    directions. Either one turns the newtype back into the primitive silently, and the gate
+    refuses such a `Deref` whatever the allowlist says.
   * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
     Hand-written copies drift.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
@@ -149,8 +150,8 @@
     not own fixes it, or a generic bound the workspace cannot change. A closure or function
     pointer type that a foreign signature requires is `trait` too. A trait the workspace declares
     is ordinary code, and its signatures take types. A primitive that the impl writes as a
-    generic argument of the trait is the workspace's choice, as in `impl Add<u32> for Px`. Its
-    site takes a type.
+    generic argument of the trait, or as the type it implements for, is the workspace's choice,
+    as in `impl Add<u32> for Px` or `impl Add<Px> for u32`. Its site takes a type.
   * The note of a line describes the value truthfully. A reviewer reads the note as code.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
