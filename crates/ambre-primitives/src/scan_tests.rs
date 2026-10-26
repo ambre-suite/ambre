@@ -1305,7 +1305,10 @@ fn an_alias_or_a_use_a_block_declares_fails_the_scan() {
 fn a_glob_chain_resolves_at_any_depth_and_a_glob_it_cannot_place_fails_the_scan() {
     let mut chain = String::new();
     for i in 0..7 {
-        chain.push_str(&format!("pub mod m{i} {{ pub use super::m{}::*; }}\n", i + 1));
+        chain.push_str(&format!(
+            "pub mod m{i} {{ pub use super::m{}::*; }}\n",
+            i + 1
+        ));
     }
     chain.push_str(
         "pub mod m7 { pub type Flag = u32; }\n\
@@ -1337,9 +1340,9 @@ fn a_glob_chain_resolves_at_any_depth_and_a_glob_it_cannot_place_fails_the_scan(
 
 #[test]
 fn a_glob_search_runs_once_per_module_and_name() {
-    // Sixty modules that each glob the root, which globs each of them: a
-    // walk that reads a module twice opens the sixty again at each step,
-    // and took twenty seconds. The bound is a hundred times what one search
+    // Sixty modules that each glob the root, which globs each of them. A
+    // walk that reads a module twice opens the sixty again at each step. It
+    // took twenty seconds. The bound is a hundred times what one search
     // per module and name takes.
     let started = std::time::Instant::now();
     let mut tree = String::new();
@@ -1443,7 +1446,10 @@ fn a_literal_reaches_a_fn_under_the_name_a_pub_use_gives_it() {
         ("user/src/lib.rs", "fn f() { demo::switch(true); }"),
     ]);
     let listed = all(&scan);
-    assert!(scan.bool_literal(&site(&scan, "ctrl(on)"), &listed).is_err());
+    assert!(
+        scan.bool_literal(&site(&scan, "ctrl(on)"), &listed)
+            .is_err()
+    );
 }
 
 #[test]
