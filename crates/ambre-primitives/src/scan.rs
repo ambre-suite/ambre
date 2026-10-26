@@ -2823,18 +2823,21 @@ fn shadowed(declared: &Declared, ty: &syn::Type, shadow: &Shadow) -> Option<Stri
         let opens = |name: &str| declared.alias_names.contains(name) || declared.renames.contains(name);
         if shadow.aliases.contains(first) {
             return Some(format!(
-                "it names {first}, an alias a block declares, and the gate reads aliases by                  module only"
+                "it names {first}, an alias a block declares, and the gate reads aliases by \
+                 module only"
             ));
         }
         if shadow.uses.contains(first) && (opens(first) || opens(last)) {
             return Some(format!(
-                "it names {}, which a use item of a block brings in, and the gate reads use                  items by module only",
+                "it names {}, which a use item of a block brings in, and the gate reads use \
+                 items by module only",
                 segments.join("::")
             ));
         }
         if segments.len() == 1 && shadow.uses.contains(GLOB) && opens(first) {
             return Some(format!(
-                "it names {first}, which a glob use item of a block may bring in, and the gate                  reads use items by module only"
+                "it names {first}, which a glob use item of a block may bring in, and the gate \
+                 reads use items by module only"
             ));
         }
         None
@@ -3915,7 +3918,9 @@ impl<'a> FileVisit<'a> {
     /// dereference impl.
     fn opaque_refusal(&self, path: &str, module: &str) -> String {
         format!(
-            "{} | {}: a call of {path}! in {module} writes an impl of Deref or DerefMut, and              the gate expands no macro, so it cannot show that the impl exposes no primitive              and fails closed. A newtype never dereferences to its primitive (ARCH-037)",
+            "{} | {}: a call of {path}! in {module} writes an impl of Deref or DerefMut, and \
+             the gate expands no macro, so it cannot show that the impl exposes no primitive \
+             and fails closed. A newtype never dereferences to its primitive (ARCH-037)",
             self.krate, self.file
         )
     }
