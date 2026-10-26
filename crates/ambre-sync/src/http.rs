@@ -172,7 +172,7 @@ impl Target {
     /// Lends the full address to `send`, the one call that sends the
     /// request. A presigned link is lent from its wrapper, and no copy of it
     /// is kept here.
-    pub(crate) fn open<R>(&self, send: impl FnOnce(&str) -> R) -> R {
+    fn open<R>(&self, send: impl FnOnce(&str) -> R) -> R {
         match self {
             Self::Relay(url) => send(url.as_str()),
             Self::Object(link) => link.present_link(send),
