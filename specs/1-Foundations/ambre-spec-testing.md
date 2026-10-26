@@ -81,13 +81,20 @@ file, the module, the item, the kind and the type, and no line number.
   impl writes as a trait argument, or as the type it is for, refutes the line: the workspace
   chose it. A `use ... as` rename of a trait is undone before the
   lookup.
-* **An alias reads as its target.** Each `type` alias of the workspace resolves in the module that
-  names it, across crates, before any check reads the type. The key keeps the type as written.
-  * The path is placed through child modules, `use` items, `use ... as` renames and globs. A name
-    a `use` imports that is no alias shadows one.
-  * An argument resolves where the use writes it, and the target in the module of the alias.
-  * A path that ends in an alias name and cannot be placed fails the scan. So do a chain past 32
-    aliases and an expansion past 4096.
+* **An alias of a module reads as its target.** Each `type` alias a module of the workspace
+  declares resolves in the module that names it, across crates, before any check reads the type.
+  The key keeps the type as written.
+  * The path is placed through child modules, `use` items, `use ... as` and `extern crate`
+    renames, and globs. A name a `use` imports that is no alias shadows one, and so do a generic
+    parameter of an enclosing item and an item an enclosing block declares.
+  * An argument resolves where the use writes it, and takes the place of the next parameter of its
+    kind. A parameter with no argument takes its default, and the target resolves in the module of
+    the alias.
+  * A `use ... as` that renames a primitive of the toolchain, through any chain of imports, reads
+    as that primitive.
+  * A path that ends in an alias name and cannot be placed fails the scan, and so does a glob `use`
+    the gate cannot place. A site that names an alias or a `use` that a block declares fails too:
+    the gate reads both by module only. So do a chain past 32 aliases and an expansion past 4096.
   * An alias of a foreign crate reads as itself (`ARCH-044`), and the gate reads no site a macro
     writes (`ARCH-043`).
 * **A `Deref` to a primitive fails, whatever the file says** (`ARCH-037`). The gate reads the
@@ -96,8 +103,9 @@ file, the module, the item, the kind and the type, and no line number.
   element. A generic target fails closed, a bound that names a primitive included, since which
   instance makes it a primitive is rustc's to resolve. A target the gate cannot read fails too.
 
-  The impls nested in a constant or a static, and those a `macro_rules!` body writes, are read. A
-  body that writes `impl ... Deref` and does not parse fails.
+  The impls nested in a constant, a static or an enum discriminant, and those a `macro_rules!`
+  body writes, are read. A body that writes `impl ... Deref` and does not parse fails, and so does
+  a call of any other macro whose tokens write one, since the gate expands no macro.
 * **A site that is not private fails three checks, whatever its category.** A site is not private
   when it is `pub`, `pub(crate)`, `pub(super)` or `pub(in path)`, or sits in a trait impl. A field
   is not private either on a type of `ambre-bus`, or on a type that derives `Serialize`,
@@ -114,9 +122,11 @@ file, the module, the item, the kind and the type, and no line number.
   its dependencies, a renamed one included, and the crates they re-export. A call that matches two
   sites refutes both, since a name cannot tell them apart.
 
-  A literal counts bare, in parentheses or in a block of one expression. It counts behind `&` or
-  `!`, under `Some`, and in a tuple, an array or a `vec!`. A call through a value, a literal in any
-  other shape, and code a macro writes, stay out of reach (`ARCH-041`).
+  A literal counts bare, in parentheses, or in a block or an `unsafe` block of one expression. It
+  counts behind `&` or `!`, under `Some`, in a tuple, an array or a `vec!`, and in a branch of an
+  `if` or an arm of a `match`. A `use ... as` rename holds in its own module, and a `pub use ...
+  as` names the `fn` to every crate that reaches it. A call through a value, a literal in any other
+  shape, and code a macro writes, stay out of reach (`ARCH-041`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
@@ -150,15 +160,15 @@ tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one 
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
 **The four obstacles.** The first three hold one row each today: the frame on the phone, the page a
-deployment serves, and what an allowlist line means. The fourth holds two rows of the primitive
-gate, what rustc resolves and syn does not.
+deployment serves, and what an allowlist line means. The fourth holds four rows of the primitive
+gate, `ARCH-041` to `ARCH-044`: what rustc resolves and syn does not.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
-| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, and what a macro writes. The primitive gate parses with `syn` and expands nothing | -- |
+| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, and what an alias of a foreign crate stands for. The primitive gate parses with `syn`, expands nothing and reads no foreign source | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so

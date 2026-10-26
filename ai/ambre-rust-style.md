@@ -109,19 +109,21 @@
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
     hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
     plaintext type prints only its length through `Debug`.
-  * **Two bans.** Never implement `Deref` or `DerefMut` to a primitive, or to a type that hands
-    one out. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc` or `Cow` hand out
-    their element. A generic `Target = T` counts, bound or not: the gate cannot see which
-    instance makes `T` a primitive, so it fails closed. Never implement `From` in both
-    directions. Either one turns the newtype back into the primitive silently, and the gate
-    refuses such a `Deref` whatever the allowlist says.
+  * **Two bans.** Never implement `From` in both directions, and never implement `Deref` or
+    `DerefMut` to a primitive, or to a type that hands one out. Either one turns the newtype back
+    into the primitive silently. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc`
+    or `Cow` hand out their element. A generic `Target = T` counts, bound or not: the gate cannot
+    see which instance makes `T` a primitive, so it fails closed. The gate refuses such a `Deref`
+    whatever the allowlist says.
   * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
     Hand-written copies drift.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
-  line of that file by hand (`ARCH-035`). The gate reads a workspace `type` alias as its target,
-  so an alias hides no primitive and no `bool` from a check.
+  line of that file by hand (`ARCH-035`). The gate reads a `type` alias a module of the
+  workspace declares as its target, so such an alias hides no primitive and no `bool` from a
+  check. An alias of a foreign crate, and a site a macro writes, are a reviewer's to read
+  (`ARCH-043`, `ARCH-044`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
   site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line
