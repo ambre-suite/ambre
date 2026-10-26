@@ -77,10 +77,7 @@ impl SyncState {
             &envelope.aad(),
             &key,
         ) {
-            Ok(plaintext) => self.reply(
-                id,
-                RestEvent::DocFileOpened { plaintext },
-            ),
+            Ok(plaintext) => self.reply(id, RestEvent::DocFileOpened { plaintext }),
             Err(_) => {
                 tracing::warn!("Sync: OpenDocFile: wrong passphrase or tampered file");
                 self.reply(id, RestEvent::DocFileOpenFailed);

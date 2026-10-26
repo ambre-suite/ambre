@@ -6,13 +6,18 @@ fn refused(krate: &str, relative: &str, source: &str) -> Vec<String> {
         Ok(tree) => tree,
         Err(e) => panic!("the test source does not parse: {e}"),
     };
-    refusals(krate, relative, &format!("crates/{krate}/{relative}"), &tree)
-        .into_iter()
-        .map(|refusal| match refusal.split_once(" is named here") {
-            Some((head, _)) => head.to_owned(),
-            None => refusal,
-        })
-        .collect()
+    refusals(
+        krate,
+        relative,
+        &format!("crates/{krate}/{relative}"),
+        &tree,
+    )
+    .into_iter()
+    .map(|refusal| match refusal.split_once(" is named here") {
+        Some((head, _)) => head.to_owned(),
+        None => refusal,
+    })
+    .collect()
 }
 
 // The red cases are the code of 66bec579, before Secret.
@@ -104,14 +109,20 @@ fn a_manual_wipe_is_refused_through_its_trait_and_its_call() {
 }
 
 #[test]
-fn ambre_crypto_reads_a_secret_and_the_secret_module_wipes_one() {
+fn the_crypto_crate_reads_a_secret_and_the_secret_module_wipes_one() {
     let read = "fn key(seed: &Seed) -> [u8; 32] { *seed.0.expose() }\n\
                 fn copy(seed: &Seed) -> Seed { Seed(seed.0.clone_secret()) }";
-    assert_eq!(refused("ambre-crypto", "src/keys.rs", read), Vec::<String>::new());
+    assert_eq!(
+        refused("ambre-crypto", "src/keys.rs", read),
+        Vec::<String>::new()
+    );
     let module = "use zeroize::{Zeroize, ZeroizeOnDrop};\n\
                   impl<T: Zeroize> Drop for Secret<T> { fn drop(&mut self) { self.0.zeroize(); } }\n\
                   impl<T: Zeroize> Secret<T> { pub fn expose(&self) -> &T { &self.0 } }";
-    assert_eq!(refused("ambre-core", "src/secret.rs", module), Vec::<String>::new());
+    assert_eq!(
+        refused("ambre-core", "src/secret.rs", module),
+        Vec::<String>::new()
+    );
 }
 
 #[test]
@@ -209,11 +220,17 @@ fn another_build_of_the_code_is_refused() {
 
 #[test]
 fn a_refusal_names_its_rule() {
-    let tree = match syn::parse_file("fn a(s: &S) { s.expose(); let _ = zeroize::Zeroizing::new(1); }") {
-        Ok(tree) => tree,
-        Err(e) => panic!("the test source does not parse: {e}"),
-    };
-    let found = refusals("ambre-bus", "src/lib.rs", "crates/ambre-bus/src/lib.rs", &tree);
+    let tree =
+        match syn::parse_file("fn a(s: &S) { s.expose(); let _ = zeroize::Zeroizing::new(1); }") {
+            Ok(tree) => tree,
+            Err(e) => panic!("the test source does not parse: {e}"),
+        };
+    let found = refusals(
+        "ambre-bus",
+        "src/lib.rs",
+        "crates/ambre-bus/src/lib.rs",
+        &tree,
+    );
     assert_eq!(found.len(), 3);
     assert!(found[0].contains("(ARCH-045)"), "{}", found[0]);
     assert!(found[1].contains("(ARCH-046)"), "{}", found[1]);

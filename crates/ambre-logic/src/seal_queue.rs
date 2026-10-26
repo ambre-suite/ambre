@@ -161,7 +161,7 @@ mod tests {
                 PersistWrite::Snapshot(SnapshotBytes::new(b"whole".to_vec())),
             )
             .expect("a snapshot is sealed");
-        assert_eq!(&plain[..], b"whole");
+        assert_eq!(plain.to_plaintext(), b"whole");
         let (second, _) = queue
             .push(doc, PersistWrite::Delta(DeltaBytes::new(b"edit".to_vec())))
             .expect("a delta is sealed");

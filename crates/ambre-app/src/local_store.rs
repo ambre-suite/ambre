@@ -404,7 +404,7 @@ mod tests {
             panic!("expected a seal");
         };
         assert_eq!(place, RowPlace::Document(doc));
-        assert_eq!(&plaintext[..], b"the document");
+        assert_eq!(plaintext.to_plaintext(), b"the document");
         let (second, _) = request(&vault_rx).await;
         // The delta's seal answers first: the store still waits for the
         // snapshot's, so the delta never lands under it.

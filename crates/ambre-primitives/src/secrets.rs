@@ -96,8 +96,8 @@ pub(crate) fn refusals(krate: &str, relative: &str, file: &str, tree: &syn::File
 }
 
 /// A dependency on the `zeroize` crate under another key, which no name of
-/// the source would show: refused in every crate, the Secret module's
-/// included, since the gate reads names (`ARCH-046`).
+/// the source would show. The gate reads names, so it refuses one in every
+/// crate, the Secret module's included (`ARCH-046`).
 pub(crate) fn renamed_wipers(krate: &str, renamed: &BTreeMap<String, String>) -> Vec<String> {
     renamed
         .iter()

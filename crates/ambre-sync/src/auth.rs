@@ -557,10 +557,7 @@ mod provider_tests {
 
         let stored = state.tokens.borrow();
         let stored = stored.as_ref().expect("the worker holds the session");
-        assert_eq!(
-            stored.access_token.present(str::to_owned),
-            "access-s3cr3t"
-        );
+        assert_eq!(stored.access_token.present(str::to_owned), "access-s3cr3t");
         assert_eq!(
             stored.refresh_token.present(str::to_owned),
             "refresh-s3cr3t"

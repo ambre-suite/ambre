@@ -135,11 +135,8 @@ pub fn wrap_anchored(
             plain.extend_from_slice(&anchor.0);
         }
     });
-    let (nonce, ciphertext) = aead::seal(
-        plaintext.expose(),
-        &ambre_core::Aad::of(KEK_DOMAIN),
-        &kek,
-    )?;
+    let (nonce, ciphertext) =
+        aead::seal(plaintext.expose(), &ambre_core::Aad::of(KEK_DOMAIN), &kek)?;
     Ok(WrappedKey { nonce, ciphertext })
 }
 

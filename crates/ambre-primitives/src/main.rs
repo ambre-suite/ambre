@@ -173,10 +173,7 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
         })
         .collect();
     println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean()
-        && refuted.is_empty()
-        && scan.derefs.is_empty()
-        && scan.secrets.is_empty()
+    if verdict.is_clean() && refuted.is_empty() && scan.derefs.is_empty() && scan.secrets.is_empty()
     {
         ExitCode::SUCCESS
     } else {

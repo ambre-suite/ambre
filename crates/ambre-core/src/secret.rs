@@ -144,8 +144,8 @@ impl<T: Zeroize + AsRef<[u8]>> ConstantTimeEq for Secret<T> {
     }
 }
 
-/// Secret UTF-8 text that crosses a thread: the recovery phrase of a new
-/// account, on its way from the Sync worker to the screen that shows it once.
+/// Secret UTF-8 text that crosses a thread. It carries the recovery phrase
+/// of a new account from the Sync worker to the screen that shows it once.
 #[derive(Clone, Debug, Default)]
 pub struct SecretString(Arc<Secret<String>>);
 
@@ -285,9 +285,9 @@ impl<'de> Deserialize<'de> for Passphrase {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
     use std::marker::PhantomData;
-    use std::rc::Rc;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
     use subtle::ConstantTimeEq;
     use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -297,11 +297,11 @@ mod tests {
     /// A value that counts the wipes it receives, so a test sees the drop
     /// wipe it without reading freed memory.
     #[derive(Default)]
-    struct Spy(Rc<Cell<u32>>);
+    struct Spy(Arc<AtomicU32>);
 
     impl Zeroize for Spy {
         fn zeroize(&mut self) {
-            self.0.set(self.0.get() + 1);
+            self.0.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -350,34 +350,34 @@ mod tests {
 
     #[test]
     fn a_secret_wipes_its_value_once_when_it_drops() {
-        let wipes = Rc::new(Cell::new(0));
-        let secret = Secret::new(Spy(Rc::clone(&wipes)));
-        assert_eq!(wipes.get(), 0);
+        let wipes = Arc::new(AtomicU32::new(0));
+        let secret = Secret::new(Spy(Arc::clone(&wipes)));
+        assert_eq!(wipes.load(Ordering::Relaxed), 0);
         drop(secret);
-        assert_eq!(wipes.get(), 1);
+        assert_eq!(wipes.load(Ordering::Relaxed), 1);
     }
 
     #[test]
     fn a_shared_secret_wipes_when_its_last_owner_drops() {
-        let wipes = Rc::new(Cell::new(0));
-        let first = std::sync::Arc::new(Secret::new(Spy(Rc::clone(&wipes))));
-        let second = std::sync::Arc::clone(&first);
+        let wipes = Arc::new(AtomicU32::new(0));
+        let first = Arc::new(Secret::new(Spy(Arc::clone(&wipes))));
+        let second = Arc::clone(&first);
         drop(first);
-        assert_eq!(wipes.get(), 0);
+        assert_eq!(wipes.load(Ordering::Relaxed), 0);
         drop(second);
-        assert_eq!(wipes.get(), 1);
+        assert_eq!(wipes.load(Ordering::Relaxed), 1);
     }
 
     #[test]
     fn a_failed_fill_wipes_the_partial_value() {
-        let wipes = Rc::new(Cell::new(0));
-        let seen = Rc::clone(&wipes);
+        let wipes = Arc::new(AtomicU32::new(0));
+        let seen = Arc::clone(&wipes);
         let failed = Secret::<Spy>::try_filled(|spy| {
             spy.0 = seen;
             Err("refused")
         });
         assert!(failed.is_err());
-        assert_eq!(wipes.get(), 1);
+        assert_eq!(wipes.load(Ordering::Relaxed), 1);
     }
 
     #[test]

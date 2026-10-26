@@ -45,8 +45,9 @@ use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 // Secret-carrying IPC fields (H5)
 // -----------------------------------------------------------------------------
 
-/// Secret bytes and secret text that cross the UI -> Logic -> Sync boundary:
-/// a plaintext on its way to or from a seal, and the recovery phrase. Both
+/// Secret bytes and secret text that cross the UI -> Logic -> Sync boundary.
+/// They carry a plaintext on its way to or from a seal, and the recovery
+/// phrase. Both
 /// live in `ambre-core` on [`ambre_core::Secret`], so a crate that cannot
 /// depend on the bus holds them too. A passphrase travels as
 /// [`ambre_core::Passphrase`].

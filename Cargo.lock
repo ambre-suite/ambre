@@ -106,7 +106,6 @@ dependencies = [
  "postcard",
  "serde",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
@@ -167,6 +166,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "subtle",
  "thiserror 2.0.18",
  "uuid",
  "zeroize",
@@ -189,10 +189,10 @@ dependencies = [
  "hmac 0.12.1",
  "proptest",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "x25519-dalek",
- "zeroize",
 ]
 
 [[package]]

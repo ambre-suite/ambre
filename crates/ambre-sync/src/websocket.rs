@@ -34,12 +34,10 @@ impl SyncState {
     /// Sends the access token as the socket's first frame. The relay reads
     /// nothing else until this frame opens the session (`SRV-031`).
     pub(crate) fn authenticate_socket(&mut self) {
-        let Some(token) = self
-            .tokens
-            .borrow()
-            .as_ref()
-            .map(|t| t.access_token.present(|text| AccessToken::new(text.to_owned())))
-        else {
+        let Some(token) = self.tokens.borrow().as_ref().map(|t| {
+            t.access_token
+                .present(|text| AccessToken::new(text.to_owned()))
+        }) else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
         };
