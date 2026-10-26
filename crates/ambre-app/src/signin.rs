@@ -62,7 +62,7 @@ pub(crate) fn accept_return(
 /// Whether `url` may be followed: an `https` address. The address is data from
 /// the relay, and a `javascript:` one would run in this page's origin.
 pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
-    web_sys::Url::new(url.expose()).is_ok_and(|u| u.protocol() == "https:")
+    web_sys::Url::new(url.reveal()).is_ok_and(|u| u.protocol() == "https:")
 }
 
 /// Follow the provider's address: remember its `state` for the return, then
@@ -80,10 +80,10 @@ pub(crate) fn follow_address(
     let Some(storage) = session_storage() else {
         return false;
     };
-    if storage.set_item(PENDING_STATE_KEY, state.expose()).is_err() {
+    if storage.set_item(PENDING_STATE_KEY, state.reveal()).is_err() {
         return false;
     }
-    navigate(url.expose());
+    navigate(url.reveal());
     true
 }
 

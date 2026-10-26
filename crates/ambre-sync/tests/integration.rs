@@ -87,11 +87,9 @@ fn setup_account_returns_created_with_recovery_words() {
 
     match drain_rest(&rx, id) {
         RestEvent::AccountCreated { recovery_words } => {
-            assert!(
-                !recovery_words.is_empty(),
-                "recovery words must not be empty"
-            );
-            assert_eq!(recovery_words.len(), 64, "32-byte hex-encoded string");
+            let words = recovery_words.secret().expose();
+            assert_eq!(words.len(), 64, "32-byte hex-encoded string");
+            assert!(words.bytes().all(|b| b.is_ascii_hexdigit()));
         }
         other => panic!("expected AccountCreated, got {other:?}"),
     }
@@ -549,7 +547,8 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         // What comes back is the whole plaintext container, byte for byte, so
         // the caller reads it exactly as it reads a file off the disk.
         RestEvent::DocFileOpened { plaintext: opened } => {
-            assert_eq!(&*opened, plaintext.as_bytes());
+            let opened = opened.to_plaintext();
+            assert_eq!(opened, plaintext.as_bytes());
             let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
             assert_eq!(header.doc_type, DocType::Prose);
             assert_eq!(header.document_id, doc_id);

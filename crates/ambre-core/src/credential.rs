@@ -21,7 +21,7 @@ macro_rules! define_credential {
             }
 
             /// The credential text, for the one call that presents it.
-            pub fn expose(&self) -> &str {
+            pub fn reveal(&self) -> &str {
                 &self.0
             }
         }

@@ -99,7 +99,7 @@ impl OidcSecret {
     }
 
     /// The secret text, for the one call that presents it.
-    pub fn expose(&self) -> &str {
+    pub fn reveal(&self) -> &str {
         &self.0
     }
 }
@@ -184,7 +184,7 @@ async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, App
     let client = OidcClient::from_provider_metadata(
         provider_metadata,
         google.client_id.clone(),
-        Some(ClientSecret::new(google.client_secret.expose().to_owned())),
+        Some(ClientSecret::new(google.client_secret.reveal().to_owned())),
     );
 
     let mut map = HashMap::new();
@@ -253,9 +253,9 @@ pub async fn exchange_code(
     code: &ambre_core::OidcCode,
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
-    let auth_code = AuthorizationCode::new(code.expose().to_owned());
+    let auth_code = AuthorizationCode::new(code.reveal().to_owned());
     let pkce_verifier =
-        PkceCodeVerifier::new(stored_state.pkce_verifier_secret.expose().to_owned());
+        PkceCodeVerifier::new(stored_state.pkce_verifier_secret.reveal().to_owned());
 
     let http_client = &provider.http_client;
     let client_with_redirect = provider

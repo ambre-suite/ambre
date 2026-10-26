@@ -79,9 +79,7 @@ impl SyncState {
         ) {
             Ok(plaintext) => self.reply(
                 id,
-                RestEvent::DocFileOpened {
-                    plaintext: SecretBytes::from(plaintext),
-                },
+                RestEvent::DocFileOpened { plaintext },
             ),
             Err(_) => {
                 tracing::warn!("Sync: OpenDocFile: wrong passphrase or tampered file");

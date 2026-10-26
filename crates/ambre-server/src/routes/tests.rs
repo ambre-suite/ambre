@@ -1294,11 +1294,11 @@ mod handler_tests {
             app.clone().oneshot(with_peer(request))
         };
 
-        let bearer = format!("Bearer {}", minted.access_token.expose());
+        let bearer = format!("Bearer {}", minted.access_token.reveal());
         let (listed, _) = status_and_code(&app_other, get_with("/api/documents", &bearer)).await;
         assert_eq!(listed, StatusCode::OK, "a token minted elsewhere");
 
-        let renewed = refresh(&app_other, minted.refresh_token.expose())
+        let renewed = refresh(&app_other, minted.refresh_token.reveal())
             .await
             .unwrap();
         assert_eq!(renewed.status(), StatusCode::OK);
@@ -1364,7 +1364,7 @@ mod handler_tests {
             Request::post("/api/auth/logout")
                 .header(
                     "authorization",
-                    format!("Bearer {}", mine.access_token.expose()),
+                    format!("Bearer {}", mine.access_token.reveal()),
                 )
                 .header("content-type", "application/json")
                 .body(Body::from(
@@ -1375,7 +1375,7 @@ mod handler_tests {
 
         let resp = app
             .clone()
-            .oneshot(sign_out(theirs.refresh_token.expose()))
+            .oneshot(sign_out(theirs.refresh_token.reveal()))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1383,7 +1383,7 @@ mod handler_tests {
         assert!(alive.unwrap().is_some(), "a stranger's session survives");
 
         let resp = app
-            .oneshot(sign_out(mine.refresh_token.expose()))
+            .oneshot(sign_out(mine.refresh_token.reveal()))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1831,7 +1831,7 @@ mod handler_tests {
         let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
-        let setup = format!("Bearer {}", tokens.access_token.expose());
+        let setup = format!("Bearer {}", tokens.access_token.reveal());
 
         let refused = status_and_code(&app, get_with("/api/documents", &setup)).await;
         assert_eq!(refused, (StatusCode::FORBIDDEN, "SETUP_REQUIRED".into()));
@@ -2024,7 +2024,7 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(
-            first_close_code(state, tokens.access_token.expose()).await,
+            first_close_code(state, tokens.access_token.reveal()).await,
             Some(CloseCode::SETUP_REQUIRED)
         );
     }

@@ -131,7 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // refresh.
     let jwt_seed = match std::env::var("JWT_SIGNING_SEED") {
         // The hex text is the seed too, so it is wiped like the bytes.
-        Ok(hex_seed) => jwt::JwtSeed::from_hex(&zeroize::Zeroizing::new(hex_seed))?,
+        Ok(hex_seed) => jwt::JwtSeed::from_hex(&ambre_core::Secret::new(hex_seed))?,
         Err(_) if dev_mode => {
             tracing::warn!(
                 "JWT_SIGNING_SEED not set: generating an ephemeral signing key (tokens \

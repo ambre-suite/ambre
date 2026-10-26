@@ -68,7 +68,7 @@ impl AccessToken {
     }
 
     /// The token text, for the one call that verifies it.
-    pub fn expose(&self) -> &str {
+    pub fn reveal(&self) -> &str {
         &self.0
     }
 }
@@ -92,7 +92,7 @@ impl RefreshToken {
     }
 
     /// The token text, for the one call that redeems it.
-    pub fn expose(&self) -> &str {
+    pub fn reveal(&self) -> &str {
         &self.0
     }
 }

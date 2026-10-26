@@ -10,13 +10,15 @@
 //! type of its own, so that no local file takes the document key the server
 //! rotates.
 //!
-//! All three are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
+//! Each one holds an [`ambre_core::Secret`]: its bytes sit on the heap, are
+//! wiped when the last owner drops them, and never print.
 
-use ambre_core::{FileSalt, KeyId, SALT_LEN, WrappedMasterKey};
+use std::sync::Arc;
+
+use ambre_core::{EntryDigest, FileSalt, KeyId, SALT_LEN, Secret, SecretString, WrappedMasterKey};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::aead;
 use crate::error::CryptoError;
@@ -36,11 +38,46 @@ const STORE_DOMAIN: &[u8] = b"ambre-store-v1";
 /// Derives 32 bytes from `domain || seed` via BLAKE2b, truncating the 64-byte
 /// digest. Distinct domains yield independent keys from the same seed. The
 /// bytes are secret, so they are wiped when the caller drops them.
-fn derive32(domain: &[u8], seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
+fn derive32(domain: &[u8], seed: &[u8; 32]) -> Secret<[u8; 32]> {
     let mut hasher = Blake2b512::new();
     hasher.update(domain);
     hasher.update(seed);
-    Zeroizing::new(crate::hash::prefix(&hasher.finalize()))
+    Secret::filled(|out: &mut [u8; 32]| *out = crate::hash::prefix(&hasher.finalize()))
+}
+
+/// A 32-byte key copied out of `bytes` in place, or `None` when `bytes` is
+/// not 32 bytes long.
+fn key_of(bytes: &[u8]) -> Option<Secret<[u8; 32]>> {
+    Secret::try_filled(|key: &mut [u8; 32]| {
+        bytes
+            .get(..32)
+            .filter(|_| bytes.len() == 32)
+            .map(|from| key.copy_from_slice(from))
+            .ok_or(())
+    })
+    .ok()
+}
+
+/// Splits what a key wrap opens into the key and the anchor of the
+/// membership log, when the wrapper sealed one beside it (`SYNC-104`).
+///
+/// # Errors
+///
+/// [`CryptoError::InvalidKeyLength`] when `plain` is neither a key nor a key
+/// and an anchor.
+pub(crate) fn split_anchored(
+    plain: &[u8],
+) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
+    let (key, anchor) = match plain.len() {
+        32 => (plain.get(..32), None),
+        64 => (plain.get(..32), plain.get(32..)),
+        _ => (None, None),
+    };
+    let key = key.and_then(key_of).ok_or(CryptoError::InvalidKeyLength)?;
+    let anchor = anchor
+        .and_then(|a| <[u8; 32]>::try_from(a).ok())
+        .map(EntryDigest);
+    Ok((DocumentKey::from_secret(key), anchor))
 }
 
 /// The root secret of a user, decrypted at login from the server-stored,
@@ -49,44 +86,55 @@ fn derive32(domain: &[u8], seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
 /// Deliberately not `Clone`: the root seed is the single most sensitive secret
 /// (recovery-word equivalent), so silent duplication of copies to zeroize is
 /// disallowed. It is moved, never copied.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct MasterSeed([u8; 32]);
+#[derive(Debug)]
+pub struct MasterSeed(Secret<[u8; 32]>);
 
 impl MasterSeed {
     /// Generates a fresh master seed from the platform CSPRNG (account setup).
     pub fn generate() -> Self {
-        Self(random::bytes::<32>())
+        Self(Secret::filled(|seed: &mut [u8; 32]| random::fill(seed)))
     }
 
     /// Reconstructs a master seed from raw bytes (for example after decryption).
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    pub fn from_array(bytes: [u8; 32]) -> Self {
+        Self(Secret::new(bytes))
     }
 
     /// Derives the Ed25519 signing key (deterministic for a given seed).
     pub fn derive_signing_key(&self) -> SigningKey {
-        let sk = derive32(SIGN_DOMAIN, &self.0);
-        SigningKey::from_bytes(&sk)
+        let sk = derive32(SIGN_DOMAIN, self.0.expose());
+        SigningKey::from_bytes(sk.expose())
     }
 
     /// Derives the X25519 exchange key (deterministic for a given seed).
     pub fn derive_exchange_key(&self) -> StaticSecret {
-        let sk = derive32(EXCH_DOMAIN, &self.0);
-        StaticSecret::from(*sk)
+        let sk = derive32(EXCH_DOMAIN, self.0.expose());
+        StaticSecret::from(*sk.expose())
     }
 
     /// Derives the key that seals the rows of the local store
     /// (`ambre-spec-residency.md`, `RESID-025`). The same seed derives it on
     /// every device and every sign-in, so nothing of it is ever written down.
     pub fn derive_store_key(&self) -> StoreKey {
-        StoreKey(*derive32(STORE_DOMAIN, &self.0))
+        StoreKey(derive32(STORE_DOMAIN, self.0.expose()))
     }
 
-    /// Returns the raw seed bytes for recovery-word encoding. This is the one
-    /// sanctioned escape hatch that exposes the root seed. Its name flags that
-    /// the caller is handling recovery material and must not retain it.
-    pub fn recovery_bytes(&self) -> &[u8; 32] {
-        &self.0
+    /// The recovery phrase of the seed: its 32 bytes in lowercase hex, as the
+    /// screen of a new account shows them once. The one way out of the root
+    /// seed, and it hands out a secret that is wiped in turn.
+    pub fn recovery_words(&self) -> SecretString {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        // Sized once, so no reallocation leaves a copy behind; the move into
+        // the wrapper moves the buffer, not the bytes.
+        let mut text = String::with_capacity(64);
+        for byte in self.0.expose() {
+            for nibble in [byte >> 4, byte & 0x0f] {
+                if let Some(&digit) = HEX.get(usize::from(nibble)) {
+                    text.push(char::from(digit));
+                }
+            }
+        }
+        SecretString::new(text)
     }
 
     /// Seals the raw seed under `key` (the passphrase-derived user key) with the
@@ -101,7 +149,7 @@ impl MasterSeed {
         key: &DocumentKey,
         aad: &ambre_core::Aad,
     ) -> Result<WrappedMasterKey, CryptoError> {
-        let (nonce, ciphertext) = aead::seal(&self.0, aad, key)?;
+        let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, key)?;
         let mut wrapped = nonce.0.to_vec();
         wrapped.extend_from_slice(&ciphertext.0);
         Ok(WrappedMasterKey::new(wrapped))
@@ -110,23 +158,35 @@ impl MasterSeed {
 
 /// A 32-byte symmetric key scoped to a single document. Used for AEAD encryption
 /// and to compute the HMAC-SHA256 key-commitment tag.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct DocumentKey([u8; 32]);
+///
+/// Several owners hold one key: the session cache, the tasks that seal and
+/// open under it. So it shares one [`Secret`] behind an [`Arc`], and a clone
+/// copies the pointer, never the bytes. The bytes are wiped when the last
+/// owner drops.
+#[derive(Clone, Debug)]
+pub struct DocumentKey(Arc<Secret<[u8; 32]>>);
 
 impl DocumentKey {
     /// Generates a fresh document key from the platform CSPRNG.
     pub fn generate() -> Self {
-        Self(random::bytes::<32>())
+        Self(Arc::new(Secret::filled(|key: &mut [u8; 32]| {
+            random::fill(key);
+        })))
     }
 
     /// Builds a document key from raw bytes (for example after X25519 unwrap).
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    pub fn from_array(bytes: [u8; 32]) -> Self {
+        Self(Arc::new(Secret::new(bytes)))
+    }
+
+    /// Takes a key built in place by this crate, such as a key-encryption key.
+    pub(crate) fn from_secret(key: Secret<[u8; 32]>) -> Self {
+        Self(Arc::new(key))
     }
 
     /// Returns the raw key bytes. Restricted to crate use (AEAD, HMAC, wrap).
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+        self.0.expose()
     }
 
     /// The identifier of this key: `BLAKE2b(domain || key)`, truncated
@@ -135,7 +195,7 @@ impl DocumentKey {
     pub fn id(&self) -> KeyId {
         let digest = Blake2b512::new()
             .chain_update(KEY_ID_DOMAIN)
-            .chain_update(self.0)
+            .chain_update(self.0.expose())
             .finalize();
         KeyId::from_array(crate::hash::prefix(&digest))
     }
@@ -154,7 +214,7 @@ impl DocumentKey {
         aad: &ambre_core::Aad,
         signing_key: &SigningKey,
     ) -> Result<crate::Sealed, CryptoError> {
-        crate::envelope::seal(&previous.0, aad, self, signing_key)
+        crate::envelope::seal(previous.as_bytes(), aad, self, signing_key)
     }
 
     /// Opens what [`Self::seal_previous`] sealed, against the author's key.
@@ -172,12 +232,10 @@ impl DocumentKey {
         aad: &ambre_core::Aad,
         author: &ambre_core::PublicKey,
     ) -> Result<DocumentKey, CryptoError> {
-        let mut bytes = crate::envelope::open(sealed, aad, self, author)?;
-        let key = <[u8; 32]>::try_from(bytes.as_slice())
-            .map(DocumentKey)
-            .map_err(|_| CryptoError::InvalidKeyLength);
-        bytes.zeroize();
-        key
+        let bytes = Secret::new(crate::envelope::open(sealed, aad, self, author)?);
+        key_of(bytes.expose())
+            .map(Self::from_secret)
+            .ok_or(CryptoError::InvalidKeyLength)
     }
 }
 
@@ -187,13 +245,13 @@ impl DocumentKey {
 /// A type of its own, like [`FileKey`]. A row sealed under a document key
 /// would stop opening at the next rotation, and no AEAD entry point takes the
 /// other's key. It carries no [`Clone`], so the one copy is the one wiped.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct StoreKey([u8; 32]);
+#[derive(Debug)]
+pub struct StoreKey(Secret<[u8; 32]>);
 
 impl StoreKey {
     /// Returns the raw key bytes. Restricted to crate use (AEAD).
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+        self.0.expose()
     }
 }
 
@@ -210,8 +268,8 @@ impl StoreKey {
 ///
 /// It carries no [`Clone`]: a file key exists for one seal or one open, and a
 /// copy is one more buffer to wipe.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct FileKey([u8; 32]);
+#[derive(Debug)]
+pub struct FileKey(Secret<[u8; 32]>);
 
 impl FileKey {
     /// Derives the key that seals one file, from `passphrase` and that file's
@@ -238,7 +296,7 @@ impl FileKey {
         salt: &FileSalt,
     ) -> Result<Self, CryptoError> {
         let intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
-        Ok(Self(*derive32(FILE_DOMAIN, &intermediate)))
+        Ok(Self(derive32(FILE_DOMAIN, intermediate.expose())))
     }
 
     /// Draws a fresh salt from the platform CSPRNG, derives the key of a file
@@ -263,6 +321,6 @@ impl FileKey {
 
     /// Returns the raw key bytes. Restricted to crate use (AEAD).
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+        self.0.expose()
     }
 }

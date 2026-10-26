@@ -3,34 +3,11 @@ use std::rc::Rc;
 
 use ambre_core::{ApiFailure, HttpStatus, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-/// A session token: an access or a refresh token. It wipes its bytes when
-/// dropped, so a sign-out leaves no token in the worker's memory
-/// (`SYNC-100`). Its `Debug` prints no byte of it, so no log can carry one
-/// (`SYNC-061`). Serialized and parsed as the bare string the relay exchanges.
-#[derive(Clone, Default, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
-#[serde(transparent)]
-pub(crate) struct SecretToken(String);
-
-impl SecretToken {
-    /// The token's text, for the one header or query that carries it.
-    pub(crate) fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<String> for SecretToken {
-    fn from(token: String) -> Self {
-        Self(token)
-    }
-}
-
-impl std::fmt::Debug for SecretToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("SecretToken(<redacted>)")
-    }
-}
+/// A session token: an access or a refresh token, wiped on drop and redacted
+/// in `Debug` (`SYNC-100`, `SYNC-061`). It lives in `ambre-crypto`, which
+/// alone reads its text (`ARCH-045`).
+pub(crate) use ambre_crypto::SecretToken;
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenPair {
@@ -190,10 +167,10 @@ pub(crate) enum Target {
 
 impl Target {
     /// The full address, for the one call that sends the request.
-    pub(crate) fn expose(&self) -> &str {
+    pub(crate) fn reveal(&self) -> &str {
         match self {
             Self::Relay(url) => url.as_str(),
-            Self::Object(link) => link.expose(),
+            Self::Object(link) => link.reveal(),
         }
     }
 }
@@ -223,7 +200,7 @@ impl std::fmt::Display for Target {
         match self {
             Self::Relay(url) => url.fmt(f),
             Self::Object(link) => {
-                let text = link.expose();
+                let text = link.reveal();
                 f.write_str(text.split_once('?').map_or(text, |(address, _)| address))
             }
         }
@@ -313,11 +290,6 @@ impl AuthContext {
         }
         expect_ok(&request, &resp)
     }
-}
-
-/// The `Authorization` header value, wiped once the request holds its copy.
-pub(crate) fn bearer(token: &SecretToken) -> Zeroizing<String> {
-    Zeroizing::new(format!("Bearer {}", token.expose()))
 }
 
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
@@ -474,11 +446,12 @@ impl Transport for Fetch {
         let signal = web_sys::AbortSignal::timeout_with_u32(
             u32::try_from(request.timeout.0).unwrap_or(u32::MAX),
         );
-        let mut builder = gloo_net::http::RequestBuilder::new(request.url.expose())
+        let mut builder = gloo_net::http::RequestBuilder::new(request.url.reveal())
             .method(request.method.gloo())
             .abort_signal(Some(&signal));
         if let Some(token) = &request.bearer {
-            builder = builder.header("Authorization", &bearer(token));
+            // The value is wiped once the request holds its copy.
+            builder = token.present_bearer(|value| builder.header("Authorization", value));
         }
         let sent = match &request.body {
             Some((content_type, bytes)) => {
@@ -1968,7 +1941,7 @@ pub(crate) mod scripted {
             self.sent
                 .borrow()
                 .iter()
-                .map(|r| (r.method, r.url.expose().to_owned()))
+                .map(|r| (r.method, r.url.reveal().to_owned()))
                 .collect()
         }
     }
@@ -2069,7 +2042,7 @@ mod tests {
         request
             .bearer
             .as_ref()
-            .map(|token| bearer(token).to_string())
+            .map(|token| token.present_bearer(str::to_owned))
     }
 
     /// A route the token travels to is built from the session's own API
@@ -2120,7 +2093,7 @@ mod tests {
         let _: serde_json::Value = get_json_auth_via(&transport, &url, &auth).await.unwrap();
         let sent = transport.sent.borrow();
         assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].url.expose(), url.as_str());
+        assert_eq!(sent[0].url.reveal(), url.as_str());
         assert_eq!(bearer_of(&sent[0]).as_deref(), Some("Bearer access-1"));
     }
 
@@ -2149,7 +2122,7 @@ mod tests {
             panic!("expected three requests, got {}", sent.len());
         };
         assert_eq!(bearer_of(first).as_deref(), Some("Bearer access-1"));
-        assert_eq!(renewal.url.expose(), "https://relay.test/api/auth/refresh");
+        assert_eq!(renewal.url.reveal(), "https://relay.test/api/auth/refresh");
         assert_eq!(
             bearer_of(renewal),
             None,
@@ -2185,7 +2158,7 @@ mod tests {
         let [only] = sent.as_slice() else {
             panic!("expected one request, got {}", sent.len());
         };
-        assert_eq!((only.method, only.url.expose()), (Method::Post, logout));
+        assert_eq!((only.method, only.url.reveal()), (Method::Post, logout));
         assert_eq!(bearer_of(only).as_deref(), Some("Bearer access-1"));
         assert_eq!(
             body_of(only),
@@ -2205,7 +2178,7 @@ mod tests {
         let [_, _, replay] = sent.as_slice() else {
             panic!("expected three requests, got {}", sent.len());
         };
-        assert_eq!(replay.url.expose(), logout);
+        assert_eq!(replay.url.reveal(), logout);
         assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
         assert_eq!(
             body_of(replay),

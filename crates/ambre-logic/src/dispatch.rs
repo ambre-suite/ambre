@@ -1105,7 +1105,7 @@ mod tests {
                 SyncCommand::Rest {
                     id,
                     cmd: RestCommand::SealDocFile { plaintext, .. },
-                } => Some((id, plaintext.to_vec())),
+                } => Some((id, plaintext.to_plaintext())),
                 _ => None,
             })
             .expect("the sealed export asked Sync to seal");

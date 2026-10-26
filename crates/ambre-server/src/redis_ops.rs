@@ -560,7 +560,7 @@ pub async fn refresh_get(
     redis: &Client,
     token: &RefreshToken,
 ) -> Result<Option<RefreshData>, AppError> {
-    let key = format!("refresh:{}", token.expose());
+    let key = format!("refresh:{}", token.reveal());
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
     // string" because each pair is itself a sequence.)
@@ -600,7 +600,7 @@ pub async fn refresh_create(
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     let ttl_secs = ttl.0;
-    let key = format!("refresh:{}", token.expose());
+    let key = format!("refresh:{}", token.reveal());
 
     let user_id = data.user_id.to_string();
     let signing_pubkey_hex = data
@@ -625,7 +625,7 @@ pub async fn refresh_create(
 
 /// Deletes a refresh-token record (logout, or the old token during rotation).
 pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), AppError> {
-    let key = format!("refresh:{}", token.expose());
+    let key = format!("refresh:{}", token.reveal());
     redis
         .del([&key])
         .await
@@ -640,7 +640,7 @@ pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), 
 /// race on the same token exactly one observes `1`. That caller owns the claim;
 /// every other one observes `0` and must be rejected as a replay.
 pub async fn refresh_claim(redis: &Client, token: &RefreshToken) -> Result<bool, AppError> {
-    let key = format!("refresh:{}", token.expose());
+    let key = format!("refresh:{}", token.reveal());
     let removed: usize = redis
         .del([&key])
         .await
@@ -1101,12 +1101,12 @@ pub async fn oidc_state_set(
     csrf_state: &ambre_core::OidcState,
     auth_state: &OidcAuthState,
 ) -> Result<(), AppError> {
-    let key = format!("oidc:state:{}", csrf_state.expose());
+    let key = format!("oidc:state:{}", csrf_state.reveal());
     redis
         .hset(
             &key,
             [
-                ("pkce_verifier", auth_state.pkce_verifier_secret.expose()),
+                ("pkce_verifier", auth_state.pkce_verifier_secret.reveal()),
                 ("nonce", auth_state.nonce.secret().as_str()),
             ],
         )
@@ -1127,7 +1127,7 @@ pub async fn oidc_state_take(
     redis: &Client,
     csrf_state: &ambre_core::OidcState,
 ) -> Result<OidcAuthState, AppError> {
-    let key = format!("oidc:state:{}", csrf_state.expose());
+    let key = format!("oidc:state:{}", csrf_state.reveal());
     // Read into a `HashMap`, NOT a `Vec<String>`. Under RESP3 rustis returns a hash
     // reply as a map, and deserializing that into a flat `Vec<String>` fails with
     // "invalid type: sequence, expected a string". That surfaced here as a spurious
@@ -1841,7 +1841,7 @@ mod redis_integration_tests {
         let taken = oidc_state_take(&redis, &csrf)
             .await
             .expect("oidc state take");
-        assert_eq!(taken.pkce_verifier_secret.expose(), "verifier-xyz");
+        assert_eq!(taken.pkce_verifier_secret.reveal(), "verifier-xyz");
         assert_eq!(taken.nonce.secret(), "nonce-abc");
     }
 

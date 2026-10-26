@@ -246,15 +246,30 @@ fn the_store_key_matches_its_frozen_domain() {
     assert_eq!(seed.derive_store_key().as_bytes(), &STORE);
 }
 
+/// The recovery phrase is the seed in lowercase hex, and prints nothing.
+#[test]
+fn the_recovery_words_spell_the_seed_in_hex() {
+    let words = MasterSeed::from_array([0xa7; 32]).recovery_words();
+    assert_eq!(words.secret().expose(), &"a7".repeat(32));
+    assert_eq!(format!("{words:?}"), "SecretString(Secret([REDACTED]))");
+}
+
 /// A row opens under its own key and its own place, and under nothing else.
 #[test]
 fn a_store_row_opens_only_where_it_was_sealed() {
     let key = fixed_seed().derive_store_key();
-    let row = aead::seal_row(b"a copy", &Aad::of(b"doc:0a"), &key).unwrap();
+    let row = aead::seal_row(
+        &ambre_core::SecretBytes::new(b"a copy".to_vec()),
+        &Aad::of(b"doc:0a"),
+        &key,
+    )
+    .unwrap();
     assert_eq!(row.first(), Some(&aead::RowLayout::CURRENT.byte()));
     assert!(!row.windows(6).any(|w| w == b"a copy"));
     assert_eq!(
-        aead::open_row(&row, &Aad::of(b"doc:0a"), &key).unwrap(),
+        aead::open_row(&row, &Aad::of(b"doc:0a"), &key)
+            .unwrap()
+            .to_plaintext(),
         b"a copy"
     );
 
@@ -298,14 +313,13 @@ fn ecdh_symmetric() {
 
 #[test]
 fn a_shared_secret_is_wiped_and_never_printed() {
-    fn wiped_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
     let bob_pub =
         ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
     let shared = ecdh::shared_secret(&alice, &bob_pub).unwrap();
-    wiped_on_drop(&shared);
-    assert_eq!(format!("{shared:?}"), "SharedSecret(32 bytes)");
+    // The bytes sit in an `ambre_core::Secret`, which wipes them on drop.
+    assert_eq!(format!("{shared:?}"), "SharedSecret(Secret([REDACTED]))");
 }
 
 #[test]
@@ -676,9 +690,12 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     let aad = &Aad::of(b"the-sealed-header");
     let plaintext = b"a whole plaintext container";
     let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
-    let (nonce, ciphertext) = aead::seal_file(plaintext, aad, &key).unwrap();
+    let sealed = ambre_core::SecretBytes::new(plaintext.to_vec());
+    let (nonce, ciphertext) = aead::seal_file(&sealed, aad, &key).unwrap();
     assert_eq!(
-        aead::open_file(&nonce, &ciphertext, aad, &key).unwrap(),
+        aead::open_file(&nonce, &ciphertext, aad, &key)
+            .unwrap()
+            .to_plaintext(),
         plaintext
     );
 
@@ -686,17 +703,17 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     // cheaper sits upstream of it: no password verifier, no checksum. The tag
     // is the whole of "that passphrase does not open this file".
     let wrong = FileKey::from_passphrase(&pass("open sesa"), &salt).unwrap();
-    assert_eq!(
+    assert!(matches!(
         aead::open_file(&nonce, &ciphertext, aad, &wrong),
         Err(CryptoError::AeadFailed)
-    );
+    ));
 
     // And the seal binds the header it covered: an edited salt, nonce or
     // lineage byte fails the tag rather than deriving quietly.
-    assert_eq!(
+    assert!(matches!(
         aead::open_file(&nonce, &ciphertext, &Aad::of(b"the-sealed-headeR"), &key),
         Err(CryptoError::AeadFailed)
-    );
+    ));
 }
 
 #[test]

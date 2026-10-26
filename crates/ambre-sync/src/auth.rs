@@ -355,7 +355,7 @@ impl SyncState {
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
                 let master_seed = MasterSeed::generate();
-                let recovery_words = SecretString::new(encode(master_seed.recovery_bytes()));
+                let recovery_words = master_seed.recovery_words();
                 let signing_key = master_seed.derive_signing_key();
                 let exchange_key = master_seed.derive_exchange_key();
                 let signing_pub_key =
@@ -432,7 +432,7 @@ impl SyncState {
             let master_seed = MasterSeed::generate();
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());
-            let recovery_words = SecretString::new(encode(master_seed.recovery_bytes()));
+            let recovery_words = master_seed.recovery_words();
             self.master_seed = Some(master_seed);
             self.open_websocket();
             self.reply(id, RestEvent::AccountCreated { recovery_words });
@@ -557,8 +557,14 @@ mod provider_tests {
 
         let stored = state.tokens.borrow();
         let stored = stored.as_ref().expect("the worker holds the session");
-        assert_eq!(stored.access_token.expose(), "access-s3cr3t");
-        assert_eq!(stored.refresh_token.expose(), "refresh-s3cr3t");
+        assert_eq!(
+            stored.access_token.present(str::to_owned),
+            "access-s3cr3t"
+        );
+        assert_eq!(
+            stored.refresh_token.present(str::to_owned),
+            "refresh-s3cr3t"
+        );
         assert_eq!(state.socket_opens, 0);
         assert!(!state.setup_owed);
 

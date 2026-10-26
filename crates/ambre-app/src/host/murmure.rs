@@ -257,7 +257,7 @@ impl DraftKeeper {
                 let opened = opened.unwrap_or_default();
                 let mut drafts = Vec::new();
                 for (key, row) in keys.into_iter().zip(opened) {
-                    match row.and_then(|row| DraftRow::from_bytes(row.to_vec())) {
+                    match row.and_then(|row| DraftRow::from_bytes(row.to_plaintext())) {
                         Some(row) => drafts.push((key, row)),
                         None => store.delete_draft(&key),
                     }

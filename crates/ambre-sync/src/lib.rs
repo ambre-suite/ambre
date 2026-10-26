@@ -59,8 +59,6 @@ use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg}
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
-use hex::encode;
-
 /// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the
 /// Logic thread, so it cannot hold a queue `Sender<LogicEvent>` directly:
 /// instead it calls this type-erased closure. In the wasm worker the closure

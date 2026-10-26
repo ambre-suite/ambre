@@ -44,7 +44,7 @@ fn vet(
     if first.is_empty() {
         return Err(PassphraseRefusal::Empty);
     }
-    if intent == PassphraseIntent::Seal && second != first {
+    if intent == PassphraseIntent::Seal && !first.matches(second) {
         return Err(PassphraseRefusal::Mismatch);
     }
     Ok(())

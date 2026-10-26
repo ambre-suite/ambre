@@ -15,12 +15,12 @@
 
 use std::collections::HashSet;
 
+use ambre_core::Secret;
 use ambre_protocol::ws::AccessToken;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// Access-token claims. `sub` is the user id, as its hyphenated text.
 /// `spk` is the hex Ed25519 signing public key (used server-side to verify WS
@@ -41,10 +41,11 @@ pub struct Claims {
 /// The 32-byte Ed25519 seed the access tokens are signed under, read from
 /// `JWT_SIGNING_SEED` or drawn at a dev startup.
 ///
-/// Wiped on drop and never cloned (`SRV-235`). Its `Debug` form prints the
-/// length and none of the bytes (`SRV-236`).
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct JwtSeed([u8; 32]);
+/// It holds an [`ambre_core::Secret`], so it is wiped on drop and never
+/// cloned (`SRV-235`). Its `Debug` form prints none of the bytes and not
+/// their length (`SRV-236`).
+#[derive(Debug)]
+pub struct JwtSeed(Secret<[u8; 32]>);
 
 /// Why a `JWT_SIGNING_SEED` value is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -58,44 +59,40 @@ pub enum JwtSeedRefusal {
 impl JwtSeed {
     /// The seed `bytes` name, for a fixed seed in a test.
     #[cfg(test)]
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    pub fn from_array(bytes: [u8; 32]) -> Self {
+        Self(Secret::new(bytes))
     }
 
-    /// Reads the seed from its hex text. The decoded bytes are wiped too,
+    /// Reads the seed from its hex text, which is a secret too. The bytes
+    /// decode in place into the wrapper, so no copy of them is left behind,
     /// whether the seed is accepted or refused.
     ///
     /// # Errors
     ///
     /// [`JwtSeedRefusal::NotHex`] when the text is not hex, and
     /// [`JwtSeedRefusal::Length`] when it decodes to other than 32 bytes.
-    pub fn from_hex(text: &str) -> Result<Self, JwtSeedRefusal> {
-        let bytes = Zeroizing::new(
-            hex::decode(text.trim()).map_err(|e| JwtSeedRefusal::NotHex(e.to_string()))?,
-        );
-        let mut seed = Self([0u8; 32]);
-        if bytes.len() != seed.0.len() {
-            return Err(JwtSeedRefusal::Length(bytes.len()));
-        }
-        seed.0.copy_from_slice(&bytes);
-        Ok(seed)
+    pub fn from_hex(text: &Secret<String>) -> Result<Self, JwtSeedRefusal> {
+        let text = text.expose().trim();
+        Secret::try_filled(|seed: &mut [u8; 32]| {
+            hex::decode_to_slice(text, seed).map_err(|e| match e {
+                hex::FromHexError::InvalidStringLength
+                    if text.bytes().all(|b| b.is_ascii_hexdigit()) =>
+                {
+                    JwtSeedRefusal::Length(text.len() / 2)
+                }
+                other => JwtSeedRefusal::NotHex(other.to_string()),
+            })
+        })
+        .map(Self)
     }
 
-    /// Draws a fresh seed from the platform CSPRNG.
+    /// Draws a fresh seed from the platform CSPRNG, in place.
     ///
     /// # Errors
     ///
     /// The error of `getrandom` when the platform has no CSPRNG.
     pub fn generate() -> Result<Self, getrandom::Error> {
-        let mut seed = Self([0u8; 32]);
-        getrandom::fill(&mut seed.0)?;
-        Ok(seed)
-    }
-}
-
-impl std::fmt::Debug for JwtSeed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "JwtSeed({} bytes)", self.0.len())
+        Secret::try_filled(|seed: &mut [u8; 32]| getrandom::fill(seed)).map(Self)
     }
 }
 
@@ -120,7 +117,7 @@ impl JwtKeys {
         reason = "an Ed25519 key always encodes to PKCS#8, so the conversion cannot fail"
     )]
     pub fn from_seed(seed: &JwtSeed) -> Self {
-        let signing = SigningKey::from_bytes(&seed.0);
+        let signing = SigningKey::from_bytes(seed.0.expose());
         let pkcs8 = signing
             .to_pkcs8_der()
             .expect("ed25519 signing key to PKCS#8 DER");
@@ -150,7 +147,7 @@ impl JwtKeys {
     /// that is not a user id fails the decode.
     pub fn verify(&self, token: &AccessToken) -> Result<Claims, jsonwebtoken::errors::Error> {
         Ok(
-            jsonwebtoken::decode::<Claims>(token.expose(), &self.decoding, &self.validation)?
+            jsonwebtoken::decode::<Claims>(token.reveal(), &self.decoding, &self.validation)?
                 .claims,
         )
     }
@@ -185,15 +182,21 @@ mod tests {
     #[test]
     fn a_jwt_seed_is_wiped_and_never_printed() {
         fn wiped_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
-        let seed = JwtSeed::from_hex(&"ab".repeat(32)).expect("64 hex chars");
-        wiped_on_drop(&seed);
-        assert_eq!(format!("{seed:?}"), "JwtSeed(32 bytes)");
+        let hex = |text: String| Secret::new(text);
+        let seed = JwtSeed::from_hex(&hex("ab".repeat(32))).expect("64 hex chars");
+        wiped_on_drop(&seed.0);
+        assert_eq!(seed.0.expose(), &[0xab; 32]);
+        assert_eq!(format!("{seed:?}"), "JwtSeed(Secret([REDACTED]))");
         assert_eq!(
-            JwtSeed::from_hex(&"ab".repeat(31)).err(),
+            JwtSeed::from_hex(&hex("ab".repeat(31))).err(),
             Some(JwtSeedRefusal::Length(31))
         );
         assert!(matches!(
-            JwtSeed::from_hex("zz"),
+            JwtSeed::from_hex(&hex("zz".to_owned())),
+            Err(JwtSeedRefusal::NotHex(_))
+        ));
+        assert!(matches!(
+            JwtSeed::from_hex(&hex("abc".to_owned())),
             Err(JwtSeedRefusal::NotHex(_))
         ));
     }

@@ -40,7 +40,6 @@ hex               = { workspace = true }
 uuid              = { workspace = true, features = ["v4", "v7"] }
 time              = { workspace = true }
 getrandom         = { workspace = true }
-zeroize           = { workspace = true }
 jsonwebtoken      = { workspace = true }
 openidconnect     = { workspace = true }
 reqwest           = { workspace = true }
@@ -62,6 +61,9 @@ tokio-tungstenite = "0.29"
 # signs an identity token with a key it generates; the relay itself holds no
 # RSA private key.
 rsa = { version = "0.9", features = ["getrandom"] }
+# The bound that proves the token signing seed wipes on drop (`SRV-235`). The
+# code itself wipes through `ambre_core::Secret` alone (`ARCH-046`).
+zeroize = { workspace = true }
 
 [lints]
 workspace = true

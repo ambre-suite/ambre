@@ -38,7 +38,7 @@ impl SyncState {
             .tokens
             .borrow()
             .as_ref()
-            .map(|t| AccessToken::new(t.access_token.expose().to_owned()))
+            .map(|t| t.access_token.present(|text| AccessToken::new(text.to_owned())))
         else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
@@ -2000,7 +2000,7 @@ mod tests {
         let WsClientMsg::Authenticate { token } = &sent[0] else {
             panic!("the first frame is {:?}", sent[0]);
         };
-        assert_eq!(token.expose(), "acc-s3cr3t");
+        assert_eq!(token.reveal(), "acc-s3cr3t");
         assert!(!format!("{:?}", sent[0]).contains("s3cr3t"));
         assert!(matches!(sent[1], WsClientMsg::Subscribe { document_id } if document_id == id));
     }
@@ -2017,12 +2017,14 @@ mod tests {
         assert!(!shown.contains("s3cr3t"), "{shown}");
     }
 
-    /// Both tokens wipe their bytes when dropped (`SYNC-100`): the bound fails
-    /// the build the day either stops doing so.
+    /// Both tokens wipe their bytes when dropped (`SYNC-100`): each holds an
+    /// `ambre_core::Secret`, and the bound fails the build the day the
+    /// wrapper stops wiping.
     #[test]
     fn session_tokens_wipe_on_drop() {
-        fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
-        wipes_on_drop::<SecretToken>();
+        fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
+        let token = SecretToken::from("acc-s3cr3t".to_owned());
+        wipes_on_drop(token.secret());
     }
 
     /// A worker holding one relay document at seq 7, and its socket's wire.

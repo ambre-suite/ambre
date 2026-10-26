@@ -5,7 +5,7 @@
 //! The associated data (`aad`) binds the ciphertext to the message's public
 //! metadata without encrypting it.
 
-use ambre_core::{Ciphertext, EntryDigest, Nonce};
+use ambre_core::{Ciphertext, EntryDigest, Nonce, Secret, SecretBytes};
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
@@ -56,11 +56,11 @@ pub fn open(
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305.
 pub fn seal_file(
-    plaintext: &[u8],
+    plaintext: &SecretBytes,
     aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
-    seal_under(plaintext, aad, key.as_bytes())
+    seal_under(plaintext.secret().expose(), aad, key.as_bytes())
 }
 
 /// Opens one passphrase-sealed `.ambre` file under its own [`FileKey`].
@@ -77,8 +77,8 @@ pub fn open_file(
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     key: &FileKey,
-) -> Result<Vec<u8>, CryptoError> {
-    open_under(nonce, &ciphertext.0, aad, key.as_bytes())
+) -> Result<SecretBytes, CryptoError> {
+    open_under(nonce, &ciphertext.0, aad, key.as_bytes()).map(SecretBytes::new)
 }
 
 ambre_core::define_layout_version! {
@@ -101,11 +101,11 @@ ambre_core::define_layout_version! {
 /// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
 /// XChaCha20-Poly1305.
 pub fn seal_row(
-    plaintext: &[u8],
+    plaintext: &SecretBytes,
     context: &ambre_core::Aad,
     key: &StoreKey,
 ) -> Result<Vec<u8>, CryptoError> {
-    let (nonce, ciphertext) = seal_under(plaintext, context, key.as_bytes())?;
+    let (nonce, ciphertext) = seal_under(plaintext.secret().expose(), context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(&nonce.0);
@@ -124,7 +124,7 @@ pub fn open_row(
     row: &[u8],
     context: &ambre_core::Aad,
     key: &StoreKey,
-) -> Result<Vec<u8>, CryptoError> {
+) -> Result<SecretBytes, CryptoError> {
     let Some((&first, rest)) = row.split_first() else {
         return Err(CryptoError::AeadFailed);
     };
@@ -135,7 +135,7 @@ pub fn open_row(
         return Err(CryptoError::AeadFailed);
     };
     let nonce = Nonce(nonce.try_into().map_err(|_| CryptoError::AeadFailed)?);
-    open_under(&nonce, ciphertext, context, key.as_bytes())
+    open_under(&nonce, ciphertext, context, key.as_bytes()).map(SecretBytes::new)
 }
 
 /// Seals one document key under another, as a catalogue holds the key of a
@@ -170,11 +170,14 @@ pub fn seal_anchored_key(
     outer: &DocumentKey,
     anchor: Option<&EntryDigest>,
 ) -> Result<(Nonce, Ciphertext), CryptoError> {
-    let mut plain = zeroize::Zeroizing::new(inner.as_bytes().to_vec());
-    if let Some(anchor) = anchor {
-        plain.extend_from_slice(&anchor.0);
-    }
-    seal_under(&plain, aad, outer.as_bytes())
+    let plain = Secret::filled(|plain: &mut Vec<u8>| {
+        plain.reserve_exact(64);
+        plain.extend_from_slice(inner.as_bytes());
+        if let Some(anchor) = anchor {
+            plain.extend_from_slice(&anchor.0);
+        }
+    });
+    seal_under(plain.expose(), aad, outer.as_bytes())
 }
 
 /// Opens a document key sealed by [`seal_document_key`].
@@ -205,19 +208,8 @@ pub fn open_anchored_key(
     aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
-    let plain = zeroize::Zeroizing::new(open_under(nonce, &ciphertext.0, aad, outer.as_bytes())?);
-    let (key, anchor) = match plain.len() {
-        32 => (plain.get(..32), None),
-        64 => (plain.get(..32), plain.get(32..)),
-        _ => (None, None),
-    };
-    let key: [u8; 32] = key
-        .and_then(|k| k.try_into().ok())
-        .ok_or(CryptoError::InvalidKeyLength)?;
-    let anchor = anchor
-        .and_then(|a| <[u8; 32]>::try_from(a).ok())
-        .map(EntryDigest);
-    Ok((DocumentKey::from_array(key), anchor))
+    let plain = Secret::new(open_under(nonce, &ciphertext.0, aad, outer.as_bytes())?);
+    crate::keys::split_anchored(plain.expose())
 }
 
 /// The cipher itself, over raw key bytes. Private: every caller reaches it

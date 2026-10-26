@@ -33,10 +33,8 @@ thiserror = { workspace = true }
 # Session keypair types held in SyncState (derived from the MasterSeed).
 ed25519-dalek = { workspace = true }
 x25519-dalek  = { workspace = true }
-# zeroize  → wipe DocumentKey / MasterSeed on Logout
 # gloo-net → HTTP REST (fetch) + WebSocket
 # ruzstd   → payload compression / decompression
-zeroize  = { workspace = true }
 gloo-net = { workspace = true, features = ["http", "websocket"] }
 ruzstd   = { workspace = true }
 hex      = { workspace = true }
@@ -58,6 +56,9 @@ futures-util = { workspace = true }
 # tasks (`invite_task` etc.) against a fake transport in unit tests.
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
+# The bound that proves a session token wipes on drop (`SYNC-100`). The code
+# itself wipes through `ambre_core::Secret` alone (`ARCH-046`).
+zeroize = { workspace = true }
 
 # Sync worker bootstrap (wasm only): panic overlay + tracing into the console.
 # This is a separate wasm instance from Main, so it inits its own subscriber.

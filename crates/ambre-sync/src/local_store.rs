@@ -62,7 +62,6 @@ impl SyncState {
             .map(|row| {
                 ambre_crypto::aead::open_row(row.sealed.as_bytes(), &place_bytes(&row.place), &key)
                     .ok()
-                    .map(SecretBytes::from)
             })
             .collect();
         self.reply(id, RestEvent::LocalRowsOpened { rows });
@@ -145,7 +144,7 @@ mod tests {
         let [Some(plain)] = rows.as_slice() else {
             panic!("the row did not open: {rows:?}");
         };
-        assert_eq!(&plain[..], b"the whole document");
+        assert_eq!(plain.to_plaintext(), b"the whole document");
     }
 
     /// Each row opens on its own. Another user's row, one moved to another
@@ -186,8 +185,11 @@ mod tests {
         let RestEvent::LocalRowsOpened { rows } = open(&mut state, &rx, rows) else {
             panic!("expected opened rows");
         };
-        let opened: Vec<Option<&[u8]>> = rows.iter().map(|r| r.as_deref()).collect();
-        assert_eq!(opened, [None, None, None, Some(b"a draft".as_slice())]);
+        let opened: Vec<Option<Vec<u8>>> = rows
+            .iter()
+            .map(|r| r.as_ref().map(SecretBytes::to_plaintext))
+            .collect();
+        assert_eq!(opened, [None, None, None, Some(b"a draft".to_vec())]);
     }
 
     /// Without a session there is no key: nothing is sealed or opened.

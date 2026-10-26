@@ -196,7 +196,7 @@ impl LocalStore {
             this.inner.vault.open(rows, move |opened| {
                 let copy = opened.map(|rows| {
                     rows.into_iter()
-                        .map(|row| row.map(|bytes| bytes.to_vec()))
+                        .map(|row| row.map(|bytes| bytes.to_plaintext()))
                         .collect::<Option<Vec<_>>>()
                 });
                 let (snapshot, deltas, sessions) = match copy {

@@ -303,7 +303,7 @@ mod tests {
         );
         let commit = sent.len() - 1;
         assert_eq!(
-            sent[commit].url.expose(),
+            sent[commit].url.reveal(),
             format!("{BASE}/api/channels/{channel}/segments/{segment}/finalize")
         );
         assert_eq!(

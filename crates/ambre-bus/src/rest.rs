@@ -36,11 +36,8 @@
 //!   `RequestId` is a later refinement).
 
 use core::sync::atomic::{AtomicU64, Ordering};
-use std::fmt;
-use std::ops::Deref;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use zeroize::Zeroizing;
+use serde::{Deserialize, Serialize};
 
 use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 
@@ -48,61 +45,12 @@ use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 // Secret-carrying IPC fields (H5)
 // -----------------------------------------------------------------------------
 
-/// Secret byte material crossing the UI -> Logic -> Sync boundary: a document's plaintext
-/// on its way to or from a seal. A passphrase travels as [`ambre_core::Passphrase`].
-///
-/// A `Vec<u8>` would relay the same bytes, and also render
-/// them in a `Debug` line and leave its copy in the heap after the hop. In a feature about
-/// a document at rest, that is the wrong default.
-///
-/// Wraps [`Zeroizing<Vec<u8>>`], so the bytes are wiped when the value is dropped anywhere
-/// along the relay -- including the placeholder handlers that merely bind-and-drop. `Debug`
-/// is redacted, so the secret can never leak into a log line. The byte contents are exposed
-/// only through [`Deref`] to `[u8]`, which the crypto call sites already consume.
-#[derive(Clone, Default)]
-pub struct SecretBytes(Zeroizing<Vec<u8>>);
-
-impl SecretBytes {
-    /// Wrap owned bytes as a zeroizing secret.
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(Zeroizing::new(bytes))
-    }
-}
-
-impl From<Vec<u8>> for SecretBytes {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self::new(bytes)
-    }
-}
-
-impl Deref for SecretBytes {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl fmt::Debug for SecretBytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SecretBytes([redacted; {} bytes])", self.0.len())
-    }
-}
-
-impl Serialize for SecretBytes {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.as_slice().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SecretBytes {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(Self::new(Vec::<u8>::deserialize(deserializer)?))
-    }
-}
-
-/// Secret UTF-8 material, the recovery phrase, lives in `ambre-core` so a
-/// crate that cannot depend on the bus holds it too.
-pub use ambre_core::SecretString;
+/// Secret bytes and secret text that cross the UI -> Logic -> Sync boundary:
+/// a plaintext on its way to or from a seal, and the recovery phrase. Both
+/// live in `ambre-core` on [`ambre_core::Secret`], so a crate that cannot
+/// depend on the bus holds them too. A passphrase travels as
+/// [`ambre_core::Passphrase`].
+pub use ambre_core::{SecretBytes, SecretString};
 
 // -----------------------------------------------------------------------------
 // RequestId -- request/response correlation token

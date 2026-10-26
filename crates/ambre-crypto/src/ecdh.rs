@@ -6,11 +6,10 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
-use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, Nonce};
+use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, Nonce, Secret};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::aead;
 use crate::error::CryptoError;
@@ -33,20 +32,14 @@ pub struct WrappedKey {
 /// The raw X25519 output between two parties, the input of the KEK.
 ///
 /// Wiped on drop and never cloned, like the keys of `keys.rs`. Its `Debug`
-/// form prints the length and none of the bytes.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct SharedSecret([u8; 32]);
+/// form prints none of the bytes.
+#[derive(Debug)]
+pub struct SharedSecret(Secret<[u8; 32]>);
 
 impl SharedSecret {
     /// Returns the raw secret bytes, for the KEK derivation and the tests.
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
-impl core::fmt::Debug for SharedSecret {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "SharedSecret({} bytes)", self.0.len())
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        self.0.expose()
     }
 }
 
@@ -65,13 +58,15 @@ pub fn shared_secret(
     peer_public: &ExchangePublicKey,
 ) -> Result<SharedSecret, CryptoError> {
     let peer = PublicKey::from(*peer_public.as_array());
-    // `x25519_dalek::SharedSecret` wipes itself on drop; the copy moves
-    // straight into the wiping wrapper.
+    // `x25519_dalek::SharedSecret` wipes itself on drop; its bytes are copied
+    // in place into the wiping wrapper.
     let shared = own_secret.diffie_hellman(&peer);
     if !shared.was_contributory() {
         return Err(CryptoError::WeakPublicKey);
     }
-    Ok(SharedSecret(shared.to_bytes()))
+    Ok(SharedSecret(Secret::filled(|out: &mut [u8; 32]| {
+        out.copy_from_slice(shared.as_bytes());
+    })))
 }
 
 /// Derives the key-encryption key via HKDF-BLAKE2b, binding the transcript to
@@ -94,12 +89,11 @@ fn derive_kek(
     info.extend_from_slice(KEK_DOMAIN);
     info.extend_from_slice(sender_pk.as_slice());
     info.extend_from_slice(recipient_pk.as_slice());
-    let mut kek = [0u8; 32];
-    hk.expand(&info, &mut kek)
-        .expect("HKDF-BLAKE2b expand of 32 bytes is within the output limit");
-    let key = DocumentKey::from_array(kek);
-    kek.zeroize();
-    key
+    let kek = Secret::filled(|kek: &mut [u8; 32]| {
+        hk.expand(&info, kek)
+            .expect("HKDF-BLAKE2b expand of 32 bytes is within the output limit");
+    });
+    DocumentKey::from_secret(kek)
 }
 
 /// Wraps `doc_key` for the holder of `peer_public`, using `own_secret`. Here the
@@ -134,11 +128,18 @@ pub fn wrap_anchored(
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, &own_pub, peer_public);
-    let mut plaintext = Zeroizing::new(doc_key.as_bytes().to_vec());
-    if let Some(anchor) = anchor {
-        plaintext.extend_from_slice(&anchor.0);
-    }
-    let (nonce, ciphertext) = aead::seal(&plaintext, &ambre_core::Aad::of(KEK_DOMAIN), &kek)?;
+    let plaintext = Secret::filled(|plain: &mut Vec<u8>| {
+        plain.reserve_exact(64);
+        plain.extend_from_slice(doc_key.as_bytes());
+        if let Some(anchor) = anchor {
+            plain.extend_from_slice(&anchor.0);
+        }
+    });
+    let (nonce, ciphertext) = aead::seal(
+        plaintext.expose(),
+        &ambre_core::Aad::of(KEK_DOMAIN),
+        &kek,
+    )?;
     Ok(WrappedKey { nonce, ciphertext })
 }
 
@@ -175,22 +176,11 @@ pub fn unwrap_anchored(
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, peer_public, &own_pub);
-    let bytes = Zeroizing::new(aead::open(
+    let bytes = Secret::new(aead::open(
         &wrapped.nonce,
         &wrapped.ciphertext,
         &ambre_core::Aad::of(KEK_DOMAIN),
         &kek,
     )?);
-    let (key, anchor) = match bytes.len() {
-        32 => (bytes.get(..32), None),
-        64 => (bytes.get(..32), bytes.get(32..)),
-        _ => (None, None),
-    };
-    let key: [u8; 32] = key
-        .and_then(|k| k.try_into().ok())
-        .ok_or(CryptoError::InvalidKeyLength)?;
-    let anchor = anchor
-        .and_then(|a| <[u8; 32]>::try_from(a).ok())
-        .map(EntryDigest);
-    Ok((DocumentKey::from_array(key), anchor))
+    crate::keys::split_anchored(bytes.expose())
 }
