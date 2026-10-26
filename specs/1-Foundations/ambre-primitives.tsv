@@ -130,9 +130,9 @@ ambre-app | src/tofu.rs | crate::tofu | TofuPrompt.changed | field | bool	generi
 ambre-app | src/vault.rs | crate::vault | Vault::answer() | ret | bool	generic	predicate result
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/activity.rs | crate::activity | ActivitySummary.mentions_all | field | bool	generic	fact flag mirrored from ambre-core ActivitySummary
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	trait	signature fixed by the trait
-ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
 ambre-bus | src/app/murmure.rs | crate::app::murmure | ChannelActivity.active | field | bool	generic	fact flag
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
@@ -168,8 +168,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
-ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
+ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
+ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -308,7 +308,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::UndoState.can_und
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress.0 | field | String	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::into_string() | ret | String	newtype-inner	WebAddress newtype
-ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
+ambre-bus | src/app/toile.rs | crate::app::toile | <WebAddress as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of WebAddress validates
 ambre-bus | src/app/toile.rs | crate::app::toile | AddressError::message() | ret | &'static str	free-text	AddressError message text
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::parse(text) | param | &str	free-text	address text the user typed or the document holds, checked into a WebAddress
 ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
@@ -337,7 +337,7 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <SheetId as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | <SheetId as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of SheetId, lent through Borrow
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.bold | field | bool	generic	named option or style flag, selects no mode
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.is_filtered | field | bool	generic	named option or style flag, selects no mode
@@ -471,7 +471,7 @@ ambre-bus | src/outbox.rs | crate::outbox | Outbox::is_busy() | ret | bool	gener
 ambre-bus | src/outbox.rs | crate::outbox | Outbox::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/rest.rs | crate::rest | <SecretBytes as Deref>::deref() | ret | &[u8]	newtype-inner	secret newtype
-ambre-bus | src/rest.rs | crate::rest | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	trait	signature fixed by the trait
+ambre-bus | src/rest.rs | crate::rest | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	the Vec<u8> the constructor of SecretBytes wraps
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
@@ -993,8 +993,8 @@ ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext(payload) | 
 ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
-ambre-core | src/email.rs | crate::email | <Email as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/email.rs | crate::email | <Email as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/email.rs | crate::email | <Email as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Email copies into its text
+ambre-core | src/email.rs | crate::email | <Email as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Email wraps
 ambre-core | src/email.rs | crate::email | Email.0 | field | String	newtype-inner	Email newtype
 ambre-core | src/email.rs | crate::email | Email::as_str() | ret | &str	newtype-inner	Email newtype
 ambre-core | src/encoded.rs | crate::encoded | ANCHOR_LEN | const | usize	generic	length constant
@@ -1075,16 +1075,16 @@ ambre-core | src/lang.rs | crate::lang | LangTag.0 | field | String	newtype-inne
 ambre-core | src/lang.rs | crate::lang | LangTag::as_str() | ret | &str	newtype-inner	LangTag newtype accessor
 ambre-core | src/lang.rs | crate::lang | LangTag::parse(text) | param | &str	newtype-inner	LangTag constructor, the text it validates
 ambre-core | src/lang.rs | crate::lang | LangTag::primary() | ret | String	newtype-inner	LangTag primary subtag, lowercased
-ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/link.rs | crate::link | <LinkUrl as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of LinkUrl copies into its text
+ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of LinkUrl wraps
 ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | String	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
-ambre-core | src/media.rs | crate::media | <ContentHash as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/media.rs | crate::media | <ContentHash as From<String>>::from(text) | param | String	trait	signature fixed by the trait
-ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature fixed by the trait
-ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/media.rs | crate::media | <ContentHash as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ContentHash copies into its text
+ambre-core | src/media.rs | crate::media | <ContentHash as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ContentHash wraps
+ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of ContentHash, lent through Borrow
+ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
+ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
 ambre-core | src/media.rs | crate::media | ByteSize.0 | field | u64	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ByteSize::as_len() | ret | usize	newtype-inner	ByteSize constructor or accessor
 ambre-core | src/media.rs | crate::media | ByteSize::from_i64(stored) | param | i64	newtype-inner	ByteSize storage conversion
@@ -1103,7 +1103,7 @@ ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq() 
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq(other) | param | &&str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq(other) | param | &str	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of DisplayName validates
 ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq() | ret | bool	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq(other) | param | &&str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <Name as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
@@ -1123,11 +1123,11 @@ ambre-core | src/name.rs | crate::name | Name::is_empty() | ret | bool	newtype-i
 ambre-core | src/name.rs | crate::name | Name::new(text) | param | impl Into<String>	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | name_fits() | ret | bool	generic	name cap and its predicate
 ambre-core | src/name.rs | crate::name | name_fits(name) | param | &str	generic	name cap and its predicate
-ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::from(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ObjectKey copies into its text
+ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ObjectKey wraps
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::as_str() | ret | &str	newtype-inner	ObjectKey newtype
-ambre-core | src/passphrase.rs | crate::passphrase | <Passphrase as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/passphrase.rs | crate::passphrase | <Passphrase as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Passphrase wraps
 ambre-core | src/passphrase.rs | crate::passphrase | Passphrase.0 | field | Zeroizing<String>	newtype-inner	secret newtype
 ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::as_bytes() | ret | &[u8]	newtype-inner	secret newtype
 ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::is_empty() | ret | bool	generic	predicate
@@ -1161,7 +1161,7 @@ ambre-core | src/schema.rs | crate::schema | SchemaVersion::new(version) | param
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
 ambre-core | src/schema.rs | crate::schema | StepFingerprint.0 | field | u64	newtype-inner	the FNV-1a hash a migration step fingerprint holds
-ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
+ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 the fallible constructor of Seq validates
 ambre-core | src/seq.rs | crate::seq | Seq.0 | field | u64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/seq.rs | crate::seq | Seq::to_i64_saturating() | ret | i64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(parse) | param | impl FnOnce(&str)->Option<T>	generic	generic serde helper
@@ -2491,7 +2491,7 @@ ambre-protocol | src/membership.rs | crate::membership | LogPosition::after(leng
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::get() | ret | u64	newtype-inner	LogPosition field or accessor
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::is_first() | ret | bool	newtype-inner	LogPosition predicate
 ambre-protocol | src/membership.rs | crate::membership | LogPosition::new(raw) | param | u64	newtype-inner	the raw place the wire and the relay rows carry
-ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::try_from(value) | param | i64	trait	signature fixed by the trait
+ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 the fallible constructor of Clock validates
 ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Counter.0 | field | u64	newtype-inner	protocol newtype accessor
@@ -2693,7 +2693,7 @@ ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | pus
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | verify_sealed_signature(public_data_bytes) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.tokens | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
-ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	trait	signature set by the trait
+ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of Topic, lent through Borrow
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	free-text	private hub channel name constant
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
@@ -3986,7 +3986,7 @@ ambre-core | src/member_count.rs | crate::member_count | MemberCount::is_shared(
 ambre-core | src/member_count.rs | crate::member_count | MemberCount::new(n) | param | u32	newtype-inner	the count MemberCount wraps
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	generic	the computed bool the one constructor of Visibility reads into its variant
-ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	trait	signature fixed by the trait
+ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
 ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Zeroizing<String>	newtype-inner	secret newtype
 ambre-core | src/secret.rs | crate::secret | SecretString::expose() | ret | &str	newtype-inner	secret newtype
 ambre-core | src/secret.rs | crate::secret | SecretString::is_empty() | ret | bool	generic	predicate result
