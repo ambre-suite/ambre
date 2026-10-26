@@ -470,8 +470,6 @@ ambre-bus | src/outbox.rs | crate::outbox | Outbox::held() | ret | usize	math	ch
 ambre-bus | src/outbox.rs | crate::outbox | Outbox::is_busy() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/outbox.rs | crate::outbox | Outbox::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/rest.rs | crate::rest | <SecretBytes as Deref>::deref() | ret | &[u8]	newtype-inner	secret newtype
-ambre-bus | src/rest.rs | crate::rest | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	the Vec<u8> the constructor of SecretBytes wraps
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
@@ -479,8 +477,6 @@ ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	
 ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
-ambre-bus | src/rest.rs | crate::rest | SecretBytes.0 | field | Zeroizing<Vec<u8>>	newtype-inner	secret newtype
-ambre-bus | src/rest.rs | crate::rest | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype
 ambre-bus | src/start.rs | crate::start | ANNOUNCEMENT | const | &[u8]	generic	start announcement bytes
 ambre-bus | src/start.rs | crate::start | StartGate.open | field | bool	generic	gate state flag
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
@@ -1127,11 +1123,6 @@ ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<&str>>::
 ambre-core | src/object_key.rs | crate::object_key | <ObjectKey as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ObjectKey wraps
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey.0 | field | String	newtype-inner	ObjectKey newtype
 ambre-core | src/object_key.rs | crate::object_key | ObjectKey::as_str() | ret | &str	newtype-inner	ObjectKey newtype
-ambre-core | src/passphrase.rs | crate::passphrase | <Passphrase as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Passphrase wraps
-ambre-core | src/passphrase.rs | crate::passphrase | Passphrase.0 | field | Zeroizing<String>	newtype-inner	secret newtype
-ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::as_bytes() | ret | &[u8]	newtype-inner	secret newtype
-ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::is_empty() | ret | bool	generic	predicate
-ambre-core | src/passphrase.rs | crate::passphrase | Passphrase::new(text) | param | String	newtype-inner	secret newtype
 ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
@@ -1227,16 +1218,12 @@ ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	ne
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_file() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_file(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_row() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | seal_row(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(key) | param | &[u8;32]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | seal_under(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | MEDIA_ADDRESS_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1257,20 +1244,15 @@ ambre-crypto | src/hash.rs | crate::hash | HASH_LEN | const | usize	generic	gene
 ambre-crypto | src/hash.rs | crate::hash | entry_digest(encoded_entry) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | EXCH_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | FILE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | FileKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | KEY_ID_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | MasterSeed::from_array(bytes) | param | [u8;32]	newtype-inner	newtype field, constructor or accessor
-ambre-crypto | src/keys.rs | crate::keys | MasterSeed::recovery_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | SIGN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | STORE_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/keys.rs | crate::keys | StoreKey.0 | field | [u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | StoreKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/keys.rs | crate::keys | derive32(domain) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | derive32(seed) | param | &[u8;32]	generic	generic byte/text API or codec
@@ -2563,10 +2545,8 @@ ambre-protocol | src/signaling.rs | crate::signaling | SignalingServerMsg::Offer
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | report_transcript() | ret | Vec<u8>	generic	wire codec
 ambre-protocol | src/ws.rs | crate::ws | AccessToken.0 | field | String	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | AccessToken::expose() | ret | &str	newtype-inner	token newtype
 ambre-protocol | src/ws.rs | crate::ws | AccessToken::new(token) | param | String	newtype-inner	token newtype
 ambre-protocol | src/ws.rs | crate::ws | RefreshToken.0 | field | String	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | RefreshToken::expose() | ret | &str	newtype-inner	token newtype
 ambre-protocol | src/ws.rs | crate::ws | RefreshToken::new(token) | param | String	newtype-inner	token newtype
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::is_from_newer_peer() | ret | bool	generic	raw unparsed wire version byte, may lie outside Version's range
@@ -2676,7 +2656,6 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	generic	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/oidc.rs | crate::oidc | OidcSecret::expose() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/oidc.rs | crate::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
@@ -2775,7 +2754,6 @@ ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot() | ret | Result<V
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | <HttpError as From<&str>>::from(message) | param | &str	trait	signature fixed by the trait
 ambre-sync | src/http.rs | crate::http | <HttpError as From<String>>::from(message) | param | String	trait	signature fixed by the trait
-ambre-sync | src/http.rs | crate::http | <SecretToken as From<String>>::from(token) | param | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ActivityEntry.active | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | AmendmentsResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
@@ -2802,14 +2780,10 @@ ambre-sync | src/http.rs | crate::http | RelayUrl.0 | field | String	newtype-inn
 ambre-sync | src/http.rs | crate::http | RelayUrl::as_str() | ret | &str	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::join(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-text	error message text
-ambre-sync | src/http.rs | crate::http | SecretToken.0 | field | String	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | SecretToken::expose() | ret | &str	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ThreadResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | bearer() | ret | Zeroizing<String>	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/http.rs | crate::http | SocketUrl.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | SocketUrl::as_str() | ret | &str	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | Target::expose() | ret | &str	foreign-api	the full address the browser's fetch takes
 ambre-sync | src/http.rs | crate::http | TransportError::Body.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
 ambre-sync | src/http.rs | crate::http | TransportError::Fetch.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
 ambre-sync | src/http.rs | crate::http | TransportError::Truncated.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
@@ -4022,10 +3996,7 @@ ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	ge
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(head) | param | &[u8]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(tail) | param | &[u8]	generic	private hashing construction; each caller wraps the result
-ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | [u8;32]	newtype-inner	SharedSecret newtype
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
-ambre-server | src/jwt.rs | crate::jwt | JwtSeed.0 | field | [u8;32]	newtype-inner	JwtSeed newtype
-ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &str	foreign-api	the JWT_SIGNING_SEED environment value, parsed here once
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::NotHex.0 | field | String	free-text	the hex decoder message a refusal reports
 ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports
@@ -4046,10 +4017,6 @@ ambre-core | src/member_count.rs | crate::member_count | MemberCount::new(n) | p
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	generic	the computed bool the one constructor of Visibility reads into its variant
 ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
-ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Zeroizing<String>	newtype-inner	secret newtype
-ambre-core | src/secret.rs | crate::secret | SecretString::expose() | ret | &str	newtype-inner	secret newtype
-ambre-core | src/secret.rs | crate::secret | SecretString::is_empty() | ret | bool	generic	predicate result
-ambre-core | src/secret.rs | crate::secret | SecretString::len() | ret | usize	newtype-inner	secret newtype
 ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | String	newtype-inner	secret newtype
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	generic	generic codec/parser/bytes API
@@ -4108,10 +4075,6 @@ ambre-core | src/mode.rs | crate::mode | LinkState::connected_if(open) | param |
 ambre-core | src/mode.rs | crate::mode | LinkState::is_connected() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::is_resolved() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-core | src/mode.rs | crate::mode | ThreadState::resolved_if(resolved) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-crypto | src/keys.rs | crate::keys | derive32() | ret | Zeroizing<[u8;32]>	generic	HKDF output, zeroized on drop; each caller wraps it in its typed key
-ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | [u8;USER_KEY_LEN]	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey::as_bytes() | ret | &[u8;USER_KEY_LEN]	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Zeroizing<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output, zeroized on drop; its one caller wraps it in UserKey
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash.0 | field | String	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::new(text) | param | &str	newtype-inner	the newtype's own inside, accessor or constructor
@@ -4212,3 +4175,59 @@ ambre-primitives | src/scan.rs | crate::scan | foreign_path() | ret | Result<syn
 ambre-primitives | src/scan.rs | crate::scan | foreign_path(full) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | generic_names() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | shadowed() | ret | Option<String>	free-text	error messages printed to the terminal
+ambre-core | src/secret.rs | crate::secret | <Passphrase as From<String>>::from(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | <SecretBytes as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | Passphrase.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | Passphrase::is_empty() | ret | bool	generic	predicate
+ambre-core | src/secret.rs | crate::secret | Passphrase::matches() | ret | bool	generic	a constant-time predicate
+ambre-core | src/secret.rs | crate::secret | Passphrase::new(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | SecretBytes::secret() | ret | &Secret<Vec<u8>>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | SecretBytes::to_plaintext() | ret | Vec<u8>	newtype-inner	a copy of the plaintext for the document model, out of the Secret
+ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | SecretString::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | DocumentKey.0 | field | Arc<Secret<[u8;32]>>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | DocumentKey::from_secret(key) | param | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | FileKey.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | MasterSeed.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | MasterSeed::recovery_words::HEX | const | &[u8;16]	generic	the hex alphabet the recovery words are spelled in
+ambre-crypto | src/keys.rs | crate::keys | StoreKey.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/keys.rs | crate::keys | derive32() | ret | Secret<[u8;32]>	generic	BLAKE2b output in a Secret; each caller wraps it in its typed key
+ambre-crypto | src/keys.rs | crate::keys | key_of() | ret | Option<Secret<[u8;32]>>	generic	generic byte/text API or codec
+ambre-crypto | src/keys.rs | crate::keys | key_of(bytes) | param | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/keys.rs | crate::keys | split_anchored(plain) | param | &[u8]	generic	generic byte/text API or codec
+ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
+ambre-crypto | src/token.rs | crate::token | <SecretToken as From<String>>::from(token) | param | String	newtype-inner	the SecretToken newtype over a shared Secret
+ambre-crypto | src/token.rs | crate::token | SecretToken.0 | field | Arc<Secret<String>>	newtype-inner	the SecretToken newtype over a shared Secret
+ambre-crypto | src/token.rs | crate::token | SecretToken::present(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
+ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
+ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
+ambre-crypto | src/token.rs | crate::token | SecretToken::secret() | ret | &Secret<String>	newtype-inner	the SecretToken newtype over a shared Secret
+ambre-primitives | src/scan.rs | crate::scan | Scan.secrets | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/secrets.rs | crate::secrets | CRYPTO | const | &str	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | Check::names() | ret | &'static[&'static str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | Check::reason() | ret | &'static str	free-text	error messages printed to the terminal
+ambre-primitives | src/secrets.rs | crate::secrets | READERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | SECRET_MODULE | const | (&str,&str)	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | Seek.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | Seek.found | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/secrets.rs | crate::secrets | WIPERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | checks(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | checks(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | refusals() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/secrets.rs | crate::secrets | refusals(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | refusals(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | refusals(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-protocol | src/ws.rs | crate::ws | AccessToken::reveal() | ret | &str	newtype-inner	token newtype
+ambre-protocol | src/ws.rs | crate::ws | RefreshToken::reveal() | ret | &str	newtype-inner	token newtype
+ambre-server | src/jwt.rs | crate::jwt | JwtSeed.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
+ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &Secret<String>	foreign-api	the JWT_SIGNING_SEED environment value, parsed here once
+ambre-server | src/oidc.rs | crate::oidc | OidcSecret::reveal() | ret | &str	newtype-inner	newtype inner, accessor or constructor
+ambre-sync | src/http.rs | crate::http | Target::reveal() | ret | &str	foreign-api	the full address the browser's fetch takes

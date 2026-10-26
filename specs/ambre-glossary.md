@@ -107,7 +107,7 @@
 | key hierarchy | the derivation tree of every key a client holds | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
-| Secret | the one wrapper that holds every key, seed, passphrase and token, and wipes it | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| Secret | the one wrapper that holds and wipes every secret value | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |

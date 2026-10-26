@@ -96,6 +96,7 @@ constrains, and the table below lists them.
 | `ARCH-042` | A `trait` line on a closure type or a function pointer type MUST name one that a foreign signature requires. | `ambre-spec-architecture.md` |
 | `ARCH-043` | A field, parameter, return, constant, static, alias or `Deref` impl that a macro writes MUST obey `ARCH-033`, `ARCH-037`, `ARCH-039` and `ARCH-040` as one the source writes does. | `ambre-spec-architecture.md` |
 | `ARCH-044` | A site whose type names an alias of a foreign crate MUST obey `ARCH-033`, `ARCH-039` and `ARCH-040` as the alias's target does. A `Deref` impl whose target names one MUST obey `ARCH-037` as that target does. | `ambre-spec-architecture.md` |
+| `ARCH-047` | The value of a `Secret` MUST NOT leave `ambre-crypto` and the Secret module through a door other than the three names of `ARCH-045`: a function of either that lends out the bare value to any caller, a trait impl of `Secret` that hands it out, or code a macro or a derive writes. | `ambre-spec-architecture.md` |
 <!-- end of the human-review rows -->
 
 The table is written from the rows by `just contracts-write`, and `just contracts` fails when it is
