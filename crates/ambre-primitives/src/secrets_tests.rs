@@ -254,7 +254,7 @@ fn a_dependency_that_renames_zeroize_is_refused() {
 
 #[test]
 fn the_relay_reads_a_secret_in_its_secrets_module_alone() {
-    let read = "pub fn refresh_key(t: &RefreshToken) -> String { t.secret().expose().clone() }";
+    let read = "pub fn key_text(t: &RefreshToken) -> String { t.secret().expose().clone() }";
     assert_eq!(
         refused("ambre-server", "src/secrets/token.rs", read),
         Vec::<String>::new()
@@ -321,20 +321,90 @@ fn every_sink_has_its_name_and_its_file() {
     assert_eq!(named, super::SINK_NAMES);
 }
 
+// The red cases are the forms 653d7d4f let through. They are the build
+// output, a path to the macro, a rename of it, and a macro body.
+
 #[test]
-fn an_include_is_refused_unless_it_names_the_build_output() {
+fn an_include_is_refused_in_every_form() {
     let found = refused(
         "ambre-sync",
         "src/lib.rs",
         "include!(\"../../../leak_inc.rs\");\n\
          include!(concat!(env!(\"OUT_DIR\"), \"/theme_gen.rs\"));\n\
-         include!(concat!(\"/tmp\", \"/x.rs\"));",
+         std::include!(\"leak.rs\");\n\
+         ::core::include!(\"leak.rs\");\n\
+         use std::include as inc;\n\
+         inc!(\"leak.rs\");\n\
+         macro_rules! splice { ($f:literal) => { include!($f); }; }\n\
+         fn f() { let _ = stringify!(a, include!(\"leak.rs\")); }",
     );
     assert_eq!(
         found,
         [
-            "crates/ambre-sync/src/lib.rs:1: `include!`",
-            "crates/ambre-sync/src/lib.rs:3: `include!`",
+            "crates/ambre-sync/src/lib.rs:1: `include`",
+            "crates/ambre-sync/src/lib.rs:2: `include`",
+            "crates/ambre-sync/src/lib.rs:3: `include`",
+            "crates/ambre-sync/src/lib.rs:4: `include`",
+            "crates/ambre-sync/src/lib.rs:5: `include`",
+            "crates/ambre-sync/src/lib.rs:7: `include`",
+            "crates/ambre-sync/src/lib.rs:8: `include`",
         ]
     );
+}
+
+#[test]
+fn an_include_is_refused_where_a_secret_is_read_too() {
+    let source = "include!(concat!(env!(\"OUT_DIR\"), \"/gen.rs\"));";
+    assert_eq!(
+        refused("ambre-core", "src/secret.rs", source),
+        ["crates/ambre-core/src/secret.rs:1: `include`"]
+    );
+    assert_eq!(
+        refused("ambre-crypto", "src/keys.rs", source),
+        ["crates/ambre-crypto/src/keys.rs:1: `include`"]
+    );
+    assert_eq!(
+        refused("ambre-server", "src/secrets/mod.rs", source),
+        ["crates/ambre-server/src/secrets/mod.rs:1: `include`"]
+    );
+}
+
+#[test]
+fn a_relay_sink_is_named_in_its_call_file_and_its_declaring_file_alone() {
+    let call = "async fn get(c: &Client, t: &RefreshToken) { crate::secrets::token::refresh_key(t, |k| c.hgetall(k)); }";
+    assert_eq!(
+        refused("ambre-server", "src/redis_ops.rs", call),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-server", "src/routes/auth.rs", call),
+        ["crates/ambre-server/src/routes/auth.rs:1: `refresh_key`"]
+    );
+    let declare = "pub fn refresh_key<R>(t: &RefreshToken, send: impl FnOnce(&str) -> R) -> R { send(t.secret().expose()) }";
+    assert_eq!(
+        refused("ambre-server", "src/secrets/token.rs", declare),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-server", "src/secrets/oidc.rs", declare),
+        ["crates/ambre-server/src/secrets/oidc.rs:1: `refresh_key`"]
+    );
+    // Each of the seven functions 653d7d4f let any file of the relay call.
+    for (name, file) in [
+        ("refresh_key", "src/redis_ops.rs"),
+        ("oidc_state_key", "src/redis_ops.rs"),
+        ("present_stored", "src/redis_ops.rs"),
+        ("to_client_secret", "src/oidc.rs"),
+        ("to_pkce_verifier", "src/oidc.rs"),
+        ("authorization_code", "src/oidc.rs"),
+        ("decode_access", "src/jwt.rs"),
+        ("seed_key", "src/jwt.rs"),
+    ] {
+        let source = format!("fn f(x: &X) {{ x.{name}(); }}");
+        assert_eq!(refused("ambre-server", file, &source), Vec::<String>::new());
+        assert_eq!(
+            refused("ambre-server", "src/main.rs", &source),
+            [format!("crates/ambre-server/src/main.rs:1: `{name}`")]
+        );
+    }
 }
