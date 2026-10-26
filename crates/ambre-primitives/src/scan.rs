@@ -212,6 +212,9 @@ pub struct Scan {
     /// words a reviewer reads (`ARCH-037`). No line of the allowlist admits
     /// one.
     pub derefs: Vec<String>,
+    /// Each name of a secret reader or of the `zeroize` crate outside the
+    /// code the secret checks admit (`ARCH-045`, `ARCH-046`).
+    pub secrets: Vec<String>,
     /// Every call of the workspace, tests included, that passes a `bool`
     /// literal (`ARCH-040`).
     literals: Vec<BoolCall>,
@@ -2509,6 +2512,9 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         .insert("crate".to_owned());
     if let Some(manifest) = tree.read(&dir.join("Cargo.toml")) {
         let Manifest { packages, renamed } = dependencies(&manifest);
+        result
+            .secrets
+            .append(&mut crate::secrets::renamed_wipers(&name, &renamed));
         result.declared.deps.insert(name.clone(), packages);
         result.declared.renamed.insert(name.clone(), renamed);
     }
@@ -2565,6 +2571,13 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         let mut visit = FileVisit::new(&name, relative, &path, next.module);
         visit.uses(&file);
         visit.visit_file(&file);
+        let file_name = relative.to_string_lossy().replace('\\', "/");
+        result.secrets.append(&mut crate::secrets::refusals(
+            &name,
+            &file_name,
+            &format!("crates/{name}/{file_name}"),
+            &file,
+        ));
         found.keys.append(&mut visit.keys);
         found.derefs.append(&mut visit.derefs);
         found.unread.append(&mut visit.unread);
@@ -2983,7 +2996,7 @@ fn evaluate(meta: &syn::Meta) -> Tri {
 
 /// Whether the attributes keep an item out of every build but a test:
 /// a `cfg` that no other build satisfies, or a test macro.
-fn test_only(attrs: &[syn::Attribute]) -> bool {
+pub(crate) fn test_only(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let path = attr.path();
         if path.is_ident("cfg") {

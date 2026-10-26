@@ -107,8 +107,15 @@
     the same note.
   * **Indexing.** A collection indexed by an index type is a typed collection.
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
-    hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A secret or
-    plaintext type prints only its length through `Debug`.
+    hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A plaintext type
+    prints only its length through `Debug`. A secret type prints nothing of its value: it holds
+    an `ambre_core::Secret` and derives `Debug`, which prints `Secret([REDACTED])`.
+  * **Secrets.** A key, a seed, a passphrase or a token is a domain newtype over
+    `ambre_core::Secret`, which wipes the value on drop. `Secret` has no `Clone`, no serde, no
+    `PartialEq` and no `Display`, so a derive of one on the newtype does not compile. A value two
+    owners share is an `Arc<Secret<T>>`; `clone_secret` is the one copy. Equality is
+    `ConstantTimeEq`. The value is read through `expose` in `ambre-crypto` alone: a crate outside
+    it calls a typed method there (`ambre-spec-zero-knowledge.md section 2`).
   * **Two bans.** Never implement `From` in both directions, and never implement `Deref` or
     `DerefMut` to a primitive, or to a type that hands one out. Either one turns the newtype back
     into the primitive silently. A slice, an array, a reference, and a `Vec`, `Box`, `Rc`, `Arc`
@@ -130,13 +137,16 @@
   `ARCH-044`).
 
   The gate checks the category word. It also refutes a `newtype-inner` or a `trait` line whose
-  site lacks the shape stated below (`ARCH-036`). It refuses four more defects, whatever the line
+  site lacks the shape stated below (`ARCH-036`). It refuses six more defects, whatever the line
   says:
   1. a `Deref` or a `DerefMut` to a primitive (`ARCH-037`);
   2. a `local` line on a site that is not private (`ARCH-038`);
   3. a `bool` field that is not private, unless its line is `foreign-api` (`ARCH-039`);
   4. a `bool` parameter that is not private and that a caller writes as a literal, unless its
-     line is `trait` (`ARCH-040`).
+     line is `trait` (`ARCH-040`);
+  5. `expose`, `expose_mut` or `clone_secret` named outside `ambre-crypto` and the Secret module
+     (`ARCH-045`);
+  6. a name of the `zeroize` crate outside the Secret module (`ARCH-046`).
 
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.

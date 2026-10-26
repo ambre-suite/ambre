@@ -8,15 +8,19 @@
 //!
 //! Two modes, one per recipe:
 //!
-//!   * `check`, the default, fails on five defects, then prints the lines
+//!   * `check`, the default, fails on six defects, then prints the lines
 //!     per category. Two defects compare the file with the sites: a site no
 //!     line names, and a line that names no site. Three read the site. A
 //!     line may claim a shape its site lacks, or the privacy checks may
-//!     refuse it. A `Deref` of a workspace type to a primitive fails too;
+//!     refuse it. A `Deref` of a workspace type to a primitive fails too.
+//!     The sixth reads names: a secret reader outside `ambre-crypto`, or
+//!     the `zeroize` crate outside the Secret module (`ARCH-045`,
+//!     `ARCH-046`);
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;
 mod scan;
+mod secrets;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -149,6 +153,16 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
             scan.derefs.len()
         );
     }
+    for secret in &scan.secrets {
+        eprintln!("primitives: {secret}");
+    }
+    if !scan.secrets.is_empty() {
+        eprintln!(
+            "primitives: {} names read a secret, or wipe one, outside the code that may. Move \
+             the read into ambre-crypto, and hold the value in an ambre_core::Secret.",
+            scan.secrets.len()
+        );
+    }
     let counts: Vec<String> = Category::ALL
         .iter()
         .map(|category| {
@@ -159,7 +173,11 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
         })
         .collect();
     println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean() && refuted.is_empty() && scan.derefs.is_empty() {
+    if verdict.is_clean()
+        && refuted.is_empty()
+        && scan.derefs.is_empty()
+        && scan.secrets.is_empty()
+    {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
