@@ -113,7 +113,8 @@ impl<T: Zeroize + Clone> Secret<T> {
     /// An independent copy of the value, on a heap of its own. It is the one
     /// way to copy a secret, and the gate admits it where it admits
     /// [`Secret::expose`] (`ARCH-045`). A type with several owners shares an
-    /// `Arc<Secret<T>>` instead.
+    /// `Arc<Secret<T>>` instead. The copy passes through one stack temporary
+    /// before it is boxed, and nothing wipes that temporary.
     #[must_use]
     pub fn clone_secret(&self) -> Self {
         Self::new(T::clone(&self.0))

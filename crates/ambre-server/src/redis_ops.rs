@@ -560,14 +560,13 @@ pub async fn refresh_get(
     redis: &Client,
     token: &RefreshToken,
 ) -> Result<Option<RefreshData>, AppError> {
-    let key = crate::secrets::refresh_key(token);
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
     // string" because each pair is itself a sequence.)
-    let fields: std::collections::HashMap<String, String> = redis
-        .hgetall(&key)
-        .await
-        .map_err(|e| AppError::Redis(format!("refresh get failed: {e}")))?;
+    let fields: std::collections::HashMap<String, String> =
+        crate::secrets::token::refresh_key(token, |key| redis.hgetall(key))
+            .await
+            .map_err(|e| AppError::Redis(format!("refresh get failed: {e}")))?;
 
     if fields.is_empty() {
         return Ok(None);
@@ -600,7 +599,6 @@ pub async fn refresh_create(
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     let ttl_secs = ttl.0;
-    let key = crate::secrets::refresh_key(token);
 
     let user_id = data.user_id.to_string();
     let signing_pubkey_hex = data
@@ -611,13 +609,13 @@ pub async fn refresh_create(
     if let Some(hex) = &signing_pubkey_hex {
         fields.push(("signing_pubkey_hex", hex.as_str()));
     }
-    redis
-        .hset(&key, fields)
-        .await
+    // Both commands take their copy of the key before either is sent.
+    let (set, expire) = crate::secrets::token::refresh_key(token, |key| {
+        (redis.hset(key, fields), redis.expire(key, ttl_secs, None))
+    });
+    set.await
         .map_err(|e| AppError::Redis(format!("refresh create hset: {e}")))?;
-
-    redis
-        .expire(&key, ttl_secs, None)
+    expire
         .await
         .map_err(|e| AppError::Redis(format!("refresh create expire: {e}")))?;
     Ok(())
@@ -625,9 +623,7 @@ pub async fn refresh_create(
 
 /// Deletes a refresh-token record (logout, or the old token during rotation).
 pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), AppError> {
-    let key = crate::secrets::refresh_key(token);
-    redis
-        .del([&key])
+    crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
         .map_err(|e| AppError::Redis(format!("refresh delete failed: {e}")))?;
     Ok(())
@@ -640,9 +636,7 @@ pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), 
 /// race on the same token exactly one observes `1`. That caller owns the claim;
 /// every other one observes `0` and must be rejected as a replay.
 pub async fn refresh_claim(redis: &Client, token: &RefreshToken) -> Result<bool, AppError> {
-    let key = crate::secrets::refresh_key(token);
-    let removed: usize = redis
-        .del([&key])
+    let removed: usize = crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
         .map_err(|e| AppError::Redis(format!("refresh claim del: {e}")))?;
     Ok(removed == 1)
@@ -1101,20 +1095,23 @@ pub async fn oidc_state_set(
     csrf_state: &ambre_core::OidcState,
     auth_state: &OidcAuthState,
 ) -> Result<(), AppError> {
-    let key = crate::secrets::oidc_state_key(csrf_state);
-    let verifier = auth_state.pkce_verifier_secret.stored_text();
-    redis
-        .hset(
-            &key,
-            [
-                ("pkce_verifier", verifier.as_str()),
-                ("nonce", auth_state.nonce.secret().as_str()),
-            ],
-        )
-        .await
+    // Both commands take their copy of the key, and the first its copy of the
+    // verifier, before either is sent.
+    let (set, expire) = crate::secrets::token::oidc_state_key(csrf_state, |key| {
+        let set = auth_state.pkce_verifier_secret.present_stored(|verifier| {
+            redis.hset(
+                key,
+                [
+                    ("pkce_verifier", verifier),
+                    ("nonce", auth_state.nonce.secret().as_str()),
+                ],
+            )
+        });
+        (set, redis.expire(key, 600, None))
+    });
+    set.await
         .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
-    redis
-        .expire(&key, 600, None)
+    expire
         .await
         .map_err(|e| AppError::Redis(format!("oidc state expire: {e}")))?;
     Ok(())
@@ -1128,14 +1125,16 @@ pub async fn oidc_state_take(
     redis: &Client,
     csrf_state: &ambre_core::OidcState,
 ) -> Result<OidcAuthState, AppError> {
-    let key = crate::secrets::oidc_state_key(csrf_state);
     // Read into a `HashMap`, NOT a `Vec<String>`. Under RESP3 rustis returns a hash
     // reply as a map, and deserializing that into a flat `Vec<String>` fails with
     // "invalid type: sequence, expected a string". That surfaced here as a spurious
     // `SessionExpired` on EVERY OIDC callback (login fully broken). Mirror
     // `refresh_get`, which reads the same shape correctly.
-    let fields: std::collections::HashMap<String, String> = redis
-        .hgetall(&key)
+    // Both commands take their copy of the key before the read is sent.
+    let (get, delete) = crate::secrets::token::oidc_state_key(csrf_state, |key| {
+        (redis.hgetall(key), redis.del([key]))
+    });
+    let fields: std::collections::HashMap<String, String> = get
         .await
         .map_err(|e| AppError::Redis(format!("oidc state get: {e}")))?;
 
@@ -1143,16 +1142,15 @@ pub async fn oidc_state_take(
         return Err(AppError::SessionExpired);
     }
 
-    let pkce_verifier = fields.get("pkce_verifier").cloned().unwrap_or_default();
+    let verifier = fields.get("pkce_verifier").cloned().unwrap_or_default();
     let nonce = fields.get("nonce").cloned().unwrap_or_default();
 
-    redis
-        .del([&key])
+    delete
         .await
         .map_err(|e| AppError::Redis(format!("oidc state delete: {e}")))?;
 
     Ok(OidcAuthState {
-        pkce_verifier_secret: OidcSecret::new(pkce_verifier),
+        pkce_verifier_secret: OidcSecret::new(verifier),
         nonce: openidconnect::Nonce::new(nonce),
     })
 }
@@ -1842,7 +1840,10 @@ mod redis_integration_tests {
         let taken = oidc_state_take(&redis, &csrf)
             .await
             .expect("oidc state take");
-        assert_eq!(taken.pkce_verifier_secret.stored_text(), "verifier-xyz");
+        assert_eq!(
+            taken.pkce_verifier_secret.present_stored(str::to_owned),
+            "verifier-xyz"
+        );
         assert_eq!(taken.nonce.secret(), "nonce-abc");
     }
 

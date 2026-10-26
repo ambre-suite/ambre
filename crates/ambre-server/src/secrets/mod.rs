@@ -6,7 +6,8 @@
 //!   * the refresh token and the sign-in state, which name a record of its
 //!     store;
 //!   * the OIDC client secret and PKCE verifier, which it presents to the
-//!     provider, and the code, which it trades there.
+//!     provider, and the code, which it trades there;
+//!   * the hex text of the token signing seed, which it decodes once.
 //!
 //! Each sits in an [`ambre_core::Secret`]. The primitive gate admits a read
 //! of one here, and nowhere else in the relay. The rest of the relay calls
@@ -14,16 +15,22 @@
 //! so no key of a document is read here. This module reads a credential only
 //! to hand it to the one foreign call that needs it.
 //!
+//! Each function below is a sink (`ARCH-049`). The gate admits its name in
+//! the one file that makes its foreign call, and in its own file here. So
+//! no other file of the relay reaches the text through it, and no bare
+//! `String` of a secret leaves this module.
+//!
 //! The foreign call owns its copy. `jsonwebtoken`, `openidconnect` and
-//! `rustis` take a `&str` or a `String`, and do not wipe it. A store key that
-//! carries a token is such a copy too. A reviewer holds that each function
-//! below hands the text to one such call and to nothing else (`ARCH-047`).
+//! `rustis` take a `&str` or a `String`, and do not wipe it. A reviewer
+//! holds that each function below hands the text to one such call and to
+//! nothing else (`ARCH-047`).
 
-mod oidc;
-mod token;
+pub mod oidc;
+pub mod seed;
+pub mod token;
 
-pub use oidc::{OidcSecret, authorization_code};
-pub use token::{decode_access, oidc_state_key, refresh_key};
+pub use oidc::OidcSecret;
+pub use seed::SeedText;
 
 #[cfg(test)]
 mod tests;

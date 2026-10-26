@@ -161,7 +161,7 @@ async fn init_oidc_clients(google: &OidcRegistration) -> Result<OidcClients, App
     let client = OidcClient::from_provider_metadata(
         provider_metadata,
         google.client_id.clone(),
-        Some(google.client_secret.client_secret()),
+        Some(google.client_secret.to_client_secret()),
     );
 
     let mut map = HashMap::new();
@@ -230,8 +230,8 @@ pub async fn exchange_code(
     code: &ambre_core::OidcCode,
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
-    let auth_code = crate::secrets::authorization_code(code);
-    let pkce_verifier = stored_state.pkce_verifier_secret.pkce_verifier();
+    let auth_code = crate::secrets::oidc::authorization_code(code);
+    let pkce_verifier = stored_state.pkce_verifier_secret.to_pkce_verifier();
 
     let http_client = &provider.http_client;
     let client_with_redirect = provider

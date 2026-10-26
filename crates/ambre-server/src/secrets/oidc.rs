@@ -19,24 +19,28 @@ impl OidcSecret {
         Self(Arc::new(Secret::new(secret)))
     }
 
-    /// The client secret, as the provider client presents it.
-    pub fn client_secret(&self) -> ClientSecret {
+    /// The client secret, as the provider client presents it. Named in
+    /// `src/oidc.rs` alone, which builds the one client (`ARCH-049`).
+    pub fn to_client_secret(&self) -> ClientSecret {
         ClientSecret::new(self.0.expose().clone())
     }
 
-    /// The PKCE verifier, as the code exchange presents it.
-    pub fn pkce_verifier(&self) -> PkceCodeVerifier {
+    /// The PKCE verifier, as the code exchange presents it. Named in
+    /// `src/oidc.rs` alone, which makes the one exchange (`ARCH-049`).
+    pub fn to_pkce_verifier(&self) -> PkceCodeVerifier {
         PkceCodeVerifier::new(self.0.expose().clone())
     }
 
-    /// The text the store keeps beside the sign-in state, until the
-    /// callback takes it back.
-    pub fn stored_text(&self) -> String {
-        self.0.expose().clone()
+    /// Lends the text to `store`, the one call that writes it beside the
+    /// sign-in state until the callback takes it back. Named in
+    /// `src/redis_ops.rs` alone (`ARCH-049`). No copy is kept here.
+    pub fn present_stored<R>(&self, store: impl FnOnce(&str) -> R) -> R {
+        store(self.0.expose())
     }
 }
 
-/// The authorization code, as the code exchange presents it.
+/// The authorization code, as the code exchange presents it. Named in
+/// `src/oidc.rs` alone, which makes the one exchange (`ARCH-049`).
 pub fn authorization_code(code: &ambre_core::OidcCode) -> AuthorizationCode {
     AuthorizationCode::new(code.secret().expose().clone())
 }
