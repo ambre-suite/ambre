@@ -4150,6 +4150,7 @@ ambre-logic | src/data.rs | crate::data | PDF_STEM | const | &str	free-text	a st
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_STEM | const | &str	free-text	a stem the suite names itself
 ambre-primitives | src/scan.rs | crate::scan | AliasCount.0 | field | usize	newtype-inner	the inside of AliasCount, the count of aliases one type opened
 ambre-primitives | src/scan.rs | crate::scan | BlockNames.aliases | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | BlockNames.imports | field | BTreeMap<String,Import>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | BlockNames.items | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | BlockNames.uses | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.exported | field | BTreeMap<String,BTreeMap<String,BTreeSet<String>>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -4199,6 +4200,7 @@ ambre-primitives | src/scan.rs | crate::scan | Resolver<'_,'_>::open() | ret | R
 ambre-primitives | src/scan.rs | crate::scan | Scan::names() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Scan::names(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Shadow.aliases | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Shadow.imports | field | BTreeMap<String,Import>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Shadow.masked | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Shadow.uses | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Through::Module.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
