@@ -50,9 +50,24 @@ const WRAPPERS: &[&str] = &["Vec", "Box", "Rc", "Arc", "Cow"];
 /// `macro_rules!` is read as Rust. No source identifier starts with it.
 const META: &str = "__ambre_meta_";
 
-/// How deep one alias may lead to another before the walk stops. A cycle
-/// fails to compile, so the bound only keeps a broken tree from looping.
-const ALIAS_DEPTH: usize = 8;
+/// How deep one alias may lead to another. A cycle fails to compile, so the
+/// bound keeps a broken tree from looping. Reaching it fails the scan, since
+/// the type past it stays unread.
+const ALIAS_DEPTH: usize = 32;
+
+/// How many aliases one type may open, nested ones included. An alias that
+/// names another twice doubles the walk at each level, so the bound keeps
+/// the walk finite. Reaching it fails the scan.
+const ALIAS_EXPANSIONS: usize = 4096;
+
+/// How many `use` items and modules one path may lead through before the
+/// lookup stops. A loop of imports fails to compile, so reaching it fails
+/// the scan.
+const RESOLVE_HOPS: usize = 16;
+
+/// How many glob `use` items one lookup may lead through. Two modules may
+/// glob each other, so a search past the bound brings in nothing.
+const GLOB_HOPS: usize = 6;
 
 /// One site, written as one line: the crate, the file, the module path, the
 /// item path, the kind and the type, joined by [`SiteKey::SEPARATOR`].
@@ -403,9 +418,6 @@ struct DerefImpl {
     /// The last segment of the implementing type, the name `DerefMut` is
     /// matched by.
     self_ty: String,
-    /// The type arguments of the last segment of the implementing type, as
-    /// text, in order: where a generic target sits in an instance.
-    self_args: Vec<String>,
     /// Each type parameter of the impl, with the text of its bounds, the
     /// `where` clause included.
     bounds: BTreeMap<String, String>,
@@ -421,7 +433,8 @@ enum Exposure {
     /// A primitive, bare or through a slice, an array, a reference or a
     /// [`WRAPPERS`] type.
     Primitive(String),
-    /// A type parameter of the impl, whose instances decide.
+    /// A type parameter of the impl, which an instance may make a
+    /// primitive.
     Generic(String),
     /// A target the gate cannot read, which fails closed: why.
     Unsure(String),
@@ -434,6 +447,9 @@ enum Exposure {
 struct Host {
     /// The last segment of the implementing type, without its generics.
     self_ty: String,
+    /// The implementing type as the impl writes it, normalised. A primitive
+    /// it names is the workspace's choice, as a generic argument is.
+    self_full: String,
     /// The trait the impl implements, `None` for an inherent impl.
     of_trait: Option<TraitPath>,
     /// `Without` for a constant.
@@ -460,11 +476,38 @@ struct TraitPath {
 struct Alias {
     /// The module path that declares it.
     module: String,
-    privacy: Privacy,
     /// The names of its type parameters, in order.
     params: Vec<String>,
     /// The aliased type, normalised.
     target: String,
+}
+
+/// One name a `use` item brings into a module.
+#[derive(Clone, Debug)]
+struct Import {
+    /// The path the `use` writes, read from the module that holds it.
+    path: Vec<String>,
+    /// Whether the `use` gives the item a new name with `as`.
+    renamed: bool,
+}
+
+/// What the last segment of a path names, as the alias lookup reads it.
+enum Named {
+    /// A workspace alias, with the crate directory that declares it.
+    Alias(String, Alias),
+    /// Anything else: a struct, an enum, a trait, a module, a foreign item.
+    Other,
+}
+
+/// What one segment of a module path leads to.
+enum Step {
+    /// A module of the workspace: the crate directory and the module path.
+    Module(String, String),
+    /// A place outside the workspace's modules: a foreign crate, a type
+    /// whose associated item the path names, or a generic parameter.
+    Outside,
+    /// Nothing the module declares or imports.
+    Absent,
 }
 
 /// What the workspace declares, across every crate the scan reads.
@@ -495,6 +538,26 @@ struct Declared {
     /// The name of every alias, in any crate: a type that names none needs
     /// no resolution.
     alias_names: BTreeSet<String>,
+    /// Per crate directory, the path of every module, `crate` included.
+    modules: BTreeMap<String, BTreeSet<String>>,
+    /// Per crate directory, every struct, enum, union and trait, and every
+    /// type a `define_*!` macro writes, as `module::Name`: a name that is no
+    /// alias.
+    items: BTreeMap<String, BTreeSet<String>>,
+    /// Per crate directory, then per module, each name a `use` brings in.
+    imports: BTreeMap<String, BTreeMap<String, BTreeMap<String, Import>>>,
+    /// Per crate directory, then per module, the path of each glob `use`.
+    globs: BTreeMap<String, BTreeMap<String, Vec<Vec<String>>>>,
+    /// The new name of every `use ... as`, in any crate: a type that writes
+    /// one may hide an alias or a primitive under it.
+    renames: BTreeSet<String>,
+}
+
+/// The module above `module`. The crate root has none, and stays itself.
+fn parent(module: &str) -> String {
+    module
+        .rsplit_once("::")
+        .map_or_else(|| module.to_owned(), |(above, _)| above.to_owned())
 }
 
 impl Declared {
@@ -528,6 +591,21 @@ impl Declared {
             .cloned()
     }
 
+    /// Whether `root` names a crate outside the workspace from `krate`: one
+    /// of the toolchain, or a dependency its manifest declares.
+    fn foreign_crate(&self, krate: &str, root: &str) -> bool {
+        TOOLCHAIN.contains(&root)
+            || root == "proc_macro"
+            || self
+                .deps
+                .get(krate)
+                .is_some_and(|deps| deps.iter().any(|dep| dep.replace('-', "_") == root))
+            || self
+                .renamed
+                .get(krate)
+                .is_some_and(|names| names.contains_key(root))
+    }
+
     /// Writes [`Declared::reach`]: the dependencies of each crate, then
     /// every crate a reached crate re-exports, until none is added.
     fn close_reach(&mut self) {
@@ -554,82 +632,314 @@ impl Declared {
         self.reach = reach;
     }
 
-    /// The alias a use of `name` names, from `module` of `krate`. `hint` is
-    /// the module a qualified path writes. The declaration in that module
-    /// wins. A private alias reaches its own module and the modules under
-    /// it. With no declaration in reach, a bare name may name a `pub` alias
-    /// of a crate that `krate` reaches. A struct or an enum of that name in
-    /// `module` shadows it.
-    fn alias(
+    /// The name `name` that a `use` of `module` brings in, if one does.
+    fn import(&self, krate: &str, module: &str, name: &str) -> Option<&Import> {
+        self.imports.get(krate)?.get(module)?.get(name)
+    }
+
+    /// The path of each glob `use` of `module`.
+    fn globs_of(&self, krate: &str, module: &str) -> &[Vec<String>] {
+        self.globs
+            .get(krate)
+            .and_then(|modules| modules.get(module))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// Whether `krate` declares the module `path`.
+    fn has_module(&self, krate: &str, path: &str) -> bool {
+        self.modules
+            .get(krate)
+            .is_some_and(|modules| modules.contains(path))
+    }
+
+    /// Whether `module` of `krate` declares a type of that name that is no
+    /// alias.
+    fn has_item(&self, krate: &str, module: &str, name: &str) -> bool {
+        self.items
+            .get(krate)
+            .is_some_and(|items| items.contains(&format!("{module}::{name}")))
+    }
+
+    /// The alias `module` of `krate` declares under `name`, if any.
+    fn alias_at(&self, krate: &str, module: &str, name: &str) -> Option<&Alias> {
+        self.aliases
+            .get(krate)?
+            .get(name)?
+            .iter()
+            .find(|alias| alias.module == module)
+    }
+
+    /// Where the segments `prefix` of a path lead, read from `module` of
+    /// `krate` the way rustc reads them: `crate`, `self` and `super`, a
+    /// child module, a `use` of the module, a glob `use`, then a crate.
+    /// `Ok(None)` when they leave the workspace's modules.
+    ///
+    /// # Errors
+    ///
+    /// A segment the gate cannot place, or imports that loop.
+    fn place(
+        &self,
+        krate: &str,
+        module: &str,
+        prefix: &[String],
+        hops: usize,
+    ) -> Result<Option<(String, String)>, String> {
+        if hops > RESOLVE_HOPS {
+            return Err(format!(
+                "the path {} leads through more than {RESOLVE_HOPS} imports",
+                prefix.join("::")
+            ));
+        }
+        let Some((first, rest)) = prefix.split_first() else {
+            return Ok(Some((krate.to_owned(), module.to_owned())));
+        };
+        let start = match first.as_str() {
+            "crate" => Step::Module(krate.to_owned(), "crate".to_owned()),
+            "self" => Step::Module(krate.to_owned(), module.to_owned()),
+            "super" => Step::Module(krate.to_owned(), parent(module)),
+            "Self" => Step::Outside,
+            _ => match self.child(krate, module, first, hops, false)? {
+                Step::Absent => match self.crate_of(krate, first) {
+                    Some(dir) => Step::Module(dir, "crate".to_owned()),
+                    None if self.foreign_crate(krate, first) => Step::Outside,
+                    None => match self.glob_child(krate, module, first, hops) {
+                        Step::Absent if first.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                            Step::Outside
+                        }
+                        Step::Absent => {
+                            return Err(format!(
+                                "{first} is no module, import or crate that {module} of {krate} \
+                                 declares"
+                            ));
+                        }
+                        step => step,
+                    },
+                },
+                step => step,
+            },
+        };
+        let Step::Module(mut at_crate, mut at) = start else {
+            return Ok(None);
+        };
+        for segment in rest {
+            if segment == "super" {
+                at = parent(&at);
+                continue;
+            }
+            match self.child(&at_crate, &at, segment, hops, true)? {
+                Step::Module(next_crate, next) => (at_crate, at) = (next_crate, next),
+                Step::Outside => return Ok(None),
+                Step::Absent => {
+                    return Err(format!(
+                        "{at} of {at_crate} declares or imports no module {segment}"
+                    ));
+                }
+            }
+        }
+        Ok(Some((at_crate, at)))
+    }
+
+    /// Where the segment `name` leads from `module` of `krate`: a child
+    /// module, a module a `use` imports, or, when `globs` holds, one a glob
+    /// `use` brings in. A type of that name, or a foreign glob, leads
+    /// outside.
+    fn child(
         &self,
         krate: &str,
         module: &str,
         name: &str,
-        hint: Option<&str>,
-    ) -> Option<(String, Alias)> {
-        let visible = |alias: &&Alias| {
-            alias.privacy != Privacy::Private
-                || module == alias.module
-                || module.starts_with(&format!("{}::", alias.module))
-        };
-        let shadowed = self
-            .types
-            .get(krate)
-            .and_then(|names| names.get(name))
-            .is_some_and(|decls| decls.iter().any(|decl| decl.module == module));
-        if let Some(decls) = self.aliases.get(krate).and_then(|names| names.get(name)) {
-            let at = hint.unwrap_or(module);
-            if let Some(exact) = decls.iter().find(|alias| alias.module == at) {
-                return Some((krate.to_owned(), exact.clone()));
-            }
-            if !shadowed && let Some(seen) = decls.iter().find(visible) {
-                return Some((krate.to_owned(), seen.clone()));
-            }
+        hops: usize,
+        globs: bool,
+    ) -> Result<Step, String> {
+        let path = format!("{module}::{name}");
+        if self.has_module(krate, &path) {
+            return Ok(Step::Module(krate.to_owned(), path));
         }
-        if hint.is_some() || shadowed {
-            return None;
+        // `use serde;` names the crate, not the import itself.
+        if let Some(import) = self.import(krate, module, name)
+            && import.path.first().map(String::as_str) != Some(name)
+        {
+            return Ok(match self.place(krate, module, &import.path, hops + 1)? {
+                Some((dir, found)) => Step::Module(dir, found),
+                None => Step::Outside,
+            });
         }
-        self.reach.get(krate).into_iter().flatten().find_map(|dep| {
-            self.aliases
-                .get(dep)
-                .and_then(|names| names.get(name))
-                .and_then(|decls| decls.iter().find(|alias| alias.privacy == Privacy::Public))
-                .map(|alias| (dep.clone(), alias.clone()))
+        if self.has_item(krate, module, name) || self.alias_at(krate, module, name).is_some() {
+            return Ok(Step::Outside);
+        }
+        Ok(if globs {
+            self.glob_child(krate, module, name, hops)
+        } else {
+            Step::Absent
         })
     }
 
-    /// `ty` with every workspace alias it names replaced by its target, as
-    /// seen from `module` of `krate`.
-    fn resolve(&self, ty: &syn::Type, krate: &str, module: &str) -> syn::Type {
+    /// Where the segment `name` leads through the glob `use` items of
+    /// `module` of `krate`. A glob that names its own module back, or one
+    /// past [`GLOB_HOPS`], brings in nothing: its search ends there.
+    fn glob_child(&self, krate: &str, module: &str, name: &str, hops: usize) -> Step {
+        if hops >= GLOB_HOPS {
+            return Step::Absent;
+        }
+        let mut foreign = false;
+        for glob in self.globs_of(krate, module) {
+            if glob.first().map(String::as_str) == Some(name) {
+                continue;
+            }
+            match self.place(krate, module, glob, hops + 1) {
+                Ok(Some((dir, found))) => match self.child(&dir, &found, name, hops + 1, true) {
+                    Ok(Step::Absent) | Err(_) => {}
+                    Ok(step) => return step,
+                },
+                Ok(None) => foreign = true,
+                Err(_) => {}
+            }
+        }
+        if foreign { Step::Outside } else { Step::Absent }
+    }
+
+    /// What `name` names in `module` of `krate`: an alias it declares, a
+    /// type it declares, what a `use` of it imports, or what a glob `use`
+    /// brings in. `Ok(None)` when none does.
+    fn member(
+        &self,
+        krate: &str,
+        module: &str,
+        name: &str,
+        hops: usize,
+    ) -> Result<Option<Named>, String> {
+        if let Some(alias) = self.alias_at(krate, module, name) {
+            return Ok(Some(Named::Alias(krate.to_owned(), alias.clone())));
+        }
+        if self.has_item(krate, module, name) || self.has_module(krate, &format!("{module}::{name}"))
+        {
+            return Ok(Some(Named::Other));
+        }
+        if let Some(import) = self.import(krate, module, name) {
+            if import.path.len() == 1 && import.path.first().map(String::as_str) == Some(name) {
+                return Ok(Some(Named::Other));
+            }
+            return self.lookup(krate, module, &import.path, hops + 1).map(Some);
+        }
+        if hops >= GLOB_HOPS {
+            return Ok(None);
+        }
+        let mut foreign = false;
+        for glob in self.globs_of(krate, module) {
+            match self.place(krate, module, glob, hops + 1) {
+                Ok(Some((dir, found))) => match self.member(&dir, &found, name, hops + 1) {
+                    Ok(Some(named)) => return Ok(Some(named)),
+                    Ok(None) | Err(_) => {}
+                },
+                Ok(None) => foreign = true,
+                Err(_) => {}
+            }
+        }
+        Ok(foreign.then_some(Named::Other))
+    }
+
+    /// What the path `segments`, written in `module` of `krate`, names.
+    /// A bare name that no item, `use` or glob of the module brings in is
+    /// a generic parameter or an item of the prelude.
+    ///
+    /// # Errors
+    ///
+    /// A qualified path whose module the gate places, and that names an
+    /// alias name the module neither declares nor imports. A segment it
+    /// cannot place. The alias the path names stays unread, so the check
+    /// fails closed.
+    fn lookup(
+        &self,
+        krate: &str,
+        module: &str,
+        segments: &[String],
+        hops: usize,
+    ) -> Result<Named, String> {
+        if hops > RESOLVE_HOPS {
+            return Err(format!(
+                "the path {} leads through more than {RESOLVE_HOPS} imports",
+                segments.join("::")
+            ));
+        }
+        let Some((name, prefix)) = segments.split_last() else {
+            return Ok(Named::Other);
+        };
+        if prefix.is_empty() {
+            return Ok(self
+                .member(krate, module, name, hops)?
+                .unwrap_or(Named::Other));
+        }
+        let Some((dir, found)) = self.place(krate, module, prefix, hops)? else {
+            return Ok(Named::Other);
+        };
+        match self.member(&dir, &found, name, hops)? {
+            Some(named) => Ok(named),
+            None if self.alias_names.contains(name) => Err(format!(
+                "{} names an alias name, and {found} of {dir} declares or imports no {name}",
+                segments.join("::")
+            )),
+            None => Ok(Named::Other),
+        }
+    }
+
+    /// `ty` with every workspace alias it names replaced by its target, and
+    /// each `use ... as` rename undone, as seen from `module` of `krate`.
+    ///
+    /// # Errors
+    ///
+    /// Why the gate cannot read the type whole: an alias path it cannot
+    /// place, a chain past [`ALIAS_DEPTH`], or more than
+    /// [`ALIAS_EXPANSIONS`] aliases opened.
+    fn resolve(&self, ty: &syn::Type, krate: &str, module: &str) -> Result<syn::Type, String> {
         let mut resolved = ty.clone();
         if self.names_alias(ty) {
+            let mut expansion = Expansion::default();
             Resolver {
                 declared: self,
-                krate,
-                module,
+                krate: krate.to_owned(),
+                module: module.to_owned(),
+                masked: BTreeSet::new(),
                 depth: 0,
+                expansion: &mut expansion,
             }
             .visit_type_mut(&mut resolved);
+            if let Some(why) = expansion.failure {
+                return Err(why);
+            }
         }
-        resolved
+        Ok(resolved)
     }
 
     /// Whether a type writes a word that some alias of the workspace is
-    /// named.
+    /// named, or that some `use ... as` gives as a new name.
     fn names_alias(&self, ty: &syn::Type) -> bool {
         normalise(&ty.to_token_stream().to_string())
             .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-            .any(|word| self.alias_names.contains(word))
+            .any(|word| self.alias_names.contains(word) || self.renames.contains(word))
     }
 
-    /// The primitives the generic arguments of a trait name, aliases
-    /// resolved from `module` of `krate`.
-    fn chosen(&self, path: &TraitPath, krate: &str, module: &str) -> BTreeSet<String> {
-        path.args
-            .iter()
-            .filter_map(|arg| syn::parse_str::<syn::Type>(arg).ok())
-            .flat_map(|arg| primitives_of(&self.resolve(&arg, krate, module)))
-            .collect()
+    /// The primitives the workspace chose in the impl `host`: each one the
+    /// generic arguments of its trait name, and each one its implementing
+    /// type names. Aliases resolve from `module` of `krate`.
+    ///
+    /// # Errors
+    ///
+    /// Why an alias of those types stays unread.
+    fn chosen(
+        &self,
+        path: &TraitPath,
+        host: &Host,
+        krate: &str,
+        module: &str,
+    ) -> Result<BTreeSet<String>, String> {
+        let mut chosen = BTreeSet::new();
+        for written in path.args.iter().chain(std::iter::once(&host.self_full)) {
+            if let Ok(ty) = syn::parse_str::<syn::Type>(written) {
+                chosen.extend(primitives_of(&self.resolve(&ty, krate, module)?));
+            }
+        }
+        Ok(chosen)
     }
 
     /// Whether the workspace declares the trait. A path of one segment is
@@ -728,109 +1038,191 @@ impl Declared {
     }
 }
 
-/// Replaces each workspace alias a type names with its target, the type
-/// rustc reads. An alias hides no `bool` and no primitive from a check.
-struct Resolver<'d> {
-    declared: &'d Declared,
-    /// The crate directory the type is written in.
-    krate: &'d str,
-    /// The module path the type is written in.
-    module: &'d str,
-    /// How many aliases led here, bounded by [`ALIAS_DEPTH`].
-    depth: usize,
+/// How far one resolution has gone, shared by every alias it opens.
+#[derive(Debug, Default)]
+struct Expansion {
+    /// The aliases opened so far, bounded by [`ALIAS_EXPANSIONS`].
+    opened: usize,
+    /// Why the resolution stopped, if it did.
+    failure: Option<String>,
 }
 
-impl Resolver<'_> {
-    /// The target of the alias `ty` names, with the crate and the module
-    /// that write it. Each parameter of the alias reads as the argument of
-    /// the use.
-    fn target(&self, ty: &syn::Type) -> Option<(syn::Type, String, String)> {
+/// What one type path reads as, once opened.
+enum Opened {
+    /// The target of the alias it names, resolved whole.
+    Alias(syn::Type),
+    /// The path a `use ... as` renames, still to resolve.
+    Renamed(syn::Type),
+}
+
+/// Replaces each workspace alias a type names with its target, the type
+/// rustc reads. An alias hides no `bool` and no primitive from a check.
+struct Resolver<'d, 'e> {
+    declared: &'d Declared,
+    /// The crate directory the type is written in.
+    krate: String,
+    /// The module path the type is written in.
+    module: String,
+    /// The type parameters of the alias whose target this reads. Each one
+    /// stands for an argument the use writes, resolved where the use sits,
+    /// so none resolves here.
+    masked: BTreeSet<String>,
+    /// How many aliases led here, bounded by [`ALIAS_DEPTH`].
+    depth: usize,
+    expansion: &'e mut Expansion,
+}
+
+impl Resolver<'_, '_> {
+    /// What the type path `ty` reads as: the target of the alias it names,
+    /// or the path a `use ... as` of its first segment renames. `Ok(None)`
+    /// for any other type.
+    fn open(&mut self, ty: &syn::Type) -> Result<Option<Opened>, String> {
         let syn::Type::Path(path) = ty else {
-            return None;
+            return Ok(None);
         };
         if path.qself.is_some() {
-            return None;
+            return Ok(None);
         }
-        let segments: Vec<&syn::PathSegment> = path.path.segments.iter().collect();
-        let last = segments.last()?;
+        let segments: Vec<String> = path
+            .path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect();
+        let (Some(first), Some(last)) = (segments.first(), path.path.segments.last()) else {
+            return Ok(None);
+        };
         let name = last.ident.to_string();
-        if !self.declared.alias_names.contains(&name) {
-            return None;
+        if segments.len() == 1 && self.masked.contains(&name) {
+            return Ok(None);
         }
-        let (krate, hint) = match segments.as_slice() {
-            [_] => (self.krate.to_owned(), None),
-            [first, middle @ .., _] => {
-                let root = first.ident.to_string();
-                if root == "Self" {
-                    return None;
-                }
-                let krate = self.declared.crate_of(self.krate, &root)?;
-                let base = match root.as_str() {
-                    "self" => self.module.to_owned(),
-                    "super" => self
-                        .module
-                        .rsplit_once("::")
-                        .map_or_else(|| self.module.to_owned(), |(parent, _)| parent.to_owned()),
-                    _ => "crate".to_owned(),
-                };
-                let rest: Vec<String> = middle
-                    .iter()
-                    .map(|segment| segment.ident.to_string())
-                    .collect();
-                let hint = std::iter::once(base)
-                    .chain(rest)
-                    .collect::<Vec<_>>()
-                    .join("::");
-                (krate, Some(hint))
-            }
-            [] => return None,
-        };
-        let module = if krate == self.krate {
-            self.module
-        } else {
-            "crate"
-        };
-        let (home, alias) = self
+        let renamed = self.declared.renames.contains(first);
+        if !renamed && !self.declared.alias_names.contains(&name) {
+            return Ok(None);
+        }
+        let named = self
             .declared
-            .alias(&krate, module, &name, hint.as_deref())?;
-        let mut target = syn::parse_str::<syn::Type>(&alias.target).ok()?;
-        if let syn::PathArguments::AngleBracketed(args) = &last.arguments {
-            let given: Vec<&syn::Type> = args
+            .lookup(&self.krate, &self.module, &segments, 0)?;
+        if let Named::Alias(home, alias) = named {
+            return self
+                .expand(&home, &alias, &name, &last.arguments)
+                .map(|target| Some(Opened::Alias(target)));
+        }
+        match self.declared.import(&self.krate, &self.module, first) {
+            Some(import) if renamed && import.renamed => {
+                unrenamed(path, &import.path).map(|full| Some(Opened::Renamed(full)))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// The target of `alias`, declared in `home` and named `name`, for a
+    /// use that writes `arguments`. Each argument resolves where the use
+    /// sits, the target where the alias sits, and each argument then takes
+    /// the place of its parameter.
+    fn expand(
+        &mut self,
+        home: &str,
+        alias: &Alias,
+        name: &str,
+        arguments: &syn::PathArguments,
+    ) -> Result<syn::Type, String> {
+        self.expansion.opened += 1;
+        if self.expansion.opened > ALIAS_EXPANSIONS {
+            return Err(format!(
+                "the type opens more than {ALIAS_EXPANSIONS} aliases, so the gate cannot read it \
+                 whole"
+            ));
+        }
+        if self.depth >= ALIAS_DEPTH {
+            return Err(format!(
+                "the alias {name} leads through more than {ALIAS_DEPTH} aliases, so the gate \
+                 cannot read the type it names"
+            ));
+        }
+        let mut given: Vec<syn::Type> = match arguments {
+            syn::PathArguments::AngleBracketed(args) => args
                 .args
                 .iter()
                 .filter_map(|arg| match arg {
-                    syn::GenericArgument::Type(ty) => Some(ty),
+                    syn::GenericArgument::Type(ty) => Some(ty.clone()),
                     _ => None,
                 })
-                .collect();
-            let map: BTreeMap<String, syn::Type> = alias
-                .params
-                .iter()
-                .cloned()
-                .zip(given.into_iter().cloned())
-                .collect();
-            Substitute(&map).visit_type_mut(&mut target);
+                .collect(),
+            _ => Vec::new(),
+        };
+        for arg in &mut given {
+            self.visit_type_mut(arg);
         }
-        Some((target, home, alias.module))
+        let mut target = syn::parse_str::<syn::Type>(&alias.target)
+            .map_err(|e| format!("the target of the alias {name} does not parse: {e}"))?;
+        Resolver {
+            declared: self.declared,
+            krate: home.to_owned(),
+            module: alias.module.clone(),
+            masked: alias.params.iter().cloned().collect(),
+            depth: self.depth + 1,
+            expansion: &mut *self.expansion,
+        }
+        .visit_type_mut(&mut target);
+        if let Some(why) = self.expansion.failure.take() {
+            return Err(why);
+        }
+        let map: BTreeMap<String, syn::Type> = alias.params.iter().cloned().zip(given).collect();
+        Substitute(&map).visit_type_mut(&mut target);
+        Ok(target)
     }
 }
 
-impl VisitMut for Resolver<'_> {
+/// The type path `path` once its first segment reads as `full`, the path a
+/// `use ... as` renames. A primitive the toolchain names, as
+/// `use std::primitive::u32 as Raw` does, reads bare.
+fn unrenamed(path: &syn::TypePath, full: &[String]) -> Result<syn::Type, String> {
+    let bare = path.path.segments.len() == 1
+        && full
+            .first()
+            .is_some_and(|root| TOOLCHAIN.contains(&root.as_str()))
+        && full
+            .last()
+            .is_some_and(|last| PRIMITIVES.contains(&last.as_str()));
+    let mut text = if bare {
+        full.last().cloned().unwrap_or_default()
+    } else {
+        full.join("::")
+    };
+    for (i, segment) in path.path.segments.iter().enumerate() {
+        if i > 0 {
+            text.push_str("::");
+            text.push_str(&segment.ident.to_string());
+        }
+        text.push_str(&segment.arguments.to_token_stream().to_string());
+    }
+    syn::parse_str::<syn::Type>(&text)
+        .map_err(|e| format!("the path {text} a use ... as renames does not parse: {e}"))
+}
+
+impl VisitMut for Resolver<'_, '_> {
     fn visit_type_mut(&mut self, ty: &mut syn::Type) {
-        if self.depth < ALIAS_DEPTH
-            && let Some((target, krate, module)) = self.target(ty)
-        {
-            *ty = target;
-            Resolver {
-                declared: self.declared,
-                krate: &krate,
-                module: &module,
-                depth: self.depth + 1,
-            }
-            .visit_type_mut(ty);
+        if self.expansion.failure.is_some() {
             return;
         }
-        syn::visit_mut::visit_type_mut(self, ty);
+        match self.open(ty) {
+            Ok(Some(Opened::Alias(target))) => *ty = target,
+            Ok(Some(Opened::Renamed(mut full))) => {
+                if self.depth >= ALIAS_DEPTH {
+                    self.expansion.failure = Some(format!(
+                        "the renames lead through more than {ALIAS_DEPTH} paths"
+                    ));
+                    return;
+                }
+                self.depth += 1;
+                self.visit_type_mut(&mut full);
+                self.depth -= 1;
+                *ty = full;
+            }
+            Ok(None) => syn::visit_mut::visit_type_mut(self, ty),
+            Err(why) => self.expansion.failure = Some(why),
+        }
     }
 }
 
@@ -955,7 +1347,8 @@ impl Scan {
 
     /// Checks the claim of a `trait` line. The site is a signature or a
     /// constant of an impl of a trait the workspace does not declare. Its
-    /// primitive is no generic argument the impl writes. Or its type is a
+    /// primitive is no generic argument the impl writes, and not in the
+    /// type the impl implements the trait for. Or its type is a
     /// closure or a function pointer that names a type of a foreign crate,
     /// outside the toolchain.
     ///
@@ -968,16 +1361,24 @@ impl Scan {
         let Some(place) = self.places.get(key) else {
             return Ok(());
         };
-        if let Some(path) = place.host.as_ref().and_then(|host| host.of_trait.as_ref()) {
+        if let Some(host) = &place.host
+            && let Some(path) = &host.of_trait
+        {
             if self.declared.owns_trait(path) {
                 return Err(format!(
                     "the trait {} is declared in the workspace, so its signature takes types",
                     path.name
                 ));
             }
-            // `impl Add<u32> for Px`: the trait takes any argument, and the
-            // workspace picked the primitive.
-            let chosen = self.declared.chosen(path, &place.krate, &place.module);
+            // `impl Add<u32> for Px` and `impl Add<Px> for u32`: the trait
+            // takes any argument and any type, and the workspace picked the
+            // primitive.
+            let chosen = self
+                .declared
+                .chosen(path, host, &place.krate, &place.module)
+                .map_err(|why| {
+                    format!("the gate cannot read the types the impl chooses, and fails closed: {why}")
+                })?;
             let shared: Vec<&str> = place
                 .primitives
                 .intersection(&chosen)
@@ -987,8 +1388,8 @@ impl Scan {
                 Ok(())
             } else {
                 Err(format!(
-                    "the impl writes {} as a generic argument of {}, so the workspace chose the \
-                     primitive, not the trait: the site takes a type",
+                    "the impl writes {} as a generic argument of {} or as the type it implements \
+                     for, so the workspace chose the primitive, not the trait: the site takes a type",
                     shared.join(", "),
                     path.name
                 ))
@@ -1250,18 +1651,53 @@ struct LiteralVisit {
     /// The file, from the workspace root.
     file: String,
     calls: Vec<BoolCall>,
+    /// Each `use ... as` of the file: the new name, then the segments of
+    /// the path it renames. A call of the new name calls the last one.
+    renames: BTreeMap<String, Vec<String>>,
 }
 
-/// The `bool` literal an argument writes: bare, in parentheses, or as the
-/// one argument of `Some`, the literal of an `Option<bool>`.
-fn literal_of(arg: &syn::Expr) -> Option<&syn::LitBool> {
+/// The line of the `bool` literal an argument writes. The literal may sit
+/// bare, in parentheses, in a block of one expression, behind a `&` or a
+/// `!`, or as the one argument of `Some`, the literal of an
+/// `Option<bool>`. It may also be an element of a tuple, of an array or of
+/// a `vec![..]` list, or the value an array repeats.
+fn literal_of(arg: &syn::Expr) -> Option<LineNo> {
     match arg {
         syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Bool(literal),
             ..
-        }) => Some(literal),
+        }) => Some(LineNo(literal.span.start().line)),
         syn::Expr::Paren(inner) => literal_of(&inner.expr),
         syn::Expr::Group(inner) => literal_of(&inner.expr),
+        syn::Expr::Reference(inner) => literal_of(&inner.expr),
+        syn::Expr::Unary(syn::ExprUnary {
+            op: syn::UnOp::Not(_),
+            expr,
+            ..
+        }) => literal_of(expr),
+        syn::Expr::Block(block) => match block.block.stmts.as_slice() {
+            [syn::Stmt::Expr(only, None)] => literal_of(only),
+            _ => None,
+        },
+        syn::Expr::Tuple(tuple) => tuple.elems.iter().find_map(literal_of),
+        syn::Expr::Array(array) => array.elems.iter().find_map(literal_of),
+        syn::Expr::Repeat(repeat) => literal_of(&repeat.expr),
+        syn::Expr::Macro(mac)
+            if mac
+                .mac
+                .path
+                .segments
+                .last()
+                .is_some_and(|last| last.ident == "vec") =>
+        {
+            mac.mac
+                .parse_body_with(
+                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated,
+                )
+                .ok()?
+                .iter()
+                .find_map(literal_of)
+        }
         syn::Expr::Call(call) => match (&*call.func, call.args.first()) {
             (syn::Expr::Path(path), Some(only))
                 if call.args.len() == 1 && path.path.is_ident("Some") =>
@@ -1289,6 +1725,17 @@ enum Tokens {
 }
 
 impl LiteralVisit {
+    /// The `fn` a call of the one-segment path `name` calls, once a
+    /// `use ... as` rename of the file is undone: `use demo::ctrl as c`
+    /// makes `c` call `ctrl`.
+    fn called(&self, name: &syn::Ident) -> syn::Ident {
+        self.renames
+            .get(&name.to_string())
+            .and_then(|full| full.last())
+            .and_then(|last| syn::parse_str::<syn::Ident>(last).ok())
+            .unwrap_or_else(|| name.clone())
+    }
+
     fn record<'e>(
         &mut self,
         form: CallForm,
@@ -1296,11 +1743,11 @@ impl LiteralVisit {
         args: impl IntoIterator<Item = &'e syn::Expr>,
     ) {
         for (i, arg) in args.into_iter().enumerate() {
-            if let Some(literal) = literal_of(arg) {
+            if let Some(line) = literal_of(arg) {
                 self.calls.push(BoolCall {
                     krate: self.krate.clone(),
                     file: self.file.clone(),
-                    line: LineNo(literal.span.start().line),
+                    line,
                     name: name.to_string(),
                     position: ArgPosition(i),
                     form,
@@ -1330,12 +1777,15 @@ impl LiteralVisit {
                         && let Ok(args) = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
                             .parse2(group.stream())
                     {
-                        let form = if i > 0 && is_punct(tokens.get(i - 1), '.') {
-                            CallForm::Method
+                        let after_path = i > 0 && is_punct(tokens.get(i - 1), ':');
+                        let (form, called) = if i > 0 && is_punct(tokens.get(i - 1), '.') {
+                            (CallForm::Method, name.clone())
+                        } else if after_path {
+                            (CallForm::Path, name.clone())
                         } else {
-                            CallForm::Path
+                            (CallForm::Path, self.called(name))
                         };
-                        self.record(form, name, &args);
+                        self.record(form, &called, &args);
                         for arg in &args {
                             self.visit_expr(arg);
                         }
@@ -1403,7 +1853,12 @@ impl<'ast> Visit<'ast> for LiteralVisit {
         if let syn::Expr::Path(path) = &*call.func
             && let Some(last) = path.path.segments.last()
         {
-            self.record(CallForm::Path, &last.ident, &call.args);
+            let called = if path.path.segments.len() == 1 && path.qself.is_none() {
+                self.called(&last.ident)
+            } else {
+                last.ident.clone()
+            };
+            self.record(CallForm::Path, &called, &call.args);
         }
         syn::visit::visit_expr_call(self, call);
     }
@@ -1415,7 +1870,9 @@ impl<'ast> Visit<'ast> for LiteralVisit {
 
     // syn leaves a macro's tokens unparsed. The arguments of `assert!`,
     // `assert_eq!`, `vec!` and `format!` parse as expressions, and a test
-    // writes many of its calls there. Any other body is read as tokens.
+    // writes many of its calls there. Any other body is read as tokens,
+    // once each metavariable of a `macro_rules!` reads as a word, so that
+    // `f($x, true)` parses as a call.
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         let view = mac
             .path
@@ -1434,7 +1891,7 @@ impl<'ast> Visit<'ast> for LiteralVisit {
                     self.visit_expr(arg);
                 }
             }
-            Err(_) => self.tokens(mac.tokens.clone(), Tokens::Plain),
+            Err(_) => self.tokens(unmeta(mac.tokens.clone(), &BTreeMap::new()), Tokens::Plain),
         }
     }
 }
@@ -1459,18 +1916,17 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     // crate through a re-export. Both are read once every crate is.
     result.declared.close_reach();
     let mut keys = Vec::new();
-    let mut resolved = Vec::new();
     for raw in found.keys {
-        if let Some((key, ty)) = settle(&result.declared, raw) {
+        if let Some(key) = settle(&result.declared, raw, &mut result.errors) {
             keys.push(key);
-            resolved.push(ty);
         }
     }
     for (key, place) in dedup(keys) {
         result.sites.insert(key.clone());
         result.places.insert(key, place);
     }
-    result.derefs = refused_derefs(&result.declared, &found.derefs, &resolved);
+    result.derefs = refused_derefs(&result.declared, &found.derefs);
+    result.derefs.append(&mut found.unread);
     result
 }
 
@@ -1480,11 +1936,16 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
 struct Found {
     keys: Vec<RawKey>,
     derefs: Vec<DerefImpl>,
+    /// The refusal of each `macro_rules!` body that writes a dereference
+    /// impl and does not parse.
+    unread: Vec<String>,
 }
 
-/// The key of a site once its type is resolved, with that type. `None` for
-/// a type that holds no primitive, alias or not.
-fn settle(declared: &Declared, raw: RawKey) -> Option<(RawKey, syn::Type)> {
+/// The key of a site once its type is resolved. `None` for a type that
+/// holds no primitive, alias or not. A type the gate cannot resolve whole
+/// keeps its written form and adds an error to `errors`: the scan fails
+/// closed.
+fn settle(declared: &Declared, raw: RawKey, errors: &mut Vec<String>) -> Option<RawKey> {
     let RawKey {
         head,
         item,
@@ -1492,7 +1953,16 @@ fn settle(declared: &Declared, raw: RawKey) -> Option<(RawKey, syn::Type)> {
         ty,
         mut place,
     } = raw;
-    let resolved = declared.resolve(&ty, &place.krate, &place.module);
+    let resolved = match declared.resolve(&ty, &place.krate, &place.module) {
+        Ok(resolved) => resolved,
+        Err(why) => {
+            let sep = SiteKey::SEPARATOR;
+            errors.push(format!(
+                "{head}{sep}{item}{sep}{tail}: {why}, so the gate fails closed"
+            ));
+            ty.clone()
+        }
+    };
     if !holds_primitive(&normalise(&resolved.to_token_stream().to_string())) {
         return None;
     }
@@ -1502,16 +1972,13 @@ fn settle(declared: &Declared, raw: RawKey) -> Option<(RawKey, syn::Type)> {
     place.roots = facts.roots;
     place.shape = shape_of(&resolved);
     place.primitives = primitives_of(&resolved);
-    Some((
-        RawKey {
-            head,
-            item,
-            tail,
-            ty,
-            place,
-        },
-        resolved,
-    ))
+    Some(RawKey {
+        head,
+        item,
+        tail,
+        ty,
+        place,
+    })
 }
 
 /// The facts a type gives a [`Place`]: its form, and the roots of its
@@ -1659,6 +2126,12 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     result.declared.crates.insert(name.replace('-', "_"));
+    result
+        .declared
+        .modules
+        .entry(name.clone())
+        .or_default()
+        .insert("crate".to_owned());
     if let Some(manifest) = tree.read(&dir.join("Cargo.toml")) {
         let Manifest { packages, renamed } = dependencies(&manifest);
         result.declared.deps.insert(name.clone(), packages);
@@ -1719,6 +2192,39 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         visit.visit_file(&file);
         found.keys.append(&mut visit.keys);
         found.derefs.append(&mut visit.derefs);
+        found.unread.append(&mut visit.unread);
+        let declared = &mut result.declared;
+        declared
+            .modules
+            .entry(name.clone())
+            .or_default()
+            .append(&mut visit.modules);
+        declared
+            .items
+            .entry(name.clone())
+            .or_default()
+            .append(&mut visit.items);
+        for (module, new_name, import) in visit.imports.drain(..) {
+            if import.renamed {
+                declared.renames.insert(new_name.clone());
+            }
+            declared
+                .imports
+                .entry(name.clone())
+                .or_default()
+                .entry(module)
+                .or_default()
+                .insert(new_name, import);
+        }
+        for (module, glob) in visit.globs.drain(..) {
+            declared
+                .globs
+                .entry(name.clone())
+                .or_default()
+                .entry(module)
+                .or_default()
+                .push(glob);
+        }
         result
             .declared
             .reexports
@@ -1774,6 +2280,8 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             continue;
         };
         let relative = path.strip_prefix(dir).unwrap_or(path);
+        let mut seek = UseSeek::default();
+        seek.visit_file(&file);
         let mut visit = LiteralVisit {
             krate: name.clone(),
             file: format!(
@@ -1781,6 +2289,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
                 relative.to_string_lossy().replace('\\', "/")
             ),
             calls: Vec::new(),
+            renames: seek.renames,
         };
         visit.visit_file(&file);
         result.literals.append(&mut visit.calls);
@@ -2001,6 +2510,17 @@ fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
             if name.starts_with(META) {
                 return Exposure::Unsure("a metavariable of a macro_rules! body".to_owned());
             }
+            // `T::Assoc` reads as `<T as Trait>::Assoc`, which an instance
+            // decides.
+            if let Some(first) = path.path.segments.first()
+                && path.path.segments.len() >= 2
+                && generics.contains_key(&first.ident.to_string())
+            {
+                return Exposure::Unsure(format!(
+                    "an associated type of the type parameter {}",
+                    first.ident
+                ));
+            }
             if path.path.segments.len() == 1 && generics.contains_key(&name) {
                 return Exposure::Generic(name);
             }
@@ -2032,43 +2552,13 @@ fn exposure(ty: &syn::Type, generics: &BTreeMap<String, String>) -> Exposure {
     }
 }
 
-/// The type arguments written at position `index` of each use of the type
-/// `name`, across the types of every site.
-struct Instances<'n> {
-    name: &'n str,
-    index: usize,
-    args: Vec<syn::Type>,
-}
-
-impl<'ast> Visit<'ast> for Instances<'_> {
-    fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
-        if segment.ident == self.name
-            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-            && let Some(arg) = args
-                .args
-                .iter()
-                .filter_map(|arg| match arg {
-                    syn::GenericArgument::Type(ty) => Some(ty),
-                    _ => None,
-                })
-                .nth(self.index)
-        {
-            self.args.push(arg.clone());
-        }
-        syn::visit::visit_path_segment(self, segment);
-    }
-}
-
 /// Why one dereference impl exposes a primitive, or `None` when it does
 /// not. `derefs` holds every impl, where a `DerefMut` finds its `Deref`.
-/// `sites` holds the resolved type of every site, where a generic target
-/// finds its instances.
-fn deref_refusal(
-    declared: &Declared,
-    deref: &DerefImpl,
-    derefs: &[DerefImpl],
-    sites: &[syn::Type],
-) -> Option<String> {
+///
+/// A generic target fails closed: a bound that names a primitive, as
+/// `T: AsRef<str>` does, refuses it by design, and so does a bare `T`,
+/// whose instances rustc resolves and the tokens do not show.
+fn deref_refusal(declared: &Declared, deref: &DerefImpl, derefs: &[DerefImpl]) -> Option<String> {
     let source = match &deref.target {
         Some(_) => Some(deref.clone()),
         None if deref.of == DerefTrait::DerefMut => derefs
@@ -2076,6 +2566,7 @@ fn deref_refusal(
             .find(|other| {
                 other.of == DerefTrait::Deref
                     && other.krate == deref.krate
+                    && other.module == deref.module
                     && other.self_ty == deref.self_ty
             })
             .cloned(),
@@ -2091,14 +2582,17 @@ fn deref_refusal(
     let Some(source) = source else {
         return Some(unsure(match deref.of {
             DerefTrait::Deref => "the impl writes no Target",
-            DerefTrait::DerefMut => "no Deref of the type is in its crate",
+            DerefTrait::DerefMut => "no Deref of the type is in its module",
         }));
     };
     let target_text = source.target.clone().unwrap_or_default();
     let Ok(target) = syn::parse_str::<syn::Type>(&target_text) else {
         return Some(unsure("the Target does not parse as a type"));
     };
-    let target = declared.resolve(&target, &source.krate, &source.module);
+    let target = match declared.resolve(&target, &source.krate, &source.module) {
+        Ok(target) => target,
+        Err(why) => return Some(unsure(&format!("its Target {target_text} stays unread: {why}"))),
+    };
     let exposes = |primitive: &str, how: String| {
         format!(
             "{} | {}: {} of {} to {target_text}{how} exposes the primitive {primitive}. A newtype \
@@ -2122,45 +2616,20 @@ fn deref_refusal(
                     format!(", whose bound {bound} names {primitive},"),
                 ));
             }
-            let Some(index) = source.self_args.iter().position(|arg| *arg == param) else {
-                return Some(unsure(&format!(
-                    "{param} is no type argument of {}",
-                    source.ty
-                )));
-            };
-            let mut instances = Instances {
-                name: &source.self_ty,
-                index,
-                args: Vec::new(),
-            };
-            for ty in sites {
-                instances.visit_type(ty);
-            }
-            instances
-                .args
-                .iter()
-                .find_map(|arg| match exposure(arg, &BTreeMap::new()) {
-                    Exposure::Primitive(primitive) => Some(exposes(
-                        &primitive,
-                        format!(
-                            ", which a site writes as {}<..{}..>,",
-                            source.self_ty,
-                            normalise(&arg.to_token_stream().to_string())
-                        ),
-                    )),
-                    _ => None,
-                })
+            Some(unsure(&format!(
+                "its Target is the type parameter {param}, which an instance may make a primitive"
+            )))
         }
     }
 }
 
 /// The refusal of each impl of `derefs` whose target exposes a primitive,
 /// or that the gate cannot read. A `DerefMut` takes the target of the
-/// `Deref` of the same type in its crate.
-fn refused_derefs(declared: &Declared, derefs: &[DerefImpl], sites: &[syn::Type]) -> Vec<String> {
+/// `Deref` of the same type name in its module.
+fn refused_derefs(declared: &Declared, derefs: &[DerefImpl]) -> Vec<String> {
     derefs
         .iter()
-        .filter_map(|deref| deref_refusal(declared, deref, derefs, sites))
+        .filter_map(|deref| deref_refusal(declared, deref, derefs))
         .collect()
 }
 
@@ -2296,25 +2765,12 @@ fn deref_impl(
             bound.push_str(&text);
         }
     }
-    let self_args = match &*i.self_ty {
-        syn::Type::Path(path) => match path.path.segments.last().map(|last| &last.arguments) {
-            Some(syn::PathArguments::AngleBracketed(args)) => args
-                .args
-                .iter()
-                .map(|arg| normalise(&arg.to_token_stream().to_string()))
-                .filter(|arg| !arg.starts_with('\''))
-                .collect(),
-            _ => Vec::new(),
-        },
-        _ => Vec::new(),
-    };
     Some(DerefImpl {
         krate: krate.to_owned(),
         module: module.to_owned(),
         file: file.to_owned(),
         ty: normalise(&i.self_ty.to_token_stream().to_string()),
         self_ty: type_name(&i.self_ty),
-        self_args,
         bounds,
         of,
         target: (of == DerefTrait::Deref).then_some(target).flatten(),
@@ -2322,25 +2778,79 @@ fn deref_impl(
 }
 
 /// The body of each rule of a `macro_rules!`, the group after each `=>`,
-/// with its metavariables made words syn parses (see [`unmeta`]).
+/// with its metavariables made Rust that syn parses (see [`unmeta`]).
 fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
     let tokens: Vec<TokenTree> = tokens.into_iter().collect();
     tokens
-        .windows(3)
+        .windows(4)
         .filter_map(|window| match window {
             [
+                TokenTree::Group(matcher),
                 TokenTree::Punct(eq),
                 TokenTree::Punct(gt),
                 TokenTree::Group(body),
-            ] if eq.as_char() == '=' && gt.as_char() == '>' => Some(unmeta(body.stream())),
+            ] if eq.as_char() == '=' && gt.as_char() == '>' => {
+                let mut fragments = BTreeMap::new();
+                fragments_of(matcher.stream(), &mut fragments);
+                Some(unmeta(body.stream(), &fragments))
+            }
             _ => None,
         })
         .collect()
 }
 
-/// A `macro_rules!` body as Rust: `$x` reads `__ambre_meta_x`, `$crate`
-/// reads `crate`, and a repetition `$( .. ) sep op` reads its contents once.
-fn unmeta(stream: TokenStream) -> TokenStream {
+/// The fragment each metavariable of a matcher declares: `$v:vis` maps
+/// `v` to `vis`.
+fn fragments_of(matcher: TokenStream, fragments: &mut BTreeMap<String, String>) {
+    let tokens: Vec<TokenTree> = matcher.into_iter().collect();
+    for (i, token) in tokens.iter().enumerate() {
+        match token {
+            TokenTree::Punct(dollar) if dollar.as_char() == '$' => {
+                if let (
+                    Some(TokenTree::Ident(name)),
+                    Some(TokenTree::Punct(colon)),
+                    Some(TokenTree::Ident(fragment)),
+                ) = (tokens.get(i + 1), tokens.get(i + 2), tokens.get(i + 3))
+                    && colon.as_char() == ':'
+                {
+                    fragments.insert(name.to_string(), fragment.to_string());
+                }
+            }
+            TokenTree::Group(group) => fragments_of(group.stream(), fragments),
+            _ => {}
+        }
+    }
+}
+
+/// What a metavariable `$name` of the fragment `fragment` reads as, so the
+/// body parses: a `vis`, an `item` or a `stmt` reads as nothing, a
+/// `lifetime` as a lifetime, a `block` as an empty block, a `literal` as
+/// `0`. Any other reads as the word `__ambre_meta_name`, a name, a type,
+/// an expression or a pattern alike.
+fn metavariable(name: &proc_macro2::Ident, fragment: Option<&str>) -> Vec<TokenTree> {
+    let word = || proc_macro2::Ident::new(&format!("{META}{name}"), name.span());
+    match fragment {
+        Some("vis" | "item" | "stmt") => Vec::new(),
+        Some("lifetime") => vec![
+            TokenTree::Punct(proc_macro2::Punct::new(
+                '\'',
+                proc_macro2::Spacing::Joint,
+            )),
+            TokenTree::Ident(word()),
+        ],
+        Some("block") => vec![TokenTree::Group(Group::new(
+            Delimiter::Brace,
+            TokenStream::new(),
+        ))],
+        Some("literal") => vec![TokenTree::Literal(proc_macro2::Literal::u8_unsuffixed(0))],
+        _ => vec![TokenTree::Ident(word())],
+    }
+}
+
+/// A `macro_rules!` body as Rust: `$x` reads as [`metavariable`] says for
+/// the fragment `fragments` gives it, `$crate` reads `crate`, and a
+/// repetition `$( .. ) sep op` reads its contents once.
+fn unmeta(stream: TokenStream, fragments: &BTreeMap<String, String>) -> TokenStream {
     let tokens: Vec<TokenTree> = stream.into_iter().collect();
     let mut out: Vec<TokenTree> = Vec::new();
     let mut i = 0;
@@ -2350,19 +2860,19 @@ fn unmeta(stream: TokenStream) -> TokenStream {
             TokenTree::Punct(dollar) if dollar.as_char() == '$' => match tokens.get(i) {
                 Some(TokenTree::Ident(name)) => {
                     i += 1;
-                    let word = if name == "crate" {
-                        "crate".to_owned()
+                    if name == "crate" {
+                        out.push(TokenTree::Ident(proc_macro2::Ident::new(
+                            "crate",
+                            name.span(),
+                        )));
                     } else {
-                        format!("{META}{name}")
-                    };
-                    out.push(TokenTree::Ident(proc_macro2::Ident::new(
-                        &word,
-                        name.span(),
-                    )));
+                        let fragment = fragments.get(&name.to_string()).map(String::as_str);
+                        out.extend(metavariable(name, fragment));
+                    }
                 }
                 Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => {
                     i += 1;
-                    out.extend(unmeta(group.stream()));
+                    out.extend(unmeta(group.stream(), fragments));
                     // The separator, if any, then the operator.
                     let op = |token: Option<&TokenTree>| matches!(token, Some(TokenTree::Punct(p)) if matches!(p.as_char(), '*' | '+' | '?'));
                     if op(tokens.get(i)) {
@@ -2374,7 +2884,7 @@ fn unmeta(stream: TokenStream) -> TokenStream {
                 _ => out.push(token.clone()),
             },
             TokenTree::Group(group) => {
-                let mut inner = Group::new(group.delimiter(), unmeta(group.stream()));
+                let mut inner = Group::new(group.delimiter(), unmeta(group.stream(), fragments));
                 inner.set_span(group.span());
                 out.push(TokenTree::Group(inner));
             }
@@ -2382,6 +2892,46 @@ fn unmeta(stream: TokenStream) -> TokenStream {
         }
     }
     out.into_iter().collect()
+}
+
+/// Whether a token stream writes `impl ... Deref` or `impl ... DerefMut`
+/// before the body of the impl, at any depth.
+fn writes_deref(stream: TokenStream) -> bool {
+    let tokens: Vec<TokenTree> = stream.into_iter().collect();
+    tokens.iter().enumerate().any(|(i, token)| match token {
+        TokenTree::Ident(word) if word == "impl" => tokens
+            .iter()
+            .skip(i + 1)
+            .take_while(|next| {
+                !matches!(next, TokenTree::Group(group) if group.delimiter() == Delimiter::Brace)
+                    && !is_punct(Some(next), ';')
+            })
+            .any(|next| matches!(next, TokenTree::Ident(name) if name == "Deref" || name == "DerefMut")),
+        TokenTree::Group(group) => writes_deref(group.stream()),
+        _ => false,
+    })
+}
+
+/// The impls a parsed `macro_rules!` body writes at any depth, in a
+/// constant, a `fn` body or a module, and the rules of each
+/// `macro_rules!` it declares.
+#[derive(Default)]
+struct MacroItems {
+    impls: Vec<syn::ItemImpl>,
+    rules: Vec<TokenStream>,
+}
+
+impl<'ast> Visit<'ast> for MacroItems {
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        self.impls.push(i.clone());
+        syn::visit::visit_item_impl(self, i);
+    }
+
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if mac.path.is_ident("macro_rules") {
+            self.rules.push(mac.tokens.clone());
+        }
+    }
 }
 
 /// The scan of one file: the sites it declares, and the module files it
@@ -2423,6 +2973,69 @@ struct FileVisit<'a> {
     /// Each `use ... as` of the file: the new name, then the segments of
     /// the path it renames.
     renames: BTreeMap<String, Vec<String>>,
+    /// The path of every module the file declares.
+    modules: BTreeSet<String>,
+    /// Every struct, enum, union and trait the file declares, and every
+    /// type a `define_*!` macro writes, as `module::Name`.
+    items: BTreeSet<String>,
+    /// Each name a `use` of the file brings into a module: the module, the
+    /// name, and what it imports.
+    imports: Vec<(String, String, Import)>,
+    /// The path of each glob `use` of the file, with its module.
+    globs: Vec<(String, Vec<String>)>,
+    /// The refusal of each `macro_rules!` body that writes a dereference
+    /// impl and does not parse.
+    unread: Vec<String>,
+}
+
+/// Each name a use tree brings in under the segments `prefix`, with the
+/// path it imports, and the path of each glob. `use x::{self}` brings in
+/// `x`, and `use x as _` brings in no name.
+fn use_entries(
+    tree: &syn::UseTree,
+    prefix: &[String],
+    names: &mut Vec<(String, Import)>,
+    globs: &mut Vec<Vec<String>>,
+) {
+    let joined = |ident: &syn::Ident| {
+        let mut path = prefix.to_vec();
+        if ident != "self" {
+            path.push(ident.to_string());
+        }
+        path
+    };
+    match tree {
+        syn::UseTree::Path(path) => {
+            let mut next = prefix.to_vec();
+            next.push(path.ident.to_string());
+            use_entries(&path.tree, &next, names, globs);
+        }
+        syn::UseTree::Name(name) => {
+            let path = joined(&name.ident);
+            if let Some(last) = path.last().cloned() {
+                let import = Import {
+                    path,
+                    renamed: false,
+                };
+                names.push((last, import));
+            }
+        }
+        syn::UseTree::Rename(rename) => {
+            if rename.rename != "_" {
+                let import = Import {
+                    path: joined(&rename.ident),
+                    renamed: true,
+                };
+                names.push((rename.rename.to_string(), import));
+            }
+        }
+        syn::UseTree::Glob(_) => globs.push(prefix.to_vec()),
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                use_entries(item, prefix, names, globs);
+            }
+        }
+    }
 }
 
 impl<'a> FileVisit<'a> {
@@ -2463,6 +3076,11 @@ impl<'a> FileVisit<'a> {
             aliases: Vec::new(),
             reexports: BTreeSet::new(),
             renames: BTreeMap::new(),
+            modules: BTreeSet::new(),
+            items: BTreeSet::new(),
+            imports: Vec::new(),
+            globs: Vec::new(),
+            unread: Vec::new(),
         }
     }
 
@@ -2613,7 +3231,59 @@ impl<'a> FileVisit<'a> {
 
     fn declare(&mut self, name: String, decl: Decl) {
         let module = self.module.join("::");
+        self.items.insert(format!("{module}::{name}"));
         self.types.push((name, Declaration { module, decl }));
+    }
+
+    /// Scans the initialiser of a constant or a static for the items it
+    /// declares, `const _: () = { impl .. };` among them, under its name.
+    fn initialiser(&mut self, name: String, expr: &syn::Expr) {
+        self.scope.push(name);
+        self.visit_expr(expr);
+        self.scope.pop();
+    }
+
+    /// Reads each rule body of a `macro_rules!` for the dereference impls
+    /// it writes, at any depth, nested `macro_rules!` included. A body that
+    /// parses neither as items nor as statements, and that writes
+    /// `impl ... Deref`, fails closed.
+    fn macro_rules(&mut self, tokens: TokenStream) {
+        let module = self.module.join("::");
+        for body in rule_bodies(tokens) {
+            let mut walk = MacroItems::default();
+            if let Ok(file) = syn::parse2::<syn::File>(body.clone()) {
+                walk.visit_file(&file);
+            } else if let Ok(stmts) = syn::Block::parse_within.parse2(body.clone()) {
+                for stmt in &stmts {
+                    walk.visit_stmt(stmt);
+                }
+            } else {
+                if writes_deref(body) {
+                    self.unread.push(format!(
+                        "{} | {}: a macro_rules! body in {module} writes an impl of Deref or \
+                         DerefMut and does not parse as Rust, so the gate cannot show that it \
+                         exposes no primitive and fails closed. A newtype never dereferences to \
+                         its primitive (ARCH-037)",
+                        self.krate, self.file
+                    ));
+                }
+                continue;
+            }
+            for i in &walk.impls {
+                let of_trait = i
+                    .trait_
+                    .as_ref()
+                    .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
+                if let Some(deref) =
+                    deref_impl(i, of_trait.as_ref(), self.krate, &module, &self.file)
+                {
+                    self.derefs.push(deref);
+                }
+            }
+            for rules in walk.rules {
+                self.macro_rules(rules);
+            }
+        }
     }
 
     /// Keeps a test module's file, and every file under its directory, out of
@@ -2642,6 +3312,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         }
         let mut module = self.module.clone();
         module.push(name.clone());
+        self.modules.insert(module.join("::"));
         match &m.content {
             Some((_, items)) => {
                 let saved = (
@@ -2704,12 +3375,14 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         }
         let ty = normalise(&i.self_ty.to_token_stream().to_string());
         let self_ty = type_name(&i.self_ty);
+        let self_full = ty.clone();
         let of_trait = i
             .trait_
             .as_ref()
             .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
         let host = |receiver: Receiver, output: Output| Host {
             self_ty: self_ty.clone(),
+            self_full: self_full.clone(),
             of_trait: of_trait.clone(),
             receiver,
             output,
@@ -2753,6 +3426,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     };
                     self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
                     self.host = None;
+                    self.initialiser(c.ident.to_string(), &c.expr);
                 }
                 _ => {}
             }
@@ -2765,6 +3439,8 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             return;
         }
         self.traits.insert(t.ident.to_string());
+        self.items
+            .insert(format!("{}::{}", self.module.join("::"), t.ident));
         self.scope.push(t.ident.to_string());
         for item in &t.items {
             if let syn::TraitItem::Fn(f) = item {
@@ -2807,6 +3483,8 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
 
     fn visit_item_union(&mut self, u: &'ast syn::ItemUnion) {
         if !test_only(&u.attrs) {
+            self.items
+                .insert(format!("{}::{}", self.module.join("::"), u.ident));
             self.fields(
                 &u.ident.to_string(),
                 &u.fields.named,
@@ -2846,6 +3524,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if !test_only(&c.attrs) {
             self.privacy = privacy(&c.vis);
             self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
+            self.initialiser(c.ident.to_string(), &c.expr);
         }
     }
 
@@ -2853,6 +3532,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if !test_only(&s.attrs) {
             self.privacy = privacy(&s.vis);
             self.emit(self.item(&s.ident.to_string()), SiteKind::Static, &s.ty);
+            self.initialiser(s.ident.to_string(), &s.expr);
         }
     }
 
@@ -2871,7 +3551,6 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     t.ident.to_string(),
                     Alias {
                         module: self.module.join("::"),
-                        privacy: self.privacy,
                         params,
                         target: normalise(&t.ty.to_token_stream().to_string()),
                     },
@@ -2900,27 +3579,25 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             }
         }
         if m.mac.path.is_ident("macro_rules") {
-            let module = self.module.join("::");
-            for body in rule_bodies(m.mac.tokens.clone()) {
-                // A body that is no list of items, an expression for one,
-                // does not parse and holds no impl.
-                let Ok(file) = syn::parse2::<syn::File>(body) else {
-                    continue;
-                };
-                for item in &file.items {
-                    if let syn::Item::Impl(i) = item {
-                        let of_trait = i
-                            .trait_
-                            .as_ref()
-                            .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
-                        if let Some(deref) =
-                            deref_impl(i, of_trait.as_ref(), self.krate, &module, &self.file)
-                        {
-                            self.derefs.push(deref);
-                        }
-                    }
-                }
-            }
+            self.macro_rules(m.mac.tokens.clone());
+        }
+    }
+
+    // A `use` inside a `fn` body reaches that body alone, so only a `use`
+    // of a module is recorded.
+    fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
+        if test_only(&u.attrs) || !self.scope.is_empty() {
+            return;
+        }
+        let module = self.module.join("::");
+        let mut names = Vec::new();
+        let mut globs = Vec::new();
+        use_entries(&u.tree, &[], &mut names, &mut globs);
+        for (name, import) in names {
+            self.imports.push((module.clone(), name, import));
+        }
+        for glob in globs {
+            self.globs.push((module.clone(), glob));
         }
     }
 

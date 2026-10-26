@@ -542,6 +542,7 @@ fn a_local_line_holds_on_a_private_site_only() {
          fn g(n: u32) {}\n\
          pub(self) fn s(n: u32) {}\n\
          impl A { pub(super) fn h(&self, n: u32) {} fn k(&self, n: u32) {} }\n\
+         mod x { pub(in crate::x) fn p(n: u32) {} }\n\
          impl From<u32> for A { fn from(v: u32) -> Self { x() } }\n\
          pub enum E { V(u32) }\n\
          enum F { W(u32) }\n\
@@ -552,6 +553,7 @@ fn a_local_line_holds_on_a_private_site_only() {
         "A.x",
         "f(n)",
         "A::h(n)",
+        "p(n)",
         "<A as From<u32>>::from(v)",
         "E::V.0",
         "S.z",
@@ -773,7 +775,6 @@ fn a_deref_target_is_read_through_paths_wrappers_aliases_generics_and_macros() {
          pub struct F([[u8; 4]; 4]);\nimpl Deref for F { type Target = [[u8; 4]; 4]; }\n\
          type Raw = u64;\npub struct G(Raw);\nimpl Deref for G { type Target = Raw; }\n\
          pub struct W<T>(T);\nimpl<T> Deref for W<T> { type Target = T; }\n\
-         pub struct Uses { w: W<u32> }\n\
          pub struct V<T>(T);\nimpl<T: AsRef<str>> Deref for V<T> { type Target = T; }\n\
          pub struct Q<T>(T);\nimpl<T: Shape> Deref for Q<T> { type Target = <T as Shape>::Out; }\n\
          macro_rules! wrap { ($name:ident) => { impl Deref for $name { type Target = str; } }; }\n\
@@ -792,6 +793,7 @@ fn a_deref_target_is_read_through_paths_wrappers_aliases_generics_and_macros() {
         "V<T>",
         "Q<T>",
         "__ambre_meta_name",
+        "M<T>",
     ];
     for ty in refused {
         assert!(
@@ -892,4 +894,316 @@ fn a_private_field_of_a_pub_struct_is_private_off_every_wire() {
     assert_eq!(scan.bool_field(&site(&scan, "P.on")), Ok(()));
     assert_eq!(scan.local_site(&site(&scan, "P.n")), Ok(()));
     assert!(scan.bool_field(&site(&scan, "Q.on")).is_err());
+}
+
+#[test]
+fn an_alias_a_module_path_names_resolves_through_a_child_module_and_a_use() {
+    let scan = scanned(
+        "mod flags { pub type Yes = bool; }\n\
+         pub struct S { pub on: flags::Yes }\n\
+         mod deep { pub mod inner { pub type No = bool; } }\n\
+         use deep::inner;\n\
+         pub struct T { pub off: inner::No }",
+    );
+    for item in ["S.on", "T.off"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn an_alias_path_the_gate_cannot_place_fails_the_scan() {
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "mod flags { pub type Yes = bool; }\nmod empty {}\npub struct X { pub on: empty::Yes }",
+    )]);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors
+            .iter()
+            .all(|error| error.contains("X.on") && error.contains("fails closed")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn an_alias_argument_resolves_where_the_use_writes_it() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub mod m { pub type Wrap<T> = Option<T>; pub type T = u32; }\n\
+             mod n { type Own = bool; pub struct G { pub on: crate::m::Wrap<Own> } }\n\
+             pub struct Name;\n\
+             pub struct H { pub n: m::Wrap<Name> }",
+        ),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
+        (
+            "user/src/lib.rs",
+            "type Mine = bool;\npub struct Cross { pub on: demo::m::Wrap<Mine> }",
+        ),
+    ]);
+    for item in ["G.on", "Cross.on"] {
+        assert!(scan.bool_field(&site(&scan, item)).is_err(), "{item}");
+    }
+    // The parameter `T` of `Wrap` stands for the argument, never for the
+    // alias `T` its module declares.
+    assert!(
+        scan.sites.iter().all(|key| !key.to_string().contains("H.n")),
+        "{:?}",
+        scan.sites
+    );
+}
+
+#[test]
+fn a_use_as_rename_is_undone_before_the_alias_lookup() {
+    let scan = scanned(
+        "mod flags { pub type Yes = bool; }\n\
+         use flags::Yes as Renamed;\n\
+         use std::string::String as Text;\n\
+         pub struct R { pub on: Renamed, pub t: Text }",
+    );
+    assert!(scan.bool_field(&site(&scan, "R.on")).is_err());
+    assert!(scan.local_site(&site(&scan, "R.t")).is_err());
+}
+
+#[test]
+fn an_alias_chain_resolves_whole_and_a_cycle_fails_the_scan() {
+    let mut chain = String::from("type L0 = bool;\n");
+    for i in 1..10 {
+        chain.push_str(&format!("type L{i} = L{};\n", i - 1));
+    }
+    chain.push_str("pub struct C { pub on: L9 }");
+    let scan = scanned(&chain);
+    assert!(scan.bool_field(&site(&scan, "C.on")).is_err());
+    let (_, errors) = run(&[("src/lib.rs", "type L = Vec<L>;\npub struct D { pub l: L }")]);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("D.l") && error.contains("more than 32 aliases")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn an_alias_that_opens_too_many_aliases_fails_the_scan_and_ends() {
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "type A = (A, A, A, A, A, A, A, A, A, A);\npub struct E { pub a: A }",
+    )]);
+    assert!(
+        errors.iter().any(|error| error.contains("E.a")),
+        "{errors:?}"
+    );
+    let mut wide = String::from("type W0 = bool;\n");
+    for i in 1..6 {
+        let p = i - 1;
+        wide.push_str(&format!(
+            "type W{i} = (W{p}, W{p}, W{p}, W{p}, W{p}, W{p}, W{p}, W{p});\n"
+        ));
+    }
+    wide.push_str("pub struct F { pub w: W5 }");
+    let (_, errors) = run(&[("src/lib.rs", &wide)]);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("F.w") && error.contains("more than 4096 aliases")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn an_imported_name_that_is_no_alias_shadows_an_alias_of_that_name() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub type Id = u32;\npub mod b { pub struct Id; }",
+        ),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }\nforeign = \"1\"",
+        ),
+        (
+            "user/src/lib.rs",
+            "mod b { pub struct Id; }\n\
+             mod c { use crate::b::Id; pub struct T { pub id: Id } }\n\
+             mod d { use foreign::Id; pub struct U { pub id: Id } }\n\
+             mod e { use demo::b::Id; pub struct V { pub id: Id } }\n\
+             use demo::Id as Num;\n\
+             pub struct P { pub n: Num }",
+        ),
+    ]);
+    let keys: Vec<String> = scan.sites.iter().map(ToString::to_string).collect();
+    for item in ["T.id", "U.id", "V.id"] {
+        assert!(
+            keys.iter().all(|key| !key.contains(item)),
+            "{item} in {keys:?}"
+        );
+    }
+    assert!(scan.local_site(&site(&scan, "P.n")).is_err());
+}
+
+#[test]
+fn a_deref_a_macro_rules_body_writes_is_read_through_its_fragments_or_fails_closed() {
+    let scan = scanned(
+        "macro_rules! newtype {\n\
+             ($v:vis $name:ident, $l:lifetime, $b:block) => {\n\
+                 $v struct $name(u32);\n\
+                 impl<$l> core::ops::Deref for $name { type Target = u32; fn deref(&self) -> &u32 $b }\n\
+             };\n\
+         }\n\
+         macro_rules! odd { ($t:tt) => { impl Deref for X { type Target = u8; } => => }; }",
+    );
+    assert_eq!(scan.derefs.len(), 2, "{:?}", scan.derefs);
+    assert!(
+        scan.derefs
+            .iter()
+            .any(|refusal| refusal.contains("Deref of __ambre_meta_name to u32")),
+        "{:?}",
+        scan.derefs
+    );
+    assert!(
+        scan.derefs
+            .iter()
+            .any(|refusal| refusal.contains("does not parse")),
+        "{:?}",
+        scan.derefs
+    );
+}
+
+#[test]
+fn a_deref_nested_in_a_constant_a_static_or_a_macro_constant_is_read() {
+    let scan = scanned(
+        "pub struct K(u8);\n\
+         const _: () = { impl core::ops::Deref for K { type Target = u8; fn deref(&self) -> &u8 { &self.0 } } };\n\
+         macro_rules! inner { () => { const _: () = { impl core::ops::Deref for crate::K2 { type Target = u8; } }; }; }\n\
+         pub struct K2(u8);\n\
+         static S: () = { impl core::ops::Deref for K3 { type Target = u8; } };\n\
+         pub struct K3(u8);",
+    );
+    for ty in ["K", "crate::K2", "K3"] {
+        assert!(
+            scan.derefs
+                .iter()
+                .any(|refusal| refusal.contains(&format!("Deref of {ty} to u8"))),
+            "{ty} in {:?}",
+            scan.derefs
+        );
+    }
+    assert_eq!(scan.derefs.len(), 3, "{:?}", scan.derefs);
+}
+
+#[test]
+fn a_generic_deref_target_fails_closed_bound_or_not() {
+    let scan = scanned(
+        "pub struct Body<T>(T);\nimpl<T> Deref for Body<T> { type Target = T; }\n\
+         fn f() { let b: Body<u32> = Body(1); }\n\
+         pub struct P<T>(T);\nimpl<T: Tr> Deref for P<T> { type Target = T::Assoc; }\n\
+         pub struct V<T>(T);\nimpl<T: AsRef<str>> Deref for V<T> { type Target = T; }",
+    );
+    for (ty, why) in [
+        ("Body<T>", "the type parameter T"),
+        ("P<T>", "an associated type"),
+        ("V<T>", "names str"),
+    ] {
+        assert!(
+            scan.derefs
+                .iter()
+                .any(|refusal| refusal.contains(&format!("Deref of {ty}")) && refusal.contains(why)),
+            "{ty} in {:?}",
+            scan.derefs
+        );
+    }
+}
+
+#[test]
+fn a_deref_mut_takes_the_target_of_the_deref_in_its_own_module() {
+    let scan = scanned(
+        "mod a { pub struct T(u32); impl Deref for T { type Target = u32; } impl DerefMut for T {} }\n\
+         mod b { pub struct T(Core); impl Deref for T { type Target = Core; } impl DerefMut for T {} }",
+    );
+    assert_eq!(scan.derefs.len(), 2, "{:?}", scan.derefs);
+}
+
+#[test]
+fn a_literal_is_found_behind_a_reference_a_not_a_block_a_tuple_an_array_and_a_rename() {
+    let scan = crates(&[
+        ("demo/Cargo.toml", ""),
+        (
+            "demo/src/lib.rs",
+            "pub fn by_ref(on: &bool) {}\n\
+             pub fn by_tuple(p: (bool, u8)) {}\n\
+             pub fn by_block(on: bool) {}\n\
+             pub fn by_not(on: bool) {}\n\
+             pub fn by_array(on: [bool; 1]) {}\n\
+             pub fn by_vec(on: Vec<bool>) {}\n\
+             pub fn by_repeat(on: [bool; 2]) {}\n\
+             pub fn ctrl(on: bool) {}",
+        ),
+        (
+            "user/Cargo.toml",
+            "[dependencies]\ndemo = { path = \"../demo\" }",
+        ),
+        (
+            "user/src/lib.rs",
+            "use demo::ctrl as c;\n\
+             fn go() {\n\
+                 demo::by_ref(&true);\n\
+                 demo::by_tuple((true, 1));\n\
+                 demo::by_block({ true });\n\
+                 demo::by_not(!false);\n\
+                 demo::by_array([true]);\n\
+                 demo::by_vec(vec![false]);\n\
+                 demo::by_repeat([true; 2]);\n\
+                 c(true);\n\
+             }",
+        ),
+    ]);
+    let listed = all(&scan);
+    for item in [
+        "by_ref(on)",
+        "by_tuple(p)",
+        "by_block(on)",
+        "by_not(on)",
+        "by_array(on)",
+        "by_vec(on)",
+        "by_repeat(on)",
+        "ctrl(on)",
+    ] {
+        assert!(
+            scan.bool_literal(&site(&scan, item), &listed).is_err(),
+            "{item}"
+        );
+    }
+}
+
+#[test]
+fn a_literal_in_a_macro_rules_body_is_read_once_each_metavariable_is_a_word() {
+    let scan = scanned(
+        "pub fn in_rules(n: u32, on: bool) {}\n\
+         macro_rules! m { ($x:expr) => { in_rules($x, true) }; }",
+    );
+    let listed = all(&scan);
+    assert!(
+        scan.bool_literal(&site(&scan, "in_rules(on)"), &listed)
+            .is_err()
+    );
+}
+
+#[test]
+fn a_trait_line_is_refuted_on_an_impl_for_a_primitive() {
+    let scan = scanned(
+        "pub struct Px(u32);\n\
+         impl core::ops::Add<Px> for u32 { type Output = u32; fn add(self, rhs: Px) -> u32 { 0 } }",
+    );
+    let refusal = scan.foreign_signature(&site(&scan, "<u32 as core::ops::Add<Px>>::add()"));
+    assert!(
+        refusal
+            .as_ref()
+            .is_err_and(|reason| reason.contains("implements for")),
+        "{refusal:?}"
+    );
 }
