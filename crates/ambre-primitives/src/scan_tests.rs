@@ -951,7 +951,9 @@ fn an_alias_argument_resolves_where_the_use_writes_it() {
     // The parameter `T` of `Wrap` stands for the argument, never for the
     // alias `T` its module declares.
     assert!(
-        scan.sites.iter().all(|key| !key.to_string().contains("H.n")),
+        scan.sites
+            .iter()
+            .all(|key| !key.to_string().contains("H.n")),
         "{:?}",
         scan.sites
     );

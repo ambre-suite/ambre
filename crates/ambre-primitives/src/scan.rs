@@ -499,6 +499,16 @@ enum Named {
     Other,
 }
 
+/// Whether a lookup of one segment searches the glob `use` items of its
+/// module once the module declares and imports no such name.
+#[derive(Clone, Copy)]
+enum Globs {
+    /// The first segment of a path: a crate name comes before a glob.
+    Skip,
+    /// A later segment, or a name a glob brings in.
+    Follow,
+}
+
 /// What one segment of a module path leads to.
 enum Step {
     /// A module of the workspace: the crate directory and the module path.
@@ -699,7 +709,7 @@ impl Declared {
             "self" => Step::Module(krate.to_owned(), module.to_owned()),
             "super" => Step::Module(krate.to_owned(), parent(module)),
             "Self" => Step::Outside,
-            _ => match self.child(krate, module, first, hops, false)? {
+            _ => match self.child(krate, module, first, hops, Globs::Skip)? {
                 Step::Absent => match self.crate_of(krate, first) {
                     Some(dir) => Step::Module(dir, "crate".to_owned()),
                     None if self.foreign_crate(krate, first) => Step::Outside,
@@ -727,7 +737,7 @@ impl Declared {
                 at = parent(&at);
                 continue;
             }
-            match self.child(&at_crate, &at, segment, hops, true)? {
+            match self.child(&at_crate, &at, segment, hops, Globs::Follow)? {
                 Step::Module(next_crate, next) => (at_crate, at) = (next_crate, next),
                 Step::Outside => return Ok(None),
                 Step::Absent => {
@@ -750,7 +760,7 @@ impl Declared {
         module: &str,
         name: &str,
         hops: usize,
-        globs: bool,
+        globs: Globs,
     ) -> Result<Step, String> {
         let path = format!("{module}::{name}");
         if self.has_module(krate, &path) {
@@ -768,10 +778,9 @@ impl Declared {
         if self.has_item(krate, module, name) || self.alias_at(krate, module, name).is_some() {
             return Ok(Step::Outside);
         }
-        Ok(if globs {
-            self.glob_child(krate, module, name, hops)
-        } else {
-            Step::Absent
+        Ok(match globs {
+            Globs::Follow => self.glob_child(krate, module, name, hops),
+            Globs::Skip => Step::Absent,
         })
     }
 
@@ -788,7 +797,7 @@ impl Declared {
                 continue;
             }
             match self.place(krate, module, glob, hops + 1) {
-                Ok(Some((dir, found))) => match self.child(&dir, &found, name, hops + 1, true) {
+                Ok(Some((dir, found))) => match self.child(&dir, &found, name, hops + 1, Globs::Follow) {
                     Ok(Step::Absent) | Err(_) => {}
                     Ok(step) => return step,
                 },
@@ -812,7 +821,8 @@ impl Declared {
         if let Some(alias) = self.alias_at(krate, module, name) {
             return Ok(Some(Named::Alias(krate.to_owned(), alias.clone())));
         }
-        if self.has_item(krate, module, name) || self.has_module(krate, &format!("{module}::{name}"))
+        if self.has_item(krate, module, name)
+            || self.has_module(krate, &format!("{module}::{name}"))
         {
             return Ok(Some(Named::Other));
         }
@@ -828,10 +838,11 @@ impl Declared {
         let mut foreign = false;
         for glob in self.globs_of(krate, module) {
             match self.place(krate, module, glob, hops + 1) {
-                Ok(Some((dir, found))) => match self.member(&dir, &found, name, hops + 1) {
-                    Ok(Some(named)) => return Ok(Some(named)),
-                    Ok(None) | Err(_) => {}
-                },
+                Ok(Some((dir, found))) => {
+                    if let Ok(Some(named)) = self.member(&dir, &found, name, hops + 1) {
+                        return Ok(Some(named));
+                    }
+                }
                 Ok(None) => foreign = true,
                 Err(_) => {}
             }
@@ -1377,7 +1388,9 @@ impl Scan {
                 .declared
                 .chosen(path, host, &place.krate, &place.module)
                 .map_err(|why| {
-                    format!("the gate cannot read the types the impl chooses, and fails closed: {why}")
+                    format!(
+                        "the gate cannot read the types the impl chooses, and fails closed: {why}"
+                    )
                 })?;
             let shared: Vec<&str> = place
                 .primitives
@@ -2591,7 +2604,11 @@ fn deref_refusal(declared: &Declared, deref: &DerefImpl, derefs: &[DerefImpl]) -
     };
     let target = match declared.resolve(&target, &source.krate, &source.module) {
         Ok(target) => target,
-        Err(why) => return Some(unsure(&format!("its Target {target_text} stays unread: {why}"))),
+        Err(why) => {
+            return Some(unsure(&format!(
+                "its Target {target_text} stays unread: {why}"
+            )));
+        }
     };
     let exposes = |primitive: &str, how: String| {
         format!(
@@ -2832,10 +2849,7 @@ fn metavariable(name: &proc_macro2::Ident, fragment: Option<&str>) -> Vec<TokenT
     match fragment {
         Some("vis" | "item" | "stmt") => Vec::new(),
         Some("lifetime") => vec![
-            TokenTree::Punct(proc_macro2::Punct::new(
-                '\'',
-                proc_macro2::Spacing::Joint,
-            )),
+            TokenTree::Punct(proc_macro2::Punct::new('\'', proc_macro2::Spacing::Joint)),
             TokenTree::Ident(word()),
         ],
         Some("block") => vec![TokenTree::Group(Group::new(

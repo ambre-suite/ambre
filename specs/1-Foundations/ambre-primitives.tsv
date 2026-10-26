@@ -1956,12 +1956,6 @@ ambre-primitives | src/scan.rs | crate::scan | Declared.aliases | field | BTreeM
 ambre-primitives | src/scan.rs | crate::scan | Declared.reach | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.reexports | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.renamed | field | BTreeMap<String,BTreeMap<String,String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::alias() | ret | Option<(String,Alias)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::alias(hint) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::alias(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::alias(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::alias(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Declared::chosen() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::chosen(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::chosen(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::crate_of() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1973,7 +1967,6 @@ ambre-primitives | src/scan.rs | crate::scan | Declared::resolve(module) | param
 ambre-primitives | src/scan.rs | crate::scan | DerefImpl.bounds | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | DerefImpl.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | DerefImpl.module | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | DerefImpl.self_args | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Exposure::Generic.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Exposure::Primitive.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Exposure::Unsure.0 | field | String	free-text	error messages printed to the terminal
@@ -1981,16 +1974,11 @@ ambre-primitives | src/scan.rs | crate::scan | FileVisit.aliases | field | Vec<(
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.reexports | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.renames | field | BTreeMap<String,Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit<'a>::unrename() | ret | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Instances.index | field | usize	generic	the position of a type argument in a parsed path
-ambre-primitives | src/scan.rs | crate::scan | Instances.name | field | &'n str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | META | const | &str	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | Manifest.packages | field | BTreeSet<String>	generic	the text of a Cargo.toml the scanner reads its dependencies from
 ambre-primitives | src/scan.rs | crate::scan | Manifest.renamed | field | BTreeMap<String,String>	generic	the text of a Cargo.toml the scanner reads its dependencies from
 ambre-primitives | src/scan.rs | crate::scan | Place.primitives | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Resolver.depth | field | usize	math	how many aliases one walk follows before it stops, a bound against a loop
-ambre-primitives | src/scan.rs | crate::scan | Resolver.krate | field | &'d str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Resolver.module | field | &'d str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | Resolver<'_>::target() | ret | Option<(syn::Type,String,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Slot.param | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Substitute.0 | field | &'m BTreeMap<String,syn::Type>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | TraitPath.args | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -2011,6 +1999,94 @@ ambre-primitives | src/scan.rs | crate::scan | package_of() | ret | Option<Strin
 ambre-primitives | src/scan.rs | crate::scan | package_of(line) | param | &str	generic	the text of a Cargo.toml the scanner reads its dependencies from
 ambre-primitives | src/scan.rs | crate::scan | primitives_of() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | trait_path(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | ALIAS_EXPANSIONS | const | usize	math	how many aliases one site may open in all, a bound against an exponential expansion
+ambre-primitives | src/scan.rs | crate::scan | Declared.globs | field | BTreeMap<String,BTreeMap<String,Vec<Vec<String>>>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.imports | field | BTreeMap<String,BTreeMap<String,BTreeMap<String,Import>>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.items | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.modules | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.renames | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::alias_at(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::alias_at(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::alias_at(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::child() | ret | Result<Step,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::child(hops) | param | usize	math	how many use items and modules one lookup followed, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | Declared::child(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::child(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::child(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::chosen() | ret | Result<BTreeSet<String>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::foreign_crate(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::glob_child(hops) | param | usize	math	how many use items and modules one lookup followed, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | Declared::glob_child(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::glob_child(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::glob_child(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::globs_of() | ret | &[Vec<String>]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::globs_of(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::globs_of(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_item() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_item(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_item(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_item(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_module() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_module(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::has_module(path) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::import(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::import(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::import(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::lookup() | ret | Result<Named,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::lookup(hops) | param | usize	math	how many use items and modules one lookup followed, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | Declared::lookup(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::lookup(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::lookup(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::member() | ret | Result<Option<Named>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::member(hops) | param | usize	math	how many use items and modules one lookup followed, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | Declared::member(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::member(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::member(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::place() | ret | Result<Option<(String,String)>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::place(hops) | param | usize	math	how many use items and modules one lookup followed, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | Declared::place(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::place(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::place(prefix) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::resolve() | ret | Result<syn::Type,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Expansion.failure | field | Option<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Expansion.opened | field | usize	math	a count of the aliases one site opened, checked against its bound
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.globs | field | Vec<(String,Vec<String>)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.imports | field | Vec<(String,String,Import)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.items | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.modules | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.unread | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | FileVisit<'a>::initialiser(name) | param | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Found.unread | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | GLOB_HOPS | const | usize	math	how many glob use items one lookup follows before it stops, a bound against a loop
+ambre-primitives | src/scan.rs | crate::scan | Host.self_full | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Import.path | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Import.renamed | field | bool	generic	a fact a use item records: whether it renames the name it imports
+ambre-primitives | src/scan.rs | crate::scan | LiteralVisit.renames | field | BTreeMap<String,Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Named::Alias.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | RESOLVE_HOPS | const | usize	math	how many use items and modules one lookup follows before it stops, a bound against a loop
+ambre-primitives | src/scan.rs | crate::scan | Resolver.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Resolver.masked | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Resolver.module | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Resolver<'_,'_>::expand() | ret | Result<syn::Type,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Resolver<'_,'_>::expand(home) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Resolver<'_,'_>::expand(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Resolver<'_,'_>::open() | ret | Result<Option<Opened>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Step::Module.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Step::Module.1 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | fragments_of(fragments) | param | &mut BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | metavariable(fragment) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | parent() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | parent(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | settle(errors) | param | &mut Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | unmeta(fragments) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | unrenamed() | ret | Result<syn::Type,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | unrenamed(full) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | use_entries(globs) | param | &mut Vec<Vec<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | use_entries(names) | param | &mut Vec<(String,Import)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | use_entries(prefix) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | writes_deref() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-prose | src/band.rs | crate::band | field_value() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
