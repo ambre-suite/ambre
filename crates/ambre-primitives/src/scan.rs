@@ -797,10 +797,12 @@ impl Declared {
                 continue;
             }
             match self.place(krate, module, glob, hops + 1) {
-                Ok(Some((dir, found))) => match self.child(&dir, &found, name, hops + 1, Globs::Follow) {
-                    Ok(Step::Absent) | Err(_) => {}
-                    Ok(step) => return step,
-                },
+                Ok(Some((dir, found))) => {
+                    match self.child(&dir, &found, name, hops + 1, Globs::Follow) {
+                        Ok(Step::Absent) | Err(_) => {}
+                        Ok(step) => return step,
+                    }
+                }
                 Ok(None) => foreign = true,
                 Err(_) => {}
             }
