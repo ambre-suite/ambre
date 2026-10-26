@@ -1872,7 +1872,6 @@ ambre-primitives | src/scan.rs | crate::scan | SiteKey::SEPARATOR | const | &'st
 ambre-primitives | src/scan.rs | crate::scan | SiteKey::parse(text) | param | &str	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/scan.rs | crate::scan | SiteKind::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as the allowlist file writes it
 ambre-primitives | src/scan.rs | crate::scan | Skipped::covers() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-primitives | src/scan.rs | crate::scan | TEST_FEATURES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | TEST_MACROS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | Tree::read() | ret | Option<String>	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | holds_primitive() | ret | bool	generic	a predicate or a file read of the scanner
@@ -2544,10 +2543,6 @@ ambre-protocol | src/signaling.rs | crate::signaling | SignalingServerMsg::Ice.c
 ambre-protocol | src/signaling.rs | crate::signaling | SignalingServerMsg::Offer.sdp | field | String	free-text	opaque WebRTC SDP / ICE text the relay forwards
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | report_transcript() | ret | Vec<u8>	generic	wire codec
-ambre-protocol | src/ws.rs | crate::ws | AccessToken.0 | field | String	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | AccessToken::new(token) | param | String	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | RefreshToken.0 | field | String	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | RefreshToken::new(token) | param | String	newtype-inner	token newtype
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::is_from_newer_peer() | ret | bool	generic	raw unparsed wire version byte, may lie outside Version's range
 ambre-protocol | src/ws.rs | crate::ws | decode_client_msg(data) | param | &[u8]	generic	wire codec
@@ -2655,8 +2650,6 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | cl
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateBucket::Peer.0 | field | String	free-text	peer address text as the socket or the forwarded header states it, or unknown; client_ip_str builds it from header text
 ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	generic	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
-ambre-server | src/oidc.rs | crate::oidc | OidcSecret.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/oidc.rs | crate::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -3998,7 +3991,6 @@ ambre-crypto | src/hash.rs | crate::hash | length_prefixed(head) | param | &[u8]
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed(tail) | param | &[u8]	generic	private hashing construction; each caller wraps the result
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
-ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::NotHex.0 | field | String	free-text	the hex decoder message a refusal reports
 ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports
 ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
@@ -4203,7 +4195,6 @@ ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secre
 ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
 ambre-crypto | src/token.rs | crate::token | <SecretToken as From<String>>::from(token) | param | String	newtype-inner	the SecretToken newtype over a shared Secret
 ambre-crypto | src/token.rs | crate::token | SecretToken.0 | field | Arc<Secret<String>>	newtype-inner	the SecretToken newtype over a shared Secret
-ambre-crypto | src/token.rs | crate::token | SecretToken::present(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
 ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
 ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
 ambre-crypto | src/token.rs | crate::token | SecretToken::secret() | ret | &Secret<String>	newtype-inner	the SecretToken newtype over a shared Secret
@@ -4225,9 +4216,51 @@ ambre-primitives | src/secrets.rs | crate::secrets | refusals(relative) | param 
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-protocol | src/ws.rs | crate::ws | AccessToken::reveal() | ret | &str	newtype-inner	token newtype
-ambre-protocol | src/ws.rs | crate::ws | RefreshToken::reveal() | ret | &str	newtype-inner	token newtype
-ambre-server | src/jwt.rs | crate::jwt | JwtSeed.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor
-ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | &Secret<String>	foreign-api	the JWT_SIGNING_SEED environment value, parsed here once
-ambre-server | src/oidc.rs | crate::oidc | OidcSecret::reveal() | ret | &str	newtype-inner	newtype inner, accessor or constructor
-ambre-sync | src/http.rs | crate::http | Target::reveal() | ret | &str	foreign-api	the full address the browser's fetch takes
+ambre-core | src/credential.rs | crate::credential | ProviderUrl.0 | field | String	newtype-inner	the provider address, which the browser shows in clear
+ambre-core | src/credential.rs | crate::credential | ProviderUrl::as_str() | ret | &str	newtype-inner	the provider address, which the browser shows in clear
+ambre-core | src/credential.rs | crate::credential | ProviderUrl::new(text) | param | String	newtype-inner	the provider address, which the browser shows in clear
+ambre-core | src/secret.rs | crate::secret | AccessToken::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential newtype
+ambre-core | src/secret.rs | crate::secret | OidcState::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | PresignedUrl::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
+ambre-core | src/secret.rs | crate::secret | PresignedUrl::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
+ambre-draw | src/testing.rs | crate::testing | <RecordingSurface as DrawSurface>::stroke_line(width) | param | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | <RecordingSurface as DrawSurface>::stroke_rect(width) | param | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::DrawImage.height | field | u32	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::DrawImage.width | field | u32	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::Glyphs.glyph_count | field | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.width | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.x0 | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.x1 | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.y0 | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeLine.y1 | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokePath.width | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | DrawOp::StrokeRect.width | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | FixedClock.ms | field | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | FixedClock::new(ms) | param | f64	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface.clip_depth | field | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface.transform_depth | field | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clip_depth() | ret | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count() | ret | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::transform_depth() | ret | usize	math	geometry or count a test double records
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
+ambre-murmure | src/testing.rs | crate::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
+ambre-primitives | src/secrets.rs | crate::secrets | RELAY_SECRETS | const | (&str,&str)	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | SINKS | const | &[(&str,(&str,&str))]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | SINK_NAMES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/secrets.rs | crate::secrets | Seek.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | Seek.relative | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | admits_sink() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | includes_build_output() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-server | src/jwt.rs | crate::jwt | JwtSeed::from_hex(text) | param | String	foreign-api	the JWT_SIGNING_SEED environment value, decoded here once and wiped
+ambre-server | src/jwt.rs | crate::jwt | signing_key(fill) | param | impl FnOnce(&mut[u8;32])->Result<(),E>	generic	writes the seed into the wrapper the key is built in
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret.0 | field | Arc<Secret<String>>	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::stored_text() | ret | String	foreign-api	the PKCE verifier text the Redis hash stores (ARCH-047)
+ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key() | ret | String	foreign-api	the Redis key of a sign-in state (ARCH-047)
+ambre-server | src/secrets/token.rs | crate::secrets::token | refresh_key() | ret | String	foreign-api	the Redis key of a refresh token (ARCH-047)
+ambre-sync | src/http.rs | crate::http | ShownTarget.0 | field | String	newtype-inner	the address an error shows, with no signed query
+ambre-sync | src/http.rs | crate::http | Target::open(send) | param | impl FnOnce(&str)->R	generic	lends the full address to the one foreign call that fetches it
