@@ -50,7 +50,7 @@ compiler needs no test, no run and no reading.
 | Lint wall: `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` in **every** crate | removes a whole scanning category from review | always. The "no `unsafe`" pillar is a claim until the lint enforces it crate by crate |
 | `cargo-deny`: advisories, licences, duplicate versions, capability bans | the supply chain of a crypto product, checked by machine | always |
 | A gate in `scripts/`, run by a `just` recipe in the CI `lint` job | holds what the compiler cannot see: the corpus, the prose, and a committed artifact that must not move | a rule about the tree rather than the code. Its own tests run under `just test-scripts`, because a gate that reads nothing and a gate that is satisfied look alike |
-| The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` alone and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
+| The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
 | `proptest` | universal rules over an unenumerated input space | pure logic and reference models: the formula engine, CRDT convergence, cache against rebuild |
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
 | `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
@@ -61,7 +61,9 @@ compiler needs no test, no run and no reading.
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
 **The primitive gate reads the items rustc reads.** It parses each crate from its roots without
-expanding a macro, and never takes a site from test code. A site is a field, a parameter, a
+expanding a macro, and never takes a site from test code. Test code is what `cfg(test)`, a
+`cfg(all(test, ..))` or a test macro marks; a module name and a feature such as `test-helpers`
+mark none, since a release build can compile either. A site is a field, a parameter, a
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
 file, the module, the item, the kind and the type, and no line number.
 
@@ -130,17 +132,21 @@ file, the module, the item, the kind and the type, and no line number.
   branch of an `if` and in an arm of a `match`. A `use ... as` rename holds in its own module,
   and a `pub use ... as` names the `fn` to every crate that reaches it. A call through a value,
   a literal in any other shape, and code a macro writes, stay out of reach (`ARCH-041`).
-* **A secret is read in one crate and wiped in one module** (`ARCH-045`, `ARCH-046`). Outside
-  test code, the gate refuses `expose`, `expose_mut` and `clone_secret` outside `ambre-crypto` and
-  `crates/ambre-core/src/secret.rs`. It refuses a name of the `zeroize` crate outside that one
-  file, in `ambre-crypto` too, and a manifest that renames the crate.
+* **A secret is read in two places and wiped in one module** (`ARCH-045`, `ARCH-046`,
+  `ARCH-048`). Outside test code, the gate refuses `expose`, `expose_mut` and `clone_secret`
+  outside `ambre-crypto`, `crates/ambre-core/src/secret.rs` and the relay's
+  `crates/ambre-server/src/secrets/`. It refuses a name of the `zeroize` crate outside that one
+  file, in `ambre-crypto` and the relay's module too, and a manifest that renames the crate.
+  * It refuses a sink, which lends the text to one foreign call, outside the file of that call
+    (`ARCH-049`), and an `include!` that names other than the output of a build script.
   * It reads names, not types. A method call, a path, a `use` item, a signature, an attribute and
     every token of a macro count. So a method of another type with a refused name fails closed.
   * A hand-written `Display`, `Clone` or `Serialize` of a type that holds a `Secret` reads the
-    value through `expose`, and so does a `serialize_with` function. Each is refused outside
-    `ambre-crypto`. A derive of one of them does not compile, since `Secret` implements none.
-  * A function that lends out the bare value under another name, and code a macro or a derive
-    writes, stay a reviewer's to read (`ARCH-047`).
+    value through `expose`, and so does a `serialize_with` function. Each is refused outside the
+    places that read. A derive of one of them does not compile, since `Secret` implements none.
+  * A type that holds a newtype with a serde form of its own derives it with no refused name. That
+    door, a function that lends out the bare value under another name, and code a macro or a
+    derive writes, stay a reviewer's to read (`ARCH-047`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
