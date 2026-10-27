@@ -297,15 +297,18 @@ index-write:
 # The gate finds the files with a syn walk, and rustc is the source of truth
 # for them. So it runs `cargo check` itself, the host line with every target
 # and every feature and the wasm lines of `lint-wasm`, and reads the dep-info
-# of each unit. A `.rs` file a shipped build reads and the walk does not
-# fails, and so does a `.rs` file under `crates/` that no compile reads. A
-# test holds its wasm lines to those of `lint-wasm`.
+# of each unit. A file a shipped build reads fails, whatever its name, unless
+# the walk reads it or a string literal of a walked file names it as data. A
+# `.rs` file under the root that no compile reads fails too. A test holds its
+# wasm lines to those of `lint-wasm`. This half runs first, and CI runs this
+# recipe alone, since it holds both halves.
 primitives:
     cargo run -q -p ambre-primitives -- check
 
 # The dep-info half of the gate alone, as `fixtures-check` is the drift half of
-# the fixtures. The allowlist half is red while the workspace is typed, and a
-# red run hides nothing this half finds.
+# the fixtures. The allowlist half is red while the workspace is typed, so a
+# local run of this half gives its verdict alone. CI does not run it, since
+# `primitives` runs it first.
 primitives-files:
     cargo run -q -p ambre-primitives -- files
 
