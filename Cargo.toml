@@ -89,6 +89,9 @@ quote = { version = "1.0.45", default-features = false }
 # Already under syn and quote. Its `span-locations` feature gives the line of a
 # token, which a refusal of a bool literal names.
 proc-macro2 = { version = "1.0.106", default-features = false, features = ["span-locations"] }
+# Already in the lockfile under leptos. The gate parses each manifest and each
+# cargo config as TOML, as cargo reads them, rather than matching their text.
+toml = { version = "1.1.2", default-features = false, features = ["parse", "serde"] }
 
 # Test-only
 proptest = "1"

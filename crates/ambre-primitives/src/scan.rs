@@ -3235,7 +3235,7 @@ const DATA_MACROS: &[&str] = &["include_str", "include_bytes"];
 /// The `sqlx` macro that embeds each file of a directory, its crate, and the
 /// directory it reads when the call names none.
 const MIGRATE: &str = "migrate";
-const SQLX: &str = "sqlx";
+pub(crate) const SQLX: &str = "sqlx";
 const MIGRATIONS: &str = "migrations";
 
 /// A file the source names as data rather than as a module.

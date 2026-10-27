@@ -4252,4 +4252,33 @@ ambre-primitives | src/scan.rs | crate::scan | macro_mods() | ret | Vec<String>	
 ambre-primitives | src/scan.rs | crate::scan | macro_mods(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | names_migrate() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | names_migrate(at) | param | usize	generic	the index of a token in the token trees the scanner reads
+ambre-primitives | src/depinfo.rs | crate::depinfo | FLAG_KEYS | const | &[&str]	generic	the TOML keys whose value cargo passes to rustc or rustdoc as flags
+ambre-primitives | src/depinfo.rs | crate::depinfo | RECIPES | const | &[&str]	generic	the recipe files, relative to the workspace root, whose lines the lever check reads
+ambre-primitives | src/depinfo.rs | crate::depinfo | Unstable.config | field | &'static str	generic	the config file of an unstable cargo setting the lever check admits, matched against the tree
+ambre-primitives | src/depinfo.rs | crate::depinfo | Unstable.key | field | &'static str	generic	the key of an unstable cargo setting the lever check admits, matched against the parsed TOML
+ambre-primitives | src/depinfo.rs | crate::depinfo | Unstable.value | field | &'static[&'static str]	generic	the exact value of an unstable cargo setting the lever check admits, matched against the parsed TOML
+ambre-primitives | src/depinfo.rs | crate::depinfo | config_levers(found) | param | &mut Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | config_levers(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | declares_workspace() | ret | Result<bool,String>	free-text	a predicate, or the first line of the TOML parser error printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | declares_workspace(manifest) | param | &str	generic	the text of a manifest, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | flag_text() | ret | String	generic	one flag value of a cargo config, matched at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | flag_values(found) | param | &mut Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | flag_values(prefix) | param | &str	generic	a dotted TOML key, printed in an error message
+ambre-primitives | src/depinfo.rs | crate::depinfo | flag_values(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | lever() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/depinfo.rs | crate::depinfo | lever(text) | param | &str	generic	a flag value or a recipe line, matched at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | lever_refusal() | ret | String	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | lever_refusal(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | lever_refusal(what) | param | &str	free-text	a phrase of an error message printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | levers() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | manifest_keys(found) | param | &mut Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | manifest_keys(prefix) | param | &str	generic	a dotted TOML key, printed in an error message
+ambre-primitives | src/depinfo.rs | crate::depinfo | manifest_keys(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | manifest_levers(found) | param | &mut Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | manifest_levers(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | toml_table() | ret | Result<toml::Table,String>	free-text	the parsed table, or the first line of the TOML parser error printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | toml_table(text) | param | &str	generic	the text of a manifest or a cargo config, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed() | ret | String	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed(error) | param | &str	free-text	the TOML parser error, printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | called() | ret | bool	generic	a predicate or a file read of the scanner

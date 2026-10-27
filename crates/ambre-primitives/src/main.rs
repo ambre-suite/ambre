@@ -16,7 +16,8 @@
 //!     the `zeroize` crate outside the Secret module (`ARCH-045`,
 //!     `ARCH-046`). The seventh holds the walk to rustc. It
 //!     refuses a file a compile reads that the walk neither reads nor
-//!     names as data, and a `.rs` file no compile reads (`ARCH-033`);
+//!     names as data, a `.rs` file no compile reads, and a build lever
+//!     that enables an unstable feature (`ARCH-033`);
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and nothing else.
@@ -99,18 +100,21 @@ fn main() -> ExitCode {
 
 /// Every refusal of the dep-info check, printed with its count. Each compile
 /// runs in the workspace, so the check reads the files the recipes build.
+/// The build configuration is read first, and refused whatever the
+/// compiles say: a lever can make a compile fail, or pass.
 fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
-    let refusals = match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
+    let mut refusals = depinfo::levers(disk, root);
+    refusals.append(&mut depinfo::stray_workspaces(disk, root));
+    match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
         Ok(compiled) => {
             let sources = depinfo::sources(disk, root);
-            let mut stray = depinfo::stray_workspaces(disk, root);
             let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-            let mut refusals = depinfo::cross_check(scan, &compiled, &sources, &root, disk);
-            refusals.append(&mut stray);
-            refusals
+            refusals.append(&mut depinfo::cross_check(
+                scan, &compiled, &sources, &root, disk,
+            ));
         }
-        Err(errors) => errors,
-    };
+        Err(mut errors) => refusals.append(&mut errors),
+    }
     for refusal in &refusals {
         eprintln!("primitives: {refusal}");
     }

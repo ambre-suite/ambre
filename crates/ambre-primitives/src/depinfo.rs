@@ -18,12 +18,15 @@
 //!     file syn refuses passes it. The scan refuses the `mod` a macro
 //!     declares, the one way a data file compiles as a module the walk
 //!     does not see;
+//!   * no build configuration under the root enables an unstable feature
+//!     or a crate attribute, so no flag enables syntax the guard misreads;
 //!   * a crate root that a build compiles is one the walk starts from;
 //!   * a `.rs` file under the workspace root is one that a compile reads,
 //!     test builds included. So no file sits in the tree that no build
 //!     checks. The nested workspace of the fuzz targets builds apart and is
 //!     left out, by its name. A manifest elsewhere that declares a workspace
-//!     of its own is refused.
+//!     of its own is refused. Each manifest and each config is parsed as
+//!     TOML, as cargo reads it.
 //!
 //! A failed compile, a missing dep-info file, and a dep-info line the
 //! parser cannot read whole all fail the check. A partial set would pass a
@@ -34,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::scan::{NESTED_WORKSPACES, Scan, Tree, canonical};
+use crate::scan::{NESTED_WORKSPACES, SQLX, Scan, Tree, canonical};
 
 /// Where one compile builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -537,9 +540,9 @@ pub(crate) fn sources(tree: &impl Tree, root: &Path) -> BTreeSet<PathBuf> {
 /// Each manifest under the workspace root, the root's own and those of the
 /// nested workspaces apart, that declares a workspace of its own. Such a
 /// directory builds apart from the compiles the check runs, so no shipped
-/// build of it is held. The match reads the text, and fails closed: a
-/// `[workspace]` table, a `[workspace.*]` table, or a top-level dotted
-/// `workspace.*` key.
+/// build of it is held. The manifest is parsed as TOML, as cargo reads it,
+/// and any top-level `workspace` key counts, in any spelling. A manifest
+/// that does not parse fails closed.
 pub(crate) fn stray_workspaces(tree: &impl Tree, root: &Path) -> Vec<String> {
     let kept: Vec<PathBuf> = std::iter::once(root.join("Cargo.toml"))
         .chain(
@@ -552,24 +555,268 @@ pub(crate) fn stray_workspaces(tree: &impl Tree, root: &Path) -> Vec<String> {
         .into_iter()
         .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))
         .filter(|path| !kept.contains(path))
-        .filter(|path| {
-            tree.read(path).is_some_and(|text| {
-                text.lines().map(str::trim_start).any(|line| {
-                    line.starts_with("[workspace]")
-                        || line.starts_with("[workspace.")
-                        || line.starts_with("workspace.")
-                })
-            })
-        })
-        .map(|path| {
-            format!(
-                "{}: the manifest declares a workspace of its own, which builds apart from the \
-                 compiles the check runs. Make it a member of the root workspace, or name its \
-                 directory in NESTED_WORKSPACES",
-                path.strip_prefix(root).unwrap_or(&path).display()
-            )
+        .filter_map(|path| {
+            let shown = path.strip_prefix(root).unwrap_or(&path).display();
+            match tree.read(&path).map(|text| declares_workspace(&text)) {
+                Some(Ok(false)) => None,
+                Some(Ok(true)) => Some(format!(
+                    "{shown}: the manifest declares a workspace of its own, which builds apart \
+                     from the compiles the check runs. Make it a member of the root workspace, \
+                     or name its directory in NESTED_WORKSPACES"
+                )),
+                Some(Err(error)) => Some(unparsed(&shown.to_string(), &error)),
+                None => Some(unparsed(&shown.to_string(), "it is not UTF-8 text")),
+            }
         })
         .collect()
+}
+
+/// Whether a manifest declares a workspace: a top-level `workspace` key. A
+/// `workspace` key inside `[package]` names the workspace of a member, and
+/// declares none.
+pub(crate) fn declares_workspace(manifest: &str) -> Result<bool, String> {
+    toml_table(manifest).map(|table| table.contains_key("workspace"))
+}
+
+/// The text parsed as one TOML table, or the first line of the parser's
+/// error.
+fn toml_table(text: &str) -> Result<toml::Table, String> {
+    text.parse::<toml::Table>().map_err(|error| {
+        error
+            .to_string()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    })
+}
+
+/// The refusal of a TOML file the check cannot parse.
+fn unparsed(shown: &str, error: &str) -> String {
+    format!(
+        "{shown}: the file does not parse as TOML, so the check cannot show what it sets, and \
+         fails closed: {error}"
+    )
+}
+
+/// One key of an `[unstable]` table of a cargo config that the build needs,
+/// admitted by its file, its key and its exact value. No pattern admits one.
+struct Unstable {
+    /// The config file, relative to the workspace root.
+    config: &'static str,
+    key: &'static str,
+    value: &'static [&'static str],
+}
+
+/// The unstable cargo settings the build needs. `build-std` rebuilds the
+/// standard library for the threaded wasm build, against `+atomics`. It
+/// enables no feature and sets no crate attribute on a workspace crate.
+const UNSTABLE: &[Unstable] = &[Unstable {
+    config: ".cargo/config.toml",
+    key: "build-std",
+    value: &["std", "panic_abort"],
+}];
+
+/// The recipe files whose command lines set the flags of a build: the
+/// `justfile` and the CI workflow, relative to the workspace root.
+const RECIPES: &[&str] = &["justfile", ".github/workflows/ci.yml"];
+
+/// The keys whose value cargo passes to rustc or rustdoc as flags.
+const FLAG_KEYS: &[&str] = &["rustflags", "rustdocflags"];
+
+/// Each lever of the build configuration that enables an unstable feature
+/// or a crate attribute, as one refusal (`ARCH-033`). Such a lever enables
+/// syntax the pinned syn may not parse, as a `#![feature]` does, so a data
+/// file could compile as a module the parse guard misreads. The check reads
+/// four sources:
+///
+///   * each `.cargo/config.toml` and `.cargo/config` under the root: a `-Z`
+///     flag, `crate-attr` or `feature(` in a `rustflags` or `rustdocflags`
+///     value, at any depth, and each key of an `[unstable]` table that
+///     `UNSTABLE` does not name with its exact value;
+///   * each `Cargo.toml` under the root: a `cargo-features` key, and a
+///     `rustflags` or `rustdocflags` key at any depth;
+///   * the `justfile`;
+///   * the CI workflow: a non-comment line of either that holds a `-Z` flag,
+///     `crate-attr` or `feature(`.
+///
+/// A config file that does not parse fails closed. `stray_workspaces`
+/// refuses a manifest that does not parse, so this check skips one. A
+/// manifest that renames `sqlx` to another package fails too, since the
+/// scan reads `sqlx::migrate!` as data by its name.
+pub(crate) fn levers(tree: &impl Tree, root: &Path) -> Vec<String> {
+    let mut found = Vec::new();
+    for path in tree.files(root) {
+        let shown = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        let name = path.file_name().unwrap_or_default();
+        let in_cargo = path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|dir| dir == ".cargo");
+        if in_cargo && (name == "config" || name == "config.toml") {
+            match tree.read(&path).as_deref().map(toml_table) {
+                Some(Ok(table)) => config_levers(&shown, &table, &mut found),
+                Some(Err(error)) => found.push(unparsed(&shown, &error)),
+                None => found.push(unparsed(&shown, "it is not UTF-8 text")),
+            }
+        } else if name == "Cargo.toml"
+            && let Some(Ok(table)) = tree.read(&path).as_deref().map(toml_table)
+        {
+            manifest_levers(&shown, &table, &mut found);
+        }
+    }
+    for recipe in RECIPES {
+        let Some(text) = tree.read(&root.join(recipe)) else {
+            found.push(format!(
+                "{recipe}: the check cannot read it, so it cannot show that its flags enable \
+                 no unstable feature, and fails closed"
+            ));
+            continue;
+        };
+        for (at, line) in text.lines().enumerate() {
+            if !line.trim_start().starts_with('#') && lever(line) {
+                found.push(lever_refusal(&format!("{recipe}:{}", at + 1), "the line"));
+            }
+        }
+    }
+    found
+}
+
+/// The levers of one cargo config, parsed.
+fn config_levers(shown: &str, table: &toml::Table, found: &mut Vec<String>) {
+    if let Some(unstable) = table.get("unstable") {
+        let keys: Vec<(String, Option<&toml::Value>)> = match unstable.as_table() {
+            Some(keys) => keys
+                .iter()
+                .map(|(key, value)| (format!("unstable.{key}"), Some(value)))
+                .collect(),
+            None => vec![("unstable".to_owned(), None)],
+        };
+        for (key, value) in keys {
+            let admitted = UNSTABLE.iter().any(|entry| {
+                entry.config == shown
+                    && key.strip_prefix("unstable.") == Some(entry.key)
+                    && value.and_then(toml::Value::as_array).is_some_and(|items| {
+                        items.len() == entry.value.len()
+                            && items
+                                .iter()
+                                .zip(entry.value)
+                                .all(|(item, want)| item.as_str() == Some(*want))
+                    })
+            });
+            if !admitted {
+                found.push(format!(
+                    "{shown}: `{key}` is an unstable cargo setting that UNSTABLE does \
+                     not name with this value, so the check fails closed (ARCH-033): remove \
+                     it, or name it in UNSTABLE with the reason"
+                ));
+            }
+        }
+    }
+    flag_values(shown, "", table, found);
+}
+
+/// Each `rustflags` or `rustdocflags` value of `table`, at any depth, that
+/// holds a lever. `prefix` is the dotted key of `table`.
+fn flag_values(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec<String>) {
+    for (key, value) in table {
+        let dotted = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        if FLAG_KEYS.contains(&key.as_str()) {
+            let words: Vec<String> = match value {
+                toml::Value::Array(items) => items.iter().map(flag_text).collect(),
+                other => vec![flag_text(other)],
+            };
+            if words.iter().any(|word| lever(word)) {
+                found.push(lever_refusal(shown, &format!("`{dotted}`")));
+            }
+        } else if let Some(inner) = value.as_table() {
+            flag_values(shown, &dotted, inner, found);
+        }
+    }
+}
+
+/// The text of one flag value: a string as written, any other value in its
+/// debug form, so a value of another type still meets the check.
+fn flag_text(value: &toml::Value) -> String {
+    value
+        .as_str()
+        .map_or_else(|| format!("{value:?}"), str::to_owned)
+}
+
+/// The levers of one manifest, parsed.
+fn manifest_levers(shown: &str, table: &toml::Table, found: &mut Vec<String>) {
+    if table.contains_key("cargo-features") {
+        found.push(format!(
+            "{shown}: `cargo-features` enables an unstable cargo feature, so the check fails \
+             closed (ARCH-033): remove it"
+        ));
+    }
+    manifest_keys(shown, "", table, found);
+}
+
+/// Each flag key of a manifest, at any depth, and each `sqlx` dependency
+/// renamed to another package. `prefix` is the dotted key of `table`.
+fn manifest_keys(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec<String>) {
+    for (key, value) in table {
+        let dotted = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        if FLAG_KEYS.contains(&key.as_str()) {
+            found.push(format!(
+                "{shown}: `{dotted}` passes flags to rustc from a manifest, so the check fails \
+                 closed (ARCH-033): remove it"
+            ));
+            continue;
+        }
+        let Some(inner) = value.as_table() else {
+            continue;
+        };
+        let renamed = key.ends_with("dependencies")
+            && inner
+                .get(SQLX)
+                .and_then(|dependency| dependency.get("package"))
+                .is_some_and(|package| package.as_str() != Some(SQLX));
+        if renamed {
+            found.push(format!(
+                "{shown}: `{dotted}.sqlx` names another package. The scan reads `sqlx::migrate!` \
+                 as a data read by its name, so the check fails closed (ARCH-033): keep the \
+                 name `sqlx` for the sqlx crate alone"
+            ));
+        }
+        manifest_keys(shown, &dotted, inner, found);
+    }
+}
+
+/// Whether `text` holds a lever: a `-Z` flag, `crate-attr`, or `feature(`
+/// with any spaces. A `-Z` counts where no letter or digit comes before it,
+/// so `[A-Z]` is no flag.
+fn lever(text: &str) -> bool {
+    let joined: String = text.split_whitespace().collect();
+    joined.contains("crate-attr")
+        || joined.contains("feature(")
+        || text.match_indices("-Z").any(|(at, _)| {
+            at.checked_sub(1)
+                .and_then(|before| text.as_bytes().get(before))
+                .is_none_or(|byte| !byte.is_ascii_alphanumeric())
+        })
+}
+
+/// The refusal of a lever that `what` of `shown` holds.
+fn lever_refusal(shown: &str, what: &str) -> String {
+    format!(
+        "{shown}: {what} holds a -Z flag, a crate-attr or a feature( lever, which enables syntax \
+         the gate may not parse, so the check fails closed (ARCH-033): remove it"
+    )
 }
 
 #[cfg(test)]

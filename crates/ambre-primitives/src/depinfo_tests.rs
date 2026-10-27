@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use super::{
-    Build, COMPILES, Compile, Compiled, Target, Unit, artifact, collect, cross_check, dependencies,
-    stray_workspaces,
+    Build, COMPILES, Compile, Compiled, Target, Unit, artifact, collect, cross_check,
+    declares_workspace, dependencies, levers, stray_workspaces,
 };
-use crate::scan::{Disk, Scan, Tree, lexical, scan};
+use crate::scan::{Disk, NESTED_WORKSPACES, Scan, Tree, lexical, scan};
 
 const ROOT: &str = "/w";
 
@@ -814,6 +814,15 @@ fn a_manifest_that_declares_a_workspace_outside_the_nested_ones_is_refused() {
         ("extra/Cargo.toml", "workspace.members = []\n"),
         ("extra/src/main.rs", ""),
         ("tables/Cargo.toml", "  [workspace.dependencies]\n"),
+        // The SEC-1h review: the text match missed these spellings.
+        ("spaced/Cargo.toml", "[ workspace ]\n"),
+        ("inline/Cargo.toml", "workspace = { members = [] }\n"),
+        ("quoted/Cargo.toml", "\"workspace\" = {}\n"),
+        ("broken/Cargo.toml", "[workspace\n"),
+        (
+            "member/Cargo.toml",
+            "[package]\nname = \"m\"\n[dependencies]\nx = { workspace = true }\n",
+        ),
         ("fuzz/Cargo.toml", "[package]\n\n[workspace]\n"),
         ("fuzz/fuzz_targets/one.rs", ""),
     ]);
@@ -829,9 +838,219 @@ fn a_manifest_that_declares_a_workspace_outside_the_nested_ones_is_refused() {
     assert_eq!(
         stray_workspaces(&tree, root),
         [
+            "broken/Cargo.toml: the file does not parse as TOML, so the check cannot show what it \
+             sets, and fails closed: TOML parse error at line 1, column 11"
+                .to_owned(),
             stray("crates/demo/hide/Cargo.toml"),
             stray("extra/Cargo.toml"),
+            stray("inline/Cargo.toml"),
+            stray("quoted/Cargo.toml"),
+            stray("spaced/Cargo.toml"),
             stray("tables/Cargo.toml"),
+        ]
+    );
+}
+
+#[test]
+fn each_nested_workspace_manifest_declares_a_workspace() {
+    // The SEC-1h review: the orphan check leaves out each nested workspace
+    // by its name, and nothing held that its manifest declares one.
+    for dir in NESTED_WORKSPACES {
+        let path = workspace().join(dir).join("Cargo.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            panic!("{} cannot be read", path.display());
+        };
+        assert_eq!(declares_workspace(&text), Ok(true), "{}", path.display());
+    }
+}
+
+/// The two recipe files, with no lever, and `files` beside them.
+fn recipes(files: &[(&'static str, &'static str)]) -> Files {
+    let mut all = vec![
+        (
+            "justfile",
+            "# `-Z build-std` comes from the config.\nlint:\n    cargo clippy -- -D warnings\n",
+        ),
+        (
+            ".github/workflows/ci.yml",
+            "# -Zanything in a comment\nrun: cargo test --workspace\n",
+        ),
+    ];
+    all.extend_from_slice(files);
+    Files::new(&all)
+}
+
+/// The refusal of a lever that `what` of `shown` holds.
+fn lever(shown: &str, what: &str) -> String {
+    format!(
+        "{shown}: {what} holds a -Z flag, a crate-attr or a feature( lever, which enables syntax \
+         the gate may not parse, so the check fails closed (ARCH-033): remove it"
+    )
+}
+
+/// The refusal of an `[unstable]` key UNSTABLE does not admit.
+fn unstable(shown: &str, key: &str) -> String {
+    format!(
+        "{shown}: `{key}` is an unstable cargo setting that UNSTABLE does not name with this \
+         value, so the check fails closed (ARCH-033): remove it, or name it in UNSTABLE with \
+         the reason"
+    )
+}
+
+#[test]
+fn a_lever_in_a_cargo_config_is_refused() {
+    // The SEC-1h review: `-Zcrate-attr=feature(..)` in a config enabled a
+    // syntax that the pinned syn rejects, so the parse guard passed a data
+    // file as data.
+    let tree = recipes(&[
+        (
+            ".cargo/config.toml",
+            "[build]\nrustflags = [\"-Zcrate-attr=feature(yeet_expr)\"]\n\
+             [target.wasm32-unknown-unknown]\nrustflags = [\"-C\", \"target-feature=+atomics\"]\n\
+             [target.'cfg(unix)']\nrustflags = \"-C opt-level=1 -Z x\"\n\
+             [unstable]\nbuild-std = [\"std\", \"panic_abort\"]\nother = true\n",
+        ),
+        (
+            "crates/demo/.cargo/config",
+            "build.rustdocflags = [\"--crate-attr\", \"x\"]\n\
+             [unstable]\nbuild-std = [\"std\", \"panic_abort\"]\n",
+        ),
+        (
+            "crates/other/.cargo/config.toml",
+            "unstable = 1\n[build]\nrustflags = [\"-A\", \"warnings\"]\n",
+        ),
+        ("crates/bad/.cargo/config.toml", "[build\n"),
+        ("crates/kept/.cargo/other.toml", "unstable = 1\n"),
+    ]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            unstable(".cargo/config.toml", "unstable.other"),
+            lever(".cargo/config.toml", "`build.rustflags`"),
+            lever(".cargo/config.toml", "`target.cfg(unix).rustflags`"),
+            "crates/bad/.cargo/config.toml: the file does not parse as TOML, so the check \
+             cannot show what it sets, and fails closed: TOML parse error at line 1, column 7"
+                .to_owned(),
+            unstable("crates/demo/.cargo/config", "unstable.build-std"),
+            lever("crates/demo/.cargo/config", "`build.rustdocflags`"),
+            unstable("crates/other/.cargo/config.toml", "unstable"),
+        ]
+    );
+}
+
+#[test]
+fn a_lever_in_a_manifest_is_refused() {
+    let tree = recipes(&[
+        (
+            "Cargo.toml",
+            "cargo-features = [\"profile-rustflags\"]\n[workspace]\n\
+             [profile.dev]\nrustflags = [\"-C\", \"opt-level=1\"]\n",
+        ),
+        (
+            "crates/demo/Cargo.toml",
+            "[package]\nname = \"demo\"\n[profile.release.package.x]\nrustdocflags = []\n",
+        ),
+        ("crates/broken/Cargo.toml", "[package\n"),
+    ]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            "Cargo.toml: `cargo-features` enables an unstable cargo feature, so the check fails \
+             closed (ARCH-033): remove it"
+                .to_owned(),
+            "Cargo.toml: `profile.dev.rustflags` passes flags to rustc from a manifest, so the \
+             check fails closed (ARCH-033): remove it"
+                .to_owned(),
+            "crates/demo/Cargo.toml: `profile.release.package.x.rustdocflags` passes flags to \
+             rustc from a manifest, so the check fails closed (ARCH-033): remove it"
+                .to_owned(),
+        ]
+    );
+}
+
+#[test]
+fn a_manifest_that_renames_sqlx_to_another_package_is_refused() {
+    // The SEC-1h review: `sqlx = { package = "other" }` would make a
+    // foreign `migrate!` read as data.
+    let tree = recipes(&[
+        (
+            "Cargo.toml",
+            "[workspace.dependencies]\nsqlx = { version = \"0.8\", package = \"other\" }\n",
+        ),
+        (
+            "crates/demo/Cargo.toml",
+            "[dependencies]\nsqlx = { workspace = true }\n\
+             [target.'cfg(unix)'.dev-dependencies.sqlx]\npackage = \"x\"\n\
+             [build-dependencies]\nsqlx = { package = \"sqlx\" }\ndb = { package = \"sqlx\" }\n",
+        ),
+    ]);
+    let renamed = |shown: &str, key: &str| {
+        format!(
+            "{shown}: `{key}.sqlx` names another package. The scan reads `sqlx::migrate!` as a \
+             data read by its name, so the check fails closed (ARCH-033): keep the name `sqlx` \
+             for the sqlx crate alone"
+        )
+    };
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            renamed("Cargo.toml", "workspace.dependencies"),
+            renamed(
+                "crates/demo/Cargo.toml",
+                "target.cfg(unix).dev-dependencies"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_lever_on_a_line_of_the_justfile_is_refused() {
+    let tree = Files::new(&[
+        (
+            "justfile",
+            "# RUSTFLAGS=\"-Zx\" in a comment\n\
+             lint-wasm:\n    RUSTFLAGS=\"-Awarnings -C debuginfo=0\" cargo clippy\n\
+             \x20   RUSTFLAGS=\"-Awarnings -Zcrate-attr=feature(yeet_expr)\" cargo check\n\
+             \x20   grep '[A-Z]' x\n\
+             \x20   cargo +nightly build -Z build-std\n",
+        ),
+        (".github/workflows/ci.yml", "run: cargo test\n"),
+    ]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            lever("justfile:4", "the line"),
+            lever("justfile:6", "the line")
+        ]
+    );
+}
+
+#[test]
+fn a_lever_on_a_line_of_the_ci_workflow_is_refused() {
+    let tree = Files::new(&[
+        ("justfile", "lint:\n    cargo clippy\n"),
+        (
+            ".github/workflows/ci.yml",
+            "env:\n  RUSTFLAGS: \"--cfg x\"\n  RUSTDOCFLAGS: \"--crate-attr=x\"\n\
+             \x20 # RUSTFLAGS: -Zx\n  CARGO_ENCODED_RUSTFLAGS: \"-Zthreads=2\"\n",
+        ),
+    ]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            lever(".github/workflows/ci.yml:3", "the line"),
+            lever(".github/workflows/ci.yml:5", "the line"),
+        ]
+    );
+    assert_eq!(
+        levers(&Files::new(&[]), Path::new(ROOT)),
+        [
+            "justfile: the check cannot read it, so it cannot show that its flags enable no \
+             unstable feature, and fails closed"
+                .to_owned(),
+            ".github/workflows/ci.yml: the check cannot read it, so it cannot show that its \
+             flags enable no unstable feature, and fails closed"
+                .to_owned(),
         ]
     );
 }

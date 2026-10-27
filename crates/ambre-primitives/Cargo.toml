@@ -16,6 +16,9 @@ quote       = { workspace = true }
 # dep-info file of each unit rustc compiled (`ARCH-033`).
 serde_json  = { workspace = true }
 syn         = { workspace = true }
+# Each manifest and each cargo config, parsed as cargo reads them: the
+# workspace a manifest declares, and the flags a build takes (`ARCH-033`).
+toml        = { workspace = true }
 
 [lints]
 workspace = true
