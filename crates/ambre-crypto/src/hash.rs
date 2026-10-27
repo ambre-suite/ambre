@@ -77,16 +77,25 @@ pub fn chain_hash(
     snapshot: &ambre_core::Ciphertext,
 ) -> ambre_core::ChainHash {
     let parent: &[u8] = parent.map_or(&[], |p| &p.0);
-    ambre_core::ChainHash(length_prefixed(parent, &snapshot.0))
+    ambre_core::ChainHash(length_prefixed(Head(parent), Tail(&snapshot.0)))
 }
+
+/// The field that [`length_prefixed`] bounds with its length.
+struct Head<'a>(&'a [u8]);
+
+/// The bytes that [`length_prefixed`] hashes after the bounded field.
+///
+/// The order of the two inputs is the property the chain hash rests on, so
+/// each takes a type of its own, and a swap does not compile.
+struct Tail<'a>(&'a [u8]);
 
 /// `BLAKE2b(len(head) || head || tail)`, truncated to 32 bytes: the one
 /// construction behind the chain hash and the two keyless digests below.
-fn length_prefixed(head: &[u8], tail: &[u8]) -> [u8; HASH_LEN] {
+fn length_prefixed(head: Head<'_>, tail: Tail<'_>) -> [u8; HASH_LEN] {
     let mut hasher = Blake2b512::new();
-    hasher.update((head.len() as u64).to_le_bytes());
-    hasher.update(head);
-    hasher.update(tail);
+    hasher.update((head.0.len() as u64).to_le_bytes());
+    hasher.update(head.0);
+    hasher.update(tail.0);
     prefix(&hasher.finalize())
 }
 
@@ -98,12 +107,15 @@ const DEV_SEED_DOMAIN: &[u8] = b"ambre-dev-seed";
 /// server-side key storage. Dev login only; a real account draws its seed
 /// from the CSPRNG.
 pub fn dev_seed(username: &str) -> crate::keys::MasterSeed {
-    crate::keys::MasterSeed::from_array(length_prefixed(DEV_SEED_DOMAIN, username.as_bytes()))
+    crate::keys::MasterSeed::from_array(length_prefixed(
+        Head(DEV_SEED_DOMAIN),
+        Tail(username.as_bytes()),
+    ))
 }
 
 /// A keyless 32-byte digest of a whole file, for the fixture sidecar that
 /// catches a flipped byte. Not a link of the snapshot chain: its head is
 /// empty, which keeps the digests of the committed corpus.
 pub fn file_digest(bytes: &[u8]) -> [u8; HASH_LEN] {
-    length_prefixed(&[], bytes)
+    length_prefixed(Head(&[]), Tail(bytes))
 }

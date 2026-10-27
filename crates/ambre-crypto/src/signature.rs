@@ -35,19 +35,21 @@ fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
     msg.extend_from_slice(field);
 }
 
+/// The signed transcript. Each field takes its own type, so a swap of two
+/// fields does not compile, and the bytes unwrap here alone.
 fn message(
-    nonce: &[u8],
-    ciphertext: &[u8],
+    nonce: &Nonce,
+    ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-    commitment_tag: &[u8],
+    commitment_tag: &CommitmentTag,
 ) -> Vec<u8> {
     let mut msg = Vec::with_capacity(
-        16 + nonce.len() + ciphertext.len() + aad.as_bytes().len() + commitment_tag.len(),
+        16 + nonce.0.len() + ciphertext.len() + aad.as_bytes().len() + commitment_tag.0.len(),
     );
-    push_framed(&mut msg, nonce);
-    push_framed(&mut msg, ciphertext);
+    push_framed(&mut msg, &nonce.0);
+    push_framed(&mut msg, &ciphertext.0);
     push_framed(&mut msg, aad.as_bytes());
-    push_framed(&mut msg, commitment_tag);
+    push_framed(&mut msg, &commitment_tag.0);
     msg
 }
 
@@ -59,7 +61,7 @@ pub fn sign(
     aad: &ambre_core::Aad,
     commitment_tag: &CommitmentTag,
 ) -> Signature {
-    let msg = message(&nonce.0, &ciphertext.0, aad, &commitment_tag.0);
+    let msg = message(nonce, ciphertext, aad, commitment_tag);
     Signature(signing_key.sign(&msg).to_bytes())
 }
 
@@ -81,7 +83,7 @@ pub fn verify(
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
     let sig = ed25519_dalek::Signature::from_bytes(&signature.0);
-    let msg = message(&nonce.0, &ciphertext.0, aad, &commitment_tag.0);
+    let msg = message(nonce, ciphertext, aad, commitment_tag);
     // Strict verification rejects non-canonical `S` and small-order `A`, so a
     // valid `(R, S)` cannot be transformed into a distinct valid signature over
     // the same message. Ambre treats "signature identifies the author" as
