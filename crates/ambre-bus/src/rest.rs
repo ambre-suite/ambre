@@ -213,7 +213,7 @@ pub enum RestCommand {
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
     /// Rejected unless the server runs with `DEV_MODE`. -> `SessionReady`.
-    DevLogin { username: String },
+    DevLogin { username: ambre_core::DisplayName },
     /// Change the account passphrase. -> `PassphraseChanged`.
     ChangePassphrase {
         current_passphrase: ambre_core::Passphrase,

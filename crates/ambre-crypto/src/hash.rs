@@ -106,10 +106,10 @@ const DEV_SEED_DOMAIN: &[u8] = b"ambre-dev-seed";
 /// yields the same keys, so a refresh re-derives the identity with no
 /// server-side key storage. Dev login only; a real account draws its seed
 /// from the CSPRNG.
-pub fn dev_seed(username: &str) -> crate::keys::MasterSeed {
+pub fn dev_seed(username: &ambre_core::DisplayName) -> crate::keys::MasterSeed {
     crate::keys::MasterSeed::from_array(length_prefixed(
         Head(DEV_SEED_DOMAIN),
-        Tail(username.as_bytes()),
+        Tail(username.as_str().as_bytes()),
     ))
 }
 

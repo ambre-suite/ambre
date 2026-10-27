@@ -227,9 +227,9 @@ pub(crate) fn stored_dev_user() -> Option<String> {
 
 /// Remember `username` as the active dev identity (dev-only; the derived keys are
 /// never stored, only the name they are re-derived from).
-pub(crate) fn remember_dev_user(username: &str) {
+pub(crate) fn remember_dev_user(username: &ambre_core::DisplayName) {
     if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
-        let _ = storage.set_item(DEV_USER_KEY, username);
+        let _ = storage.set_item(DEV_USER_KEY, username.as_str());
     }
 }
 

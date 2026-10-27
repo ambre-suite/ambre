@@ -1100,7 +1100,7 @@ pub(crate) struct SetupAccountResponse {
 
 #[derive(Serialize)]
 pub(crate) struct DevLoginRequest {
-    pub username: String,
+    pub username: ambre_core::DisplayName,
     pub signing_pub_key: ambre_core::SigningKeyHex,
     pub exchange_pub_key: ambre_core::ExchangeKeyHex,
 }

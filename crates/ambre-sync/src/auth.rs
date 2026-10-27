@@ -146,7 +146,7 @@ impl SyncState {
     /// (it rejects this unless `DEV_MODE` is set). Lets `?user=<name>` test
     /// multi-user behaviour on one machine; an edit survives a refresh because
     /// the same username always derives the same identity.
-    pub(crate) fn handle_dev_login(&mut self, id: RequestId, username: String) {
+    pub(crate) fn handle_dev_login(&mut self, id: RequestId, username: ambre_core::DisplayName) {
         tracing::info!("Sync: DevLogin (username={username})");
         // Remember it so a WS auth rejection (close 4401) whose refresh also fails
         // can silently re-login with the same deterministic identity.
@@ -212,8 +212,7 @@ impl SyncState {
                 id,
                 RestEvent::SessionReady {
                     user_id,
-                    display_name: ambre_core::DisplayName::cut_to_fit(&username)
-                        .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&user_id)),
+                    display_name: username,
                     email: ambre_core::Email(String::new()),
                 },
             );

@@ -89,7 +89,7 @@ ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | DEV_USER_KEY | const | &str	free-text	single storage key literal
-ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	dev username
+ambre-app | src/platform.rs | crate::platform | dev_user_from_url() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
 ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	generic	predicate result
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
@@ -97,8 +97,7 @@ ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | p
 ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
-ambre-app | src/platform.rs | crate::platform | remember_dev_user(username) | param | &str	free-text	dev username
-ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	dev username
+ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
@@ -473,7 +472,6 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inne
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
-ambre-bus | src/rest.rs | crate::rest | RestCommand::DevLogin.username | field | String	free-text	dev-only login name
 ambre-bus | src/rest.rs | crate::rest | RestCommand::SearchUsers.query | field | String	free-text	search query
 ambre-bus | src/rest.rs | crate::rest | RestEvent::ProviderSignedIn.keys_stored | field | bool	generic	fact flag
 ambre-bus | src/start.rs | crate::start | ANNOUNCEMENT | const | &[u8]	generic	start announcement bytes
@@ -2681,7 +2679,6 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	newtype-inner	the key text of PendingKey
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	newtype-inner	the key text of PendingKey
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
-ambre-sync | src/auth.rs | crate::auth | SyncState::handle_dev_login(username) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
 ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -2699,7 +2696,6 @@ ambre-sync | src/http.rs | crate::http | AmendmentsResponse.created | field | bo
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | DevLoginRequest.username | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
@@ -2747,7 +2743,6 @@ ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | f
 ambre-sync | src/lib.rs | crate | SyncEvent::ProviderSignedIn.keys_stored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncState.dev_username | field | Option<String>	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.held_outbox | field | RefCell<Vec<Vec<u8>>>	generic	generic byte/text API or codec
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.mock_ws_tx | field | Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>	generic	generic byte/text API or codec
@@ -3932,7 +3927,6 @@ ambre-bus | src/app/find.rs | crate::app::find | FindQuery<O>::new(text) | param
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
-ambre-crypto | src/hash.rs | crate::hash | dev_seed(username) | param | &str	free-text	dev-only login name, hashed as typed
 ambre-crypto | src/hash.rs | crate::hash | file_digest() | ret | [u8;HASH_LEN]	generic	keyless digest of any file, for the fixture sidecar
 ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	generic	keyless digest of any file, for the fixture sidecar
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; chain_hash and dev_seed wrap the result, file_digest returns it

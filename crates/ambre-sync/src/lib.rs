@@ -1157,7 +1157,7 @@ pub struct SyncState {
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
     /// real (non-dev) session, where reauth relies solely on the refresh token.
-    dev_username: Option<String>,
+    dev_username: Option<ambre_core::DisplayName>,
 }
 
 impl SyncState {

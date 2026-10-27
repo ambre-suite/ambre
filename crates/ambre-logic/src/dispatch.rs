@@ -1972,7 +1972,7 @@ mod tests {
                 display_name: ambre_core::DisplayName::new("A").unwrap(),
             },
             RestCommand::DevLogin {
-                username: "a".to_owned(),
+                username: ambre_core::DisplayName::new("a").unwrap(),
             },
             RestCommand::ChangePassphrase {
                 current_passphrase: typed(),

@@ -251,7 +251,7 @@ mod tests {
     /// `CHROME-108`).
     #[wasm_bindgen_test]
     fn a_sign_out_forgets_the_user_and_boots_home_afresh() {
-        crate::platform::remember_dev_user("ada");
+        crate::platform::remember_dev_user(&ambre_core::DisplayName::new("ada").unwrap());
         session_storage()
             .unwrap()
             .set_item(PENDING_STATE_KEY, "st1")

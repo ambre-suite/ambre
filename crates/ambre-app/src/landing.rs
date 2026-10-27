@@ -591,9 +591,9 @@ fn sign_in_panel(
             let value = RwSignal::new("alice".to_owned());
             let to_logic = to_logic.clone();
             let go = move || {
-                let name = value.get();
-                let name = name.trim().to_owned();
-                if !name.is_empty() {
+                // A name the account rule refuses, a blank one among them,
+                // sends nothing: the relay would refuse it (`SRV-234`).
+                if let Ok(name) = ambre_core::DisplayName::new(&value.get()) {
                     // Remember the dev identity so a later refresh re-establishes
                     // the session without `?user=` in the URL.
                     crate::remember_dev_user(&name);
