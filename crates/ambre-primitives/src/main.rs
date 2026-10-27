@@ -19,7 +19,8 @@
 //!     The seventh holds the walk to rustc. It refuses a file a compile
 //!     reads that the walk neither reads nor names as data, and a `.rs` file
 //!     no compile reads. It refuses a build lever that enables an
-//!     unstable feature too (`ARCH-033`);
+//!     unstable feature too, in the build configuration or in the gate's
+//!     own environment (`ARCH-033`);
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and nothing else.
@@ -103,19 +104,31 @@ fn main() -> ExitCode {
 /// Every refusal of the dep-info check, printed with its count. Each compile
 /// runs in the workspace, so the check reads the files the recipes build.
 /// The build configuration is read first, and refused whatever the
-/// compiles say: a lever can make a compile fail, or pass.
+/// compiles say: a lever can make a compile fail, or pass. A lever in the
+/// gate's own environment stops the check before any compile, since a
+/// wrapper it names would run.
 fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
-    let mut refusals = depinfo::levers(disk, root);
+    let environment = depinfo::env_levers(std::env::vars_os());
+    let compile = environment.is_empty();
+    let mut refusals = environment;
+    refusals.append(&mut depinfo::levers(disk, root));
+    refusals.append(&mut depinfo::outer_levers(
+        disk,
+        root,
+        cargo_home().as_deref(),
+    ));
     refusals.append(&mut depinfo::stray_workspaces(disk, root));
-    match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
-        Ok(compiled) => {
-            let sources = depinfo::sources(disk, root);
-            let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-            refusals.append(&mut depinfo::cross_check(
-                scan, &compiled, &sources, &root, disk,
-            ));
+    if compile {
+        match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
+            Ok(compiled) => {
+                let sources = depinfo::sources(disk, root);
+                let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+                refusals.append(&mut depinfo::cross_check(
+                    scan, &compiled, &sources, &root, disk,
+                ));
+            }
+            Err(mut errors) => refusals.append(&mut errors),
         }
-        Err(mut errors) => refusals.append(&mut errors),
     }
     for refusal in &refusals {
         eprintln!("primitives: {refusal}");
@@ -125,6 +138,14 @@ fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
         refusals.len()
     );
     refusals
+}
+
+/// The cargo home whose config cargo reads: `CARGO_HOME`, or `.cargo` in
+/// the home directory, as cargo finds it.
+fn cargo_home() -> Option<PathBuf> {
+    std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".cargo")))
 }
 
 /// The workspace root, two levels above this crate's manifest.

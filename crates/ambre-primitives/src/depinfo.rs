@@ -18,8 +18,11 @@
 //!     file syn refuses passes it. The scan refuses the `mod` a macro
 //!     declares, the one way a data file compiles as a module the walk
 //!     does not see;
-//!   * no build configuration under the root enables an unstable feature
-//!     or a crate attribute, so no flag enables syntax the guard misreads;
+//!   * no build configuration cargo reads enables an unstable feature or a
+//!     crate attribute, or names a compiler wrapper. Neither does a variable
+//!     of the gate's own environment. So no flag the check reads enables
+//!     syntax the guard misreads. A flag set some other way is a
+//!     reviewer's (`ARCH-050`);
 //!   * a crate root that a build compiles is one the walk starts from;
 //!   * a `.rs` file under the workspace root is one that a compile reads,
 //!     test builds included. So no file sits in the tree that no build
@@ -34,6 +37,7 @@
 //! a registry crate and the standard library count for nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -143,7 +147,10 @@ pub(crate) fn collect(
             .arg("check")
             .args(compile.args)
             .arg("--message-format=json")
-            .arg("--quiet");
+            .arg("--quiet")
+            // It overrides `RUSTFLAGS`, so a wasm compile would drop the
+            // flags of `lint-wasm`.
+            .env_remove("CARGO_ENCODED_RUSTFLAGS");
         if compile.target == Target::Wasm {
             command
                 .arg("--target")
@@ -542,7 +549,7 @@ pub(crate) fn sources(tree: &impl Tree, root: &Path) -> BTreeSet<PathBuf> {
 /// directory builds apart from the compiles the check runs, so no shipped
 /// build of it is held. The manifest is parsed as TOML, as cargo reads it,
 /// and any top-level `workspace` key counts, in any spelling. A manifest
-/// that does not parse fails closed.
+/// that does not parse is `levers`'s to refuse, so this check skips one.
 pub(crate) fn stray_workspaces(tree: &impl Tree, root: &Path) -> Vec<String> {
     let kept: Vec<PathBuf> = std::iter::once(root.join("Cargo.toml"))
         .chain(
@@ -557,16 +564,15 @@ pub(crate) fn stray_workspaces(tree: &impl Tree, root: &Path) -> Vec<String> {
         .filter(|path| !kept.contains(path))
         .filter_map(|path| {
             let shown = path.strip_prefix(root).unwrap_or(&path).display();
-            match tree.read(&path).map(|text| declares_workspace(&text)) {
-                Some(Ok(false)) => None,
-                Some(Ok(true)) => Some(format!(
-                    "{shown}: the manifest declares a workspace of its own, which builds apart \
-                     from the compiles the check runs. Make it a member of the root workspace, \
-                     or name its directory in NESTED_WORKSPACES"
-                )),
-                Some(Err(error)) => Some(unparsed(&shown.to_string(), &error)),
-                None => Some(unparsed(&shown.to_string(), "it is not UTF-8 text")),
-            }
+            tree.read(&path)
+                .is_some_and(|text| declares_workspace(&text) == Ok(true))
+                .then(|| {
+                    format!(
+                        "{shown}: the manifest declares a workspace of its own, which builds \
+                         apart from the compiles the check runs. Make it a member of the root \
+                         workspace, or name its directory in NESTED_WORKSPACES"
+                    )
+                })
         })
         .collect()
 }
@@ -624,6 +630,25 @@ const RECIPES: &[&str] = &["justfile", ".github/workflows/ci.yml"];
 /// The keys whose value cargo passes to rustc or rustdoc as flags.
 const FLAG_KEYS: &[&str] = &["rustflags", "rustdocflags"];
 
+/// The keys of a cargo config that name the compiler, or a wrapper that
+/// runs it. Either one can pass rustc any flag the check never reads, so a
+/// config fails closed on each, at any depth: `build.rustc` and the like.
+const COMPILER_KEYS: &[&str] = &["rustc", "rustc-wrapper", "rustc-workspace-wrapper"];
+
+/// One entry of an `[env]` table of a cargo config that the build needs,
+/// admitted by its file, its key and its exact value. No pattern admits one.
+struct ConfigEnv {
+    /// The config file, relative to the workspace root.
+    config: &'static str,
+    key: &'static str,
+    value: &'static str,
+}
+
+/// The `[env]` entries the build needs. None does today. An entry sets the
+/// environment of rustc and of each build script, so it can carry a flag
+/// variable such as `RUSTFLAGS` past the check.
+const CONFIG_ENV: &[ConfigEnv] = &[];
+
 /// Each lever of the build configuration that enables an unstable feature
 /// or a crate attribute, as one refusal (`ARCH-033`). Such a lever enables
 /// syntax the pinned syn may not parse, as a `#![feature]` does. A data
@@ -633,17 +658,22 @@ const FLAG_KEYS: &[&str] = &["rustflags", "rustdocflags"];
 ///   * each `.cargo/config.toml` and `.cargo/config` under the root. A `-Z`
 ///     flag, `crate-attr` or `feature(` in a `rustflags` or `rustdocflags`
 ///     value fails, at any depth. So does each key of an `[unstable]` table
-///     that `UNSTABLE` does not name with its exact value;
+///     that `UNSTABLE` does not name with its exact value. A key of
+///     `COMPILER_KEYS`, an `include` key and each `[env]` entry that
+///     `CONFIG_ENV` does not name fail too;
 ///   * each `Cargo.toml` under the root: a `cargo-features` key, and a
 ///     `rustflags` or `rustdocflags` key at any depth;
 ///   * the `justfile`;
 ///   * the CI workflow: a non-comment line of either that holds a `-Z` flag,
 ///     `crate-attr` or `feature(`.
 ///
-/// A config file that does not parse fails closed. `stray_workspaces`
-/// refuses a manifest that does not parse, so this check skips one. A
-/// manifest that renames `sqlx` to another package fails too, since the
-/// scan reads `sqlx::migrate!` as data by its name.
+/// A config file or a manifest that does not parse fails closed. A manifest
+/// that puts another crate under the name `sqlx` fails too, since the scan
+/// reads `sqlx::migrate!` as data by its name.
+///
+/// A config in a crate directory is read too, though cargo run from the
+/// root reads none. Its levers are refused all the same: that fails closed,
+/// and costs nothing.
 pub(crate) fn levers(tree: &impl Tree, root: &Path) -> Vec<String> {
     let mut found = Vec::new();
     for path in tree.files(root) {
@@ -663,10 +693,12 @@ pub(crate) fn levers(tree: &impl Tree, root: &Path) -> Vec<String> {
                 Some(Err(error)) => found.push(unparsed(&shown, &error)),
                 None => found.push(unparsed(&shown, "it is not UTF-8 text")),
             }
-        } else if name == "Cargo.toml"
-            && let Some(Ok(table)) = tree.read(&path).as_deref().map(toml_table)
-        {
-            manifest_levers(&shown, &table, &mut found);
+        } else if name == "Cargo.toml" {
+            match tree.read(&path).as_deref().map(toml_table) {
+                Some(Ok(table)) => manifest_levers(&shown, &table, &mut found),
+                Some(Err(error)) => found.push(unparsed(&shown, &error)),
+                None => found.push(unparsed(&shown, "it is not UTF-8 text")),
+            }
         }
     }
     for recipe in RECIPES {
@@ -686,8 +718,136 @@ pub(crate) fn levers(tree: &impl Tree, root: &Path) -> Vec<String> {
     found
 }
 
+/// The environment variables whose value cargo passes to rustc or rustdoc
+/// as flags. A `CARGO_TARGET_<triple>_RUSTFLAGS` counts too, for any triple.
+const FLAG_VARS: &[&str] = &[
+    "RUSTFLAGS",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "CARGO_BUILD_RUSTFLAGS",
+    "RUSTDOCFLAGS",
+    "CARGO_ENCODED_RUSTDOCFLAGS",
+    "CARGO_BUILD_RUSTDOCFLAGS",
+];
+
+/// The environment variables that name the compiler or a wrapper that runs
+/// it. A `CARGO_BUILD_RUSTC` prefix counts too, for each of its forms.
+const COMPILER_VARS: &[&str] = &["RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER"];
+
+/// Each lever the gate's own environment sets, as one refusal (`ARCH-033`).
+/// The compiles inherit the environment, so a flag variable or a wrapper
+/// there reaches rustc as a config does:
+///
+///   * a variable of `FLAG_VARS`, or a `CARGO_TARGET_*_RUSTFLAGS`, that
+///     holds a `-Z` flag, `crate-attr` or `feature(`;
+///   * any `CARGO_UNSTABLE_*` variable, as an `[unstable]` key;
+///   * any variable of `COMPILER_VARS`, or a `CARGO_BUILD_RUSTC*`, set at
+///     all.
+///
+/// A value that is not UTF-8 fails closed. Neither the `justfile` nor the
+/// CI workflow sets one of them, so no allowlist admits a value. `vars` is
+/// the environment, passed in, so a test sets none of the process.
+pub(crate) fn env_levers(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Vec<String> {
+    let mut vars: Vec<(OsString, OsString)> = vars.into_iter().collect();
+    vars.sort();
+    let mut found = Vec::new();
+    for (name, value) in vars {
+        let name = name.to_string_lossy();
+        let flags = FLAG_VARS.contains(&name.as_ref())
+            || (name.starts_with("CARGO_TARGET_") && name.ends_with("_RUSTFLAGS"));
+        if name.starts_with("CARGO_UNSTABLE_") {
+            found.push(format!(
+                "environment: `{name}` is an unstable cargo setting, so the check fails closed \
+                 (ARCH-033): unset it"
+            ));
+        } else if COMPILER_VARS.contains(&name.as_ref()) || name.starts_with("CARGO_BUILD_RUSTC") {
+            found.push(format!(
+                "environment: `{name}` names the compiler or a wrapper that runs it, which can \
+                 pass rustc a flag the check does not read, so the check fails closed \
+                 (ARCH-033): unset it"
+            ));
+        } else if flags {
+            match value.to_str() {
+                Some(text) if lever(text) => {
+                    found.push(lever_refusal("environment", &format!("`{name}`")));
+                }
+                Some(_) => {}
+                None => found.push(format!(
+                    "environment: `{name}` is not UTF-8, so the check cannot read its flags, \
+                     and fails closed (ARCH-033): unset it"
+                )),
+            }
+        }
+    }
+    found
+}
+
+/// The levers of each cargo config cargo reads outside the root. Those are
+/// the `.cargo/config.toml` and `.cargo/config` of each directory above it,
+/// and the `config.toml` and `config` of `cargo_home`. A file that does not
+/// exist counts for nothing. The check reads them as it reads one under the
+/// root, and no `UNSTABLE` entry admits a key of one.
+pub(crate) fn outer_levers(
+    tree: &impl Tree,
+    root: &Path,
+    cargo_home: Option<&Path>,
+) -> Vec<String> {
+    let above = root
+        .ancestors()
+        .skip(1)
+        .flat_map(|dir| ["config.toml", "config"].map(|name| dir.join(".cargo").join(name)));
+    let home = cargo_home
+        .into_iter()
+        .flat_map(|dir| ["config.toml", "config"].map(|name| dir.join(name)));
+    let configs: BTreeSet<PathBuf> = above.chain(home).collect();
+    let mut found = Vec::new();
+    for path in configs {
+        let shown = path.display().to_string();
+        match tree.read(&path).as_deref().map(toml_table) {
+            Some(Ok(table)) => config_levers(&shown, &table, &mut found),
+            Some(Err(error)) => found.push(unparsed(&shown, &error)),
+            None => {}
+        }
+    }
+    found
+}
+
 /// The levers of one cargo config, parsed.
 fn config_levers(shown: &str, table: &toml::Table, found: &mut Vec<String>) {
+    if table.contains_key("include") {
+        found.push(format!(
+            "{shown}: `include` loads another config file, which the check does not read, so \
+             the check fails closed (ARCH-033): remove it"
+        ));
+    }
+    if let Some(env) = table.get("env") {
+        let entries: Vec<(String, Option<&toml::Value>)> = match env.as_table() {
+            Some(entries) => entries
+                .iter()
+                .map(|(key, value)| (key.clone(), Some(value)))
+                .collect(),
+            None => vec![(String::new(), None)],
+        };
+        for (key, value) in entries {
+            let admitted = CONFIG_ENV.iter().any(|entry| {
+                entry.config == shown
+                    && entry.key == key
+                    && value.and_then(toml::Value::as_str) == Some(entry.value)
+            });
+            if !admitted {
+                let dotted = if key.is_empty() {
+                    "env".to_owned()
+                } else {
+                    format!("env.{key}")
+                };
+                found.push(format!(
+                    "{shown}: `{dotted}` sets the environment of rustc, which can carry a flag \
+                     the check does not read, and CONFIG_ENV does not name it with this value, \
+                     so the check fails closed (ARCH-033): remove it, or name it in CONFIG_ENV \
+                     with the reason"
+                ));
+            }
+        }
+    }
     if let Some(unstable) = table.get("unstable") {
         let keys: Vec<(String, Option<&toml::Value>)> = match unstable.as_table() {
             Some(keys) => keys
@@ -721,7 +881,8 @@ fn config_levers(shown: &str, table: &toml::Table, found: &mut Vec<String>) {
 }
 
 /// Each `rustflags` or `rustdocflags` value of `table`, at any depth, that
-/// holds a lever. `prefix` is the dotted key of `table`.
+/// holds a lever, and each key of `COMPILER_KEYS`. `prefix` is the dotted
+/// key of `table`.
 fn flag_values(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec<String>) {
     for (key, value) in table {
         let dotted = if prefix.is_empty() {
@@ -729,7 +890,13 @@ fn flag_values(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec<S
         } else {
             format!("{prefix}.{key}")
         };
-        if FLAG_KEYS.contains(&key.as_str()) {
+        if COMPILER_KEYS.contains(&key.as_str()) {
+            found.push(format!(
+                "{shown}: `{dotted}` names the compiler or a wrapper that runs it, which can \
+                 pass rustc a flag the check does not read, so the check fails closed \
+                 (ARCH-033): remove it"
+            ));
+        } else if FLAG_KEYS.contains(&key.as_str()) {
             let words: Vec<String> = match value {
                 toml::Value::Array(items) => items.iter().map(flag_text).collect(),
                 other => vec![flag_text(other)],
@@ -759,7 +926,35 @@ fn manifest_levers(shown: &str, table: &toml::Table, found: &mut Vec<String>) {
              closed (ARCH-033): remove it"
         ));
     }
+    // A patch or a replace of `sqlx` puts another crate under its name.
+    let patched = table
+        .get("patch")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|sources| sources.iter())
+        .filter(|(_, source)| source.get(SQLX).is_some())
+        .map(|(source, _)| format!("patch.{source}.{SQLX}"));
+    let replaced = table
+        .get("replace")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|specs| specs.keys())
+        .filter(|spec| spec.contains(SQLX))
+        .map(|spec| format!("replace.{spec}"));
+    for dotted in patched.chain(replaced) {
+        found.push(substituted(shown, &dotted));
+    }
     manifest_keys(shown, "", table, found);
+}
+
+/// The refusal of a manifest key that puts another crate under the name
+/// `sqlx`.
+fn substituted(shown: &str, dotted: &str) -> String {
+    format!(
+        "{shown}: `{dotted}` puts another crate under the name sqlx. The scan reads \
+         `sqlx::migrate!` as a data read by its name, so the check fails closed (ARCH-033): \
+         keep the name `sqlx` for the sqlx crate of the registry alone"
+    )
 }
 
 /// Each flag key of a manifest, at any depth, and each `sqlx` dependency
@@ -781,17 +976,21 @@ fn manifest_keys(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec
         let Some(inner) = value.as_table() else {
             continue;
         };
-        let renamed = key.ends_with("dependencies")
-            && inner
-                .get(SQLX)
-                .and_then(|dependency| dependency.get("package"))
-                .is_some_and(|package| package.as_str() != Some(SQLX));
+        let sqlx = inner.get(SQLX).filter(|_| key.ends_with("dependencies"));
+        let renamed = sqlx
+            .and_then(|dependency| dependency.get("package"))
+            .is_some_and(|package| package.as_str() != Some(SQLX));
         if renamed {
             found.push(format!(
                 "{shown}: `{dotted}.sqlx` names another package. The scan reads `sqlx::migrate!` \
                  as a data read by its name, so the check fails closed (ARCH-033): keep the \
                  name `sqlx` for the sqlx crate alone"
             ));
+        }
+        if sqlx.is_some_and(|dependency| {
+            dependency.get("path").is_some() || dependency.get("git").is_some()
+        }) {
+            found.push(substituted(shown, &format!("{dotted}.{SQLX}")));
         }
         manifest_keys(shown, &dotted, inner, found);
     }

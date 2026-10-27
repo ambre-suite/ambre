@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use super::{
     Build, COMPILES, Compile, Compiled, Target, Unit, artifact, collect, cross_check,
-    declares_workspace, dependencies, levers, stray_workspaces,
+    declares_workspace, dependencies, env_levers, levers, outer_levers, stray_workspaces,
 };
 use crate::scan::{Disk, NESTED_WORKSPACES, Scan, Tree, lexical, scan};
 
@@ -818,6 +819,7 @@ fn a_manifest_that_declares_a_workspace_outside_the_nested_ones_is_refused() {
         ("spaced/Cargo.toml", "[ workspace ]\n"),
         ("inline/Cargo.toml", "workspace = { members = [] }\n"),
         ("quoted/Cargo.toml", "\"workspace\" = {}\n"),
+        // `levers` refuses a manifest that does not parse.
         ("broken/Cargo.toml", "[workspace\n"),
         (
             "member/Cargo.toml",
@@ -838,9 +840,6 @@ fn a_manifest_that_declares_a_workspace_outside_the_nested_ones_is_refused() {
     assert_eq!(
         stray_workspaces(&tree, root),
         [
-            "broken/Cargo.toml: the file does not parse as TOML, so the check cannot show what it \
-             sets, and fails closed: TOML parse error at line 1, column 11"
-                .to_owned(),
             stray("crates/demo/hide/Cargo.toml"),
             stray("extra/Cargo.toml"),
             stray("inline/Cargo.toml"),
@@ -961,6 +960,11 @@ fn a_lever_in_a_manifest_is_refused() {
             "Cargo.toml: `profile.dev.rustflags` passes flags to rustc from a manifest, so the \
              check fails closed (ARCH-033): remove it"
                 .to_owned(),
+            // The SEC-1i review: an unparsable root or nested manifest
+            // reached no check, since `stray_workspaces` skips both.
+            "crates/broken/Cargo.toml: the file does not parse as TOML, so the check cannot \
+             show what it sets, and fails closed: TOML parse error at line 1, column 9"
+                .to_owned(),
             "crates/demo/Cargo.toml: `profile.release.package.x.rustdocflags` passes flags to \
              rustc from a manifest, so the check fails closed (ARCH-033): remove it"
                 .to_owned(),
@@ -999,6 +1003,261 @@ fn a_manifest_that_renames_sqlx_to_another_package_is_refused() {
                 "crates/demo/Cargo.toml",
                 "target.cfg(unix).dev-dependencies"
             ),
+        ]
+    );
+}
+
+/// The refusal of a key of a cargo config that names the compiler or a
+/// wrapper.
+fn compiler(shown: &str, key: &str) -> String {
+    format!(
+        "{shown}: `{key}` names the compiler or a wrapper that runs it, which can pass rustc a \
+         flag the check does not read, so the check fails closed (ARCH-033): remove it"
+    )
+}
+
+#[test]
+fn a_rustc_key_in_a_cargo_config_is_refused() {
+    // The SEC-1i review: `build.rustc` runs a script in place of rustc.
+    let tree = recipes(&[(
+        ".cargo/config.toml",
+        "[build]\nrustc = \"wrap.sh\"\n[target.x]\nrustc = \"y\"\n",
+    )]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            compiler(".cargo/config.toml", "build.rustc"),
+            compiler(".cargo/config.toml", "target.x.rustc"),
+        ]
+    );
+}
+
+#[test]
+fn a_rustc_wrapper_key_in_a_cargo_config_is_refused() {
+    let tree = recipes(&[(
+        ".cargo/config",
+        "build.rustc-wrapper = \"sccache\"\n[a.b]\nrustc-wrapper = \"\"\n",
+    )]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            compiler(".cargo/config", "a.b.rustc-wrapper"),
+            compiler(".cargo/config", "build.rustc-wrapper"),
+        ]
+    );
+}
+
+#[test]
+fn a_rustc_workspace_wrapper_key_in_a_cargo_config_is_refused() {
+    // The SEC-1i review: the wrapper added `-Zcrate-attr` for one crate,
+    // and the gate passed with exit 0.
+    let tree = recipes(&[(
+        ".cargo/config.toml",
+        "[build]\nrustc-workspace-wrapper = \"./wrap.sh\"\n",
+    )]);
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [compiler(
+            ".cargo/config.toml",
+            "build.rustc-workspace-wrapper"
+        )]
+    );
+}
+
+#[test]
+fn an_include_key_in_a_cargo_config_is_refused() {
+    // The SEC-1i review: the included file set the lever, unread.
+    let tree = recipes(&[
+        (
+            ".cargo/config.toml",
+            "include = [{ path = \"lev.toml\" }]\n",
+        ),
+        ("crates/demo/.cargo/config", "include = \"x.toml\"\n"),
+        (".cargo/lev.toml", "[build]\nrustflags = [\"-Zx\"]\n"),
+    ]);
+    let include = |shown: &str| {
+        format!(
+            "{shown}: `include` loads another config file, which the check does not read, so \
+             the check fails closed (ARCH-033): remove it"
+        )
+    };
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            include(".cargo/config.toml"),
+            include("crates/demo/.cargo/config")
+        ]
+    );
+}
+
+#[test]
+fn an_env_table_in_a_cargo_config_is_refused() {
+    // The SEC-1i review: `[env] RUSTFLAGS` reached rustc past the check.
+    let tree = recipes(&[
+        (
+            ".cargo/config.toml",
+            "[env]\nRUSTFLAGS = \"-Zcrate-attr=feature(yeet_expr)\"\n\
+             PLAIN = { value = \"x\", force = true }\n",
+        ),
+        ("crates/demo/.cargo/config.toml", "env = 1\n"),
+    ]);
+    let env = |shown: &str, key: &str| {
+        format!(
+            "{shown}: `{key}` sets the environment of rustc, which can carry a flag the check \
+             does not read, and CONFIG_ENV does not name it with this value, so the check fails \
+             closed (ARCH-033): remove it, or name it in CONFIG_ENV with the reason"
+        )
+    };
+    assert_eq!(super::CONFIG_ENV.len(), 0, "a new entry needs its own test");
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            env(".cargo/config.toml", "env.PLAIN"),
+            env(".cargo/config.toml", "env.RUSTFLAGS"),
+            env("crates/demo/.cargo/config.toml", "env"),
+        ]
+    );
+}
+
+#[test]
+fn a_lever_in_a_config_above_the_root_or_in_the_cargo_home_is_refused() {
+    // The SEC-1i review: cargo reads the config of each directory above the
+    // root, and the check read none.
+    let tree = Files::new(&[
+        ("/.cargo/config.toml", "[build]\nrustflags = [\"-Zx\"]\n"),
+        (
+            "/.cargo/config",
+            "[unstable]\nbuild-std = [\"std\", \"panic_abort\"]\n",
+        ),
+        (
+            "/home/.cargo/config.toml",
+            "[build]\nrustc-wrapper = \"w\"\n",
+        ),
+        ("/home/.cargo/config", "[build\n"),
+        (
+            "/home/.cargo/other.toml",
+            "[build]\nrustflags = [\"-Zx\"]\n",
+        ),
+        (".cargo/config.toml", "[build]\nrustflags = [\"-Zx\"]\n"),
+    ]);
+    assert_eq!(
+        outer_levers(&tree, Path::new(ROOT), Some(Path::new("/home/.cargo"))),
+        [
+            unstable("/.cargo/config", "unstable.build-std"),
+            lever("/.cargo/config.toml", "`build.rustflags`"),
+            "/home/.cargo/config: the file does not parse as TOML, so the check cannot show \
+             what it sets, and fails closed: TOML parse error at line 1, column 7"
+                .to_owned(),
+            compiler("/home/.cargo/config.toml", "build.rustc-wrapper"),
+        ]
+    );
+    assert_eq!(
+        outer_levers(&empty(), Path::new(ROOT), None),
+        Vec::<String>::new()
+    );
+}
+
+/// An environment of `pairs`, as the process hands it over.
+fn environment(pairs: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
+    pairs
+        .iter()
+        .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+        .collect()
+}
+
+#[test]
+fn a_lever_in_a_flag_variable_of_the_environment_is_refused() {
+    // The SEC-1i review: `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS` in the
+    // shell that ran the gate enabled `yeet_expr`, and the gate passed.
+    let found = env_levers(environment(&[
+        ("RUSTFLAGS", "-Zcrate-attr=feature(yeet_expr)"),
+        ("CARGO_ENCODED_RUSTFLAGS", "-Z\x1fthreads=2"),
+        ("CARGO_BUILD_RUSTFLAGS", "--cfg feature(\"x\")"),
+        ("CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS", "-Zx"),
+        ("RUSTDOCFLAGS", "--crate-attr=x"),
+        ("CARGO_ENCODED_RUSTDOCFLAGS", "-Zunstable-options"),
+        ("CARGO_INCREMENTAL", "0"),
+        ("PATH", "/a-Z/bin"),
+    ]));
+    let refused = |name: &str| lever("environment", &format!("`{name}`"));
+    assert_eq!(
+        found,
+        [
+            refused("CARGO_BUILD_RUSTFLAGS"),
+            refused("CARGO_ENCODED_RUSTDOCFLAGS"),
+            refused("CARGO_ENCODED_RUSTFLAGS"),
+            refused("CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS"),
+            refused("RUSTDOCFLAGS"),
+            refused("RUSTFLAGS"),
+        ]
+    );
+    // The flags of `lint-wasm` are no lever.
+    let plain = environment(&[("RUSTFLAGS", "-Awarnings -C debuginfo=0")]);
+    assert_eq!(env_levers(plain), Vec::<String>::new());
+}
+
+#[test]
+fn a_compiler_or_an_unstable_variable_of_the_environment_is_refused() {
+    let found = env_levers(environment(&[
+        ("RUSTC", "rustc"),
+        ("RUSTC_WRAPPER", ""),
+        ("RUSTC_WORKSPACE_WRAPPER", "./wrap.sh"),
+        ("CARGO_BUILD_RUSTC", "x"),
+        ("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER", "x"),
+        ("CARGO_UNSTABLE_BUILD_STD", "std"),
+    ]));
+    let compiler = |name: &str| {
+        format!(
+            "environment: `{name}` names the compiler or a wrapper that runs it, which can pass \
+             rustc a flag the check does not read, so the check fails closed (ARCH-033): unset it"
+        )
+    };
+    assert_eq!(
+        found,
+        [
+            compiler("CARGO_BUILD_RUSTC"),
+            compiler("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER"),
+            "environment: `CARGO_UNSTABLE_BUILD_STD` is an unstable cargo setting, so the check \
+             fails closed (ARCH-033): unset it"
+                .to_owned(),
+            compiler("RUSTC"),
+            compiler("RUSTC_WORKSPACE_WRAPPER"),
+            compiler("RUSTC_WRAPPER"),
+        ]
+    );
+}
+
+#[test]
+fn a_patch_or_a_path_substitute_of_sqlx_is_refused() {
+    // The SEC-1i review: a substitute named `sqlx` kept the name, so its
+    // `migrate!` read as data.
+    let tree = recipes(&[
+        (
+            "Cargo.toml",
+            "[patch.crates-io]\nsqlx = { path = \"vend\" }\nother = { path = \"o\" }\n\
+             [replace]\n\"sqlx:0.8.0\" = { git = \"x\" }\n",
+        ),
+        (
+            "crates/demo/Cargo.toml",
+            "[dependencies]\nsqlx = { path = \"../../vend\" }\n\
+             [dev-dependencies]\nsqlx = { git = \"x\", version = \"0.8\" }\n\
+             [build-dependencies]\nsqlx = { version = \"0.8\" }\n",
+        ),
+    ]);
+    let substituted = |shown: &str, key: &str| {
+        format!(
+            "{shown}: `{key}` puts another crate under the name sqlx. The scan reads \
+             `sqlx::migrate!` as a data read by its name, so the check fails closed (ARCH-033): \
+             keep the name `sqlx` for the sqlx crate of the registry alone"
+        )
+    };
+    assert_eq!(
+        levers(&tree, Path::new(ROOT)),
+        [
+            substituted("Cargo.toml", "patch.crates-io.sqlx"),
+            substituted("Cargo.toml", "replace.sqlx:0.8.0"),
+            substituted("crates/demo/Cargo.toml", "dependencies.sqlx"),
+            substituted("crates/demo/Cargo.toml", "dev-dependencies.sqlx"),
         ]
     );
 }
