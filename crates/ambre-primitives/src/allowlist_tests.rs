@@ -131,6 +131,10 @@ impl Tree for OneFile {
             .filter(|path| path.starts_with(dir))
             .collect()
     }
+
+    fn canonical(&self, path: &Path) -> PathBuf {
+        path.to_path_buf()
+    }
 }
 
 // `From<u32>` is a foreign trait, but the impl chose the `u32`: the site

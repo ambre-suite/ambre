@@ -1,14 +1,15 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use super::{Scan, SiteKey, Tree, is_build_output, scan};
+use super::{Scan, SiteKey, Tree, is_build_output, lexical, scan};
 
 /// A source tree held in memory, so a test states every file it reads.
 struct Memory(BTreeMap<PathBuf, String>);
 
 impl Tree for Memory {
+    // As on disk, `..` steps out of a directory.
     fn read(&self, path: &Path) -> Option<String> {
-        self.0.get(path).cloned()
+        self.0.get(&lexical(path)).cloned()
     }
 
     // As on disk, a file under a build output directory is not listed.
@@ -25,17 +26,60 @@ impl Tree for Memory {
             .cloned()
             .collect()
     }
+
+    // No link: the path with `..` undone is the file.
+    fn canonical(&self, path: &Path) -> PathBuf {
+        lexical(path)
+    }
+}
+
+/// A tree in memory whose links send a file to another, as a symbolic link
+/// on disk does.
+struct Linked {
+    tree: Memory,
+    links: BTreeMap<PathBuf, PathBuf>,
+}
+
+impl Tree for Linked {
+    fn read(&self, path: &Path) -> Option<String> {
+        self.tree.read(&self.canonical(path))
+    }
+
+    fn files(&self, dir: &Path) -> Vec<PathBuf> {
+        let mut files = self.tree.files(dir);
+        files.extend(
+            self.links
+                .keys()
+                .filter(|link| link.starts_with(dir))
+                .cloned(),
+        );
+        files.sort();
+        files
+    }
+
+    fn canonical(&self, path: &Path) -> PathBuf {
+        let path = lexical(path);
+        self.links.get(&path).cloned().unwrap_or(path)
+    }
 }
 
 const CRATES: &str = "/w/crates";
 
 /// One crate named `demo`, its files given relative to the crate directory.
 fn demo(files: &[(&str, &str)]) -> Memory {
+    named("demo", files)
+}
+
+/// One crate named `krate`, its files given relative to the crate directory.
+fn named(krate: &str, files: &[(&str, &str)]) -> Memory {
     let mut tree = BTreeMap::new();
-    tree.insert(PathBuf::from(CRATES).join("demo/Cargo.toml"), String::new());
+    tree.insert(
+        PathBuf::from(CRATES).join(krate).join("Cargo.toml"),
+        String::new(),
+    );
     for (path, text) in files {
         tree.insert(
-            PathBuf::from(CRATES).join("demo").join(path),
+            PathBuf::from(CRATES).join(krate).join(path),
             (*text).to_owned(),
         );
     }
@@ -410,10 +454,181 @@ fn an_item_a_macro_writes_is_out_of_reach() {
 }
 
 #[test]
-fn a_file_no_module_reaches_fails_the_scan() {
-    let (_, errors) = run(&[("src/lib.rs", ""), ("src/orphan.rs", "pub fn f(x: u32) {}")]);
-    assert_eq!(errors.len(), 1);
-    assert!(errors.iter().all(|error| error.contains("orphan.rs")));
+fn the_walk_records_each_file_it_reads_per_crate_root() {
+    // The dep-info check holds this record to rustc. A file under
+    // `#![cfg(test)]` is read, as rustc reads it, and a test module is not.
+    let result = scan(
+        &demo(&[
+            (
+                "src/lib.rs",
+                "mod a;
+mod gated;
+#[cfg(test)]
+mod tests;",
+            ),
+            ("src/main.rs", "mod a;"),
+            ("src/a.rs", "pub fn f(x: u32) {}"),
+            (
+                "src/gated.rs",
+                "#![cfg(test)]
+mod deeper;",
+            ),
+            ("src/gated/deeper.rs", ""),
+            ("src/tests.rs", ""),
+            ("src/orphan.rs", "pub fn f(x: u32) {}"),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    let src = Path::new(CRATES).join("demo/src");
+    let files =
+        |names: &[&str]| -> BTreeSet<PathBuf> { names.iter().map(|name| src.join(name)).collect() };
+    assert_eq!(
+        result.walked,
+        BTreeMap::from([
+            (src.join("lib.rs"), files(&["lib.rs", "a.rs", "gated.rs"])),
+            (src.join("main.rs"), files(&["main.rs", "a.rs"])),
+        ])
+    );
+    // A file two roots declare holds its sites once.
+    let a = result
+        .sites
+        .iter()
+        .filter(|key| key.to_string().contains("src/a.rs"))
+        .count();
+    assert_eq!(a, 1);
+}
+
+#[test]
+fn a_raw_path_attribute_is_followed_and_a_raw_cfg_attr_fails_the_scan() {
+    // Probe of the SEC-1e review: rustc reads `#[r#path]` as `#[path]`, and
+    // `#[r#cfg_attr]` as `#[cfg_attr]`.
+    let result = scan(
+        &demo(&[
+            (
+                "src/lib.rs",
+                "#[r#path = \"elsewhere/real.rs\"] mod raw;\n\
+                 #[r#cfg_attr(all(), path = \"../../../leak.rs\")] mod hidden;",
+            ),
+            (
+                "src/elsewhere/real.rs",
+                "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",
+            ),
+            ("src/hidden.rs", ""),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+    assert!(
+        result.errors[0]
+            .contains("the module crate::hidden is placed by a `path` inside a `cfg_attr`"),
+        "{:?}",
+        result.errors
+    );
+    assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
+    assert!(
+        result.secrets[0].starts_with("crates/demo/src/elsewhere/real.rs:1: `expose`"),
+        "{}",
+        result.secrets[0]
+    );
+}
+
+#[test]
+fn a_file_a_path_attribute_loads_holds_its_modules_beside_it() {
+    // Probe of the SEC-1e review: rustc reads `a/child.rs`, as for a
+    // `mod.rs`. A walk that reads `a/file/child.rs` scans the decoy.
+    let result = scan(
+        &demo(&[
+            ("src/lib.rs", "#[path = \"a/file.rs\"] mod file;"),
+            ("src/a/file.rs", "mod child;"),
+            (
+                "src/a/child.rs",
+                "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",
+            ),
+            ("src/a/file/child.rs", "pub fn decoy() {}"),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
+    assert!(
+        result.secrets[0].starts_with("crates/demo/src/a/child.rs:1: `expose`"),
+        "{}",
+        result.secrets[0]
+    );
+}
+
+#[test]
+fn a_dot_dot_out_of_the_relay_secrets_is_no_exemption() {
+    // Probe of the SEC-1e review: the raw path `src/secrets/../../leak.rs`
+    // starts with `src/secrets/`, and the file sits at the crate root.
+    let result = scan(
+        &named(
+            "ambre-server",
+            &[
+                (
+                    "src/lib.rs",
+                    "mod secrets;\n#[path = \"secrets/../../leak.rs\"] mod leak;",
+                ),
+                (
+                    "src/secrets/mod.rs",
+                    "pub fn held(s: &Secret<String>) -> String { s.expose().clone() }",
+                ),
+                (
+                    "leak.rs",
+                    "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",
+                ),
+            ],
+        ),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
+    assert!(
+        result.secrets[0].starts_with("crates/ambre-server/leak.rs:1: `expose`"),
+        "{}",
+        result.secrets[0]
+    );
+}
+
+#[test]
+fn a_link_out_of_the_relay_secrets_is_no_exemption() {
+    // `src/secrets/token.rs` names a file of the relay's secrets module, and
+    // the disk holds `src/leak.rs`: the exemptions key on both.
+    let dir = Path::new(CRATES).join("ambre-server");
+    let result = scan(
+        &Linked {
+            tree: named(
+                "ambre-server",
+                &[
+                    ("src/lib.rs", "mod secrets;"),
+                    ("src/secrets/mod.rs", "mod token;"),
+                    (
+                        "src/leak.rs",
+                        "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }\n\
+                         pub fn b() { refresh_key(); }",
+                    ),
+                ],
+            ),
+            links: BTreeMap::from([(dir.join("src/secrets/token.rs"), dir.join("src/leak.rs"))]),
+        },
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    let named: Vec<&str> = result
+        .secrets
+        .iter()
+        .filter_map(|secret| secret.split_once(" is named here").map(|(head, _)| head))
+        .collect();
+    assert_eq!(
+        named,
+        [
+            "crates/ambre-server/src/secrets/token.rs:1: `expose`",
+            "crates/ambre-server/src/secrets/token.rs:2: `refresh_key`"
+        ],
+        "{:?}",
+        result.secrets
+    );
 }
 
 #[test]

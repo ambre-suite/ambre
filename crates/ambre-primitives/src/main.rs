@@ -6,19 +6,22 @@
 //! copies the primitive it sees in the next signature, so a review rule alone
 //! loses ground on every change. The gate makes the count only go down.
 //!
-//! Two modes, one per recipe:
+//! Three modes, one per recipe:
 //!
-//!   * `check`, the default, fails on six defects, then prints the lines
+//!   * `check`, the default, fails on seven defects, then prints the lines
 //!     per category. Two defects compare the file with the sites: a site no
-//!     line names, and a line that names no site. Three read the site. A
-//!     line may claim a shape its site lacks, or the privacy checks may
-//!     refuse it. A `Deref` of a workspace type to a primitive fails too.
-//!     The sixth reads names: a secret reader outside `ambre-crypto`, or
+//!     line names, and a line that names no site. Three read the site: a
+//!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
+//!     workspace type to a primitive. The sixth reads names: a secret reader outside `ambre-crypto`, or
 //!     the `zeroize` crate outside the Secret module (`ARCH-045`,
-//!     `ARCH-046`);
+//!     `ARCH-046`). The seventh holds the walk to rustc: a file a compile
+//!     reads and the walk does not, or a file no compile reads (`ARCH-033`);
+//!   * `files` runs the seventh check alone, so a red allowlist hides no
+//!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and nothing else.
 
 mod allowlist;
+mod depinfo;
 mod scan;
 mod secrets;
 
@@ -35,27 +38,42 @@ const ALLOWLIST: &str = "specs/1-Foundations/ambre-primitives.tsv";
 /// What one run does.
 enum Mode {
     Check,
+    Files,
     Prune,
 }
 
 fn main() -> ExitCode {
     let mode = match std::env::args().nth(1).as_deref() {
         None | Some("check") => Mode::Check,
+        Some("files") => Mode::Files,
         Some("--prune") => Mode::Prune,
         Some(other) => {
             eprintln!(
-                "primitives: unknown argument {other:?} -- usage: ambre-primitives [check | --prune]"
+                "primitives: unknown argument {other:?} -- usage: ambre-primitives [check | files \
+                 | --prune]"
             );
             return ExitCode::FAILURE;
         }
     };
     let root = workspace_root();
-    let scan = scan::scan(&scan::Disk, &root.join("crates"));
+    let crates = root.join("crates");
+    let scan = scan::scan(&scan::Disk, &crates);
     if !scan.errors.is_empty() {
         for error in &scan.errors {
             eprintln!("primitives: {error}");
         }
         return ExitCode::FAILURE;
+    }
+    let unread = match mode {
+        Mode::Prune => Vec::new(),
+        Mode::Check | Mode::Files => files(&scan, &root, &crates),
+    };
+    if let Mode::Files = mode {
+        return if unread.is_empty() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
     }
     let path = root.join(ALLOWLIST);
     let Ok(text) = std::fs::read_to_string(&path) else {
@@ -72,9 +90,30 @@ fn main() -> ExitCode {
         }
     };
     match mode {
-        Mode::Check => check(&list, &scan),
+        Mode::Check | Mode::Files => check(&list, &scan, &unread),
         Mode::Prune => prune(&list, &scan.sites, &path),
     }
+}
+
+/// Every refusal of the dep-info check, printed with its count. Each compile
+/// runs in the workspace, so the check reads the files the recipes build.
+fn files(scan: &Scan, root: &Path, crates: &Path) -> Vec<String> {
+    let refusals = match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
+        Ok(compiled) => {
+            let sources = depinfo::sources(&scan::Disk, crates);
+            let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+            depinfo::cross_check(scan, &compiled, &sources, &root)
+        }
+        Err(errors) => errors,
+    };
+    for refusal in &refusals {
+        eprintln!("primitives: {refusal}");
+    }
+    println!(
+        "primitives: dep-info: {} refusals of the file set rustc compiles",
+        refusals.len()
+    );
+    refusals
 }
 
 /// The workspace root, two levels above this crate's manifest.
@@ -87,7 +126,7 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
+fn check(list: &Allowlist, scan: &Scan, unread: &[String]) -> ExitCode {
     let sites = &scan.sites;
     let verdict = list.compare(sites);
     for key in &verdict.missing {
@@ -173,7 +212,11 @@ fn check(list: &Allowlist, scan: &Scan) -> ExitCode {
         })
         .collect();
     println!("primitives: {} sites; {}", sites.len(), counts.join(", "));
-    if verdict.is_clean() && refuted.is_empty() && scan.derefs.is_empty() && scan.secrets.is_empty()
+    if verdict.is_clean()
+        && refuted.is_empty()
+        && scan.derefs.is_empty()
+        && scan.secrets.is_empty()
+        && unread.is_empty()
     {
         ExitCode::SUCCESS
     } else {

@@ -2,9 +2,9 @@
 //!
 //! The scan walks the module tree of each crate from its roots, the way rustc
 //! does, rather than every file on disk. A module declared under a test gate is
-//! then never opened, wherever its file sits. A file that no `mod` reaches is
-//! reported instead of read: the gate cannot hold code it cannot place
-//! (`ARCH-033`).
+//! then never opened, wherever its file sits. The walk records each file it
+//! reads per crate root. The dep-info check holds that record to the files
+//! rustc reads, since the gate cannot hold code it cannot place (`ARCH-033`).
 //!
 //! syn parses and never expands. An item that a macro writes, and the output
 //! of a build script, are therefore outside the scan by construction.
@@ -167,6 +167,10 @@ pub trait Tree {
     /// Every file under `dir`, at any depth, sorted. A `target/` directory is
     /// build output and is left out.
     fn files(&self, dir: &Path) -> Vec<PathBuf>;
+
+    /// The path with every symbolic link followed and every `..` undone: the
+    /// file rustc opens. A path that does not resolve keeps its lexical form.
+    fn canonical(&self, path: &Path) -> PathBuf;
 }
 
 /// The tree on disk.
@@ -198,6 +202,10 @@ impl Tree for Disk {
         found.sort();
         found
     }
+
+    fn canonical(&self, path: &Path) -> PathBuf {
+        std::fs::canonicalize(path).unwrap_or_else(|_| lexical(path))
+    }
 }
 
 /// Whether a directory of this name is build output, which the walk leaves
@@ -220,6 +228,10 @@ pub struct Scan {
     /// Each name of a secret reader or of the `zeroize` crate outside the
     /// code the secret checks admit (`ARCH-045`, `ARCH-046`).
     pub secrets: Vec<String>,
+    /// Each crate root the walk starts from, and every file it reads from
+    /// that root outside test code, both canonical. The dep-info check holds
+    /// it to the files rustc reads (`ARCH-033`).
+    pub walked: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// Every call of the workspace, tests included, that passes a `bool`
     /// literal (`ARCH-040`).
     literals: Vec<BoolCall>,
@@ -2304,6 +2316,10 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     }
     result.derefs = refused_derefs(&result.declared, &found.derefs);
     result.derefs.append(&mut found.unread);
+    // A file two roots declare is walked once per root, and a refusal of
+    // one of its modules would print once per root.
+    let mut seen = BTreeSet::new();
+    result.errors.retain(|error| seen.insert(error.clone()));
     result
 }
 
@@ -2500,6 +2516,8 @@ struct Pending {
     candidates: Vec<PathBuf>,
     module: Vec<String>,
     placement: Placement,
+    /// The canonical crate root whose module tree holds the file.
+    root: PathBuf,
 }
 
 /// How a `mod` declaration places the file of its module.
@@ -2579,7 +2597,7 @@ fn misplaced(dir: &Path, file: &Path) -> Option<Unplaced> {
 
 /// The path with each `.` dropped and each `..` undone on the text, without
 /// a read of the disk.
-fn lexical(path: &Path) -> PathBuf {
+pub(crate) fn lexical(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in path.components() {
         match component {
@@ -2633,10 +2651,14 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             candidates: vec![path.clone()],
             module: vec!["crate".to_owned()],
             placement: Placement::Named,
+            root: tree.canonical(path),
         })
         .collect();
-    let mut reached = BTreeSet::new();
-    let mut skipped = Skipped::default();
+    // rustc compiles a module tree per root, so a file two roots declare is
+    // walked once per root. Its sites are read once.
+    let mut scanned = BTreeSet::new();
+    let mut walked = BTreeSet::new();
+    let canonical_dir = tree.canonical(dir);
     while let Some(next) = pending.pop() {
         // rustc compiles the file a `path` names. A file the gate cannot
         // show to be that one, or cannot list, fails the scan rather than
@@ -2680,37 +2702,59 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             ));
             continue;
         };
-        if !reached.insert(path.clone()) {
+        if !walked.insert((next.root.clone(), path.clone())) {
             continue;
         }
+        // rustc reads a file under `#![cfg(test)]` too, before the `cfg`
+        // drops its items, so the walk records it as read.
+        let canonical = tree.canonical(&path);
+        result
+            .walked
+            .entry(next.root.clone())
+            .or_default()
+            .insert(canonical.clone());
+        let first = scanned.insert(path.clone());
         let file = match syn::parse_file(&text) {
             Ok(file) => file,
             Err(e) => {
-                result
-                    .errors
-                    .push(format!("{}: syn cannot parse it: {e}", path.display()));
+                if first {
+                    result
+                        .errors
+                        .push(format!("{}: syn cannot parse it: {e}", path.display()));
+                }
                 continue;
             }
         };
         // A file under `#![cfg(test)]` is test code, and so is every module
         // it declares.
         if test_only(&file.attrs) {
-            let own = if path.file_name().is_some_and(|f| f == "mod.rs") {
-                path.parent().map(Path::to_path_buf)
-            } else {
-                Some(path.with_extension(""))
-            };
-            skipped.dirs.extend(own);
             continue;
         }
-        let relative = path.strip_prefix(dir).unwrap_or(&path);
-        let mut visit = FileVisit::new(&name, relative, &path, next.module);
+        // The file as the text names it, `..` undone, and the file the disk
+        // holds, links followed. An exemption of the secret checks holds
+        // only when both forms sit in its place (`ARCH-045`, `ARCH-048`).
+        let lexical_path = lexical(&path);
+        let relative = lexical_path
+            .strip_prefix(lexical(dir))
+            .unwrap_or(&lexical_path);
+        let held = canonical
+            .strip_prefix(&canonical_dir)
+            .ok()
+            .map(|inside| inside.to_string_lossy().replace('\\', "/"));
+        let mut visit = FileVisit::new(&name, relative, &path, next.module, &next.placement);
         visit.uses(&file);
         visit.visit_file(&file);
+        pending.extend(visit.children.drain(..).map(|child| Pending {
+            root: next.root.clone(),
+            ..child
+        }));
+        if !first {
+            continue;
+        }
         let file_name = relative.to_string_lossy().replace('\\', "/");
         result.secrets.append(&mut crate::secrets::refusals(
             &name,
-            &file_name,
+            &[Some(file_name.as_str()), held.as_deref()],
             &format!("crates/{name}/{file_name}"),
             &file,
         ));
@@ -2792,9 +2836,6 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
                 .or_default()
                 .push(decl);
         }
-        pending.extend(visit.children);
-        skipped.files.append(&mut visit.skipped.files);
-        skipped.dirs.append(&mut visit.skipped.dirs);
     }
     // Tests are callers too: every file of the crate is read for literals,
     // whether a `mod` reaches it or not.
@@ -2806,7 +2847,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             continue;
         };
         let Ok(file) = syn::parse_file(&text) else {
-            if !reached.contains(path) {
+            if !scanned.contains(path) {
                 result
                     .errors
                     .push(format!("{}: syn cannot parse it", path.display()));
@@ -2829,35 +2870,6 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         visit.visit_file(&file);
         result.literals.append(&mut visit.calls);
     }
-    for path in all.iter().filter(|path| path.starts_with(&src)) {
-        let is_rs = path.extension().is_some_and(|ext| ext == "rs");
-        if is_rs && !reached.contains(path) && !skipped.covers(path) && !is_test_file(path) {
-            result.errors.push(format!(
-                "{}: no `mod` of the crate reaches it, so the gate cannot place it",
-                path.display()
-            ));
-        }
-    }
-}
-
-/// The files and the directories a test gate keeps out of the scan.
-#[derive(Default)]
-struct Skipped {
-    files: Vec<PathBuf>,
-    dirs: Vec<PathBuf>,
-}
-
-impl Skipped {
-    fn covers(&self, path: &Path) -> bool {
-        self.files.iter().any(|file| file == path)
-            || self.dirs.iter().any(|dir| path.starts_with(dir))
-    }
-}
-
-/// A file named after the tests it holds, kept out whatever declares it.
-fn is_test_file(path: &Path) -> bool {
-    path.file_stem()
-        .is_some_and(|stem| stem.to_string_lossy().ends_with("_tests"))
 }
 
 /// A key before the duplicates are numbered: the fields before the item
@@ -3141,12 +3153,20 @@ pub(crate) fn test_only(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
+/// Whether the attribute is the one-segment `name`, raw or not: rustc reads
+/// `#[r#path]` as `#[path]`.
+fn named(attr: &syn::Attribute, name: &str) -> bool {
+    attr.path()
+        .get_ident()
+        .is_some_and(|ident| ident.unraw() == name)
+}
+
 /// Where the `path` attributes of a module declaration put its file. A
 /// `path` inside a `cfg_attr`, at any depth, and a `path` that is not one
 /// string literal, are unplaced: the gate fails closed on both.
 fn mod_path(attrs: &[syn::Attribute]) -> ModPath {
     for attr in attrs {
-        if attr.path().is_ident("cfg_attr") {
+        if named(attr, "cfg_attr") {
             let mut streams = match &attr.meta {
                 syn::Meta::List(list) => vec![list.tokens.clone()],
                 _ => Vec::new(),
@@ -3164,7 +3184,7 @@ fn mod_path(attrs: &[syn::Attribute]) -> ModPath {
             }
         }
     }
-    let Some(attr) = attrs.iter().find(|attr| attr.path().is_ident("path")) else {
+    let Some(attr) = attrs.iter().find(|attr| named(attr, "path")) else {
         return ModPath::Named;
     };
     match &attr.meta {
@@ -3718,8 +3738,9 @@ struct FileVisit<'a> {
     /// inline module, where it resolves against `dir`.
     file_dir: Option<PathBuf>,
     keys: Vec<RawKey>,
+    /// The modules the file declares, each still to read. The walk sets
+    /// their crate root.
     children: Vec<Pending>,
-    skipped: Skipped,
     /// The impl item whose signature the visit reads, `None` elsewhere.
     host: Option<Host>,
     /// The struct whose fields the visit reads, `None` elsewhere.
@@ -3815,17 +3836,29 @@ fn use_entries(
 }
 
 impl<'a> FileVisit<'a> {
-    fn new(krate: &'a str, relative: &Path, path: &Path, module: Vec<String>) -> Self {
+    /// The visit of the file at `path`, which `placement` placed. rustc gives
+    /// a file a `#[path]` loads the directory of a `mod.rs`: its own modules
+    /// sit beside it.
+    fn new(
+        krate: &'a str,
+        relative: &Path,
+        path: &Path,
+        module: Vec<String>,
+        placement: &Placement,
+    ) -> Self {
         let parent = path.parent().map(Path::to_path_buf).unwrap_or_default();
-        // A crate root and a `mod.rs` hold their children beside them; any
-        // other module file holds them in the directory of its own name.
+        // A crate root, a `mod.rs` and a file a `#[path]` loads hold their
+        // children beside them. Any other module file holds them in the
+        // directory of its own name.
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned());
-        let mod_rs = matches!(
-            name.as_deref(),
-            Some("mod.rs" | "lib.rs" | "main.rs" | "build.rs")
-        ) || parent.ends_with("src/bin");
+        let mod_rs = matches!(placement, Placement::Path)
+            || matches!(
+                name.as_deref(),
+                Some("mod.rs" | "lib.rs" | "main.rs" | "build.rs")
+            )
+            || parent.ends_with("src/bin");
         let dir = if mod_rs {
             parent.clone()
         } else {
@@ -3840,7 +3873,6 @@ impl<'a> FileVisit<'a> {
             file_dir: Some(parent),
             keys: Vec::new(),
             children: Vec::new(),
-            skipped: Skipped::default(),
             host: None,
             owner: None,
             traits: BTreeSet::new(),
@@ -4129,22 +4161,6 @@ impl<'a> FileVisit<'a> {
             self.krate, self.file
         )
     }
-
-    /// Keeps a test module's file, and every file under its directory, out of
-    /// the scan and out of the unreached report.
-    fn skip_module(&mut self, m: &syn::ItemMod) {
-        let name = m.ident.to_string();
-        if m.content.is_none() {
-            if let ModPath::Given(path) = mod_path(&m.attrs) {
-                let base = self.file_dir.clone().unwrap_or_else(|| self.dir.clone());
-                let file = base.join(path);
-                self.skipped.dirs.push(file.with_extension(""));
-                self.skipped.files.push(file);
-            }
-            self.skipped.files.push(self.dir.join(format!("{name}.rs")));
-        }
-        self.skipped.dirs.push(self.dir.join(&name));
-    }
 }
 
 impl<'ast> Visit<'ast> for FileVisit<'_> {
@@ -4163,9 +4179,9 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     candidates: Vec::new(),
                     module,
                     placement: Placement::Unplaced(why),
+                    root: PathBuf::new(),
                 });
             }
-            self.skip_module(m);
             return;
         }
         self.modules.insert(module.join("::"));
@@ -4181,6 +4197,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                         candidates: Vec::new(),
                         module,
                         placement: Placement::Unplaced(why),
+                        root: PathBuf::new(),
                     });
                 }
                 let saved = (
@@ -4228,6 +4245,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     candidates,
                     module,
                     placement,
+                    root: PathBuf::new(),
                 });
             }
         }

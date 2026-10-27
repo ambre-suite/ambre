@@ -293,8 +293,21 @@ index-write:
 # `specs/1-Foundations/ambre-primitives.tsv` with a category and a reason
 # from a closed set (`ARCH-033`). No category means "to type later". A line
 # that names no site fails too (`ARCH-034`). It prints the lines per category.
+#
+# The gate finds the files with a syn walk, and rustc is the source of truth
+# for them. So it runs `cargo check` itself, the host line with every target
+# and every feature and the wasm lines of `lint-wasm`, and reads the dep-info
+# of each unit. A `.rs` file a shipped build reads and the walk does not
+# fails, and so does a `.rs` file under `crates/` that no compile reads. A
+# test holds its wasm lines to those of `lint-wasm`.
 primitives:
     cargo run -q -p ambre-primitives -- check
+
+# The dep-info half of the gate alone, as `fixtures-check` is the drift half of
+# the fixtures. The allowlist half is red while the workspace is typed, and a
+# red run hides nothing this half finds.
+primitives-files:
+    cargo run -q -p ambre-primitives -- files
 
 # Remove the lines that name no site, after a value was typed. No recipe adds
 # a line: a new one is a hand edit a reviewer reads (`ARCH-035`).

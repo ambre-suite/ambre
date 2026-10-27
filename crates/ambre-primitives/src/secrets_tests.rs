@@ -8,7 +8,7 @@ fn refused(krate: &str, relative: &str, source: &str) -> Vec<String> {
     };
     refusals(
         krate,
-        relative,
+        &[Some(relative)],
         &format!("crates/{krate}/{relative}"),
         &tree,
     )
@@ -227,7 +227,7 @@ fn a_refusal_names_its_rule() {
         };
     let found = refusals(
         "ambre-bus",
-        "src/lib.rs",
+        &[Some("src/lib.rs")],
         "crates/ambre-bus/src/lib.rs",
         &tree,
     );
@@ -425,4 +425,35 @@ fn a_relay_sink_is_named_in_its_call_file_and_its_declaring_file_alone() {
             [format!("crates/ambre-server/src/main.rs:1: `{name}`")]
         );
     }
+}
+
+#[test]
+fn an_exemption_holds_only_when_every_form_of_the_file_sits_in_it() {
+    // The file the source names sits in the relay's secrets module, and the
+    // file the disk holds does not, or sits outside the crate.
+    let tree = match syn::parse_file(
+        "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }\n\
+         pub fn b() { refresh_key(); }",
+    ) {
+        Ok(tree) => tree,
+        Err(e) => panic!("the test source does not parse: {e}"),
+    };
+    let names = |forms: &[Option<&str>]| -> Vec<String> {
+        refusals("ambre-server", forms, "f.rs", &tree)
+            .into_iter()
+            .filter_map(|refusal| {
+                refusal
+                    .split_once(" is named here")
+                    .map(|(head, _)| head.to_owned())
+            })
+            .collect()
+    };
+    let both = ["f.rs:1: `expose`", "f.rs:2: `refresh_key`"];
+    assert_eq!(names(&[Some("src/secrets/token.rs")]), Vec::<String>::new());
+    assert_eq!(
+        names(&[Some("src/secrets/token.rs"), Some("src/leak.rs")]),
+        both
+    );
+    assert_eq!(names(&[Some("src/secrets/token.rs"), None]), both);
+    assert_eq!(names(&[None]), both);
 }

@@ -1840,13 +1840,11 @@ ambre-primitives | src/scan.rs | crate::scan | SiteKey::FIELDS | const | usize	n
 ambre-primitives | src/scan.rs | crate::scan | SiteKey::SEPARATOR | const | &'static str	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/scan.rs | crate::scan | SiteKey::parse(text) | param | &str	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/scan.rs | crate::scan | SiteKind::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as the allowlist file writes it
-ambre-primitives | src/scan.rs | crate::scan | Skipped::covers() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | TEST_MACROS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | Tree::read() | ret | Option<String>	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | holds_primitive() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | holds_primitive(ty) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | is_build_output() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-primitives | src/scan.rs | crate::scan | is_test_file() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | normalise() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | normalise(tokens) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | test_only() | ret | bool	generic	a predicate or a file read of the scanner
@@ -4177,11 +4175,9 @@ ambre-primitives | src/secrets.rs | crate::secrets | Seek.file | field | String	
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.found | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | WIPERS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | checks(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/secrets.rs | crate::secrets | checks(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | refusals() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | refusals(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | refusals(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/secrets.rs | crate::secrets | refusals(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -4200,11 +4196,25 @@ ambre-primitives | src/secrets.rs | crate::secrets | INCLUDE | const | &[&str]	g
 ambre-primitives | src/secrets.rs | crate::secrets | SINKS | const | &[(&str,&[(&str,&str)])]	generic	each sink name with the crate names and file paths that may name it, matched against the scanned file
 ambre-primitives | src/secrets.rs | crate::secrets | SINK_NAMES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | Seek.krate | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/secrets.rs | crate::secrets | Seek.relative | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(relative) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | Compile.args | field | &'static[&'static str]	foreign-api	the arguments of the one cargo call a compile runs
+ambre-primitives | src/depinfo.rs | crate::depinfo | WASM_FLAGS | const | &str	foreign-api	the RUSTFLAGS of the one cargo call of each wasm compile
+ambre-primitives | src/depinfo.rs | crate::depinfo | WASM_TRIPLE | const | &str	foreign-api	the target triple of the one cargo call of each wasm compile
+ambre-primitives | src/depinfo.rs | crate::depinfo | artifact() | ret | Result<Option<Unit>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | artifact(message) | param | &str	generic	a line of JSON cargo prints, parsed at once
+ambre-primitives | src/depinfo.rs | crate::depinfo | collect() | ret | Result<Compiled,Vec<String>>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | cross_check() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies(text) | param | &str	generic	the text of a dep-info file rustc writes, parsed at once
+ambre-primitives | src/main.rs | crate | check(unread) | param | &[String]	free-text	error messages printed to the terminal
+ambre-primitives | src/main.rs | crate | files() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | named() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | named(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | Seek.forms | field | Vec<Option<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | admits_sink(relative) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | checks(relative) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/secrets.rs | crate::secrets | refusals(forms) | param | &[Option<&str>]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-server | src/jwt.rs | crate::jwt | signing_key(fill) | param | impl FnOnce(&mut[u8;32])->Result<(),E>	generic	writes the seed into the wrapper the key is built in
 ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret.0 | field | Arc<Secret<String>>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/secrets/oidc.rs | crate::secrets::oidc | OidcSecret::new(secret) | param | String	newtype-inner	newtype inner, accessor or constructor

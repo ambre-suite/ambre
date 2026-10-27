@@ -12,6 +12,9 @@ description = "The primitive gate: every site whose type holds a primitive is ty
 [dependencies]
 proc-macro2 = { workspace = true }
 quote       = { workspace = true }
+# The messages of `cargo check --message-format=json`, which name the
+# dep-info file of each unit rustc compiled (`ARCH-033`).
+serde_json  = { workspace = true }
 syn         = { workspace = true }
 
 [lints]

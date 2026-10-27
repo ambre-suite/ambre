@@ -136,7 +136,7 @@ const SINK_NAMES: &[&str] = &[
 const INCLUDE: &[&str] = &["include"];
 
 /// One check, and the rule that states it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Check {
     /// A reader named outside `ambre-crypto` and the Secret module.
     Reader,
@@ -184,8 +184,12 @@ impl Check {
 }
 
 /// The checks that apply to one file of one crate. `relative` is the path of
-/// the file inside its crate, with `/` separators.
-fn checks(krate: &str, relative: &str) -> Vec<Check> {
+/// the file inside its crate, with `/` separators. It is `None` when the
+/// file sits outside the crate, where no exemption holds.
+fn checks(krate: &str, relative: Option<&str>) -> Vec<Check> {
+    let Some(relative) = relative else {
+        return vec![Check::Reader, Check::Wiper, Check::Sink, Check::Include];
+    };
     if (krate, relative) == SECRET_MODULE {
         vec![Check::Include]
     } else if krate == CRYPTO {
@@ -198,19 +202,42 @@ fn checks(krate: &str, relative: &str) -> Vec<Check> {
 }
 
 /// Whether `name` is a sink this file makes the call of.
-fn admits_sink(name: &str, krate: &str, relative: &str) -> bool {
-    SINKS
-        .iter()
-        .any(|(sink, files)| *sink == name && files.contains(&(krate, relative)))
+fn admits_sink(name: &str, krate: &str, relative: Option<&str>) -> bool {
+    relative.is_some_and(|relative| {
+        SINKS
+            .iter()
+            .any(|(sink, files)| *sink == name && files.contains(&(krate, relative)))
+    })
 }
 
-/// Every refusal of the two checks in one file, test code left out. `file`
+/// Every refusal of the checks in one file, test code left out. `file`
 /// names the file in each refusal.
-pub(crate) fn refusals(krate: &str, relative: &str, file: &str, tree: &syn::File) -> Vec<String> {
+///
+/// `forms` names the file inside its crate in each form the walk knows it
+/// by. One is the path the source writes, with `..` undone. The other is
+/// the path the disk holds, with links followed, and `None` when it leaves
+/// the crate. A check applies when it applies to one form, and a sink is
+/// admitted only when every form admits it. So neither a `..` nor a link
+/// moves a file into an exemption (`ARCH-045`, `ARCH-048`).
+pub(crate) fn refusals(
+    krate: &str,
+    forms: &[Option<&str>],
+    file: &str,
+    tree: &syn::File,
+) -> Vec<String> {
+    let mut applied = Vec::new();
+    for form in forms {
+        for check in checks(krate, *form) {
+            if !applied.contains(&check) {
+                applied.push(check);
+            }
+        }
+    }
+    applied.sort();
     let mut seek = Seek {
-        checks: checks(krate, relative),
+        checks: applied,
         krate: krate.to_owned(),
-        relative: relative.to_owned(),
+        forms: forms.iter().map(|form| form.map(str::to_owned)).collect(),
         file: file.to_owned(),
         found: Vec::new(),
     };
@@ -240,7 +267,7 @@ pub(crate) fn renamed_wipers(krate: &str, renamed: &BTreeMap<String, String>) ->
 struct Seek {
     checks: Vec<Check>,
     krate: String,
-    relative: String,
+    forms: Vec<Option<String>>,
     file: String,
     found: Vec<String>,
 }
@@ -251,7 +278,12 @@ impl Seek {
         let text = ident.to_string();
         let text = text.trim_start_matches("r#");
         for check in &self.checks {
-            if *check == Check::Sink && admits_sink(text, &self.krate, &self.relative) {
+            let admitted = !self.forms.is_empty()
+                && self
+                    .forms
+                    .iter()
+                    .all(|form| admits_sink(text, &self.krate, form.as_deref()));
+            if *check == Check::Sink && admitted {
                 continue;
             }
             if check.names().contains(&text) {
