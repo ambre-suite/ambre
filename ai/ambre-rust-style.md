@@ -155,15 +155,21 @@
      crate root.
 
      A `mod` a macro holds fails too, unless it is an inline module in the literal tokens of a
-     `macro_rules!` transcriber. A call the transcriber writes passes no `mod`. A lever of the
-     build configuration fails too: a `-Z` flag, `crate-attr` or `feature(`. The gate reads it in
-     a cargo config, a manifest, the `justfile` and the CI workflow.
+     `macro_rules!` transcriber. A call the transcriber writes passes no `mod`, and neither does
+     a group after a metavariable. A lever of the build configuration fails too: a `-Z` flag,
+     `crate-attr` or `feature(`. So does a compiler wrapper, an `include` or an `[env]` entry. The
+     gate reads them in each cargo config cargo reads, a manifest and its own environment. It
+     reads the `justfile` and the CI workflow as a literal tripwire, which shell quoting passes.
 
      So does a file a shipped build reads that the walk neither reads nor names as data, or a
      `.rs` file no compile reads (`ARCH-033`). A data file that parses as Rust items fails too, as
      defence in depth. A build outside those compiles, and a `mod` a foreign macro writes, are a
      reviewer's (`ARCH-050`). An exemption holds only when the path with each `..` undone and the
      path with each link followed both sit in it.
+
+     The gate catches the accidental misuse of a contributor who writes plain code, and fails
+     closed on each form it cannot follow. Review holds a deliberate evasion by a
+     committer (`ARCH-047`): a macro trick, a lever outside the forms checked, a proc macro.
 
   Test code is what `cfg(test)`, a `cfg(all(test, ..))` or a test macro marks. A module named
   `*_tests` with no test `cfg`, and code behind a feature such as `test-helpers`, are scanned.

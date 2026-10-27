@@ -61,7 +61,18 @@ compiler needs no test, no run and no reading.
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
 **The primitive gate reads the items rustc reads.** It parses each crate from its roots without
-expanding a macro, and never takes a site from test code. Test code is what `cfg(test)`, a
+expanding a macro, and never takes a site from test code.
+
+**The gate guards against accidental misuse.** It catches a contributor who writes plain code, and
+it fails closed on each form it cannot follow. It does not hold a deliberate evasion by a
+committer, who can ship a build script or a dependency anyway. Review of every change holds that
+threat (`ARCH-047`). Five examples:
+* a macro trick;
+* build configuration, an environment or a wrapper outside the forms the gate checks;
+* a recipe line that shell quoting or a line continuation hides from the literal tripwire;
+* a `${{ vars.* }}` in the CI workflow;
+* a proc or a foreign macro.
+ Test code is what `cfg(test)`, a
 `cfg(all(test, ..))` or a test macro marks. A module name and a feature such as `test-helpers`
 mark none, since a release build can compile either. A site is a field, a parameter, a
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
@@ -85,18 +96,25 @@ file, the module, the item, the kind and the type, and no line number.
   A `#![feature]` in a crate root fails, unless `FEATURE_ROOTS` names the root.
 
   A lever of the build configuration fails too: a `-Z` flag, `crate-attr` or `feature(`. Such a
-  lever enables syntax the pinned syn may not parse. The check reads four sources:
-  1. each `.cargo/config.toml` and `.cargo/config` under the root. It reads each `rustflags` and
-     `rustdocflags` value, and each key of an `[unstable]` table. `UNSTABLE` names one key with
-     its exact value: `build-std` of the root config, for the threaded wasm build;
-  2. each `Cargo.toml`: a `cargo-features` key, and a `rustflags` or `rustdocflags` key. A `sqlx`
-     dependency that names another package fails too, since the scan reads `sqlx::migrate!` by
-     its name;
-  3. the `justfile`, each line that is no comment;
-  4. `.github/workflows/ci.yml`, each line that is no comment.
+  lever enables syntax the pinned syn may not parse. The check reads five sources:
+  1. each `.cargo/config.toml` and `.cargo/config` under the root, above it and in the cargo
+     home. It reads each `rustflags` and `rustdocflags` value, and each key of an `[unstable]`
+     table. `UNSTABLE` names one key with its exact value: `build-std` of the root config, for
+     the threaded wasm build. A `rustc`, `rustc-wrapper` or `rustc-workspace-wrapper` key fails
+     at any depth. So do an `include` key and each `[env]` entry, since `CONFIG_ENV` names none;
+  2. each `Cargo.toml`: a `cargo-features` key, and a `rustflags` or `rustdocflags` key. The scan
+     reads `sqlx::migrate!` by its name, so another crate under that name fails. That is a
+     rename, a `path` or `git` source, and a `[patch]` or `[replace]` of `sqlx`;
+  3. the environment of the gate, before any compile. A flag variable such as `RUSTFLAGS` or
+     `CARGO_ENCODED_RUSTFLAGS` fails on a lever. Any `CARGO_UNSTABLE_*` variable fails, and so
+     does any variable that names `rustc` or a wrapper. CI sets none of them;
+  4. the `justfile`, each line that is no comment;
+  5. `.github/workflows/ci.yml`, each line that is no comment.
 
-  A config or a manifest that does not parse as TOML fails. A flag set elsewhere is a
-  reviewer's (`ARCH-050`): in the environment of a shell, or in a cargo config above the root.
+  Sources 4 and 5 are a literal tripwire. Shell quoting, a line continuation and a
+  `${{ vars.* }}` pass it. A config or a manifest that does not parse as TOML fails. A flag set
+  elsewhere is a reviewer's (`ARCH-050`): in the environment of another job, or in a `--config`
+  argument the tripwire does not see.
 
   A data file that parses as Rust items fails too, as defence in depth. syn and rustc parse
   apart, so this guard is best effort. A refusal of what syn cannot parse would refuse the real
@@ -202,6 +220,9 @@ file, the module, the item, the kind and the type, and no line number.
   * A type that holds a newtype with a serde form of its own derives it with no refused name. A
     reviewer reads that door (`ARCH-047`). So also a function that lends out the bare value under
     another name, and code a macro or a derive writes.
+  * The check holds a name the source writes, in a crate root or in a module a `mod` item
+    declares (`ARCH-045`). A name a macro builds, and a file a deliberate evasion hides from the
+    walk, are a reviewer's (`ARCH-047`).
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
@@ -246,7 +267,7 @@ gate, `ARCH-041` to `ARCH-044`, `ARCH-047` and `ARCH-050`: what rustc resolves a
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
-| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, and which files a build the gate does not run reads. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
+| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, which files a build the gate does not run reads, and what a committer hides from the gate on purpose. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
