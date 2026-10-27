@@ -50,7 +50,7 @@ compiler needs no test, no run and no reading.
 | Lint wall: `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` in **every** crate | removes a whole scanning category from review | always. The "no `unsafe`" pillar is a claim until the lint enforces it crate by crate |
 | `cargo-deny`: advisories, licences, duplicate versions, capability bans | the supply chain of a crypto product, checked by machine | always |
 | A gate in `scripts/`, run by a `just` recipe in the CI `lint` job | holds what the compiler cannot see: the corpus, the prose, and a committed artifact that must not move | a rule about the tree rather than the code. Its own tests run under `just test-scripts`, because a gate that reads nothing and a gate that is satisfied look alike |
-| The primitive gate, `crates/ambre-primitives`, run by `just primitives-files` and `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
+| The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
 | `proptest` | universal rules over an unenumerated input space | pure logic and reference models: the formula engine, CRDT convergence, cache against rebuild |
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
 | `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
@@ -69,13 +69,19 @@ file, the module, the item, the kind and the type, and no line number.
 
 * **rustc holds the files the walk reads** (`ARCH-033`). The gate runs `cargo check` on the host
   with every package, target and feature, and on each wasm line of `lint-wasm`. It reads the
-  dep-info of each unit of the workspace. A `.rs` file that a shipped build reads fails when the
-  walk misses it. A `mod` a macro writes, an `include!` file and a misread `#[path]` each land
-  there. A `.rs` file under `crates/` that no compile reads fails too, whatever its name.
+  dep-info of each unit of the workspace. A file that a shipped build reads fails, whatever its
+  name, unless the walk reads it or a walked file names it as data. Data is the string literal of
+  an `include_str!` or an `include_bytes!`, or the directory a `migrate!` names.
 
-  A failed compile and a missing dep-info file fail closed. `just primitives-files` runs this half
-  alone. A build none of these compiles makes, under another target, `cfg`, feature set or
-  profile, is a reviewer's (`ARCH-050`).
+  A `mod` a macro writes, an `include!` file, a misread `#[path]` and a data path a macro builds
+  each land there. A data file that parses as Rust items fails too. A test build may read any
+  file. A `.rs` file under the workspace root that no compile reads fails, whatever its name. The
+  check leaves out `target/` and a nested workspace such as `fuzz/`.
+
+  A failed compile, a missing dep-info file, a unit with no test flag and a dep-info line the
+  parser cannot read whole fail closed. `just primitives-files` runs this half alone. A build none
+  of these compiles makes, under another target, `cfg`, feature set or profile, is a reviewer's
+  (`ARCH-050`).
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,

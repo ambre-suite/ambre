@@ -151,9 +151,9 @@
   6. a name of the `zeroize` crate outside the Secret module (`ARCH-046`);
   7. a sink named outside the file of its foreign call (`ARCH-049`). The name `include` in any
      form, in each file the gate reads (`ARCH-047`), since the gate reads no file an `include!`
-     names. A `#[path]` the gate cannot follow fails the scan. So does a `.rs` file that a build
-     of the gate's compiles ships and the walk misses, or that no compile reads (`ARCH-033`). A
-     build outside those compiles is a reviewer's (`ARCH-050`). An exemption holds only when the
+     names. A `#[path]` the gate cannot follow fails the scan. So does a file a shipped build reads
+     that the walk neither reads nor names as data, or a `.rs` file no compile reads (`ARCH-033`). A build outside those compiles is
+     a reviewer's (`ARCH-050`). An exemption holds only when the
      path with each `..` undone and the path with each link followed both sit in it.
 
   Test code is what `cfg(test)`, a `cfg(all(test, ..))` or a test macro marks. A module named
