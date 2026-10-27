@@ -3939,8 +3939,8 @@ ambre-crypto | src/hash.rs | crate::hash | dev_seed(username) | param | &str	fre
 ambre-crypto | src/hash.rs | crate::hash | file_digest() | ret | [u8;HASH_LEN]	generic	keyless digest of any file, for the fixture sidecar
 ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	generic	keyless digest of any file, for the fixture sidecar
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; chain_hash and dev_seed wrap the result, file_digest returns it
-ambre-crypto | src/hash.rs | crate::hash | Head.0 | field | &'a [u8]	newtype-inner	the length-bounded input of length_prefixed, typed apart from Tail so a swap does not compile
-ambre-crypto | src/hash.rs | crate::hash | Tail.0 | field | &'a [u8]	newtype-inner	the input after the bounded field of length_prefixed, typed apart from Head so a swap does not compile
+ambre-crypto | src/hash.rs | crate::hash | Head.0 | field | &'a[u8]	newtype-inner	the length-bounded input of length_prefixed, typed apart from Tail so a swap does not compile
+ambre-crypto | src/hash.rs | crate::hash | Tail.0 | field | &'a[u8]	newtype-inner	the input after the bounded field of length_prefixed, typed apart from Head so a swap does not compile
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
 ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
 ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports
