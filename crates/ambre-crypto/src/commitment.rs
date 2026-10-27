@@ -5,7 +5,8 @@
 //! message to a specific key, defeating inter-document substitution by a
 //! compromised relay. Distinct from the Poly1305 tag carried inside the AEAD.
 
-use ambre_core::{Ciphertext, CommitmentTag, Nonce};
+use ambre_core::{Ciphertext, CommitmentTag, Nonce, Secret};
+use hmac::digest::FixedOutput;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
@@ -64,20 +65,20 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 ///
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
 pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> ambre_core::MediaAddress {
-    let subkey: [u8; TAG_LEN] = mac_over(key, MEDIA_ADDRESS_DOMAIN);
-    let mut m = keyed(&subkey);
+    // The subkey is key material, so the HMAC writes it in place under the
+    // wiping wrapper, and no bare copy of it leaves this function.
+    let subkey: Secret<[u8; TAG_LEN]> = Secret::filled(|out: &mut [u8; TAG_LEN]| {
+        let mut m = keyed(key.as_bytes());
+        m.update(MEDIA_ADDRESS_DOMAIN);
+        FixedOutput::finalize_into(m, out.into());
+    });
+    let mut m = keyed(subkey.expose());
     m.update(plaintext);
     ambre_core::MediaAddress::from_array(m.finalize().into_bytes().into())
 }
 
 // A media address is one HMAC output wide.
 const _: () = assert!(ambre_core::MEDIA_ADDRESS_LEN == TAG_LEN);
-
-fn mac_over(key: &DocumentKey, data: &[u8]) -> [u8; TAG_LEN] {
-    let mut m = keyed(key.as_bytes());
-    m.update(data);
-    m.finalize().into_bytes().into()
-}
 
 /// Verifies `tag` against a freshly computed commitment, in constant time.
 ///

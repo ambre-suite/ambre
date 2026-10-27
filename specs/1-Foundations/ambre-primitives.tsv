@@ -1199,8 +1199,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | TAG_LEN | const | usize	g
 ambre-crypto | src/commitment.rs | crate::commitment | keyed(key) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | mac(nonce) | param | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TAG_LEN]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
