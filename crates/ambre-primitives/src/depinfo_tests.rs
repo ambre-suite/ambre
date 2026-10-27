@@ -120,10 +120,16 @@ fn a_path_that_holds_a_newline_fails_the_parser() {
          /t/a.rmeta: src/lib.rs src/x\n\
          b: c.rs\n",
     );
-    assert!(rule.contains("lists other files than the first rule"), "{rule}");
+    assert!(
+        rule.contains("lists other files than the first rule"),
+        "{rule}"
+    );
     // A dependency with no empty rule of its own is a fragment too.
     let orphan = refused("/t/a.d: src/lib.rs src/x\n\nsrc/lib.rs:\n");
-    assert!(orphan.contains("\"src/x\" has no rule of its own"), "{orphan}");
+    assert!(
+        orphan.contains("\"src/x\" has no rule of its own"),
+        "{orphan}"
+    );
     // A path with a `:` would read as a rule.
     let colon = refused("/t/a.d: src/lib.rs src/a:b.rs\n");
     assert!(colon.contains("holds a `:`"), "{colon}");
@@ -357,10 +363,7 @@ fn a_data_file_that_parses_as_rust_items_is_refused() {
         )],
     };
     let tree = Files::new(&[
-        (
-            "crates/demo/src/code.txt",
-            "pub fn f() { let expose = 1; }",
-        ),
+        ("crates/demo/src/code.txt", "pub fn f() { let expose = 1; }"),
         ("crates/demo/src/empty.txt", "// a comment\n"),
         (
             "crates/demo/src/shader.wgsl",
@@ -386,7 +389,10 @@ fn the_orphan_check_covers_the_whole_root_but_a_nested_workspace() {
         ("crates/demo/Cargo.toml", "[package]\n"),
         ("crates/demo/src/lib.rs", ""),
         ("extra/orphan.rs", ""),
-        ("fuzz/Cargo.toml", "[package]\nname = \"fuzz\"\n\n[workspace]\n"),
+        (
+            "fuzz/Cargo.toml",
+            "[package]\nname = \"fuzz\"\n\n[workspace]\n",
+        ),
         ("fuzz/fuzz_targets/one.rs", ""),
         ("target/debug/build/out.rs", ""),
         ("scripts/gate.py", ""),
@@ -467,8 +473,7 @@ fn heads(found: &[String]) -> BTreeSet<String> {
 /// A scratch workspace in the temporary directory, named for one test, with
 /// one member crate per name of `members`.
 fn probe(test: &str, members: &[&str]) -> (PathBuf, Scratch) {
-    let root =
-        std::env::temp_dir().join(format!("ambre-depinfo-{test}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ambre-depinfo-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let scratch = Scratch(root.clone());
     let list: Vec<String> = members
@@ -650,7 +655,11 @@ fn a_real_compile_refuses_a_data_file_the_walk_does_not_name() {
     put(&root, &format!("{krate}/src/blob.bin"), "\u{0}\u{1}");
     put(&root, "extra/hid", read);
     put(&root, "extra/orphan.rs", read);
-    put(&root, "nested/Cargo.toml", "[package]\nname = \"nested\"\n\n[workspace]\n");
+    put(
+        &root,
+        "nested/Cargo.toml",
+        "[package]\nname = \"nested\"\n\n[workspace]\n",
+    );
     put(&root, "nested/src/main.rs", read);
 
     let walk = scan(&Disk, &root.join("crates"));
@@ -682,9 +691,17 @@ fn a_real_dep_info_with_a_path_rustc_cannot_escape_fails_closed() {
     // The B2 probe of the SEC-1f review, and its N4: rustc writes a newline
     // and a backslash unescaped, so both paths split.
     let (root, scratch) = probe("escape", &["split", "slash"]);
-    put(&root, "crates/split/src/lib.rs", "#[path = \"x\\ny.rs\"]\nmod x;\n");
+    put(
+        &root,
+        "crates/split/src/lib.rs",
+        "#[path = \"x\\ny.rs\"]\nmod x;\n",
+    );
     put(&root, "crates/split/src/x\ny.rs", "pub fn f() {}\n");
-    put(&root, "crates/slash/src/lib.rs", "#[path = \"a\\\\ b.rs\"]\nmod a;\n");
+    put(
+        &root,
+        "crates/slash/src/lib.rs",
+        "#[path = \"a\\\\ b.rs\"]\nmod a;\n",
+    );
     put(&root, "crates/slash/src/a\\ b.rs", "pub fn f() {}\n");
     let Err(errors) = compile(&root) else {
         panic!("the dep-info of a split path is read");
@@ -697,9 +714,16 @@ fn a_real_dep_info_with_a_path_rustc_cannot_escape_fails_closed() {
             .filter(|error| error.contains(&format!("/{crate_name}-")) && error.contains(why))
             .count()
     };
-    assert_eq!(count("split", "line 2 is no rule `target: dependencies`"), 2, "{joined}");
     assert_eq!(
-        count("slash", "line 1: a path holds a backslash that escapes no space"),
+        count("split", "line 2 is no rule `target: dependencies`"),
+        2,
+        "{joined}"
+    );
+    assert_eq!(
+        count(
+            "slash",
+            "line 1: a path holds a backslash that escapes no space"
+        ),
         2,
         "{joined}"
     );

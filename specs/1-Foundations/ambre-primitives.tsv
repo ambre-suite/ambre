@@ -4225,3 +4225,14 @@ ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key(sen
 ambre-server | src/secrets/token.rs | crate::secrets::token | refresh_key(send) | param | impl FnOnce(&str)->R	generic	lends the Redis key of a refresh token to the one Redis call that takes it (ARCH-049)
 ambre-sync | src/http.rs | crate::http | ShownTarget.0 | field | String	newtype-inner	the address an error shows, with no signed query
 ambre-sync | src/http.rs | crate::http | Target::open(send) | param | impl FnOnce(&str)->R	generic	lends the full address to the one foreign call that fetches it
+ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies() | ret | Result<Vec<PathBuf>,String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | package() | ret | String	generic	the package name cargo prints in a package id, put in an error message
+ambre-primitives | src/depinfo.rs | crate::depinfo | parses_as_items() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/depinfo.rs | crate::depinfo | words() | ret | Result<Vec<String>,String>	free-text	the paths of one dep-info line, or error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | words(line) | param | &str	generic	a line of a dep-info file rustc writes, parsed at once
+ambre-primitives | src/scan.rs | crate::scan | DATA_MACROS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/scan.rs | crate::scan | MIGRATE | const | &str	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/scan.rs | crate::scan | MIGRATIONS | const | &str	foreign-api	the directory sqlx reads when a migrate! names none
+ambre-primitives | src/scan.rs | crate::scan | DataRead::Dir.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | DataRead::File.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | literal_argument() | ret | Option<Option<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name

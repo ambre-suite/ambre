@@ -391,8 +391,9 @@ pub(crate) fn dependencies(text: &str) -> Result<Vec<PathBuf>, String> {
         }
     }
     let Some(listed) = listed else {
-        return Err("no rule lists a dependency, so the check reads nothing, and fails closed"
-            .to_owned());
+        return Err(
+            "no rule lists a dependency, so the check reads nothing, and fails closed".to_owned(),
+        );
     };
     let named: BTreeSet<String> = listed.iter().cloned().collect();
     if let Some(path) = named.symmetric_difference(&own).next() {
