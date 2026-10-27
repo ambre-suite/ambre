@@ -83,8 +83,8 @@ impl std::fmt::Display for RateBucket {
 
 /// The peer a request without a caller counts against.
 ///
-/// A parsed address, so one address has one spelling in the store key, and
-/// two spellings of it never get two windows.
+/// A parsed address in its canonical form. One address therefore has one
+/// spelling in the store key, and two spellings of it never get two windows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Peer {
     /// The address the socket or a trusted proxy states.
@@ -93,6 +93,24 @@ enum Peer {
     /// parse. Every such request shares one window, which fails toward the
     /// stricter limit.
     Unknown,
+}
+
+impl Peer {
+    /// The peer `addr` names. An IPv4-mapped IPv6 address becomes its IPv4
+    /// address, so one client never holds a window under each form.
+    fn of(addr: std::net::IpAddr) -> Self {
+        Self::Addr(addr.to_canonical())
+    }
+
+    /// The peer an `X-Forwarded-For` entry names: an address, or an address
+    /// and a port as a socket address spells it. The port is dropped, so a
+    /// proxy that appends it opens no window per source port.
+    fn forwarded(entry: &str) -> Self {
+        entry
+            .parse::<std::net::IpAddr>()
+            .or_else(|_| entry.parse::<std::net::SocketAddr>().map(|a| a.ip()))
+            .map_or(Self::Unknown, Self::of)
+    }
 }
 
 impl std::fmt::Display for Peer {
@@ -126,15 +144,16 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Requ
     let remote = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map_or(Peer::Unknown, |a| Peer::Addr(a.0.ip()));
+        .map_or(Peer::Unknown, |a| Peer::of(a.0.ip()));
     RateBucket::Peer(client_peer(x_forwarded_for, remote))
 }
 
 /// The peer of a request: the first entry of `X-Forwarded-For` when a trusted
 /// proxy wrote one, the socket peer `remote` otherwise.
 ///
-/// An entry that does not parse as an address is [`Peer::Unknown`], never the
-/// socket peer: behind a proxy, the socket peer is the proxy itself.
+/// An entry that parses neither as an address nor as a socket address is
+/// [`Peer::Unknown`]. It is never the socket peer: behind a proxy, the socket
+/// peer is the proxy itself.
 fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
     let first = x_forwarded_for.and_then(|fwd| {
         fwd.split(',')
@@ -142,7 +161,7 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
             .find(|entry| !entry.is_empty())
     });
     match first {
-        Some(entry) => entry.parse().map_or(Peer::Unknown, Peer::Addr),
+        Some(entry) => Peer::forwarded(entry),
         None => remote,
     }
 }
@@ -380,9 +399,11 @@ mod tests {
         );
     }
 
-    /// The store key of a real address keeps the text the string form wrote:
-    /// the address as `IpAddr` prints it, after `ip:`. A missing address keeps
-    /// `ip:unknown`. Two spellings of one IPv6 address now share one key.
+    /// The store key of an address in its canonical spelling keeps the text
+    /// the string form wrote: the address as `IpAddr` prints it, after `ip:`.
+    /// A missing address keeps `ip:unknown`. Any other spelling changes key
+    /// on purpose, onto the canonical one: two spellings of one IPv6 address
+    /// share one key.
     #[test]
     fn the_store_key_of_a_real_address_is_unchanged() {
         for (text, key) in [
@@ -401,6 +422,44 @@ mod tests {
         assert_eq!(
             client_peer(Some("2001:DB8:0::1"), Peer::Unknown),
             addr("2001:db8::1")
+        );
+    }
+
+    /// `SRV-094`: a forwarded entry that carries a port counts as its
+    /// address alone. A proxy that appends the port opens no window per port.
+    #[test]
+    fn a_forwarded_entry_with_a_port_counts_as_its_address() {
+        for (entry, peer) in [
+            ("1.2.3.4:5678", "1.2.3.4"),
+            ("[::1]:443", "::1"),
+            ("[2001:db8::1]:8080, 1.2.3.4", "2001:db8::1"),
+        ] {
+            assert_eq!(client_peer(Some(entry), addr("10.0.0.7")), addr(peer));
+        }
+        assert_eq!(
+            client_peer(Some("1.2.3.4:port"), addr("10.0.0.7")),
+            Peer::Unknown
+        );
+    }
+
+    /// `SRV-094`: an IPv4 address spelled as IPv4-mapped IPv6 shares the
+    /// window of the IPv4 address, from a proxy and from the socket alike. One
+    /// client therefore cannot hold two windows.
+    #[test]
+    fn an_ipv4_mapped_address_shares_the_ipv4_window() {
+        for entry in ["::ffff:1.2.3.4", "[::ffff:1.2.3.4]:80"] {
+            let peer = client_peer(Some(entry), Peer::Unknown);
+            assert_eq!(peer, addr("1.2.3.4"));
+            assert_eq!(RateBucket::Peer(peer).to_string(), "ip:1.2.3.4");
+        }
+        let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
+        let mut req = request_from([10, 0, 0, 1], &[]);
+        let mapped: std::net::SocketAddr = "[::ffff:1.2.3.4]:443".parse().unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(mapped));
+        assert_eq!(
+            request_bucket(&jwt, ProxyTrust::Direct, &req),
+            RateBucket::Peer(addr("1.2.3.4"))
         );
     }
 

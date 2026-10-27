@@ -2783,6 +2783,8 @@
   {"edge": "verified-by", "from": "SRV-094", "to": "::client_ip_ignores_empty_forwarded"},
   {"edge": "verified-by", "from": "SRV-094", "to": "::a_forwarded_entry_that_is_no_address_is_unknown"},
   {"edge": "verified-by", "from": "SRV-094", "to": "::the_store_key_of_a_real_address_is_unchanged"},
+  {"edge": "verified-by", "from": "SRV-094", "to": "::a_forwarded_entry_with_a_port_counts_as_its_address"},
+  {"edge": "verified-by", "from": "SRV-094", "to": "::an_ipv4_mapped_address_shares_the_ipv4_window"},
   {"edge": "verified-by", "from": "SRV-094", "to": "::an_anonymous_request_is_bucketed_by_its_peer"},
   {"edge": "cites-finding", "from": "SRV-095", "to": "M6"},
   {"edge": "cites-section", "from": "SRV-095", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},

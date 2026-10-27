@@ -2590,6 +2590,7 @@ ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool
 ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
 ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	free-text	config list text
 ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	free-text	config list text
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	free-text	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::classify(path) | param | &str	generic	path classifier
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::limits() | ret | (u64,ambre_core::Seconds)	math	already typed Seconds; count
