@@ -95,9 +95,10 @@ pub struct Command {
     pub category: CommandCategory,
 }
 
-/// One accelerator bit, and no way to name the control and the command keys
-/// apart: one table serves every platform (`UI-THREAD-028`).
-pub struct Modifiers { pub primary: bool, pub alt: bool, pub shift: bool }
+/// A set of three named members, `PRIMARY`, `ALT` and `SHIFT`. One accelerator member, and no
+/// way to name the control and the command keys apart: one table serves every platform
+/// (`UI-THREAD-028`).
+pub struct Modifiers(u8);
 
 /// Runtime state, derived from the application's state on each query and never stored.
 pub struct CommandState { pub enabled: bool, pub visible: bool, pub toggled: bool }
@@ -127,7 +128,7 @@ rebindable. It reports what a rebinding displaced, so a conflict can be shown to
 (`UI-THREAD-041`). A chord carries at most one command because the table is keyed by it
 (`UI-THREAD-026`), and nothing refuses two commands declaring the same default (`UI-THREAD-037`).
 
-**One accelerator, one table.** The modifier set carries `primary`, and the control key and the
+**One accelerator, one table.** The modifier set carries `PRIMARY`, and the control key and the
 command key both fold into it where a browser event becomes a chord. A table therefore cannot name
 one machine's accelerator, and one table serves every platform (`UI-THREAD-028`). A chord is
 written "Ctrl+K", which the fold makes true everywhere: a machine whose accelerator is the command

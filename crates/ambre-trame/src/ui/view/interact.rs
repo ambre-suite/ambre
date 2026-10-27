@@ -5,7 +5,7 @@ use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
-use ambre_commands::{Key, Modifiers};
+use ambre_commands::Key;
 use ambre_core::{DocPoint, DocPx, ViewPoint};
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
@@ -243,7 +243,7 @@ impl TrameView {
         } else {
             src.col_count() == ColCount::ONE
         };
-        let mode = match (mods.primary, single_line) {
+        let mode = match (mods.primary(), single_line) {
             (false, _) => FillMode::Auto,
             (true, true) => FillMode::Series,
             (true, false) => FillMode::Copy,
@@ -724,19 +724,11 @@ impl TrameView {
                 }
                 false
             }
-            InputEvent::Key {
-                key,
-                mods:
-                    Modifiers {
-                        primary,
-                        alt,
-                        shift,
-                    },
-            } => {
+            InputEvent::Key { key, mods } => {
                 // Ctrl/Cmd+Enter fills the whole selection with the typed value;
                 // Ctrl/Cmd+A selects the whole buffer; other command chords
                 // (Ctrl/Cmd+X) fall through to the chrome keymap.
-                if *primary {
+                if mods.primary() {
                     if *key == Key::Enter {
                         // Deferred: the fill reads the buffer after the paint flush.
                         // `edit_dirty` schedules that paint (else it would wait for
@@ -757,7 +749,7 @@ impl TrameView {
                 match *key {
                     // Alt+Enter inserts a newline (multi-line cell); a bare Enter
                     // commits and moves down (spreadsheet convention).
-                    Key::Enter if *alt => {
+                    Key::Enter if mods.alt() => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.newline();
                         }
@@ -793,7 +785,7 @@ impl TrameView {
                     // Delete removes the selection, else the char after the caret.
                     // Shift+Delete is "cut": let it fall through so the browser
                     // fires the `cut` clipboard event the host listens for.
-                    Key::Delete if !*shift => {
+                    Key::Delete if !mods.shift() => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.delete_forward();
                         }
@@ -803,7 +795,7 @@ impl TrameView {
                     // Shift extends the selection; a bare arrow collapses it.
                     Key::ArrowLeft => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift {
+                            if mods.shift() {
                                 ed.extend_left()
                             } else {
                                 ed.move_left()
@@ -814,7 +806,7 @@ impl TrameView {
                     }
                     Key::ArrowRight => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift {
+                            if mods.shift() {
                                 ed.extend_right()
                             } else {
                                 ed.move_right()
@@ -825,7 +817,7 @@ impl TrameView {
                     }
                     Key::Home => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift {
+                            if mods.shift() {
                                 ed.extend_home()
                             } else {
                                 ed.move_home()
@@ -836,7 +828,7 @@ impl TrameView {
                     }
                     Key::End => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift {
+                            if mods.shift() {
                                 ed.extend_end()
                             } else {
                                 ed.move_end()
@@ -850,14 +842,18 @@ impl TrameView {
                     // arrows only applies when NOT editing.
                     Key::ArrowUp => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift { ed.extend_up() } else { ed.move_up() }
+                            if mods.shift() {
+                                ed.extend_up()
+                            } else {
+                                ed.move_up()
+                            }
                         }
                         self.reset_blink();
                         true
                     }
                     Key::ArrowDown => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift {
+                            if mods.shift() {
                                 ed.extend_down()
                             } else {
                                 ed.move_down()

@@ -946,14 +946,7 @@ fn the_board_editor_drives_the_shared_core() {
             left(ambre_canvas::Extend::Move, ambre_canvas::Stride::Word),
         ),
         (
-            key(
-                Key::ArrowRight,
-                Modifiers {
-                    primary: false,
-                    alt: true,
-                    shift: true,
-                },
-            ),
+            key(Key::ArrowRight, Modifiers::ALT_SHIFT),
             right(ambre_canvas::Extend::Select, ambre_canvas::Stride::Word),
         ),
         (text("X"), EditIntent::Insert("X".to_owned())),

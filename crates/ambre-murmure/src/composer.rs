@@ -824,11 +824,7 @@ impl Composer {
         if mods == Modifiers::NONE && self.list_key(of, key) {
             return true;
         }
-        let Modifiers {
-            primary,
-            alt,
-            shift,
-        } = mods;
+        let (primary, alt, shift) = (mods.primary(), mods.alt(), mods.shift());
         // A chord puts its style on the selection once the keys before it
         // landed (`MURMURE-431`).
         if mods == Modifiers::PRIMARY

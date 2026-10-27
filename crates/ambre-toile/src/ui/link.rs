@@ -100,7 +100,7 @@ impl LinkAction {
 /// follows on a modifier, or on any click in presentation mode, where editing
 /// is off.
 pub fn wants_follow(mods: Modifiers, mode: PresentMode) -> bool {
-    mods.primary || mode.is_presenting()
+    mods.primary() || mode.is_presenting()
 }
 
 /// The badge of a linked element, in screen space: a small square just outside

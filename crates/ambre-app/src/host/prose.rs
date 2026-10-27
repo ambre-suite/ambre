@@ -604,7 +604,7 @@ impl ProseView {
     /// to the host.
     fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
         Some(match ev {
-            InputEvent::Key { key, mods } if !mods.alt => ProseInput::Key {
+            InputEvent::Key { key, mods } if !mods.alt() => ProseInput::Key {
                 key: ProseKey::from_key(*key, *mods)?,
                 mods: *mods,
             },
@@ -618,10 +618,7 @@ impl ProseView {
             } => ProseInput::Press {
                 at: *at,
                 // The host folds `Cmd` into `primary`; a press reads no Alt.
-                mods: Modifiers {
-                    alt: false,
-                    ..*mods
-                },
+                mods: mods.without(Modifiers::ALT),
                 now: self.now,
             },
             InputEvent::PointerMove { at } => ProseInput::Drag { at: *at },

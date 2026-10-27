@@ -106,12 +106,11 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 };
                 let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
                     key,
-                    mods: ambre_chrome::commands::Modifiers::from_event(
-                        event.ctrl_key(),
-                        event.alt_key(),
-                        event.shift_key(),
-                        event.meta_key(),
-                    ),
+                    mods: ambre_chrome::commands::Modifiers::NONE
+                        .ctrl_if(event.ctrl_key())
+                        .alt_if(event.alt_key())
+                        .shift_if(event.shift_key())
+                        .meta_if(event.meta_key()),
                 });
                 // A key left unconsumed keeps its default, so its character
                 // reaches the buffer (`CHROME-062`).

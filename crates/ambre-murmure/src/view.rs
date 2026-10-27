@@ -1651,13 +1651,9 @@ impl MurmureView {
             }
             InputEvent::Key {
                 key,
-                mods:
-                    Modifiers {
-                        primary: false,
-                        alt: false,
-                        shift,
-                    },
+                mods: mods @ (Modifiers::NONE | Modifiers::SHIFT),
             } => {
+                let shift = mods.shift();
                 match key {
                     Key::ContextMenu => (self.reads.act_on)(self.target_of_focus()),
                     Key::F(10) if shift => (self.reads.act_on)(self.target_of_focus()),
@@ -1763,8 +1759,8 @@ impl MurmureView {
                 // The box is drawn, so its turn by Alt+Enter is said
                 // (`MURMURE-535`).
                 if pressed == Some(Key::Enter)
-                    && mods.alt
-                    && !mods.shift
+                    && mods.alt()
+                    && !mods.shift()
                     && matches!(channel, DraftOf::Thread(..))
                 {
                     let checked = self.composer.also_in_channel(channel);
@@ -4155,9 +4151,10 @@ mod tests {
     /// A `Cmd` chord, as macOS reports it: the host folds the command key,
     /// with no control, into the primary accelerator.
     fn command(page: &mut Page, key: Key) -> bool {
+        let (command, control) = (true, false);
         let ev = InputEvent::Key {
             key,
-            mods: Modifiers::from_event(false, false, false, true),
+            mods: Modifiers::NONE.ctrl_if(control).meta_if(command),
         };
         page.view.handle_input(&ev)
     }

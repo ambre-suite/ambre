@@ -75,7 +75,7 @@ impl TrameView {
             InputEvent::PointerDown {
                 at,
                 button: PointerButton::Primary,
-                mods: Modifiers { shift, .. },
+                mods,
             } if self.fill_drag.is_none() && self.state.header_hit(*at).is_some() => {
                 let Some(hit) = self.state.header_hit(*at) else {
                     return false;
@@ -84,12 +84,12 @@ impl TrameView {
                 match hit {
                     // Shift extends a band of the same axis.
                     HeaderHit::ColBody(c)
-                        if *shift && self.state.selection.kind == SelKind::Cols =>
+                        if mods.shift() && self.state.selection.kind == SelKind::Cols =>
                     {
                         self.extend_axis(AxisPos::Col(c))
                     }
                     HeaderHit::RowBody(r)
-                        if *shift && self.state.selection.kind == SelKind::Rows =>
+                        if mods.shift() && self.state.selection.kind == SelKind::Rows =>
                     {
                         self.extend_axis(AxisPos::Row(r))
                     }
@@ -179,13 +179,13 @@ impl TrameView {
             InputEvent::PointerDown {
                 at,
                 button: PointerButton::Primary,
-                mods: Modifiers { primary, shift, .. },
+                mods,
             } => {
                 self.text_input.focus();
                 if let Some(at) = self.state.cell_at(*at) {
-                    if *shift {
+                    if mods.shift() {
                         self.extend_cell(at);
-                    } else if *primary {
+                    } else if mods.primary() {
                         self.disjoin_cell(at);
                     } else {
                         self.select_cell(at);
@@ -340,19 +340,11 @@ impl TrameView {
                 self.edit_dirty = true;
                 true
             }
-            InputEvent::Key {
-                key,
-                mods:
-                    Modifiers {
-                        primary: chord,
-                        alt,
-                        shift,
-                    },
-            } => {
+            InputEvent::Key { key, mods } => {
                 // `primary` is Ctrl, or Cmd on macOS: the jump modifier.
                 // Shift extends the selection range across navigation keys
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
-                let ext = if *shift {
+                let ext = if mods.shift() {
                     SelectionMode::Extend
                 } else {
                     SelectionMode::Move
@@ -367,12 +359,12 @@ impl TrameView {
                     // selection: Shift is the reverse-direction modifier here, not
                     // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
-                    Key::Tab if !*chord => {
-                        let step = ColDelta::new(if *shift { -1 } else { 1 });
+                    Key::Tab if !mods.primary() => {
+                        let step = ColDelta::new(if mods.shift() { -1 } else { 1 });
                         self.nav_move(RowDelta::ZERO, step, SelectionMode::Move)
                     }
-                    Key::Enter if !*chord => {
-                        let step = RowDelta::new(if *shift { -1 } else { 1 });
+                    Key::Enter if !mods.primary() => {
+                        let step = RowDelta::new(if mods.shift() { -1 } else { 1 });
                         self.nav_move(step, ColDelta::ZERO, SelectionMode::Move)
                     }
                     // Page Down / Up move by a full viewport height.
@@ -387,7 +379,7 @@ impl TrameView {
                         self.nav_move(step, ColDelta::ZERO, ext)
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    Key::Home if *chord => self.nav_goto(CellPos::ORIGIN, ext),
+                    Key::Home if mods.primary() => self.nav_goto(CellPos::ORIGIN, ext),
                     Key::Home => {
                         self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext)
                     }
@@ -396,7 +388,7 @@ impl TrameView {
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
                     // Best-effort -- the UI thread has no used-range model, so it
                     // scans its local cache (`trame-grid-viewport`).
-                    Key::End if *chord => {
+                    Key::End if mods.primary() => {
                         let at = self
                             .state
                             .last_content_cell()
@@ -420,7 +412,7 @@ impl TrameView {
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
                     // the native `cut` clipboard event the host services (`trame-clipboard`).
-                    Key::Delete if *shift => false,
+                    Key::Delete if mods.shift() => false,
                     // Delete / Backspace clear the active cell.
                     Key::Delete | Key::Backspace => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
@@ -430,7 +422,7 @@ impl TrameView {
                         true
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
-                    Key::Char('t') if *alt => {
+                    Key::Char('t') if mods.alt() => {
                         self.text_pass = match self.text_pass {
                             TextPass::Shapes => TextPass::WithText,
                             TextPass::WithText => TextPass::Shapes,
@@ -459,7 +451,7 @@ impl TrameView {
         mods: Modifiers,
     ) -> bool {
         // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
-        if mods.primary {
+        if mods.primary() {
             return false;
         }
         let outcome = self.scroll.wheel(&mut self.state, delta, self.clock.now());

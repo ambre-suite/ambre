@@ -59,13 +59,6 @@ pub const REACT: CommandId = CommandId("murmure.message.react");
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: CommandId = CommandId("murmure.general.keys");
 
-/// Alt and Shift together, the modifiers of the jumps.
-const ALT_SHIFT: Modifiers = Modifiers {
-    primary: false,
-    alt: true,
-    shift: true,
-};
-
 fn palette_title(_: &Locale) -> String {
     "Command palette".into()
 }
@@ -127,14 +120,14 @@ pub const COMMANDS: &[Command] = &[
         id: NEXT_ACTIVITY,
         title: next_activity_title,
         icon: None,
-        keybindings: &[KeyBinding::new(ALT_SHIFT, Key::ArrowDown)],
+        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::ArrowDown)],
         category: NAVIGATE,
     },
     Command {
         id: PREVIOUS_ACTIVITY,
         title: previous_activity_title,
         icon: None,
-        keybindings: &[KeyBinding::new(ALT_SHIFT, Key::ArrowUp)],
+        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::ArrowUp)],
         category: NAVIGATE,
     },
     Command {
@@ -143,7 +136,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         // Not Shift+Escape: Chrome opens its task manager on it, and the
         // page never sees the key.
-        keybindings: &[KeyBinding::new(ALT_SHIFT, Key::Char('a'))],
+        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::Char('a'))],
         category: UNREAD,
     },
     Command {

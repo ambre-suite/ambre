@@ -132,5 +132,9 @@ pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> 
 /// The modifier set of a DOM keyboard event, the control and the command keys
 /// folded into the primary accelerator (`UI-THREAD-028`).
 pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Modifiers {
-    Modifiers::from_event(ev.ctrl_key(), ev.alt_key(), ev.shift_key(), ev.meta_key())
+    Modifiers::NONE
+        .ctrl_if(ev.ctrl_key())
+        .alt_if(ev.alt_key())
+        .shift_if(ev.shift_key())
+        .meta_if(ev.meta_key())
 }

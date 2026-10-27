@@ -835,13 +835,17 @@ ambre-commands | src/keybinding.rs | crate::keybinding | Key::F.0 | field | u8	n
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::char(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary_shift(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.alt | field | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.primary | field | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.shift | field | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(alt) | param | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(ctrl) | param | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(meta) | param | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::from_event(shift) | param | bool	newtype-inner	enum/newtype own accessor or constructor
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary() | ret | bool	generic	whether the set holds a named member, a predicate answer
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift() | ret | bool	generic	whether the set holds a named member, a predicate answer
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::ctrl_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::meta_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
+ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::with_if(held) | param | bool	newtype-inner	private: the one step the named builders share
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	foreign-api	DOM KeyboardEvent.key string parsed into Key
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | CommandCategory.0 | field | &'static str	newtype-inner	newtype inner

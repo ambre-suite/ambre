@@ -37,6 +37,10 @@ impl SelectionMode {
     /// The mode a chord picks: Shift extends the selection.
     #[must_use]
     pub const fn from_mods(mods: Modifiers) -> Self {
-        if mods.shift { Self::Extend } else { Self::Move }
+        if mods.shift() {
+            Self::Extend
+        } else {
+            Self::Move
+        }
     }
 }

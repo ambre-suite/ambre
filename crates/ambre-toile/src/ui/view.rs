@@ -1335,7 +1335,7 @@ impl ToileView {
     // -- Input handling --------------------------------------------------------
 
     fn handle_wheel(&mut self, delta: WheelDelta, mods: Modifiers) -> bool {
-        let ctrl_key = mods.primary;
+        let ctrl_key = mods.primary();
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
         let line = CssVector::new(WHEEL_LINE, WHEEL_LINE);
@@ -1795,10 +1795,9 @@ impl ToileView {
     /// ends what began before. Every other input reaches no board handler.
     fn present_input(&mut self, ev: &InputEvent) -> bool {
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
-                *delta,
-                Modifiers::from_event(*ctrl_key, false, false, false),
-            ),
+            InputEvent::Wheel { delta, ctrl_key } => {
+                self.handle_wheel(*delta, Modifiers::NONE.ctrl_if(*ctrl_key))
+            }
             InputEvent::PointerDown { at, button, mods } => {
                 let screen = on_screen(*at);
                 self.last_pointer = screen;
@@ -2999,8 +2998,8 @@ impl ToileView {
     /// clipboard events (Phase A). Returns `true` when the key was consumed (host
     /// `preventDefault`).
     fn handle_key(&mut self, key: Key, mods: Modifiers) -> bool {
-        let cmd = mods.primary;
-        let shift = mods.shift;
+        let cmd = mods.primary();
+        let shift = mods.shift();
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {
@@ -3548,8 +3547,8 @@ impl ToileView {
     /// Character-producing keys return `false` so the browser still emits the
     /// `input` event that lands as `InputEvent::Text` (the actual insertion).
     fn edit_key(&mut self, key: Key, mods: Modifiers) -> bool {
-        let cmd = mods.primary;
-        let shift = mods.shift;
+        let cmd = mods.primary();
+        let shift = mods.shift();
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
         if cmd {
             match key {
@@ -3562,7 +3561,7 @@ impl ToileView {
                 _ => return false,
             }
         }
-        let word = ambre_canvas::Stride::word_if(mods.alt); // Alt+Arrow = word motion (Ctrl is reserved for chords).
+        let word = ambre_canvas::Stride::word_if(mods.alt()); // Alt+Arrow = word motion (Ctrl is reserved for chords).
         match key {
             Key::Escape => self.request_close_editor(),
             Key::Enter => self.push_intent(EditIntent::Newline),
@@ -4127,10 +4126,9 @@ impl ToileView {
             return true;
         }
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
-                *delta,
-                Modifiers::from_event(*ctrl_key, false, false, false),
-            ),
+            InputEvent::Wheel { delta, ctrl_key } => {
+                self.handle_wheel(*delta, Modifiers::NONE.ctrl_if(*ctrl_key))
+            }
             InputEvent::PointerDown { at, button, mods } => {
                 self.handle_pointer_down(on_screen(*at), *button, *mods)
             }

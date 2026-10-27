@@ -467,12 +467,11 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         // A key the chord set does not model is no input of the cell.
         return Some(InputEvent::Key {
             key: Key::from_dom(&key.key())?,
-            mods: Modifiers::from_event(
-                key.ctrl_key(),
-                key.alt_key(),
-                key.shift_key(),
-                key.meta_key(),
-            ),
+            mods: Modifiers::NONE
+                .ctrl_if(key.ctrl_key())
+                .alt_if(key.alt_key())
+                .shift_if(key.shift_key())
+                .meta_if(key.meta_key()),
         });
     }
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
@@ -487,12 +486,11 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     }
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
     let at = super::offset_of(pointer);
-    let mods = Modifiers::from_event(
-        pointer.ctrl_key(),
-        pointer.alt_key(),
-        pointer.shift_key(),
-        pointer.meta_key(),
-    );
+    let mods = Modifiers::NONE
+        .ctrl_if(pointer.ctrl_key())
+        .alt_if(pointer.alt_key())
+        .shift_if(pointer.shift_key())
+        .meta_if(pointer.meta_key());
     Some(match event.type_().as_str() {
         "pointerdown" => InputEvent::PointerDown {
             at,

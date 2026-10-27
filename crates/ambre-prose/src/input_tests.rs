@@ -72,7 +72,9 @@ impl Rig {
     fn key(&mut self, key: ProseKey, shift: bool, ctrl: bool) -> bool {
         self.input(ProseInput::Key {
             key,
-            mods: ambre_commands::Modifiers::from_event(ctrl, false, shift, false),
+            mods: ambre_commands::Modifiers::NONE
+                .ctrl_if(ctrl)
+                .shift_if(shift),
         })
     }
 
@@ -83,7 +85,7 @@ impl Rig {
     fn press(&mut self, (x, y): (f32, f32), shift: bool, now: ambre_core::PageTime) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
-            mods: ambre_commands::Modifiers::from_event(false, false, shift, false),
+            mods: ambre_commands::Modifiers::NONE.shift_if(shift),
             now,
         })
     }
@@ -1105,7 +1107,7 @@ fn linked() -> (Rig, BlockId) {
 fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
-        mods: ambre_commands::Modifiers::from_event(follow, false, false, false),
+        mods: ambre_commands::Modifiers::NONE.ctrl_if(follow),
         now: ambre_core::PageTime(0.0),
     })
 }
@@ -2640,7 +2642,7 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
 fn press_chord(rig: &mut Rig, chord: ambre_commands::KeyBinding) -> Vec<ProseCommand> {
     let key = ProseKey::from_key(chord.key, chord.mods).expect("the view decodes the chord");
     let before = rig.sent.len();
-    assert!(rig.key(key, chord.mods.shift, chord.mods.primary));
+    assert!(rig.key(key, chord.mods.shift(), chord.mods.primary()));
     rig.sent[before..].to_vec()
 }
 

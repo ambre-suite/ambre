@@ -103,7 +103,7 @@ pub fn menu_key(key: Key, mods: Modifiers, at: usize, initials: &[char]) -> Menu
         Key::ArrowUp => MenuKey::Focus(prev),
         // A menu is a transient popup: Tab cycles inside it rather than
         // letting focus escape to the page behind.
-        Key::Tab => MenuKey::Focus(if mods.shift { prev } else { next }),
+        Key::Tab => MenuKey::Focus(if mods.shift() { prev } else { next }),
         Key::Home => MenuKey::Focus(0),
         Key::End => MenuKey::Focus(len - 1),
         Key::Escape => MenuKey::Dismiss,
@@ -349,7 +349,8 @@ mod tests {
         assert_eq!(Selected::Off.aria(), "false");
         assert_eq!(Checked::On.aria(), "true");
         assert_eq!(Checked::Off.aria(), "false");
-        assert_eq!(crate::Pressed::from_bool(true).aria(), "true");
-        assert_eq!(crate::Pressed::from_bool(false).aria(), "false");
+        for (on, aria) in [(true, "true"), (false, "false")] {
+            assert_eq!(crate::Pressed::from_bool(on).aria(), aria);
+        }
     }
 }

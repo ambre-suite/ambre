@@ -245,12 +245,11 @@ where
                         at,
                         button: ambre_canvas::PointerButton::from_dom(event.button()),
                         // Cmd (macOS) folds into primary, so disjoint-select works there.
-                        mods: ambre_chrome::commands::Modifiers::from_event(
-                            event.ctrl_key(),
-                            event.alt_key(),
-                            event.shift_key(),
-                            event.meta_key(),
-                        ),
+                        mods: ambre_chrome::commands::Modifiers::NONE
+                            .ctrl_if(event.ctrl_key())
+                            .alt_if(event.alt_key())
+                            .shift_if(event.shift_key())
+                            .meta_if(event.meta_key()),
                     },
                     "pointermove" => InputEvent::PointerMove { at },
                     // The browser took a mouse gesture over: it ends where
@@ -262,12 +261,11 @@ where
                         } else {
                             ambre_canvas::PointerButton::from_dom(event.button())
                         },
-                        mods: ambre_chrome::commands::Modifiers::from_event(
-                            event.ctrl_key(),
-                            event.alt_key(),
-                            event.shift_key(),
-                            event.meta_key(),
-                        ),
+                        mods: ambre_chrome::commands::Modifiers::NONE
+                            .ctrl_if(event.ctrl_key())
+                            .alt_if(event.alt_key())
+                            .shift_if(event.shift_key())
+                            .meta_if(event.meta_key()),
                     },
                     _ => return,
                 };

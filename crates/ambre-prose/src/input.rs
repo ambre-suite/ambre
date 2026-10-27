@@ -54,7 +54,7 @@ impl ProseKey {
     /// `None` for a key the view leaves to the host.
     #[must_use]
     pub fn from_key(key: Key, mods: Modifiers) -> Option<Self> {
-        let ctrl = mods.primary;
+        let ctrl = mods.primary();
         Some(match key {
             Key::ArrowLeft => Self::Left,
             Key::ArrowRight => Self::Right,
@@ -347,7 +347,7 @@ impl ProseUiState {
             }
             ProseInput::Press { at, mods, now } => {
                 let target = mods
-                    .primary
+                    .primary()
                     .then(|| self.link_at(*at).map(|link| link.url.clone()))
                     .flatten();
                 match target {
@@ -535,7 +535,7 @@ impl ProseUiState {
     ) -> Option<bool> {
         let menu = self.slash.as_mut()?;
         match key {
-            ProseKey::Up | ProseKey::Down if !mods.shift && !mods.primary => {
+            ProseKey::Up | ProseKey::Down if !mods.shift() && !mods.primary() => {
                 self.step_menu(if key == ProseKey::Down {
                     StepDirection::Forward
                 } else {
@@ -553,7 +553,7 @@ impl ProseUiState {
             }
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
-            ProseKey::Backspace if !mods.primary && menu.query.pop().is_some() => {
+            ProseKey::Backspace if !mods.primary() && menu.query.pop().is_some() => {
                 menu.selected = crate::view::slash::SlashChoice::ZERO;
                 None
             }
@@ -655,12 +655,12 @@ impl ProseUiState {
         mods: Modifiers,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
-        let ctrl = mods.primary;
+        let ctrl = mods.primary();
         // A history step needs no caret: the engine places it after
         // (`UNDO-010`, `UNDO-011`). The key is the view's whether or not the
         // command was taken, so the pipe never runs its own undo.
         if matches!(key, ProseKey::Undo | ProseKey::Redo) {
-            let redo = key == ProseKey::Redo || mods.shift;
+            let redo = key == ProseKey::Redo || mods.shift();
             send(if redo {
                 ProseCommand::Redo
             } else {
