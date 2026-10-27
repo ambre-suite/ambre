@@ -161,7 +161,9 @@ impl TryFrom<TokenColour> for OpaqueColour {
         if colour.0.a == u8::MAX {
             Ok(Self(colour.0))
         } else {
-            Err(format!("token colour must be opaque, #rrggbb: {colour}"))
+            Err(format!(
+                "token colour must be opaque, #rrggbb or #rrggbbff: {colour}"
+            ))
         }
     }
 }
@@ -179,9 +181,11 @@ impl From<OpaqueColour> for Color {
     }
 }
 
-/// The name of a scale step: snake_case, refused at deserialization
-/// otherwise. The Rust module writes it upper case, and the stylesheet with
-/// hyphens. A name declared twice is refused by [`check_scale`].
+/// The name of a scale step: snake_case that starts with a lowercase ASCII
+/// letter, refused at deserialization otherwise. The Rust module writes it
+/// upper case as the name of a constant, which a digit or a `_` cannot
+/// start. The stylesheet writes it with hyphens. A name declared twice is
+/// refused by [`check_scale`].
 #[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(try_from = "String")]
 struct ScaleName(String);
@@ -190,14 +194,16 @@ impl TryFrom<String> for ScaleName {
     type Error = String;
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
-        let snake = !text.is_empty()
+        let snake = text.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
             && text
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
         if snake {
             Ok(Self(text))
         } else {
-            Err(format!("scale name must be snake_case: {text}"))
+            Err(format!(
+                "scale name must be snake_case and start with a lowercase letter: {text}"
+            ))
         }
     }
 }
@@ -611,12 +617,15 @@ mod tests {
             assert!(
                 refused
                     .as_ref()
-                    .is_some_and(|e| e.contains("must be opaque")),
+                    .is_some_and(|e| e.contains("must be opaque, #rrggbb or #rrggbbff")),
                 "{from}: {refused:?}"
             );
         }
         let opaque_photo = source().replace("\"#000000bf\"", "\"#000000ff\"");
         assert!(parsed(&opaque_photo).is_ok());
+        let full_alpha = source().replace("\"#f2a93d\"", "\"#f2a93dff\"");
+        assert_ne!(full_alpha, source());
+        assert!(parsed(&full_alpha).is_ok());
     }
 
     // A scale name has a rule too, snake_case, held by its type. The
@@ -629,6 +638,18 @@ mod tests {
             let refused = parsed(&broken).err().map(|e| e.to_string());
             assert!(
                 refused.as_ref().is_some_and(|e| e.contains("snake_case")),
+                "{bad}: {refused:?}"
+            );
+        }
+        // The Rust module names a constant after it, which a digit or a
+        // `_` cannot start.
+        for bad in ["\"1space\"", "\"_space\""] {
+            let broken = source().replace("\"space_1\"", bad);
+            let refused = parsed(&broken).err().map(|e| e.to_string());
+            assert!(
+                refused
+                    .as_ref()
+                    .is_some_and(|e| e.contains("start with a lowercase letter")),
                 "{bad}: {refused:?}"
             );
         }

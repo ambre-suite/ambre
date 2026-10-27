@@ -747,7 +747,7 @@ ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	f
 ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	free-text	the CSS variable name of each typed colour, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
-ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	an error that echoes the refused token
+ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	the refusal message of the source
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
 ambre-canvas | src/tokens.rs | crate::tokens | generate() | ret | Result<Generated,String>	generic	an error that echoes the refused token
 ambre-canvas | src/tokens.rs | crate::tokens | generate(source) | param | &str	free-text	the whole token source text
