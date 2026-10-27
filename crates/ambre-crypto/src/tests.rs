@@ -823,3 +823,86 @@ fn a_sealed_value_that_is_no_key_is_refused() {
     let short = aead::open_document_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer);
     assert_eq!(short.err(), Some(CryptoError::InvalidKeyLength));
 }
+
+// -- Byte goldens ------------------------------------------------------------
+//
+// Each value below comes from an independent implementation: Python's `hmac`,
+// `hashlib.blake2b` and the `cryptography` Ed25519 signer, over the inputs
+// written here. A refactor of a construction keeps every byte it writes, or
+// one of these fails. The relay re-implements the signed transcript, so its
+// bytes are pinned by value as well as by round trip.
+
+/// Decodes a lowercase hex golden.
+fn golden(hex: &str) -> Vec<u8> {
+    data_encoding::HEXLOWER.decode(hex.as_bytes()).unwrap()
+}
+
+/// The inputs every golden of the envelope shares.
+fn golden_envelope() -> (Nonce, Ciphertext, Aad) {
+    (
+        Nonce([0x07; 24]),
+        Ciphertext(b"a sealed body".to_vec()),
+        Aad::of(b"public-data"),
+    )
+}
+
+#[test]
+fn the_commitment_tag_keeps_its_bytes() {
+    let (nonce, ciphertext, aad) = golden_envelope();
+    let tag = commitment::commitment_tag(&fixed_doc_key(), &nonce, &ciphertext, &aad);
+    assert_eq!(
+        tag.0.to_vec(),
+        golden("bbb7a3f12f49c5ac3bb02be16a06d657ce026587d7c01053d69444d2f30ce622")
+    );
+}
+
+#[test]
+fn the_media_address_keeps_its_bytes() {
+    let address = commitment::media_address(&fixed_doc_key(), b"a picture");
+    let expected: [u8; 32] =
+        golden("c72a97882edaf9922202a868bba98c10b9d8391391ee833ce679124602fd0f98")
+            .try_into()
+            .unwrap();
+    assert_eq!(address, ambre_core::MediaAddress::from_array(expected));
+}
+
+#[test]
+fn the_envelope_signature_keeps_its_bytes() {
+    let (nonce, ciphertext, aad) = golden_envelope();
+    let tag = commitment::commitment_tag(&fixed_doc_key(), &nonce, &ciphertext, &aad);
+    let signing = ed25519_dalek::SigningKey::from_bytes(&[0x33; 32]);
+    let signature = crate::signature::sign(&signing, &nonce, &ciphertext, &aad, &tag);
+    assert_eq!(
+        signature.0.to_vec(),
+        golden(
+            "ceb6340011299611cb720434c2ccbc24e44497db42b827870a1876a1110be99f\
+             6100b0be0749510adc17b1b1fae731151e64e813b05fedb8a105a1be3bab9909"
+        )
+    );
+}
+
+#[test]
+fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
+    let (_, snapshot, _) = golden_envelope();
+    let parent = ambre_core::ChainHash([0x44; 32]);
+    assert_eq!(
+        hash::chain_hash(Some(&parent), &snapshot).0.to_vec(),
+        golden("e02ef1c5d7a3f1836f76be11227c66f52f0fc2f9d5beef621ea870e716d53186")
+    );
+    let headless = golden("997889dc0af01e9390d3155a446f283600e018a8cccc32c15085956fe8ef4a79");
+    assert_eq!(hash::chain_hash(None, &snapshot).0.to_vec(), headless);
+    assert_eq!(hash::file_digest(&snapshot.0).to_vec(), headless);
+}
+
+#[test]
+fn the_dev_seed_keeps_its_bytes() {
+    let seed: [u8; 32] = golden("31824b2cddf4df243951a9a2e3e4f6ae90373fc78543354bc52f6643631426f2")
+        .try_into()
+        .unwrap();
+    assert_eq!(
+        hash::dev_seed("alice").derive_signing_key().verifying_key(),
+        MasterSeed::from_array(seed)
+            .derive_signing_key()
+            .verifying_key()
+    );
+}
