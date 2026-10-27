@@ -173,11 +173,11 @@ pub fn unwrap_anchored(
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, peer_public, &own_pub);
-    let bytes = Secret::new(aead::open(
+    let bytes = aead::open(
         &wrapped.nonce,
         &wrapped.ciphertext,
         &ambre_core::Aad::of(KEK_DOMAIN),
         &kek,
-    )?);
-    crate::keys::split_anchored(bytes.expose())
+    )?;
+    crate::keys::split_anchored(bytes.secret().expose())
 }

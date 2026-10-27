@@ -8,7 +8,7 @@
 //! Assembly into `ambre_protocol::{Update,Snapshot,Ephemeral}` and the
 //! compression version byte live in the Sync thread, not here.
 
-use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, Signature};
+use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, SecretBytes, Signature};
 use ed25519_dalek::SigningKey;
 
 use crate::aead;
@@ -67,7 +67,8 @@ pub fn seal(
 
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,
 /// then commitment tag, then AEAD. Any failure yields a typed error; the caller
-/// (Sync) drops the message and raises a `SyncWarning`.
+/// (Sync) drops the message and raises a `SyncWarning`. The plaintext comes
+/// back as [`SecretBytes`], wiped when its last copy drops.
 ///
 /// # Errors
 ///
@@ -82,7 +83,7 @@ pub fn open(
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
-) -> Result<Vec<u8>, CryptoError> {
+) -> Result<SecretBytes, CryptoError> {
     signature::verify(
         author_pub,
         &sealed.nonce,

@@ -174,13 +174,13 @@ impl MasterSeed {
             .as_bytes()
             .split_first_chunk::<{ aead::NONCE_LEN }>()
             .ok_or(CryptoError::InvalidKeyLength)?;
-        let opened = Secret::new(aead::open(
+        let opened = aead::open(
             &ambre_core::Nonce(*nonce),
             &ambre_core::Ciphertext(ciphertext.to_vec()),
             aad,
             &key.document_key(),
-        )?);
-        key_of(opened.expose())
+        )?;
+        key_of(opened.secret().expose())
             .map(Self)
             .ok_or(CryptoError::InvalidKeyLength)
     }
@@ -262,8 +262,8 @@ impl DocumentKey {
         aad: &ambre_core::Aad,
         author: &ambre_core::PublicKey,
     ) -> Result<DocumentKey, CryptoError> {
-        let bytes = Secret::new(crate::envelope::open(sealed, aad, self, author)?);
-        key_of(bytes.expose())
+        let bytes = crate::envelope::open(sealed, aad, self, author)?;
+        key_of(bytes.secret().expose())
             .map(Self::from_secret)
             .ok_or(CryptoError::InvalidKeyLength)
     }

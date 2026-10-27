@@ -31,7 +31,7 @@ fn roundtrip_envelope() {
 
     let sealed = envelope::seal(plaintext, aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
-    assert_eq!(opened, plaintext);
+    assert_eq!(opened.to_plaintext(), plaintext);
 }
 
 /// `ZK-017`: the debug form of an envelope prints its length and none of its
@@ -58,10 +58,10 @@ fn tampered_ciphertext_fails() {
     let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     sealed.ciphertext.0[0] ^= 0xFF;
     // Signature covers the ciphertext, so this trips the signature check first.
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&sealed, aad, &doc_key, &author),
         Err(CryptoError::InvalidSignature)
-    );
+    ));
 }
 
 #[test]
@@ -85,10 +85,10 @@ fn commitment_tag_wrong_aad_rejected() {
         signature,
         ..sealed
     };
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&forged, forged_aad, &doc_key, &author),
         Err(CryptoError::CommitmentMismatch)
-    );
+    ));
 }
 
 /// Every seal draws its own 192-bit nonce (`SYNC-003`). One payload sealed
@@ -131,22 +131,22 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
         );
     };
 
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&forged, aad, &doc_key, &author),
         Err(CryptoError::InvalidSignature)
-    );
+    ));
     resign(&mut forged);
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&forged, aad, &doc_key, &author),
         Err(CryptoError::CommitmentMismatch)
-    );
+    ));
     forged.commitment_tag =
         commitment::commitment_tag(&doc_key, &forged.nonce, &forged.ciphertext, aad);
     resign(&mut forged);
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&forged, aad, &doc_key, &author),
         Err(CryptoError::AeadFailed)
-    );
+    ));
 }
 
 #[test]
@@ -162,10 +162,10 @@ fn invalid_signature_rejected() {
             .verifying_key()
             .to_bytes(),
     );
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&sealed, aad, &doc_key, &wrong_author),
         Err(CryptoError::InvalidSignature)
-    );
+    ));
 }
 
 #[test]
@@ -177,10 +177,10 @@ fn wrong_document_key_rejected() {
 
     let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     let other_key = DocumentKey::from_array([0x44; 32]);
-    assert_eq!(
+    assert!(matches!(
         envelope::open(&sealed, aad, &other_key, &author),
         Err(CryptoError::CommitmentMismatch)
-    );
+    ));
 }
 
 // -- Key derivation ----------------------------------------------------------
@@ -603,7 +603,7 @@ proptest! {
         let aad = &Aad::of(b"aad");
         let sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
-        prop_assert_eq!(opened, data);
+        prop_assert_eq!(opened.to_plaintext(), data);
     }
 
     #[test]
@@ -770,7 +770,9 @@ fn a_document_key_sealed_under_another_opens_to_the_same_key() {
     // The opened key reads what the original sealed.
     let (n, ct) = aead::seal(b"a message", &Aad::of(b""), &inner).unwrap();
     assert_eq!(
-        aead::open(&n, &ct, &Aad::of(b""), &opened).unwrap(),
+        aead::open(&n, &ct, &Aad::of(b""), &opened)
+            .unwrap()
+            .to_plaintext(),
         b"a message"
     );
 }

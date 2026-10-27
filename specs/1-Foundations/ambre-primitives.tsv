@@ -1186,7 +1186,6 @@ ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(hi) | param | f64	ne
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/aead.rs | crate::aead | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_row(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
@@ -1204,7 +1203,6 @@ ambre-crypto | src/commitment.rs | crate::commitment | mac_over() | ret | [u8;TA
 ambre-crypto | src/commitment.rs | crate::commitment | mac_over(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | media_address(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/envelope.rs | crate::envelope | open() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/envelope.rs | crate::envelope | seal(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_DOMAIN | const | &[u8]	generic	generic byte/text API or codec

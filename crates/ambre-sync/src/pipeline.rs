@@ -331,7 +331,9 @@ fn open_payload(
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
 ) -> Result<Vec<u8>, PipelineError> {
-    let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?;
+    // The model reads the bytes, so they are copied once, through the door
+    // `ARCH-047` admits. The opened buffer is wiped as its temporary drops.
+    let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?.to_plaintext();
     let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
     decompress(CompressionVersion::from_byte(*version)?, body)
 }
@@ -794,12 +796,7 @@ pub fn open_object(
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, PipelineError> {
     let (key_id, author, sealed) = object_parts(bytes, doc_key)?;
-    Ok(envelope::open(
-        &sealed,
-        &object_aad(key_id, aad),
-        doc_key,
-        &author,
-    )?)
+    Ok(envelope::open(&sealed, &object_aad(key_id, aad), doc_key, &author)?.to_plaintext())
 }
 
 // -- Key links -----------------------------------------------------------------
@@ -1033,8 +1030,9 @@ mod tests {
                 &update.commitment_tag,
                 &update.signature,
             );
-            let plaintext =
-                envelope::open(&sealed, &aad, &doc_key, &update.public_data.pub_key).unwrap();
+            let plaintext = envelope::open(&sealed, &aad, &doc_key, &update.public_data.pub_key)
+                .unwrap()
+                .to_plaintext();
             assert_eq!(plaintext[0], version);
         }
     }

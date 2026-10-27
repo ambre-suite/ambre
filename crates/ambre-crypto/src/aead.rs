@@ -32,6 +32,9 @@ pub fn seal(
 
 /// Decrypts `ciphertext` under `key`, verifying the Poly1305 tag against `aad`.
 ///
+/// The plaintext comes back as [`SecretBytes`], so it leaves this crate
+/// wrapped, and the opened buffer is wiped when its last copy drops.
+///
 /// # Errors
 ///
 /// [`CryptoError::AeadFailed`] when the tag does not verify: a wrong key,
@@ -41,8 +44,8 @@ pub fn open(
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
     key: &DocumentKey,
-) -> Result<Vec<u8>, CryptoError> {
-    open_under(nonce, &ciphertext.0, aad, key.as_bytes())
+) -> Result<SecretBytes, CryptoError> {
+    open_under(nonce, &ciphertext.0, aad, key.as_bytes()).map(SecretBytes::new)
 }
 
 /// Seals one passphrase-sealed `.ambre` file under its own [`FileKey`].
