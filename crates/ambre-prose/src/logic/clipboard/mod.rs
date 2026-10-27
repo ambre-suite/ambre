@@ -608,8 +608,7 @@ mod tests {
         );
     }
 
-    /// `PROSE-UI-234`, `PROSE-UI-220`: a pasted link passes the check an HTML
-    /// paste makes. A target that runs, or one longer than a paste keeps,
+    /// `PROSE-UI-234`: a pasted link passes the check an HTML paste makes. A target that runs, or one longer than a paste keeps,
     /// never lands, so no export writes it.
     #[test]
     fn a_crafted_link_lands_only_when_a_reader_may_follow_it() {
@@ -649,8 +648,8 @@ mod tests {
         assert_eq!(written, vec![("s".to_owned(), LoroValue::from(""))]);
     }
 
-    /// `PROSE-UI-234`, `PROSE-008`: a flag set by a boolean lands in the one
-    /// spelling of "present", and a flag cleared by one does not land.
+    /// `PROSE-UI-234`: a flag set by a boolean lands in the one spelling of
+    /// "present", and a flag cleared by one does not land.
     #[test]
     fn a_crafted_flag_lands_as_present_or_not_at_all() {
         let written = pasted_marks(vec![
