@@ -6,8 +6,27 @@ use super::*;
 /// The name an organization is created or renamed with: trimmed, never blank,
 /// at most [`ambre_core::NAME_MAX_CHARS`] characters (`SRV-233`). A row read
 /// back keeps its name as text, so a name stored before the rule still lists.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A request body decodes it through [`OrgName::new`], so a body naming a
+/// name that breaks the rule does not decode.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct OrgName(String);
+
+/// The error of a name [`OrgName::new`] refuses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "an organization name is blank or past {} characters",
+    ambre_core::NAME_MAX_CHARS
+)]
+pub struct InvalidOrgName;
+
+impl TryFrom<String> for OrgName {
+    type Error = InvalidOrgName;
+
+    fn try_from(text: String) -> Result<Self, InvalidOrgName> {
+        Self::new(&text).ok_or(InvalidOrgName)
+    }
+}
 
 impl OrgName {
     /// The name `text` is once trimmed, or `None` when it breaks the rule.

@@ -2554,6 +2554,7 @@ ambre-server | src/db/mod.rs | crate::db | uuid_to_core(u) | param | uuid::Uuid	
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrgName::new(text) | param | &str	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/db/orgs.rs | crate::db::orgs | <OrgName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of OrgName validates, as a request body carries it
 ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field | String	free-text	row keeps legacy name text by design; OrgName validates at the request seam (SRV-233)
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
@@ -2643,10 +2644,7 @@ ambre-server | src/routes/channels.rs | crate::routes::channels | ThreadJson.cre
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	echo of a validated OrgName
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | UpdateOrgRequest.name | field | String	free-text	validated into db::OrgName by org_name() at the seam
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | org_name(name) | param | &str	newtype-inner	constructor seam into OrgName
 ambre-server | src/routes/read_cursors.rs | crate::routes::read_cursors | ActivityJson.active | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result

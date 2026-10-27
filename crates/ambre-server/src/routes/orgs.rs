@@ -15,7 +15,8 @@ use crate::state::AppState;
 /// Request body for creating an organization.
 #[derive(serde::Deserialize)]
 pub struct CreateOrgRequest {
-    pub name: String,
+    /// A name blank or past the cap does not decode (`SRV-233`).
+    pub name: db::OrgName,
     /// X25519 organization public key (hex encoded).
     pub org_pubkey: ambre_core::ExchangeKeyHex,
     /// A split out of range does not decode (`SRV-062`).
@@ -89,7 +90,8 @@ fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
 /// Request body for updating an organization.
 #[derive(serde::Deserialize)]
 pub struct UpdateOrgRequest {
-    pub name: String,
+    /// A name blank or past the cap does not decode (`SRV-233`).
+    pub name: db::OrgName,
 }
 
 /// Validates that a role is allowed in an organization context.
@@ -148,7 +150,7 @@ pub async fn create_org(
     let session = auth;
     let owner_id = session.user_id;
 
-    let name = org_name(&req.name)?;
+    let name = req.name;
     validate_shamir_params(req.shamir)?;
     refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
@@ -216,7 +218,7 @@ pub async fn update_org(
     let uid = session.user_id;
 
     require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
-    let name = org_name(&req.name)?;
+    let name = req.name;
 
     let org = db::update_organization(&state.db, &org_id, &name)
         .await?
@@ -244,17 +246,6 @@ pub async fn delete_org(
         });
     }
     Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
-}
-
-/// The name an organization takes, refused when blank or past the cap of a
-/// name (`SRV-233`).
-fn org_name(name: &str) -> Result<db::OrgName, AppError> {
-    db::OrgName::new(name).ok_or_else(|| {
-        AppError::BadRequest(format!(
-            "organization name: blank or past {} characters",
-            ambre_core::NAME_MAX_CHARS
-        ))
-    })
 }
 
 /// A share that arrives is refused rather than stored unread: no client
@@ -876,7 +867,7 @@ mod tests {
                 let resp = send("POST", "/api/organizations".into(), create)
                     .await
                     .unwrap();
-                assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{name}");
+                assert_eq!(resp.status(), StatusCode::CONFLICT, "{name}");
             }
             let organizations: i64 = sqlx::query_scalar("SELECT count(*) FROM organizations")
                 .fetch_one(&state.db)
@@ -889,7 +880,7 @@ mod tests {
                 let rename = serde_json::json!({ "name": name });
                 let uri = format!("/api/organizations/{org_id}");
                 let resp = send("PATCH", uri, rename).await.unwrap();
-                assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{name}");
+                assert_eq!(resp.status(), StatusCode::CONFLICT, "{name}");
             }
             let rename = serde_json::json!({ "name": "  Globex " });
             let uri = format!("/api/organizations/{org_id}");
