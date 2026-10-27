@@ -737,68 +737,23 @@ ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	
 ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/tokens.rs | crate::tokens | CSS_OUT | const | &str	generic	file path relative to the crate, joined by std::path and named in a message
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.caret | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.cell_border | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.cell_error | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.cell_text | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.content_bg | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.content_pending | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.grid_line | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.header_active | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.header_bg | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.header_border | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.header_hover | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.header_text | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors.selection | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,&str);13]	free-text	CSS variable or field names paired with token colour text
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.accent | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.bg | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.border | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.error | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.info | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.on_accent | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.success | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.surface | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.surface_2 | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.surface_hover | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.text | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.text_dim | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors.warning | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,&str);13]	free-text	CSS variable or field names paired with token colour text
-ambre-canvas | src/tokens.rs | crate::tokens | Effects.scrim | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | Result<[(&'static str,String);4],String>	generic	CSS variable names and values, or an error that echoes the refused token
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
+ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
+ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
+ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	free-text	the CSS variable name of each typed colour, written into the generated files
+ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	free-text	the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.control_ground | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.control_line | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.line | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.text | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.text_shadow | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.veil | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo.veil_deep | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,&str);7]	free-text	CSS variable or field names paired with token colour text
+ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	free-text	the CSS variable name of each typed colour, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
-ambre-canvas | src/tokens.rs | crate::tokens | RUST_OUT | const | &str	generic	file path relative to the crate, joined by std::path and named in a message
-ambre-canvas | src/tokens.rs | crate::tokens | SOURCE | const | &str	generic	file path relative to the crate, joined by std::path and named in a message
-ambre-canvas | src/tokens.rs | crate::tokens | Shadow.colour | field | String	free-text	token colour text, read from tokens.ron and written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Shadow::css() | ret | Result<String,String>	generic	generated text, or an error that echoes the refused token
-ambre-canvas | src/tokens.rs | crate::tokens | Tokens.scale | field | Vec<(String,Px)>	free-text	scale step names read from tokens.ron, each with its typed length
+ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
+ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	an error that echoes the refused token
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
-ambre-canvas | src/tokens.rs | crate::tokens | check_scale(scale) | param | &[(String,Px)]	free-text	scale step names read from tokens.ron, each with its typed length
-ambre-canvas | src/tokens.rs | crate::tokens | crate_file(relative) | param | &str	generic	file path relative to the crate, joined by std::path
-ambre-canvas | src/tokens.rs | crate::tokens | css_colour() | ret | Result<&str,String>	generic	the checked token colour text, or an error that echoes the refused token
-ambre-canvas | src/tokens.rs | crate::tokens | css_colour(hex) | param | &str	generic	generic codec/parser/bytes API: token colour text in
 ambre-canvas | src/tokens.rs | crate::tokens | generate() | ret | Result<Generated,String>	generic	an error that echoes the refused token
 ambre-canvas | src/tokens.rs | crate::tokens | generate(source) | param | &str	free-text	the whole token source text
-ambre-canvas | src/tokens.rs | crate::tokens | generate_from_disk() | ret | Result<Generated,String>	generic	an error that echoes the refused token or names the unread source
-ambre-canvas | src/tokens.rs | crate::tokens | outputs() | ret | [(&'static str,&String);2]	generic	file path relative to the crate, paired with the text the file must hold
-ambre-canvas | src/tokens.rs | crate::tokens | rgba8() | ret | Result<String,String>	generic	Rust expression text of the colour, or an error that echoes the refused token
-ambre-canvas | src/tokens.rs | crate::tokens | rgba8(hex) | param | &str	generic	generic codec/parser/bytes API: token colour text in
-ambre-canvas | src/tokens.rs | crate::tokens | rust_module() | ret | Result<String,String>	generic	generated text, or an error that echoes the refused token
-ambre-canvas | src/tokens.rs | crate::tokens | stale() | ret | Vec<&'static str>	generic	file paths relative to the crate, named in the drift message
-ambre-canvas | src/tokens.rs | crate::tokens | stylesheet() | ret | Result<String,String>	generic	generated text, or an error that echoes the refused token
-ambre-canvas | src/tokens.rs | crate::tokens | write() | ret | Result<(),String>	generic	an error that names the file it failed to write
+ambre-canvas | src/tokens.rs | crate::tokens | outputs() | ret | [(TokenFile,&String);2]	free-text	each generated file, paired with the whole text it must hold
+ambre-canvas | src/tokens.rs | crate::tokens | rust_module() | ret | String	free-text	a whole generated file: the Rust module
+ambre-canvas | src/tokens.rs | crate::tokens | stylesheet() | ret | String	free-text	a whole generated file: the stylesheet
 ambre-canvas | src/view.rs | crate::view | FrameStats.fps | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionEnd.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionUpdate.text | field | String	free-text	text, label or message

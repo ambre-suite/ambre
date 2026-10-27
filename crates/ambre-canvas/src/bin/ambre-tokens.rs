@@ -14,7 +14,7 @@
 
 use std::process::ExitCode;
 
-use ambre_canvas::tokens::{self, SOURCE};
+use ambre_canvas::tokens::{self, TokenFile};
 
 /// What one run does.
 enum Mode {
@@ -53,8 +53,11 @@ fn main() -> ExitCode {
     if stale.is_empty() {
         return ExitCode::SUCCESS;
     }
-    for path in stale {
-        eprintln!("tokens: crates/ambre-canvas/{path} is not what {SOURCE} generates");
+    for file in stale {
+        eprintln!(
+            "tokens: crates/ambre-canvas/{file} is not what {} generates",
+            TokenFile::Source
+        );
     }
     eprintln!("tokens: run `just tokens-write` and commit the result");
     ExitCode::FAILURE
