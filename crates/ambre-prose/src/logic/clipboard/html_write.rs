@@ -27,13 +27,13 @@ const ELEMENTS: [(MarkRoot, &str); 7] = [
 fn list_open(kind: &ClipKind) -> Option<String> {
     match kind {
         ClipKind::Bullet | ClipKind::Todo(_) => Some("<ul>".to_owned()),
-        ClipKind::Ordered(code) => Some(
-            match OrderedStyle::from_code(*code) {
-                Some(OrderedStyle::LowerAlpha) => "<ol type=\"a\">",
-                Some(OrderedStyle::UpperAlpha) => "<ol type=\"A\">",
-                Some(OrderedStyle::LowerRoman) => "<ol type=\"i\">",
-                Some(OrderedStyle::UpperRoman) => "<ol type=\"I\">",
-                _ => "<ol>",
+        ClipKind::Ordered(style) => Some(
+            match style {
+                OrderedStyle::LowerAlpha => "<ol type=\"a\">",
+                OrderedStyle::UpperAlpha => "<ol type=\"A\">",
+                OrderedStyle::LowerRoman => "<ol type=\"i\">",
+                OrderedStyle::UpperRoman => "<ol type=\"I\">",
+                OrderedStyle::Decimal => "<ol>",
             }
             .to_owned(),
         ),
@@ -72,8 +72,8 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
             }
             ClipKind::Code(lang) => {
                 html.push_str("<pre><code");
-                if !lang.is_empty() {
-                    let _ = write!(html, " class=\"language-{}\"", escape(lang));
+                if let Some(lang) = lang {
+                    let _ = write!(html, " class=\"language-{}\"", escape(lang.as_str()));
                 }
                 html.push('>');
                 for run in &block.runs {

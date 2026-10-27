@@ -16,14 +16,14 @@ use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
 use ambre_bus::app::prose::{
-    BlockInit, DocCount, DocOffset, DocSpan, HeadingLevel, ListStyle, OrderedStyle,
+    BlockInit, CodeLang, DocCount, DocOffset, DocSpan, HeadingLevel, ListStyle, OrderedStyle,
 };
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
-use crate::mark::{FORMATTING_KEYS, MarkRoot};
+use crate::mark::{self, FORMATTING_KEYS, MarkRoot};
 use ambre_bus::app::prose::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
@@ -51,9 +51,35 @@ enum ClipKind {
     Paragraph,
     Heading(HeadingLevel),
     Bullet,
-    Ordered(u8),
+    Ordered(OrderedStyle),
     Todo(crate::events::TodoMark),
-    Code(String),
+    /// A code block, `None` for a plain one. The payload spells it as the
+    /// text the block stores, the empty text for a plain block.
+    Code(#[serde(with = "stored_lang")] Option<CodeLang>),
+}
+
+/// The code language as the payload spells it: the stored text, so the bytes
+/// stay those a payload of a bare string wrote.
+mod stored_lang {
+    use ambre_bus::app::prose::CodeLang;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[expect(
+        clippy::ref_option,
+        reason = "serde's `with` hands the field by reference"
+    )]
+    pub(super) fn serialize<S: Serializer>(
+        lang: &Option<CodeLang>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        CodeLang::stored(lang.as_ref()).serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<CodeLang>, D::Error> {
+        String::deserialize(deserializer).map(CodeLang::new)
+    }
 }
 
 /// A run of text and the formatting marks it carries. Anchors stay behind:
@@ -84,12 +110,23 @@ impl ClipValue {
         })
     }
 
-    fn value(&self) -> LoroValue {
+    /// The value a paste writes under `key`, or `None` for a mark it drops
+    /// (`PROSE-UI-234`). Only a formatting key passes, and its value must pass
+    /// the grammar a typed mark does: a flag, a canonical colour, a size in
+    /// range. The bytes a paste reads may come from a crafted page, so the
+    /// copy that wrote them proves nothing.
+    fn checked(&self, key: &MarkKey) -> Option<LoroValue> {
+        if !MarkRoot::of(key).is_some_and(|root| FORMATTING_KEYS.contains(&root)) {
+            return None;
+        }
         match self {
-            Self::Bool(on) => LoroValue::from(*on),
-            Self::Int(n) => LoroValue::from(*n),
-            Self::Float(x) => LoroValue::from(*x),
-            Self::Text(text) => LoroValue::from(text.as_str()),
+            Self::Bool(on) => mark::validate_value(key, None)
+                .ok()
+                .map(|_| LoroValue::from(*on)),
+            Self::Text(raw) => mark::validate_value(key, Some(raw))
+                .ok()
+                .map(|value| LoroValue::from(value.as_str())),
+            Self::Int(_) | Self::Float(_) => None,
         }
     }
 }
@@ -102,17 +139,13 @@ impl ClipKind {
             Self::Bullet => BlockInit::ListItem {
                 style: ListStyle::Bullet,
             },
-            Self::Ordered(code) => BlockInit::ListItem {
-                style: ListStyle::Ordered(
-                    OrderedStyle::from_code(*code).unwrap_or(OrderedStyle::Decimal),
-                ),
+            Self::Ordered(style) => BlockInit::ListItem {
+                style: ListStyle::Ordered(*style),
             },
             Self::Todo(done) => BlockInit::ListItem {
                 style: ListStyle::Todo(*done),
             },
-            Self::Code(lang) => BlockInit::CodeBlock {
-                lang: ambre_bus::app::prose::CodeLang::new(lang.clone()),
-            },
+            Self::Code(lang) => BlockInit::CodeBlock { lang: lang.clone() },
         }
     }
 }
@@ -139,7 +172,7 @@ impl ClipRun {
             marks: self
                 .marks
                 .iter()
-                .map(|(key, value)| (key.clone(), value.value()))
+                .filter_map(|(key, value)| Some((key.clone(), value.checked(key)?)))
                 .collect(),
         }
     }
@@ -165,12 +198,12 @@ impl ProseState {
                 doc::heading_level_of(&tree, id).map_or(HeadingLevel::H1, StoredLevel::clamped),
             ),
             Some(BlockType::ListItem) => match doc::list_style_of(&tree, id) {
-                Some(ListStyle::Ordered(style)) => ClipKind::Ordered(style.code()),
+                Some(ListStyle::Ordered(style)) => ClipKind::Ordered(style),
                 Some(ListStyle::Todo(done)) => ClipKind::Todo(done),
                 _ => ClipKind::Bullet,
             },
             Some(BlockType::CodeBlock) => {
-                ClipKind::Code(self.code_lang_of(&block_id(*id)).unwrap_or_default())
+                ClipKind::Code(self.code_lang_of(&block_id(*id)).and_then(CodeLang::new))
             }
             _ => ClipKind::Paragraph,
         }
@@ -470,6 +503,75 @@ mod tests {
         assert_eq!(state.block_type_of(&pasted[1]), Some(BlockType::Paragraph));
         assert_eq!(state.block_type_of(&pasted[2]), Some(BlockType::ListItem));
         assert!(format!("{:?}", state.marks_of(&pasted[1])).contains("\"b\""));
+    }
+
+    /// `PROSE-UI-234`: a crafted payload writes only the formatting marks a
+    /// typed mark may carry. A colour, a size or a flag value the grammar
+    /// refuses is dropped, and so is an anchor and a value of no mark shape.
+    #[test]
+    fn a_crafted_payload_writes_only_the_marks_a_typed_mark_may() {
+        let (mut state, first) = document();
+        let run = |key: &str, value: ClipValue| ClipRun {
+            text: "x".to_owned(),
+            marks: vec![(MarkKey::from(key), value)],
+        };
+        let text = |raw: &str| ClipValue::Text(raw.to_owned());
+        let payload = Payload {
+            magic: MAGIC,
+            blocks: vec![ClipBlock {
+                kind: ClipKind::Paragraph,
+                runs: vec![
+                    run("fg", text("red")),
+                    run("fs", text("9999")),
+                    run("b", text("yes")),
+                    run("cm:x", text("a-thread")),
+                    run("zz", text("")),
+                    run("fg", ClipValue::Int(5)),
+                    run("bg", text("#FFFF00")),
+                    run("i", ClipValue::Bool(true)),
+                ],
+            }],
+        };
+        let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
+        state.handle_command(ProseCommand::Paste {
+            at: (first, DocOffset::ZERO),
+            text: "xxxxxxxx".to_owned(),
+            html: None,
+            payload: Some(ambre_core::ClipboardBytes::new(bytes)),
+        });
+        assert_eq!(state.text_of(&first).as_deref(), Some("xxxxxxxx"));
+        let body = state.body_of(&tree_id(first)).expect("the paragraph");
+        let span = DocSpan::new(
+            DocOffset::ZERO,
+            DocCount::from_len(body.len_unicode()).as_end(),
+        );
+        let written: Vec<(String, LoroValue)> = marked_runs(&body, span)
+            .into_iter()
+            .flat_map(|run| run.marks)
+            .map(|(key, value)| (key.as_str().to_owned(), value))
+            .collect();
+        assert_eq!(
+            written,
+            vec![
+                ("bg".to_owned(), LoroValue::from("#ffff00")),
+                ("i".to_owned(), LoroValue::from(true)),
+            ]
+        );
+    }
+
+    /// `PROSE-UI-107`: a typed ordinal style and code language keep the bytes
+    /// a payload of a bare code and a bare string wrote.
+    #[test]
+    fn a_typed_kind_keeps_its_payload_bytes() {
+        let bytes = |kind: &ClipKind| postcard::to_allocvec(kind).expect("a kind encodes");
+        assert_eq!(bytes(&ClipKind::Ordered(OrderedStyle::LowerRoman)), [3, 3]);
+        assert_eq!(bytes(&ClipKind::Code(None)), [5, 0]);
+        assert_eq!(bytes(&ClipKind::Code(CodeLang::new("rs"))), [5, 2, b'r', b's']);
+        assert!(postcard::from_bytes::<ClipKind>(&[3, 9]).is_err());
+        assert_eq!(
+            postcard::from_bytes::<ClipKind>(&[5, 0]).ok(),
+            Some(ClipKind::Code(None))
+        );
     }
 
     /// `PROSE-UI-042`: bytes this application did not write paste as their

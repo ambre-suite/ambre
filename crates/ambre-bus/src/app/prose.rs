@@ -348,8 +348,10 @@ impl TodoMark {
     }
 }
 
-/// How an ordered item's ordinal is spelled.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How an ordered item's ordinal is spelled. A clipboard payload carries it
+/// as its bare code, and a decoded code outside the five is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
 pub enum OrderedStyle {
     Decimal = 0,
     LowerAlpha = 1,
@@ -374,6 +376,25 @@ impl OrderedStyle {
             4 => Self::UpperRoman,
             _ => return None,
         })
+    }
+}
+
+/// The error of a decoded ordinal style outside the five codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("an ordinal style is a code of zero to four, not {0}")]
+pub struct InvalidOrderedStyle(pub u8);
+
+impl TryFrom<u8> for OrderedStyle {
+    type Error = InvalidOrderedStyle;
+
+    fn try_from(code: u8) -> Result<Self, Self::Error> {
+        Self::from_code(code).ok_or(InvalidOrderedStyle(code))
+    }
+}
+
+impl From<OrderedStyle> for u8 {
+    fn from(style: OrderedStyle) -> Self {
+        style.code()
     }
 }
 

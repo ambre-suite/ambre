@@ -17,7 +17,7 @@ use html5ever::tokenizer::{
 };
 use html5ever::{Attribute, LocalName, ParseOpts, ns, parse_document};
 
-use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
+use ambre_bus::app::prose::{CodeLang, HeadingLevel, OrderedStyle};
 
 use super::sink::{Arena, Data, NodeId, Nodes};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
@@ -358,7 +358,7 @@ impl Reader {
             "ul" | "ol" => {
                 self.flush(EmptyBlock::Drop);
                 self.lists.push(if tag == "ol" {
-                    ClipKind::Ordered(ordered_style(attr(attrs, "type")).code())
+                    ClipKind::Ordered(ordered_style(attr(attrs, "type")))
                 } else {
                     ClipKind::Bullet
                 });
@@ -382,7 +382,7 @@ impl Reader {
                     kind: ClipKind::Code(lang),
                     ..
                 }) = self.open.last_mut()
-                    && lang.is_empty()
+                    && lang.is_none()
                 {
                     *lang = language(attrs);
                 }
@@ -550,7 +550,7 @@ impl Reader {
 }
 
 /// The language a code block names through a `language-` or `lang-` class.
-fn language(attrs: &[Attribute]) -> String {
+fn language(attrs: &[Attribute]) -> Option<CodeLang> {
     attr(attrs, "class")
         .into_iter()
         .flat_map(str::split_ascii_whitespace)
@@ -559,13 +559,14 @@ fn language(attrs: &[Attribute]) -> String {
                 .strip_prefix("language-")
                 .or_else(|| class.strip_prefix("lang-"))
         })
-        .map(|lang| {
-            lang.chars()
-                .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '+' | '#'))
-                .take(32)
-                .collect()
+        .and_then(|lang| {
+            CodeLang::new(
+                lang.chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '+' | '#'))
+                    .take(32)
+                    .collect::<String>(),
+            )
         })
-        .unwrap_or_default()
 }
 
 fn ordered_style(kind: Option<&str>) -> OrderedStyle {
@@ -918,11 +919,8 @@ mod tests {
         );
         let blocks = read(html);
         assert_eq!(texts(&blocks), ["one two", "fn a() {}\n    b();", "x"]);
-        assert_eq!(blocks[1].kind, ClipKind::Code("rust".to_owned()));
-        assert_eq!(
-            blocks[2].kind,
-            ClipKind::Ordered(OrderedStyle::LowerRoman.code())
-        );
+        assert_eq!(blocks[1].kind, ClipKind::Code(CodeLang::new("rust")));
+        assert_eq!(blocks[2].kind, ClipKind::Ordered(OrderedStyle::LowerRoman));
     }
 
     /// `PROSE-UI-219`: a colour spelled in any form lands in the one spelling
@@ -1068,7 +1066,7 @@ mod tests {
         assert_eq!(
             last,
             Some((
-                ClipKind::Code(String::new()),
+                ClipKind::Code(None),
                 vec!["fn main() {\n    println!(\"<ok>\");\n}".to_owned()]
             ))
         );
