@@ -13,7 +13,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_chrome::commands::{Key, Modifiers};
+use ambre_chrome::commands::{Key, KeyState, Modifiers};
 
 /// The listeners a cell takes its input from, on its own canvas. The canvas
 /// takes the focus, so its keys reach its own view (the Murmure message list
@@ -468,10 +468,10 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
         return Some(InputEvent::Key {
             key: Key::from_dom(&key.key())?,
             mods: Modifiers::NONE
-                .ctrl_if(key.ctrl_key())
-                .alt_if(key.alt_key())
-                .shift_if(key.shift_key())
-                .meta_if(key.meta_key()),
+                .ctrl_if(KeyState::from_bool(key.ctrl_key()))
+                .alt_if(KeyState::from_bool(key.alt_key()))
+                .shift_if(KeyState::from_bool(key.shift_key()))
+                .meta_if(KeyState::from_bool(key.meta_key())),
         });
     }
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
@@ -487,10 +487,10 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
     let at = super::offset_of(pointer);
     let mods = Modifiers::NONE
-        .ctrl_if(pointer.ctrl_key())
-        .alt_if(pointer.alt_key())
-        .shift_if(pointer.shift_key())
-        .meta_if(pointer.meta_key());
+        .ctrl_if(KeyState::from_bool(pointer.ctrl_key()))
+        .alt_if(KeyState::from_bool(pointer.alt_key()))
+        .shift_if(KeyState::from_bool(pointer.shift_key()))
+        .meta_if(KeyState::from_bool(pointer.meta_key()));
     Some(match event.type_().as_str() {
         "pointerdown" => InputEvent::PointerDown {
             at,

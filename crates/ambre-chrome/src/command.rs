@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_commands::{Key, KeyBinding, Modifiers};
+use ambre_commands::{Key, KeyBinding, KeyState, Modifiers};
 use leptos::prelude::*;
 
 /// Whether a toggle command is on, as the Logic thread reports it.
@@ -133,8 +133,8 @@ pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> 
 /// folded into the primary accelerator (`UI-THREAD-028`).
 pub(crate) fn modifiers_of(ev: &web_sys::KeyboardEvent) -> Modifiers {
     Modifiers::NONE
-        .ctrl_if(ev.ctrl_key())
-        .alt_if(ev.alt_key())
-        .shift_if(ev.shift_key())
-        .meta_if(ev.meta_key())
+        .ctrl_if(KeyState::from_bool(ev.ctrl_key()))
+        .alt_if(KeyState::from_bool(ev.alt_key()))
+        .shift_if(KeyState::from_bool(ev.shift_key()))
+        .meta_if(KeyState::from_bool(ev.meta_key()))
 }

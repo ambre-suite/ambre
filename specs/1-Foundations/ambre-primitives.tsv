@@ -840,12 +840,6 @@ ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret 
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift() | ret | bool	generic	whether the set holds a named member, a predicate answer
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::ctrl_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::meta_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift_if(held) | param | bool	newtype-inner	the set's own builder: the bool a browser event or a caller reports for the member the name gives
-ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::with_if(held) | param | bool	newtype-inner	private: the one step the named builders share
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	foreign-api	DOM KeyboardEvent.key string parsed into Key
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | CommandCategory.0 | field | &'static str	newtype-inner	newtype inner

@@ -349,8 +349,26 @@ mod tests {
         assert_eq!(Selected::Off.aria(), "false");
         assert_eq!(Checked::On.aria(), "true");
         assert_eq!(Checked::Off.aria(), "false");
-        for (on, aria) in [(true, "true"), (false, "false")] {
-            assert_eq!(crate::Pressed::from_bool(on).aria(), aria);
+        assert_eq!(crate::Pressed::On.aria(), "true");
+        assert_eq!(crate::Pressed::Off.aria(), "false");
+        // Each flag reads back as itself through its stored `bool`, and a
+        // toggle's `bool` reads as the pressed state of the same name.
+        for flag in [Expanded::Open, Expanded::Collapsed] {
+            assert_eq!(Expanded::from_bool(flag.as_bool()), flag);
         }
+        for flag in [Selected::On, Selected::Off] {
+            assert_eq!(Selected::from_bool(flag.as_bool()), flag);
+        }
+        for flag in [Checked::On, Checked::Off] {
+            assert_eq!(Checked::from_bool(flag.as_bool()), flag);
+        }
+        assert_eq!(
+            crate::Pressed::from_bool(Checked::On.as_bool()),
+            crate::Pressed::On
+        );
+        assert_eq!(
+            crate::Pressed::from_bool(Checked::Off.as_bool()),
+            crate::Pressed::Off
+        );
     }
 }

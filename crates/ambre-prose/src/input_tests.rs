@@ -73,8 +73,8 @@ impl Rig {
         self.input(ProseInput::Key {
             key,
             mods: ambre_commands::Modifiers::NONE
-                .ctrl_if(ctrl)
-                .shift_if(shift),
+                .ctrl_if(ambre_commands::KeyState::from_bool(ctrl))
+                .shift_if(ambre_commands::KeyState::from_bool(shift)),
         })
     }
 
@@ -85,7 +85,8 @@ impl Rig {
     fn press(&mut self, (x, y): (f32, f32), shift: bool, now: ambre_core::PageTime) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
-            mods: ambre_commands::Modifiers::NONE.shift_if(shift),
+            mods: ambre_commands::Modifiers::NONE
+                .shift_if(ambre_commands::KeyState::from_bool(shift)),
             now,
         })
     }
@@ -1107,7 +1108,7 @@ fn linked() -> (Rig, BlockId) {
 fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
-        mods: ambre_commands::Modifiers::NONE.ctrl_if(follow),
+        mods: ambre_commands::Modifiers::NONE.ctrl_if(ambre_commands::KeyState::from_bool(follow)),
         now: ambre_core::PageTime(0.0),
     })
 }

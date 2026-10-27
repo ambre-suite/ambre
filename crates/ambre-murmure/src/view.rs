@@ -1820,6 +1820,7 @@ mod tests {
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
+    use ambre_commands::KeyState;
 
     /// The pointer at `x`, `y` of the view.
     fn pointer(x: impl Into<f64>, y: impl Into<f64>) -> ViewPoint {
@@ -4151,10 +4152,11 @@ mod tests {
     /// A `Cmd` chord, as macOS reports it: the host folds the command key,
     /// with no control, into the primary accelerator.
     fn command(page: &mut Page, key: Key) -> bool {
-        let (command, control) = (true, false);
         let ev = InputEvent::Key {
             key,
-            mods: Modifiers::NONE.ctrl_if(control).meta_if(command),
+            mods: Modifiers::NONE
+                .ctrl_if(KeyState::Released)
+                .meta_if(KeyState::Held),
         };
         page.view.handle_input(&ev)
     }

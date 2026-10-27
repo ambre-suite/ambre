@@ -75,7 +75,7 @@ use super::viewport::ViewportTransform;
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId, Key, Modifiers};
+use ambre_commands::{ClipboardWrite, CommandId, Key, KeyState, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -1795,9 +1795,10 @@ impl ToileView {
     /// ends what began before. Every other input reaches no board handler.
     fn present_input(&mut self, ev: &InputEvent) -> bool {
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => {
-                self.handle_wheel(*delta, Modifiers::NONE.ctrl_if(*ctrl_key))
-            }
+            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
+                *delta,
+                Modifiers::NONE.ctrl_if(KeyState::from_bool(*ctrl_key)),
+            ),
             InputEvent::PointerDown { at, button, mods } => {
                 let screen = on_screen(*at);
                 self.last_pointer = screen;
@@ -4126,9 +4127,10 @@ impl ToileView {
             return true;
         }
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => {
-                self.handle_wheel(*delta, Modifiers::NONE.ctrl_if(*ctrl_key))
-            }
+            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
+                *delta,
+                Modifiers::NONE.ctrl_if(KeyState::from_bool(*ctrl_key)),
+            ),
             InputEvent::PointerDown { at, button, mods } => {
                 self.handle_pointer_down(on_screen(*at), *button, *mods)
             }

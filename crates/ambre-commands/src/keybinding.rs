@@ -68,27 +68,30 @@ impl Modifiers {
         self.contains(Self::SHIFT)
     }
 
-    /// The set with `member` added when `held`, unchanged otherwise.
-    const fn with_if(self, member: Self, held: bool) -> Self {
-        if held { self.with(member) } else { self }
+    /// The set with `member` added when `key` is held, unchanged otherwise.
+    const fn with_if(self, member: Self, key: KeyState) -> Self {
+        match key {
+            KeyState::Held => self.with(member),
+            KeyState::Released => self,
+        }
     }
 
-    /// The set with the primary accelerator added when `held`.
+    /// The set with the primary accelerator added when `key` is held.
     #[must_use]
-    pub const fn primary_if(self, held: bool) -> Self {
-        self.with_if(Self::PRIMARY, held)
+    pub const fn primary_if(self, key: KeyState) -> Self {
+        self.with_if(Self::PRIMARY, key)
     }
 
-    /// The set with Alt added when `held`.
+    /// The set with Alt added when `key` is held.
     #[must_use]
-    pub const fn alt_if(self, held: bool) -> Self {
-        self.with_if(Self::ALT, held)
+    pub const fn alt_if(self, key: KeyState) -> Self {
+        self.with_if(Self::ALT, key)
     }
 
-    /// The set with Shift added when `held`.
+    /// The set with Shift added when `key` is held.
     #[must_use]
-    pub const fn shift_if(self, held: bool) -> Self {
-        self.with_if(Self::SHIFT, held)
+    pub const fn shift_if(self, key: KeyState) -> Self {
+        self.with_if(Self::SHIFT, key)
     }
 
     /// The set with the primary accelerator added when a browser event
@@ -97,15 +100,27 @@ impl Modifiers {
     /// the command key both answer the primary accelerator, so a table
     /// declares one chord and both machines resolve it (`UI-THREAD-028`).
     #[must_use]
-    pub const fn ctrl_if(self, held: bool) -> Self {
-        self.primary_if(held)
+    pub const fn ctrl_if(self, key: KeyState) -> Self {
+        self.primary_if(key)
     }
 
     /// The set with the primary accelerator added when a browser event
     /// reports the command key held, the fold of [`Modifiers::ctrl_if`].
     #[must_use]
-    pub const fn meta_if(self, held: bool) -> Self {
-        self.primary_if(held)
+    pub const fn meta_if(self, key: KeyState) -> Self {
+        self.primary_if(key)
+    }
+}
+
+ambre_core::define_flag! {
+    /// Whether one modifier key is down, as a browser event reports it. A
+    /// caller names the state, so a builder of [`Modifiers`] never reads a
+    /// bare `true` (`ARCH-040`).
+    pub enum KeyState {
+        /// The key is up.
+        Released,
+        /// The key is down.
+        Held,
     }
 }
 
@@ -289,22 +304,27 @@ mod tests {
     fn the_control_key_and_the_command_key_fold_into_one_chord() {
         // The same chord on a Windows machine and on a Mac: the table declares
         // it once and both events resolve it (`UI-THREAD-028`).
-        let (held, free) = (true, false);
-        let control = Modifiers::NONE.ctrl_if(held).meta_if(free);
-        let command = Modifiers::NONE.ctrl_if(free).meta_if(held);
+        let control = Modifiers::NONE
+            .ctrl_if(KeyState::Held)
+            .meta_if(KeyState::Released);
+        let command = Modifiers::NONE
+            .ctrl_if(KeyState::Released)
+            .meta_if(KeyState::Held);
         assert_eq!(control, command);
         assert_eq!(control, Modifiers::PRIMARY);
         // Alt and Shift stay themselves, and a bare key stays bare.
         assert_eq!(
-            Modifiers::NONE.ctrl_if(held).shift_if(held),
+            Modifiers::NONE
+                .ctrl_if(KeyState::Held)
+                .shift_if(KeyState::Held),
             Modifiers::PRIMARY_SHIFT
         );
         assert_eq!(
             Modifiers::NONE
-                .ctrl_if(free)
-                .alt_if(free)
-                .shift_if(free)
-                .meta_if(free),
+                .ctrl_if(KeyState::Released)
+                .alt_if(KeyState::Released)
+                .shift_if(KeyState::Released)
+                .meta_if(KeyState::Released),
             Modifiers::NONE
         );
     }

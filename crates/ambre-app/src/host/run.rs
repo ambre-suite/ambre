@@ -246,10 +246,16 @@ where
                         button: ambre_canvas::PointerButton::from_dom(event.button()),
                         // Cmd (macOS) folds into primary, so disjoint-select works there.
                         mods: ambre_chrome::commands::Modifiers::NONE
-                            .ctrl_if(event.ctrl_key())
-                            .alt_if(event.alt_key())
-                            .shift_if(event.shift_key())
-                            .meta_if(event.meta_key()),
+                            .ctrl_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.ctrl_key(),
+                            ))
+                            .alt_if(ambre_chrome::commands::KeyState::from_bool(event.alt_key()))
+                            .shift_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.shift_key(),
+                            ))
+                            .meta_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.meta_key(),
+                            )),
                     },
                     "pointermove" => InputEvent::PointerMove { at },
                     // The browser took a mouse gesture over: it ends where
@@ -262,10 +268,16 @@ where
                             ambre_canvas::PointerButton::from_dom(event.button())
                         },
                         mods: ambre_chrome::commands::Modifiers::NONE
-                            .ctrl_if(event.ctrl_key())
-                            .alt_if(event.alt_key())
-                            .shift_if(event.shift_key())
-                            .meta_if(event.meta_key()),
+                            .ctrl_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.ctrl_key(),
+                            ))
+                            .alt_if(ambre_chrome::commands::KeyState::from_bool(event.alt_key()))
+                            .shift_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.shift_key(),
+                            ))
+                            .meta_if(ambre_chrome::commands::KeyState::from_bool(
+                                event.meta_key(),
+                            )),
                     },
                     _ => return,
                 };
