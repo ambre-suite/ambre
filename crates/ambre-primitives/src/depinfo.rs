@@ -3,21 +3,27 @@
 //!
 //! The walk resolves modules with syn, as rustc does, and every module
 //! placement it misreads let a file through unread. rustc writes down, for
-//! each crate it compiles, every source file it read. A `#[path]` file, an
-//! `include!` file and the file of a `mod` a macro writes are all there. So the gate runs each compile
-//! of the workspace and holds the walk to that set:
+//! each crate it compiles, every file it read. A `#[path]` file, an
+//! `include!` file and the file of a `mod` a macro writes are all there. So
+//! the gate runs each compile of the workspace and holds the walk to that
+//! set:
 //!
-//!   * a `.rs` file that a build of a crate reads, outside a test build, is
-//!     one the walk reads from the same crate root;
+//!   * a file that a shipped build of a crate reads is one the walk reads
+//!     from the same crate root. Or a walked file names it as data, with a
+//!     string literal. The name of the file decides nothing: rustc compiles
+//!     a `.txt` file as a module when a `#[path]` names it;
+//!   * a data file that parses as Rust items is refused all the same, since
+//!     the dep-info does not tell a module from data;
 //!   * a crate root that a build compiles is one the walk starts from;
-//!   * a `.rs` file under `crates/` is one that a compile reads, test builds
-//!     included, so no file sits in the tree that no build checks.
+//!   * a `.rs` file under the workspace root is one that a compile reads,
+//!     test builds included. So no file sits in the tree that no build
+//!     checks. A nested workspace, such as the fuzz targets, builds apart
+//!     and is left out.
 //!
-//! A compile that fails, and a dep-info file that is missing, fail the
-//! check: a stale set would pass a file no build read. Only a unit of a
-//! workspace package is read, so a registry crate and the standard library
-//! count for nothing. A file that is not `.rs`, such as the data of an
-//! `include_str!`, is no module and is left out.
+//! A failed compile, a missing dep-info file, and a dep-info line the
+//! parser cannot read whole all fail the check. A partial set would pass a
+//! file no build read. Only a unit of a workspace package is read, so
+//! a registry crate and the standard library count for nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -99,7 +105,7 @@ pub(crate) struct Unit {
     /// The crate root, canonical.
     pub(crate) root: PathBuf,
     pub(crate) build: Build,
-    /// Every `.rs` file rustc read, canonical.
+    /// Every file rustc read, whatever its name, canonical.
     pub(crate) reads: BTreeSet<PathBuf>,
 }
 
@@ -157,6 +163,7 @@ pub(crate) fn collect(
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut named = 0_usize;
+        let before = errors.len();
         for message in stdout.lines() {
             match artifact(&root, message) {
                 Ok(Some(unit)) => {
@@ -170,7 +177,7 @@ pub(crate) fn collect(
                 Err(error) => errors.push(format!("cargo check {line}: {error}")),
             }
         }
-        if named == 0 {
+        if named == 0 && errors.len() == before {
             errors.push(format!(
                 "cargo check {line} names no unit of the workspace, so the check reads nothing \
                  and fails closed"
@@ -218,10 +225,17 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
         .and_then(serde_json::Value::as_array)
         .map(|kinds| kinds.iter().filter_map(serde_json::Value::as_str).collect())
         .unwrap_or_default();
-    let test = value
+    // A unit with no test flag is no unit the check can class, so it fails
+    // closed rather than pass as a test build.
+    let Some(test) = value
         .pointer("/profile/test")
         .and_then(serde_json::Value::as_bool)
-        .unwrap_or(true);
+    else {
+        return Err(format!(
+            "{source}: an artifact names no test flag in its profile, so the check cannot tell \
+             a test build from a shipped one, and fails closed"
+        ));
+    };
     let build = if test
         || kinds
             .iter()
@@ -245,22 +259,27 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
     } else {
         Writer::Crate
     };
+    // cargo deems a unit fresh from its own fingerprint, and never writes
+    // the dep-info again for it. A rebuild of the package writes it anew.
+    let package = package(&value);
     let Some(info) = dep_info(output, writer) else {
         return Err(format!(
             "{source}: cargo wrote no dep-info beside {}, so the check cannot read what rustc \
-             compiled, and fails closed",
+             compiled, and fails closed. Touch a source file of {package}, or run `cargo clean \
+             -p {package}`, then run the gate again",
             output.display()
         ));
     };
     let Ok(text) = std::fs::read_to_string(&info) else {
         return Err(format!(
-            "{}: the dep-info of {source} cannot be read, so the check fails closed",
+            "{}: the dep-info of {source} cannot be read, so the check fails closed. Touch a \
+             source file of {package}, or run `cargo clean -p {package}`, then run the gate again",
             info.display()
         ));
     };
     let reads = dependencies(&text)
+        .map_err(|error| format!("{}: {error}", info.display()))?
         .into_iter()
-        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
         .map(|path| Disk.canonical(&root.join(path)))
         .collect();
     Ok(Some(Unit {
@@ -268,6 +287,22 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
         build,
         reads,
     }))
+}
+
+/// The package name of an artifact, as `cargo clean -p` takes it. A
+/// package id reads `path+file:///dir#name@version`, or `#version` alone
+/// when the name is the last segment of the directory.
+fn package(value: &serde_json::Value) -> String {
+    let id = value
+        .get("package_id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let (url, tail) = id.rsplit_once('#').unwrap_or((id, ""));
+    let name = tail.split_once('@').map_or(tail, |(name, _)| name);
+    if !name.is_empty() && !name.starts_with(|c: char| c.is_ascii_digit()) {
+        return name.to_owned();
+    }
+    url.rsplit('/').next().unwrap_or(url).to_owned()
 }
 
 /// What a unit builds, which decides where its dep-info sits.
@@ -302,47 +337,116 @@ fn dep_info(output: &Path, writer: Writer) -> Option<PathBuf> {
     info.is_file().then_some(info)
 }
 
-/// Every dependency a dep-info file lists, in the order it lists them. A
-/// rule reads `target: dep dep ...`, and a space inside a path is `\ `. A
-/// line of `# env-dep` and the empty rules rustc adds per file name no
-/// further file.
-pub(crate) fn dependencies(text: &str) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    for line in text.lines().filter(|line| !line.starts_with('#')) {
-        let mut words = Vec::new();
-        let mut word = String::new();
-        let mut chars = line.chars();
-        while let Some(c) = chars.next() {
-            match c {
-                '\\' => match chars.next() {
-                    Some(' ') => word.push(' '),
-                    Some(next) => {
-                        word.push('\\');
-                        word.push(next);
-                    }
-                    None => word.push('\\'),
-                },
-                ' ' => words.push(std::mem::take(&mut word)),
-                _ => word.push(c),
+/// Every dependency a dep-info file lists, in the order its first rule
+/// lists them. The parser fails closed on any text it cannot read whole:
+///
+///   * a line is empty, a `#` comment, or a rule `target: dep dep ...`;
+///   * a path holds no `:`, and a backslash only before a space, since
+///     rustc escapes a space and nothing else. A path that holds a newline
+///     or a backslash cannot be read back, so its fragments fail here;
+///   * every rule that lists dependencies lists the same ones, and each of
+///     them has an empty rule of its own, as rustc writes them. A fragment
+///     that reads as a rule breaks one of the two.
+pub(crate) fn dependencies(text: &str) -> Result<Vec<PathBuf>, String> {
+    let mut listed: Option<Vec<String>> = None;
+    let mut own = BTreeSet::new();
+    for (number, line) in text.lines().enumerate() {
+        let number = number + 1;
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let words = words(line).map_err(|why| format!("line {number}: {why}"))?;
+        let mut words = words.into_iter();
+        let target = words
+            .next()
+            .and_then(|word| word.strip_suffix(':').map(str::to_owned))
+            .filter(|target| !target.is_empty());
+        let Some(target) = target else {
+            return Err(format!(
+                "line {number} is no rule `target: dependencies`. rustc does not escape a newline, \
+                 so a path that holds one splits into fragments the check cannot place, and it \
+                 fails closed"
+            ));
+        };
+        let deps: Vec<String> = words.collect();
+        if let Some(word) = deps.iter().find(|word| word.contains(':')) {
+            return Err(format!(
+                "line {number}: the path {word:?} holds a `:`, which reads as a rule, so the \
+                 check fails closed"
+            ));
+        }
+        if deps.is_empty() {
+            own.insert(target);
+            continue;
+        }
+        match &listed {
+            None => listed = Some(deps),
+            Some(first) if *first == deps => {}
+            Some(_) => {
+                return Err(format!(
+                    "line {number}: the rule of {target} lists other files than the first rule, \
+                     so a path splits, and the check fails closed"
+                ));
             }
         }
-        words.push(word);
-        let mut words = words.into_iter().filter(|word| !word.is_empty());
-        if words.next().is_some_and(|target| target.ends_with(':')) {
-            found.extend(words.map(PathBuf::from));
+    }
+    let Some(listed) = listed else {
+        return Err("no rule lists a dependency, so the check reads nothing, and fails closed"
+            .to_owned());
+    };
+    let named: BTreeSet<String> = listed.iter().cloned().collect();
+    if let Some(path) = named.symmetric_difference(&own).next() {
+        return Err(format!(
+            "the path {path:?} has no rule of its own, or a rule names a path no rule lists, so \
+             a path splits, and the check fails closed"
+        ));
+    }
+    Ok(listed.into_iter().map(PathBuf::from).collect())
+}
+
+/// The words of one dep-info line: a space separates two, and `\ ` is a
+/// space inside one. Any other backslash fails, since rustc escapes nothing
+/// else and the path it belongs to cannot be read back.
+fn words(line: &str) -> Result<Vec<String>, String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next() {
+                Some(' ') => word.push(' '),
+                _ => {
+                    return Err(
+                        "a path holds a backslash that escapes no space. rustc escapes a space \
+                         alone, so the path cannot be read back, and the check fails closed"
+                            .to_owned(),
+                    );
+                }
+            },
+            ' ' => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            _ => word.push(c),
         }
     }
-    found
+    if !word.is_empty() {
+        words.push(word);
+    }
+    Ok(words)
 }
 
 /// Every refusal of the dep-info check. `sources` lists every `.rs` file
-/// under `crates/`, canonical. `root` is the workspace root, canonical, and
-/// shortens each path a refusal prints.
+/// the orphan check covers, canonical. `root` is the workspace root,
+/// canonical, and shortens each path a refusal prints. `tree` reads a data
+/// file, to refuse one that parses as Rust items.
 pub(crate) fn cross_check(
     scan: &Scan,
     compiled: &Compiled,
     sources: &BTreeSet<PathBuf>,
     root: &Path,
+    tree: &impl Tree,
 ) -> Vec<String> {
     let shown = |path: &Path| {
         path.strip_prefix(root)
@@ -350,10 +454,13 @@ pub(crate) fn cross_check(
             .display()
             .to_string()
     };
+    let none = BTreeSet::new();
     let mut errors = Vec::new();
     let mut read = BTreeSet::new();
     for unit in &compiled.units {
         read.extend(unit.reads.iter().cloned());
+        // A test build is test code whole, which no check of the gate reads.
+        // What it reads ships in no build, so it only feeds the orphan check.
         if unit.build == Build::Test {
             continue;
         }
@@ -364,13 +471,25 @@ pub(crate) fn cross_check(
             ));
             continue;
         };
+        let data = scan.data.get(&unit.root).unwrap_or(&none);
         for file in unit.reads.difference(walked) {
-            errors.push(format!(
-                "{}: rustc reads it for the crate root {}, and the walk does not, so the gate \
-                 cannot place it",
-                shown(file),
-                shown(&unit.root)
-            ));
+            if !data.contains(file) {
+                errors.push(format!(
+                    "{}: rustc reads it for the crate root {}, and the walk neither reads it as \
+                     a module nor finds a string literal that names it as data, so the gate \
+                     cannot place it",
+                    shown(file),
+                    shown(&unit.root)
+                ));
+            } else if parses_as_items(tree, file) {
+                errors.push(format!(
+                    "{}: a walked file of the crate root {} names it as data, and it parses as \
+                     Rust items. The dep-info does not tell a module from data, so the gate \
+                     cannot show that no `mod` compiles it",
+                    shown(file),
+                    shown(&unit.root)
+                ));
+            }
         }
     }
     for file in sources.difference(&read) {
@@ -382,11 +501,35 @@ pub(crate) fn cross_check(
     errors
 }
 
-/// Every `.rs` file under `crates`, canonical, build output left out.
-pub(crate) fn sources(tree: &impl Tree, crates: &Path) -> BTreeSet<PathBuf> {
-    tree.files(crates)
+/// Whether the file is Rust that declares at least one item. rustc compiles
+/// a module only from text that parses. A module with no item adds no code,
+/// so any other data file cannot hide a module.
+fn parses_as_items(tree: &impl Tree, file: &Path) -> bool {
+    tree.read(file)
+        .and_then(|text| syn::parse_file(&text).ok())
+        .is_some_and(|parsed| !parsed.items.is_empty())
+}
+
+/// Every `.rs` file under the workspace root, canonical. Build output is
+/// left out, and so is each nested workspace. A directory below the root
+/// whose manifest declares a `[workspace]` of its own builds apart, as the
+/// fuzz targets do under `cargo-fuzz`.
+pub(crate) fn sources(tree: &impl Tree, root: &Path) -> BTreeSet<PathBuf> {
+    let files = tree.files(root);
+    let nested: Vec<PathBuf> = files
+        .iter()
+        .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))
+        .filter(|path| path.parent() != Some(root))
+        .filter(|path| {
+            tree.read(path)
+                .is_some_and(|text| text.lines().any(|line| line.trim() == "[workspace]"))
+        })
+        .filter_map(|path| path.parent().map(Path::to_path_buf))
+        .collect();
+    files
         .into_iter()
         .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .filter(|path| !nested.iter().any(|dir| path.starts_with(dir)))
         .map(|path| tree.canonical(&path))
         .collect()
 }

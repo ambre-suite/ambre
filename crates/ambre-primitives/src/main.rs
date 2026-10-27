@@ -14,8 +14,9 @@
 //!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
 //!     workspace type to a primitive. The sixth reads names: a secret reader outside `ambre-crypto`, or
 //!     the `zeroize` crate outside the Secret module (`ARCH-045`,
-//!     `ARCH-046`). The seventh holds the walk to rustc: a file a compile
-//!     reads and the walk does not, or a file no compile reads (`ARCH-033`);
+//!     `ARCH-046`). The seventh holds the walk to rustc. It
+//!     refuses a file a compile reads that the walk neither reads nor
+//!     names as data, and a `.rs` file no compile reads (`ARCH-033`);
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and nothing else.
@@ -66,7 +67,7 @@ fn main() -> ExitCode {
     }
     let unread = match mode {
         Mode::Prune => Vec::new(),
-        Mode::Check | Mode::Files => files(&scan, &root, &crates),
+        Mode::Check | Mode::Files => files(&scan, &root),
     };
     if let Mode::Files = mode {
         return if unread.is_empty() {
@@ -97,12 +98,12 @@ fn main() -> ExitCode {
 
 /// Every refusal of the dep-info check, printed with its count. Each compile
 /// runs in the workspace, so the check reads the files the recipes build.
-fn files(scan: &Scan, root: &Path, crates: &Path) -> Vec<String> {
+fn files(scan: &Scan, root: &Path) -> Vec<String> {
     let refusals = match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
         Ok(compiled) => {
-            let sources = depinfo::sources(&scan::Disk, crates);
+            let sources = depinfo::sources(&scan::Disk, root);
             let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-            depinfo::cross_check(scan, &compiled, &sources, &root)
+            depinfo::cross_check(scan, &compiled, &sources, &root, &scan::Disk)
         }
         Err(errors) => errors,
     };

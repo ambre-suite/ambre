@@ -232,6 +232,13 @@ pub struct Scan {
     /// that root outside test code, both canonical. The dep-info check holds
     /// it to the files rustc reads (`ARCH-033`).
     pub walked: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
+    /// Each crate root the walk starts from, and every file that a walked
+    /// file names as data outside test code, both canonical. Data is the
+    /// target of an `include_str!` or an `include_bytes!` that a string
+    /// literal names, or a file of the directory a `migrate!` names. The dep-info check
+    /// admits these reads, and no other file the walk does not read
+    /// (`ARCH-033`).
+    pub data: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// Every call of the workspace, tests included, that passes a `bool`
     /// literal (`ARCH-040`).
     literals: Vec<BoolCall>,
@@ -2730,6 +2737,28 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         if test_only(&file.attrs) {
             continue;
         }
+        // rustc resolves the literal of an `include_str!` beside the file
+        // that calls it, and `sqlx` resolves a `migrate!` under the crate
+        // directory. A path built by a macro is never recorded, so the
+        // dep-info check refuses the file it reads (`ARCH-033`).
+        let beside = path.parent().unwrap_or(dir);
+        let data = result.data.entry(next.root.clone()).or_default();
+        for read in data_reads(&file) {
+            match read {
+                DataRead::File(name) => {
+                    data.insert(tree.canonical(&beside.join(name)));
+                }
+                DataRead::Dir(name) => {
+                    let listed = lexical(&dir.join(name));
+                    data.extend(
+                        tree.files(&listed)
+                            .into_iter()
+                            .filter(|file| file.parent().map(lexical).as_ref() == Some(&listed))
+                            .map(|file| tree.canonical(&file)),
+                    );
+                }
+            }
+        }
         // The file as the text names it, `..` undone, and the file the disk
         // holds, links followed. An exemption of the secret checks holds
         // only when both forms sit in its place (`ARCH-045`, `ARCH-048`).
@@ -3151,6 +3180,130 @@ pub(crate) fn test_only(attrs: &[syn::Attribute]) -> bool {
             .last()
             .is_some_and(|last| TEST_MACROS.iter().any(|name| last.ident == name))
     })
+}
+
+/// The macros that read a file as data, beside the file that calls them.
+const DATA_MACROS: &[&str] = &["include_str", "include_bytes"];
+
+/// The `sqlx` macro that embeds each file of a directory, and the directory
+/// it reads when the call names none.
+const MIGRATE: &str = "migrate";
+const MIGRATIONS: &str = "migrations";
+
+/// A file the source names as data rather than as a module.
+#[derive(Debug, PartialEq, Eq)]
+enum DataRead {
+    /// The literal of an `include_str!` or an `include_bytes!`, relative to
+    /// the directory of the file that calls it.
+    File(String),
+    /// The directory of a `migrate!`, relative to the crate directory.
+    Dir(String),
+}
+
+/// Every data read a file names outside test code. The tokens are read
+/// whole, so a call inside another macro or inside an attribute counts. A
+/// call whose argument is no string literal, such as a `concat!` or a
+/// metavariable, names nothing the walk can resolve, and is left out.
+fn data_reads(file: &syn::File) -> Vec<DataRead> {
+    let mut found = Vec::new();
+    for attr in &file.attrs {
+        seek_data(attr.to_token_stream(), &mut found);
+    }
+    data_items(&file.items, &mut found);
+    found
+}
+
+/// The data reads of `items`, an inline module's items included, a test
+/// item left out.
+fn data_items(items: &[syn::Item], found: &mut Vec<DataRead>) {
+    for item in items {
+        if test_only(item_attrs(item)) {
+            continue;
+        }
+        match item {
+            syn::Item::Mod(m) => {
+                for attr in &m.attrs {
+                    seek_data(attr.to_token_stream(), found);
+                }
+                if let Some((_, inner)) = &m.content {
+                    data_items(inner, found);
+                }
+            }
+            other => seek_data(other.to_token_stream(), found),
+        }
+    }
+}
+
+/// The outer attributes of an item.
+fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
+    match item {
+        syn::Item::Const(i) => &i.attrs,
+        syn::Item::Enum(i) => &i.attrs,
+        syn::Item::ExternCrate(i) => &i.attrs,
+        syn::Item::Fn(i) => &i.attrs,
+        syn::Item::ForeignMod(i) => &i.attrs,
+        syn::Item::Impl(i) => &i.attrs,
+        syn::Item::Macro(i) => &i.attrs,
+        syn::Item::Mod(i) => &i.attrs,
+        syn::Item::Static(i) => &i.attrs,
+        syn::Item::Struct(i) => &i.attrs,
+        syn::Item::Trait(i) => &i.attrs,
+        syn::Item::TraitAlias(i) => &i.attrs,
+        syn::Item::Type(i) => &i.attrs,
+        syn::Item::Union(i) => &i.attrs,
+        syn::Item::Use(i) => &i.attrs,
+        _ => &[],
+    }
+}
+
+/// The data reads of a token stream, at any depth of groups. A call is a
+/// name, a `!` and a group, so a path before the name changes nothing.
+fn seek_data(tokens: TokenStream, found: &mut Vec<DataRead>) {
+    let trees: Vec<TokenTree> = tokens.into_iter().collect();
+    for (at, tree) in trees.iter().enumerate() {
+        if let TokenTree::Group(group) = tree {
+            seek_data(group.stream(), found);
+            continue;
+        }
+        let TokenTree::Ident(ident) = tree else {
+            continue;
+        };
+        let (Some(TokenTree::Punct(bang)), Some(TokenTree::Group(args))) =
+            (trees.get(at + 1), trees.get(at + 2))
+        else {
+            continue;
+        };
+        if bang.as_char() != '!' {
+            continue;
+        }
+        let name = ident.unraw().to_string();
+        let literal = literal_argument(args.stream());
+        if DATA_MACROS.contains(&name.as_str()) {
+            if let Some(Some(literal)) = literal {
+                found.push(DataRead::File(literal));
+            }
+        } else if name == MIGRATE {
+            match literal {
+                Some(Some(literal)) => found.push(DataRead::Dir(literal)),
+                Some(None) => found.push(DataRead::Dir(MIGRATIONS.to_owned())),
+                None => {}
+            }
+        }
+    }
+}
+
+/// The one string literal of a call's arguments, a trailing comma allowed.
+/// `Some(None)` when the call has no argument, `None` for any other shape.
+fn literal_argument(tokens: TokenStream) -> Option<Option<String>> {
+    if tokens.is_empty() {
+        return Some(None);
+    }
+    let parser = |input: syn::parse::ParseStream| {
+        let literal: syn::LitStr = input.parse()?;
+        let _: Option<syn::Token![,]> = input.parse()?;
+        Ok(literal.value())
+    };
+    parser.parse2(tokens).ok().map(Some)
 }
 
 /// Whether the attribute is the one-segment `name`, raw or not: rustc reads

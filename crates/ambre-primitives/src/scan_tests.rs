@@ -500,6 +500,62 @@ mod deeper;",
 }
 
 #[test]
+fn the_walk_records_the_literal_target_of_each_data_read_per_crate_root() {
+    // The dep-info check admits a file the walk does not read only when a
+    // string literal of a walked file names it as data. rustc
+    // resolves the literal beside the file that calls the macro, an inline
+    // module's file included, and `sqlx` resolves a `migrate!` under the
+    // crate directory.
+    let result = scan(
+        &demo(&[
+            (
+                "src/lib.rs",
+                "#![doc = include_str!(\"../README.md\")]
+pub const A: &str = include_str!(\"a.txt\");
+pub const B: &[u8] = ::core::include_bytes!(r\"../data/b.bin\",);
+pub fn c() -> Vec<&'static str> { vec![std::include_str!(\"c.txt\")] }
+mod inner { pub const D: &str = include_str!(\"d.txt\"); }
+pub const BUILT: &str = include_str!(concat!(\"e\", \".txt\"));
+macro_rules! m { ($p:expr) => { include_str!($p) }; }
+#[cfg(test)]
+const T: &str = include_str!(\"t.txt\");
+#[cfg(test)]
+mod tests { const U: &str = include_str!(\"u.txt\"); }
+pub async fn run() { sqlx::migrate!(\"./migrations\"); }
+mod sub;",
+            ),
+            ("src/sub.rs", "pub const S: &str = include_str!(\"s.txt\");"),
+            ("src/main.rs", "fn main() { sqlx::migrate!(); }"),
+            ("migrations/1_init.sql", ""),
+            ("migrations/deeper/2_more.sql", ""),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    let dir = Path::new(CRATES).join("demo");
+    let files =
+        |names: &[&str]| -> BTreeSet<PathBuf> { names.iter().map(|name| dir.join(name)).collect() };
+    assert_eq!(
+        result.data,
+        BTreeMap::from([
+            (
+                dir.join("src/lib.rs"),
+                files(&[
+                    "README.md",
+                    "src/a.txt",
+                    "data/b.bin",
+                    "src/c.txt",
+                    "src/d.txt",
+                    "src/s.txt",
+                    "migrations/1_init.sql",
+                ])
+            ),
+            (dir.join("src/main.rs"), files(&["migrations/1_init.sql"])),
+        ])
+    );
+}
+
+#[test]
 fn a_raw_path_attribute_is_followed_and_a_raw_cfg_attr_fails_the_scan() {
     // Probe of the SEC-1e review: rustc reads `#[r#path]` as `#[path]`, and
     // `#[r#cfg_attr]` as `#[cfg_attr]`.
