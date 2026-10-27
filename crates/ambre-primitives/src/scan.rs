@@ -4123,14 +4123,44 @@ impl MacroMods {
     }
 }
 
-/// Whether the group after `before` is the tokens of a macro call. That is
-/// `!` then the group, or `!`, a name and the group, as `macro_rules! m {
+/// Whether the group after `before` may be the tokens of a macro call. That
+/// is `!` then the group, or `!`, a name and the group, as `macro_rules! m {
 /// .. }` writes. A negation in parentheses matches too, which only fails closed.
+///
+/// A metavariable before the group may also make a call, directly or with
+/// one name between. When the caller passes `k !`, `$m $b { .. }` and
+/// `$($m)* { .. }` both expand to `k ! { .. }`. So that group reads as a call too. The body
+/// of `mod $name { .. }` is the one exception: rustc parses a module there,
+/// whatever name the caller passes.
 fn called(before: &[TokenTree]) -> bool {
     let bang = |tree: &TokenTree| matches!(tree, TokenTree::Punct(p) if p.as_char() == '!');
+    let named = match before {
+        [rest @ .., TokenTree::Ident(_)] => Some(rest),
+        _ => None,
+    };
     match before {
         [.., last] if bang(last) => true,
-        [.., mark, TokenTree::Ident(_)] => bang(mark),
+        [.., mark, TokenTree::Ident(_)] if bang(mark) => true,
+        [
+            ..,
+            TokenTree::Ident(keyword),
+            TokenTree::Punct(dollar),
+            TokenTree::Ident(_),
+        ] if keyword.unraw() == "mod" && dollar.as_char() == '$' => false,
+        _ => ends_on_metavariable(before) || named.is_some_and(ends_on_metavariable),
+    }
+}
+
+/// Whether `before` ends on a metavariable of a transcriber: `$x`, or a
+/// repetition `$( .. )` with its operator and an optional separator.
+fn ends_on_metavariable(before: &[TokenTree]) -> bool {
+    let dollar = |tree: &TokenTree| matches!(tree, TokenTree::Punct(p) if p.as_char() == '$');
+    let operator = |tree: &TokenTree| matches!(tree, TokenTree::Punct(p) if matches!(p.as_char(), '*' | '+' | '?'));
+    let repetition = |tree: &TokenTree| matches!(tree, TokenTree::Group(g) if g.delimiter() == Delimiter::Parenthesis);
+    match before {
+        [.., mark, TokenTree::Ident(_)] => dollar(mark),
+        [.., mark, group, op] if operator(op) && repetition(group) => dollar(mark),
+        [.., mark, group, _, op] if operator(op) && repetition(group) => dollar(mark),
         _ => false,
     }
 }

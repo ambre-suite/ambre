@@ -2037,6 +2037,22 @@ fn an_inline_module_a_macro_can_reorder_fails_the_scan() {
 }
 
 #[test]
+fn an_inline_module_after_a_metavariable_fails_the_scan() {
+    // The SEC-1i review: `$m $b { mod hid {} }` called with `k !` writes
+    // `k ! { mod hid {} }`, and `k` reorders the module into `mod hid;`.
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "macro_rules! t6 { ($m:ident $b:tt) => { $m $b { mod hid {} } }; }\n\
+         macro_rules! t7 { ($($m:tt)*) => { $($m)* { mod hid {} } }; }\n\
+         macro_rules! sep { ($($m:tt),*) => { $($m),* { mod hid {} } }; }\n\
+         macro_rules! one { ($m:tt) => { $m name { mod hid {} } }; }\n\
+         macro_rules! kept { ($n:ident) => { pub mod $n { mod inner {} } }; }\n\
+         macro_rules! plain { () => { const _: () = { mod a {} }; }; }",
+    )]);
+    assert_eq!(errors, [1, 2, 3, 4].map(macro_mod));
+}
+
+#[test]
 fn an_unstable_feature_in_a_crate_root_fails_the_scan() {
     // A `#![feature]` enables syntax the pinned syn may not parse, so a data
     // file could pass the parse guard and compile on the nightly toolchain.
