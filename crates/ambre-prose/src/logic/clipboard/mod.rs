@@ -111,24 +111,59 @@ impl ClipValue {
     }
 
     /// The value a paste writes under `key`, or `None` for a mark it drops
-    /// (`PROSE-UI-234`). Only a formatting key passes, and its value must pass
-    /// the grammar a typed mark does: a flag, a canonical colour, a size in
-    /// range. The bytes a paste reads may come from a crafted page, so the
-    /// copy that wrote them proves nothing.
+    /// (`PROSE-UI-234`). Only a key that is a formatting root exactly passes,
+    /// as a copy writes it. Its value must pass [`pasted`], the check an HTML
+    /// paste makes too. A flag set by a boolean is stored as the one spelling
+    /// of "present" (`PROSE-008`), and a flag cleared by one is dropped. The
+    /// bytes a paste reads may come from a crafted page, so the copy that
+    /// wrote them proves nothing.
     fn checked(&self, key: &MarkKey) -> Option<LoroValue> {
-        if !MarkRoot::of(key).is_some_and(|root| FORMATTING_KEYS.contains(&root)) {
-            return None;
-        }
-        match self {
-            Self::Bool(on) => mark::validate_value(key, None)
-                .ok()
-                .map(|_| LoroValue::from(*on)),
-            Self::Text(raw) => mark::validate_value(key, Some(raw))
-                .ok()
-                .map(|value| LoroValue::from(value.as_str())),
-            Self::Int(_) | Self::Float(_) => None,
-        }
+        let root = MarkRoot::parse(key.as_str()).filter(|root| FORMATTING_KEYS.contains(root))?;
+        let raw = match self {
+            Self::Bool(true) => None,
+            Self::Text(raw) => Some(raw.as_str()),
+            Self::Bool(false) | Self::Int(_) | Self::Float(_) => return None,
+        };
+        pasted(root, raw).map(|value| LoroValue::from(value.as_str()))
     }
+}
+
+/// The longest link and family name a paste keeps, in bytes.
+const HREF_MAX: usize = 2048;
+const FAMILY_MAX: usize = 64;
+
+/// The value a paste writes under `root`, from either half of the clipboard
+/// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
+/// mark first. A paste then adds two limits: a link a reader follows, and a
+/// family name of bounded length and plain characters.
+fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
+    let value = mark::validate_value(&root.key(), raw).ok()?;
+    let kept = match root {
+        MarkRoot::Link => safe_link(value.as_str()),
+        MarkRoot::FontFamily => safe_family(value.as_str()),
+        _ => true,
+    };
+    kept.then_some(value)
+}
+
+/// A link a paste keeps: one a reader follows to a page or a mail, never one
+/// that runs.
+fn safe_link(href: &str) -> bool {
+    let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
+    href.len() <= HREF_MAX
+        && ["http://", "https://", "mailto:"]
+            .iter()
+            .any(|scheme| lower.starts_with(scheme))
+}
+
+/// A family name a paste keeps: not empty, within [`FAMILY_MAX`], and free of
+/// a control character or one that closes a style declaration.
+fn safe_family(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= FAMILY_MAX
+        && name
+            .chars()
+            .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'))
 }
 
 impl ClipKind {
@@ -505,58 +540,124 @@ mod tests {
         assert!(format!("{:?}", state.marks_of(&pasted[1])).contains("\"b\""));
     }
 
-    /// `PROSE-UI-234`: a crafted payload writes only the formatting marks a
-    /// typed mark may carry. A colour, a size or a flag value the grammar
-    /// refuses is dropped, and so is an anchor and a value of no mark shape.
-    #[test]
-    fn a_crafted_payload_writes_only_the_marks_a_typed_mark_may() {
-        let (mut state, first) = document();
-        let run = |key: &str, value: ClipValue| ClipRun {
+    /// A run of one character that carries one mark, as a crafted payload
+    /// spells it.
+    fn run(key: &str, value: ClipValue) -> ClipRun {
+        ClipRun {
             text: "x".to_owned(),
             marks: vec![(MarkKey::from(key), value)],
-        };
-        let text = |raw: &str| ClipValue::Text(raw.to_owned());
+        }
+    }
+
+    fn text(raw: &str) -> ClipValue {
+        ClipValue::Text(raw.to_owned())
+    }
+
+    /// The marks a paste of `runs`, built by hand, writes into a new document.
+    fn pasted_marks(runs: Vec<ClipRun>) -> Vec<(String, LoroValue)> {
+        let (mut state, first) = document();
+        let len = runs.len();
         let payload = Payload {
             magic: MAGIC,
             blocks: vec![ClipBlock {
                 kind: ClipKind::Paragraph,
-                runs: vec![
-                    run("fg", text("red")),
-                    run("fs", text("9999")),
-                    run("b", text("yes")),
-                    run("cm:x", text("a-thread")),
-                    run("zz", text("")),
-                    run("fg", ClipValue::Int(5)),
-                    run("bg", text("#FFFF00")),
-                    run("i", ClipValue::Bool(true)),
-                ],
+                runs,
             }],
         };
         let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
         state.handle_command(ProseCommand::Paste {
             at: (first, DocOffset::ZERO),
-            text: "xxxxxxxx".to_owned(),
+            text: "x".repeat(len),
             html: None,
             payload: Some(ambre_core::ClipboardBytes::new(bytes)),
         });
-        assert_eq!(state.text_of(&first).as_deref(), Some("xxxxxxxx"));
+        assert_eq!(state.text_of(&first), Some("x".repeat(len)));
         let body = state.body_of(&tree_id(first)).expect("the paragraph");
         let span = DocSpan::new(
             DocOffset::ZERO,
             DocCount::from_len(body.len_unicode()).as_end(),
         );
-        let written: Vec<(String, LoroValue)> = marked_runs(&body, span)
+        marked_runs(&body, span)
             .into_iter()
             .flat_map(|run| run.marks)
             .map(|(key, value)| (key.as_str().to_owned(), value))
-            .collect();
+            .collect()
+    }
+
+    /// `PROSE-UI-234`: a crafted payload writes only the formatting marks a
+    /// typed mark may carry. A colour, a size or a flag value the grammar
+    /// refuses is dropped, and so is an anchor and a value of no mark shape.
+    #[test]
+    fn a_crafted_payload_writes_only_the_marks_a_typed_mark_may() {
+        let written = pasted_marks(vec![
+            run("fg", text("red")),
+            run("fs", text("9999")),
+            run("b", text("yes")),
+            run("cm:x", text("a-thread")),
+            run("zz", text("")),
+            run("fg", ClipValue::Int(5)),
+            run("bg", text("#FFFF00")),
+            run("i", text("")),
+        ]);
         assert_eq!(
             written,
             vec![
                 ("bg".to_owned(), LoroValue::from("#ffff00")),
-                ("i".to_owned(), LoroValue::from(true)),
+                ("i".to_owned(), LoroValue::from("")),
             ]
         );
+    }
+
+    /// `PROSE-UI-234`, `PROSE-UI-220`: a pasted link passes the check an HTML
+    /// paste makes. A target that runs, or one longer than a paste keeps,
+    /// never lands, so no export writes it.
+    #[test]
+    fn a_crafted_link_lands_only_when_a_reader_may_follow_it() {
+        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX));
+        let written = pasted_marks(vec![
+            run("a", text("javascript:alert(1)")),
+            run("a", text("data:text/html,<script>alert(1)</script>")),
+            run("a", text(&long)),
+            run("a", text("https://example.org/page")),
+        ]);
+        assert_eq!(
+            written,
+            vec![("a".to_owned(), LoroValue::from("https://example.org/page"))]
+        );
+    }
+
+    /// `PROSE-UI-234`: a pasted family name is capped as an HTML paste caps
+    /// it, so a crafted payload cannot write a name of any length.
+    #[test]
+    fn a_crafted_family_name_lands_only_within_the_cap() {
+        let written = pasted_marks(vec![
+            run("ff", text(&"A".repeat(100_000))),
+            run("ff", text("Georgia")),
+        ]);
+        assert_eq!(written, vec![("ff".to_owned(), LoroValue::from("Georgia"))]);
+    }
+
+    /// `PROSE-UI-234`: a key lands only when it is a formatting root exactly,
+    /// as a copy writes it. A root with a suffix is no key of the registry.
+    #[test]
+    fn a_crafted_key_lands_only_when_it_names_a_root_exactly() {
+        let written = pasted_marks(vec![
+            run("b:zz", text("")),
+            run("fg:x", text("#ff0000")),
+            run("s", text("")),
+        ]);
+        assert_eq!(written, vec![("s".to_owned(), LoroValue::from(""))]);
+    }
+
+    /// `PROSE-UI-234`, `PROSE-008`: a flag set by a boolean lands in the one
+    /// spelling of "present", and a flag cleared by one does not land.
+    #[test]
+    fn a_crafted_flag_lands_as_present_or_not_at_all() {
+        let written = pasted_marks(vec![
+            run("u", ClipValue::Bool(false)),
+            run("i", ClipValue::Bool(true)),
+        ]);
+        assert_eq!(written, vec![("i".to_owned(), LoroValue::from(""))]);
     }
 
     /// `PROSE-UI-107`: a typed ordinal style and code language keep the bytes

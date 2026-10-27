@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-107` | `IO` | Content copied in Ambre and pasted back into Ambre MUST return with the marks and the block structure it was copied with. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_rich_paste_keeps_types_and_marks`; `::a_typed_kind_keeps_its_payload_bytes` -- the ordinal style and the code language encode as the bare code and text they replaced | none | verified |
 | `PROSE-UI-219` | `IO` | A paste of HTML MUST keep its headings, paragraphs, lists, to-do items, code blocks, links and character formatting, Google Docs and Word fragments included. | this spec section 3 | `ambre_prose::logic::clipboard::tests::each_html_fixture_pastes_as_its_golden_says` -- a Word, a Google Docs, a web page and a PDF viewer fixture, each against a golden text; `::the_html_half_alone_pastes_what_the_rich_half_does` -- Ambre's own HTML; `ambre_prose::logic::clipboard::html_read::tests::a_google_docs_fragment_keeps_its_blocks_and_marks`; `::a_word_fragment_keeps_its_list_and_drops_its_bullet_glyph`; `::white_space_collapses_outside_a_pre_and_stays_inside_one`; `::colours_and_sizes_land_canonical`; `::a_word_clipboard_document_reads_as_its_fragment`; `::a_google_docs_clipboard_fragment_keeps_list_highlight_and_link`; `::a_pdf_text_layer_reads_one_paragraph_per_line` -- the reader, one source at a time; `ambre_prose::input_tests::an_html_half_keeps_a_short_paste_off_the_typing_path` -- the view hands the half on | none | verified |
 | `PROSE-UI-220` | `INV` | A paste of HTML MUST insert only text and the formatting this document knows: no script, style, hidden content, embedded object or link outside http, https and mailto MUST reach the document. | this spec section 5 | `ambre_prose::logic::clipboard::html_read::tests::hostile_markup_leaves_only_its_text` | none | verified |
-| `PROSE-UI-234` | `INV` | A paste of this application's own bytes MUST write only formatting marks, each with a value that passes the validation of a typed mark under its key. Any other mark MUST be dropped. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_crafted_payload_writes_only_the_marks_a_typed_mark_may` -- a payload built by hand carries an anchor, an unknown key, a number, and a colour, a size and a flag the grammar refuses, and only the two valid marks land | none | verified |
+| `PROSE-UI-234` | `INV` | A paste of this application's own bytes MUST write only marks whose key is exactly a formatting root. Each value MUST pass the validation of a typed mark under its key. A link MUST also pass the scheme and length check of an HTML paste. A family name MUST pass the length cap of an HTML paste. A flag MUST land as present, or not at all. Any other mark MUST be dropped. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_crafted_payload_writes_only_the_marks_a_typed_mark_may` -- a payload built by hand carries an anchor, an unknown key, a number, and a colour, a size and a flag the grammar refuses, and only the two valid marks land; `::a_crafted_link_lands_only_when_a_reader_may_follow_it` -- a `javascript:`, a `data:` and an overlong link are dropped; `::a_crafted_family_name_lands_only_within_the_cap` -- a name of 100 000 characters is dropped; `::a_crafted_key_lands_only_when_it_names_a_root_exactly` -- `b:zz` and `fg:x` are dropped; `::a_crafted_flag_lands_as_present_or_not_at_all` -- `true` lands as the empty string and `false` does not land | none | verified |
 | `PROSE-UI-224` | `INV` | A paste of HTML MUST NOT turn a page's theme into marks: the style of an element holding blocks, and a body ink black or near it, MUST set no mark. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_web_page_keeps_its_formatting_and_drops_its_theme`; `ambre_prose::logic::clipboard::tests::each_html_fixture_pastes_as_its_golden_says` -- the web page fixture's themed container | none | verified |
 | `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -174,11 +174,16 @@ deletion is the ordinary cross-paragraph one
 
 A payload opens with four bytes of its own, so bytes another Ambre application wrote under the
 same clipboard type paste as their plain text. Only the formatting marks travel: a comment or a
-suggestion anchor stays in the document it was copied from. Any page can write those bytes, so a paste
-reads them as untrusted. It keeps a formatting mark only when its value passes the validation of a
-typed mark, and drops any other mark (`PROSE-UI-234`). A paste of several blocks into a band
-or a note is refused, as a split there is. A paste of one line with neither a payload nor HTML
-is typing, and joins the draft.
+suggestion anchor stays in the document it was copied from.
+
+Any page can write those bytes, so a paste reads them as untrusted. It keeps a mark only when its
+key is exactly a formatting root, as a copy writes it. The value passes the validation of a typed
+mark, and the check an HTML paste makes of a link and a family name. A flag set by a boolean lands
+as present, and one cleared by a boolean does not land. Any other mark is dropped
+(`PROSE-UI-234`).
+
+A paste of several blocks into a band or a note is refused, as a split there is. A paste of one
+line with neither a payload nor HTML is typing, and joins the draft.
 
 **Code:** `crates/ambre-prose/src/logic/clipboard/` (the payload, the HTML halves, the copy and
 the paste),

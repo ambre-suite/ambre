@@ -2235,14 +2235,12 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (MarkRoot,Option<String>)	free-text	a candidate mark value read off pasted HTML, before validate_value checks it; the one that passes becomes a MarkValue, the one that fails is dropped
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Change | alias | (MarkRoot,Option<String>)	free-text	a candidate mark value read off pasted HTML, before pasted checks it; the one that passes becomes a MarkValue, the one that fails is dropped
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Depth.exceeded | field | Cell<bool>	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | FAMILY_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.block | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.list | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.pre | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | HREF_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.keep_empty | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.touched | field | bool	generic	independent flag or predicate
@@ -2270,8 +2268,6 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	predicate result
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link() | ret | bool	generic	predicate result
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | safe_link(href) | param | &str	free-text	href attribute text of pasted HTML, checked before it becomes a link
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | style_marks(style) | param | &str	generic	CSS style parser over &str
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
@@ -2293,11 +2289,18 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	newtype-inner	newtype inner field
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | FAMILY_MAX | const | usize	math	count, size or local index
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | HREF_MAX | const | usize	math	count, size or local index
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | MAGIC | const | [u8;4]	math	count, size or local index
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | Payload.magic | field | [u8;4]	math	count, size or local index
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	free-text	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family() | ret | bool	generic	predicate result
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	free-text	family name of a pasted mark, checked before it lands
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link() | ret | bool	generic	predicate result
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	free-text	link target of a pasted mark, checked before it lands
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	math	count, size or local index

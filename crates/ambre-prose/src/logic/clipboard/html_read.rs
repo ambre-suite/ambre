@@ -68,10 +68,6 @@ const KEPT_EMPTY: [&str; 11] = [
     "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "td", "th",
 ];
 
-/// The longest link and family name a paste keeps, in bytes.
-const HREF_MAX: usize = 2048;
-const FAMILY_MAX: usize = 64;
-
 /// Read `html` into blocks. A document with no text reads as no block, and
 /// so does one nested deeper than [`DEPTH_MAX`].
 pub(super) fn read(html: &str) -> Vec<ClipBlock> {
@@ -414,9 +410,9 @@ impl Reader {
         }
         for (key, value) in changes {
             let value = match value {
-                Some(raw) => match mark::validate_value(&key.key(), Some(&raw)) {
-                    Ok(canonical) => Some(canonical),
-                    Err(_) => continue,
+                Some(raw) => match super::pasted(key, Some(&raw)) {
+                    Some(canonical) => Some(canonical),
+                    None => continue,
                 },
                 None => None,
             };
@@ -597,21 +593,10 @@ fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
         "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => vec![on(MarkRoot::Code)],
         "a" => attr(attrs, "href")
             .map(str::trim)
-            .filter(|href| safe_link(href))
             .map(|href| vec![(MarkRoot::Link, Some(href.to_owned()))])
             .unwrap_or_default(),
         _ => Vec::new(),
     }
-}
-
-/// A link a paste keeps: one a reader follows to a page or a mail, never one
-/// that runs.
-fn safe_link(href: &str) -> bool {
-    let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    href.len() <= HREF_MAX
-        && ["http://", "https://", "mailto:"]
-            .iter()
-            .any(|scheme| lower.starts_with(scheme))
 }
 
 /// The marks a style attribute's declarations stand for. Black ink and a
@@ -738,13 +723,7 @@ fn font_family(value: &str) -> Option<String> {
         "initial",
         "unset",
     ];
-    let usable = !first.is_empty()
-        && first.len() <= FAMILY_MAX
-        && !first.starts_with('-')
-        && !generic.contains(&first.to_ascii_lowercase().as_str())
-        && first
-            .chars()
-            .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'));
+    let usable = !first.starts_with('-') && !generic.contains(&first.to_ascii_lowercase().as_str());
     usable.then(|| first.to_owned())
 }
 
