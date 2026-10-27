@@ -2564,6 +2564,12 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | par
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold.0 | field | i16	newtype-inner	the k of a k-of-n split, typed apart from ShareTotal; the smallint column width
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal.0 | field | i16	newtype-inner	the n of a k-of-n split, typed apart from ShareThreshold; the smallint column width
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold::new(count) | param | i16	newtype-inner	the validated constructor of ShareThreshold: a count below 1 is refused
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareThreshold validates, as a row or a request body carries it
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::new(count) | param | i16	newtype-inner	the validated constructor of ShareTotal: a count below 1 is refused
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareTotal validates, as a row or a request body carries it
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserSearch.0 | field | String	newtype-inner	the trimmed search text of UserSearch
@@ -4122,7 +4128,7 @@ ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secre
 ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::secret() | ret | &Secret<Vec<u8>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::to_plaintext() | ret | Vec<u8>	newtype-inner	a copy of the plaintext for the document model, out of the Secret
+ambre-core | src/secret.rs | crate::secret | SecretBytes::to_plaintext() | ret | Vec<u8>	newtype-inner	a copy of the plaintext for the document model, out of the Secret; the copy is never wiped, so the wrapper is typing only, with no wipe gain
 ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretString::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret.0 | field | Secret<[u8;32]>	newtype-inner	newtype field, constructor or accessor

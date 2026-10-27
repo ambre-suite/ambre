@@ -332,7 +332,8 @@ fn open_payload(
     author_pub: &PublicKey,
 ) -> Result<Vec<u8>, PipelineError> {
     // The model reads the bytes, so they are copied once, through the door
-    // `ARCH-047` admits. The opened buffer is wiped as its temporary drops.
+    // `ARCH-047` admits. Nothing wipes that copy: the wrapper is typing only
+    // here, with no wipe gain.
     let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?.to_plaintext();
     let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
     decompress(CompressionVersion::from_byte(*version)?, body)

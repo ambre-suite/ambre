@@ -49,18 +49,80 @@ pub struct ShamirParams(ShamirWire);
 
 /// How many shares of a split reconstruct the key: the `k` of k-of-n. A type
 /// apart from [`ShareTotal`], so a split never takes the two swapped.
+/// [`ShareThreshold::new`] is the one way in, so the count is at least 1.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-#[serde(transparent)]
-pub struct ShareThreshold(pub i16);
+#[serde(try_from = "i16", into = "i16")]
+pub struct ShareThreshold(i16);
 
 /// How many shares a split cuts the key into: the `n` of k-of-n.
+/// [`ShareTotal::new`] is the one way in, so the count is at least 1.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-#[serde(transparent)]
-pub struct ShareTotal(pub i16);
+#[serde(try_from = "i16", into = "i16")]
+pub struct ShareTotal(i16);
+
+/// The error of a share count below 1, which no split may declare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a share count is below 1")]
+pub struct InvalidShareCount;
+
+impl ShareThreshold {
+    /// The one share a single-authority recovery takes.
+    pub const ONE: Self = Self(1);
+
+    /// The threshold `count` names, or `None` below 1.
+    pub fn new(count: i16) -> Option<Self> {
+        (count >= 1).then_some(Self(count))
+    }
+
+    /// The count, for the column and the wire that store it.
+    pub fn get(self) -> i16 {
+        self.0
+    }
+}
+
+impl ShareTotal {
+    /// The total `count` names, or `None` below 1.
+    pub fn new(count: i16) -> Option<Self> {
+        (count >= 1).then_some(Self(count))
+    }
+
+    /// The count, for the column and the wire that store it.
+    pub fn get(self) -> i16 {
+        self.0
+    }
+}
+
+impl TryFrom<i16> for ShareThreshold {
+    type Error = InvalidShareCount;
+
+    fn try_from(count: i16) -> Result<Self, InvalidShareCount> {
+        Self::new(count).ok_or(InvalidShareCount)
+    }
+}
+
+impl From<ShareThreshold> for i16 {
+    fn from(threshold: ShareThreshold) -> Self {
+        threshold.0
+    }
+}
+
+impl TryFrom<i16> for ShareTotal {
+    type Error = InvalidShareCount;
+
+    fn try_from(count: i16) -> Result<Self, InvalidShareCount> {
+        Self::new(count).ok_or(InvalidShareCount)
+    }
+}
+
+impl From<ShareTotal> for i16 {
+    fn from(total: ShareTotal) -> Self {
+        total.0
+    }
+}
 
 /// The two fields of a split as the request body, the answer and the
 /// `organizations` row spell them.
@@ -72,9 +134,10 @@ pub struct ShamirWire {
 
 impl ShamirParams {
     /// The split of `total` shares that `threshold` of them reconstruct.
-    /// Refuses a threshold below 1 or above the total.
+    /// Refuses a threshold above the total. Each type already holds its count
+    /// at 1 or more.
     pub fn new(threshold: ShareThreshold, total: ShareTotal) -> Result<Self, AppError> {
-        if total.0 < 1 || threshold.0 < 1 || threshold.0 > total.0 {
+        if threshold.get() > total.get() {
             return Err(AppError::Conflict {
                 detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
                     .into(),
@@ -113,11 +176,12 @@ impl From<ShamirParams> for ShamirWire {
 
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for ShamirParams {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
-        Self::new(
-            ShareThreshold(row.try_get("shamir_threshold")?),
-            ShareTotal(row.try_get("shamir_total")?),
-        )
-        .map_err(|e| sqlx::Error::Decode(e.to_string().into()))
+        let decode = |e: &dyn std::fmt::Display| sqlx::Error::Decode(e.to_string().into());
+        let threshold = ShareThreshold::try_from(row.try_get::<i16, _>("shamir_threshold")?)
+            .map_err(|e| decode(&e))?;
+        let total =
+            ShareTotal::try_from(row.try_get::<i16, _>("shamir_total")?).map_err(|e| decode(&e))?;
+        Self::new(threshold, total).map_err(|e| decode(&e))
     }
 }
 
@@ -173,8 +237,8 @@ pub async fn create_organization(
     .bind(id_to_uuid(*org_id))
     .bind(name.as_str())
     .bind(org_pubkey.as_slice())
-    .bind(shamir.threshold().0)
-    .bind(shamir.total().0)
+    .bind(shamir.threshold().get())
+    .bind(shamir.total().get())
     .fetch_one(&mut *tx)
     .await?;
 

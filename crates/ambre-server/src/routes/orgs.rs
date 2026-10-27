@@ -114,7 +114,7 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
 /// cannot keep: reject any threshold above 1. [`db::ShamirParams`] already
 /// holds `1 <= threshold <= total`.
 fn validate_shamir_params(shamir: db::ShamirParams) -> Result<(), AppError> {
-    if shamir.threshold() > db::ShareThreshold(1) {
+    if shamir.threshold() > db::ShareThreshold::ONE {
         return Err(AppError::Conflict {
             detail: "shamir_threshold > 1 is not yet supported: threshold reconstruction is \
                      unimplemented and recovery is single-authority (owner-only)"
@@ -472,7 +472,13 @@ mod tests {
     /// Whether a request declaring `threshold` of `total` passes: the range
     /// the split holds, then the quorum the relay enforces.
     fn accepted(threshold: i16, total: i16) -> bool {
-        db::ShamirParams::new(db::ShareThreshold(threshold), db::ShareTotal(total))
+        let (Some(threshold), Some(total)) = (
+            db::ShareThreshold::new(threshold),
+            db::ShareTotal::new(total),
+        ) else {
+            return false;
+        };
+        db::ShamirParams::new(threshold, total)
             .and_then(validate_shamir_params)
             .is_ok()
     }
@@ -507,6 +513,39 @@ mod tests {
         );
     }
 
+    /// The split of `total` shares that `threshold` reconstruct, for a test.
+    fn split(threshold: i16, total: i16) -> db::ShamirParams {
+        db::ShamirParams::new(
+            db::ShareThreshold::new(threshold).unwrap(),
+            db::ShareTotal::new(total).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// A share count below 1 has no value of its type, on the wire or built.
+    /// Each count keeps the bare number its column and its JSON field carry.
+    #[test]
+    fn a_share_count_below_one_is_unrepresentable() {
+        for count in [0, -1, i16::MIN] {
+            assert_eq!(db::ShareThreshold::new(count), None);
+            assert_eq!(db::ShareTotal::new(count), None);
+            assert!(serde_json::from_str::<db::ShareThreshold>(&count.to_string()).is_err());
+            assert!(serde_json::from_str::<db::ShareTotal>(&count.to_string()).is_err());
+        }
+        let threshold = db::ShareThreshold::new(2).unwrap();
+        assert_eq!(threshold.get(), 2);
+        assert_eq!(serde_json::to_string(&threshold).unwrap(), "2");
+        assert_eq!(
+            serde_json::to_string(&db::ShareTotal::new(5).unwrap()).unwrap(),
+            "5"
+        );
+        let body = r#"{"shamir_threshold": 0, "shamir_total": 3}"#;
+        assert!(serde_json::from_str::<db::ShamirParams>(body).is_err());
+        let body = r#"{"shamir_threshold": 1, "shamir_total": 0}"#;
+        assert!(serde_json::from_str::<db::ShamirParams>(body).is_err());
+        assert_eq!(split(2, 3).threshold(), threshold);
+    }
+
     // -- Response formatting ------------------------------------------------
 
     #[test]
@@ -515,16 +554,13 @@ mod tests {
             id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
             org_pubkey: ambre_core::PublicKey::from_array([0u8; 32]),
-            shamir: db::ShamirParams::new(db::ShareThreshold(3), db::ShareTotal(5)).unwrap(),
+            shamir: split(3, 5),
             created_at: chrono::Utc::now(),
         };
         let resp = org_to_response(&org);
         assert_eq!(resp.id.to_string(), "00000000-0000-0000-0000-000000000001");
         assert_eq!(resp.name, "Test Org");
-        assert_eq!(
-            resp.shamir,
-            db::ShamirParams::new(db::ShareThreshold(3), db::ShareTotal(5)).unwrap()
-        );
+        assert_eq!(resp.shamir, split(3, 5));
         assert_eq!(
             resp.org_pubkey,
             ambre_core::ExchangeKeyHex::encode(vec![0u8; 32])
