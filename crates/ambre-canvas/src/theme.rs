@@ -1,7 +1,8 @@
 // ambre-canvas/src/theme.rs
 // ============================================================================
-// Design tokens, consumed (ambre-spec-design-tokens.md, ambre-spec-frame.md). The colour
-// palettes and scales are generated from `tokens.ron` by `build.rs`; this module
+// Design tokens, consumed (ambre-spec-design-tokens.md, ambre-spec-frame.md).
+// `just tokens-write` generates the colour palettes and scales from
+// `tokens.ron` into the committed `theme_gen.rs` and `theme.css`. This module
 // wraps them in the runtime theme switch shared across the canvas/DOM boundary:
 //
 //   Palette / LIGHT / DARK / SPACE_* / RADIUS / FONT_*   (generated).
@@ -17,12 +18,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 // Palette struct, LIGHT/DARK consts, and SPACE_*/RADIUS/FONT_* scales.
-include!(concat!(env!("OUT_DIR"), "/theme_gen.rs"));
+pub use crate::theme_gen::*;
 
 /// The generated CSS custom-property sheet (`:root` light + `[data-theme=dark]`).
 /// The launcher injects this into a `<style>` so the DOM chrome reads the same
 /// tokens the canvas draws with.
-pub const THEME_CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/theme.css"));
+pub const THEME_CSS: &str = include_str!("theme.css");
 
 /// The active colour scheme. `Light` is the unmarked CSS `:root` default; the
 /// app boots `Dark` (and sets `data-theme="dark"`).
@@ -381,7 +382,7 @@ mod stylesheet_tests {
     }
 
     /// A palette colour as the sheet spells it.
-    fn hex(color: super::Color) -> String {
+    fn hex(color: ambre_draw::Color) -> String {
         let [r, g, b, _] = color.to_rgba8().to_u8_array();
         format!("#{r:02x}{g:02x}{b:02x}")
     }

@@ -1,9 +1,10 @@
 // ambre-canvas/tokens.ron
 // ============================================================================
-// SINGLE SOURCE of Ambre's design tokens (ambre-spec-design-tokens.md). `build.rs` reads
-// this file and generates BOTH:
-//   - theme.css : CSS custom properties for the DOM chrome (ambre-chrome).
-//   - theme.rs  : Rust `Palette` constants for the wgpu content (ambre-canvas).
+// SINGLE SOURCE of Ambre's design tokens (ambre-spec-design-tokens.md).
+// `just tokens-write` reads this file and generates BOTH, committed in src/:
+//   - theme.css    : CSS custom properties for the DOM chrome (ambre-chrome).
+//   - theme_gen.rs : Rust `Palette` constants for the wgpu content (ambre-canvas).
+// `just tokens-check` fails when either one is not what this file generates.
 // One source => canvas/DOM coherence by construction. Light is the unmarked
 // `:root` default; dark is `:root[data-theme="dark"]` and the canvas DARK palette.
 //

@@ -9,7 +9,7 @@
    --------------------------------------------------------------------------- */
 
 /* Colour, spacing, radius and font tokens come from the generated theme.css
-   (tokens.ron -> build.rs), injected at startup into <head> as CSS custom
+   (tokens.ron -> just tokens-write), injected at startup into <head> as CSS custom
    properties. Only layout constants specific to the shell live here. */
 :root {
     --header-h: 44px;

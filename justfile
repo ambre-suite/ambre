@@ -26,7 +26,7 @@ default:
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
 # canvas host, the workers -- which host clippy never reads. The flags are those
@@ -70,16 +70,20 @@ lint-wasm:
 # carries the handler that answers `ExportPdf` (`TOILE-IO-029`), and a run
 # without it compiles the refusal arm instead.
 #
+# `--features ambre-canvas/tokens` reaches the generator and its tests, and
+# `just tokens-check` then holds the committed theme files to `tokens.ron`.
+#
 # No feature here is read negatively -- no `cfg(not(feature = ...))` exists in
-# the workspace -- so enabling all three changes no test's outcome. The `lint`
+# the workspace -- so enabling all four changes no test's outcome. The `lint`
 # recipe still compiles the workspace with no feature at all, which is what holds
 # the other half: that the gated code is genuinely optional.
 
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
 test-native:
-    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf
+    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-canvas/tokens
     just fixtures-check
+    just tokens-check
 
 # Regenerate `fixtures/current/` in place and drop any artifact whose generator
 # is gone (`ambre-spec-fixtures.md` section 3). The fix for a red
@@ -94,6 +98,21 @@ fixtures:
 # Exits non-zero on any drift; runs in the CI host job.
 fixtures-check:
     cargo run -p ambre-logic --features fixtures --bin ambre-fixtures -- check
+
+# The design tokens (`ambre-spec-design-tokens.md`). `tokens.ron` is the one
+# source, and the generator writes the committed `src/theme_gen.rs` and
+# `src/theme.css` of `ambre-canvas`. They are committed so that every gate reads
+# them, and the check below holds them to the source. The fix for a red check
+# is always the rewrite, never a hand edit. `ambre-canvas/tokens` is on in the
+# test-native build, so the check reuses that build.
+
+# Rewrite the generated theme module and stylesheet from `tokens.ron`.
+tokens-write:
+    cargo run -q -p ambre-canvas --features tokens --bin ambre-tokens -- --write
+
+# token drift: fail when a generated theme file is not what `tokens.ron` gives.
+tokens-check:
+    cargo run -q -p ambre-canvas --features tokens --bin ambre-tokens
 
 # Copy one artifact out of `current/` into `frozen/`, deriving the version
 # suffix from its manifest. Takes a generator name (`trame/grid_literals`),

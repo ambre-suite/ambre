@@ -59,6 +59,11 @@ pub mod perf;
 
 // -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl
 pub mod theme;
+// The committed output of `just tokens-write`, re-exported by `theme`.
+mod theme_gen;
+// The generator of `theme_gen.rs` and `theme.css`, for `just tokens-write`.
+#[cfg(feature = "tokens")]
+pub mod tokens;
 
 // -- Lazy font loading (CJK/Arabic/Devanagari fetched on missing codepoint) --
 pub mod fonts;

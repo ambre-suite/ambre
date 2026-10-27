@@ -5,12 +5,19 @@ edition.workspace = true
 license.workspace = true
 description = "GPU content-rendering runtime for the Ambre UI thread (wgpu surface, quad/glyph pipeline, GPU bootstrap + rAF loop). Chrome lives in the DOM (ambre-chrome)."
 
-[build-dependencies]
-# Token codegen: parse tokens.ron -> theme.rs + theme.css (build.rs).
-serde = { workspace = true }
-ron   = "0.8"
+# The token generator (`ambre-spec-design-tokens.md`): `just tokens-write`
+# parses `tokens.ron` into the committed `src/theme_gen.rs` and `src/theme.css`,
+# and `just tokens-check` fails when either one is stale. Non-default, so no
+# client build links a RON parser.
+[features]
+tokens = ["dep:serde", "dep:ron"]
 
 [dependencies]
+# The token source reader, behind `tokens`. Both were the build dependencies of
+# the build script this binary replaces, so the tree gains no crate.
+serde = { workspace = true, optional = true }
+ron   = { version = "0.8", optional = true }
+
 ambre-bus  = { path = "../ambre-bus" }
 # The keys and modifiers an input event carries (`Key`, `Modifiers`).
 ambre-commands = { path = "../ambre-commands" }
@@ -40,6 +47,13 @@ wasm-bindgen = { workspace = true }
 js-sys               = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 tracing              = { workspace = true }
+
+# `required-features` keeps the generator out of every other build, the wasm
+# one included.
+[[bin]]
+name = "ambre-tokens"
+path = "src/bin/ambre-tokens.rs"
+required-features = ["tokens"]
 
 [dev-dependencies]
 # The recording surface the fatal screen is painted on in a host test.
