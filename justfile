@@ -74,9 +74,12 @@ lint-wasm:
 # `just tokens-check` then holds the committed theme files to `tokens.ron`.
 #
 # No feature here is read negatively -- no `cfg(not(feature = ...))` exists in
-# the workspace -- so enabling all four changes no test's outcome. The `lint`
-# recipe still compiles the workspace with no feature at all, which is what holds
-# the other half: that the gated code is genuinely optional.
+# the workspace -- so enabling all four changes no test's outcome. The other
+# half is that the gated code is genuinely optional. No recipe compiles the host
+# workspace with no feature, so `lint-wasm` holds that half. Its lines compile
+# the client crates without `fixtures` or `tokens`. Its Logic and Trame lines
+# compile `ambre-logic` and `ambre-toile` without the PDF features, which
+# `ambre-app` turns on. This tier compiles `ambre-server` without `db`.
 
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
@@ -104,7 +107,10 @@ fixtures-check:
 # `src/theme.css` of `ambre-canvas`. They are committed so that every gate reads
 # them, and the check below holds them to the source. The fix for a red check
 # is always the rewrite, never a hand edit. `ambre-canvas/tokens` is on in the
-# test-native build, so the check reuses that build.
+# test-native build, so the generator's tests run there. The check builds the
+# binary under the feature set of `ambre-canvas` alone. There `ambre-core` and
+# `ambre-draw` lose a feature, so cargo compiles them and each crate above them
+# again: the check reuses none of the Ambre crates of the test build.
 
 # Rewrite the generated theme module and stylesheet from `tokens.ron`.
 tokens-write:
