@@ -85,8 +85,8 @@ struct Head<'a>(&'a [u8]);
 
 /// The bytes that [`length_prefixed`] hashes after the bounded field.
 ///
-/// The order of the two inputs is the property the chain hash rests on, so
-/// each takes a type of its own, and a swap does not compile.
+/// The chain hash rests on the order of the two inputs. Each takes a type of
+/// its own, so a swap does not compile.
 struct Tail<'a>(&'a [u8]);
 
 /// `BLAKE2b(len(head) || head || tail)`, truncated to 32 bytes: the one

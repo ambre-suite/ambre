@@ -55,9 +55,9 @@ pub(crate) struct TofuPrompt {
 
 /// How a fetched key that interrupts the user relates to the pin.
 ///
-/// An `enum`, not a `bool`, because the two states select different words
-/// and a warning: a swap of the two would hide a substituted key behind the
-/// prompt of a first contact.
+/// The two states select different words and a warning, so they are an
+/// `enum`. A swap of the two would hide a substituted key behind the prompt
+/// of a first contact.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum KeyContact {
     /// No key is pinned for the recipient: the first contact.
