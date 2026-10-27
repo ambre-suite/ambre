@@ -743,8 +743,9 @@ const COMPILER_VARS: &[&str] = &["RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAP
 ///   * any variable of `COMPILER_VARS`, or a `CARGO_BUILD_RUSTC*`, set at
 ///     all.
 ///
-/// A value that is not UTF-8 fails closed. Neither the `justfile` nor the
-/// CI workflow sets one of them, so no allowlist admits a value. `vars` is
+/// A value that is not UTF-8 fails closed. The `justfile` sets `RUSTFLAGS`
+/// on its wasm lines, but no lever in it. Neither the `justfile` nor the CI
+/// workflow names a wrapper, so no allowlist admits a value. `vars` is
 /// the environment, passed in, so a test sets none of the process.
 pub(crate) fn env_levers(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Vec<String> {
     let mut vars: Vec<(OsString, OsString)> = vars.into_iter().collect();

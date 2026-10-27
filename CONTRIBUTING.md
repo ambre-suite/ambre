@@ -60,6 +60,10 @@ adoption, not an imposition:
 git config core.hooksPath .githooks
 ```
 
+`just primitives` refuses a `RUSTC_WRAPPER` such as sccache. It also refuses a lever, an
+`[unstable]` key, an `[env]` entry or a wrapper in `~/.cargo/config.toml`. To run it, unset the
+variable, or move that config away for the run.
+
 The table holds what no gate sees. Read it before you commit.
 
 | Check | Why no gate holds it |
