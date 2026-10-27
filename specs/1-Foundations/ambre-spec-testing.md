@@ -80,16 +80,18 @@ file, the module, the item, the kind and the type, and no line number.
   `macro_rules!` body, a macro call or an attribute. An inline `mod name { .. }` passes in one
   place: the literal tokens of a `macro_rules!` transcriber, outside a call the transcriber
   writes. Its child `mod` is read the same way. A macro can reorder the tokens of a call, so an
-  inline module there fails. A `#![feature]` in a crate root fails, unless `FEATURE_ROOTS` names
-  the root.
+  inline module there fails.
+
+  A `#![feature]` in a crate root fails, unless `FEATURE_ROOTS` names the root.
 
   A lever of the build configuration fails too: a `-Z` flag, `crate-attr` or `feature(`. Such a
   lever enables syntax the pinned syn may not parse. The check reads four sources:
   1. each `.cargo/config.toml` and `.cargo/config` under the root. It reads each `rustflags` and
      `rustdocflags` value, and each key of an `[unstable]` table. `UNSTABLE` names one key with
      its exact value: `build-std` of the root config, for the threaded wasm build;
-  2. each `Cargo.toml`: a `cargo-features` key, a `rustflags` or `rustdocflags` key, and a `sqlx`
-     dependency that names another package, since the scan reads `sqlx::migrate!` by its name;
+  2. each `Cargo.toml`: a `cargo-features` key, and a `rustflags` or `rustdocflags` key. A `sqlx`
+     dependency that names another package fails too, since the scan reads `sqlx::migrate!` by
+     its name;
   3. the `justfile`, each line that is no comment;
   4. `.github/workflows/ci.yml`, each line that is no comment.
 
@@ -101,9 +103,9 @@ file, the module, the item, the kind and the type, and no line number.
   shaders and style sheets, which lex as Rust tokens and do not parse.
 
   A test build may read any file. A `.rs` file under the workspace root that no compile reads
-  fails, whatever its name. The check leaves out the `.git/` and `target/` of the root, and the
-  nested workspace `fuzz/` that `NESTED_WORKSPACES` names, and a test holds that its manifest
-  declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
+  fails, whatever its name. The check leaves out the `.git/` and `target/` of the root. It leaves
+  out the nested workspace `fuzz/` that `NESTED_WORKSPACES` names too, and a test holds that its
+  manifest declares one. Any other manifest with a top-level `workspace` key in its TOML fails. The
   listing follows no link to a directory.
 
   A failed compile, a missing dep-info file, a unit with no test flag and a dep-info line the
@@ -204,9 +206,9 @@ file, the module, the item, the kind and the type, and no line number.
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
   `serde_json` reads the messages of `cargo check`, which name the dep-info file of each unit.
+
   `toml` parses each manifest and each cargo config as cargo reads them. The lockfile already
-  holds it under `leptos`.
-  The tree walk uses `std` rather than a crate.
+  holds it under `leptos`. The tree walk uses `std` rather than a crate.
 
 ---
 

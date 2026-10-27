@@ -626,14 +626,14 @@ const FLAG_KEYS: &[&str] = &["rustflags", "rustdocflags"];
 
 /// Each lever of the build configuration that enables an unstable feature
 /// or a crate attribute, as one refusal (`ARCH-033`). Such a lever enables
-/// syntax the pinned syn may not parse, as a `#![feature]` does, so a data
-/// file could compile as a module the parse guard misreads. The check reads
-/// four sources:
+/// syntax the pinned syn may not parse, as a `#![feature]` does. A data
+/// file could then compile as a module the parse guard misreads. The check
+/// reads four sources:
 ///
-///   * each `.cargo/config.toml` and `.cargo/config` under the root: a `-Z`
+///   * each `.cargo/config.toml` and `.cargo/config` under the root. A `-Z`
 ///     flag, `crate-attr` or `feature(` in a `rustflags` or `rustdocflags`
-///     value, at any depth, and each key of an `[unstable]` table that
-///     `UNSTABLE` does not name with its exact value;
+///     value fails, at any depth. So does each key of an `[unstable]` table
+///     that `UNSTABLE` does not name with its exact value;
 ///   * each `Cargo.toml` under the root: a `cargo-features` key, and a
 ///     `rustflags` or `rustdocflags` key at any depth;
 ///   * the `justfile`;
@@ -744,7 +744,7 @@ fn flag_values(shown: &str, prefix: &str, table: &toml::Table, found: &mut Vec<S
 }
 
 /// The text of one flag value: a string as written, any other value in its
-/// debug form, so a value of another type still meets the check.
+/// debug form. A value of another type still meets the check.
 fn flag_text(value: &toml::Value) -> String {
     value
         .as_str()

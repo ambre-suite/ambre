@@ -14,10 +14,12 @@
 //!     claimed shape the site lacks, a privacy refusal, and a `Deref` of a
 //!     workspace type to a primitive. The sixth reads names: a secret reader outside `ambre-crypto`, or
 //!     the `zeroize` crate outside the Secret module (`ARCH-045`,
-//!     `ARCH-046`). The seventh holds the walk to rustc. It
-//!     refuses a file a compile reads that the walk neither reads nor
-//!     names as data, a `.rs` file no compile reads, and a build lever
-//!     that enables an unstable feature (`ARCH-033`);
+//!     `ARCH-046`).
+//!
+//!     The seventh holds the walk to rustc. It refuses a file a compile
+//!     reads that the walk neither reads nor names as data, and a `.rs` file
+//!     no compile reads. It refuses a build lever that enables an
+//!     unstable feature too (`ARCH-033`);
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
 //!   * `--prune` removes the lines that name no site, and nothing else.

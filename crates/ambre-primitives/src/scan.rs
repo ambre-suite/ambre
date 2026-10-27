@@ -4123,9 +4123,9 @@ impl MacroMods {
     }
 }
 
-/// Whether the group after `before` is the tokens of a macro call: `!`
-/// then the group, or `!`, a name and the group, as `macro_rules! m { .. }`
-/// writes. A negation in parentheses matches too, which only fails closed.
+/// Whether the group after `before` is the tokens of a macro call. That is
+/// `!` then the group, or `!`, a name and the group, as `macro_rules! m {
+/// .. }` writes. A negation in parentheses matches too, which only fails closed.
 fn called(before: &[TokenTree]) -> bool {
     let bang = |tree: &TokenTree| matches!(tree, TokenTree::Punct(p) if p.as_char() == '!');
     match before {

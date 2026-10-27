@@ -152,10 +152,12 @@
   7. a sink named outside the file of its foreign call (`ARCH-049`). The name `include` in any
      form, in each file the gate reads (`ARCH-047`), since the gate reads no file an `include!`
      names. A `#[path]` the gate cannot follow fails the scan, and so does a `#![feature]` in a
-     crate root. So does a `mod` a macro holds, unless it is an inline module in the literal
-     tokens of a `macro_rules!` transcriber, outside a call the transcriber writes. So does a
-     lever of the build configuration: a `-Z` flag, `crate-attr` or `feature(` in a cargo config,
-     a manifest, the `justfile` or the CI workflow.
+     crate root.
+
+     A `mod` a macro holds fails too, unless it is an inline module in the literal tokens of a
+     `macro_rules!` transcriber. A call the transcriber writes passes no `mod`. A lever of the
+     build configuration fails too: a `-Z` flag, `crate-attr` or `feature(`. The gate reads it in
+     a cargo config, a manifest, the `justfile` and the CI workflow.
 
      So does a file a shipped build reads that the walk neither reads nor names as data, or a
      `.rs` file no compile reads (`ARCH-033`). A data file that parses as Rust items fails too, as
