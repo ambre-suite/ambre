@@ -4058,17 +4058,18 @@ impl MacroMods {
         let trees: Vec<TokenTree> = tokens.into_iter().collect();
         for (at, tree) in trees.iter().enumerate() {
             match tree {
-                TokenTree::Ident(ident) if ident.unraw() == "mod" => {
-                    if !inline_module(trees.get(at + 1..).unwrap_or_default()) {
-                        self.found.push(format!(
-                            "{}:{}: a macro holds the keyword `mod` outside an inline module. The \
-                             walk follows no module a macro declares, and the dep-info check \
-                             cannot tell its file from data, so the scan fails closed \
-                             (ARCH-033): declare the module in the source",
-                            self.file,
-                            ident.span().start().line
-                        ));
-                    }
+                TokenTree::Ident(ident)
+                    if ident.unraw() == "mod"
+                        && !inline_module(trees.get(at + 1..).unwrap_or_default()) =>
+                {
+                    self.found.push(format!(
+                        "{}:{}: a macro holds the keyword `mod` outside an inline module. The \
+                         walk follows no module a macro declares, and the dep-info check \
+                         cannot tell its file from data, so the scan fails closed \
+                         (ARCH-033): declare the module in the source",
+                        self.file,
+                        ident.span().start().line
+                    ));
                 }
                 TokenTree::Group(group) => self.tokens(group.stream()),
                 _ => {}

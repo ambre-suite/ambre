@@ -4236,3 +4236,19 @@ ambre-primitives | src/scan.rs | crate::scan | MIGRATIONS | const | &str	foreign
 ambre-primitives | src/scan.rs | crate::scan | DataRead::Dir.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | DataRead::File.0 | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | literal_argument() | ret | Option<Option<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/depinfo.rs | crate::depinfo | stray_workspaces() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | FEATURE_ROOTS | const | &[(&str,&str)]	generic	the crate roots, by crate and file, that may enable an unstable feature: none today
+ambre-primitives | src/scan.rs | crate::scan | MacroMods.file | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | MacroMods.found | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | NESTED_WORKSPACES | const | &[&str]	generic	the directories of the workspace root that hold a workspace of their own
+ambre-primitives | src/scan.rs | crate::scan | SKIPPED | const | &[&str]	generic	the directories of the workspace root that a listing leaves out
+ambre-primitives | src/scan.rs | crate::scan | SQLX | const | &str	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/scan.rs | crate::scan | features() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | features(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | holds_ident() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | holds_ident(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | inline_module() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | macro_mods() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | macro_mods(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | names_migrate() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | names_migrate(at) | param | usize	generic	the index of a token in the token trees the scanner reads
