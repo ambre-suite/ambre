@@ -4252,3 +4252,4 @@ ambre-primitives | src/scan.rs | crate::scan | macro_mods() | ret | Vec<String>	
 ambre-primitives | src/scan.rs | crate::scan | macro_mods(file) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | names_migrate() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | names_migrate(at) | param | usize	generic	the index of a token in the token trees the scanner reads
+ambre-primitives | src/scan.rs | crate::scan | called() | ret | bool	generic	a predicate or a file read of the scanner

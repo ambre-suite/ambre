@@ -542,9 +542,10 @@ fn refusals(root: &Path, walk: &Scan) -> (Vec<String>, Compiled) {
 /// The refusal of a `mod` keyword a macro holds at `line` of `file`.
 fn macro_mod(file: &str, line: usize) -> String {
     format!(
-        "{file}:{line}: a macro holds the keyword `mod` outside an inline module. The walk \
-         follows no module a macro declares, and the dep-info check cannot tell its file from \
-         data, so the scan fails closed (ARCH-033): declare the module in the source"
+        "{file}:{line}: a macro holds the keyword `mod` outside an inline module of a \
+         macro_rules! transcriber. The walk follows no module a macro declares, and the dep-info \
+         check cannot tell its file from data, so the scan fails closed (ARCH-033): declare the \
+         module in the source"
     )
 }
 

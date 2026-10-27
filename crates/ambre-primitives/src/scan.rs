@@ -4030,10 +4030,13 @@ fn holds_ident(tokens: TokenStream, name: &str) -> bool {
 /// not, the tokens of any macro call, and the tokens of an attribute.
 ///
 /// One form passes: `mod name { .. }` or `mod $name { .. }`, an inline
-/// module, which reads no file. A child `mod` it holds is a keyword of the
-/// same tokens, read the same way, so a `#[path]` child still fails. Every
-/// other form fails, `mod name;` and a keyword that a `tt` fragment carries
-/// alone, as in `m!(mod hid)`, among them.
+/// module, in the literal tokens of a `macro_rules!` transcriber. Those
+/// tokens reach rustc in the order they are written, so the module reads no
+/// file. A child `mod` it holds is a keyword of the same tokens, read the
+/// same way, so a `#[path]` child still fails. The tokens of a macro call
+/// pass to a macro that may reorder them: `mod hid {}` can come out as
+/// `mod hid;`. So an inline module fails there, in a matcher, and in a call
+/// a transcriber writes.
 fn macro_mods(file: &str, tree: &syn::File) -> Vec<String> {
     let mut seek = MacroMods {
         file: file.to_owned(),
@@ -4051,30 +4054,84 @@ struct MacroMods {
     found: Vec<String>,
 }
 
+/// Where a `mod` keyword sits in the tokens of a macro, which decides
+/// whether an inline module passes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModReach {
+    /// The literal tokens of a `macro_rules!` transcriber, outside a macro
+    /// call they write. rustc reads them in the order they are written, so
+    /// an inline module passes.
+    Transcriber,
+    /// Every other token: a matcher, the tokens of a macro call and those
+    /// of an attribute. A macro may reorder them, so every `mod` fails.
+    Reordered,
+}
+
 impl MacroMods {
-    /// Refuses each `mod` keyword of `tokens` that does not open an inline
-    /// module, at any depth of groups.
-    fn tokens(&mut self, tokens: TokenStream) {
+    /// Refuses each `mod` keyword of `tokens` that is not an inline module
+    /// of a transcriber, at any depth of groups.
+    fn tokens(&mut self, tokens: TokenStream, reach: ModReach) {
         let trees: Vec<TokenTree> = tokens.into_iter().collect();
         for (at, tree) in trees.iter().enumerate() {
             match tree {
                 TokenTree::Ident(ident)
                     if ident.unraw() == "mod"
-                        && !inline_module(trees.get(at + 1..).unwrap_or_default()) =>
+                        && !(reach == ModReach::Transcriber
+                            && inline_module(trees.get(at + 1..).unwrap_or_default())) =>
                 {
                     self.found.push(format!(
-                        "{}:{}: a macro holds the keyword `mod` outside an inline module. The \
-                         walk follows no module a macro declares, and the dep-info check \
-                         cannot tell its file from data, so the scan fails closed \
-                         (ARCH-033): declare the module in the source",
+                        "{}:{}: a macro holds the keyword `mod` outside an inline module of a \
+                         macro_rules! transcriber. The walk follows no module a macro \
+                         declares, and the dep-info check cannot tell its file from data, so \
+                         the scan fails closed (ARCH-033): declare the module in the source",
                         self.file,
                         ident.span().start().line
                     ));
                 }
-                TokenTree::Group(group) => self.tokens(group.stream()),
+                TokenTree::Group(group) => {
+                    let inner = if called(trees.get(..at).unwrap_or_default()) {
+                        ModReach::Reordered
+                    } else {
+                        reach
+                    };
+                    self.tokens(group.stream(), inner);
+                }
                 _ => {}
             }
         }
+    }
+
+    /// Reads the rules of a `macro_rules!`: each group after `=>` is a
+    /// transcriber, and every other token is a matcher or a separator.
+    fn rules(&mut self, tokens: TokenStream) {
+        let trees: Vec<TokenTree> = tokens.into_iter().collect();
+        for (at, tree) in trees.iter().enumerate() {
+            let arrow = at
+                .checked_sub(2)
+                .and_then(|start| trees.get(start..at))
+                .is_some_and(|before| {
+                    matches!(before, [TokenTree::Punct(eq), TokenTree::Punct(gt)]
+                        if eq.as_char() == '=' && gt.as_char() == '>')
+                });
+            match tree {
+                TokenTree::Group(group) if arrow => {
+                    self.tokens(group.stream(), ModReach::Transcriber);
+                }
+                other => self.tokens(other.clone().into(), ModReach::Reordered),
+            }
+        }
+    }
+}
+
+/// Whether the group after `before` is the tokens of a macro call: `!`
+/// then the group, or `!`, a name and the group, as `macro_rules! m { .. }`
+/// writes. A negation in parentheses matches too, which only fails closed.
+fn called(before: &[TokenTree]) -> bool {
+    let bang = |tree: &TokenTree| matches!(tree, TokenTree::Punct(p) if p.as_char() == '!');
+    match before {
+        [.., last] if bang(last) => true,
+        [.., mark, TokenTree::Ident(_)] => bang(mark),
+        _ => false,
     }
 }
 
@@ -4114,11 +4171,15 @@ impl<'ast> Visit<'ast> for MacroMods {
     // An attribute's tokens reach a macro: `#[doc = m!(..)]` does, and so
     // does a `cfg_attr` that writes one.
     fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
-        self.tokens(attr.meta.to_token_stream());
+        self.tokens(attr.meta.to_token_stream(), ModReach::Reordered);
     }
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        self.tokens(mac.tokens.clone());
+        if mac.path.is_ident("macro_rules") {
+            self.rules(mac.tokens.clone());
+        } else {
+            self.tokens(mac.tokens.clone(), ModReach::Reordered);
+        }
     }
 }
 

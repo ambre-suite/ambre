@@ -1966,9 +1966,10 @@ fn a_deref_to_an_associated_type_of_self_or_in_a_discriminant_is_read() {
 /// crate's `src/lib.rs`.
 fn macro_mod(line: usize) -> String {
     format!(
-        "crates/demo/src/lib.rs:{line}: a macro holds the keyword `mod` outside an inline module. \
-         The walk follows no module a macro declares, and the dep-info check cannot tell its \
-         file from data, so the scan fails closed (ARCH-033): declare the module in the source"
+        "crates/demo/src/lib.rs:{line}: a macro holds the keyword `mod` outside an inline module \
+         of a macro_rules! transcriber. The walk follows no module a macro declares, and the \
+         dep-info check cannot tell its file from data, so the scan fails closed (ARCH-033): \
+         declare the module in the source"
     )
 }
 
@@ -2012,6 +2013,27 @@ fn an_inline_module_a_macro_writes_passes_and_its_path_child_fails() {
          macro_rules! glued { ($b:tt) => { mod glued $b }; }",
     )]);
     assert_eq!(errors, [4, 5].map(macro_mod));
+}
+
+#[test]
+fn an_inline_module_a_macro_can_reorder_fails_the_scan() {
+    // The SEC-1h review: the tokens `mod hid {}` of a call passed as an
+    // inline module, and the macro reordered them into `#[path] mod hid;`.
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "macro_rules! k { ($k:tt $n:ident $b:tt) => { #[path = \"hid.txt\"] $k $n; }; }\n\
+         k!(mod hid {});\n\
+         macro_rules! j { () => { k!(mod hid {}); }; }\n\
+         macro_rules! d { () => { $crate::k! { r#mod hid {} } }; }\n\
+         macro_rules! r { () => { macro_rules! inner { () => { mod hid {} }; } }; }\n\
+         macro_rules! w { (mod $n:ident {}) => { mod $n {} }; }\n\
+         #[cfg_attr(all(), doc = m!(mod hid {}))]\n\
+         pub struct S;\n\
+         macro_rules! kept { ($k:tt $n:ident) => { #[path = \"hid.txt\"] $k $n; }; }\n\
+         kept!(mod hid);\n\
+         macro_rules! lit { () => { $(mod a {})* pub mod b { mod c {} } }; }",
+    )]);
+    assert_eq!(errors, [2, 3, 4, 5, 6, 7, 10].map(macro_mod));
 }
 
 #[test]
