@@ -11,11 +11,13 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::ffi::OsStr;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::ToTokens;
+use syn::ext::IdentExt;
 use syn::parse::Parser;
 use syn::visit::Visit;
 use syn::visit_mut::VisitMut;
@@ -185,7 +187,7 @@ impl Tree for Disk {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    if path.file_name().is_some_and(|name| name != "target") {
+                    if path.file_name().is_some_and(|name| !is_build_output(name)) {
                         pending.push(path);
                     }
                 } else {
@@ -196,6 +198,13 @@ impl Tree for Disk {
         found.sort();
         found
     }
+}
+
+/// Whether a directory of this name is build output, which the walk leaves
+/// out. A `#[path]` into one fails the scan, so the walk and the files rustc
+/// compiles agree.
+fn is_build_output(name: &OsStr) -> bool {
+    name == "target"
 }
 
 /// What one scan found: the sites, and what kept it from reading the tree
@@ -2490,6 +2499,102 @@ fn macro_types(mac: &syn::Macro) -> Vec<String> {
 struct Pending {
     candidates: Vec<PathBuf>,
     module: Vec<String>,
+    placement: Placement,
+}
+
+/// How a `mod` declaration places the file of its module.
+enum Placement {
+    /// By the module name: `x.rs`, then `x/mod.rs`, inside the crate.
+    Named,
+    /// By a plain `#[path = "..."]`. The walk checks the file against the
+    /// crate before it reads it.
+    Path,
+    /// By a `path` the gate cannot follow, so the scan fails closed.
+    Unplaced(Unplaced),
+}
+
+/// Where the `path` attributes of a module declaration put its file.
+enum ModPath {
+    /// No `path` attribute.
+    Named,
+    /// One plain `#[path = "..."]`, relative to the declaring file.
+    Given(PathBuf),
+    /// A `path` the gate cannot follow.
+    Unplaced(Unplaced),
+}
+
+/// Why the gate cannot follow the `path` of a module. rustc compiles the
+/// file the attribute names, and the gate would read another one or none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Unplaced {
+    /// A `path` inside a `cfg_attr`, at any depth. Which build takes it is
+    /// a `cfg`, and the gate evaluates none here.
+    CfgAttr,
+    /// A `path` attribute that is not one string literal.
+    NotLiteral,
+    /// A `#[path]` on an inline module, which moves the files of the
+    /// modules it declares.
+    Inline,
+    /// A file outside the directory of the crate.
+    Outside,
+    /// A file that is not `.rs`.
+    NotRust,
+    /// A file under a build output directory, which the walk leaves out.
+    BuildOutput,
+}
+
+impl fmt::Display for Unplaced {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::CfgAttr => "a `path` inside a `cfg_attr`, which the gate does not evaluate",
+            Self::NotLiteral => "a `path` attribute that is not one string literal",
+            Self::Inline => "a `#[path]` on an inline module, which moves the files of its modules",
+            Self::Outside => "a `#[path]` to a file outside the directory of the crate",
+            Self::NotRust => "a `#[path]` to a file that is not `.rs`",
+            Self::BuildOutput => "a `#[path]` to a file under a `target/` directory",
+        })
+    }
+}
+
+/// Why the file a `#[path]` names cannot be read as the module. `None`
+/// when the file is `.rs`, in the crate directory `dir`, and under no
+/// directory the walk leaves out. The comparison is lexical: `..` is undone
+/// on the text of the path.
+fn misplaced(dir: &Path, file: &Path) -> Option<Unplaced> {
+    let file = lexical(file);
+    let Ok(inside) = file.strip_prefix(lexical(dir)) else {
+        return Some(Unplaced::Outside);
+    };
+    let skipped = inside
+        .parent()
+        .is_some_and(|parent| parent.iter().any(is_build_output));
+    if skipped {
+        return Some(Unplaced::BuildOutput);
+    }
+    if file.extension().is_none_or(|ext| ext != "rs") {
+        return Some(Unplaced::NotRust);
+    }
+    None
+}
+
+/// The path with each `.` dropped and each `..` undone on the text, without
+/// a read of the disk.
+fn lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match out.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                _ => out.push(".."),
+            },
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Scans one crate from its roots: the library, the binaries and the build
@@ -2527,11 +2632,38 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         .map(|path| Pending {
             candidates: vec![path.clone()],
             module: vec!["crate".to_owned()],
+            placement: Placement::Named,
         })
         .collect();
     let mut reached = BTreeSet::new();
     let mut skipped = Skipped::default();
     while let Some(next) = pending.pop() {
+        // rustc compiles the file a `path` names. A file the gate cannot
+        // show to be that one, or cannot list, fails the scan rather than
+        // let the gate read another (`ARCH-033`, `ARCH-045`).
+        let refusal = match next.placement {
+            Placement::Named => None,
+            Placement::Path => next.candidates.iter().find_map(|file| misplaced(dir, file)),
+            Placement::Unplaced(why) => Some(why),
+        };
+        if let Some(why) = refusal {
+            let names: Vec<String> = next
+                .candidates
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect();
+            result.errors.push(format!(
+                "crates/{name}: the module {} is placed by {why}{}, so the gate cannot show that \
+                 it reads the file rustc compiles, and fails closed",
+                next.module.join("::"),
+                if names.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", names.join(", "))
+                },
+            ));
+            continue;
+        }
         let Some((path, text)) = next
             .candidates
             .iter()
@@ -3009,18 +3141,43 @@ pub(crate) fn test_only(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
-/// The `#[path = "..."]` of a module declaration, if it carries one.
-fn path_attr(attrs: &[syn::Attribute]) -> Option<String> {
-    attrs.iter().find_map(|attr| match &attr.meta {
-        syn::Meta::NameValue(pair) if pair.path.is_ident("path") => match &pair.value {
-            syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(path),
-                ..
-            }) => Some(path.value()),
-            _ => None,
-        },
-        _ => None,
-    })
+/// Where the `path` attributes of a module declaration put its file. A
+/// `path` inside a `cfg_attr`, at any depth, and a `path` that is not one
+/// string literal, are unplaced: the gate fails closed on both.
+fn mod_path(attrs: &[syn::Attribute]) -> ModPath {
+    for attr in attrs {
+        if attr.path().is_ident("cfg_attr") {
+            let mut streams = match &attr.meta {
+                syn::Meta::List(list) => vec![list.tokens.clone()],
+                _ => Vec::new(),
+            };
+            while let Some(stream) = streams.pop() {
+                for tree in stream {
+                    match tree {
+                        TokenTree::Ident(ident) if ident.unraw() == "path" => {
+                            return ModPath::Unplaced(Unplaced::CfgAttr);
+                        }
+                        TokenTree::Group(group) => streams.push(group.stream()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    let Some(attr) = attrs.iter().find(|attr| attr.path().is_ident("path")) else {
+        return ModPath::Named;
+    };
+    match &attr.meta {
+        syn::Meta::NameValue(syn::MetaNameValue {
+            value:
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(path),
+                    ..
+                }),
+            ..
+        }) => ModPath::Given(PathBuf::from(path.value())),
+        _ => ModPath::Unplaced(Unplaced::NotLiteral),
+    }
 }
 
 /// A token stream as one line: a space stays only between two words, so
@@ -3978,7 +4135,7 @@ impl<'a> FileVisit<'a> {
     fn skip_module(&mut self, m: &syn::ItemMod) {
         let name = m.ident.to_string();
         if m.content.is_none() {
-            if let Some(path) = path_attr(&m.attrs) {
+            if let ModPath::Given(path) = mod_path(&m.attrs) {
                 let base = self.file_dir.clone().unwrap_or_else(|| self.dir.clone());
                 let file = base.join(path);
                 self.skipped.dirs.push(file.with_extension(""));
@@ -3995,15 +4152,37 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         let name = m.ident.to_string();
         // A module is test code by its `cfg` alone, never by its name: a
         // `mod x_tests;` with no test `cfg` is built and scanned.
+        let placed = mod_path(&m.attrs);
+        let mut module = self.module.clone();
+        module.push(name.clone());
         if test_only(&m.attrs) {
+            // A test module is never read, wherever its file sits. A `path`
+            // the gate cannot follow still fails: no `cfg` is read here.
+            if let ModPath::Unplaced(why) = placed {
+                self.children.push(Pending {
+                    candidates: Vec::new(),
+                    module,
+                    placement: Placement::Unplaced(why),
+                });
+            }
             self.skip_module(m);
             return;
         }
-        let mut module = self.module.clone();
-        module.push(name.clone());
         self.modules.insert(module.join("::"));
         match &m.content {
             Some((_, items)) => {
+                let why = match placed {
+                    ModPath::Named => None,
+                    ModPath::Given(_) => Some(Unplaced::Inline),
+                    ModPath::Unplaced(why) => Some(why),
+                };
+                if let Some(why) = why {
+                    self.children.push(Pending {
+                        candidates: Vec::new(),
+                        module,
+                        placement: Placement::Unplaced(why),
+                    });
+                }
                 let saved = (
                     self.dir.clone(),
                     self.file_dir.take(),
@@ -4026,23 +4205,30 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 ) = saved;
             }
             None => {
-                let candidates = match path_attr(&m.attrs) {
-                    Some(path) => {
+                let (candidates, placement) = match placed {
+                    ModPath::Given(path) => (
                         vec![
                             self.file_dir
                                 .clone()
                                 .unwrap_or_else(|| self.dir.clone())
                                 .join(path),
-                        ]
-                    }
-                    None => {
+                        ],
+                        Placement::Path,
+                    ),
+                    ModPath::Named => (
                         vec![
                             self.dir.join(format!("{name}.rs")),
                             self.dir.join(&name).join("mod.rs"),
-                        ]
-                    }
+                        ],
+                        Placement::Named,
+                    ),
+                    ModPath::Unplaced(why) => (Vec::new(), Placement::Unplaced(why)),
                 };
-                self.children.push(Pending { candidates, module });
+                self.children.push(Pending {
+                    candidates,
+                    module,
+                    placement,
+                });
             }
         }
     }

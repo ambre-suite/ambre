@@ -149,8 +149,9 @@
   5. `expose`, `expose_mut` or `clone_secret` named outside `ambre-crypto`, the Secret module and
      the relay's `src/secrets/` (`ARCH-045`, `ARCH-048`);
   6. a name of the `zeroize` crate outside the Secret module (`ARCH-046`);
-  7. a sink named outside the file of its foreign call (`ARCH-049`), and the name `include` in
-     any file and any form (`ARCH-047`). The gate reads no file an `include!` names.
+  7. a sink named outside the file of its foreign call (`ARCH-049`). The name `include` in any
+     form, in each file the gate reads (`ARCH-047`). The gate reads no file an `include!` names,
+     and a `#[path]` it cannot follow fails the scan (`ARCH-033`).
 
   Test code is what `cfg(test)`, a `cfg(all(test, ..))` or a test macro marks. A module named
   `*_tests` with no test `cfg`, and code behind a feature such as `test-helpers`, are scanned.

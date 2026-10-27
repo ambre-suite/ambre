@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use super::{Scan, SiteKey, Tree, scan};
+use super::{Scan, SiteKey, Tree, is_build_output, scan};
 
 /// A source tree held in memory, so a test states every file it reads.
 struct Memory(BTreeMap<PathBuf, String>);
@@ -11,10 +11,17 @@ impl Tree for Memory {
         self.0.get(path).cloned()
     }
 
+    // As on disk, a file under a build output directory is not listed.
     fn files(&self, dir: &Path) -> Vec<PathBuf> {
         self.0
             .keys()
-            .filter(|path| path.starts_with(dir))
+            .filter(|path| {
+                path.strip_prefix(dir).is_ok_and(|inside| {
+                    !inside
+                        .parent()
+                        .is_some_and(|parent| parent.iter().any(is_build_output))
+                })
+            })
             .cloned()
             .collect()
     }
@@ -266,6 +273,115 @@ fn a_secret_read_in_a_tests_module_with_no_test_cfg_is_refused() {
     assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
     assert!(
         result.secrets[0].starts_with("crates/demo/src/leak_tests.rs:1: `expose`"),
+        "{}",
+        result.secrets[0]
+    );
+}
+
+#[test]
+fn a_path_inside_a_cfg_attr_fails_the_scan_at_any_depth() {
+    // The probe of the SEC-1c/1d review. Rustc compiles `leak.rs`, outside
+    // the crate. A walk that drops the `cfg_attr` reads the harmless
+    // `innocent/mod.rs` instead, and reports no read of a secret.
+    let result = scan(
+        &demo(&[
+            (
+                "src/lib.rs",
+                "#[cfg_attr(all(), path = \"../../../leak.rs\")] mod innocent;\n\
+                 #[cfg_attr(all(), cfg_attr(unix, path = \"deep.rs\"))] mod deeper;\n\
+                 #[cfg(test)]\n#[cfg_attr(all(), path = \"t.rs\")] mod checks;",
+            ),
+            ("src/innocent/mod.rs", "pub fn f() {}"),
+            ("src/deeper.rs", "pub fn g() {}"),
+        ]),
+        Path::new(CRATES),
+    );
+    for module in ["crate::innocent", "crate::deeper", "crate::checks"] {
+        assert!(
+            result.errors.iter().any(|error| error.contains(&format!(
+                "the module {module} is placed by a `path` inside a `cfg_attr`"
+            ))),
+            "{module}: {:?}",
+            result.errors
+        );
+    }
+}
+
+#[test]
+fn a_path_outside_the_crate_to_another_kind_or_under_target_fails_the_scan() {
+    let (_, errors) = run(&[
+        (
+            "src/lib.rs",
+            "#[path = \"../../../leak.rs\"] mod outside;\n\
+             #[path = \"leak.txt\"] mod text;\n\
+             #[path = \"target/leak.rs\"] mod built;",
+        ),
+        (
+            "src/leak.txt",
+            "pub fn f(s: &Secret<String>) { s.expose(); }",
+        ),
+        (
+            "src/target/leak.rs",
+            "pub fn f(s: &Secret<String>) { s.expose(); }",
+        ),
+    ]);
+    // One refusal each. The file under `target/` is no orphan either: the
+    // walk and the orphan check leave out the same directories.
+    assert_eq!(errors.len(), 3, "{errors:?}");
+    for (module, why) in [
+        ("outside", "a file outside the directory of the crate"),
+        ("text", "a file that is not `.rs`"),
+        ("built", "a file under a `target/` directory"),
+    ] {
+        assert!(
+            errors.iter().any(|error| error.contains(&format!(
+                "crate::{module} is placed by a `#[path]` to {why}"
+            ))),
+            "{module}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn a_path_on_an_inline_module_or_off_a_string_literal_fails_the_scan() {
+    let (_, errors) = run(&[
+        (
+            "src/lib.rs",
+            "#[path = \"elsewhere\"] mod inner { mod leaf; }\n\
+             #[path = concat!(\"a\", \".rs\")] mod a;",
+        ),
+        ("src/inner/leaf.rs", "pub fn f() {}"),
+        ("src/a.rs", "pub fn g() {}"),
+    ]);
+    assert!(
+        errors.iter().any(
+            |error| error.contains("crate::inner is placed by a `#[path]` on an inline module")
+        ),
+        "{errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| error
+            .contains("crate::a is placed by a `path` attribute that is not one string literal")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn a_plain_path_inside_the_crate_is_read_and_its_secret_read_refused() {
+    let result = scan(
+        &demo(&[
+            ("src/lib.rs", "#[path = \"other/real.rs\"] mod renamed;"),
+            (
+                "src/other/real.rs",
+                "pub fn a(s: &Secret<String>) -> String { s.expose().clone() }",
+            ),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    assert_eq!(result.secrets.len(), 1, "{:?}", result.secrets);
+    assert!(
+        result.secrets[0].starts_with("crates/demo/src/other/real.rs:1: `expose`"),
         "{}",
         result.secrets[0]
     );

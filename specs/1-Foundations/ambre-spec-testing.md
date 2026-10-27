@@ -138,7 +138,12 @@ file, the module, the item, the kind and the type, and no line number.
   `crates/ambre-server/src/secrets/`. It refuses a name of the `zeroize` crate outside that one
   file, and a manifest that renames the crate. The two other places that read get no wipe.
   * It refuses a sink outside the file of its one foreign call (`ARCH-049`). It refuses the name
-    `include` in every file and in every form, since it reads no file an `include!` names.
+    `include` in each file it reads and in each form the source writes, since it reads no file
+    an `include!` names. A foreign macro that splices a file under another name is a reviewer's
+    (`ARCH-047`).
+  * It reads the files the walk reaches. A `#[path]` the walk cannot follow fails the scan: one
+    inside a `cfg_attr`, one that is no string literal, and one on an inline module. So does one
+    whose file lies outside the crate, is not `.rs` or lies under `target/` (`ARCH-033`).
   * It reads names, not types. A method call, a path, a `use` item, a signature, an attribute and
     every token of a macro count. So a method of another type with a refused name fails closed.
   * A hand-written `Display`, `Clone` or `Serialize` of a type that holds a `Secret` reads the

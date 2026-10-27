@@ -1845,10 +1845,10 @@ ambre-primitives | src/scan.rs | crate::scan | TEST_MACROS | const | &[&str]	gen
 ambre-primitives | src/scan.rs | crate::scan | Tree::read() | ret | Option<String>	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | holds_primitive() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | holds_primitive(ty) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | is_build_output() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | is_test_file() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | normalise() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | normalise(tokens) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-primitives | src/scan.rs | crate::scan | path_attr() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | test_only() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Declared.crates | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.types | field | BTreeMap<String,BTreeMap<String,Vec<Declaration>>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
