@@ -397,7 +397,7 @@ class CrateBoundaries(unittest.TestCase):
         bad = 'view! { <button aria-pressed=move || on.get().then_some("true") /> }\n'
         errors = self.breach("crates/ambre-chrome/src/format.rs", bad)
         self.assertTrue(any("drops its false state" in e for e in errors), errors)
-        good = "view! { <button aria-pressed=move || aria_bool(on.get()) /> }\n"
+        good = "view! { <button aria-pressed=move || Pressed::from_bool(on.get()).aria() /> }\n"
         self.assertEqual(self.breach("crates/ambre-chrome/src/format.rs", good), [])
 
     def test_a_panel_claiming_a_modal_role_is_refused(self):

@@ -7,11 +7,64 @@
 use ambre_commands::{Key, Modifiers};
 use wasm_bindgen::JsCast;
 
-/// The value of a two-state ARIA attribute: `"true"` or `"false"`, never
-/// absent. An absent `aria-expanded` says "this opens nothing", and an absent
-/// `aria-pressed` says "this is not a toggle" (`CHROME-066`, `CHROME-070`).
-pub const fn aria_bool(on: bool) -> &'static str {
-    if on { "true" } else { "false" }
+ambre_core::define_flag! {
+    /// Whether a control's menu or panel is open, as `aria-expanded` reads it.
+    /// The attribute always carries its value: an absent `aria-expanded` says
+    /// "this opens nothing" (`CHROME-066`).
+    pub enum Expanded {
+        /// The menu or panel is closed.
+        Collapsed,
+        /// The menu or panel is open.
+        Open,
+    }
+
+    /// Whether an option is the one the keyboard is on, as `aria-selected`
+    /// reads it. The attribute always carries its value.
+    pub enum Selected {
+        /// Another option is selected.
+        Off,
+        /// This option is selected.
+        On,
+    }
+
+    /// Whether a radio item of a menu is the chosen one, as `aria-checked`
+    /// reads it. The attribute always carries its value.
+    pub enum Checked {
+        /// Another item is chosen.
+        Off,
+        /// This item is chosen.
+        On,
+    }
+}
+
+impl Expanded {
+    /// The `aria-expanded` value: `"true"` or `"false"`, never absent.
+    pub const fn aria(self) -> &'static str {
+        match self {
+            Self::Collapsed => "false",
+            Self::Open => "true",
+        }
+    }
+}
+
+impl Checked {
+    /// The `aria-checked` value: `"true"` or `"false"`, never absent.
+    pub const fn aria(self) -> &'static str {
+        match self {
+            Self::Off => "false",
+            Self::On => "true",
+        }
+    }
+}
+
+impl Selected {
+    /// The `aria-selected` value: `"true"` or `"false"`, never absent.
+    pub const fn aria(self) -> &'static str {
+        match self {
+            Self::Off => "false",
+            Self::On => "true",
+        }
+    }
 }
 
 /// What a key does in an open menu.
@@ -290,7 +343,13 @@ mod tests {
     /// A two-state attribute says false rather than vanishing.
     #[test]
     fn a_two_state_attribute_always_has_a_value() {
-        assert_eq!(aria_bool(true), "true");
-        assert_eq!(aria_bool(false), "false");
+        assert_eq!(Expanded::Open.aria(), "true");
+        assert_eq!(Expanded::Collapsed.aria(), "false");
+        assert_eq!(Selected::On.aria(), "true");
+        assert_eq!(Selected::Off.aria(), "false");
+        assert_eq!(Checked::On.aria(), "true");
+        assert_eq!(Checked::Off.aria(), "false");
+        assert_eq!(crate::Pressed::from_bool(true).aria(), "true");
+        assert_eq!(crate::Pressed::from_bool(false).aria(), "false");
     }
 }

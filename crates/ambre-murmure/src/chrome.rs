@@ -151,7 +151,7 @@ pub fn ChannelHeader(
             <Show when=move || has_members.get()>
                 <button
                     class="murmure-members-toggle"
-                    aria-pressed=move || ambre_chrome::aria_bool(members_open())
+                    aria-pressed=move || ambre_chrome::Pressed::from_bool(members_open()).aria()
                     on:click=toggle_members
                 >
                     "Members"
@@ -253,7 +253,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
             <div class="murmure-invite">
                 <button
                     class="murmure-invite-toggle"
-                    aria-expanded=move || ambre_chrome::aria_bool(open.get())
+                    aria-expanded=move || ambre_chrome::Expanded::from_bool(open.get()).aria()
                     on:click=move |_| open.update(|o| *o = !*o)
                 >
                     "Invite"

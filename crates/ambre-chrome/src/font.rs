@@ -118,7 +118,7 @@ pub fn FontPicker(
                 class="font-trigger"
                 aria-label="Font"
                 aria-haspopup="true"
-                aria-expanded=move || crate::menu::aria_bool(open.get())
+                aria-expanded=move || crate::menu::Expanded::from_bool(open.get()).aria()
                 style:font-family=current_css
                 // Keep DOM focus on the canvas text pipe (the FormatBar hazard).
                 on:mousedown=move |ev| ev.prevent_default()

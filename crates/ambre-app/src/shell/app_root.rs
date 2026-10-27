@@ -137,7 +137,7 @@ fn ShellHeader(
                 title="Share"
                 aria-label="Share document"
                 aria-haspopup="dialog"
-                aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
+                aria-expanded=move || ambre_chrome::Expanded::from_bool(share_open.get()).aria()
                 on:click=move |_| share_open.set(true)
             >
                 <Icon icon=icondata::AiShareAltOutlined />
@@ -148,7 +148,7 @@ fn ShellHeader(
             title="About"
             aria-label="About Ambre"
             aria-haspopup="dialog"
-            aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
+            aria-expanded=move || ambre_chrome::Expanded::from_bool(about_open.get()).aria()
             on:click=move |_| about_open.set(true)
         >
             "?"

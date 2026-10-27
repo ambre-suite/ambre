@@ -234,7 +234,7 @@ pub fn CommandPalette(
                                         class:focused=move || focused.get() == i
                                         role="option"
                                         aria-selected=move || {
-                                            crate::menu::aria_bool(focused.get() == i)
+                                            crate::menu::Selected::from_bool(focused.get() == i).aria()
                                         }
                                         on:mouseenter=move |_| focused.set(i)
                                         on:click=move |_| run(chosen)

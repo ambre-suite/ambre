@@ -72,7 +72,7 @@ pub fn CommentsPanel(
                             .map(|(f, label)| view! {
                                 <button
                                     class="ambre-comments-filter-btn"
-                                    aria-pressed=move || ambre_chrome::aria_bool(filter.get() == f)
+                                    aria-pressed=move || ambre_chrome::Pressed::from_bool(filter.get() == f).aria()
                                     on:click=move |_| filter.set(f)
                                 >
                                     {label}

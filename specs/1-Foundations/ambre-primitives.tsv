@@ -795,13 +795,15 @@ ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | Str
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	generic	state flag/predicate
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/format.rs | crate::format | Pressed::from_bool(on) | param | bool	newtype-inner	the enum's own constructor from the bool it replaces, On or Off
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
+ambre-chrome | src/menu.rs | crate::menu | Checked::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/menu.rs | crate::menu | Expanded::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/menu.rs | crate::menu | Selected::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Choose.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Focus.0 | field | usize	newtype-inner	newtype inner
-ambre-chrome | src/menu.rs | crate::menu | aria_bool() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
-ambre-chrome | src/menu.rs | crate::menu | aria_bool(on) | param | bool	generic	state flag/predicate
 ambre-chrome | src/menu.rs | crate::menu | initial() | ret | char	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | initial(label) | param | &str	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	local count/index/counter

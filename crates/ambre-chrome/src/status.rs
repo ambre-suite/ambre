@@ -85,7 +85,7 @@ pub fn ZoomChip(
                 class="statusbar-zoom-btn"
                 title=title
                 aria-haspopup="menu"
-                aria-expanded=move || crate::menu::aria_bool(show.get())
+                aria-expanded=move || crate::Expanded::from_bool(show.get()).aria()
                 on:click=move |_| show.update(|v| *v = !*v)
             >
                 {move || format!("{:.0} %", zoom.get().get() * 100.0)}
@@ -116,7 +116,7 @@ pub fn ZoomChip(
                                         role="menuitemradio"
                                         class="statusbar-zoom-item"
                                         class:selected=selected
-                                        aria-checked=move || crate::menu::aria_bool(selected())
+                                        aria-checked=move || crate::Checked::from_bool(selected()).aria()
                                         on:click=move |_| {
                                             zoom.set(z.clamped(lo, hi));
                                             show.set(false);

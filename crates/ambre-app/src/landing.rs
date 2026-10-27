@@ -283,7 +283,7 @@ pub fn NewDocPicker(
             <button
                 class="ambre-new-doc"
                 aria-haspopup="menu"
-                aria-expanded=move || ambre_chrome::aria_bool(open.get())
+                aria-expanded=move || ambre_chrome::Expanded::from_bool(open.get()).aria()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 "New document"

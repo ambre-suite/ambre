@@ -106,7 +106,7 @@ pub fn FormatToggle(
         <button
             aria-label=label
             title=title
-            aria-pressed=move || crate::menu::aria_bool(pressed.get())
+            aria-pressed=move || crate::Pressed::from_bool(pressed.get()).aria()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_toggle.run(())
         >
@@ -127,8 +127,15 @@ pub enum Pressed {
 }
 
 impl Pressed {
+    /// A two-state toggle's value: `On` or `Off`, never `Mixed`. An absent
+    /// `aria-pressed` says "this is not a toggle" (`CHROME-070`), so a toggle
+    /// writes `Off` rather than nothing.
+    pub const fn from_bool(on: bool) -> Self {
+        if on { Self::On } else { Self::Off }
+    }
+
     /// The `aria-pressed` value.
-    pub fn aria(self) -> &'static str {
+    pub const fn aria(self) -> &'static str {
         match self {
             Self::On => "true",
             Self::Mixed => "mixed",

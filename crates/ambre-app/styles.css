@@ -1737,7 +1737,7 @@ input[type="radio"] {
         flex: 0 0 var(--sidebar-w);
     }
 
-    .ambre-body[data-focus] > .ambre-sidebar[data-folded="true"] {
+    .ambre-body[data-focus] > .ambre-sidebar[data-expanded="false"] {
         flex-basis: var(--sidebar-strip);
         overflow: hidden;
     }

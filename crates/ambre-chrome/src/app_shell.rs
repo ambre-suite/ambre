@@ -153,12 +153,12 @@ pub fn AppShell(
                         <nav
                             class="ambre-sidebar"
                             aria-label=sidebar.label
-                            data-folded=move || crate::aria_bool(folded.get())
+                            data-expanded=move || crate::Expanded::from_bool(!folded.get()).aria()
                         >
                             <button
                                 class="icon ambre-sidebar-fold"
                                 aria-label="Fold the sidebar"
-                                aria-expanded=move || crate::aria_bool(!folded.get())
+                                aria-expanded=move || crate::Expanded::from_bool(!folded.get()).aria()
                                 on:click=move |_| folded.update(|f| *f = !*f)
                             >
                                 {move || if folded.get() { "\u{203a}" } else { "\u{2039}" }}
