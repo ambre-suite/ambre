@@ -4282,3 +4282,15 @@ ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed() | ret | String	f
 ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed(error) | param | &str	free-text	the TOML parser error, printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | unparsed(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | called() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/depinfo.rs | crate::depinfo | COMPILER_KEYS | const | &[&str]	generic	the TOML keys that name the compiler or a wrapper that runs it, which the lever check refuses
+ambre-primitives | src/depinfo.rs | crate::depinfo | COMPILER_VARS | const | &[&str]	generic	the environment variables that name the compiler or a wrapper that runs it, which the lever check refuses when set
+ambre-primitives | src/depinfo.rs | crate::depinfo | ConfigEnv.config | field | &'static str	generic	the config file of an [env] entry the lever check admits, matched against the tree: none today
+ambre-primitives | src/depinfo.rs | crate::depinfo | ConfigEnv.key | field | &'static str	generic	the key of an [env] entry the lever check admits, matched against the parsed TOML: none today
+ambre-primitives | src/depinfo.rs | crate::depinfo | ConfigEnv.value | field | &'static str	generic	the exact value of an [env] entry the lever check admits, matched against the parsed TOML: none today
+ambre-primitives | src/depinfo.rs | crate::depinfo | FLAG_VARS | const | &[&str]	generic	the environment variables whose value cargo passes to rustc or rustdoc as flags
+ambre-primitives | src/depinfo.rs | crate::depinfo | env_levers() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | outer_levers() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | substituted() | ret | String	free-text	error messages printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(dotted) | param | &str	generic	the dotted TOML key a refusal names, printed to the terminal
+ambre-primitives | src/depinfo.rs | crate::depinfo | substituted(shown) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | ends_on_metavariable() | ret | bool	generic	a predicate or a file read of the scanner
