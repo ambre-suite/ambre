@@ -333,7 +333,7 @@ fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
 }
 
 /// The attributes of an impl item, for the test gate.
-fn impl_item_attrs(item: &syn::ImplItem) -> &[syn::Attribute] {
+pub(crate) fn impl_item_attrs(item: &syn::ImplItem) -> &[syn::Attribute] {
     match item {
         syn::ImplItem::Const(i) => &i.attrs,
         syn::ImplItem::Fn(i) => &i.attrs,
@@ -344,7 +344,7 @@ fn impl_item_attrs(item: &syn::ImplItem) -> &[syn::Attribute] {
 }
 
 /// The attributes of a trait item, for the test gate.
-fn trait_item_attrs(item: &syn::TraitItem) -> &[syn::Attribute] {
+pub(crate) fn trait_item_attrs(item: &syn::TraitItem) -> &[syn::Attribute] {
     match item {
         syn::TraitItem::Const(i) => &i.attrs,
         syn::TraitItem::Fn(i) => &i.attrs,

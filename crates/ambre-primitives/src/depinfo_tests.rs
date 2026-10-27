@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::{
     Build, COMPILES, Compile, Compiled, Target, Unit, artifact, collect, cross_check, dependencies,
+    stray_workspaces,
 };
 use crate::scan::{Disk, Scan, Tree, lexical, scan};
 
@@ -531,9 +532,29 @@ fn refusals(root: &Path, walk: &Scan) -> (Vec<String>, Compiled) {
         Ok(canonical) => canonical,
         Err(e) => panic!("{}: {e}", root.display()),
     };
-    let sources = super::sources(&Disk, root);
-    let errors = cross_check(walk, &compiled, &sources, &canonical, &Disk);
+    let disk = Disk::at(root);
+    let sources = super::sources(&disk, root);
+    let mut errors = cross_check(walk, &compiled, &sources, &canonical, &disk);
+    errors.append(&mut stray_workspaces(&disk, root));
     (errors, compiled)
+}
+
+/// The refusal of a `mod` keyword a macro holds at `line` of `file`.
+fn macro_mod(file: &str, line: usize) -> String {
+    format!(
+        "{file}:{line}: a macro holds the keyword `mod` outside an inline module. The walk \
+         follows no module a macro declares, and the dep-info check cannot tell its file from \
+         data, so the scan fails closed (ARCH-033): declare the module in the source"
+    )
+}
+
+/// The refusal of a manifest that declares a workspace of its own.
+fn stray(manifest: &str) -> String {
+    format!(
+        "{manifest}: the manifest declares a workspace of its own, which builds apart from the \
+         compiles the check runs. Make it a member of the root workspace, or name its directory \
+         in NESTED_WORKSPACES"
+    )
 }
 
 /// The refusal of a file that a product build reads from `root` and the
@@ -584,8 +605,13 @@ fn a_real_compile_reads_the_files_the_walk_misses() {
         panic!("the link cannot be made: {e}");
     }
 
-    let walk = scan(&Disk, &root.join("crates"));
-    assert_eq!(walk.errors, Vec::<String>::new());
+    let walk = scan(&Disk::at(&root), &root.join("crates"));
+    // The scan refuses the `mod` the macro writes since SEC-1h, and the
+    // dep-info check refuses its file too.
+    assert_eq!(
+        walk.errors,
+        [macro_mod("crates/ambre-server/src/lib.rs", 2)]
+    );
     assert_eq!(
         heads(&walk.secrets),
         [
@@ -662,11 +688,11 @@ fn a_real_compile_refuses_a_data_file_the_walk_does_not_name() {
     );
     put(&root, "nested/src/main.rs", read);
 
-    let walk = scan(&Disk, &root.join("crates"));
-    assert_eq!(walk.errors, Vec::<String>::new());
+    let walk = scan(&Disk::at(&root), &root.join("crates"));
+    let lib = "crates/ambre-server/src/lib.rs";
+    assert_eq!(walk.errors, [macro_mod(lib, 2), macro_mod(lib, 4)]);
     assert_eq!(walk.secrets, Vec::<String>::new());
     let (errors, _) = refusals(&root, &walk);
-    let lib = "crates/ambre-server/src/lib.rs";
     assert_eq!(
         errors,
         [
@@ -680,6 +706,9 @@ fn a_real_compile_refuses_a_data_file_the_walk_does_not_name() {
             unplaced("extra/hid", lib),
             "extra/orphan.rs: no compile of the workspace reads it, so no build checks it"
                 .to_owned(),
+            "nested/src/main.rs: no compile of the workspace reads it, so no build checks it"
+                .to_owned(),
+            stray("nested/Cargo.toml"),
         ]
     );
     drop(scratch);
@@ -728,5 +757,141 @@ fn a_real_dep_info_with_a_path_rustc_cannot_escape_fails_closed() {
         "{joined}"
     );
     assert_eq!(errors.len(), 4, "{joined}");
+    drop(scratch);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_real_compile_refuses_a_mod_a_macro_declares_over_a_data_file() {
+    // The SEC-1g review: a macro writes `mod hid;` over a file a walked
+    // file names as data. The dep-info lists it once, so only its parse
+    // told it from data, and a parse that fails passed it.
+    let (root, scratch) = probe("macro", &["ambre-server"]);
+    let krate = "crates/ambre-server";
+    let file = |path: &str, text: &str| put(&root, &format!("{krate}/{path}"), text);
+    file(
+        "src/lib.rs",
+        "#![allow(dead_code)]\n\
+         macro_rules! m { () => { #[path = \"hid.txt\"] mod hid; }; }\n\
+         m!();\n\
+         pub const DATA: &str = include_str!(\"hid.txt\");\n",
+    );
+    file(
+        "src/hid.txt",
+        "pub fn f() { let expose = 1; let _ = expose; }\n",
+    );
+
+    let walk = scan(&Disk::at(&root), &root.join("crates"));
+    let lib = "crates/ambre-server/src/lib.rs";
+    assert_eq!(walk.errors, [macro_mod(lib, 2)]);
+    // The parse guard still refuses the file, as defence in depth.
+    let (errors, _) = refusals(&root, &walk);
+    assert_eq!(
+        errors,
+        [format!(
+            "crates/ambre-server/src/hid.txt: a walked file of the crate root {lib} names it as \
+             data, and it parses as Rust items. The dep-info does not tell a module from data, \
+             so the gate cannot show that no `mod` compiles it"
+        )]
+    );
+    drop(scratch);
+}
+
+#[test]
+fn a_manifest_that_declares_a_workspace_outside_the_nested_ones_is_refused() {
+    // The SEC-1g review: any manifest that held `[workspace]` took its
+    // directory out of the orphan check.
+    let tree = Files::new(&[
+        ("Cargo.toml", "[workspace]\n"),
+        (
+            "crates/demo/Cargo.toml",
+            "[package]\nworkspace = \"../..\"\n",
+        ),
+        ("crates/demo/src/lib.rs", ""),
+        ("crates/demo/hide/Cargo.toml", "[package]\n\n[workspace]\n"),
+        ("crates/demo/hide/src/lib.rs", ""),
+        ("extra/Cargo.toml", "workspace.members = []\n"),
+        ("extra/src/main.rs", ""),
+        ("tables/Cargo.toml", "  [workspace.dependencies]\n"),
+        ("fuzz/Cargo.toml", "[package]\n\n[workspace]\n"),
+        ("fuzz/fuzz_targets/one.rs", ""),
+    ]);
+    let root = Path::new(ROOT);
+    assert_eq!(
+        super::sources(&tree, root),
+        paths(&[
+            "crates/demo/hide/src/lib.rs",
+            "crates/demo/src/lib.rs",
+            "extra/src/main.rs",
+        ])
+    );
+    assert_eq!(
+        stray_workspaces(&tree, root),
+        [
+            stray("crates/demo/hide/Cargo.toml"),
+            stray("extra/Cargo.toml"),
+            stray("tables/Cargo.toml"),
+        ]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_listing_leaves_out_the_root_git_and_target_alone() {
+    // The SEC-1g review: a `target/` or a `.git/` directory at any depth
+    // left the listing, so a `.rs` file under one escaped the orphan check.
+    let (root, scratch) = probe("listing", &[]);
+    for file in [
+        ".git/hooks/x.rs",
+        "target/debug/y.rs",
+        "fuzz/target/z.rs",
+        "fuzz/fuzz_targets/one.rs",
+        "crates/demo/src/target/mod.rs",
+        "crates/demo/.git/w.rs",
+        "crates/demo/fuzz/target/v.rs",
+    ] {
+        put(&root, file, "");
+    }
+    let listed: Vec<PathBuf> = Disk::at(&root)
+        .files(&root)
+        .into_iter()
+        .filter_map(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            "Cargo.toml",
+            "crates/demo/.git/w.rs",
+            "crates/demo/fuzz/target/v.rs",
+            "crates/demo/src/target/mod.rs",
+            "fuzz/fuzz_targets/one.rs",
+        ]
+        .map(PathBuf::from)
+    );
+    drop(scratch);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_loop_of_directory_links_ends_the_listing() {
+    // The SEC-1g review: the listing followed a link to a directory, so a
+    // link to an ancestor listed its files again at each depth.
+    let (root, scratch) = probe("links", &[]);
+    put(&root, "a/f.rs", "");
+    put(&root, "b.rs", "");
+    for (link, target) in [("a/up", ".."), ("a/here", "."), ("a/file.rs", "../b.rs")] {
+        if let Err(e) = std::os::unix::fs::symlink(target, root.join(link)) {
+            panic!("the link {link} cannot be made: {e}");
+        }
+    }
+    let listed: Vec<PathBuf> = Disk::at(&root)
+        .files(&root)
+        .into_iter()
+        .filter_map(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
+        .collect();
+    assert_eq!(
+        listed,
+        ["Cargo.toml", "a/f.rs", "a/file.rs", "b.rs"].map(PathBuf::from)
+    );
     drop(scratch);
 }

@@ -58,7 +58,8 @@ fn main() -> ExitCode {
     };
     let root = workspace_root();
     let crates = root.join("crates");
-    let scan = scan::scan(&scan::Disk, &crates);
+    let disk = scan::Disk::at(&root);
+    let scan = scan::scan(&disk, &crates);
     if !scan.errors.is_empty() {
         for error in &scan.errors {
             eprintln!("primitives: {error}");
@@ -67,7 +68,7 @@ fn main() -> ExitCode {
     }
     let unread = match mode {
         Mode::Prune => Vec::new(),
-        Mode::Check | Mode::Files => files(&scan, &root),
+        Mode::Check | Mode::Files => files(&scan, &disk, &root),
     };
     if let Mode::Files = mode {
         return if unread.is_empty() {
@@ -98,12 +99,15 @@ fn main() -> ExitCode {
 
 /// Every refusal of the dep-info check, printed with its count. Each compile
 /// runs in the workspace, so the check reads the files the recipes build.
-fn files(scan: &Scan, root: &Path) -> Vec<String> {
+fn files(scan: &Scan, disk: &scan::Disk, root: &Path) -> Vec<String> {
     let refusals = match depinfo::collect(root, depinfo::COMPILES, &|_| {}) {
         Ok(compiled) => {
-            let sources = depinfo::sources(&scan::Disk, root);
+            let sources = depinfo::sources(disk, root);
+            let mut stray = depinfo::stray_workspaces(disk, root);
             let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-            depinfo::cross_check(scan, &compiled, &sources, &root, &scan::Disk)
+            let mut refusals = depinfo::cross_check(scan, &compiled, &sources, &root, disk);
+            refusals.append(&mut stray);
+            refusals
         }
         Err(errors) => errors,
     };

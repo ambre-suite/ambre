@@ -1961,3 +1961,143 @@ fn a_deref_to_an_associated_type_of_self_or_in_a_discriminant_is_read() {
         );
     }
 }
+
+/// The refusal of a `mod` keyword a macro holds at `line` of the demo
+/// crate's `src/lib.rs`.
+fn macro_mod(line: usize) -> String {
+    format!(
+        "crates/demo/src/lib.rs:{line}: a macro holds the keyword `mod` outside an inline module. \
+         The walk follows no module a macro declares, and the dep-info check cannot tell its \
+         file from data, so the scan fails closed (ARCH-033): declare the module in the source"
+    )
+}
+
+#[test]
+fn a_mod_a_macro_declares_fails_the_scan_in_every_form() {
+    // The SEC-1g review: a `mod` a macro writes compiles a data file as
+    // code, and the parse guard of the dep-info check fails open.
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "macro_rules! never { () => { #[path = \"hid.txt\"] mod hid; }; }\n\
+         m! { mod hid; }\n\
+         pub fn f() { let _ = m!(mod hid); }\n\
+         pub fn g() { n! { #[path = \"hid.txt\"] mod hid; } }\n\
+         macro_rules! a { () => { macro_rules! b { () => { { mod deep; } }; } }; }\n\
+         m!(r#mod raw;);\n\
+         macro_rules! named { ($n:ident) => { mod $n; }; }\n\
+         macro_rules! spliced { ($kw:tt $n:ident) => { $kw $n; }; }\n\
+         spliced!(mod hid);\n\
+         #[cfg_attr(all(), doc = m!(mod hid;))]\n\
+         pub struct S;\n\
+         impl S { m!(mod hid;); }\n\
+         #[cfg(test)]\n\
+         mod tests { m! { mod hid; } }\n\
+         #[cfg(test)]\n\
+         m! { mod hid; }",
+    )]);
+    let lines = [1, 2, 3, 4, 5, 6, 7, 9, 10, 12];
+    assert_eq!(errors, lines.map(macro_mod));
+}
+
+#[test]
+fn an_inline_module_a_macro_writes_passes_and_its_path_child_fails() {
+    // `define_serde_adapter!` of `ambre-core` and the command tables of
+    // Trame and Toile write inline modules, which read no file.
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "macro_rules! adapter { ($name:ident) => { pub mod $name { pub mod option {} } }; }\n\
+         macro_rules! titles { () => { mod titles { pub fn f() {} } }; }\n\
+         macro_rules! outer { () => { mod outer {\n\
+         #[path = \"hid.txt\"] mod hid; } }; }\n\
+         macro_rules! glued { ($b:tt) => { mod glued $b }; }",
+    )]);
+    assert_eq!(errors, [4, 5].map(macro_mod));
+}
+
+#[test]
+fn an_unstable_feature_in_a_crate_root_fails_the_scan() {
+    // A `#![feature]` enables syntax the pinned syn may not parse, so a data
+    // file could pass the parse guard and compile on the nightly toolchain.
+    let refusal = |file: &str, line: usize| {
+        format!(
+            "crates/demo/{file}:{line}: a crate root enables an unstable feature, whose syntax \
+             the gate may not parse, so the scan fails closed (ARCH-033): remove it, or name the \
+             root in FEATURE_ROOTS with the reason"
+        )
+    };
+    let (_, errors) = run(&[
+        (
+            "src/lib.rs",
+            "#![feature(never_type)]\n\
+             #![cfg_attr(all(), r#feature(box_patterns))]\n\
+             #![allow(dead_code)]\n\
+             mod a;",
+        ),
+        ("src/a.rs", "#![allow(unused)]\npub fn f() {}"),
+        (
+            "src/main.rs",
+            "#![cfg_attr(nightly, allow(dead_code), feature(yeet_expr))]\nfn main() {}",
+        ),
+        ("build.rs", "#![feature(try_blocks)]\nfn main() {}"),
+    ]);
+    assert_eq!(
+        errors,
+        [
+            refusal("src/main.rs", 1),
+            refusal("src/lib.rs", 1),
+            refusal("src/lib.rs", 2),
+            refusal("build.rs", 1),
+        ]
+    );
+}
+
+#[test]
+fn a_migrate_call_names_data_only_as_the_sqlx_macro() {
+    // The SEC-1g review: a bare `migrate!` of the workspace's own would make
+    // every file of its directory data.
+    let result = scan(
+        &demo(&[
+            (
+                "src/lib.rs",
+                "use sqlx::migrate;\n\
+                 pub fn a() { sqlx::migrate!(\"a\"); }\n\
+                 pub fn b() { let _ = ::sqlx::migrate!(\"b\"); }\n\
+                 pub fn c() { migrate!(\"c\"); }\n\
+                 pub fn e() { other::migrate!(\"e\"); }\n\
+                 pub fn f() { x::sqlx::migrate!(\"f\"); }\n\
+                 mod inner { pub fn g() { migrate!(\"g\"); } }\n\
+                 mod imports { use sqlx::migrate; pub fn h() { migrate!(\"h\"); } }",
+            ),
+            (
+                "src/main.rs",
+                "use sqlx::migrate as run;\n\
+                 use sqlx::*;\n\
+                 fn main() { migrate!(\"d\"); run!(\"d\"); }",
+            ),
+            ("a/1.sql", ""),
+            ("b/1.sql", ""),
+            ("c/1.sql", ""),
+            ("d/1.sql", ""),
+            ("e/1.sql", ""),
+            ("f/1.sql", ""),
+            ("g/1.sql", ""),
+            ("h/1.sql", ""),
+        ]),
+        Path::new(CRATES),
+    );
+    assert_eq!(result.errors, Vec::<String>::new());
+    let dir = Path::new(CRATES).join("demo");
+    assert_eq!(
+        result.data,
+        BTreeMap::from([
+            (
+                dir.join("src/lib.rs"),
+                ["a/1.sql", "b/1.sql", "c/1.sql", "h/1.sql"]
+                    .iter()
+                    .map(|name| dir.join(name))
+                    .collect::<BTreeSet<PathBuf>>()
+            ),
+            (dir.join("src/main.rs"), BTreeSet::new()),
+        ])
+    );
+}

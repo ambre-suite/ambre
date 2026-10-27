@@ -13,12 +13,17 @@
 //!     string literal. The name of the file decides nothing: rustc compiles
 //!     a `.txt` file as a module when a `#[path]` names it;
 //!   * a data file that parses as Rust items is refused all the same, since
-//!     the dep-info does not tell a module from data;
+//!     the dep-info does not tell a module from data. This parse guard is
+//!     defence in depth, and best effort: syn and rustc parse apart, so a
+//!     file syn refuses passes it. The scan refuses the `mod` a macro
+//!     declares, the one way a data file compiles as a module the walk
+//!     does not see;
 //!   * a crate root that a build compiles is one the walk starts from;
 //!   * a `.rs` file under the workspace root is one that a compile reads,
 //!     test builds included. So no file sits in the tree that no build
-//!     checks. A nested workspace, such as the fuzz targets, builds apart
-//!     and is left out.
+//!     checks. The nested workspace of the fuzz targets builds apart and is
+//!     left out, by its name. A manifest elsewhere that declares a workspace
+//!     of its own is refused.
 //!
 //! A failed compile, a missing dep-info file, and a dep-info line the
 //! parser cannot read whole all fail the check. A partial set would pass a
@@ -29,7 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::scan::{Disk, Scan, Tree};
+use crate::scan::{NESTED_WORKSPACES, Scan, Tree, canonical};
 
 /// Where one compile builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,7 +129,7 @@ pub(crate) fn collect(
     compiles: &[Compile],
     configure: &dyn Fn(&mut Command),
 ) -> Result<Compiled, Vec<String>> {
-    let root = Disk.canonical(root);
+    let root = canonical(root);
     let mut units: BTreeMap<(PathBuf, Build), BTreeSet<PathBuf>> = BTreeMap::new();
     let mut errors = Vec::new();
     for compile in compiles {
@@ -211,7 +216,7 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
     else {
         return Err("an artifact message names no manifest".to_owned());
     };
-    if !Disk.canonical(Path::new(manifest)).starts_with(root) {
+    if !canonical(Path::new(manifest)).starts_with(root) {
         return Ok(None);
     }
     let Some(source) = value
@@ -280,10 +285,10 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Unit>, String> {
     let reads = dependencies(&text)
         .map_err(|error| format!("{}: {error}", info.display()))?
         .into_iter()
-        .map(|path| Disk.canonical(&root.join(path)))
+        .map(|path| canonical(&root.join(path)))
         .collect();
     Ok(Some(Unit {
-        root: Disk.canonical(Path::new(source)),
+        root: canonical(Path::new(source)),
         build,
         reads,
     }))
@@ -502,9 +507,13 @@ pub(crate) fn cross_check(
     errors
 }
 
-/// Whether the file is Rust that declares at least one item. rustc compiles
-/// a module only from text that parses. A module with no item adds no code,
-/// so any other data file cannot hide a module.
+/// Whether the file is Rust that declares at least one item: the parse
+/// guard, defence in depth. A module with no item adds no code. A file that
+/// rustc compiles and syn refuses passes the guard, so the guard holds no
+/// rule alone. The scan refuses each `mod` a macro declares, and the walk
+/// follows each other `mod`, so no `mod` compiles a data file unseen. A
+/// shader or a style sheet often lexes as Rust tokens and does not parse.
+/// So a refusal of what syn cannot parse would refuse real data.
 fn parses_as_items(tree: &impl Tree, file: &Path) -> bool {
     tree.read(file)
         .and_then(|text| syn::parse_file(&text).ok())
@@ -512,26 +521,54 @@ fn parses_as_items(tree: &impl Tree, file: &Path) -> bool {
 }
 
 /// Every `.rs` file under the workspace root, canonical. Build output is
-/// left out, and so is each nested workspace. A directory below the root
-/// whose manifest declares a `[workspace]` of its own builds apart, as the
-/// fuzz targets do under `cargo-fuzz`.
+/// left out, and so is each nested workspace that `NESTED_WORKSPACES`
+/// names. A manifest decides nothing here: one that declares a workspace
+/// elsewhere is refused by `stray_workspaces`, and its files stay in.
 pub(crate) fn sources(tree: &impl Tree, root: &Path) -> BTreeSet<PathBuf> {
-    let files = tree.files(root);
-    let nested: Vec<PathBuf> = files
-        .iter()
-        .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))
-        .filter(|path| path.parent() != Some(root))
-        .filter(|path| {
-            tree.read(path)
-                .is_some_and(|text| text.lines().any(|line| line.trim() == "[workspace]"))
-        })
-        .filter_map(|path| path.parent().map(Path::to_path_buf))
-        .collect();
-    files
+    let nested: Vec<PathBuf> = NESTED_WORKSPACES.iter().map(|dir| root.join(dir)).collect();
+    tree.files(root)
         .into_iter()
         .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
         .filter(|path| !nested.iter().any(|dir| path.starts_with(dir)))
         .map(|path| tree.canonical(&path))
+        .collect()
+}
+
+/// Each manifest under the workspace root, the root's own and those of the
+/// nested workspaces apart, that declares a workspace of its own. Such a
+/// directory builds apart from the compiles the check runs, so no shipped
+/// build of it is held. The match reads the text, and fails closed: a
+/// `[workspace]` table, a `[workspace.*]` table, or a top-level dotted
+/// `workspace.*` key.
+pub(crate) fn stray_workspaces(tree: &impl Tree, root: &Path) -> Vec<String> {
+    let kept: Vec<PathBuf> = std::iter::once(root.join("Cargo.toml"))
+        .chain(
+            NESTED_WORKSPACES
+                .iter()
+                .map(|dir| root.join(dir).join("Cargo.toml")),
+        )
+        .collect();
+    tree.files(root)
+        .into_iter()
+        .filter(|path| path.file_name().is_some_and(|name| name == "Cargo.toml"))
+        .filter(|path| !kept.contains(path))
+        .filter(|path| {
+            tree.read(path).is_some_and(|text| {
+                text.lines().map(str::trim_start).any(|line| {
+                    line.starts_with("[workspace]")
+                        || line.starts_with("[workspace.")
+                        || line.starts_with("workspace.")
+                })
+            })
+        })
+        .map(|path| {
+            format!(
+                "{}: the manifest declares a workspace of its own, which builds apart from the \
+                 compiles the check runs. Make it a member of the root workspace, or name its \
+                 directory in NESTED_WORKSPACES",
+                path.strip_prefix(root).unwrap_or(&path).display()
+            )
+        })
         .collect()
 }
 

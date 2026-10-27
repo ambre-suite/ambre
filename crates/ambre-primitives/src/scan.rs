@@ -7,7 +7,8 @@
 //! rustc reads, since the gate cannot hold code it cannot place (`ARCH-033`).
 //!
 //! syn parses and never expands. An item that a macro writes, and the output
-//! of a build script, are therefore outside the scan by construction.
+//! of a build script, are therefore outside the scan by construction. A
+//! `mod` a macro holds fails the scan, since the walk could not follow it.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -164,8 +165,8 @@ pub trait Tree {
     /// The text of one file, or `None` when the file does not exist.
     fn read(&self, path: &Path) -> Option<String>;
 
-    /// Every file under `dir`, at any depth, sorted. A `target/` directory is
-    /// build output and is left out.
+    /// Every file under `dir`, at any depth, sorted. The build output of the
+    /// workspace is left out.
     fn files(&self, dir: &Path) -> Vec<PathBuf>;
 
     /// The path with every symbolic link followed and every `..` undone: the
@@ -173,14 +174,46 @@ pub trait Tree {
     fn canonical(&self, path: &Path) -> PathBuf;
 }
 
-/// The tree on disk.
-pub struct Disk;
+/// The tree on disk, under one workspace root.
+pub struct Disk {
+    /// The directories the listing leaves out, under the root.
+    skipped: Vec<PathBuf>,
+}
+
+/// The directories of the workspace root that a listing leaves out. They
+/// are the history of git, and the build output of the workspace and of
+/// each nested workspace. A directory of the same name elsewhere is listed,
+/// since no build writes there.
+const SKIPPED: &[&str] = &[".git", "target"];
+
+/// The nested workspaces under the root, which build apart, as the fuzz
+/// targets do under `cargo-fuzz`. The orphan check leaves each out, and a
+/// listing leaves out its build output.
+pub(crate) const NESTED_WORKSPACES: &[&str] = &["fuzz"];
+
+impl Disk {
+    /// The tree on disk under the workspace root `root`.
+    pub fn at(root: &Path) -> Self {
+        let nested = NESTED_WORKSPACES
+            .iter()
+            .map(|dir| root.join(dir).join("target"));
+        Self {
+            skipped: SKIPPED
+                .iter()
+                .map(|dir| root.join(dir))
+                .chain(nested)
+                .collect(),
+        }
+    }
+}
 
 impl Tree for Disk {
     fn read(&self, path: &Path) -> Option<String> {
         std::fs::read_to_string(path).ok()
     }
 
+    // A link to a directory is not followed, so a loop of links cannot hold
+    // the listing. The files under the root are listed where they sit.
     fn files(&self, dir: &Path) -> Vec<PathBuf> {
         let mut found = Vec::new();
         let mut pending = vec![dir.to_path_buf()];
@@ -190,11 +223,14 @@ impl Tree for Disk {
             };
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_dir() {
-                    if path.file_name().is_some_and(|name| !is_build_output(name)) {
+                let Ok(kind) = entry.file_type() else {
+                    continue;
+                };
+                if kind.is_dir() {
+                    if !self.skipped.contains(&path) {
                         pending.push(path);
                     }
-                } else {
+                } else if !(kind.is_symlink() && path.is_dir()) {
                     found.push(path);
                 }
             }
@@ -204,13 +240,18 @@ impl Tree for Disk {
     }
 
     fn canonical(&self, path: &Path) -> PathBuf {
-        std::fs::canonicalize(path).unwrap_or_else(|_| lexical(path))
+        canonical(path)
     }
 }
 
-/// Whether a directory of this name is build output, which the walk leaves
-/// out. A `#[path]` into one fails the scan, so the walk and the files rustc
-/// compiles agree.
+/// The path with every symbolic link followed and every `..` undone, or its
+/// lexical form when it does not resolve.
+pub(crate) fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| lexical(path))
+}
+
+/// Whether a directory of this name is build output. A crate built alone
+/// writes its own `target/`, so a `#[path]` into one fails the scan.
 fn is_build_output(name: &OsStr) -> bool {
     name == "target"
 }
@@ -235,7 +276,7 @@ pub struct Scan {
     /// Each crate root the walk starts from, and every file that a walked
     /// file names as data outside test code, both canonical. Data is the
     /// target of an `include_str!` or an `include_bytes!` that a string
-    /// literal names, or a file of the directory a `migrate!` names. The dep-info check
+    /// literal names, or a file of the directory a `sqlx::migrate!` names. The dep-info check
     /// admits these reads, and no other file the walk does not read
     /// (`ARCH-033`).
     pub data: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
@@ -2770,6 +2811,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             .strip_prefix(&canonical_dir)
             .ok()
             .map(|inside| inside.to_string_lossy().replace('\\', "/"));
+        let root_file = next.module.len() == 1;
         let mut visit = FileVisit::new(&name, relative, &path, next.module, &next.placement);
         visit.uses(&file);
         visit.visit_file(&file);
@@ -2781,10 +2823,15 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             continue;
         }
         let file_name = relative.to_string_lossy().replace('\\', "/");
+        let shown = format!("crates/{name}/{file_name}");
+        result.errors.append(&mut macro_mods(&shown, &file));
+        if root_file && !FEATURE_ROOTS.contains(&(name.as_str(), file_name.as_str())) {
+            result.errors.append(&mut features(&shown, &file));
+        }
         result.secrets.append(&mut crate::secrets::refusals(
             &name,
             &[Some(file_name.as_str()), held.as_deref()],
-            &format!("crates/{name}/{file_name}"),
+            &shown,
             &file,
         ));
         found.keys.append(&mut visit.keys);
@@ -3185,9 +3232,10 @@ pub(crate) fn test_only(attrs: &[syn::Attribute]) -> bool {
 /// The macros that read a file as data, beside the file that calls them.
 const DATA_MACROS: &[&str] = &["include_str", "include_bytes"];
 
-/// The `sqlx` macro that embeds each file of a directory, and the directory
-/// it reads when the call names none.
+/// The `sqlx` macro that embeds each file of a directory, its crate, and the
+/// directory it reads when the call names none.
 const MIGRATE: &str = "migrate";
+const SQLX: &str = "sqlx";
 const MIGRATIONS: &str = "migrations";
 
 /// A file the source names as data rather than as a module.
@@ -3200,22 +3248,60 @@ enum DataRead {
     Dir(String),
 }
 
+/// Whether a bare `migrate!` in a module names the `sqlx` macro: a `use` of
+/// that module imports `sqlx::migrate` under its own name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Migrate {
+    /// No `use` of the module imports it, so a bare `migrate!` is some other
+    /// macro, and names no data.
+    Foreign,
+    /// A `use` of the module imports it.
+    Imported,
+}
+
 /// Every data read a file names outside test code. The tokens are read
 /// whole, so a call inside another macro or inside an attribute counts. A
 /// call whose argument is no string literal, such as a `concat!` or a
 /// metavariable, names nothing the walk can resolve, and is left out.
 fn data_reads(file: &syn::File) -> Vec<DataRead> {
     let mut found = Vec::new();
+    let migrate = imports_migrate(&file.items);
     for attr in &file.attrs {
-        seek_data(attr.to_token_stream(), &mut found);
+        seek_data(attr.to_token_stream(), migrate, &mut found);
     }
-    data_items(&file.items, &mut found);
+    data_items(&file.items, migrate, &mut found);
     found
 }
 
+/// Whether a `use` among `items`, outside test code, imports `sqlx::migrate`
+/// under its own name. A glob, a rename and a `use` inside a block import
+/// nothing here, so a `migrate!` they would name fails closed.
+fn imports_migrate(items: &[syn::Item]) -> Migrate {
+    let imported = items.iter().any(|item| {
+        let syn::Item::Use(u) = item else {
+            return false;
+        };
+        if test_only(&u.attrs) {
+            return false;
+        }
+        let mut names = Vec::new();
+        let mut globs = Vec::new();
+        use_entries(&u.tree, &[], &mut names, &mut globs);
+        names.iter().any(|(name, import)| {
+            name == MIGRATE && import.name == ImportName::Kept && import.path == [SQLX, MIGRATE]
+        })
+    });
+    if imported {
+        Migrate::Imported
+    } else {
+        Migrate::Foreign
+    }
+}
+
 /// The data reads of `items`, an inline module's items included, a test
-/// item left out.
-fn data_items(items: &[syn::Item], found: &mut Vec<DataRead>) {
+/// item left out. `migrate` says whether the module of `items` imports the
+/// `sqlx` macro.
+fn data_items(items: &[syn::Item], migrate: Migrate, found: &mut Vec<DataRead>) {
     for item in items {
         if test_only(item_attrs(item)) {
             continue;
@@ -3223,13 +3309,13 @@ fn data_items(items: &[syn::Item], found: &mut Vec<DataRead>) {
         match item {
             syn::Item::Mod(m) => {
                 for attr in &m.attrs {
-                    seek_data(attr.to_token_stream(), found);
+                    seek_data(attr.to_token_stream(), migrate, found);
                 }
                 if let Some((_, inner)) = &m.content {
-                    data_items(inner, found);
+                    data_items(inner, imports_migrate(inner), found);
                 }
             }
-            other => seek_data(other.to_token_stream(), found),
+            other => seek_data(other.to_token_stream(), migrate, found),
         }
     }
 }
@@ -3256,13 +3342,32 @@ fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
     }
 }
 
+/// Whether the call named at `at` of `trees` is the `sqlx` macro. That is
+/// `sqlx::migrate!`, `::sqlx::migrate!`, or a bare `migrate!` in a module
+/// that imports it. Any other path names another macro.
+fn names_migrate(trees: &[TokenTree], at: usize, migrate: Migrate) -> bool {
+    let back = |n: usize| at.checked_sub(n).and_then(|i| trees.get(i));
+    let colon = |token: Option<&TokenTree>| is_punct(token, ':');
+    if colon(back(1)) {
+        let crate_name = matches!(back(3), Some(TokenTree::Ident(ident)) if ident.unraw() == SQLX);
+        // `::sqlx` is the crate. `x::sqlx` and `<T>::sqlx` name a module.
+        let rooted = !colon(back(4))
+            || (colon(back(5))
+                && !matches!(back(6), Some(TokenTree::Ident(_)))
+                && !is_punct(back(6), '>'));
+        return colon(back(2)) && crate_name && rooted;
+    }
+    migrate == Migrate::Imported
+}
+
 /// The data reads of a token stream, at any depth of groups. A call is a
-/// name, a `!` and a group, so a path before the name changes nothing.
-fn seek_data(tokens: TokenStream, found: &mut Vec<DataRead>) {
+/// name, a `!` and a group. An `include_str!` or an `include_bytes!` counts
+/// behind any path, and a `migrate!` counts as the `sqlx` macro alone.
+fn seek_data(tokens: TokenStream, migrate: Migrate, found: &mut Vec<DataRead>) {
     let trees: Vec<TokenTree> = tokens.into_iter().collect();
     for (at, tree) in trees.iter().enumerate() {
         if let TokenTree::Group(group) = tree {
-            seek_data(group.stream(), found);
+            seek_data(group.stream(), migrate, found);
             continue;
         }
         let TokenTree::Ident(ident) = tree else {
@@ -3282,7 +3387,7 @@ fn seek_data(tokens: TokenStream, found: &mut Vec<DataRead>) {
             if let Some(Some(literal)) = literal {
                 found.push(DataRead::File(literal));
             }
-        } else if name == MIGRATE {
+        } else if name == MIGRATE && names_migrate(&trees, at, migrate) {
             match literal {
                 Some(Some(literal)) => found.push(DataRead::Dir(literal)),
                 Some(None) => found.push(DataRead::Dir(MIGRATIONS.to_owned())),
@@ -3874,6 +3979,145 @@ impl<'ast> Visit<'ast> for MacroItems {
             self.opaque
                 .push(normalise(&mac.path.to_token_stream().to_string()));
         }
+    }
+}
+
+/// The crate roots that may enable an unstable feature, as the crate
+/// directory and the root file inside it. None does today.
+const FEATURE_ROOTS: &[(&str, &str)] = &[];
+
+/// Each `#![feature(..)]` of a crate root, as one refusal, in `file`
+/// (`ARCH-033`). An unstable feature enables syntax that the pinned syn may
+/// not parse. A data file that holds such syntax would then pass the parse
+/// guard of the dep-info check, and a nightly build could compile it. A
+/// `feature` inside a `cfg_attr`, at any depth, fails too: the gate
+/// evaluates no `cfg_attr`.
+fn features(file: &str, tree: &syn::File) -> Vec<String> {
+    let mut found = Vec::new();
+    for attr in &tree.attrs {
+        let held = named(attr, "feature")
+            || (named(attr, "cfg_attr") && holds_ident(attr.meta.to_token_stream(), "feature"));
+        if held {
+            found.push(format!(
+                "{file}:{}: a crate root enables an unstable feature, whose syntax the gate may \
+                 not parse, so the scan fails closed (ARCH-033): remove it, or name the root in \
+                 FEATURE_ROOTS with the reason",
+                attr.pound_token.span.start().line
+            ));
+        }
+    }
+    found
+}
+
+/// Whether `tokens` hold the identifier `name`, raw or not, at any depth.
+fn holds_ident(tokens: TokenStream, name: &str) -> bool {
+    tokens.into_iter().any(|tree| match tree {
+        TokenTree::Ident(ident) => ident.unraw() == name,
+        TokenTree::Group(group) => holds_ident(group.stream(), name),
+        _ => false,
+    })
+}
+
+/// Each `mod` that the tokens of a macro hold in `file`, outside test code,
+/// as one refusal per keyword (`ARCH-033`).
+///
+/// The walk follows the `mod` items the source writes, and expands no
+/// macro. The dep-info check refuses a file rustc reads that the walk does
+/// not, unless a walked file names it as data. The dep-info does not tell a
+/// module from data. So a `mod` a macro writes could compile a data file as
+/// code, and no check would read it. The gate refuses the keyword, raw or
+/// not, wherever a macro holds it. That is a `macro_rules!` body, called or
+/// not, the tokens of any macro call, and the tokens of an attribute.
+///
+/// One form passes: `mod name { .. }` or `mod $name { .. }`, an inline
+/// module, which reads no file. A child `mod` it holds is a keyword of the
+/// same tokens, read the same way, so a `#[path]` child still fails. Every
+/// other form fails, `mod name;` and a keyword that a `tt` fragment carries
+/// alone, as in `m!(mod hid)`, among them.
+fn macro_mods(file: &str, tree: &syn::File) -> Vec<String> {
+    let mut seek = MacroMods {
+        file: file.to_owned(),
+        found: Vec::new(),
+    };
+    if !test_only(&tree.attrs) {
+        seek.visit_file(tree);
+    }
+    seek.found
+}
+
+/// The walk of one file for the `mod` keywords its macros hold.
+struct MacroMods {
+    file: String,
+    found: Vec<String>,
+}
+
+impl MacroMods {
+    /// Refuses each `mod` keyword of `tokens` that does not open an inline
+    /// module, at any depth of groups.
+    fn tokens(&mut self, tokens: TokenStream) {
+        let trees: Vec<TokenTree> = tokens.into_iter().collect();
+        for (at, tree) in trees.iter().enumerate() {
+            match tree {
+                TokenTree::Ident(ident) if ident.unraw() == "mod" => {
+                    if !inline_module(trees.get(at + 1..).unwrap_or_default()) {
+                        self.found.push(format!(
+                            "{}:{}: a macro holds the keyword `mod` outside an inline module. The \
+                             walk follows no module a macro declares, and the dep-info check \
+                             cannot tell its file from data, so the scan fails closed \
+                             (ARCH-033): declare the module in the source",
+                            self.file,
+                            ident.span().start().line
+                        ));
+                    }
+                }
+                TokenTree::Group(group) => self.tokens(group.stream()),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Whether the tokens after a `mod` keyword are a name and a brace group:
+/// `name { .. }` or `$name { .. }`.
+fn inline_module(after: &[TokenTree]) -> bool {
+    let body = match after {
+        [TokenTree::Ident(_), body, ..] => body,
+        [TokenTree::Punct(dollar), TokenTree::Ident(_), body, ..] if dollar.as_char() == '$' => {
+            body
+        }
+        _ => return false,
+    };
+    matches!(body, TokenTree::Group(group) if group.delimiter() == Delimiter::Brace)
+}
+
+impl<'ast> Visit<'ast> for MacroMods {
+    // Test code is no build that ships.
+    fn visit_item(&mut self, item: &'ast syn::Item) {
+        if !test_only(item_attrs(item)) {
+            syn::visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast syn::ImplItem) {
+        if !test_only(crate::secrets::impl_item_attrs(item)) {
+            syn::visit::visit_impl_item(self, item);
+        }
+    }
+
+    fn visit_trait_item(&mut self, item: &'ast syn::TraitItem) {
+        if !test_only(crate::secrets::trait_item_attrs(item)) {
+            syn::visit::visit_trait_item(self, item);
+        }
+    }
+
+    // An attribute's tokens reach a macro: `#[doc = m!(..)]` does, and so
+    // does a `cfg_attr` that writes one.
+    fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
+        self.tokens(attr.meta.to_token_stream());
+    }
+
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        self.tokens(mac.tokens.clone());
     }
 }
 
