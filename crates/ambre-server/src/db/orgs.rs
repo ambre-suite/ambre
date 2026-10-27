@@ -28,19 +28,34 @@ impl OrgName {
 #[serde(try_from = "ShamirWire", into = "ShamirWire")]
 pub struct ShamirParams(ShamirWire);
 
+/// How many shares of a split reconstruct the key: the `k` of k-of-n. A type
+/// apart from [`ShareTotal`], so a split never takes the two swapped.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct ShareThreshold(pub i16);
+
+/// How many shares a split cuts the key into: the `n` of k-of-n.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct ShareTotal(pub i16);
+
 /// The two fields of a split as the request body, the answer and the
 /// `organizations` row spell them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ShamirWire {
-    shamir_threshold: i16,
-    shamir_total: i16,
+    shamir_threshold: ShareThreshold,
+    shamir_total: ShareTotal,
 }
 
 impl ShamirParams {
     /// The split of `total` shares that `threshold` of them reconstruct.
     /// Refuses a threshold below 1 or above the total.
-    pub fn new(threshold: i16, total: i16) -> Result<Self, AppError> {
-        if total < 1 || threshold < 1 || threshold > total {
+    pub fn new(threshold: ShareThreshold, total: ShareTotal) -> Result<Self, AppError> {
+        if total.0 < 1 || threshold.0 < 1 || threshold.0 > total.0 {
             return Err(AppError::Conflict {
                 detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
                     .into(),
@@ -53,12 +68,12 @@ impl ShamirParams {
     }
 
     /// How many shares reconstruct the key.
-    pub fn threshold(self) -> i16 {
+    pub fn threshold(self) -> ShareThreshold {
         self.0.shamir_threshold
     }
 
     /// How many shares the key is split into.
-    pub fn total(self) -> i16 {
+    pub fn total(self) -> ShareTotal {
         self.0.shamir_total
     }
 }
@@ -80,8 +95,8 @@ impl From<ShamirParams> for ShamirWire {
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for ShamirParams {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         Self::new(
-            row.try_get("shamir_threshold")?,
-            row.try_get("shamir_total")?,
+            ShareThreshold(row.try_get("shamir_threshold")?),
+            ShareTotal(row.try_get("shamir_total")?),
         )
         .map_err(|e| sqlx::Error::Decode(e.to_string().into()))
     }
@@ -139,8 +154,8 @@ pub async fn create_organization(
     .bind(id_to_uuid(*org_id))
     .bind(name.as_str())
     .bind(org_pubkey.as_slice())
-    .bind(shamir.threshold())
-    .bind(shamir.total())
+    .bind(shamir.threshold().0)
+    .bind(shamir.total().0)
     .fetch_one(&mut *tx)
     .await?;
 

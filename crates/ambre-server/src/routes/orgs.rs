@@ -112,7 +112,7 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
 /// cannot keep: reject any threshold above 1. [`db::ShamirParams`] already
 /// holds `1 <= threshold <= total`.
 fn validate_shamir_params(shamir: db::ShamirParams) -> Result<(), AppError> {
-    if shamir.threshold() > 1 {
+    if shamir.threshold() > db::ShareThreshold(1) {
         return Err(AppError::Conflict {
             detail: "shamir_threshold > 1 is not yet supported: threshold reconstruction is \
                      unimplemented and recovery is single-authority (owner-only)"
@@ -481,7 +481,7 @@ mod tests {
     /// Whether a request declaring `threshold` of `total` passes: the range
     /// the split holds, then the quorum the relay enforces.
     fn accepted(threshold: i16, total: i16) -> bool {
-        db::ShamirParams::new(threshold, total)
+        db::ShamirParams::new(db::ShareThreshold(threshold), db::ShareTotal(total))
             .and_then(validate_shamir_params)
             .is_ok()
     }
@@ -524,13 +524,16 @@ mod tests {
             id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
             org_pubkey: ambre_core::PublicKey::from_array([0u8; 32]),
-            shamir: db::ShamirParams::new(3, 5).unwrap(),
+            shamir: db::ShamirParams::new(db::ShareThreshold(3), db::ShareTotal(5)).unwrap(),
             created_at: chrono::Utc::now(),
         };
         let resp = org_to_response(&org);
         assert_eq!(resp.id.to_string(), "00000000-0000-0000-0000-000000000001");
         assert_eq!(resp.name, "Test Org");
-        assert_eq!(resp.shamir, db::ShamirParams::new(3, 5).unwrap());
+        assert_eq!(
+            resp.shamir,
+            db::ShamirParams::new(db::ShareThreshold(3), db::ShareTotal(5)).unwrap()
+        );
         assert_eq!(
             resp.org_pubkey,
             ambre_core::ExchangeKeyHex::encode(vec![0u8; 32])

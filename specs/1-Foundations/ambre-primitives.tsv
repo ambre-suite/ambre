@@ -2560,12 +2560,8 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field |
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::new(threshold) | param | i16	newtype-inner	the fallible constructor of ShamirParams; the smallint column width
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::new(total) | param | i16	newtype-inner	the fallible constructor of ShamirParams; the smallint column width
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::threshold() | ret | i16	newtype-inner	a part of ShamirParams, bound to the smallint column
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirParams::total() | ret | i16	newtype-inner	a part of ShamirParams, bound to the smallint column
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_threshold | field | i16	newtype-inner	the wire form ShamirParams decodes through and validates
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShamirWire.shamir_total | field | i16	newtype-inner	the wire form ShamirParams decodes through and validates
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold.0 | field | i16	newtype-inner	the k of a k-of-n split, typed apart from ShareTotal; the smallint column width
+ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal.0 | field | i16	newtype-inner	the n of a k-of-n split, typed apart from ShareThreshold; the smallint column width
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserSearch.0 | field | String	newtype-inner	the trimmed search text of UserSearch
