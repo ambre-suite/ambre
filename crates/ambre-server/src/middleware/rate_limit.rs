@@ -68,8 +68,8 @@ enum RateBucket {
     /// The user the access token names.
     User(ambre_core::UserId),
     /// The address the request comes from, as the socket or the proxy states
-    /// it; `unknown` when neither does.
-    Peer(String),
+    /// it.
+    Peer(Peer),
 }
 
 impl std::fmt::Display for RateBucket {
@@ -77,6 +77,29 @@ impl std::fmt::Display for RateBucket {
         match self {
             Self::User(user) => write!(f, "user:{user}"),
             Self::Peer(peer) => write!(f, "ip:{peer}"),
+        }
+    }
+}
+
+/// The peer a request without a caller counts against.
+///
+/// A parsed address, so one address has one spelling in the store key, and
+/// two spellings of it never get two windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Peer {
+    /// The address the socket or a trusted proxy states.
+    Addr(std::net::IpAddr),
+    /// No address: the socket gave none, or the proxy wrote one that does not
+    /// parse. Every such request shares one window, which fails toward the
+    /// stricter limit.
+    Unknown,
+}
+
+impl std::fmt::Display for Peer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Addr(addr) => addr.fmt(f),
+            Self::Unknown => f.write_str("unknown"),
         }
     }
 }
@@ -100,27 +123,28 @@ fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Requ
     }
     let x_forwarded_for =
         header("x-forwarded-for").filter(|_| trust_proxy == ProxyTrust::BehindProxy);
-    let remote_ip = req
+    let remote = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map_or_else(|| "unknown".to_owned(), |a| a.0.ip().to_string());
-    RateBucket::Peer(client_ip_str(x_forwarded_for, &remote_ip))
+        .map_or(Peer::Unknown, |a| Peer::Addr(a.0.ip()));
+    RateBucket::Peer(client_peer(x_forwarded_for, remote))
 }
 
-/// Extracts the client IP address from headers or socket address.
+/// The peer of a request: the first entry of `X-Forwarded-For` when a trusted
+/// proxy wrote one, the socket peer `remote` otherwise.
 ///
-/// Respects the `X-Forwarded-For` header (first entry) when behind a
-/// reverse proxy, falling back to the remote address.
-fn client_ip_str(x_forwarded_for: Option<&str>, remote_ip: &str) -> String {
-    if let Some(fwd) = x_forwarded_for {
-        for part in fwd.split(',') {
-            let ip = part.trim();
-            if !ip.is_empty() {
-                return ip.to_string();
-            }
-        }
+/// An entry that does not parse as an address is [`Peer::Unknown`], never the
+/// socket peer: behind a proxy, the socket peer is the proxy itself.
+fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
+    let first = x_forwarded_for.and_then(|fwd| {
+        fwd.split(',')
+            .map(str::trim)
+            .find(|entry| !entry.is_empty())
+    });
+    match first {
+        Some(entry) => entry.parse().map_or(Peer::Unknown, Peer::Addr),
+        None => remote,
     }
-    remote_ip.to_string()
 }
 
 /// Rate-limiting categories with different limits.
@@ -311,31 +335,72 @@ async fn check_sliding_window(
 mod tests {
     use super::*;
 
-    // -- client_ip_str -----------------------------------------------------
+    // -- client_peer -------------------------------------------------------
+
+    /// A parsed address, for a test.
+    fn addr(text: &str) -> Peer {
+        Peer::Addr(text.parse().unwrap())
+    }
 
     #[test]
     fn client_ip_from_forwarded_header() {
         assert_eq!(
-            client_ip_str(Some("10.0.0.1, 10.0.0.2"), "127.0.0.1"),
-            "10.0.0.1"
+            client_peer(Some("10.0.0.1, 10.0.0.2"), addr("127.0.0.1")),
+            addr("10.0.0.1")
         );
     }
 
     #[test]
     fn client_ip_falls_back_to_remote() {
-        assert_eq!(client_ip_str(None, "192.168.1.1"), "192.168.1.1");
+        assert_eq!(client_peer(None, addr("192.168.1.1")), addr("192.168.1.1"));
+        assert_eq!(client_peer(None, Peer::Unknown), Peer::Unknown);
     }
 
     #[test]
     fn client_ip_ignores_empty_forwarded() {
-        assert_eq!(client_ip_str(Some(""), "remote"), "remote");
+        assert_eq!(client_peer(Some(""), addr("10.0.0.7")), addr("10.0.0.7"));
+        assert_eq!(client_peer(Some(" , "), addr("10.0.0.7")), addr("10.0.0.7"));
     }
 
     #[test]
     fn client_ip_trims_forwarded() {
         assert_eq!(
-            client_ip_str(Some("  1.2.3.4  , 5.6.7.8"), "remote"),
-            "1.2.3.4"
+            client_peer(Some("  1.2.3.4  , 5.6.7.8"), addr("10.0.0.7")),
+            addr("1.2.3.4")
+        );
+    }
+
+    /// A forwarded entry that is no address shares the unknown window. It
+    /// never falls back to the socket peer, which is the proxy.
+    #[test]
+    fn a_forwarded_entry_that_is_no_address_is_unknown() {
+        assert_eq!(
+            client_peer(Some("not-an-ip, 1.2.3.4"), addr("10.0.0.7")),
+            Peer::Unknown
+        );
+    }
+
+    /// The store key of a real address keeps the text the string form wrote:
+    /// the address as `IpAddr` prints it, after `ip:`. A missing address keeps
+    /// `ip:unknown`. Two spellings of one IPv6 address now share one key.
+    #[test]
+    fn the_store_key_of_a_real_address_is_unchanged() {
+        for (text, key) in [
+            ("10.0.0.1", "ip:10.0.0.1"),
+            ("203.0.113.9", "ip:203.0.113.9"),
+            ("2001:db8::1", "ip:2001:db8::1"),
+            ("::1", "ip:::1"),
+        ] {
+            assert_eq!(RateBucket::Peer(addr(text)).to_string(), key);
+            assert_eq!(
+                RateBucket::Peer(client_peer(Some(text), Peer::Unknown)).to_string(),
+                key
+            );
+        }
+        assert_eq!(RateBucket::Peer(Peer::Unknown).to_string(), "ip:unknown");
+        assert_eq!(
+            client_peer(Some("2001:DB8:0::1"), Peer::Unknown),
+            addr("2001:db8::1")
         );
     }
 
@@ -388,7 +453,7 @@ mod tests {
         let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
         assert_eq!(
             request_bucket(&forged, ProxyTrust::Direct, &req),
-            RateBucket::Peer("10.0.0.1".to_owned())
+            RateBucket::Peer(addr("10.0.0.1"))
         );
     }
 
@@ -400,23 +465,23 @@ mod tests {
         let req = request_from([10, 0, 0, 1], &[("x-forwarded-for", "203.0.113.9")]);
         assert_eq!(
             request_bucket(&jwt, ProxyTrust::Direct, &req),
-            RateBucket::Peer("10.0.0.1".to_owned())
+            RateBucket::Peer(addr("10.0.0.1"))
         );
         assert_eq!(
             request_bucket(&jwt, ProxyTrust::BehindProxy, &req),
-            RateBucket::Peer("203.0.113.9".to_owned())
+            RateBucket::Peer(addr("203.0.113.9"))
         );
     }
 
     /// A bucket names its store key by kind, so a user id and a peer address
-    /// that spell the same text never share a window.
+    /// never share a window.
     #[test]
     fn a_bucket_names_its_kind_in_the_key() {
         let user = ambre_core::UserId::new();
         assert_eq!(RateBucket::User(user).to_string(), format!("user:{user}"));
         assert_eq!(
-            RateBucket::Peer(user.to_string()).to_string(),
-            format!("ip:{user}")
+            RateBucket::Peer(addr("10.0.0.1")).to_string(),
+            "ip:10.0.0.1"
         );
     }
 
