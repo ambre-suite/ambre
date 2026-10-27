@@ -32,9 +32,9 @@ pub(crate) enum Purpose {
 /// key, once that key has been compared with the pinned one.
 ///
 /// Only the states that interrupt the user become a prompt. That is a **new**
-/// key (`changed == false`, the first contact) or a **changed** key
-/// (`changed == true`, a divergence from the pin). A **trusted** key never
-/// does: the relay proceeds straight to what the key is for.
+/// key ([`KeyContact::New`], the first contact) or a **changed** key
+/// ([`KeyContact::Changed`], a divergence from the pin). A **trusted** key
+/// never does: the relay proceeds straight to what the key is for.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct TofuPrompt {
     /// What the key is for.
@@ -49,8 +49,21 @@ pub(crate) struct TofuPrompt {
     pub(crate) exchange_pub_key: ambre_core::ExchangePublicKey,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: ambre_bus::KeyFingerprint,
-    /// `false` = new (first contact), `true` = changed (diverged from the pin).
-    pub(crate) changed: bool,
+    /// Whether the key is a first contact or diverges from the pin.
+    pub(crate) contact: KeyContact,
+}
+
+/// How a fetched key that interrupts the user relates to the pin.
+///
+/// An `enum`, not a `bool`, because the two states select different words
+/// and a warning: a swap of the two would hide a substituted key behind the
+/// prompt of a first contact.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum KeyContact {
+    /// No key is pinned for the recipient: the first contact.
+    New,
+    /// A key is pinned, and the fetched one differs from it.
+    Changed,
 }
 
 impl TofuPrompt {
@@ -82,11 +95,11 @@ pub(crate) fn classify(
     match pinned {
         Some(key) if key == prompt.exchange_pub_key => Next::Proceed(request(&prompt, role)),
         Some(_) => Next::Ask(TofuPrompt {
-            changed: true,
+            contact: KeyContact::Changed,
             ..prompt
         }),
         None => Next::Ask(TofuPrompt {
-            changed: false,
+            contact: KeyContact::New,
             ..prompt
         }),
     }
@@ -168,7 +181,7 @@ pub(crate) fn TofuDialog(
                 prompt
                     .get()
                     .map(|p| {
-                        let changed = p.changed;
+                        let contact = p.contact;
                         let direct = matches!(p.purpose, Purpose::Direct { .. });
                         // The address leaves its type only at the text node.
                         let email = p.email().map(ToString::to_string);
@@ -177,10 +190,9 @@ pub(crate) fn TofuDialog(
                         view! {
                             <div class="ambre-tofu-panel">
                                 <h2>
-                                    {if changed {
-                                        "Recipient key changed"
-                                    } else {
-                                        "Verify recipient key"
+                                    {match contact {
+                                        KeyContact::Changed => "Recipient key changed",
+                                        KeyContact::New => "Verify recipient key",
                                     }}
                                 </h2>
                                 <p class="ambre-tofu-who">
@@ -190,7 +202,7 @@ pub(crate) fn TofuDialog(
                                             view! { <span class="ambre-tofu-email">{email}</span> }
                                         })}
                                 </p>
-                                {changed
+                                {(contact == KeyContact::Changed)
                                     .then(|| {
                                         view! {
                                             <p class="ambre-tofu-warning" role="alert">
@@ -236,11 +248,11 @@ pub(crate) fn TofuDialog(
                                             prompt.set(None);
                                         }
                                     >
-                                        {match (changed, direct) {
-                                            (true, false) => "Re-pin and invite",
-                                            (false, false) => "Confirm and invite",
-                                            (true, true) => "Re-pin and message",
-                                            (false, true) => "Confirm and message",
+                                        {match (contact, direct) {
+                                            (KeyContact::Changed, false) => "Re-pin and invite",
+                                            (KeyContact::New, false) => "Confirm and invite",
+                                            (KeyContact::Changed, true) => "Re-pin and message",
+                                            (KeyContact::New, true) => "Confirm and message",
                                         }}
                                     </button>
                                 </div>
@@ -271,7 +283,7 @@ mod tests {
             display_name: ambre_core::DisplayName::new("Bob").ok(),
             exchange_pub_key: ambre_core::ExchangePublicKey::from_array([byte; 32]),
             fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
-            changed: false,
+            contact: KeyContact::New,
         }
     }
 
@@ -306,7 +318,7 @@ mod tests {
     fn a_new_or_changed_key_asks_and_only_the_pinned_key_invites() {
         for prompt in [fetched(1), fetched_for_direct(1)] {
             match classify(prompt.clone(), None, Role::Editor) {
-                Next::Ask(p) => assert!(!p.changed, "a first contact is new"),
+                Next::Ask(p) => assert_eq!(p.contact, KeyContact::New, "a first contact is new"),
                 other => panic!("a new key went out: {other:?}"),
             }
             match classify(
@@ -314,7 +326,11 @@ mod tests {
                 Some(ambre_core::ExchangePublicKey::from_array([9; 32])),
                 Role::Editor,
             ) {
-                Next::Ask(p) => assert!(p.changed, "a substituted key is a change"),
+                Next::Ask(p) => assert_eq!(
+                    p.contact,
+                    KeyContact::Changed,
+                    "a substituted key is a change"
+                ),
                 other => panic!("a substituted key went out: {other:?}"),
             }
         }
@@ -499,9 +515,9 @@ mod tests {
     /// `CHROME-077`).
     #[wasm_bindgen_test]
     async fn the_prompt_states_its_limit_and_offers_refusal_first() {
-        for changed in [false, true] {
+        for contact in [KeyContact::New, KeyContact::Changed] {
             let m = mount(TofuPrompt {
-                changed,
+                contact,
                 ..fetched(2)
             })
             .await;
@@ -517,12 +533,12 @@ mod tests {
             assert_eq!(
                 first.class_name(),
                 "ambre-tofu-cancel",
-                "changed: {changed}"
+                "contact: {contact:?}"
             );
             assert_eq!(
                 last.class_name(),
                 "ambre-tofu-confirm",
-                "changed: {changed}"
+                "contact: {contact:?}"
             );
             m.root.remove();
         }

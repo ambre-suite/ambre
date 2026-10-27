@@ -1529,7 +1529,7 @@ pub fn main() {
                         display_name: Some(display_name.clone()),
                         exchange_pub_key: exchange_pub_key.clone(),
                         fingerprint: fingerprint.clone(),
-                        changed: false,
+                        contact: tofu::KeyContact::New,
                     };
                     classify_against_pin(prompt);
                 }
@@ -1558,7 +1558,7 @@ pub fn main() {
                         display_name,
                         exchange_pub_key: exchange_pub_key.clone(),
                         fingerprint: fingerprint.clone(),
-                        changed: false,
+                        contact: tofu::KeyContact::New,
                     });
                 }
                 // Revocation done (key rotation complete): confirm and refresh.

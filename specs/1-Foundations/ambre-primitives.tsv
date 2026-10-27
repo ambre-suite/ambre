@@ -126,7 +126,6 @@ ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	
 ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	trait	reload closure signature
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
-ambre-app | src/tofu.rs | crate::tofu | TofuPrompt.changed | field | bool	generic	named flag
 ambre-app | src/vault.rs | crate::vault | Vault::answer() | ret | bool	generic	predicate result
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/activity.rs | crate::activity | ActivitySummary.mentions_all | field | bool	generic	fact flag mirrored from ambre-core ActivitySummary
