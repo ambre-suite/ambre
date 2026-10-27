@@ -224,8 +224,9 @@ exist: an image reaches a surface only through the path
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **No icon exists.** There is no `assets/icons/` directory, no `Icon` type and no tessellation
-  step: `crates/ambre-canvas/build.rs` generates the design tokens and nothing else. The whole
-  pipeline of section 2 is a design (`The icon pipeline`, `ambre-roadmap.md` E6).
+  step: the one generator of `ambre-canvas`, `src/tokens.rs`, writes the design tokens and
+  nothing else. The whole pipeline of section 2 is a design (`The icon pipeline`,
+  `ambre-roadmap.md` E6).
 * **The shared image cache does not exist.** Toile holds a `MediaCache` in its Logic thread, keyed
   by content hash, and it is a fetch deduplicator rather than a decoded-pixel cache. No application
   shares it and no budget row is read against it (`CANVAS-007`).
