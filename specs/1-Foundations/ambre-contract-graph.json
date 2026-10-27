@@ -3250,6 +3250,8 @@
   {"edge": "verified-by", "from": "SYNC-152", "to": "ambre_sync::http::tests::only_an_unknown_word_reads_as_one"},
   {"edge": "verified-by", "from": "SYNC-152", "to": "ambre_sync::setup_tests::an_answer_with_an_unknown_word_reaches_logic_as_an_update"},
   {"edge": "verified-by", "from": "SYNC-152", "to": "ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update"},
+  {"edge": "cites-section", "from": "SYNC-179", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
+  {"edge": "verified-by", "from": "SYNC-179", "to": "ambre_sync::http::tests::a_query_value_is_percent_encoded_whole"},
   {"edge": "cites-document", "from": "SYNC-099", "to": "ambre-spec-session.md"},
   {"edge": "cites-rule", "from": "SYNC-099", "to": "SRV-025"},
   {"edge": "verified-by", "from": "SYNC-099", "to": "ambre_sync::http::tests::each_answer_maps_to_its_error"},

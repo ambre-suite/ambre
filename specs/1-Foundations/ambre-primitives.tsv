@@ -2712,6 +2712,7 @@ ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
+ambre-sync | src/http.rs | crate::http | QueryKey::as_str() | ret | &'static str	generic	the parameter name of a closed-set key, as the query string spells it
 ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(ContentType,Vec<u8>)>	generic	HTTP body bytes, content type typed
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayHost::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2719,6 +2720,7 @@ ambre-sync | src/http.rs | crate::http | RelayHost::new(host) | param | String	n
 ambre-sync | src/http.rs | crate::http | RelayUrl.0 | field | String	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::as_str() | ret | &str	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::join(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
+ambre-sync | src/http.rs | crate::http | RelayUrl::query(value) | param | &str	free-text	the text a query parameter carries, a user's search among them, percent-encoded whole before it joins the address
 ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-text	error message text
 ambre-sync | src/http.rs | crate::http | ThreadResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport

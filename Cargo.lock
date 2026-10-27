@@ -373,6 +373,7 @@ dependencies = [
  "gloo-net 0.7.0",
  "hex",
  "js-sys",
+ "percent-encoding",
  "postcard",
  "ruzstd",
  "serde",

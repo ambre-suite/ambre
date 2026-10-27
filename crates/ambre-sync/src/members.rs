@@ -365,8 +365,8 @@ impl SyncState {
 
     /// Searches users via `GET /api/users/search?query=...`, maps the server
     /// response into [`UserInfo`] values, and replies with
-    /// [`RestEvent::UserSearchResults`]. The query is percent-encoded for the
-    /// `@` character before being placed in the URL.
+    /// [`RestEvent::UserSearchResults`]. The query is percent-encoded whole
+    /// before it is placed in the URL (`SYNC-179`).
     pub(crate) fn handle_search_users(&self, id: RequestId, query: String) {
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
@@ -376,7 +376,8 @@ impl SyncState {
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
                 let url = crate::http::ApiRoot::of(url_scheme, &api_base)
-                    .route(format!("/users/search?query={}", query.replace('@', "%40")));
+                    .route("/users/search")
+                    .query(http::QueryKey::Query, &query);
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {
                     Ok(resp) => {
                         // Each id was parsed when the answer was read, so none

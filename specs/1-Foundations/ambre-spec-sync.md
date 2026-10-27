@@ -68,6 +68,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::a_refused_token_is_renewed_and_the_request_replayed_once` -- the replay carries the renewed token; `ambre_sync::http::tests::a_request_is_replayed_at_most_once` -- a second refusal or a refused renewal ends it | none | verified |
 | `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | `ambre_sync::http::tests::a_request_with_no_answer_is_abandoned_at_its_deadline` -- a transport that never answers ends the request with an error at its thirty-second deadline, sent once | none | verified |
 | `SYNC-152` | `POST` | An answer naming a word of a closed set this build does not know MUST reach the rest of the client as an update to install, never as a generic error. | this spec section 2; `ambre-spec-server.md`, `SRV-180` | `ambre_core::serde_enums::tests::an_unknown_word_reads_as_an_unknown_variant_in_every_set` -- each adapter refuses the word as a derived enum does; `ambre_sync::http::tests::only_an_unknown_word_reads_as_one` -- a role or a status no member carries reads as one, a malformed identifier or a missing field does not; `ambre_sync::setup_tests::an_answer_with_an_unknown_word_reaches_logic_as_an_update` -- the sink turns it into the update, under either error variant; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
+| `SYNC-179` | `POST` | A request MUST carry each value of its query string percent-encoded whole, so the relay reads the text it was. | this spec section 2 | `ambre_sync::http::tests::a_query_value_is_percent_encoded_whole` -- an ampersand, an equals sign, a hash, a plus, a percent sign, a space, an at sign and a non-ASCII letter each reach the address encoded | none | verified |
 | `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::each_answer_maps_to_its_error` -- a 403, a 409, a 500, a 404 and no answer each send one request, with no renewal | none | verified |
 
 ### 1.5 Content leaves for the relay
@@ -106,7 +107,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 49 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 50 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -187,6 +188,9 @@ is kept and sent after the reopen (`SYNC-059`). The two marks are a row of
 replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`). A refusal
 for a key setup still owed reaches it as the setup to complete. So does an unlock that finds no
 master material (`SYNC-134`).
+
+**A query string.** Each value of a query string is percent-encoded whole. A search
+text holding `&` or `#` then never ends the value or opens a fragment (`SYNC-179`).
 
 **A word this build does not know.** Each closed set on the JSON wire is read strictly, so a new
 role or status refuses the whole answer (`SRV-180`). Only a newer relay writes such a word, and no

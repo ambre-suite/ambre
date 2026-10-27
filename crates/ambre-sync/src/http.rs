@@ -142,6 +142,15 @@ impl RelayUrl {
         Self(format!("{}{}", self.0, path.as_ref()))
     }
 
+    /// This route with the one query parameter `key` set to `value`. The
+    /// value is percent-encoded whole, so no character of it ends the value,
+    /// opens another parameter or a fragment, or decodes as another character
+    /// (`SYNC-179`).
+    pub(crate) fn query(&self, key: QueryKey, value: &str) -> Self {
+        let value = percent_encoding::utf8_percent_encode(value, QUERY_VALUE);
+        Self(format!("{}?{}={value}", self.0, key.as_str()))
+    }
+
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
@@ -152,6 +161,30 @@ impl std::fmt::Display for RelayUrl {
         f.write_str(&self.0)
     }
 }
+
+/// The query parameters a relay route reads. A closed set, so a key never
+/// comes from text a user typed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum QueryKey {
+    /// The search text of `/users/search`.
+    Query,
+}
+
+impl QueryKey {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Query => "query",
+        }
+    }
+}
+
+/// Every byte but the unreserved characters of RFC 3986 is encoded in a
+/// query value.
+const QUERY_VALUE: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// Where a request goes: one of the relay's routes, or an object a presigned
 /// link names. Only a relay route ever carries the access token. A presigned
@@ -2033,6 +2066,20 @@ mod tests {
             Method::Post
         };
         HttpError::refused(method, &Target::relay(url), HttpStatus(status), code)
+    }
+
+    /// `SYNC-179`: a query value reaches the relay as the text it was, each
+    /// reserved character, the percent sign, a space and a non-ASCII letter
+    /// encoded.
+    #[test]
+    fn a_query_value_is_percent_encoded_whole() {
+        let url = ApiRoot::of(UrlScheme::Https, &RelayHost::new("relay.test".to_owned()))
+            .route("/users/search")
+            .query(QueryKey::Query, "a&b=c#d+e%f g@h-\u{e9}~");
+        assert_eq!(
+            url.as_str(),
+            "https://relay.test/api/users/search?query=a%26b%3Dc%23d%2Be%25f%20g%40h-%C3%A9~"
+        );
     }
 
     fn is_setup_refusal(error: &HttpError) -> bool {
