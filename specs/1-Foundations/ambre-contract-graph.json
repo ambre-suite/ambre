@@ -548,6 +548,7 @@
   {"edge": "verified-by", "from": "UI-THREAD-045", "to": "ambre_prose::input_tests::a_refused_copy_deletes_nothing"},
   {"edge": "cites-section", "from": "UI-THREAD-007", "section": "2", "to": "1-Foundations/ambre-spec-clipboard.md"},
   {"edge": "verified-by", "from": "UI-THREAD-007", "to": "ambre_bus::clipboard_tests::a_paste_takes_the_kept_copy_only_on_the_token"},
+  {"edge": "verified-by", "from": "UI-THREAD-007", "to": "::an_empty_token_never_matches"},
   {"edge": "cites-section", "from": "UI-THREAD-054", "section": "2", "to": "1-Foundations/ambre-spec-clipboard.md"},
   {"edge": "verified-by", "from": "UI-THREAD-054", "to": "ambre_app::host::pipe::tests::a_paste_after_a_landed_write_reads_the_clipboard_back"},
   {"edge": "cites-section", "from": "UI-THREAD-055", "section": "2", "to": "1-Foundations/ambre-spec-clipboard.md"},

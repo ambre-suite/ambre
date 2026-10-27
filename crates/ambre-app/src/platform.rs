@@ -146,7 +146,7 @@ pub(crate) async fn read_clipboard_blob(
         if has(host::ClipboardFormat::WebAmbreToken)
             && let Some(t) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbreToken).await
         {
-            token = Some(ambre_bus::ClipToken::new(t));
+            token = ambre_bus::ClipToken::new(t);
             found = true;
         }
         if has(host::ClipboardFormat::Html)
@@ -168,7 +168,6 @@ pub(crate) async fn read_clipboard_blob(
         blob.html
             .as_deref()
             .and_then(ambre_bus::ClipboardBlob::html_token)
-            .map(|t| ambre_bus::ClipToken::new(t.to_owned()))
     });
     found.then_some((blob, token))
 }

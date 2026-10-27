@@ -446,12 +446,10 @@ ambre-bus | src/event.rs | crate::event | LogicEvent::SyncWarning.message | fiel
 ambre-bus | src/event.rs | crate::event | LogicEvent::ThreadLinkFailed.message | field | String	free-text	user-facing or log message
 ambre-bus | src/lib.rs | crate | ClipToken.0 | field | String	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::as_str() | ret | &str	newtype-inner	ViewportVersion/ClipToken newtype
-ambre-bus | src/lib.rs | crate | ClipToken::is() | ret | bool	newtype-inner	ViewportVersion/ClipToken newtype
-ambre-bus | src/lib.rs | crate | ClipToken::is(read) | param | Option<&str>	newtype-inner	ViewportVersion/ClipToken newtype
+ambre-bus | src/lib.rs | crate | ClipToken::draw(random) | param | u64	newtype-inner	the random draw the token text is formatted from, at page load
 ambre-bus | src/lib.rs | crate | ClipToken::new(text) | param | String	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipboardBlob.html | field | Option<String>	free-text	clipboard text/html halves
 ambre-bus | src/lib.rs | crate | ClipboardBlob.text | field | String	free-text	clipboard text/html halves
-ambre-bus | src/lib.rs | crate | ClipboardBlob::html_token() | ret | Option<&str>	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::html_token(html) | param | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html() | ret | String	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html(html) | param | &str	generic	HTML comment marker over &str

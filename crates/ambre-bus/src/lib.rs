@@ -135,12 +135,12 @@ impl ClipboardBlob {
     }
 
     /// The ownership token [`Self::mark_html`] left in `html`, wherever the
-    /// browser moved the comment.
+    /// browser moved the comment. An empty comment carries none.
     #[must_use]
-    pub fn html_token(html: &str) -> Option<&str> {
+    pub fn html_token(html: &str) -> Option<ClipToken> {
         let start = html.find(HTML_TOKEN_OPEN)? + HTML_TOKEN_OPEN.len();
         let rest = html.get(start..)?;
-        rest.get(..rest.find(HTML_TOKEN_CLOSE)?)
+        ClipToken::new(rest.get(..rest.find(HTML_TOKEN_CLOSE)?)?.to_owned())
     }
 }
 
@@ -173,25 +173,27 @@ impl ViewportVersion {
 
 /// This tab's clipboard ownership token (`UI-THREAD-007`): written beside a
 /// copy, and read back to know a paste is of this tab's own copy. A distinct
-/// type, so a text the clipboard carries never stands for it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// type, so a text the clipboard carries never stands for it. It is never
+/// empty, so an empty read never matches it: a paste compares two tokens.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClipToken(String);
 
 impl ClipToken {
-    /// The token the tab drew when its page loaded.
-    pub fn new(text: String) -> Self {
-        Self(text)
+    /// A token the clipboard carried, or `None` when it is empty.
+    #[must_use]
+    pub fn new(text: String) -> Option<Self> {
+        (!text.is_empty()).then_some(Self(text))
+    }
+
+    /// The token a tab draws when its page loads, from a `random` draw.
+    #[must_use]
+    pub fn draw(random: u64) -> Self {
+        Self(format!("ambre-{random:x}"))
     }
 
     /// The token, as the clipboard carries it.
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    /// Whether `read`, a token a paste carried, is this one.
-    #[must_use]
-    pub fn is(&self, read: Option<&str>) -> bool {
-        read == Some(self.0.as_str())
     }
 }
 
@@ -241,14 +243,24 @@ mod clipboard_tests {
         }
     }
 
+    /// `UI-THREAD-007`: an empty token is no token, so an empty read or an
+    /// empty comment never stands for this tab's copy.
+    #[test]
+    fn an_empty_token_never_matches() {
+        assert_eq!(super::ClipToken::new(String::new()), None);
+        assert_eq!(ClipboardBlob::html_token("<!--ambre-token:--><b>x</b>"), None);
+        assert_ne!(super::ClipToken::draw(0).as_str(), "");
+    }
+
     /// `UI-THREAD-057`: the token survives in the HTML as Firefox 156 hands it
     /// back, the comment moved before the `<html>` wrapper it adds.
     #[test]
     fn the_token_reads_back_from_the_marked_html() {
-        let marked = ClipboardBlob::mark_html("<b>x</b>", &super::ClipToken::new("TOK".to_owned()));
-        assert_eq!(ClipboardBlob::html_token(&marked), Some("TOK"));
+        let tok = super::ClipToken::new("TOK".to_owned()).unwrap();
+        let marked = ClipboardBlob::mark_html("<b>x</b>", &tok);
+        assert_eq!(ClipboardBlob::html_token(&marked), Some(tok.clone()));
         let moved = "<!--ambre-token:TOK-->\n<html><head></head><body><b>x</b></body></html>";
-        assert_eq!(ClipboardBlob::html_token(moved), Some("TOK"));
+        assert_eq!(ClipboardBlob::html_token(moved), Some(tok));
         assert_eq!(ClipboardBlob::html_token("<b>x</b>"), None);
         assert_eq!(ClipboardBlob::html_token("<!--ambre-token:TOK"), None);
     }

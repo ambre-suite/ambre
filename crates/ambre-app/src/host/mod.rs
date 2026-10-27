@@ -820,7 +820,7 @@ mod tests {
         };
         let Published { item, web } = publish_item(
             &blob,
-            &ambre_bus::ClipToken::new("ambre-1".to_owned()),
+            &ambre_bus::ClipToken::new("ambre-1".to_owned()).unwrap(),
             clipboard_item,
         )
         .expect("an item");
@@ -867,7 +867,7 @@ mod tests {
         };
         let Published { item, web } = publish_item(
             &blob,
-            &ambre_bus::ClipToken::new("ambre-2".to_owned()),
+            &ambre_bus::ClipToken::new("ambre-2".to_owned()).unwrap(),
             refusing,
         )
         .expect("the second attempt");

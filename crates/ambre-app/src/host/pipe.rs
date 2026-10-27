@@ -272,11 +272,15 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().clone();
                     data.get_data(ClipboardFormat::AmbreToken.mime())
-                        .is_ok_and(|t| !t.is_empty() && token.is(Some(t.as_str())))
+                        .ok()
+                        .and_then(ambre_bus::ClipToken::new)
+                        .as_ref()
+                        == Some(&token)
                         || html
                             .as_deref()
                             .and_then(ambre_bus::ClipboardBlob::html_token)
-                            == Some(token.as_str())
+                            .as_ref()
+                            == Some(&token)
                 };
                 // After the last copy's asynchronous write landed, the token
                 // and the private bytes sit under `web ` types the event cannot
@@ -409,7 +413,6 @@ mod tests {
     use super::*;
 
     /// A host that answers as the test sets it and records every call.
-    #[derive(Default)]
     struct Recorder {
         /// Each input event, as a short tag and its text.
         inputs: Vec<String>,
@@ -486,8 +489,13 @@ mod tests {
                 .expect("attached");
             let pipe = TextInput::create(&document, &cell);
             let host = Rc::new(RefCell::new(Recorder {
-                token: ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
-                ..Recorder::default()
+                inputs: Vec::new(),
+                copies: Vec::new(),
+                pastes: Vec::new(),
+                outcome: None,
+                consume: false,
+                token: ambre_bus::ClipToken::new("ambre-test-token".to_owned()).unwrap(),
+                published: Rc::default(),
             }));
             wire_pipe(&document, &pipe, &host);
             Self {
@@ -726,14 +734,14 @@ mod tests {
             &mut *rig.host.borrow_mut(),
             ClipboardPaste {
                 blob: blob.clone(),
-                token: Some(ambre_bus::ClipToken::new("ambre-test-token".to_owned())),
+                token: ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
             },
         );
         button_paste(
             &mut *rig.host.borrow_mut(),
             ClipboardPaste {
                 blob: blob.clone(),
-                token: Some(ambre_bus::ClipToken::new("another-tab".to_owned())),
+                token: ambre_bus::ClipToken::new("another-tab".to_owned()),
             },
         );
         let host = rig.host.borrow();
@@ -765,7 +773,7 @@ mod tests {
         };
         let super::Published { item, .. } = publish_item(
             &blob,
-            &ambre_bus::ClipToken::new("ambre-test-token".to_owned()),
+            &ambre_bus::ClipToken::new("ambre-test-token".to_owned()).unwrap(),
             clipboard_item,
         )
         .expect("an item");
