@@ -369,6 +369,24 @@ fn an_include_is_refused_where_a_secret_is_read_too() {
     );
 }
 
+// `include_str!` and `include_bytes!` splice data and never code, so no
+// secret is read through one. The gate compares whole names, and neither one
+// is the name `include`, in a path, a rename or a macro body.
+#[test]
+fn an_include_of_data_is_not_refused() {
+    let found = refused(
+        "ambre-canvas",
+        "src/theme.rs",
+        "pub const CSS: &str = include_str!(\"theme.css\");\n\
+         const ICON: &[u8] = include_bytes!(\"icon.png\");\n\
+         const A: &str = std::include_str!(\"a.txt\");\n\
+         const B: &[u8] = ::core::include_bytes!(\"b.bin\");\n\
+         use std::include_str as text;\n\
+         macro_rules! data { ($f:literal) => { include_bytes!($f) }; }",
+    );
+    assert_eq!(found, Vec::<String>::new());
+}
+
 #[test]
 fn a_relay_sink_is_named_in_its_call_file_and_its_declaring_file_alone() {
     let call = "async fn get(c: &Client, t: &RefreshToken) { crate::secrets::token::refresh_key(t, |k| c.hgetall(k)); }";
