@@ -71,12 +71,24 @@ file, the module, the item, the kind and the type, and no line number.
   with every package, target and feature, and on each wasm line of `lint-wasm`. It reads the
   dep-info of each unit of the workspace. A file that a shipped build reads fails, whatever its
   name, unless the walk reads it or a walked file names it as data. Data is the string literal of
-  an `include_str!` or an `include_bytes!`, or the directory a `migrate!` names.
+  an `include_str!` or an `include_bytes!`, or the directory a `sqlx::migrate!` names. A bare
+  `migrate!` counts only where a `use` imports `sqlx::migrate`.
 
-  A `mod` a macro writes, an `include!` file, a misread `#[path]` and a data path a macro builds
-  each land there. A data file that parses as Rust items fails too. A test build may read any
-  file. A `.rs` file under the workspace root that no compile reads fails, whatever its name. The
-  check leaves out `target/` and a nested workspace such as `fuzz/`.
+  An `include!` file, a misread `#[path]` and a data path a macro builds each land there. The
+  dep-info does not tell a module from data, so a `mod` a macro writes could compile a data file
+  unseen. The scan refuses that door: a `mod` keyword a macro holds fails, raw or not, in a
+  `macro_rules!` body, a macro call or an attribute. An inline `mod name { .. }` passes, since
+  its child `mod` is read the same way. A `#![feature]` in a crate root fails, unless
+  `FEATURE_ROOTS` names the root.
+
+  A data file that parses as Rust items fails too, as defence in depth. syn and rustc parse
+  apart, so this guard is best effort. A refusal of what syn cannot parse would refuse the real
+  shaders and style sheets, which lex as Rust tokens and do not parse.
+
+  A test build may read any file. A `.rs` file under the workspace root that no compile reads
+  fails, whatever its name. The check leaves out the `.git/` and `target/` of the root, and the
+  nested workspace `fuzz/` that `NESTED_WORKSPACES` names. Any other manifest that declares a
+  workspace fails. The listing follows no link to a directory.
 
   A failed compile, a missing dep-info file, a unit with no test flag and a dep-info line the
   parser cannot read whole fail closed. `just primitives-files` runs this half alone. A build none
