@@ -248,7 +248,10 @@ mod clipboard_tests {
     #[test]
     fn an_empty_token_never_matches() {
         assert_eq!(super::ClipToken::new(String::new()), None);
-        assert_eq!(ClipboardBlob::html_token("<!--ambre-token:--><b>x</b>"), None);
+        assert_eq!(
+            ClipboardBlob::html_token("<!--ambre-token:--><b>x</b>"),
+            None
+        );
         assert_ne!(super::ClipToken::draw(0).as_str(), "");
     }
 

@@ -566,7 +566,10 @@ mod tests {
         let bytes = |kind: &ClipKind| postcard::to_allocvec(kind).expect("a kind encodes");
         assert_eq!(bytes(&ClipKind::Ordered(OrderedStyle::LowerRoman)), [3, 3]);
         assert_eq!(bytes(&ClipKind::Code(None)), [5, 0]);
-        assert_eq!(bytes(&ClipKind::Code(CodeLang::new("rs"))), [5, 2, b'r', b's']);
+        assert_eq!(
+            bytes(&ClipKind::Code(CodeLang::new("rs"))),
+            [5, 2, b'r', b's']
+        );
         assert!(postcard::from_bytes::<ClipKind>(&[3, 9]).is_err());
         assert_eq!(
             postcard::from_bytes::<ClipKind>(&[5, 0]).ok(),
