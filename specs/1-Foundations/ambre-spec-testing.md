@@ -50,7 +50,7 @@ compiler needs no test, no run and no reading.
 | Lint wall: `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` in **every** crate | removes a whole scanning category from review | always. The "no `unsafe`" pillar is a claim until the lint enforces it crate by crate |
 | `cargo-deny`: advisories, licences, duplicate versions, capability bans | the supply chain of a crypto product, checked by machine | always |
 | A gate in `scripts/`, run by a `just` recipe in the CI `lint` job | holds what the compiler cannot see: the corpus, the prose, and a committed artifact that must not move | a rule about the tree rather than the code. Its own tests run under `just test-scripts`, because a gate that reads nothing and a gate that is satisfied look alike |
-| The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
+| The primitive gate, `crates/ambre-primitives`, run by `just primitives-files` and `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
 | `proptest` | universal rules over an unenumerated input space | pure logic and reference models: the formula engine, CRDT convergence, cache against rebuild |
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
 | `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
@@ -66,6 +66,16 @@ expanding a macro, and never takes a site from test code. Test code is what `cfg
 mark none, since a release build can compile either. A site is a field, a parameter, a
 return, a constant, a static or an alias whose type holds a primitive. Its key names the crate, the
 file, the module, the item, the kind and the type, and no line number.
+
+* **rustc holds the files the walk reads** (`ARCH-033`). The gate runs `cargo check` on the host
+  with every package, target and feature, and on each wasm line of `lint-wasm`. It reads the
+  dep-info of each unit of the workspace. A `.rs` file that a shipped build reads fails when the
+  walk misses it. A `mod` a macro writes, an `include!` file and a misread `#[path]` each land
+  there. A `.rs` file under `crates/` that no compile reads fails too, whatever its name.
+
+  A failed compile and a missing dep-info file fail closed. `just primitives-files` runs this half
+  alone. A build none of these compiles makes, under another target, `cfg`, feature set or
+  profile, is a reviewer's (`ARCH-050`).
 
 * **The primitive allowlist is `specs/1-Foundations/ambre-primitives.tsv`.** One line per site:
   the key, a category and a note. The categories are a closed set: `free-text`, `foreign-api`,
@@ -141,9 +151,13 @@ file, the module, the item, the kind and the type, and no line number.
     `include` in each file it reads and in each form the source writes, since it reads no file
     an `include!` names. A foreign macro that splices a file under another name is a reviewer's
     (`ARCH-047`).
-  * It reads the files the walk reaches. A `#[path]` the walk cannot follow fails the scan: one
-    inside a `cfg_attr`, one that is no string literal, and one on an inline module. So does one
-    whose file lies outside the crate, is not `.rs` or lies under `target/` (`ARCH-033`).
+  * It reads the files the walk reaches, and the dep-info check holds them to the files rustc
+    reads (`ARCH-033`). A `#[path]` the walk cannot follow fails the scan: one inside a
+    `cfg_attr`, one that is no string literal, and one on an inline module. So does one whose
+    file lies outside the crate, is not `.rs` or lies under `target/`.
+  * An exemption keys on the file the source names with each `..` undone, and on the file the disk
+    holds with each link followed. A check applies when it applies to one of the two. So neither a
+    `..` nor a link moves a file into the relay's `src/secrets/` (`ARCH-048`).
   * It reads names, not types. A method call, a path, a `use` item, a signature, an attribute and
     every token of a macro count. So a method of another type with a refused name fails closed.
   * A hand-written `Display`, `Clone` or `Serialize` of a type that holds a `Secret` reads the
@@ -155,6 +169,7 @@ file, the module, the item, the kind and the type, and no line number.
 * **It reads with `syn` and `quote`, host only.** `syn` parses Rust as rustc does, which a regex
   over the source cannot. `quote` prints a parsed type back as text for the key. `proc-macro2`,
   already under both, gives the line of a `bool` literal through its `span-locations` feature.
+  `serde_json` reads the messages of `cargo check`, which name the dep-info file of each unit.
   The tree walk uses `std` rather than a crate.
 
 ---
@@ -185,15 +200,15 @@ tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one 
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
 **The four obstacles.** The first three hold one row each today: the frame on the phone, the page a
-deployment serves, and what an allowlist line means. The fourth holds five rows of the primitive
-gate, `ARCH-041` to `ARCH-044` and `ARCH-047`: what rustc resolves and syn does not.
+deployment serves, and what an allowlist line means. The fourth holds six rows of the primitive
+gate, `ARCH-041` to `ARCH-044`, `ARCH-047` and `ARCH-050`: what rustc resolves and syn does not.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it | -- |
-| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, and which value a function hands back. The primitive gate parses with `syn`, expands nothing and reads no foreign source | -- |
+| `type-resolution` | what rustc resolves and the tokens do not show: which `fn` a call through a value reaches, which signature takes a closure, what a macro writes, what an alias of a foreign crate stands for, which value a function hands back, and which files a build the gate does not run reads. The primitive gate parses with `syn`, expands nothing and reads no foreign source. It reads what rustc read in its own compiles alone | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
@@ -338,7 +353,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
 | `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
 | `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
-| `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, an unreached file failing the scan, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
+| `ambre-primitives` | yes | -- | `Tree`, a source tree held in memory | the primitive gate itself: every kind of site read, a module resolved where rustc finds it, test code and macro output never read, a file rustc reads and the walk misses failing the gate, and a file no compile reads, the allowlist failing on a missing site, a stale line and a word outside the set, and a secret read or wiped outside the code that may |
 | `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
