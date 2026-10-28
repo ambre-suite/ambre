@@ -2396,7 +2396,7 @@ mod tests {
             "https://store.test/bucket/object?X-Amz-Signature=secret-sig".to_owned(),
         );
         let blob = crate::pipeline::object_blob(
-            b"media",
+            &ambre_core::MediaBytes::new(b"media".to_vec()),
             &ambre_core::Aad::of(b"aad"),
             &ambre_crypto::DocumentKey::generate(),
             &ed25519_dalek::SigningKey::from_bytes(&[7; 32]),

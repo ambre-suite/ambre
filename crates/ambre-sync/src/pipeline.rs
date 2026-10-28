@@ -13,7 +13,10 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
-use ambre_core::{Aad, EphemeralBytes, KEY_ID_LEN, KeyId, PublicKey, SnapshotBytes};
+use ambre_core::{
+    Aad, ByteSize, EphemeralBytes, KEY_ID_LEN, KeyId, MediaBytes, PublicKey, SecretBytes,
+    SnapshotBytes,
+};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -27,7 +30,8 @@ use thiserror::Error;
 /// bytes than it saves, and the CPU is wasted.
 const COMPRESS_THRESHOLD: usize = 256;
 
-/// Maximum decompression ratio accepted on the inbound path. zstd routinely
+/// Maximum decompression ratio accepted on the inbound path, output bytes per
+/// compressed byte. zstd routinely
 /// reaches 1000:1+ on adversarial input, so a bomb-shaped plaintext could OOM
 /// the WASM Sync worker. The DocumentKey is shared with every collaborator, so a
 /// malicious-but-authorized peer can craft such a plaintext *after* passing
@@ -40,11 +44,11 @@ const MAX_DECOMPRESS_RATIO: usize = 200;
 /// Floor for the per-message decompression ceiling. Tiny legitimate messages (a
 /// few compressed bytes expanding to a normal delta) are never rejected by
 /// the ratio bound alone.
-const MIN_DECOMPRESS_CEILING: usize = 1 << 20; // 1 MiB
+const MIN_DECOMPRESS_CEILING: ByteSize = ByteSize(1 << 20); // 1 MiB
 
 /// Hard upper bound on any single decompressed message, regardless of the
 /// ratio-derived ceiling. Matches the client-memory pillar (< 100 MB per doc).
-const ABSOLUTE_DECOMPRESS_CAP: usize = 64 << 20; // 64 MiB
+const ABSOLUTE_DECOMPRESS_CAP: ByteSize = ByteSize(64 << 20); // 64 MiB
 
 /// Compression scheme of a sealed plaintext, encoded as the first plaintext byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,9 +290,7 @@ fn decompress(version: CompressionVersion, body: &[u8]) -> Result<Vec<u8>, Pipel
 fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // MIN_DECOMPRESS_CEILING < ABSOLUTE_DECOMPRESS_CAP by construction, so clamp
     // never panics.
-    let ceiling = body
-        .len()
-        .saturating_mul(MAX_DECOMPRESS_RATIO)
+    let ceiling = ByteSize::of_len(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
         .clamp(MIN_DECOMPRESS_CEILING, ABSOLUTE_DECOMPRESS_CAP);
 
     let mut decoder =
@@ -300,11 +302,11 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let mut out = Vec::new();
     let read = decoder
         .by_ref()
-        .take(ceiling as u64 + 1)
+        .take(ceiling.0.saturating_add(1))
         .read_to_end(&mut out)
         .map_err(|_| PipelineError::Decompress)?;
 
-    if read > ceiling {
+    if ByteSize::of_len(read) > ceiling {
         return Err(PipelineError::DecompressTooLarge);
     }
     Ok(out)
@@ -546,8 +548,8 @@ impl SealedFrame {
 /// A blob as object storage returned it: sealed by some writer, and neither
 /// verified nor opened yet. Distinct from [`SealedBlob`], which only the
 /// local seal builds, so a download never stands in for an upload.
-/// [`decode_snapshot_blob`] is the one reader. `Debug` prints the length and
-/// none of the bytes.
+/// [`decode_snapshot_blob`] reads a snapshot from it, and [`open_object`] a
+/// media blob. `Debug` prints the length and none of the bytes.
 #[derive(Clone, PartialEq, Eq)]
 pub struct FetchedBlob(Vec<u8>);
 
@@ -561,11 +563,6 @@ impl FetchedBlob {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
-
-    /// The bytes, moved out, for a reader that opens them in place.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0
-    }
 }
 
 impl std::fmt::Debug for FetchedBlob {
@@ -577,7 +574,7 @@ impl std::fmt::Debug for FetchedBlob {
 /// Bytes bound for object storage, built by the seal and by nothing else. The
 /// presigned upload takes this type, so a snapshot or a media blob leaves the
 /// worker only sealed under the document key (`SYNC-049`, `ZK-001`).
-#[derive(Debug)]
+/// `Debug` prints the length and none of the bytes.
 pub struct SealedBlob(Vec<u8>);
 
 impl SealedBlob {
@@ -586,9 +583,62 @@ impl SealedBlob {
         &self.0
     }
 
+    /// The sealed bytes, moved out, for the role that stores them: a
+    /// document name or a key link.
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
     /// The size the relay is told, which is the sealed size.
     pub(crate) fn len(&self) -> usize {
         self.0.len()
+    }
+}
+
+impl std::fmt::Debug for SealedBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SealedBlob({} bytes)", self.0.len())
+    }
+}
+
+/// The bytes of a standalone object, in each role that holds one: a blob
+/// sealed here or downloaded, a sealed document name, a key link. The header
+/// readers take only these, so no other bytes are parsed as an object
+/// (`SYNC-138`).
+pub trait StoredObject: stored_object::Sealed {
+    /// The object as it was laid out, header first.
+    fn object(&self) -> &[u8];
+}
+
+mod stored_object {
+    pub trait Sealed {}
+    impl Sealed for super::SealedBlob {}
+    impl Sealed for super::FetchedBlob {}
+    impl Sealed for ambre_core::SealedName {}
+    impl Sealed for ambre_core::SealedPreviousKey {}
+}
+
+impl StoredObject for SealedBlob {
+    fn object(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl StoredObject for FetchedBlob {
+    fn object(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl StoredObject for ambre_core::SealedName {
+    fn object(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl StoredObject for ambre_core::SealedPreviousKey {
+    fn object(&self) -> &[u8] {
+        self.as_bytes()
     }
 }
 
@@ -642,32 +692,41 @@ pub fn snapshot_blob(
         .map_err(|_| PipelineError::Postcard)
 }
 
-/// Seals `plaintext` into a standalone object bound for object storage,
+/// Seals a media blob into a standalone object bound for object storage,
 /// through [`seal_object`].
 ///
 /// # Errors
 ///
 /// Every error [`seal_object`] raises.
 pub fn object_blob(
-    plaintext: &[u8],
+    plaintext: &MediaBytes,
     aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<SealedBlob, PipelineError> {
-    seal_object(plaintext, aad, doc_key, signing_key).map(SealedBlob)
+    let plaintext = SecretBytes::new(plaintext.as_bytes().to_vec());
+    seal_object(&plaintext, aad, doc_key, signing_key)
 }
 
 // -- Standalone objects: a document name, a media blob -------------------------
 
-/// The layout of a standalone object, its first byte (`SYNC-138`). The relay
-/// keeps a blob across releases, so a reader must tell an older layout from a
-/// forged one. Every object of a release shares it, so it says nothing of the
-/// content.
-const OBJECT_LAYOUT: u8 = 1;
+ambre_core::define_layout_version! {
+    /// The layout of a standalone object, its first byte (`SYNC-138`). The
+    /// relay keeps a blob across releases, so a reader must tell an older
+    /// layout from a forged one. Every object of a release shares it, so it
+    /// says nothing of the content.
+    enum ObjectLayout {
+        /// The key id, the author key, the signature, the commitment tag and
+        /// the nonce, then the ciphertext.
+        V1 = 1,
+    }
+    current = V1;
+}
+
 /// Bytes of the layout byte.
-const LAYOUT_LEN: usize = 1;
+const LAYOUT_LEN: usize = std::mem::size_of::<ObjectLayout>();
 /// Bytes of the author key that opens a standalone object.
-const AUTHOR_KEY_LEN: usize = 32;
+const AUTHOR_KEY_LEN: usize = std::mem::size_of::<PublicKey>();
 /// Bytes before the ciphertext of a standalone object.
 const OBJECT_HEADER_LEN: usize = LAYOUT_LEN
     + KEY_ID_LEN
@@ -705,7 +764,7 @@ pub fn media_aad(document_id: ambre_core::DocumentId, address: &ambre_core::Medi
 /// identifier its header names, then the caller's own. The signature covers
 /// all three, so a header cannot be made to name another layout or key.
 fn object_aad(key_id: KeyId, aad: &Aad) -> Aad {
-    let mut bound = vec![OBJECT_LAYOUT];
+    let mut bound = vec![ObjectLayout::CURRENT.byte()];
     bound.extend_from_slice(key_id.as_array());
     bound.extend_from_slice(aad.as_bytes());
     Aad::new(bound)
@@ -714,10 +773,10 @@ fn object_aad(key_id: KeyId, aad: &Aad) -> Aad {
 /// Refuses an object whose first byte names a layout this build does not read,
 /// before anything else in it is trusted (`SYNC-138`).
 fn check_layout(bytes: &[u8]) -> Result<(), PipelineError> {
-    match bytes.first() {
-        None => Err(PipelineError::ShortObject),
-        Some(&OBJECT_LAYOUT) => Ok(()),
-        Some(&other) => Err(PipelineError::UnknownLayout(other)),
+    let byte = bytes.first().copied().ok_or(PipelineError::ShortObject)?;
+    match ObjectLayout::from_byte(byte) {
+        Some(ObjectLayout::V1) => Ok(()),
+        None => Err(PipelineError::UnknownLayout(byte)),
     }
 }
 
@@ -730,42 +789,42 @@ fn check_layout(bytes: &[u8]) -> Result<(), PipelineError> {
 /// Layout: `layout || key id || author key || signature || commitment tag ||
 /// nonce || ciphertext`.
 pub fn seal_object(
-    plaintext: &[u8],
+    plaintext: &SecretBytes,
     aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<SealedBlob, PipelineError> {
     let key_id = doc_key.id();
-    let plaintext = ambre_core::SecretBytes::new(plaintext.to_vec());
-    let sealed = envelope::seal(&plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
+    let sealed = envelope::seal(plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
     Ok(object_bytes(key_id, signing_key, &sealed))
 }
 
 /// Lays out a sealed object: `layout || key id || author key || signature ||
 /// commitment tag || nonce || ciphertext`.
-fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Vec<u8> {
+fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> SealedBlob {
     let mut out = Vec::with_capacity(OBJECT_HEADER_LEN + sealed.ciphertext.len());
-    out.push(OBJECT_LAYOUT);
+    out.push(ObjectLayout::CURRENT.byte());
     out.extend_from_slice(key_id.as_array());
     out.extend_from_slice(signing_key.verifying_key().as_bytes());
     out.extend_from_slice(&sealed.signature.0);
     out.extend_from_slice(&sealed.commitment_tag.0);
     out.extend_from_slice(&sealed.nonce.0);
     out.extend_from_slice(&sealed.ciphertext.0);
-    out
+    SealedBlob(out)
 }
 
 /// Splits what [`object_bytes`] laid out, refusing a key other than
 /// `doc_key` before any cryptography (`SYNC-125`).
 fn object_parts(
-    bytes: &[u8],
+    object: &impl StoredObject,
     doc_key: &DocumentKey,
 ) -> Result<(KeyId, PublicKey, Sealed), PipelineError> {
+    let bytes = object.object();
     check_layout(bytes)?;
     if bytes.len() < OBJECT_HEADER_LEN {
         return Err(PipelineError::ShortObject);
     }
-    let key_id = object_key(bytes)?;
+    let key_id = object_key(object)?;
     check_key(key_id, doc_key)?;
     let (author, rest) = bytes
         .get(LAYOUT_LEN + KEY_ID_LEN..)
@@ -799,12 +858,17 @@ fn object_parts(
 /// * [`PipelineError::WrongKey`] when the header names another key.
 /// * [`PipelineError::Crypto`] when any of the three checks fails.
 pub fn open_object(
-    bytes: &[u8],
+    object: &impl StoredObject,
     aad: &Aad,
     doc_key: &DocumentKey,
-) -> Result<Vec<u8>, PipelineError> {
-    let (key_id, author, sealed) = object_parts(bytes, doc_key)?;
-    Ok(envelope::open(&sealed, &object_aad(key_id, aad), doc_key, &author)?.to_plaintext())
+) -> Result<SecretBytes, PipelineError> {
+    let (key_id, author, sealed) = object_parts(object, doc_key)?;
+    Ok(envelope::open(
+        &sealed,
+        &object_aad(key_id, aad),
+        doc_key,
+        &author,
+    )?)
 }
 
 // -- Key links -----------------------------------------------------------------
@@ -842,7 +906,9 @@ pub fn seal_link(
         document_id,
         key,
         previous: previous.id(),
-        sealed: ambre_core::SealedPreviousKey::new(object_bytes(key, signing_key, &sealed)),
+        sealed: ambre_core::SealedPreviousKey::new(
+            object_bytes(key, signing_key, &sealed).into_bytes(),
+        ),
     })
 }
 
@@ -865,7 +931,7 @@ pub fn open_link(
         return Err(PipelineError::WrongDocument);
     }
     check_key(link.key, next)?;
-    let (key_id, author, sealed) = object_parts(link.sealed.as_bytes(), next)?;
+    let (key_id, author, sealed) = object_parts(&link.sealed, next)?;
     let aad = object_aad(key_id, &link_aad(document_id, link.previous));
     let previous = next.open_previous(&sealed, &aad, &author)?;
     if previous.id() == link.previous {
@@ -882,7 +948,8 @@ pub fn open_link(
 /// [`PipelineError::UnknownLayout`] when the layout is not one this build
 /// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold an
 /// identifier.
-pub fn object_key(bytes: &[u8]) -> Result<KeyId, PipelineError> {
+pub fn object_key(object: &impl StoredObject) -> Result<KeyId, PipelineError> {
+    let bytes = object.object();
     check_layout(bytes)?;
     bytes
         .get(LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN)
@@ -899,7 +966,8 @@ pub fn object_key(bytes: &[u8]) -> Result<KeyId, PipelineError> {
 ///
 /// [`PipelineError::UnknownLayout`] when the layout is not one this build
 /// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold a key.
-pub fn object_author(bytes: &[u8]) -> Result<PublicKey, PipelineError> {
+pub fn object_author(object: &impl StoredObject) -> Result<PublicKey, PipelineError> {
+    let bytes = object.object();
     check_layout(bytes)?;
     let start = LAYOUT_LEN + KEY_ID_LEN;
     bytes
@@ -915,6 +983,16 @@ mod tests {
     use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
     use ambre_crypto::MasterSeed;
     use ambre_protocol::messages::{Clock, Counter};
+
+    /// Plaintext as the object seal takes it.
+    fn secret(bytes: &[u8]) -> SecretBytes {
+        SecretBytes::new(bytes.to_vec())
+    }
+
+    /// Object bytes as a download returns them.
+    fn fetched(bytes: &[u8]) -> FetchedBlob {
+        FetchedBlob::new(bytes.to_vec())
+    }
 
     /// Bytes sealed as a frame as they stand, framed or not.
     fn frame(bytes: &[u8]) -> UpdateFrame {
@@ -1185,11 +1263,17 @@ mod tests {
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);
 
         let aad = name_aad(document_id);
-        let object = object_blob(plaintext, &aad, &doc_key, &signing).unwrap();
+        let object = object_blob(
+            &MediaBytes::new(plaintext.to_vec()),
+            &aad,
+            &doc_key,
+            &signing,
+        )
+        .unwrap();
         assert!(!contains(object.as_bytes()));
         assert_eq!(object.len(), object.as_bytes().len());
         assert_eq!(
-            open_object(object.as_bytes(), &aad, &doc_key).unwrap(),
+            open_object(&object, &aad, &doc_key).unwrap().to_plaintext(),
             plaintext
         );
     }
@@ -1245,7 +1329,7 @@ mod tests {
     fn an_object_names_the_key_that_sealed_it() {
         let (doc_key, signing, _) = keys();
         let sealed = seal_object(
-            b"Budget 2027",
+            &secret(b"Budget 2027"),
             &ambre_core::Aad::of(b"aad"),
             &doc_key,
             &signing,
@@ -1261,14 +1345,15 @@ mod tests {
 
         // A header rewritten to name another key no longer opens under it.
         let mut renamed = seal_object(
-            b"Budget 2027",
+            &secret(b"Budget 2027"),
             &ambre_core::Aad::of(b"aad"),
             &other,
             &signing,
         )
-        .unwrap();
+        .unwrap()
+        .into_bytes();
         renamed[LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN].copy_from_slice(doc_key.id().as_array());
-        assert!(open_object(&renamed, &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
+        assert!(open_object(&fetched(&renamed), &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
     }
 
     /// An object of a layout this build does not read is refused by that
@@ -1278,14 +1363,16 @@ mod tests {
     fn an_unknown_object_layout_is_refused_before_any_check() {
         let (doc_key, signing, _) = keys();
         let mut later = seal_object(
-            b"a picture",
+            &secret(b"a picture"),
             &ambre_core::Aad::of(b"aad"),
             &doc_key,
             &signing,
         )
-        .unwrap();
-        assert_eq!(later[0], OBJECT_LAYOUT);
-        later[0] = OBJECT_LAYOUT + 1;
+        .unwrap()
+        .into_bytes();
+        assert_eq!(later[0], ObjectLayout::V1.byte());
+        later[0] = ObjectLayout::V1.byte() + 1;
+        let later = fetched(&later);
         assert!(matches!(
             open_object(&later, &ambre_core::Aad::of(b"aad"), &doc_key),
             Err(PipelineError::UnknownLayout(2))
@@ -1296,11 +1383,15 @@ mod tests {
         ));
         // One byte alone: the layout is the first thing read.
         assert!(matches!(
-            open_object(&[OBJECT_LAYOUT + 1], &ambre_core::Aad::of(b"aad"), &doc_key),
+            open_object(
+                &fetched(&[ObjectLayout::V1.byte() + 1]),
+                &ambre_core::Aad::of(b"aad"),
+                &doc_key
+            ),
             Err(PipelineError::UnknownLayout(2))
         ));
         assert!(matches!(
-            open_object(&[], &ambre_core::Aad::of(b"aad"), &doc_key),
+            open_object(&fetched(&[]), &ambre_core::Aad::of(b"aad"), &doc_key),
             Err(PipelineError::ShortObject)
         ));
     }
@@ -1376,15 +1467,19 @@ mod tests {
 
         let (doc_key, signing, _) = keys();
         let aad = &ambre_core::Aad::of(b"ambre-media");
-        let sealed = seal_object(b"a picture", aad, &doc_key, &signing).unwrap();
-        assert_eq!(open_object(&sealed, aad, &doc_key).unwrap(), b"a picture");
+        let sealed = seal_object(&secret(b"a picture"), aad, &doc_key, &signing).unwrap();
+        assert_eq!(
+            open_object(&sealed, aad, &doc_key).unwrap().to_plaintext(),
+            b"a picture"
+        );
+        let sealed = sealed.into_bytes();
 
         // The signature: one flipped byte, and the author no longer signed it.
         let signature_at = LAYOUT_LEN + KEY_ID_LEN + AUTHOR_KEY_LEN;
         let mut forged = sealed.clone();
         forged[signature_at] ^= 1;
         assert!(matches!(
-            open_object(&forged, aad, &doc_key),
+            open_object(&fetched(&forged), aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::InvalidSignature))
         ));
 
@@ -1400,13 +1495,13 @@ mod tests {
         let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
         moved[signature_at..tag_at].copy_from_slice(&resigned.0);
         assert!(matches!(
-            open_object(&moved, aad, &doc_key),
+            open_object(&fetched(&moved), aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::CommitmentMismatch))
         ));
 
         // Too short to hold the header.
         assert!(matches!(
-            open_object(&sealed[..OBJECT_HEADER_LEN - 1], aad, &doc_key),
+            open_object(&fetched(&sealed[..OBJECT_HEADER_LEN - 1]), aad, &doc_key),
             Err(PipelineError::ShortObject)
         ));
     }
@@ -1417,9 +1512,12 @@ mod tests {
     fn a_name_opens_under_its_own_document_only() {
         let (doc_key, signing, _) = keys();
         let own = DocumentId::new();
-        let sealed = seal_object(b"Budget 2027", &name_aad(own), &doc_key, &signing).unwrap();
+        let sealed =
+            seal_object(&secret(b"Budget 2027"), &name_aad(own), &doc_key, &signing).unwrap();
         assert_eq!(
-            open_object(&sealed, &name_aad(own), &doc_key).unwrap(),
+            open_object(&sealed, &name_aad(own), &doc_key)
+                .unwrap()
+                .to_plaintext(),
             b"Budget 2027"
         );
         assert!(open_object(&sealed, &name_aad(DocumentId::new()), &doc_key).is_err());
@@ -1444,10 +1542,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sealed.first(), Some(&1));
+        let sealed = FetchedBlob::new(sealed);
         assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
         assert_eq!(object_author(&sealed).unwrap(), author);
         assert_eq!(
-            open_object(&sealed, &name_aad(id), &doc_key).unwrap(),
+            open_object(&sealed, &name_aad(id), &doc_key)
+                .unwrap()
+                .to_plaintext(),
             b"Budget 2027"
         );
     }

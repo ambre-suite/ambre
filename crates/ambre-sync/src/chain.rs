@@ -86,9 +86,7 @@ pub(crate) fn signed_by_writers(
     };
     links
         .into_iter()
-        .filter(|link| {
-            pipeline::object_author(link.sealed.as_bytes()).is_ok_and(|a| signers.contains(&a))
-        })
+        .filter(|link| pipeline::object_author(&link.sealed).is_ok_and(|a| signers.contains(&a)))
         .collect()
 }
 

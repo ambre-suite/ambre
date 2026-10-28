@@ -10,7 +10,7 @@ use ambre_core::MediaAddress;
 /// Seals a blob for one document and the address it is stored under
 /// (`SYNC-051`, `SYNC-074`).
 fn seal_blob(
-    data: &[u8],
+    data: &ambre_core::MediaBytes,
     document_id: DocumentId,
     address: &MediaAddress,
     doc_key: &DocumentKey,
@@ -29,7 +29,7 @@ fn seal_blob(
 /// recomputed address refuses one a member sealed under this address over
 /// other bytes.
 fn open_blob(
-    blob: &[u8],
+    blob: &pipeline::FetchedBlob,
     document_id: DocumentId,
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
@@ -37,7 +37,7 @@ fn open_blob(
     let address =
         MediaAddress::parse(content_hash).ok_or(SyncError::Malformed(Part::MediaAddress))?;
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
-    let data = ambre_core::MediaBytes::new(data);
+    let data = ambre_core::MediaBytes::new(data.to_plaintext());
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
         return Err(SyncError::BlobMismatch);
     }
@@ -47,7 +47,7 @@ fn open_blob(
 /// Opens a downloaded blob with the one key it names: the current key, a
 /// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
 fn open_blob_named(
-    blob: &[u8],
+    blob: &pipeline::FetchedBlob,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<ambre_core::MediaBytes, SyncError> {
@@ -268,8 +268,10 @@ pub(crate) trait MediaHttp {
         blob: &pipeline::SealedBlob,
     ) -> Result<(), http::HttpError>;
     /// A blob from a presigned object-storage link.
-    async fn fetch_bytes(&self, url: &ambre_core::PresignedUrl)
-    -> Result<Vec<u8>, http::HttpError>;
+    async fn fetch_bytes(
+        &self,
+        url: &ambre_core::PresignedUrl,
+    ) -> Result<pipeline::FetchedBlob, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
     async fn delete(&self, url: &http::RelayUrl)
     -> Result<ambre_core::HttpStatus, http::HttpError>;
@@ -293,10 +295,8 @@ impl MediaHttp for GlooHttp {
     async fn fetch_bytes(
         &self,
         url: &ambre_core::PresignedUrl,
-    ) -> Result<Vec<u8>, http::HttpError> {
-        http::fetch_bytes(url)
-            .await
-            .map(pipeline::FetchedBlob::into_bytes)
+    ) -> Result<pipeline::FetchedBlob, http::HttpError> {
+        http::fetch_bytes(url).await
     }
     async fn delete(
         &self,
@@ -346,13 +346,7 @@ async fn upload_media(
         signing_key,
     } = upload;
     let content_hash = address.content_hash();
-    let outcome = match seal_blob(
-        data.as_bytes(),
-        document_id,
-        &address,
-        &doc_key,
-        &signing_key,
-    ) {
+    let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
         Err(e) => Err(http::Failed::local(format!("seal: {e}"))),
     };
@@ -645,9 +639,9 @@ mod tests {
         async fn fetch_bytes(
             &self,
             _url: &ambre_core::PresignedUrl,
-        ) -> Result<Vec<u8>, http::HttpError> {
+        ) -> Result<pipeline::FetchedBlob, http::HttpError> {
             self.step("fetch")?;
-            Ok(self.served.clone())
+            Ok(pipeline::FetchedBlob::new(self.served.clone()))
         }
         async fn delete(
             &self,
@@ -762,6 +756,7 @@ mod tests {
         let key = DocumentKey::from_array([0x31; 32]);
         let document_id = DocumentId::new();
         let (blob, hash) = sealed(b"a picture", document_id, &key);
+        let blob = blob.as_bytes().to_vec();
         let keyring = crate::chain::Keyring {
             document_id,
             current: key.clone(),
@@ -770,7 +765,10 @@ mod tests {
         };
         let mut altered = blob.clone();
         *altered.last_mut().unwrap() ^= 1;
-        let (foreign, _) = sealed(b"a picture", DocumentId::new(), &key);
+        let foreign = sealed(b"a picture", DocumentId::new(), &key)
+            .0
+            .as_bytes()
+            .to_vec();
         let (logic, logic_rx) = LogicSink::channel();
         let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
 
@@ -804,11 +802,15 @@ mod tests {
         data: &[u8],
         document_id: DocumentId,
         key: &DocumentKey,
-    ) -> (Vec<u8>, ambre_core::ContentHash) {
+    ) -> (pipeline::FetchedBlob, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
-        let address = ambre_crypto::commitment::media_address(key, &data.to_vec().into());
-        let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
-        (blob.as_bytes().to_vec(), address.content_hash())
+        let data = ambre_core::MediaBytes::new(data.to_vec());
+        let address = ambre_crypto::commitment::media_address(key, &data);
+        let blob = seal_blob(&data, document_id, &address, key, &signing).unwrap();
+        (
+            pipeline::FetchedBlob::new(blob.into_bytes()),
+            address.content_hash(),
+        )
     }
 
     /// A picture sealed before two rotations opens with the current key and
@@ -871,11 +873,13 @@ mod tests {
 
         let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
         let signing = SigningKey::from_bytes(&[0x07; 32]);
-        let forged = seal_blob(b"other bytes", document_id, &address, &key, &signing).unwrap();
-        let forged = forged.as_bytes();
+        let other = ambre_core::MediaBytes::new(b"other bytes".to_vec());
+        let forged = seal_blob(&other, document_id, &address, &key, &signing).unwrap();
+        let forged = &pipeline::FetchedBlob::new(forged.into_bytes());
         assert_eq!(
             pipeline::open_object(forged, &pipeline::media_aad(document_id, &address), &key)
-                .unwrap(),
+                .unwrap()
+                .to_plaintext(),
             b"other bytes"
         );
         assert!(open_blob(forged, document_id, &wanted, &key).is_err());

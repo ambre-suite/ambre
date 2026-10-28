@@ -89,12 +89,12 @@ impl SyncState {
         name: &ambre_core::Name,
     ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
         let sealed = pipeline::seal_object(
-            name.as_str().as_bytes(),
+            &ambre_core::SecretBytes::new(name.as_str().as_bytes().to_vec()),
             &pipeline::name_aad(document_id),
             doc_key,
             signing_key,
         )?;
-        Ok(ambre_core::SealedName::new(sealed.to_vec()))
+        Ok(ambre_core::SealedName::new(sealed.into_bytes()))
     }
 
     /// The document a create answer names, refused unless the client minted
@@ -367,7 +367,7 @@ impl ListedName<'_> {
     ) -> Option<ambre_core::Name> {
         let current = self.unwrap_key(exchange_key)?;
         // One request more, and only for a name older than the current key.
-        let links = if pipeline::object_key(self.name_enc.as_bytes()).ok()? == current.id() {
+        let links = if pipeline::object_key(self.name_enc).ok()? == current.id() {
             Vec::new()
         } else {
             http::fetch_key_links(url_scheme, api_base, self.document_id, auth.clone()).await
@@ -419,12 +419,11 @@ pub(crate) fn open_name(
     sealed: &ambre_core::SealedName,
     links: Vec<ambre_protocol::KeyLink>,
 ) -> Option<ambre_core::Name> {
-    let bytes = sealed.as_bytes();
     let chain = crate::chain::Chain::new(document_id, links);
-    let wanted = pipeline::object_key(bytes).ok()?;
+    let wanted = pipeline::object_key(sealed).ok()?;
     let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
-    let plaintext = pipeline::open_object(bytes, &pipeline::name_aad(document_id), &key).ok()?;
-    let text = String::from_utf8(plaintext).ok()?;
+    let plaintext = pipeline::open_object(sealed, &pipeline::name_aad(document_id), &key).ok()?;
+    let text = String::from_utf8(plaintext.to_plaintext()).ok()?;
     ambre_core::Name::new(text).ok()
 }
 
@@ -451,7 +450,7 @@ mod tests {
         .unwrap();
         let bytes = sent.as_bytes().to_vec();
         assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
-        assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
+        assert_eq!(pipeline::object_key(&sent).unwrap(), doc_key.id());
         assert_eq!(
             open_name(document_id, &doc_key, &sent, Vec::new())
                 .as_ref()

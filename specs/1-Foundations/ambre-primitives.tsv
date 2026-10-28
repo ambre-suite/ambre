@@ -2642,11 +2642,6 @@ ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::delay(attempts) | 
 ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/media.rs | crate::media | <GlooHttp as MediaHttp>::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | MediaHttp::fetch_bytes() | ret | Result<Vec<u8>,http::HttpError>	generic	bytes of a codec or a transport
-ambre-sync | src/media.rs | crate::media | open_blob(blob) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/media.rs | crate::media | open_blob_named(blob) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/media.rs | crate::media | seal_blob(data) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/membership_log.rs | crate::membership_log | Held.present | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2658,20 +2653,17 @@ ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret |
 ambre-sync | src/membership_log.rs | crate::membership_log | LogHead::is_empty() | ret | bool	generic	named predicate of the log head
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_message() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/pipeline.rs | crate::pipeline | ABSOLUTE_DECOMPRESS_CAP | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/pipeline.rs | crate::pipeline | AUTHOR_KEY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/pipeline.rs | crate::pipeline | AUTHOR_KEY_LEN | const | usize	generic	array length of the author key in the object header, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | COMPRESS_THRESHOLD | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob.0 | field | Vec<u8>	newtype-inner	newtype inner
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::as_bytes() | ret | &[u8]	newtype-inner	enum/newtype own accessor or constructor
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::new(bytes) | param | Vec<u8>	newtype-inner	enum/newtype own accessor or constructor
-ambre-sync | src/pipeline.rs | crate::pipeline | LAYOUT_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/pipeline.rs | crate::pipeline | LAYOUT_LEN | const | usize	generic	array length of the layout byte in the object header, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	decompressed bytes allowed per compressed byte, a factor of the bomb bound
 ambre-sync | src/pipeline.rs | crate::pipeline | MEDIA_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | MIN_DECOMPRESS_CEILING | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_HEADER_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_LAYOUT | const | u8	generic	generic byte/text API or codec
+ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_HEADER_LEN | const | usize	generic	sum of the header array lengths, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor
@@ -2683,20 +2675,10 @@ ambre-sync | src/pipeline.rs | crate::pipeline | decompress() | ret | Result<Vec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress(body) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded(body) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_author(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_blob(plaintext) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_bytes() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_key(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | object_parts(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_object(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_object() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param | &[u8]	generic	generic byte/text API or codec
+ambre-sync | src/pipeline.rs | crate::pipeline | open_payload() | ret | Result<Vec<u8>,PipelineError>	generic	the opened and decompressed plaintext; each caller wraps it in its own payload role
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
-ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::into_bytes() | ret | Vec<u8>	newtype-inner	enum/newtype own accessor or constructor
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (CompressionVersion,Vec<u8>)	generic	bytes of a codec: the plaintext body after its scheme
@@ -4131,3 +4113,9 @@ ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | 
 ambre-core | src/docfile.rs | crate::docfile | FileDigest.0 | field | [u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
 ambre-core | src/docfile.rs | crate::docfile | FileDigest::as_array() | ret | &[u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
 ambre-core | src/docfile.rs | crate::docfile | FileDigest::from_array(bytes) | param | [u8;32]	newtype-inner	FileDigest newtype, from the hasher that wrote it
+ambre-sync | src/pipeline.rs | crate::pipeline | <FetchedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	FetchedBlob's own accessor, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedName as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedName's own accessor, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedPreviousKey as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedPreviousKey's own accessor, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::into_bytes() | ret | Vec<u8>	newtype-inner	newtype field, constructor or accessor
+ambre-sync | src/pipeline.rs | crate::pipeline | StoredObject::object() | ret | &[u8]	generic	the laid-out bytes the header readers split, from any role that holds an object
