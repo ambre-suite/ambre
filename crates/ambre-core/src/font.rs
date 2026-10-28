@@ -166,8 +166,8 @@ impl From<FontWeight> for u16 {
 
 crate::define_flag! {
     /// The weight of a text's face: the family's regular face or its real
-    /// bold. A record that stores a bold toggle keeps the byte of its `bool`;
-    /// a record that stores a weight on the CSS scale holds a [`FontWeight`].
+    /// bold. A record that stores a bold toggle keeps the byte of its `bool`.
+    /// A record that stores a weight on the CSS scale holds a [`FontWeight`].
     pub enum Weight {
         Regular,
         Bold,
