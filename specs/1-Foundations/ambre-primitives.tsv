@@ -2764,7 +2764,6 @@ ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaC
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve(pixels) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.image_png | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.text | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Decode.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.format | field | &'static str	free-text	format label in an error message (variant unused)
@@ -2837,7 +2836,6 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_merge_inner() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches(query) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::find_hits(query) | param | &str	free-text	label, message or user text

@@ -56,7 +56,7 @@ impl ToileState {
     /// The PNG bytes stored as one media address's thumbnail, if the document
     /// carries one (`toile-media`). Handed to the SVG export, which writes them
     /// inline (`TOILE-IO-087`).
-    fn thumbnail_png(&self, hash: &ambre_core::ContentHash) -> Option<Vec<u8>> {
+    fn thumbnail_png(&self, hash: &ambre_core::ContentHash) -> Option<ambre_core::ThumbnailPng> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return None;
@@ -69,7 +69,7 @@ impl ToileState {
         else {
             return None;
         };
-        Some(thumb.to_vec())
+        Some(ambre_core::ThumbnailPng::new(thumb.to_vec()))
     }
 
     /// Serialize the board to an SVG document (`TOILE-IO-021`). Emits one

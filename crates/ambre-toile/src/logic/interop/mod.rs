@@ -212,7 +212,7 @@ pub struct ExportElement {
     /// Ambre resolves the picture (`TOILE-IO-087`). This is the thumbnail the
     /// board holds in plaintext; the full blob is ciphertext on the relay and
     /// no path here fetches it (`TOILE-IO-100`).
-    pub image_png: Option<Vec<u8>>,
+    pub image_png: Option<ambre_core::ThumbnailPng>,
 }
 
 impl ExportElement {

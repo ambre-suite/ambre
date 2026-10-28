@@ -188,7 +188,7 @@ fn element_shape(el: &ExportElement) -> Option<String> {
             // What the board holds in plaintext is the thumbnail, so that is
             // the resolution an exported page gets (`TOILE-IO-100`).
             let png = el.image_png.as_ref()?;
-            let data = base64::engine::general_purpose::STANDARD.encode(png);
+            let data = base64::engine::general_purpose::STANDARD.encode(png.as_bytes());
             Some(format!(
                 "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" href=\"data:image/png;base64,{data}\"/>",
                 f(r.x0),
@@ -413,7 +413,7 @@ mod tests {
     fn a_picture_leaves_with_its_pixels() {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
         el.media_hash = Some(ambre_core::ContentHash::from("b2b0ffee"));
-        el.image_png = Some(vec![0x89, 0x50, 0x4E, 0x47]);
+        el.image_png = Some(ambre_core::ThumbnailPng::new(vec![0x89, 0x50, 0x4E, 0x47]));
         let export = export_svg(&[el]);
         assert!(
             export
