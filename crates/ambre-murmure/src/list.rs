@@ -9,8 +9,9 @@ use ambre_core::{ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
-    Attachment, ChannelId, DocumentId, LogicCommand, MessageId, MessageView, MurmureCommand,
-    MurmureEvent, Notice, Reaction, SegmentId, TextStyle, Timestamp, UiEvent, Unreadable, UserId,
+    Attachment, ChannelId, Deletion, DocumentId, LogicCommand, MessageId, MessageView,
+    MurmureCommand, MurmureEvent, Notice, Reaction, Revision, SegmentId, TextStyle, Timestamp,
+    UiEvent, Unreadable, UserId,
 };
 
 ambre_core::define_index! {
@@ -352,11 +353,11 @@ impl<'a> Row<'a> {
                 let body = format!("{} joined the conversation", name(member));
                 (body, true, Vec::new())
             }
-            None if message.deleted => (DELETED.to_owned(), true, Vec::new()),
+            None if message.deleted == Deletion::Deleted => (DELETED.to_owned(), true, Vec::new()),
             None => {
                 let (mut body, bytes) = message.shown_at(&name_of);
                 let marks = body_marks(message, &bytes);
-                if message.edited {
+                if message.edited == Revision::Edited {
                     body = format!("{body} {EDITED}");
                 }
                 (body, false, marks)
@@ -370,12 +371,12 @@ impl<'a> Row<'a> {
                 n => format!("{n} replies"),
             })
             .or_else(|| message.also_in_thread.map(|_| FROM_THREAD.to_owned()));
-        let reactions = if message.notice.is_some() || message.deleted {
+        let reactions = if message.notice.is_some() || message.deleted == Deletion::Deleted {
             Vec::new()
         } else {
             message.reactions.clone()
         };
-        let files = if message.deleted {
+        let files = if message.deleted == Deletion::Deleted {
             Vec::new()
         } else {
             message.attachments.clone()
@@ -822,8 +823,8 @@ pub(crate) mod tests {
             attachments: Vec::new(),
             reactions: Vec::new(),
             notice: None,
-            edited: false,
-            deleted: false,
+            edited: ambre_bus::Revision::Original,
+            deleted: ambre_bus::Deletion::Live,
             thread: None,
             also_in_thread: None,
         }
@@ -1024,7 +1025,7 @@ pub(crate) mod tests {
     #[test]
     fn a_deleted_message_shows_a_muted_line() {
         let mut gone = message(UserId::new(), ambre_bus::Timestamp(7), "");
-        gone.deleted = true;
+        gone.deleted = ambre_bus::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
         assert!(row.muted);
@@ -1042,7 +1043,7 @@ pub(crate) mod tests {
     #[test]
     fn an_edited_message_carries_the_marker() {
         let mut edited = message(UserId::new(), ambre_bus::Timestamp(0), "fixed");
-        edited.edited = true;
+        edited.edited = ambre_bus::Revision::Edited;
         assert_eq!(words(&edited, false).body, format!("fixed {EDITED}"));
         let plain = words(
             &message(UserId::new(), ambre_bus::Timestamp(0), "plain"),

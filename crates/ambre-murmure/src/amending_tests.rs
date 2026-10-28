@@ -225,7 +225,10 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
         .expect("a change");
     assert_eq!((edited.segment, edited.document), (segment, amendments));
     let read = messages_of(&edited.event);
-    assert_eq!((read[0].text.as_str(), read[0].edited), ("uno", true));
+    assert_eq!(
+        (read[0].text.as_str(), read[0].edited),
+        ("uno", ambre_bus::Revision::Edited)
+    );
     assert!(
         matches!(alice.edit(segment, ids[0], &draft("uno"), author), Ok(None)),
         "the body reads so already"
@@ -234,7 +237,8 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
     assert_eq!(deleted.document, amendments);
     let read = alice.messages(segment).expect("held");
-    assert!(read[1].deleted && read[1].text.is_empty());
+    assert_eq!(read[1].deleted, ambre_bus::Deletion::Deleted);
+    assert!(read[1].text.is_empty());
     assert!(matches!(
         alice.edit(segment, ids[1], &draft("back"), author),
         Err(MurmureError::Deleted(id)) if id == ids[1]
@@ -311,7 +315,10 @@ fn a_member_reads_the_amendments_over_the_segment() {
         .apply_signed(amendments, Seq(3), &deleted.delta, by_alice)
         .expect("applies");
     assert_eq!(events.len(), 1);
-    assert!(messages_of(&events[0])[1].deleted);
+    assert_eq!(
+        messages_of(&events[0])[1].deleted,
+        ambre_bus::Deletion::Deleted
+    );
     assert_eq!(bob.messages(segment), alice.messages(segment));
 }
 
@@ -380,7 +387,10 @@ fn an_amendment_of_another_authors_message_is_refused() {
         ),
         Err(MurmureError::Refused(Refusal::ForeignMessage))
     );
-    assert!(!alice.messages(segment).expect("held")[0].deleted);
+    assert_eq!(
+        alice.messages(segment).expect("held")[0].deleted,
+        ambre_bus::Deletion::Live
+    );
 }
 
 // --- MURMURE-013 ---
@@ -673,7 +683,7 @@ fn a_change_refused_by_the_lock_is_replayed() {
     );
     let read = alice.messages(segment).expect("held");
     assert_eq!(read[0].text, "one");
-    assert!(!read[1].deleted);
+    assert_eq!(read[1].deleted, ambre_bus::Deletion::Live);
     assert!(matches!(
         alice.change_target(segment, NOW),
         Ok(ChangeTarget::Create(_))

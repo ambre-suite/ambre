@@ -1270,8 +1270,8 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
         attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
-        edited: false,
-        deleted: false,
+        edited: ambre_bus::Revision::Original,
+        deleted: ambre_bus::Deletion::Live,
         thread: None,
         also_in_thread: None,
     };

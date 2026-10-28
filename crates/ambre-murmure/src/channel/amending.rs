@@ -8,7 +8,7 @@
 //! for messages of its own segment, each written by their author
 //! (`MURMURE-013`, `MURMURE-253`).
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
+use ambre_bus::{Deletion, MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
 use ambre_core::{
     ChannelId, DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, Seq, UserId,
 };
@@ -402,7 +402,7 @@ impl ChannelState {
         if view.author != user {
             return Err(MurmureError::NotAuthor(message));
         }
-        if view.deleted {
+        if view.deleted == Deletion::Deleted {
             return Err(MurmureError::Deleted(message));
         }
         if let Change::Edit(draft) = change
@@ -487,7 +487,10 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
     if root.is_empty() {
         return;
     }
-    for view in messages.iter_mut().filter(|view| !view.deleted) {
+    for view in messages
+        .iter_mut()
+        .filter(|view| view.deleted == Deletion::Live)
+    {
         let Some(entry) = root
             .get(&view.id.to_string())
             .and_then(crate::schema::fields_of)
@@ -499,12 +502,12 @@ pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channe
             view.mentions.clear();
             view.styles.clear();
             view.attachments.clear();
-            view.deleted = true;
+            view.deleted = ambre_bus::Deletion::Deleted;
         } else if let Some(content) = entry_content(&entry) {
             view.text = content.to_string();
             view.mentions = mention::read(&content, channel);
             view.styles = style::read(&content);
-            view.edited = true;
+            view.edited = ambre_bus::Revision::Edited;
         }
     }
 }

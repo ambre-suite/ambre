@@ -6,7 +6,7 @@
 //! above, where an index does not. The paint resolves a pointer into an end,
 //! since only the layout knows which byte lies under it.
 
-use ambre_bus::{Timestamp, UserId};
+use ambre_bus::{Deletion, Timestamp, UserId};
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint};
 
 use crate::list::{ListRow, ListRowVec, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
@@ -103,7 +103,7 @@ impl TextSelection {
             let Some(message) = row.message() else {
                 continue;
             };
-            if message.deleted || message.notice.is_some() {
+            if message.deleted == Deletion::Deleted || message.notice.is_some() {
                 continue;
             }
             // The body may end on the edited mark, which is no text of its.
@@ -230,9 +230,9 @@ mod tests {
     fn a_copy_holds_only_text_a_member_wrote() {
         let mut list = list(&["hello", "", "again"]);
         let mut edited = message(UserId::new(), ambre_bus::Timestamp(200_000), "again");
-        edited.edited = true;
+        edited.edited = ambre_bus::Revision::Edited;
         let mut gone = message(UserId::new(), ambre_bus::Timestamp(100_000), "");
-        gone.deleted = true;
+        gone.deleted = ambre_bus::Deletion::Deleted;
         let segment = SegmentId::new();
         list.absorb(segment, vec![gone, edited]);
         let rows = list.keys().len().get();

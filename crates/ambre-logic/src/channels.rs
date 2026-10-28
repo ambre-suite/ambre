@@ -3731,7 +3731,11 @@ mod tests {
         };
         assert_eq!(
             (edited[0].text.as_str(), edited[0].edited, edited[0].deleted),
-            ("lunch @bob @eve?", true, false)
+            (
+                "lunch @bob @eve?",
+                ambre_bus::Revision::Edited,
+                ambre_bus::Deletion::Live
+            )
         );
         assert_eq!(
             edited[0].mentions,
@@ -3741,7 +3745,10 @@ mod tests {
             )],
             "no mark for a user outside the channel"
         );
-        assert_eq!((deleted[0].text.as_str(), deleted[0].deleted), ("", true));
+        assert_eq!(
+            (deleted[0].text.as_str(), deleted[0].deleted),
+            ("", ambre_bus::Deletion::Deleted)
+        );
 
         state.handle_logic_command(LogicCommand::Channel {
             channel_id,
@@ -5065,7 +5072,7 @@ mod tests {
         assert!(
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment, messages }
-                    if *segment == closing && messages[0].text == "two" && messages[0].edited)),
+                    if *segment == closing && messages[0].text == "two" && messages[0].edited == ambre_bus::Revision::Edited)),
             "the view was told {shown:?}"
         );
     }
@@ -5300,7 +5307,7 @@ mod tests {
         assert!(
             shown.iter().any(|(_, event)| matches!(event,
                 MurmureEvent::Messages { segment: s, messages }
-                    if *s == segment && messages[0].text == "one" && !messages[0].edited)),
+                    if *s == segment && messages[0].text == "one" && messages[0].edited == ambre_bus::Revision::Original)),
             "the view reads the fold {shown:?}"
         );
         state.handle_logic_event(LogicEvent::AmendmentsFolded {
@@ -5862,7 +5869,7 @@ mod tests {
         else {
             panic!("the thread is held");
         };
-        assert!(messages[0].deleted);
+        assert_eq!(messages[0].deleted, ambre_bus::Deletion::Deleted);
         command(
             &mut state,
             channel_id,
@@ -5919,10 +5926,14 @@ mod tests {
             assert_eq!(sent, written, "{kind}");
             if kind == "edit" {
                 assert_eq!(copy(&state).text, "edited", "the copy reads the edit");
-                assert!(copy(&state).edited);
+                assert_eq!(copy(&state).edited, ambre_bus::Revision::Edited);
             }
         }
-        assert!(copy(&state).deleted, "the copy is deleted with its reply");
+        assert_eq!(
+            copy(&state).deleted,
+            ambre_bus::Deletion::Deleted,
+            "the copy is deleted with its reply"
+        );
         assert!(copy(&state).text.is_empty());
         assert!(
             copy(&state).reactions.is_empty(),

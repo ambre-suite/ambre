@@ -598,7 +598,10 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     assert!(in_thread(&edited));
     assert_eq!(edited.summary.kind, ActivityKind::Edit);
     let read = &replies_of(&state, thread)[0];
-    assert_eq!((read.text.as_str(), read.edited), ("hello", true));
+    assert_eq!(
+        (read.text.as_str(), read.edited),
+        ("hello", ambre_bus::Revision::Edited)
+    );
     let reacted = state
         .react(at, reply, &ambre_bus::Emoji::from("\u{1F44D}"), alice, NOW)
         .expect("react")
@@ -614,7 +617,10 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     assert!(replies_of(&state, thread)[0].reactions.is_empty());
     let deleted = state.delete(at, reply, alice).expect("delete");
     assert!(in_thread(&deleted));
-    assert!(replies_of(&state, thread)[0].deleted);
+    assert_eq!(
+        replies_of(&state, thread)[0].deleted,
+        ambre_bus::Deletion::Deleted
+    );
     let Some(MurmureEvent::Messages { messages, .. }) = state.root_view(root) else {
         panic!("the root's segment");
     };

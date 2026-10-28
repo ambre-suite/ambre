@@ -493,8 +493,8 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             }
             Notice::MemberAdded { .. } => None,
         },
-        MessageKey::Edited if message.edited => Some(format!("message {n} is edited")),
-        MessageKey::Deleted if message.deleted => Some(format!("message {n} is deleted")),
+        MessageKey::Edited if message.edited.as_bool() => Some(format!("message {n} is edited")),
+        MessageKey::Deleted if message.deleted.as_bool() => Some(format!("message {n} is deleted")),
         // A file is read through the attachments the view is given.
         MessageKey::Attachments => {
             let at = stored.at(2)?;
@@ -563,13 +563,13 @@ fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             "message {n} amended to mark {}",
             style_reading(stored, &message.styles)?
         )),
-        AmendmentKey::Content if message.edited => {
+        AmendmentKey::Content if message.edited.as_bool() => {
             Some(format!("message {n} amended to read {:?}", message.text))
         }
-        AmendmentKey::Content if message.deleted => {
+        AmendmentKey::Content if message.deleted.as_bool() => {
             Some(format!("message {n} amended to read nothing"))
         }
-        AmendmentKey::Deleted if message.deleted => {
+        AmendmentKey::Deleted if message.deleted.as_bool() => {
             Some(format!("message {n} deleted by amendment"))
         }
         AmendmentKey::By if stored.string()? == "author" && message.author == AUTHOR => {

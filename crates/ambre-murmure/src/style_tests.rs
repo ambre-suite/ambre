@@ -230,7 +230,10 @@ fn an_edit_rewrites_the_styles_of_the_body() {
         .expect("the styles changed");
     deliver(&mut bob, &alice, author, &edited, 2);
     let read = &messages(&bob)[0];
-    assert_eq!((read.text.as_str(), read.edited), ("one two", true));
+    assert_eq!(
+        (read.text.as_str(), read.edited),
+        ("one two", ambre_bus::Revision::Edited)
+    );
     assert_eq!(read.styles, [mark(TextStyle::Italic, 4..7)], "bold is gone");
 
     let plain = draft("one two three", Vec::new());

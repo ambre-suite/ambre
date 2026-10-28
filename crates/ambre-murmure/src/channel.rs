@@ -9,9 +9,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, Attachment, ChannelMatches, Emoji, MediaRef, Mention,
+    ActivityKind, ActivitySummary, Attachment, ChannelMatches, Deletion, Emoji, MediaRef, Mention,
     MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice,
-    SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
+    Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
 use ambre_core::{
     ChannelId, DeltaBytes, DocumentId, LoroPayload, LoroPayloadRef, MessageId, MetaId,
@@ -1001,8 +1001,8 @@ impl ChannelState {
                     attachments: attachments.to_vec(),
                     reactions: Vec::new(),
                     notice: None,
-                    edited: false,
-                    deleted: false,
+                    edited: ambre_bus::Revision::Original,
+                    deleted: ambre_bus::Deletion::Live,
                     thread: None,
                     also_in_thread: copy.map(|(thread, _)| thread),
                 }],
@@ -1057,8 +1057,8 @@ impl ChannelState {
                     attachments: Vec::new(),
                     reactions: Vec::new(),
                     notice: Some(Notice::MemberAdded { member }),
-                    edited: false,
-                    deleted: false,
+                    edited: ambre_bus::Revision::Original,
+                    deleted: ambre_bus::Deletion::Live,
                     thread: None,
                     also_in_thread: None,
                 }],
@@ -1316,9 +1316,9 @@ impl ChannelState {
         author: UserId,
     ) -> Vec<MediaRef> {
         let Some(target) = self.messages(segment).ok().and_then(|messages| {
-            messages
-                .into_iter()
-                .find(|view| view.id == message && view.author == author && !view.deleted)
+            messages.into_iter().find(|view| {
+                view.id == message && view.author == author && view.deleted == Deletion::Live
+            })
         }) else {
             return Vec::new();
         };
@@ -1327,7 +1327,9 @@ impl ChannelState {
             .into_iter()
             .filter_map(|id| self.messages(id).ok())
             .flatten()
-            .filter(|view| view.author == author && !view.deleted && view.id != message)
+            .filter(|view| {
+                view.author == author && view.deleted == Deletion::Live && view.id != message
+            })
             .collect();
         let mut erasable: Vec<MediaRef> = Vec::new();
         for attachment in target.attachments {
@@ -1993,8 +1995,8 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         },
         reactions: reaction::read(&map),
         notice: notice_of(&map)?,
-        edited: schema::flag(&map, MessageKey::Edited),
-        deleted,
+        edited: Revision::from_bool(schema::flag(&map, MessageKey::Edited)),
+        deleted: Deletion::from_bool(deleted),
         // The count is read from the thread document, once it is held
         // (`MURMURE-106`).
         thread: document_of(&map, MessageKey::Thread).map(|document| ThreadHead {

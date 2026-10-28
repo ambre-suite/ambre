@@ -97,7 +97,7 @@ fn a_deleted_message_carries_no_file() {
     let id = state.messages(segment).expect("held")[0].id;
     state.delete(segment, id, alice).expect("delete");
     let read = &state.messages(segment).expect("held")[0];
-    assert!(read.deleted);
+    assert_eq!(read.deleted, ambre_bus::Deletion::Deleted);
     assert!(read.attachments.is_empty());
 }
 

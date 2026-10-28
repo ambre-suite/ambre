@@ -378,7 +378,8 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
         read.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
         ["uno", "", "three"]
     );
-    assert!(read[0].edited && read[1].deleted);
+    assert_eq!(read[0].edited, ambre_bus::Revision::Edited);
+    assert_eq!(read[1].deleted, ambre_bus::Deletion::Deleted);
     // `MURMURE-562`: the fold keeps the styles of the edit.
     assert_eq!(read[0].styles, [bold()]);
     assert_eq!(read, before, "the fold reads as the amendments did");

@@ -6,7 +6,9 @@
 //! (`MURMURE-107`), the one field of it another member may write
 //! (`MURMURE-255`).
 
-use ambre_bus::{MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp};
+use ambre_bus::{
+    Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp,
+};
 use ambre_core::{DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, UserId};
 use loro::LoroDoc;
 
@@ -727,7 +729,7 @@ fn thread_head(
 ) -> ThreadHead {
     let replies: Vec<MessageView> = read_messages(thread, channel)
         .into_iter()
-        .filter(|reply| !reply.deleted)
+        .filter(|reply| reply.deleted == Deletion::Live)
         .collect();
     ThreadHead {
         document,

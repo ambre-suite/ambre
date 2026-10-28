@@ -718,7 +718,7 @@ impl MurmureView {
             mentions: message.mentions.clone(),
             styles: message.styles.clone(),
             notice: message.notice.is_some(),
-            deleted: message.deleted,
+            deleted: message.deleted.as_bool(),
             pressed: None,
             canvas: match self.region {
                 Region::Channel => CHANNEL_CANVAS,
@@ -4542,7 +4542,7 @@ mod tests {
         page.me.set(Some(me));
         let own = message(me, ambre_bus::Timestamp(0), "mine");
         let deleted = MessageView {
-            deleted: true,
+            deleted: ambre_bus::Deletion::Deleted,
             text: String::new(),
             ..message(me, ambre_bus::Timestamp(1), "gone")
         };

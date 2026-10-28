@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Mention, MessageDraft, MessageView, MurmureEvent, Notice};
+use ambre_bus::{Deletion, Mention, MessageDraft, MessageView, MurmureEvent, Notice};
 use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId};
 use loro::{LoroDoc, LoroMap, LoroText, VersionVector};
 
@@ -176,8 +176,8 @@ pub(super) fn replay_of(
     before: &MessageView,
     now: MessageView,
 ) -> Option<Replay> {
-    let draft = if now.deleted {
-        if before.deleted {
+    let draft = if now.deleted == Deletion::Deleted {
+        if before.deleted == Deletion::Deleted {
             return None;
         }
         None

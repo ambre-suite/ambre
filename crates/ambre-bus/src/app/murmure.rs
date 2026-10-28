@@ -514,6 +514,24 @@ impl MurmureCommand {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the author edited the body of a message (`MURMURE-084`).
+    pub enum Revision {
+        /// The body as the author first sent it.
+        Original,
+        /// The author edited the body.
+        Edited,
+    }
+
+    /// Whether the author deleted a message (`MURMURE-087`).
+    pub enum Deletion {
+        /// The message shows its body.
+        Live,
+        /// The author deleted the message: its body is empty.
+        Deleted,
+    }
+}
+
 /// One message as the view draws it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageView {
@@ -537,10 +555,10 @@ pub struct MessageView {
     /// What the channel announces, `None` for a message a member wrote. A
     /// notice has an empty body (`MURMURE-057`).
     pub notice: Option<Notice>,
-    /// The author edited the body (`MURMURE-084`).
-    pub edited: bool,
-    /// The author deleted the message: its body is empty (`MURMURE-087`).
-    pub deleted: bool,
+    /// Whether the author edited the body (`MURMURE-084`).
+    pub edited: Revision,
+    /// Whether the author deleted the message (`MURMURE-087`).
+    pub deleted: Deletion,
     /// The thread of replies to this message, `None` when it has no reply
     /// (`MURMURE-106`).
     pub thread: Option<ThreadHead>,

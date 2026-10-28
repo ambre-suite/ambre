@@ -44,12 +44,13 @@ pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, Ment
 pub use app::murmure::{
     Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
-    DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers, DocumentActivity, Emoji,
-    HeldReply, HeldSend, MediaRef, MediaType, MemberChannel, MemberView, Mention, MentionCount,
-    MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Notice,
-    Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft, Reaction, ReplyCount,
-    ReplyEcho, SealedChannelKey, SearchMatch, SegmentCount, SpaceCommand, SpaceEvent, StyleMark,
-    TextStyle, ThreadHead, Timestamp, Topic, UnreadCount, Unreadable,
+    Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers, DocumentActivity,
+    Emoji, HeldReply, HeldSend, MediaRef, MediaType, MemberChannel, MemberView, Mention,
+    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand,
+    MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
+    Reaction, ReplyCount, ReplyEcho, Revision, SealedChannelKey, SearchMatch, SegmentCount,
+    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount,
+    Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{

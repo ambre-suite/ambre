@@ -1284,8 +1284,8 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         attachments: Vec::new(),
         reactions: Vec::new(),
         notice: None,
-        edited: false,
-        deleted: false,
+        edited: ambre_bus::Revision::Original,
+        deleted: ambre_bus::Deletion::Live,
         thread: None,
         also_in_thread: None,
     };

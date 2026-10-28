@@ -1303,7 +1303,7 @@ pub(crate) mod tests {
     #[test]
     fn a_deleted_body_paints_muted_and_a_reply_count_in_the_accent() {
         let mut gone = message(UserId::new(), ambre_bus::Timestamp(0), "");
-        gone.deleted = true;
+        gone.deleted = ambre_bus::Deletion::Deleted;
         gone.thread = Some(ThreadHead {
             document: DocumentId::new(),
             replies: ambre_bus::ReplyCount::new(2),
@@ -1388,7 +1388,7 @@ pub(crate) mod tests {
         assert_eq!(theirs.y0, mine.y0, "on one line");
         assert!(mine.y1 <= f64::from(bottom));
 
-        reacted.deleted = true;
+        reacted.deleted = ambre_bus::Deletion::Deleted;
         let mut gone = MessageList::default();
         gone.absorb(SegmentId::new(), vec![reacted]);
         let (surface, _) = paint(&gone, 600.0);
