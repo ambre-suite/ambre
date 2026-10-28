@@ -1143,14 +1143,16 @@ fn a_merged_fill_previews_whole_blocks() {
 
 impl Rig {
     /// One wheel sample, as the host forwards it.
-    fn wheel(&mut self, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
+    fn wheel(&mut self, dy: f64, delta_mode: u32, mods: Modifiers) -> bool {
         self.view.handle_input(&InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
-                0.0,
-                dy,
+                ambre_canvas::WheelVector::new(
+                    ambre_canvas::WheelAmount::new(0.0),
+                    ambre_canvas::WheelAmount::new(dy),
+                ),
                 ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
             ),
-            ctrl_key,
+            mods,
         })
     }
 
@@ -1165,16 +1167,16 @@ impl Rig {
 fn a_wheel_delta_lands_once_and_keeps_its_remainder() {
     let mut rig = Rig::new();
     rig.frame();
-    assert!(rig.wheel(3.0, 1, false));
+    assert!(rig.wheel(3.0, 1, Modifiers::NONE));
     assert_eq!(rig.top(), 3, "three lines are three rows");
     let row = f64::from(ROW_HEIGHT.get());
     let page = (rig.view.state.canvas_height.get() / row) as u32;
-    assert!(rig.wheel(1.0, 2, false));
+    assert!(rig.wheel(1.0, 2, Modifiers::NONE));
     assert_eq!(rig.top(), 3 + page, "a page is a screen of rows");
     let at = rig.top();
-    assert!(rig.wheel(row * 1.5, 0, false));
+    assert!(rig.wheel(row * 1.5, 0, Modifiers::NONE));
     assert_eq!(rig.top(), at + 1, "a row and a half moves one row");
-    assert!(rig.wheel(row * 0.5, 0, false));
+    assert!(rig.wheel(row * 0.5, 0, Modifiers::NONE));
     assert_eq!(rig.top(), at + 2, "the half row was kept");
 }
 
@@ -1185,7 +1187,7 @@ fn a_wheel_notch_starts_no_coast() {
     let mut rig = Rig::new();
     rig.frame();
     rig.clock.set(1_000.0);
-    assert!(rig.wheel(3.0, 1, false));
+    assert!(rig.wheel(3.0, 1, Modifiers::NONE));
     let landed = rig.top();
     for step in 1..=30 {
         rig.clock.set(1_000.0 + f64::from(step) * 16.0);
@@ -1201,7 +1203,10 @@ fn a_ctrl_wheel_scrolls_nothing() {
     let mut rig = Rig::new();
     rig.frame();
     rig.sent();
-    assert!(!rig.wheel(5.0, 1, true), "the browser keeps the gesture");
+    assert!(
+        !rig.wheel(5.0, 1, Modifiers::PRIMARY),
+        "the browser keeps the gesture"
+    );
     rig.frame();
     assert_eq!(rig.top(), 0);
     assert!(
@@ -1706,7 +1711,7 @@ fn a_dropped_scroll_request_is_offered_again() {
     rig.to_logic.try_iter().for_each(drop);
     let cmd = rig.view.set_active_cmd();
     assert!(rig.view.send_command_lossless(cmd).is_ok());
-    assert!(rig.wheel(5.0, 1, false));
+    assert!(rig.wheel(5.0, 1, Modifiers::NONE));
     rig.frame();
     assert_eq!(scrolls(&mut rig), 0, "the full queue took the request");
     rig.frame();

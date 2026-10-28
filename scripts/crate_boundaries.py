@@ -448,7 +448,10 @@ KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|da
 DRAW_TRAIT = "crates/ambre-draw/src/lib.rs"
 DRAW_TRAIT_OPEN = re.compile(r"^pub trait DrawSurface\b")
 PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
-PRIMITIVE_TYPES = {"Rect", "Line", "Color", "f64", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun", "ImageSource"}
+PRIMITIVE_TYPES = {
+    "Rect", "Line", "Color", "f64", "SurfacePx", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun",
+    "ImageSource",
+}
 NUMBER_NAMES = {"width"}
 
 # Each view's scroll setter, the signature that keeps it on a model step, and

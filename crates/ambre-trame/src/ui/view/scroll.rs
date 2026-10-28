@@ -174,7 +174,10 @@ mod tests {
         for step in 0..5 {
             s.wheel(
                 &mut g,
-                WheelDelta::pixels(0.0, 16.0),
+                WheelDelta::pixels(ambre_canvas::WheelVector::new(
+                    ambre_canvas::WheelAmount::new(0.0),
+                    ambre_canvas::WheelAmount::new(16.0),
+                )),
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }
@@ -196,7 +199,13 @@ mod tests {
         for step in 0..5 {
             s.wheel(
                 &mut g,
-                WheelDelta::new(0.0, 16.0, ambre_canvas::WheelDeltaMode::Line),
+                WheelDelta::new(
+                    ambre_canvas::WheelVector::new(
+                        ambre_canvas::WheelAmount::new(0.0),
+                        ambre_canvas::WheelAmount::new(16.0),
+                    ),
+                    ambre_canvas::WheelDeltaMode::Line,
+                ),
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
         }

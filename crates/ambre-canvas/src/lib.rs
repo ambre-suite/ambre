@@ -72,7 +72,7 @@ pub mod fonts;
 pub mod request_registry;
 
 // -- Convenience re-exports --------------------------------------------------
-pub use ambre_draw::wheel::{WHEEL_LINE, WheelDelta, WheelDeltaMode};
+pub use ambre_draw::wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
 pub use anchor::{Anchor, AnchorPublisher};
 pub use busy::BusyPublisher;
 pub use density::{CssSize, DevicePx, DeviceSize, PixelSize, SurfaceSize};
@@ -93,7 +93,7 @@ pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
 pub use text_cache::{
-    Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
+    IndentPx, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
 };
 pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};

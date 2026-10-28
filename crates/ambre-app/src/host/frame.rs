@@ -656,11 +656,7 @@ impl FrameHost {
     fn render_fatal(&mut self, message: &str) {
         let Some(gpu) = self.gpu.as_mut() else { return };
 
-        let CssSize {
-            width: w,
-            height: h,
-            ..
-        } = gpu.size.logical();
+        let size = gpu.size.view();
         gpu.quad_renderer.begin_frame(gpu.size);
         {
             let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
@@ -669,7 +665,7 @@ impl FrameHost {
                 &mut surface,
                 &mut gpu.font_cx,
                 &mut gpu.text_cache,
-                (w as f32, h as f32),
+                size,
                 message,
             );
         }
@@ -811,14 +807,18 @@ mod tests {
             remap_with(&end, |_| None),
             Some(InputEvent::CompositionEnd { text }) if text == "仮名"
         ));
-        let delta = ambre_canvas::WheelDelta::new(1.5, -3.0, ambre_canvas::WheelDeltaMode::Line);
-        let wheel = InputEvent::Wheel {
-            delta,
-            ctrl_key: true,
-        };
+        let delta = ambre_canvas::WheelDelta::new(
+            ambre_canvas::WheelVector::new(
+                ambre_canvas::WheelAmount::new(1.5),
+                ambre_canvas::WheelAmount::new(-3.0),
+            ),
+            ambre_canvas::WheelDeltaMode::Line,
+        );
+        let pinch = ambre_chrome::commands::Modifiers::PRIMARY;
+        let wheel = InputEvent::Wheel { delta, mods: pinch };
         assert!(matches!(
             remap_with(&wheel, |_| None),
-            Some(InputEvent::Wheel { delta: kept, ctrl_key: true }) if kept == delta
+            Some(InputEvent::Wheel { delta: kept, mods }) if kept == delta && mods == pinch
         ));
     }
 

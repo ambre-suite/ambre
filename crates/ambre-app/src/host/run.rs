@@ -373,11 +373,15 @@ where
             Closure::<dyn FnMut(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
                 let ev = InputEvent::Wheel {
                     delta: ambre_canvas::WheelDelta::new(
-                        event.delta_x(),
-                        event.delta_y(),
+                        ambre_canvas::WheelVector::new(
+                            ambre_canvas::WheelAmount::new(event.delta_x()),
+                            ambre_canvas::WheelAmount::new(event.delta_y()),
+                        ),
                         ambre_canvas::WheelDeltaMode::from_dom(event.delta_mode()),
                     ),
-                    ctrl_key: event.ctrl_key(),
+                    mods: ambre_chrome::commands::Modifiers::NONE.ctrl_if(
+                        ambre_chrome::commands::KeyState::from_bool(event.ctrl_key()),
+                    ),
                 };
                 let consumed = host_c.borrow_mut().handle_input(&ev);
                 if consumed {

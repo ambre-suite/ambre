@@ -207,7 +207,11 @@ fn paint_peer<S: DrawSurface>(
     // in the culled set, in the peer's colour.
     for id in &p.selection {
         if let Some(wb) = element_bounds(vp, id) {
-            surface.stroke_rect(rect_to_screen(wb, w2s), *color, 1.5);
+            surface.stroke_rect(
+                rect_to_screen(wb, w2s),
+                *color,
+                ambre_core::SurfacePx::new(1.5),
+            );
         }
     }
 
@@ -262,7 +266,7 @@ fn paint_laser<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((a.x, a.y), (b.x, b.y)),
             color.with_alpha(alpha),
-            3.0,
+            ambre_core::SurfacePx::new(3.0),
         );
     }
 }

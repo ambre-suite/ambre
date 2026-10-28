@@ -894,6 +894,7 @@ class CrateBoundaries(unittest.TestCase):
             "    fn draw_glyphs(\n        &mut self,\n        run: &GlyphRun<'_, ParleyBrush>,\n"
             "        brush: &Brush,\n        transform: Affine,\n    );\n"
             "    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}\n"
+            "    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx);\n"
             "}\n\nfn density(scale: f32) {}\n"
         )
         self.assertEqual(self.breach(cb.DRAW_TRAIT, text), [])

@@ -642,7 +642,7 @@ impl TextEditor {
                 italic: span.italic,
                 family: span.family.clone(),
                 underline: span.underline,
-                indent: 0,
+                indent: crate::text_cache::IndentPx::ZERO,
             };
             let placed = push_shape(&mut builder, &text, &shape);
             if placed && span.indent > DocPx::ZERO {

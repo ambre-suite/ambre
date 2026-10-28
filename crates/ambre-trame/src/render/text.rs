@@ -95,7 +95,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((tx, ty + 2.0), (tx + adv, ty + 2.0)),
                     deco_color,
-                    1.0,
+                    ambre_core::SurfacePx::new(1.0),
                 );
             }
             // Strikethrough run: a 1px line through the x-height.
@@ -104,7 +104,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((tx, sy), (tx + adv, sy)),
                     deco_color,
-                    1.0,
+                    ambre_core::SurfacePx::new(1.0),
                 );
             }
         }

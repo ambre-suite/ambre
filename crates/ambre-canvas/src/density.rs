@@ -126,6 +126,14 @@ impl SurfaceSize {
         self.logical
     }
 
+    /// The same size in view pixels, which a surface paints in. A view pixel
+    /// is a CSS pixel in size (`CANVAS-032`).
+    pub fn view(&self) -> ambre_core::ViewSize {
+        #[allow(clippy::cast_precision_loss)]
+        let (width, height) = (self.logical.width as f32, self.logical.height as f32);
+        ambre_core::ViewSize::new(ViewPx::new(width), ViewPx::new(height))
+    }
+
     /// The size of the drawing buffer, in device pixels.
     pub(crate) fn physical(&self) -> DeviceSize {
         self.physical

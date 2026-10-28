@@ -52,7 +52,7 @@ where
         // Re-stroke the span perimeter in the grid-line colour so the block reads
         // as one cell (the fill above paints over the perimeter separators). A
         // user-set border draws on top of this in the dedicated border pass.
-        surface.stroke_rect(rect, palette.grid_line, 1.0);
+        surface.stroke_rect(rect, palette.grid_line, ambre_core::SurfacePx::new(1.0));
 
         if text_pass == TextPass::WithText && !content.text.is_empty() {
             // Honour the master's full style (size, font, colour, alignment,

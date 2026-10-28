@@ -166,8 +166,16 @@ pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h
 /// available, none active" cue on an autofilter button (`trame-shared-filter`).
 pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
     let cx = bx + w / 2.0;
-    s.stroke_line(ambre_draw::Line::new((bx, by), (cx, by + h)), c, 1.0);
-    s.stroke_line(ambre_draw::Line::new((bx + w, by), (cx, by + h)), c, 1.0);
+    s.stroke_line(
+        ambre_draw::Line::new((bx, by), (cx, by + h)),
+        c,
+        ambre_core::SurfacePx::new(1.0),
+    );
+    s.stroke_line(
+        ambre_draw::Line::new((bx + w, by), (cx, by + h)),
+        c,
+        ambre_core::SurfacePx::new(1.0),
+    );
 }
 
 /// Stroke the horizontal `line` dashed, left to right, the dashes offset left
@@ -179,7 +187,11 @@ pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Col
         let a = t.max(x0);
         let b = (t + MARCHING_DASH).min(x1);
         if b > a {
-            s.stroke_line(ambre_draw::Line::new((a, y), (b, y)), c, 1.0);
+            s.stroke_line(
+                ambre_draw::Line::new((a, y), (b, y)),
+                c,
+                ambre_core::SurfacePx::new(1.0),
+            );
         }
         t += MARCHING_PERIOD;
     }
@@ -193,7 +205,11 @@ pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Col
         let a = t.max(y0);
         let b = (t + MARCHING_DASH).min(y1);
         if b > a {
-            s.stroke_line(ambre_draw::Line::new((x, a), (x, b)), c, 1.0);
+            s.stroke_line(
+                ambre_draw::Line::new((x, a), (x, b)),
+                c,
+                ambre_core::SurfacePx::new(1.0),
+            );
         }
         t += MARCHING_PERIOD;
     }
@@ -283,7 +299,7 @@ pub fn draw_overlay<S: DrawSurface>(
             };
             let (bx, by, bw, bh) = (r.x0, r.y0, r.width(), r.height());
             surface.fill_rect(r, palette.header_bg);
-            surface.stroke_rect(r, palette.grid_line, 1.0);
+            surface.stroke_rect(r, palette.grid_line, ambre_core::SurfacePx::new(1.0));
             // Glyph inset so it reads inside the button, scaled with the zoom
             // (the button itself is zoom-scaled) so the inset stays proportional.
             let pad = 3.0 * state.zoom.get();
@@ -375,7 +391,7 @@ pub fn draw_overlay<S: DrawSurface>(
         for rect in state.selection_rects() {
             if let Some(rect) = state.range_pixel_rect(rect) {
                 surface.fill_rect(rect, palette.selection.with_alpha(0.16));
-                surface.stroke_rect(rect, palette.selection, 1.0);
+                surface.stroke_rect(rect, palette.selection, ambre_core::SurfacePx::new(1.0));
             }
         }
     }
@@ -391,7 +407,7 @@ pub fn draw_overlay<S: DrawSurface>(
             .active_merge_rect()
             .or_else(|| state.cell_pixel_rect(state.active_cell()))
     {
-        surface.stroke_rect(cell, palette.selection, 2.0);
+        surface.stroke_rect(cell, palette.selection, ambre_core::SurfacePx::new(2.0));
     }
 
     // -- 2b. Clipboard marching-ants marquee (`trame-clipboard`). A dashed rectangle around
@@ -448,7 +464,7 @@ pub fn draw_overlay<S: DrawSurface>(
     }
     if let Some(r) = state.fill_handle_rect() {
         surface.fill_rect(r, palette.selection);
-        surface.stroke_rect(r, palette.content_bg, 1.0);
+        surface.stroke_rect(r, palette.content_bg, ambre_core::SurfacePx::new(1.0));
     }
 
     // -- 2d. Header resize guide (`trame-resize`): a full-height/width line at the
@@ -459,7 +475,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((x, layout.top), (x, bottom)),
                 palette.selection,
-                1.0,
+                ambre_core::SurfacePx::new(1.0),
             );
         }
         Some(grid::ResizePreview::Row(y)) => {
@@ -467,7 +483,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
-                1.0,
+                ambre_core::SurfacePx::new(1.0),
             );
         }
         None => {}
@@ -482,7 +498,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((x, layout.top), (x, bottom)),
                 palette.selection,
-                2.5,
+                ambre_core::SurfacePx::new(2.5),
             );
         }
         Some(grid::AxisPos::Row(i)) => {
@@ -490,7 +506,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
-                2.5,
+                ambre_core::SurfacePx::new(2.5),
             );
         }
         None => {}

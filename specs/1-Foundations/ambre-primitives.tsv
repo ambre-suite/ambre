@@ -481,7 +481,6 @@ ambre-canvas | src/frame.rs | crate::frame | Phases::any_build() | ret | bool	ge
 ambre-canvas | src/frame.rs | crate::frame | RafControl::is_running() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | draw_centered(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/frame.rs | crate::frame | drive_hidden(hidden) | param | bool	generic	named state or style flag, local
-ambre-canvas | src/frame.rs | crate::frame | paint_fatal((width,height)) | param | (f32,f32)	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal(message) | param | &str	free-text	text, label or message
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal::TITLE_TEXT | const | &str	free-text	message text of the fatal frame
 ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geometry, layout, GPU or count arithmetic
@@ -619,8 +618,6 @@ ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(en
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(start) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(corners) | param | [[f32;2];4]	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(uv) | param | [[f32;2];2]	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_line(width) | param | f64	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <WgpuSurface<'_> as DrawSurface>::stroke_rect(width) | param | f64	trait	signature set by the trait
 ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphSink::glyph_corners(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphSink::glyph_corners(uv) | param | [[f32;2];2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | Mesh | alias | VertexBuffers<[f32;2],u32>	math	geometry, layout, GPU or count arithmetic
@@ -640,7 +637,6 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.font_size_x100 |
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.max_width_x10 | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | CacheKey.text | field | Box<str>	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | CachedLayout.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_cache.rs | crate::text_cache | SpanShape.indent | field | u16	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_hits | field | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.frame_misses | field | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache.tick | field | u64	math	geometry, layout, GPU or count arithmetic
@@ -692,7 +688,6 @@ ambre-canvas | src/view.rs | crate::view | FrameStats.fps | field | f32	math	geo
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionEnd.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionUpdate.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::Text.text | field | String	free-text	text, label or message
-ambre-canvas | src/view.rs | crate::view | InputEvent::Wheel.ctrl_key | field | bool	generic	named state or style flag, local
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.cells_drawn | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.fps | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -1156,8 +1151,6 @@ ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	g
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(width) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-draw | src/lib.rs | crate | DrawSurface::stroke_rect(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
 ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str	newtype-inner	ImageKey constructor
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
@@ -1169,13 +1162,7 @@ ambre-draw | src/text.rs | crate::text | ScriptSet.0 | field | u8	newtype-inner	
 ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dx | field | f64	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta.dy | field | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::new(dx) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::new(dy) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dx) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::pixels(dy) | param | f64	newtype-inner	WheelDelta field, constructor or accessor
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	foreign-api	the DOM deltaMode code
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/peer.rs | crate::peer | Hue.0 | field | u16	newtype-inner	the whole degrees of a hue below 360, built only by Hue::of_user
@@ -1501,7 +1488,6 @@ ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-tex
 ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | fill_down() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | grouped() | ret | bool	generic	a fact, selects no mode: whether the next message joins the previous one's group
-ambre-murmure | src/look.rs | crate::look | BLOCK_INDENT | const | u16	math	local count/index/counter
 ambre-murmure | src/look.rs | crate::look | LIST_DOT | const | f64	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | QUOTE_RULE | const | (f64,f64)	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
@@ -1675,8 +1661,6 @@ ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_typing() | re
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_watching() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::tick() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	generic	state flag/predicate
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_line(width) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-pdf | src/lib.rs | crate | <KrillaSurface<'_,'_> as DrawSurface>::stroke_rect(width) | param | f64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::stroke_solid(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8() | ret | u8	math	geometry, layout, count or size local to the algorithm
@@ -4075,3 +4059,11 @@ ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	ne
 ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor
 ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
 ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
+ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in the whole pixels a span shape stores
+ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::get() | ret | u16	newtype-inner	the indent unwrapped, for a view that lays out in f64
+ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::new(units) | param | u16	newtype-inner	the constructor of the indent newtype
+ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::layout_units() | ret | f32	math	the indent in the f32 units parley lays out in
+ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
+ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::get() | ret | f64	newtype-inner	the bare count, for a view that measures a notch
+ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
+ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by

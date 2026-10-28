@@ -157,7 +157,7 @@ fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
         color: look::ink(&mark.style, palette),
         underline: shape.underline,
         background: look::tint(&mark.style, palette),
-        indent: ambre_core::DocPx::new(f32::from(shape.indent)),
+        indent: ambre_core::DocPx::new(f32::from(shape.indent.get())),
     }
 }
 
@@ -1496,7 +1496,7 @@ impl Composer {
                 if self.also.contains(&shown) {
                     surface.fill_rect(square, palette.selection);
                 }
-                surface.stroke_rect(square, palette.cell_border, 1.0);
+                surface.stroke_rect(square, palette.cell_border, ambre_core::SurfacePx::new(1.0));
                 let words = shape(
                     font_cx,
                     cache,
@@ -1542,7 +1542,7 @@ impl Composer {
         } else {
             palette.cell_border
         };
-        surface.stroke_rect(field, edge, 1.0);
+        surface.stroke_rect(field, edge, ambre_core::SurfacePx::new(1.0));
         let inner = RowBounds {
             top: top + SPACE_4,
             bottom: height - SPACE_4,
@@ -1652,7 +1652,7 @@ impl Composer {
             let (y0, y1) = (top + SPACE_2, top + FILES_HEIGHT - SPACE_2);
             let chip = view_rect(x, y0, x + chip_w, y1);
             surface.fill_rect(chip, palette.header_bg);
-            surface.stroke_rect(chip, palette.cell_border, 1.0);
+            surface.stroke_rect(chip, palette.cell_border, ambre_core::SurfacePx::new(1.0));
             let ink = if removable {
                 palette.cell_text
             } else {

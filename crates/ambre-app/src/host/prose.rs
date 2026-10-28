@@ -867,8 +867,11 @@ mod tests {
         }
         assert!(view.outbox.is_busy());
         let wheel = InputEvent::Wheel {
-            delta: ambre_canvas::WheelDelta::pixels(0.0, 40.0),
-            ctrl_key: false,
+            delta: ambre_canvas::WheelDelta::pixels(ambre_canvas::WheelVector::new(
+                ambre_canvas::WheelAmount::new(0.0),
+                ambre_canvas::WheelAmount::new(40.0),
+            )),
+            mods: Modifiers::NONE,
         };
         view.dirty = false;
         assert!(view.handle_input(&wheel), "the refusal consumes the event");

@@ -1671,7 +1671,7 @@ impl MurmureView {
             }
             InputEvent::Wheel {
                 delta,
-                ctrl_key: false,
+                mods: Modifiers::NONE,
             } => {
                 let line = ambre_canvas::WHEEL_LINE;
                 let page = self.list_height().on_page(CssPx::ZERO);
@@ -2511,11 +2511,13 @@ mod tests {
         page.clock.set(now);
         let ev = InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
-                0.0,
-                dy,
+                ambre_canvas::WheelVector::new(
+                    ambre_canvas::WheelAmount::new(0.0),
+                    ambre_canvas::WheelAmount::new(dy),
+                ),
                 ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
             ),
-            ctrl_key: false,
+            mods: Modifiers::NONE,
         };
         page.view.handle_input(&ev)
     }
@@ -5812,7 +5814,7 @@ mod tests {
             .paint_content(&mut surface, &mut font_cx, &mut cache, None);
         let ink = crate::look::margin_ink(page.view.theme.palette());
         let top = f64::from(400.0 - page.view.composer().band().get());
-        let indent = f64::from(SPACE_8) + f64::from(crate::look::BLOCK_INDENT);
+        let indent = f64::from(SPACE_8) + f64::from(crate::look::BLOCK_INDENT.get());
         surface.count(|op| {
             matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
                 if *color == ink && rect.y0 >= top
@@ -5925,7 +5927,7 @@ mod tests {
             panic!("the draft's lines, got {lines:?}");
         };
         let edge = f64::from(SPACE_8);
-        let indent = edge + f64::from(crate::look::BLOCK_INDENT);
+        let indent = edge + f64::from(crate::look::BLOCK_INDENT.get());
         assert!(block.len() >= 2, "the quote wraps, got {block:?}");
         assert!(
             block.iter().all(|(_, x)| (x - indent).abs() < 0.5),

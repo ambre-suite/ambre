@@ -19,7 +19,8 @@ pub(crate) const CODE_FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::M
 /// How far right a quote's and a list's lines start: the `space_6` step.
 /// The margin mark stands in it, and a wrapped line keeps the block's edge
 /// (`MURMURE-570`).
-pub(crate) const BLOCK_INDENT: u16 = SPACE_6.get() as u16;
+pub(crate) const BLOCK_INDENT: ambre_canvas::IndentPx =
+    ambre_canvas::IndentPx::new(SPACE_6.get() as u16);
 
 /// The left and right edges of a quote's rule, in the indent.
 const QUOTE_RULE: (f64, f64) = (2.0, 4.0);
@@ -81,7 +82,7 @@ pub(crate) fn margin(
                     let (top, bottom) = line(at);
                     let middle = (top + bottom) / 2.0;
                     let half = LIST_DOT / 2.0;
-                    let centre = f64::from(BLOCK_INDENT) / 2.0;
+                    let centre = f64::from(BLOCK_INDENT.get()) / 2.0;
                     Rect::new(centre - half, middle - half, centre + half, middle + half)
                 })
                 .collect()

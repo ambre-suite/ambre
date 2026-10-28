@@ -249,7 +249,7 @@ pub fn paint_overlay<S: DrawSurface>(
     // `stroke_line` edges between the rotated corners (stroke_rect would degrade to
     // an upright AABB on the WgpuSurface, see above).
     if theta == ambre_core::Radians::ZERO {
-        surface.stroke_rect(b, palette.selection, 1.5);
+        surface.stroke_rect(b, palette.selection, ambre_core::SurfacePx::new(1.5));
     } else {
         let c = [
             place(Point::new(b.x0, b.y0)),
@@ -261,7 +261,7 @@ pub fn paint_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((a.x, a.y), (d.x, d.y)),
                 palette.selection,
-                1.5,
+                ambre_core::SurfacePx::new(1.5),
             );
         }
     }
@@ -272,7 +272,7 @@ pub fn paint_overlay<S: DrawSurface>(
     surface.stroke_line(
         ambre_draw::Line::new((stem_base.x, stem_base.y), (knob.x, knob.y)),
         palette.selection,
-        1.0,
+        ambre_core::SurfacePx::new(1.0),
     );
     draw_handle(surface, knob, palette);
 
@@ -298,7 +298,7 @@ fn paint_preview<S: DrawSurface>(
 ) {
     if let Preview::Marquee(m) = preview {
         let s = world_rect_to_screen(*m, cam);
-        surface.stroke_rect(s, palette.selection, 1.0);
+        surface.stroke_rect(s, palette.selection, ambre_core::SurfacePx::new(1.0));
         return;
     }
 
@@ -392,7 +392,7 @@ fn paint_find_highlights<S: DrawSurface>(
         } else {
             (palette.header_active, 1.5)
         };
-        surface.stroke_rect(sb, color, width);
+        surface.stroke_rect(sb, color, ambre_core::SurfacePx::new(width));
     }
 }
 
@@ -445,12 +445,12 @@ fn paint_link_badges<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((cx - r * 1.6, cy + r), (cx + r * 0.4, cy - r)),
             palette.content_bg,
-            1.5,
+            ambre_core::SurfacePx::new(1.5),
         );
         surface.stroke_line(
             ambre_draw::Line::new((cx - r * 0.4, cy + r), (cx + r * 1.6, cy - r)),
             palette.content_bg,
-            1.5,
+            ambre_core::SurfacePx::new(1.5),
         );
     }
 }

@@ -26,7 +26,7 @@ pub use types::*;
 pub mod kinetic;
 
 pub mod wheel;
-pub use wheel::{WHEEL_LINE, WheelDelta, WheelDeltaMode};
+pub use wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
 
 pub mod hit;
 pub use hit::HitTest;
@@ -40,9 +40,9 @@ pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_c
 pub mod walk;
 pub use walk::DocumentWalk;
 
-/// The size and the pixels of an image a surface draws, for a back end that
+/// The size and the pixels of an image, and the width of a stroke. A back end
 /// sees no other `ambre-core` type.
-pub use ambre_core::{ImageSize, RgbaPixels};
+pub use ambre_core::{ImageSize, RgbaPixels, SurfacePx};
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -136,11 +136,11 @@ pub trait DrawSurface {
     /// Fill a rectangle with a solid color.
     fn fill_rect(&mut self, rect: Rect, color: Color);
 
-    /// Stroke a rectangle outline.
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64);
+    /// Stroke a rectangle outline, `width` across.
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx);
 
-    /// Stroke a line segment.
-    fn stroke_line(&mut self, line: Line, color: Color, width: f64);
+    /// Stroke a line segment, `width` across.
+    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx);
 
     // -------------------------------------------------------------------------
     // Text

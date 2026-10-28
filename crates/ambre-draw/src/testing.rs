@@ -170,11 +170,16 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::FillRect { rect, color });
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64) {
-        self.ops.push(DrawOp::StrokeRect { rect, color, width });
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: ambre_core::SurfacePx) {
+        self.ops.push(DrawOp::StrokeRect {
+            rect,
+            color,
+            width: width.get(),
+        });
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: f64) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: ambre_core::SurfacePx) {
+        let width = width.get();
         self.ops.push(DrawOp::StrokeLine {
             x0: line.p0.x,
             y0: line.p0.y,

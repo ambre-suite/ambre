@@ -106,7 +106,7 @@ pub fn paint_grid<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((sx, 0.0), (sx, cam.size.height)),
             color,
-            1.0,
+            ambre_core::SurfacePx::new(1.0),
         );
         x += step;
     }
@@ -117,7 +117,7 @@ pub fn paint_grid<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((0.0, sy), (cam.size.width, sy)),
             color,
-            1.0,
+            ambre_core::SurfacePx::new(1.0),
         );
         y += step;
     }

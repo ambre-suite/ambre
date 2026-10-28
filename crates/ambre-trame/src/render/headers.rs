@@ -67,7 +67,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     surface.stroke_line(
         ambre_draw::Line::new((0.0, top + hh), (w, top + hh)),
         palette.header_border,
-        1.0,
+        ambre_core::SurfacePx::new(1.0),
     );
 
     // Per-column separators: a vertical hairline at each column's right edge, so
@@ -81,7 +81,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((edge, top), (edge, top + hh)),
                 palette.header_border,
-                1.0,
+                ambre_core::SurfacePx::new(1.0),
             );
             col_x = edge;
             col = col.next();
@@ -192,7 +192,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     surface.stroke_line(
         ambre_draw::Line::new((hw, top), (hw, h)),
         palette.header_border,
-        1.0,
+        ambre_core::SurfacePx::new(1.0),
     );
 
     // Per-row separators: a horizontal hairline at each visible row's bottom edge,
@@ -209,7 +209,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, edge), (hw, edge)),
                 palette.header_border,
-                1.0,
+                ambre_core::SurfacePx::new(1.0),
             );
             row_y = edge;
             slot += RowCount::ONE;

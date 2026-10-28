@@ -1093,8 +1093,11 @@ fn two_camera_moves_in_one_frame_send_one_viewport_request() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for dy in [40.0, 60.0] {
         rig.input(InputEvent::Wheel {
-            delta: ambre_canvas::WheelDelta::pixels(0.0, dy),
-            ctrl_key: false,
+            delta: ambre_canvas::WheelDelta::pixels(ambre_canvas::WheelVector::new(
+                ambre_canvas::WheelAmount::new(0.0),
+                ambre_canvas::WheelAmount::new(dy),
+            )),
+            mods: Modifiers::NONE,
         });
     }
     let last = rig.view.cam.to_bus_viewport();
@@ -1689,14 +1692,16 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
     assert_eq!(rig.view.selection, [eid("a")], "a match is not selected");
 }
 
-fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, ctrl_key: bool) {
+fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, mods: Modifiers) {
     rig.input(InputEvent::Wheel {
         delta: ambre_canvas::WheelDelta::new(
-            dx,
-            dy,
+            ambre_canvas::WheelVector::new(
+                ambre_canvas::WheelAmount::new(dx),
+                ambre_canvas::WheelAmount::new(dy),
+            ),
             ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
         ),
-        ctrl_key,
+        mods,
     });
 }
 
@@ -1718,7 +1723,7 @@ fn a_pan_keeps_the_zoom_and_the_selection_and_asks_where_it_landed() {
     rig.view.update();
     rig.sent();
     let (zoom, centre) = (rig.view.cam.zoom, rig.view.cam.center);
-    wheel(&mut rig, (30.0, 40.0), 0, false);
+    wheel(&mut rig, (30.0, 40.0), 0, Modifiers::NONE);
     assert_ne!(rig.view.cam.center, centre, "the board moved");
     assert_eq!(rig.view.cam.zoom, zoom);
     assert_eq!(rig.view.selection, [eid("a")]);
@@ -1736,7 +1741,7 @@ fn the_trackpad_mode_pans_both_axes_against_the_delta() {
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Trackpad;
     let before = rig.screen(0.0, 0.0);
-    wheel(&mut rig, (12.0, 18.0), 0, false);
+    wheel(&mut rig, (12.0, 18.0), 0, Modifiers::NONE);
     let after = rig.screen(0.0, 0.0);
     assert_eq!(rig.view.cam.zoom.get(), 1.0);
     assert!(
@@ -1751,16 +1756,16 @@ fn the_trackpad_mode_pans_both_axes_against_the_delta() {
 #[test]
 fn an_ambiguous_wheel_keeps_the_latched_guess() {
     let mut rig = Rig::new();
-    wheel(&mut rig, (0.0, 120.0), 0, false);
+    wheel(&mut rig, (0.0, 120.0), 0, Modifiers::NONE);
     assert!(rig.view.detected_mouse, "a notch is a mouse");
     let zoom = rig.view.cam.zoom;
-    wheel(&mut rig, (0.0, 2.0), 0, false);
+    wheel(&mut rig, (0.0, 2.0), 0, Modifiers::NONE);
     assert!(rig.view.detected_mouse);
     assert_ne!(rig.view.cam.zoom, zoom, "the mouse guess still zooms");
-    wheel(&mut rig, (3.0, 2.0), 0, false);
+    wheel(&mut rig, (3.0, 2.0), 0, Modifiers::NONE);
     assert!(!rig.view.detected_mouse, "a side delta is a trackpad");
     let zoom = rig.view.cam.zoom;
-    wheel(&mut rig, (0.0, 2.0), 0, false);
+    wheel(&mut rig, (0.0, 2.0), 0, Modifiers::NONE);
     assert!(!rig.view.detected_mouse);
     assert_eq!(rig.view.cam.zoom, zoom, "the trackpad guess still pans");
 }
@@ -1773,9 +1778,9 @@ fn ctrl_and_the_pinch_zoom_in_every_mode() {
         let mut rig = Rig::new();
         rig.view.pointer_mode = mode;
         // A trackpad glide first, so the auto guess is not the mouse.
-        wheel(&mut rig, (3.0, 2.0), 0, false);
+        wheel(&mut rig, (3.0, 2.0), 0, Modifiers::NONE);
         let zoom = rig.view.cam.zoom;
-        wheel(&mut rig, (0.0, -30.0), 0, true);
+        wheel(&mut rig, (0.0, -30.0), 0, Modifiers::PRIMARY);
         assert!(rig.view.cam.zoom > zoom, "a pinch out zooms in");
     }
 }
@@ -1787,14 +1792,14 @@ fn ctrl_and_the_pinch_zoom_in_every_mode() {
 fn a_picked_mode_ignores_a_contrary_wheel() {
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Trackpad;
-    wheel(&mut rig, (0.0, 3.0), 1, false);
+    wheel(&mut rig, (0.0, 3.0), 1, Modifiers::NONE);
     assert_eq!(rig.view.cam.zoom.get(), 1.0, "a line wheel pans");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 
     let mut rig = Rig::new();
     rig.view.pointer_mode = PointerMode::Mouse;
     rig.view.detected_mouse = false;
-    wheel(&mut rig, (4.0, 6.0), 0, false);
+    wheel(&mut rig, (4.0, 6.0), 0, Modifiers::NONE);
     assert_ne!(rig.view.cam.zoom.get(), 1.0, "a glide zooms");
     assert!(!rig.view.detected_mouse, "the latch is untouched");
 }
@@ -3023,11 +3028,11 @@ fn a_line_wheel_pans_and_zooms_as_its_pixels_do() {
     for (mode, name) in [(PointerMode::Trackpad, "pan"), (PointerMode::Mouse, "zoom")] {
         let mut by_line = Rig::new();
         by_line.view.pointer_mode = mode;
-        wheel(&mut by_line, (0.0, 1.0), 1, false);
+        wheel(&mut by_line, (0.0, 1.0), 1, Modifiers::NONE);
         let mut by_px = Rig::new();
         by_px.view.pointer_mode = mode;
         let line = f64::from(ambre_canvas::WHEEL_LINE.get());
-        wheel(&mut by_px, (0.0, line), 0, false);
+        wheel(&mut by_px, (0.0, line), 0, Modifiers::NONE);
         assert_eq!(by_line.view.cam.zoom, by_px.view.cam.zoom, "{name}");
         assert_eq!(by_line.screen(0.0, 0.0), by_px.screen(0.0, 0.0), "{name}");
     }

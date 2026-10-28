@@ -192,7 +192,7 @@ impl PageWalk<'_> {
                 surface.stroke_line(
                     ambre_draw::Line::new((x0.get(), y.get()), (x1.get(), y.get())),
                     palette.sheet_border,
-                    1.0,
+                    ambre_core::SurfacePx::new(1.0),
                 );
             }
         }
@@ -230,7 +230,7 @@ impl PageWalk<'_> {
                         surface.stroke_line(
                             ambre_draw::Line::new((rect.x0, middle), (rect.x1, middle)),
                             palette.error,
-                            1.0,
+                            ambre_core::SurfacePx::new(1.0),
                         );
                     }
                     HighlightKind::Insertion => {
@@ -238,7 +238,7 @@ impl PageWalk<'_> {
                         surface.stroke_line(
                             ambre_draw::Line::new((rect.x0, base), (rect.x1, base)),
                             palette.success,
-                            1.0,
+                            ambre_core::SurfacePx::new(1.0),
                         );
                     }
                     HighlightKind::Comment | HighlightKind::Find => {}
@@ -345,7 +345,7 @@ fn draw_lines<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((left, at), (right, at)),
             color,
-            f64::from(size),
+            ambre_core::SurfacePx::new(f64::from(size)),
         );
     }
 }
@@ -383,7 +383,11 @@ fn paint_cell_box<S: DrawSurface>(
         surface.fill_rect(bounds, packed(fill));
     }
     let Some(border) = style.border else {
-        surface.stroke_rect(bounds, palette.sheet_border, 1.0);
+        surface.stroke_rect(
+            bounds,
+            palette.sheet_border,
+            ambre_core::SurfacePx::new(1.0),
+        );
         return;
     };
     let colour = border.color.map_or(palette.sheet_border, packed);

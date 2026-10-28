@@ -2486,12 +2486,21 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
 
 /// A pixel delta of `dy`, as a trackpad glide sends it.
 fn glide(dy: f64) -> ambre_draw::WheelDelta {
-    ambre_draw::WheelDelta::pixels(0.0, dy)
+    ambre_draw::WheelDelta::pixels(ambre_draw::WheelVector::new(
+        ambre_draw::WheelAmount::new(0.0),
+        ambre_draw::WheelAmount::new(dy),
+    ))
 }
 
 /// A delta of `dy` lines, as a notched wheel sends it.
 fn notch(dy: f64) -> ambre_draw::WheelDelta {
-    ambre_draw::WheelDelta::new(0.0, dy, ambre_draw::WheelDeltaMode::Line)
+    ambre_draw::WheelDelta::new(
+        ambre_draw::WheelVector::new(
+            ambre_draw::WheelAmount::new(0.0),
+            ambre_draw::WheelAmount::new(dy),
+        ),
+        ambre_draw::WheelDeltaMode::Line,
+    )
 }
 
 /// `KINETIC-015`: a line delta scrolls the column by the pixels a line is
@@ -2513,7 +2522,13 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
 
     let mut by_page = long_rig();
     let page = by_page.ui.viewport.height;
-    let page_delta = ambre_draw::WheelDelta::new(0.0, 1.0, ambre_draw::WheelDeltaMode::Page);
+    let page_delta = ambre_draw::WheelDelta::new(
+        ambre_draw::WheelVector::new(
+            ambre_draw::WheelAmount::new(0.0),
+            ambre_draw::WheelAmount::new(1.0),
+        ),
+        ambre_draw::WheelDeltaMode::Page,
+    );
     by_page.ui.wheel(page_delta, ambre_core::PageTime(0.0));
     assert_eq!(by_page.ui.viewport.scroll_y.get(), page.get());
 }

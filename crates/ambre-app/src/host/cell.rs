@@ -477,11 +477,13 @@ fn input_of(event: &web_sys::Event) -> Option<InputEvent> {
     if let Some(wheel) = event.dyn_ref::<web_sys::WheelEvent>() {
         return Some(InputEvent::Wheel {
             delta: ambre_canvas::WheelDelta::new(
-                wheel.delta_x(),
-                wheel.delta_y(),
+                ambre_canvas::WheelVector::new(
+                    ambre_canvas::WheelAmount::new(wheel.delta_x()),
+                    ambre_canvas::WheelAmount::new(wheel.delta_y()),
+                ),
                 ambre_canvas::WheelDeltaMode::from_dom(wheel.delta_mode()),
             ),
-            ctrl_key: wheel.ctrl_key(),
+            mods: Modifiers::NONE.ctrl_if(KeyState::from_bool(wheel.ctrl_key())),
         });
     }
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;

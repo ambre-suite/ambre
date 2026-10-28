@@ -687,7 +687,7 @@ impl ProseUiState {
             surface.stroke_line(
                 ambre_draw::Line::new((rect.x0, base), (rect.x0 + width.get(), base)),
                 palette.text,
-                1.0,
+                ambre_core::SurfacePx::new(1.0),
             );
             rect.x0 += width.get();
         }
@@ -749,7 +749,7 @@ fn paint_sheet<S: DrawSurface>(
     surface.push_transform(Affine::translate((0.0, top.get())));
     surface.fill_rect(shadow, palette.shadow);
     surface.fill_rect(sheet, palette.sheet);
-    surface.stroke_rect(sheet, palette.sheet_border, 1.0);
+    surface.stroke_rect(sheet, palette.sheet_border, ambre_core::SurfacePx::new(1.0));
     surface.pop_transform();
 }
 

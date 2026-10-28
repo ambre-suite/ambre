@@ -334,7 +334,7 @@ pub fn paint_list<S: DrawSurface>(
         );
         if shown.focus == Some(i) {
             let ring = view_rect(SPACE_2, top, width - SPACE_2, bottom);
-            surface.stroke_rect(ring, palette.selection, 2.0);
+            surface.stroke_rect(ring, palette.selection, ambre_core::SurfacePx::new(2.0));
             focus = Some(RowBounds { top, bottom });
         }
     }
@@ -478,10 +478,10 @@ fn draw_chips<S: DrawSurface>(
         let mine = me.is_some_and(|me| reaction.users.contains(&me));
         if mine {
             surface.fill_rect(at, palette.selection.with_alpha(SELECTION_ALPHA));
-            surface.stroke_rect(at, palette.selection, 1.0);
+            surface.stroke_rect(at, palette.selection, ambre_core::SurfacePx::new(1.0));
         } else {
             surface.fill_rect(at, palette.header_bg);
-            surface.stroke_rect(at, palette.header_border, 1.0);
+            surface.stroke_rect(at, palette.header_border, ambre_core::SurfacePx::new(1.0));
         }
         let layout = shape(
             font_cx,
@@ -517,7 +517,7 @@ fn draw_files<S: DrawSurface>(
     for (file, b) in row.files.iter().zip(boxes) {
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         surface.fill_rect(at, palette.header_bg);
-        surface.stroke_rect(at, palette.header_border, 1.0);
+        surface.stroke_rect(at, palette.header_border, ambre_core::SurfacePx::new(1.0));
         let layout = shape(
             font_cx,
             cache,
@@ -703,7 +703,7 @@ pub fn paint_jump<S: DrawSurface>(
     let y = (height - tall - SPACE_8).max(ViewPx::ZERO);
     let rect = view_rect(x, y, x + wide, y + tall);
     surface.fill_rect(rect, palette.header_bg);
-    surface.stroke_rect(rect, palette.header_border, 1.0);
+    surface.stroke_rect(rect, palette.header_border, ambre_core::SurfacePx::new(1.0));
     draw(
         surface,
         layout,
@@ -884,7 +884,7 @@ fn draw_previews<S: DrawSurface>(
         played.files.push(file.media_ref.clone());
         let Some(picture) = pictured.shelf.get(&file.media_ref) else {
             surface.fill_rect(at, palette.header_bg);
-            surface.stroke_rect(at, palette.header_border, 1.0);
+            surface.stroke_rect(at, palette.header_border, ambre_core::SurfacePx::new(1.0));
             continue;
         };
         let (index, next) = frame_at(picture, pictured.now, pictured.motion);
@@ -1664,7 +1664,7 @@ pub(crate) mod tests {
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
             let (surface, _) = paint(&list, 600.0);
-            let indent = surface_px(SPACE_8) + f64::from(look::BLOCK_INDENT);
+            let indent = surface_px(SPACE_8) + f64::from(look::BLOCK_INDENT.get());
             let marks = surface.count(|op| {
                 matches!(op, DrawOp::FillRect { color, rect }
                     if *color == LIGHT.header_text
@@ -1725,7 +1725,7 @@ pub(crate) mod tests {
                 panic!("the author and the body, got {lines:?}");
             };
             let edge = surface_px(SPACE_8);
-            let indent = edge + f64::from(look::BLOCK_INDENT);
+            let indent = edge + f64::from(look::BLOCK_INDENT.get());
             assert!(block.len() >= 2, "the block wraps, got {block:?}");
             assert!(
                 block.iter().all(|(_, x)| (x - indent).abs() < 0.5),

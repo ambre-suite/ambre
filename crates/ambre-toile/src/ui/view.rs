@@ -75,7 +75,7 @@ use super::viewport::ViewportTransform;
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId, Key, KeyState, Modifiers};
+use ambre_commands::{ClipboardWrite, CommandId, Key, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -1795,10 +1795,7 @@ impl ToileView {
     /// ends what began before. Every other input reaches no board handler.
     fn present_input(&mut self, ev: &InputEvent) -> bool {
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
-                *delta,
-                Modifiers::NONE.ctrl_if(KeyState::from_bool(*ctrl_key)),
-            ),
+            InputEvent::Wheel { delta, mods } => self.handle_wheel(*delta, *mods),
             InputEvent::PointerDown { at, button, mods } => {
                 let screen = on_screen(*at);
                 self.last_pointer = screen;
@@ -4129,10 +4126,7 @@ impl ToileView {
             return true;
         }
         match ev {
-            InputEvent::Wheel { delta, ctrl_key } => self.handle_wheel(
-                *delta,
-                Modifiers::NONE.ctrl_if(KeyState::from_bool(*ctrl_key)),
-            ),
+            InputEvent::Wheel { delta, mods } => self.handle_wheel(*delta, *mods),
             InputEvent::PointerDown { at, button, mods } => {
                 self.handle_pointer_down(on_screen(*at), *button, *mods)
             }
@@ -4466,13 +4460,19 @@ mod view_tests;
 #[cfg(test)]
 mod wheel_tests {
     use super::{WHEEL_MOUSE_NOTCH, WheelDevice, wheel_device};
-    use ambre_canvas::{WheelDelta, WheelDeltaMode};
+    use ambre_canvas::{WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
     use ambre_core::{CssPx, CssVector};
 
     /// A notched step, in line units.
-    const LINE: WheelDelta = WheelDelta::new(0.0, 1.0, WheelDeltaMode::Line);
+    const LINE: WheelDelta = WheelDelta::new(
+        WheelVector::new(WheelAmount::new(0.0), WheelAmount::new(1.0)),
+        WheelDeltaMode::Line,
+    );
     /// A pixel glide.
-    const GLIDE: WheelDelta = WheelDelta::pixels(0.0, 1.0);
+    const GLIDE: WheelDelta = WheelDelta::pixels(WheelVector::new(
+        WheelAmount::new(0.0),
+        WheelAmount::new(1.0),
+    ));
 
     #[test]
     fn line_or_page_delta_mode_is_a_mouse() {

@@ -292,7 +292,8 @@ impl DrawSurface for WgpuSurface<'_> {
         self.renderer.push_quad(r, color);
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64) {
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: ambre_core::SurfacePx) {
+        let width = width.get();
         let hw = width * 0.5;
         // Picture-frame decomposition: two full-width horizontal bars (which own
         // the four corners) plus two verticals INSET to sit strictly between
@@ -322,7 +323,8 @@ impl DrawSurface for WgpuSurface<'_> {
         }
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: f64) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: ambre_core::SurfacePx) {
+        let width = width.get();
         let t = self.transform();
         let p0 = t * line.p0;
         let p1 = t * line.p1;

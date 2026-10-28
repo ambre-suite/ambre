@@ -8,7 +8,7 @@
 //! number and its unit together, and [`WheelDelta::to_px`] is the one way to
 //! read it as a distance (`KINETIC-015`).
 
-use ambre_core::{CssPx, CssVector};
+use ambre_core::{CssPx, CssVector, Vector};
 
 /// The pixels one wheel line is worth, in a view whose content has no line of
 /// its own. Trame steps by a zoomed cell instead.
@@ -45,28 +45,56 @@ impl WheelDeltaMode {
     }
 }
 
+/// One axis of a wheel delta, as the browser reported it. It counts the unit
+/// that [`WheelDeltaMode`] names: a pixel, a line or a page. The number is
+/// not a distance until [`WheelDelta::to_px`] says what one unit is worth.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct WheelAmount(f64);
+
+impl WheelAmount {
+    /// An amount of `units`, in the unit of the delta that holds it.
+    #[must_use]
+    pub const fn new(units: f64) -> Self {
+        Self(units)
+    }
+
+    /// The bare count of units.
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+
+    /// The amount as CSS pixels, one unit being worth `unit`.
+    #[must_use]
+    fn scaled(self, unit: f64) -> CssPx {
+        CssPx::new((self.0 * unit) as f32)
+    }
+}
+
+/// The two axes of a wheel delta, in the unit the browser gave them.
+pub type WheelVector = Vector<WheelAmount>;
+
 /// One wheel event's deltas, in the unit the browser gave them.
 ///
 /// The fields are private: a view reads the distance through
 /// [`WheelDelta::to_px`], which asks it what a line and a page are worth.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WheelDelta {
-    dx: f64,
-    dy: f64,
+    amount: WheelVector,
     mode: WheelDeltaMode,
 }
 
 impl WheelDelta {
-    /// A delta of `(dx, dy)` in `mode` units.
+    /// A delta of `amount` in `mode` units.
     #[must_use]
-    pub const fn new(dx: f64, dy: f64, mode: WheelDeltaMode) -> Self {
-        Self { dx, dy, mode }
+    pub const fn new(amount: WheelVector, mode: WheelDeltaMode) -> Self {
+        Self { amount, mode }
     }
 
-    /// A delta of `(dx, dy)` CSS pixels.
+    /// A delta of `amount` CSS pixels.
     #[must_use]
-    pub const fn pixels(dx: f64, dy: f64) -> Self {
-        Self::new(dx, dy, WheelDeltaMode::Pixel)
+    pub const fn pixels(amount: WheelVector) -> Self {
+        Self::new(amount, WheelDeltaMode::Pixel)
     }
 
     /// The unit the browser gave.
@@ -91,16 +119,13 @@ impl WheelDelta {
             WheelDeltaMode::Line => (f64::from(line.dx.get()), f64::from(line.dy.get())),
             WheelDeltaMode::Page => (f64::from(page.dx.get()), f64::from(page.dy.get())),
         };
-        CssVector::new(
-            CssPx::new((self.dx * sx) as f32),
-            CssPx::new((self.dy * sy) as f32),
-        )
+        CssVector::new(self.amount.dx.scaled(sx), self.amount.dy.scaled(sy))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{WHEEL_LINE, WheelDelta, WheelDeltaMode};
+    use super::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
     use ambre_core::{CssPx, CssVector};
 
     const LINE: CssVector = CssVector::new(WHEEL_LINE, WHEEL_LINE);
@@ -110,24 +135,28 @@ mod tests {
         CssVector::new(CssPx::new(dx), CssPx::new(dy))
     }
 
+    fn units(dx: f64, dy: f64) -> WheelVector {
+        WheelVector::new(WheelAmount::new(dx), WheelAmount::new(dy))
+    }
+
     /// `KINETIC-015`: each unit reads as its pixels, on both axes.
     #[test]
     fn each_unit_reads_as_its_pixels() {
         assert_eq!(
-            WheelDelta::pixels(3.0, -5.0).to_px(LINE, PAGE),
+            WheelDelta::pixels(units(3.0, -5.0)).to_px(LINE, PAGE),
             px(3.0, -5.0)
         );
-        let line = WheelDelta::new(1.0, 3.0, WheelDeltaMode::Line);
+        let line = WheelDelta::new(units(1.0, 3.0), WheelDeltaMode::Line);
         assert_eq!(line.to_px(LINE, PAGE), px(40.0, 120.0));
-        let page = WheelDelta::new(0.0, -1.0, WheelDeltaMode::Page);
+        let page = WheelDelta::new(units(0.0, -1.0), WheelDeltaMode::Page);
         assert_eq!(page.to_px(LINE, PAGE), px(0.0, -600.0));
     }
 
     #[test]
     fn a_line_or_a_page_is_a_step_and_a_pixel_is_not() {
-        assert!(!WheelDelta::pixels(0.0, 1.0).is_step());
-        assert!(WheelDelta::new(0.0, 1.0, WheelDeltaMode::Line).is_step());
-        assert!(WheelDelta::new(0.0, 1.0, WheelDeltaMode::Page).is_step());
+        assert!(!WheelDelta::pixels(units(0.0, 1.0)).is_step());
+        assert!(WheelDelta::new(units(0.0, 1.0), WheelDeltaMode::Line).is_step());
+        assert!(WheelDelta::new(units(0.0, 1.0), WheelDeltaMode::Page).is_step());
     }
 
     #[test]

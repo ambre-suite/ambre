@@ -87,6 +87,35 @@ impl std::hash::Hash for CacheKey {
 
 pub use ambre_core::{Slant, Weight, WordBreak};
 
+/// How far right a paragraph starts, in whole units of the width its text
+/// breaks to (`CANVAS-084`). Whole, so a span keeps its `Eq` and its `Hash`
+/// in the cache key.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct IndentPx(u16);
+
+impl IndentPx {
+    /// No indent: the paragraph starts at the edge.
+    pub const ZERO: Self = Self(0);
+
+    /// An indent of `units`.
+    #[must_use]
+    pub const fn new(units: u16) -> Self {
+        Self(units)
+    }
+
+    /// The bare count of units.
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
+    /// The indent in the units of the width a layout breaks to.
+    #[must_use]
+    pub fn layout_units(self) -> f32 {
+        f32::from(self.0)
+    }
+}
+
 /// What a span shapes over its byte range: a weight, a slant, a family, an
 /// underline, an indent. Its ink and its tint are drawn over the layout, so
 /// they stay out of the cache key (`CANVAS-081`).
@@ -99,7 +128,7 @@ pub struct SpanShape {
     pub underline: ambre_core::Underline,
     /// How far right each paragraph holding bytes of the range starts, in
     /// the units of the width the text breaks to (`CANVAS-084`).
-    pub indent: u16,
+    pub indent: IndentPx,
 }
 
 /// Break `layout`, laid out from `text`, to `width`. Each paragraph holding
@@ -556,8 +585,8 @@ impl TextCache {
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
         let mut indents = Vec::new();
         for shape in spans {
-            if push_shape(&mut builder, text, shape) && shape.indent > 0 {
-                indents.push((shape.range, f32::from(shape.indent)));
+            if push_shape(&mut builder, text, shape) && shape.indent > IndentPx::ZERO {
+                indents.push((shape.range, shape.indent.layout_units()));
             }
         }
         let mut layout = builder.build(text);
@@ -692,7 +721,7 @@ mod tests {
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
             range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
-            indent: 12,
+            indent: super::IndentPx::new(12),
             ..SpanShape::default()
         };
         let layout = cache.get_or_build_spans(

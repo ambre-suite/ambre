@@ -197,8 +197,8 @@ impl Phases {
 /// The fatal screen's backdrop, which its frame also clears to.
 pub const FATAL_BACKDROP: Color = Color::from_rgba8(0x1a, 0x1a, 0x2e, 255);
 
-/// Paint the unrecoverable-error terminal screen over a `width` x `height`
-/// logical surface: a dark backdrop, a centered title and `message` below.
+/// Paint the unrecoverable-error terminal screen over a logical surface of
+/// `size`: a dark backdrop, a centered title and `message` below.
 ///
 /// The colours are fixed, never the theme's: the fatal path reads no state
 /// that a dead thread may have left half-written. It is the canvas twin of the
@@ -207,13 +207,14 @@ pub fn paint_fatal(
     surface: &mut impl DrawSurface,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    (width, height): (f32, f32),
+    size: ambre_core::ViewSize,
     message: &str,
 ) {
     const TITLE: Color = Color::from_rgba8(0xe0, 0x5a, 0x5a, 255);
     const BODY: Color = Color::from_rgba8(0x9a, 0xa0, 0xa6, 255);
     const TITLE_TEXT: &str = "Ambre encountered a fatal error and must reload.";
 
+    let (width, height) = (size.width.get(), size.height.get());
     surface.fill_rect(
         Rect::new(0.0, 0.0, f64::from(width), f64::from(height)),
         FATAL_BACKDROP,
@@ -429,7 +430,7 @@ mod tests {
             &mut surface,
             &mut font_cx,
             &mut cache,
-            (800.0, 600.0),
+            ambre_core::ViewSize::new(ViewPx::new(800.0), ViewPx::new(600.0)),
             "Logic panicked",
         );
 

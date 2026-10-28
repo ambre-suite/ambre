@@ -146,10 +146,12 @@ pub enum InputEvent {
     },
     /// Wheel / two-finger touchpad scroll. The delta keeps the unit the
     /// browser gave it: CSS pixels (`CANVAS-032`), lines or pages. The view
-    /// reads it through [`WheelDelta::to_px`] (`KINETIC-015`).
+    /// reads it through [`WheelDelta::to_px`] (`KINETIC-015`). `mods` holds
+    /// the primary accelerator when the browser reports the control key, as
+    /// it does for a trackpad pinch.
     Wheel {
         delta: WheelDelta,
-        ctrl_key: bool,
+        mods: Modifiers,
     },
 
     /// Committed text from the transparent `<textarea>` pipe: latin typing,
