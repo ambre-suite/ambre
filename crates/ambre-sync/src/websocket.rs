@@ -578,7 +578,7 @@ impl SyncState {
                 // socket opens: the unlock or the setup opens it.
                 self.user_id = Some(user_id);
                 *self.tokens.borrow_mut() = Some(tokens);
-                self.setup_owed = !keys_stored;
+                self.setup_owed = keys_stored == ambre_bus::KeySetup::Absent;
                 self.reply(
                     id,
                     RestEvent::ProviderSignedIn {

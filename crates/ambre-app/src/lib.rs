@@ -1416,7 +1416,10 @@ pub fn main() {
                     evt: ambre_bus::RestEvent::ProviderSignedIn { keys_stored, .. },
                     ..
                 } => {
-                    tracing::info!("Provider sign-in done (keys stored: {keys_stored})");
+                    tracing::info!(
+                        "Provider sign-in done (keys stored: {})",
+                        keys_stored.as_bool()
+                    );
                 }
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::DocumentList { documents },

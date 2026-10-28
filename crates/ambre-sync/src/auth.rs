@@ -315,7 +315,7 @@ impl SyncState {
                 user_id: resp.user_id,
                 display_name: resp.display_name,
                 email: resp.email,
-                keys_stored: !keys.setup_owed(),
+                keys_stored: ambre_bus::KeySetup::from_bool(!keys.setup_owed()),
                 tokens,
             });
         });
@@ -515,7 +515,7 @@ mod provider_tests {
         )
     }
 
-    fn signed_in(keys_stored: bool) -> SyncEvent {
+    fn signed_in(keys_stored: ambre_bus::KeySetup) -> SyncEvent {
         SyncEvent::ProviderSignedIn {
             id: RequestId::next(),
             user_id: UserId::new(),
@@ -536,7 +536,7 @@ mod provider_tests {
     #[test]
     fn a_provider_sign_in_keeps_its_tokens_on_the_worker() {
         let (mut state, rx) = worker();
-        state.handle_sync_event(signed_in(true));
+        state.handle_sync_event(signed_in(ambre_bus::KeySetup::Stored));
 
         let stored = state.tokens.borrow();
         let stored = stored.as_ref().expect("the worker holds the session");
@@ -549,7 +549,11 @@ mod provider_tests {
         assert!(told.iter().any(|e| matches!(
             e,
             LogicEvent::Rest {
-                evt: RestEvent::ProviderSignedIn { keys_stored: true, display_name, .. },
+                evt: RestEvent::ProviderSignedIn {
+                    keys_stored: ambre_bus::KeySetup::Stored,
+                    display_name,
+                    ..
+                },
                 ..
             } if display_name == "Ada"
         )));
@@ -562,7 +566,7 @@ mod provider_tests {
     #[test]
     fn a_provider_sign_in_without_keys_marks_the_setup_owed() {
         let (mut state, _rx) = worker();
-        state.handle_sync_event(signed_in(false));
+        state.handle_sync_event(signed_in(ambre_bus::KeySetup::Absent));
         assert!(state.setup_owed);
         state.handle_sync_event(SyncEvent::ReconnectNow);
         assert_eq!(state.socket_opens, 0);

@@ -392,6 +392,17 @@ pub enum RestCommand {
 // RestEvent -- relayed service response (Sync -> Logic -> UI)
 // -----------------------------------------------------------------------------
 
+ambre_core::define_flag! {
+    /// Whether the account holds its sealed keys on the relay (`CHROME-096`):
+    /// what follows a provider sign-in is an unlock or a setup.
+    pub enum KeySetup {
+        /// No key is stored yet: the next step sets the keys up.
+        Absent,
+        /// The keys are stored: the next step unlocks them.
+        Stored,
+    }
+}
+
 /// A correlatable service response. Carried inside `LogicEvent::Rest` and
 /// forwarded verbatim as `UiEvent::Rest`, echoing the originating
 /// [`RequestId`].
@@ -557,6 +568,6 @@ pub enum RestEvent {
         user_id: UserId,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
-        keys_stored: bool,
+        keys_stored: KeySetup,
     },
 }

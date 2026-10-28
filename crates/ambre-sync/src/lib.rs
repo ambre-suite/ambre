@@ -261,7 +261,7 @@ enum SyncEvent {
         user_id: UserId,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
-        keys_stored: bool,
+        keys_stored: ambre_bus::KeySetup,
         tokens: http::TokenPair,
     },
     AccountCreated {
