@@ -741,7 +741,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
 #[test]
 fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
     let mut ui = ProseUiState::default();
-    let block = BlockId::new(ambre_core::PeerId(1), 0);
+    let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
     ui.set_caret((block, DocOffset::new(3)));
     let consumed = ui.handle_input(
         &ProseInput::Press {

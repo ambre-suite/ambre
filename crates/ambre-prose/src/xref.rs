@@ -83,14 +83,7 @@ pub fn resolve(
             .find(|placed| placed.block_id == *target)
             .map(|placed| placed.page_start.number().to_string()),
         CrossRefKind::SectionNumber => {
-            let number = numbering::compute_section_number(&tree, target);
-            (!number.is_empty()).then(|| {
-                number
-                    .iter()
-                    .map(u32::to_string)
-                    .collect::<Vec<_>>()
-                    .join(".")
-            })
+            numbering::compute_section_number(&tree, target).map(|number| number.to_string())
         }
         CrossRefKind::CustomText(_) => None,
     }

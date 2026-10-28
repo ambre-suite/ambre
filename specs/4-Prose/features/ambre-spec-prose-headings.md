@@ -67,8 +67,9 @@ that precede the block in document order (`PROSE-FEAT-030`) and stored nowhere
 (`PROSE-FEAT-090`).
 
 ```rust
-/// The section number of a heading, as one counter per level.
-pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Vec<u32>;
+/// The section number of a heading, as one counter per level; `None` for a
+/// block that is no live heading.
+pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber>;
 
 /// The stored level of a block, when it is a heading. Raw: the numbering reads
 /// `StoredLevel::clamped`, not this (`PROSE-FEAT-029`).

@@ -371,7 +371,7 @@ mod tests {
         let numbers: Vec<Option<Vec<u32>>> = numbered
             .entries
             .iter()
-            .map(|entry| entry.section_number.clone())
+            .map(|entry| entry.section_number.as_ref().map(|n| n.parts().to_vec()))
             .collect();
         assert_eq!(numbers, [Some(vec![1]), Some(vec![1, 1])]);
     }

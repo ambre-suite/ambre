@@ -199,8 +199,8 @@ pub(crate) fn inverse(edits: &[TextEdit]) -> Vec<TextEdit> {
 mod tests {
     use super::*;
 
-    const A: BlockId = BlockId::new(ambre_core::PeerId(1), 0);
-    const B: BlockId = BlockId::new(ambre_core::PeerId(1), 1);
+    const A: BlockId = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+    const B: BlockId = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(1));
 
     fn ins(at: u32, n: u32) -> TextEdit {
         insertion(A, DocOffset::new(at), DocCount::new(n))

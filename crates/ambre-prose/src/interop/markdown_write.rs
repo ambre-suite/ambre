@@ -678,7 +678,7 @@ mod tests {
         );
         assert!(matches!(
             report.warnings[2],
-            ConversionWarning::FeatureNotSupported { count: 2, .. }
+            ConversionWarning::FeatureNotSupported { count, .. } if count.get() == 2
         ));
     }
 

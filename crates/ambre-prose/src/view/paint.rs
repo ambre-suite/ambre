@@ -1767,7 +1767,7 @@ mod tests {
         );
         // The document answers with the block it minted: the text typed
         // into it is drawn there, and the caret with it.
-        let minted = BlockId::new(ambre_core::PeerId(9), 9);
+        let minted = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
         ui.apply_event(&crate::events::ProseEvent::BlockSplit {
             source: first,
             new_block: minted,
@@ -1799,7 +1799,7 @@ mod tests {
             at: DocOffset::new(10),
             new_block: None,
         });
-        let minted = BlockId::new(ambre_core::PeerId(9), 9);
+        let minted = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
         ui.apply_event(&crate::events::ProseEvent::BlockSplit {
             source: first,
             new_block: minted,

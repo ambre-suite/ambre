@@ -16,7 +16,7 @@ pub mod markdown_write;
 
 use ambre_bus::app::prose::{
     ConversionFormat, ConversionReport, ConversionWarning, DroppedElement, FootnoteOrdinal,
-    LiftedBlock, UnsupportedFeature,
+    LiftedBlock, UnsupportedFeature, WarningCount,
 };
 
 use crate::doc::StoredLevel;
@@ -182,14 +182,14 @@ impl Warnings {
             } = warning
                 && *known == feature
             {
-                *count += 1;
+                *count = count.incremented();
                 return;
             }
         }
         self.list.push(ConversionWarning::FeatureNotSupported {
             feature,
             format,
-            count: 1,
+            count: WarningCount::new(1),
         });
     }
 
@@ -202,12 +202,14 @@ impl Warnings {
             } = warning
                 && *known == element
             {
-                *count += 1;
+                *count = count.incremented();
                 return;
             }
         }
-        self.list
-            .push(ConversionWarning::ElementDropped { element, count: 1 });
+        self.list.push(ConversionWarning::ElementDropped {
+            element,
+            count: WarningCount::new(1),
+        });
     }
 
     /// A block moved out of a parent that refuses it (`PROSE-IO-052`).
@@ -219,12 +221,14 @@ impl Warnings {
             } = warning
                 && *known == block
             {
-                *count += 1;
+                *count = count.incremented();
                 return;
             }
         }
-        self.list
-            .push(ConversionWarning::BlockLifted { block, count: 1 });
+        self.list.push(ConversionWarning::BlockLifted {
+            block,
+            count: WarningCount::new(1),
+        });
     }
 
     #[must_use]
@@ -251,7 +255,7 @@ pub fn report_message(report: &ConversionReport) -> Option<String> {
                 ConversionWarning::ElementDropped { element, count } => (element.label(), *count),
                 ConversionWarning::BlockLifted { block, count } => (block.label(), *count),
             };
-            if count > 1 {
+            if count.get() > 1 {
                 format!("{what} ({count})")
             } else {
                 what.to_owned()

@@ -203,19 +203,19 @@ impl fmt::Display for PageCount {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct BlockId {
     pub peer: ambre_core::PeerId,
-    pub counter: i32,
+    pub counter: ambre_core::OpCounter,
 }
 
 impl BlockId {
     #[must_use]
-    pub const fn new(peer: ambre_core::PeerId, counter: i32) -> Self {
+    pub const fn new(peer: ambre_core::PeerId, counter: ambre_core::OpCounter) -> Self {
         Self { peer, counter }
     }
 }
 
 impl fmt::Display for BlockId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{}", self.counter, self.peer)
+        write!(f, "{}@{}", self.counter.0, self.peer)
     }
 }
 
@@ -1250,6 +1250,42 @@ pub struct ResolvedCrossRef {
     pub shown: Option<String>,
 }
 
+/// The number drawn in front of a heading, one counter per level from the
+/// first (`PROSE-FEAT-030`). The first second-level heading under the second
+/// first-level one is `2.1`. It is derived, stored nowhere, and never empty.
+///
+/// The name is not `SectionNumber`, which [`CrossRefKind`] already spends on
+/// the variant that shows one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeadingNumber(Vec<u32>);
+
+impl HeadingNumber {
+    /// The number made of `parts`, outermost level first. `None` for no part:
+    /// a heading always has a counter at its own level.
+    #[must_use]
+    pub fn new(parts: Vec<u32>) -> Option<Self> {
+        (!parts.is_empty()).then_some(Self(parts))
+    }
+
+    /// The counters, outermost level first.
+    #[must_use]
+    pub fn parts(&self) -> &[u32] {
+        &self.0
+    }
+}
+
+impl fmt::Display for HeadingNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, part) in self.0.iter().enumerate() {
+            if index > 0 {
+                f.write_str(".")?;
+            }
+            write!(f, "{part}")?;
+        }
+        Ok(())
+    }
+}
+
 /// One line of a table of contents. Nothing here is persisted
 /// (`features/ambre-spec-prose-table-of-contents.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1259,7 +1295,7 @@ pub struct TocEntry {
     pub text: String,
     /// Present only while the block is configured as numbered
     /// (`PROSE-FEAT-062`).
-    pub section_number: Option<Vec<u32>>,
+    pub section_number: Option<HeadingNumber>,
     /// The page the heading starts on (`PROSE-FEAT-060`). `None` while the
     /// layout places no block that holds the heading.
     pub page: Option<PageNumber>,
@@ -1804,6 +1840,12 @@ impl ConversionReport {
     }
 }
 
+ambre_core::define_tally! {
+    /// The times one construct was lost in a conversion, the figure a
+    /// warning carries in place of a repeat.
+    pub struct WarningCount;
+}
+
 /// One fidelity loss. The same construct lost twice is one warning with its
 /// count, so a long file does not bury the user in repeats.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1812,14 +1854,20 @@ pub enum ConversionWarning {
     FeatureNotSupported {
         feature: UnsupportedFeature,
         format: ConversionFormat,
-        count: u32,
+        count: WarningCount,
     },
     /// An element the reader does not recognise, dropped with its markup
     /// and its text kept where it has any (`PROSE-IO-005`).
-    ElementDropped { element: DroppedElement, count: u32 },
+    ElementDropped {
+        element: DroppedElement,
+        count: WarningCount,
+    },
     /// A block the tree refuses where the file put it, moved to the nearest
     /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
-    BlockLifted { block: LiftedBlock, count: u32 },
+    BlockLifted {
+        block: LiftedBlock,
+        count: WarningCount,
+    },
 }
 
 /// A construct a format has no syntax for, the subject of a [`ConversionWarning::FeatureNotSupported`].
@@ -2467,6 +2515,16 @@ pub enum ProseRefusal {
 mod tests {
     use super::*;
 
+    /// A heading number reads as its counters joined by dots, and there is
+    /// none without a counter.
+    #[test]
+    fn a_heading_number_reads_dotted_and_is_never_empty() {
+        let number = HeadingNumber::new(vec![2, 1, 3]).expect("three counters");
+        assert_eq!(number.to_string(), "2.1.3");
+        assert_eq!(number.parts(), [2, 1, 3]);
+        assert_eq!(HeadingNumber::new(vec![]), None);
+    }
+
     /// Each refused action prints the words a refusal printed before it was
     /// typed (`PROSE-105`).
     #[test]
@@ -2516,7 +2574,7 @@ mod tests {
     #[test]
     fn presence_is_not_a_mutation() {
         let pos = CursorPosition {
-            block_id: BlockId::new(ambre_core::PeerId(1), 0),
+            block_id: BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0)),
             offset: DocOffset::ZERO,
             anchor: None,
         };
@@ -2524,7 +2582,7 @@ mod tests {
         assert!(!ProseCommand::Noop.is_mutating());
         assert!(
             ProseCommand::SplitBlock {
-                block_id: BlockId::new(ambre_core::PeerId(1), 0),
+                block_id: BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0)),
                 pos: DocOffset::ZERO
             }
             .is_mutating()

@@ -744,9 +744,9 @@ mod tests {
                 w,
                 ConversionWarning::FeatureNotSupported {
                     feature: UnsupportedFeature::CellFormatting,
-                    count: 1,
+                    count,
                     ..
-                }
+                } if count.get() == 1
             )),
             "{warnings:?}"
         );

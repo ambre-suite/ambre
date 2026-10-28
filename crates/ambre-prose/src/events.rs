@@ -15,12 +15,13 @@ pub use ambre_bus::app::prose::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
     ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
     EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry, FootnoteOrdinal,
-    GraphemeCount, HeaderField, HeadingLevel, HfTarget, KeepTogether, KeepWithNext, LineHeight,
-    LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, PageCount,
-    PageIndex, PageNumber, PageSpan, ParagraphCount, ParagraphStyle, PatternKind, PresencePayload,
-    ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction, RemoteCursor,
-    ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents,
-    TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign, WordCount, WordTotal,
+    GraphemeCount, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext,
+    LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle,
+    PageCount, PageIndex, PageNumber, PageSpan, ParagraphCount, ParagraphStyle, PatternKind,
+    PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction,
+    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
+    TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign,
+    WordCount, WordTotal,
 };
 
 use loro::TreeID;
@@ -32,13 +33,16 @@ use loro::TreeID;
 /// of the Sync worker's dependency graph (`SYNC-011`).
 #[must_use]
 pub fn tree_id(id: BlockId) -> TreeID {
-    TreeID::new(id.peer.0, id.counter)
+    TreeID::new(id.peer.0, id.counter.0)
 }
 
 /// The transport block id a CRDT id names. The inverse of [`tree_id`].
 #[must_use]
 pub fn block_id(id: TreeID) -> BlockId {
-    BlockId::new(ambre_core::PeerId(id.peer), id.counter)
+    BlockId::new(
+        ambre_core::PeerId(id.peer),
+        ambre_core::OpCounter(id.counter),
+    )
 }
 
 /// What one command answers with (`PROSE-046`).

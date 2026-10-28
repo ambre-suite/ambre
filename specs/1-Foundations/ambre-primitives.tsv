@@ -163,20 +163,18 @@ ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borr
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockId.counter | field | i32	newtype-inner	Loro TreeID counter, half of the BlockId composite id
-ambre-bus | src/app/prose.rs | crate::app::prose | BlockId::new(counter) | param | i32	newtype-inner	Loro TreeID counter, half of the BlockId composite id
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepted_at_root() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::has_body() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::BlockLifted.count | field | u32	math	count
-ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::ElementDropped.count | field | u32	math	count
-ambre-bus | src/app/prose.rs | crate::app::prose | ConversionWarning::FeatureNotSupported.count | field | u32	math	count
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | DocCount::of(text) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose.rs | crate::app::prose | FootnoteEntry.text | field | String	free-text	user content
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber.0 | field | Vec<u32>	newtype-inner	the counters of a heading number, outermost level first
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber::new(parts) | param | Vec<u32>	newtype-inner	the counters a heading number is checked from
+ambre-bus | src/app/prose.rs | crate::app::prose | HeadingNumber::parts() | ret | &[u32]	newtype-inner	the counters a heading number reads as
 ambre-bus | src/app/prose.rs | crate::app::prose | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -211,7 +209,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | String	ne
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::plus(n) | param | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextChangeSeq.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | field | Option<Vec<u32>>	math	section number components
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -2300,11 +2297,8 @@ ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret 
 ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic	predicate result
 ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
-ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | compute_section_number() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | list_depth() | ret | u32	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | section_numbers() | ret | Vec<(TreeID,Vec<u32>)>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	tree walk callback: continue or stop

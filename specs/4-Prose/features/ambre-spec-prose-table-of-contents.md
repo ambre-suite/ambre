@@ -92,7 +92,7 @@ pub struct TocEntry {
     pub level:          HeadingLevel,
     pub text:           String,
     /// Present only when the block is configured as numbered (`PROSE-FEAT-062`).
-    pub section_number: Option<Vec<u32>>,
+    pub section_number: Option<HeadingNumber>,
     /// The page number the heading starts on, read from the layout (`PROSE-FEAT-060`).
     /// `None` while the layout places no block that holds the heading.
     pub page:           Option<PageNumber>,

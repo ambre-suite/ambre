@@ -96,8 +96,7 @@ pub fn lines(toc: &TableOfContents) -> String {
             out.push('\n');
         }
         if let Some(number) = &entry.section_number {
-            let parts: Vec<String> = number.iter().map(u32::to_string).collect();
-            out.push_str(&parts.join("."));
+            out.push_str(&number.to_string());
             out.push(' ');
         }
         out.push_str(&entry.text);

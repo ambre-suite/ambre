@@ -1399,7 +1399,7 @@ mod tests {
     #[test]
     fn a_refusal_names_the_command_it_refused() {
         let mut state = ProseState::new().expect("a document is built");
-        let absent = BlockId::new(ambre_core::PeerId(9), 9);
+        let absent = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
         let outcome = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
             range: DocSpan::from_usize_range(0..1),
@@ -1415,7 +1415,7 @@ mod tests {
     #[test]
     fn two_commands_refused_for_one_reason_name_themselves_apart() {
         let mut state = ProseState::new().expect("a document is built");
-        let absent = BlockId::new(ambre_core::PeerId(9), 9);
+        let absent = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
         let deleting = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
             range: DocSpan::from_usize_range(0..1),

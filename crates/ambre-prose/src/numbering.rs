@@ -18,7 +18,7 @@
 use loro::{LoroTree, TreeID};
 
 use crate::doc;
-use crate::events::{HeadingLevel, ListStyle, OrderedStyle};
+use crate::events::{HeadingLevel, HeadingNumber, ListStyle, OrderedStyle};
 
 ambre_core::define_ordinal! {
     /// The number an ordered list item is drawn with, one for the first item
@@ -43,7 +43,7 @@ impl Counters {
     /// Count one heading of `level`, and answer the number it is drawn with.
     /// A stored level outside one to six is brought inside before it gets
     /// here (`PROSE-FEAT-029`): it would index the counters outside them.
-    fn bump(&mut self, level: HeadingLevel) -> Vec<u32> {
+    fn bump(&mut self, level: HeadingLevel) -> Option<HeadingNumber> {
         let depth = level.depth();
         if let Some(counter) = self.0.get_mut(depth) {
             *counter = counter.saturating_add(1);
@@ -51,7 +51,7 @@ impl Counters {
         if let Some(below) = self.0.get_mut(depth + 1..) {
             below.fill(0);
         }
-        self.0.iter().copied().take(depth + 1).collect()
+        HeadingNumber::new(self.0.iter().copied().take(depth + 1).collect())
     }
 }
 
@@ -62,28 +62,30 @@ impl Counters {
 /// for (`ambre-spec-budgets.md section 1`). A document with no heading answers
 /// an empty vector.
 #[must_use]
-pub fn section_numbers(tree: &LoroTree) -> Vec<(TreeID, Vec<u32>)> {
+pub fn section_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
     let mut counters = Counters::new();
     let mut out = Vec::new();
     walk(tree, &mut |tree, id| {
-        if let Some(stored) = doc::heading_level_of(tree, id) {
-            out.push((*id, counters.bump(stored.clamped())));
+        if let Some(stored) = doc::heading_level_of(tree, id)
+            && let Some(number) = counters.bump(stored.clamped())
+        {
+            out.push((*id, number));
         }
         false
     });
     out
 }
 
-/// The number one heading is drawn with, or an empty vector when the id names
-/// no live heading (`PROSE-FEAT-030`).
+/// The number one heading is drawn with, or `None` when the id names no live
+/// heading (`PROSE-FEAT-030`).
 ///
 /// The walk stops at the heading rather than numbering the rest of the
 /// document. Numbering every heading is [`section_numbers`], which costs one
 /// walk for all of them.
 #[must_use]
-pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Vec<u32> {
+pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber> {
     let mut counters = Counters::new();
-    let mut found = Vec::new();
+    let mut found = None;
     walk(tree, &mut |tree, id| {
         let Some(stored) = doc::heading_level_of(tree, id) else {
             return false;
@@ -225,7 +227,7 @@ mod tests {
     fn numbers(state: &ProseState) -> Vec<Vec<u32>> {
         section_numbers(&doc::blocks(state.document()))
             .into_iter()
-            .map(|(_, number)| number)
+            .map(|(_, number)| number.parts().to_vec())
             .collect()
     }
 
@@ -330,7 +332,7 @@ mod tests {
         }
         let tree = doc::blocks(state.document());
         for (id, number) in section_numbers(&tree) {
-            assert_eq!(compute_section_number(&tree, &id), number);
+            assert_eq!(compute_section_number(&tree, &id), Some(number));
         }
     }
 
@@ -342,7 +344,7 @@ mod tests {
         heading(&mut state, 1);
         let tree = doc::blocks(state.document());
         assert!(
-            compute_section_number(&tree, &crate::events::tree_id(paragraph)).is_empty(),
+            compute_section_number(&tree, &crate::events::tree_id(paragraph)).is_none(),
             "a paragraph carries no section number"
         );
     }
