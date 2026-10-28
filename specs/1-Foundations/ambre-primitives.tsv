@@ -971,7 +971,6 @@ ambre-core | src/font.rs | crate::font | FontWeight.0 | field | u16	newtype-inne
 ambre-core | src/font.rs | crate::font | FontWeight::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | FontWeight::is_bold() | ret | bool	generic	predicate result
 ambre-core | src/font.rs | crate::font | FontWeight::new(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
-ambre-core | src/font.rs | crate::font | FontWeight::of_bold(bold) | param | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | InvalidFontWeight.0 | field | u16	newtype-inner	the refused value an error reports
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
@@ -3097,10 +3096,6 @@ ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | f
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Bold.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Italic.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Strikethrough.0 | field | bool	newtype-inner	single field of its own wrapper
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | StyleEdit::Underline.0 | field | bool	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/grid.rs | crate::ui::grid | BASE_GRID | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit(register) | param | f64	math	geometry, layout, count or size local to the algorithm

@@ -2527,7 +2527,8 @@ fn two_bar_edits_compose_and_keep_the_selection() {
         missing: Vec::new(),
     });
     rig.sent();
-    rig.view.apply_quick_style(StyleEdit::Bold(true));
+    rig.view
+        .apply_quick_style(StyleEdit::Bold(ambre_core::Weight::Bold));
     match rig.sent().as_slice() {
         [ToileCommand::RestyleElements { ids, style }] => {
             assert_eq!(ids, &[eid("a")]);

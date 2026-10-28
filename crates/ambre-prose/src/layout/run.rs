@@ -1313,7 +1313,7 @@ mod tests {
         EffectiveStyle::from_parts(
             &doc::DocDefaults::default(),
             &ParagraphStyle::default(),
-            crate::layout::measure::Weight::Regular,
+            ambre_core::Weight::Regular,
         )
     }
 

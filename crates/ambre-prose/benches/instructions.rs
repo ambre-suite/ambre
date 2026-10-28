@@ -102,7 +102,7 @@ fn paragraph_shape() {
     let style = EffectiveStyle::from_parts(
         &DocDefaults::default(),
         &ParagraphStyle::default(),
-        ambre_prose::layout::measure::Weight::Regular,
+        ambre_core::Weight::Regular,
     );
     // The first paragraph and key, typed in its first word, whose breaks
     // run to the end. The view shapes it again whole, from its first line.

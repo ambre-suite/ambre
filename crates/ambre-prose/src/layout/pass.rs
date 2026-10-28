@@ -208,7 +208,7 @@ impl NotePlan {
         let style = EffectiveStyle::from_parts(
             &defaults,
             &ParagraphStyle::default(),
-            crate::layout::measure::Weight::Regular,
+            ambre_core::Weight::Regular,
         );
         let width = style.text_width(content_width);
         let mut numbers = HashMap::with_capacity(key.len());
@@ -546,9 +546,9 @@ fn measure_one(
     let (document, tree, defaults) = (scope.document, scope.tree, scope.defaults);
     let content_width = scope.content_width;
     let weight = if block_type == BlockType::Heading {
-        crate::layout::measure::Weight::Bold
+        ambre_core::Weight::Bold
     } else {
-        crate::layout::measure::Weight::Regular
+        ambre_core::Weight::Regular
     };
     let style = EffectiveStyle::resolve(defaults, tree, id, weight);
     let text_width = style.text_width(content_width);

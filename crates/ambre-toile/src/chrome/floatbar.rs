@@ -115,22 +115,24 @@ pub fn SelectionToolbar(
     let on_bold = Callback::new(move |()| {
         let next = !bold.get_untracked();
         bold.set(next);
-        on_style.run(StyleEdit::Bold(next));
+        on_style.run(StyleEdit::Bold(ambre_core::Weight::from_bool(next)));
     });
     let on_italic = Callback::new(move |()| {
         let next = !italic.get_untracked();
         italic.set(next);
-        on_style.run(StyleEdit::Italic(next));
+        on_style.run(StyleEdit::Italic(ambre_core::Slant::from_bool(next)));
     });
     let on_underline = Callback::new(move |()| {
         let next = !underline.get_untracked();
         underline.set(next);
-        on_style.run(StyleEdit::Underline(next));
+        on_style.run(StyleEdit::Underline(ambre_core::Underline::from_bool(next)));
     });
     let on_strike = Callback::new(move |()| {
         let next = !strikethrough.get_untracked();
         strikethrough.set(next);
-        on_style.run(StyleEdit::Strikethrough(next));
+        on_style.run(StyleEdit::Strikethrough(
+            ambre_core::Strikethrough::from_bool(next),
+        ));
     });
 
     // A command button routing through the shared sink (identical to the inspector

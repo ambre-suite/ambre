@@ -112,11 +112,14 @@ impl FontWeight {
         }
     }
 
-    /// The bold weight when `bold` holds, the regular one otherwise: what a
-    /// bold toggle writes.
+    /// The weight on the CSS scale a face of `weight` sets: what a bold toggle
+    /// writes.
     #[must_use]
-    pub const fn of_bold(bold: bool) -> Self {
-        if bold { Self::BOLD } else { Self::REGULAR }
+    pub const fn of(weight: Weight) -> Self {
+        match weight {
+            Weight::Regular => Self::REGULAR,
+            Weight::Bold => Self::BOLD,
+        }
     }
 
     /// Whether the weight draws as bold: 700 or heavier.
@@ -169,20 +172,26 @@ crate::define_flag! {
     /// bold. A record that stores a bold toggle keeps the byte of its `bool`.
     /// A record that stores a weight on the CSS scale holds a [`FontWeight`].
     pub enum Weight {
+        /// The family's regular face, 400 on the CSS scale.
         Regular,
+        /// The family's real bold face, 700 on the CSS scale.
         Bold,
     }
 
     /// The slant of a text's face: upright, or the family's real italic.
     pub enum Slant {
+        /// The family's upright face.
         Upright,
+        /// The family's real italic face, never a sheared upright one.
         Italic,
     }
 
     /// Where a line may break: between words only, or within a word too, so
     /// a long unbreakable token wraps instead of overflowing.
     pub enum WordBreak {
+        /// A line breaks between words only, and a long word overflows.
         Whole,
+        /// A line may break inside a word as well, where it would overflow.
         Anywhere,
     }
 
@@ -305,7 +314,7 @@ impl From<FontFamily> for String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocPx, FontFamily, FontSize, FontWeight};
+    use super::{DocPx, FontFamily, FontSize, FontWeight, Weight};
 
     /// A weight lies on the CSS scale, and bold starts at 700.
     #[test]
@@ -315,7 +324,8 @@ mod tests {
         assert_eq!(FontWeight::new(700), Some(FontWeight::BOLD));
         assert!(FontWeight::new(800).is_some_and(FontWeight::is_bold));
         assert!(!FontWeight::new(600).is_some_and(FontWeight::is_bold));
-        assert_eq!(FontWeight::of_bold(false), FontWeight::REGULAR);
+        assert_eq!(FontWeight::of(Weight::Regular), FontWeight::REGULAR);
+        assert_eq!(FontWeight::of(Weight::Bold), FontWeight::BOLD);
         assert!(FontWeight::try_from(0).is_err());
     }
 

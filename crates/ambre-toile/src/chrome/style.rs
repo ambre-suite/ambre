@@ -140,19 +140,27 @@ pub fn StyleInspector(
     // The four format toggles flip their signal and commit.
     let on_bold = Callback::new(move |()| {
         bold.update(|b| *b = !*b);
-        commit(StyleEdit::Bold(bold.get_untracked()));
+        commit(StyleEdit::Bold(ambre_core::Weight::from_bool(
+            bold.get_untracked(),
+        )));
     });
     let on_italic = Callback::new(move |()| {
         italic.update(|i| *i = !*i);
-        commit(StyleEdit::Italic(italic.get_untracked()));
+        commit(StyleEdit::Italic(ambre_core::Slant::from_bool(
+            italic.get_untracked(),
+        )));
     });
     let on_underline = Callback::new(move |()| {
         underline.update(|u| *u = !*u);
-        commit(StyleEdit::Underline(underline.get_untracked()));
+        commit(StyleEdit::Underline(ambre_core::Underline::from_bool(
+            underline.get_untracked(),
+        )));
     });
     let on_strike = Callback::new(move |()| {
         strikethrough.update(|s| *s = !*s);
-        commit(StyleEdit::Strikethrough(strikethrough.get_untracked()));
+        commit(StyleEdit::Strikethrough(
+            ambre_core::Strikethrough::from_bool(strikethrough.get_untracked()),
+        ));
     });
 
     // A "Mixed" hint shown beside a control whose value differs across selection.

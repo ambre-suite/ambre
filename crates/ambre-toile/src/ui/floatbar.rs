@@ -84,13 +84,13 @@ pub enum StyleEdit {
     /// Font size, or automatic: a note's body then tracks its card.
     Size(FontSizeChoice),
     /// Bold toggle (maps to `font.weight` 700 / 400).
-    Bold(bool),
+    Bold(ambre_core::Weight),
     /// Italic toggle.
-    Italic(bool),
+    Italic(ambre_core::Slant),
     /// Underline toggle.
-    Underline(bool),
+    Underline(ambre_core::Underline),
     /// Strikethrough toggle.
-    Strikethrough(bool),
+    Strikethrough(ambre_core::Strikethrough),
 }
 
 impl StyleEdit {
@@ -113,12 +113,10 @@ impl StyleEdit {
             // The choice holds no negative size, so none reaches the style
             // (`TOILE-UI-180`).
             StyleEdit::Size(s) => style.font.size = s,
-            StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of_bold(b),
-            StyleEdit::Italic(i) => style.font.italic = ambre_core::Slant::from_bool(i),
-            StyleEdit::Underline(u) => style.font.underline = ambre_core::Underline::from_bool(u),
-            StyleEdit::Strikethrough(s) => {
-                style.font.strikethrough = ambre_core::Strikethrough::from_bool(s);
-            }
+            StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of(b),
+            StyleEdit::Italic(i) => style.font.italic = i,
+            StyleEdit::Underline(u) => style.font.underline = u,
+            StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
         }
     }
 }
@@ -512,7 +510,7 @@ mod tests {
         // Toggling underline leaves every other attribute (incl. the other three
         // decorations, the fill and the text colour) exactly as it was.
         let mut s = base.clone();
-        StyleEdit::Underline(true).apply_to(&mut s);
+        StyleEdit::Underline(ambre_core::Underline::Underlined).apply_to(&mut s);
         assert_eq!(s.font.underline, ambre_core::Underline::Underlined);
         assert_eq!(s.fill, base.fill);
         assert_eq!(s.text_color, base.text_color);
@@ -541,9 +539,9 @@ mod tests {
             },
             ..ElementStyle::default()
         };
-        StyleEdit::Bold(false).apply_to(&mut s);
+        StyleEdit::Bold(ambre_core::Weight::Regular).apply_to(&mut s);
         assert_eq!(s.font.weight, ambre_core::FontWeight::REGULAR);
-        StyleEdit::Bold(true).apply_to(&mut s);
+        StyleEdit::Bold(ambre_core::Weight::Bold).apply_to(&mut s);
         assert_eq!(s.font.weight, ambre_core::FontWeight::BOLD);
         // A negative size is refused, never clamped to automatic: no choice
         // holds one, and a decoded one does not decode.

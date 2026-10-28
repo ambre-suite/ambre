@@ -11,7 +11,7 @@ use parley::{
 };
 
 use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
-use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, char_to_byte};
+use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, Weight, char_to_byte};
 
 use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
@@ -100,15 +100,6 @@ pub struct EffectiveStyle {
     pub space_after: DocPx,
     pub keep_together: bool,
     pub keep_with_next: bool,
-}
-
-/// The weight a block's text is set in before its marks apply: a heading
-/// is bold.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Weight {
-    #[default]
-    Regular,
-    Bold,
 }
 
 impl EffectiveStyle {

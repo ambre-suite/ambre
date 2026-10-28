@@ -337,7 +337,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             let style = EffectiveStyle::from_parts(
                 &defaults,
                 &ParagraphStyle::default(),
-                crate::layout::measure::Weight::Regular,
+                ambre_core::Weight::Regular,
             );
             match doc::DefaultsKey::parse(stored.key(1)?)? {
                 doc::DefaultsKey::FontFamily => {
@@ -396,7 +396,7 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         &doc::read_defaults(document),
         &tree,
         &id,
-        crate::layout::measure::Weight::Regular,
+        ambre_core::Weight::Regular,
     );
     let what = match field {
         doc::NodeKey::Type => format!("is a {:?}", doc::block_type_of(&tree, &id)?),
