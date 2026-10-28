@@ -7336,6 +7336,7 @@
   {"edge": "cites-section", "from": "PROSE-105", "section": "3", "to": "4-Prose/features/ambre-spec-prose-engine.md"},
   {"edge": "verified-by", "from": "PROSE-105", "to": "ambre_prose::logic::tests::a_refusal_names_the_command_it_refused"},
   {"edge": "verified-by", "from": "PROSE-105", "to": "ambre_prose::logic::tests::two_commands_refused_for_one_reason_name_themselves_apart"},
+  {"edge": "verified-by", "from": "PROSE-105", "to": "ambre_bus::app::prose::tests::each_refused_action_keeps_its_label"},
   {"edge": "cites-section", "from": "PROSE-106", "section": "3", "to": "4-Prose/features/ambre-spec-prose-engine.md"},
   {"edge": "verified-by", "from": "PROSE-106", "to": "ambre_prose::logic::tests::a_mark_value_the_grammar_refuses_is_not_a_range_failure"},
   {"edge": "cites-section", "from": "PROSE-047", "section": "3", "to": "4-Prose/features/ambre-spec-prose-engine.md"},
