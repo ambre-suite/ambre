@@ -155,7 +155,7 @@ mod tests {
     /// is the vault's, so no view sees it (`RESID-026`).
     #[wasm_bindgen_test]
     fn a_seal_asks_the_worker_and_takes_its_answer() {
-        let (tx, rx) = conduit::local(8);
+        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
         let vault = Vault::new(tx);
         let got = Rc::new(RefCell::new(None));
         let doc = DocumentId::new();
@@ -190,7 +190,7 @@ mod tests {
     /// the rows read back open to nothing.
     #[wasm_bindgen_test]
     fn a_locked_store_answers_nothing() {
-        let (tx, rx) = conduit::local(8);
+        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
         let vault = Vault::new(tx);
         let sealed = Rc::new(Cell::new(false));
         let opened = Rc::new(Cell::new(false));
@@ -221,7 +221,7 @@ mod tests {
     /// order once the channel has room.
     #[wasm_bindgen_test]
     fn a_full_channel_holds_the_requests_in_order() {
-        let (tx, rx) = conduit::local(1);
+        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
         let vault = Vault::new(tx);
         for key in ["a", "b"] {
             vault.seal(
@@ -249,7 +249,7 @@ mod tests {
     /// No rows to open answers at once, with no request.
     #[wasm_bindgen_test]
     fn no_rows_open_at_once() {
-        let (tx, rx) = conduit::local(8);
+        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
         let vault = Vault::new(tx);
         let opened = Rc::new(Cell::new(false));
         vault.open(Vec::new(), {

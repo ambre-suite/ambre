@@ -841,7 +841,8 @@ mod tests {
     async fn the_provider_control_asks_for_the_address() {
         let owner = Owner::new();
         owner.set();
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(8));
         let dev_mode = RwSignal::new(Some(SignInMode::Oidc));
         let before = web_sys::window().unwrap().location().href().unwrap();
 
@@ -874,7 +875,8 @@ mod tests {
     async fn the_sign_out_control_ends_the_session_once() {
         let owner = Owner::new();
         owner.set();
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(8));
         let before = web_sys::window().unwrap().location().href().unwrap();
 
         let container = mount_in_container(move || sign_out_control(tx));
@@ -993,7 +995,8 @@ mod tests {
     async fn the_sign_in_waits_for_the_answer() {
         let owner = Owner::new();
         owner.set();
-        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let (tx, _rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(8));
         let dev_mode = RwSignal::new(None);
         let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
         let routes = |c: &web_sys::Element| {
@@ -1041,7 +1044,8 @@ mod tests {
     async fn a_rename_past_the_cap_is_refused_with_a_toast() {
         let owner = Owner::new();
         owner.set();
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(8));
         let toasts = Toasts::new();
         let item = DocItem {
             document_id: DocumentId::new(),

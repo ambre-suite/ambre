@@ -1914,8 +1914,8 @@ mod tests {
     type Listed = (Region, Option<MentionList>);
 
     fn page() -> Page {
-        let (events, from_logic) = local(64);
-        let (to_logic, commands) = local(64);
+        let (events, from_logic) = local(ambre_bus::conduit::ChannelCapacity::new(64));
+        let (to_logic, commands) = local(ambre_bus::conduit::ChannelCapacity::new(64));
         let pane = Rc::new(Cell::new(MurmurePane::default()));
         let shown = Rc::clone(&pane);
         let back = Rc::clone(&pane);

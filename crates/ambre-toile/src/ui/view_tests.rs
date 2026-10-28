@@ -36,8 +36,10 @@ impl Rig {
 
     /// A board whose queue to the Logic thread holds `capacity` commands.
     fn with_queue(capacity: usize) -> Self {
-        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
-        let (from_logic, rx) = ambre_bus::conduit::local(256);
+        let (tx, to_logic) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(capacity));
+        let (from_logic, rx) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(256));
         let notices = NoticePublisher::new();
         let view = ToileView::new(
             DocumentId::new(),

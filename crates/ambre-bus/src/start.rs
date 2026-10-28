@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn no_command_is_posted_before_the_worker_announces_itself() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_main::<u32>(8, &bell);
+        let (tx, rx) = to_main::<u32>(crate::conduit::ChannelCapacity::new(8), &bell);
         let mut gate = StartGate::new();
         let mut posted = Vec::new();
 

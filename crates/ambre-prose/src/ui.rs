@@ -974,7 +974,8 @@ mod tests {
 
     #[test]
     fn a_full_channel_drops_the_command_rather_than_holding_the_frame() {
-        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(1);
+        let (tx, _rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(1));
         assert_eq!(
             send_command(&tx, a_document(), ProseCommand::Noop),
             SendResult::Sent
@@ -989,7 +990,8 @@ mod tests {
 
     #[test]
     fn a_full_channel_holds_an_edit_rather_than_the_frame() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(1);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(1));
         let mut outbox = Outbox::new(tx);
         assert_eq!(
             send_edit(&mut outbox, a_document(), ProseCommand::Noop),
@@ -1008,7 +1010,8 @@ mod tests {
 
     #[test]
     fn a_closed_channel_is_told_apart_from_a_full_one() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(1);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(1));
         drop(rx);
         assert_eq!(
             send_command(&tx, a_document(), ProseCommand::Noop),
@@ -1018,7 +1021,8 @@ mod tests {
 
     #[test]
     fn the_draft_echo_never_reaches_the_wire() {
-        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(4);
+        let (tx, rx) =
+            ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(4));
         let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(

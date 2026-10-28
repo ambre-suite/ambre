@@ -194,14 +194,13 @@ struct Shared<T> {
 
 impl<T> Shared<T> {
     fn new(
-        capacity: Option<usize>,
+        capacity: Option<ChannelCapacity>,
         receiver_bell: Option<Doorbell>,
         sender_bell: Option<Doorbell>,
     ) -> Self {
         Self {
             queue: match capacity {
-                // `ArrayQueue::new` refuses a capacity of zero.
-                Some(capacity) => Queue::Bounded(ArrayQueue::new(capacity.max(1))),
+                Some(capacity) => Queue::Bounded(ArrayQueue::new(capacity.get())),
                 None => Queue::Unbounded(SegQueue::new()),
             },
             waker: AtomicWaker::new(),
@@ -475,10 +474,56 @@ pub struct Backlog<T> {
 
 /// The two lengths between which a [`Backlog`] asks its source to stop. The
 /// gap between them keeps one burst from flapping the source on and off.
-#[derive(Debug, Clone, Copy)]
-struct Marks {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Marks {
     high: usize,
     low: usize,
+}
+
+impl Marks {
+    /// Stop the source at `high` values held, and start it again at `low`.
+    /// `None` unless `low` sits below `high`: the source would never be
+    /// released.
+    #[must_use]
+    pub const fn new(high: usize, low: usize) -> Option<Self> {
+        if low < high {
+            Some(Self { high, low })
+        } else {
+            None
+        }
+    }
+
+    /// The length at which the source is asked to stop.
+    #[must_use]
+    pub const fn high(self) -> usize {
+        self.high
+    }
+
+    /// The length at which the source is asked to send again.
+    #[must_use]
+    pub const fn low(self) -> usize {
+        self.low
+    }
+}
+
+/// How many values a bounded channel holds before a send finds it full.
+///
+/// A queue holds at least one value, so a capacity of zero holds one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelCapacity(usize);
+
+impl ChannelCapacity {
+    /// A capacity of `values`, one when `values` is zero.
+    #[must_use]
+    pub const fn new(values: usize) -> Self {
+        Self(if values == 0 { 1 } else { values })
+    }
+
+    /// The number of values, never zero.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
 }
 
 /// What a [`Backlog`] asks of the source that feeds it (`SYNC-059`).
@@ -500,16 +545,11 @@ impl<T> Backlog<T> {
         }
     }
 
-    /// A backlog that asks its source to stop at `high` values held, and to
-    /// start again at `low`. Read the request with [`Backlog::pressure`].
-    ///
-    /// # Panics
-    ///
-    /// When `low` is not below `high`: the source would never be released.
-    pub fn with_marks(to: Sender<T>, high: usize, low: usize) -> Self {
-        assert!(low < high, "the low mark must sit below the high mark");
+    /// A backlog that asks its source to stop at the high mark, and to start
+    /// again at the low one. Read the request with [`Backlog::pressure`].
+    pub fn with_marks(to: Sender<T>, marks: Marks) -> Self {
         Self {
-            marks: Some(Marks { high, low }),
+            marks: Some(marks),
             ..Self::new(to)
         }
     }
@@ -604,7 +644,7 @@ impl<T> Drop for UnboundedSender<T> {
 }
 
 /// A channel from the main thread to the worker bound to `bell`.
-pub fn to_worker<T>(capacity: usize, bell: &Doorbell) -> (Sender<T>, Receiver<T>) {
+pub fn to_worker<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), Some(bell.clone()), None));
     (
         Sender {
@@ -615,7 +655,7 @@ pub fn to_worker<T>(capacity: usize, bell: &Doorbell) -> (Sender<T>, Receiver<T>
 }
 
 /// A channel from the worker bound to `bell` to the main thread.
-pub fn to_main<T>(capacity: usize, bell: &Doorbell) -> (WorkerSender<T>, Receiver<T>) {
+pub fn to_main<T>(capacity: ChannelCapacity, bell: &Doorbell) -> (WorkerSender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), None, Some(bell.clone())));
     (
         WorkerSender {
@@ -626,7 +666,7 @@ pub fn to_main<T>(capacity: usize, bell: &Doorbell) -> (WorkerSender<T>, Receive
 }
 
 /// A channel between two parts of the main thread.
-pub fn local<T>(capacity: usize) -> (Sender<T>, Receiver<T>) {
+pub fn local<T>(capacity: ChannelCapacity) -> (Sender<T>, Receiver<T>) {
     let shared = Arc::new(Shared::new(Some(capacity), None, None));
     (
         Sender {
@@ -661,7 +701,7 @@ mod tests {
 
     #[test]
     fn messages_arrive_in_order() {
-        let (tx, rx) = local(4);
+        let (tx, rx) = local(ChannelCapacity::new(4));
         for n in 0..4 {
             tx.try_send(n).expect("room");
         }
@@ -671,7 +711,7 @@ mod tests {
 
     #[test]
     fn a_full_channel_hands_the_value_back() {
-        let (tx, rx) = local(1);
+        let (tx, rx) = local(ChannelCapacity::new(1));
         tx.try_send(1).expect("room");
         assert_eq!(tx.try_send(2), Err(TrySendError::Full(2)));
         assert_eq!(rx.try_recv(), Ok(1));
@@ -679,15 +719,26 @@ mod tests {
 
     #[test]
     fn a_capacity_of_zero_holds_one() {
-        let (tx, _rx) = local(0);
+        assert_eq!(ChannelCapacity::new(0).get(), 1);
+        let (tx, _rx) = local(ChannelCapacity::new(0));
         assert_eq!(tx.try_send(1), Ok(()));
+    }
+
+    /// A pair of marks whose low one does not sit below the high one would
+    /// hold its source for good, and is refused.
+    #[test]
+    fn a_low_mark_must_sit_below_the_high_one() {
+        assert_eq!(Marks::new(3, 3), None);
+        assert_eq!(Marks::new(1, 3), None);
+        let marks = Marks::new(3, 1).expect("1 sits below 3");
+        assert_eq!((marks.high(), marks.low()), (3, 1));
     }
 
     /// `ARCH-024`: the last sender gone reads as a disconnection, once the
     /// messages it queued are taken.
     #[test]
     fn the_last_sender_dropped_disconnects_after_its_messages() {
-        let (tx, rx) = local(4);
+        let (tx, rx) = local(ChannelCapacity::new(4));
         let second = tx.clone();
         tx.try_send(1).expect("room");
         drop(tx);
@@ -699,7 +750,7 @@ mod tests {
 
     #[test]
     fn a_dropped_receiver_refuses_the_send() {
-        let (tx, rx) = local(4);
+        let (tx, rx) = local(ChannelCapacity::new(4));
         drop(rx);
         assert!(tx.is_disconnected());
         assert_eq!(tx.try_send(1), Err(TrySendError::Disconnected(1)));
@@ -720,7 +771,7 @@ mod tests {
     /// arrival order once the receiver takes room. Nothing is dropped.
     #[test]
     fn a_backlog_holds_past_a_full_channel_and_keeps_the_order() {
-        let (tx, rx) = local(2);
+        let (tx, rx) = local(ChannelCapacity::new(2));
         let mut backlog = Backlog::new(tx);
         for n in 0..5 {
             backlog.push(n);
@@ -739,7 +790,7 @@ mod tests {
     /// channel has room by then.
     #[test]
     fn a_backlog_never_lets_a_new_value_overtake_a_held_one() {
-        let (tx, rx) = local(1);
+        let (tx, rx) = local(ChannelCapacity::new(1));
         let mut backlog = Backlog::new(tx);
         backlog.push(1);
         backlog.push(2);
@@ -754,8 +805,8 @@ mod tests {
     /// again once at the low mark, never in between (`SYNC-059`).
     #[test]
     fn a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low() {
-        let (tx, rx) = local(1);
-        let mut backlog = Backlog::with_marks(tx, 3, 1);
+        let (tx, rx) = local(ChannelCapacity::new(1));
+        let mut backlog = Backlog::with_marks(tx, Marks::new(3, 1).expect("1 sits below 3"));
         let mut asked = Vec::new();
         for n in 0..5 {
             backlog.push(n);
@@ -775,7 +826,7 @@ mod tests {
 
     #[test]
     fn a_backlog_drops_what_a_gone_receiver_will_never_take() {
-        let (tx, rx) = local(1);
+        let (tx, rx) = local(ChannelCapacity::new(1));
         let mut backlog = Backlog::new(tx);
         backlog.push(1);
         backlog.push(2);
@@ -815,7 +866,7 @@ mod tests {
     #[test]
     fn a_send_wakes_the_parked_worker() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_worker(4, &bell);
+        let (tx, rx) = to_worker(ChannelCapacity::new(4), &bell);
         let (bound, read) = parked_reader(bell, rx);
         bound.recv_timeout(PATIENCE).expect("bound");
         thread::sleep(Duration::from_millis(20));
@@ -828,7 +879,7 @@ mod tests {
     #[test]
     fn the_last_sender_dropped_wakes_the_parked_worker() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_worker::<u32>(4, &bell);
+        let (tx, rx) = to_worker::<u32>(ChannelCapacity::new(4), &bell);
         let (bound, read) = parked_reader(bell, rx);
         bound.recv_timeout(PATIENCE).expect("bound");
         thread::sleep(Duration::from_millis(20));
@@ -844,7 +895,7 @@ mod tests {
     #[test]
     fn a_full_send_resumes_when_the_receiver_takes_one() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_main(2, &bell);
+        let (tx, rx) = to_main(ChannelCapacity::new(2), &bell);
         let (done_tx, done_rx) = mpsc::channel();
         thread::spawn(move || {
             let _waiter = bell.bind().expect("bind");
@@ -869,7 +920,7 @@ mod tests {
     #[test]
     fn a_dropped_receiver_wakes_a_parked_sender() {
         let bell = Doorbell::new();
-        let (tx, rx) = to_main(1, &bell);
+        let (tx, rx) = to_main(ChannelCapacity::new(1), &bell);
         let (parked_tx, parked_rx) = mpsc::channel();
         let (done_tx, done_rx) = mpsc::channel();
         thread::spawn(move || {
@@ -892,7 +943,7 @@ mod tests {
     #[test]
     fn a_full_send_off_the_bound_thread_hands_the_value_back() {
         let bell = Doorbell::new();
-        let (tx, _rx) = to_main(1, &bell);
+        let (tx, _rx) = to_main(ChannelCapacity::new(1), &bell);
         tx.send(1).expect("room");
         assert_eq!(tx.send(2), Err(SendError::Unbound(2)));
     }

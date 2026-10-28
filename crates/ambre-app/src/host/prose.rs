@@ -796,8 +796,10 @@ mod tests {
             .expect("a body")
             .append_child(&cell)
             .expect("attached");
-        let (to_logic, _queue) = ambre_bus::conduit::local(4);
-        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let (to_logic, _queue) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
+        let (_to_ui, from_logic) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
         let pipe = TextInput::create(&document, &cell);
         let mut view = ProseView::new(
             DocumentId::new(),
@@ -840,8 +842,10 @@ mod tests {
             .expect("a body")
             .append_child(&cell)
             .expect("attached");
-        let (to_logic, queue) = ambre_bus::conduit::local(1);
-        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let (to_logic, queue) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
+        let (_to_ui, from_logic) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
         let document_id = DocumentId::new();
         let mut view = ProseView::new(
             document_id,
@@ -896,8 +900,10 @@ mod tests {
         let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
         mount_to(target, move || view! { <ProseFigures figures=figures /> }).forget();
 
-        let (to_logic, _queue) = ambre_bus::conduit::local(4);
-        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let (to_logic, _queue) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
+        let (_to_ui, from_logic) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
         let mut view = ProseView::new(
             DocumentId::new(),
             to_logic,

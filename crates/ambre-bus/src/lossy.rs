@@ -112,14 +112,14 @@ mod tests {
 
     #[test]
     fn an_open_channel_takes_a_request_that_changes_nothing() {
-        let (tx, rx) = crate::conduit::local(2);
+        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(2));
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
         assert_eq!(rx.len(), 1);
     }
 
     #[test]
     fn a_full_channel_drops_the_request_and_says_so() {
-        let (tx, rx) = crate::conduit::local(1);
+        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Dropped);
         assert!(!LossyOutcome::Dropped.sent());
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn a_command_that_changes_the_document_never_reaches_the_channel() {
-        let (tx, rx) = crate::conduit::local(8);
+        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(8));
         for cmd in mutations() {
             assert_eq!(send_lossy(&tx, cmd), LossyOutcome::Refused);
         }
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn a_command_of_another_plane_is_refused_with_the_mutations() {
-        let (tx, rx) = crate::conduit::local(1);
+        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
         let close = LogicCommand::CloseDocument {
             document_id: DocumentId::from_bytes([2; 16]),
         };
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn a_gone_logic_thread_is_reported_not_dropped() {
-        let (tx, rx) = crate::conduit::local(1);
+        let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
         drop(rx);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Disconnected);
     }

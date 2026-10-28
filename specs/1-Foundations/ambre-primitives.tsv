@@ -70,14 +70,11 @@ ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	
 ambre-app | src/landing.rs | crate::landing | card_name(name) | param | Option<String>	free-text	document name for display
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/landing.rs | crate::landing | rel_time() | ret | String	free-text	relative time label
-ambre-app | src/lib.rs | crate | CHANNEL_CAPACITY | const | usize	math	channel capacity
 ambre-app | src/lib.rs | crate | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/lib.rs | crate | ChromeStatus.hydrating | field | bool	generic	a fact that selects no mode: whether the first sync is still landing; the link itself is LinkState, and no caller writes it as a literal
 ambre-app | src/lib.rs | crate | ChromeStatus::dot_class() | ret | &'static str	free-text	css class
 ambre-app | src/lib.rs | crate | ChromeStatus::label() | ret | &'static str	free-text	label
 ambre-app | src/lib.rs | crate | ChromeStatus::open_failed() | ret | Option<&'static str>	free-text	notice text
-ambre-app | src/lib.rs | crate | SYNC_INBOX_HIGH | const | usize	math	watermark count
-ambre-app | src/lib.rs | crate | SYNC_INBOX_LOW | const | usize	math	watermark count
 ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<String>>	free-text	filter values text
 ambre-app | src/lib.rs | crate | Wiring.formula_ref | field | RwSignal<String>	free-text	formula bar label
 ambre-app | src/lib.rs | crate | Wiring.formula_text | field | RwSignal<String>	free-text	formula bar text
@@ -384,11 +381,16 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.
 ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::with_marks(high) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::with_marks(low) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
+ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
+ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Marks.high | field | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Marks.low | field | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/conduit.rs | crate::conduit | Marks::high() | ret | usize	math	a backlog length at which a source is held or released
+ambre-bus | src/conduit.rs | crate::conduit | Marks::low() | ret | usize	math	a backlog length at which a source is held or released
+ambre-bus | src/conduit.rs | crate::conduit | Marks::new(high) | param | usize	math	a backlog length at which a source is held or released
+ambre-bus | src/conduit.rs | crate::conduit | Marks::new(low) | param | usize	math	a backlog length at which a source is held or released
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
@@ -397,11 +399,7 @@ ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::len() | ret | usize	m
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | Shared<T>::new(capacity) | param | Option<usize>	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | UnboundedSender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | local(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | to_main(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | to_worker(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/event.rs | crate::event | ApiRequest::as_str() | ret | &'static str	newtype-inner	the wire word of the ApiRequest enum
 ambre-bus | src/event.rs | crate::event | LogicEvent::AmendmentsLinkFailed.message | field | String	free-text	user-facing or log message
 ambre-bus | src/event.rs | crate::event | LogicEvent::ApiError.message | field | String	free-text	user-facing or log message

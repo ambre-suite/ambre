@@ -63,8 +63,10 @@ impl Rig {
 
     /// A view whose queue to the Logic thread holds `capacity` commands.
     fn with_queue(capacity: usize) -> Self {
-        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
-        let (from_logic, rx) = ambre_bus::conduit::local(256);
+        let (tx, to_logic) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(capacity));
+        let (from_logic, rx) =
+            ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(256));
         let clock = TestClock::default();
         let theme = ThemeControl::default();
         let view = TrameView::new(
@@ -527,7 +529,7 @@ impl Rig {
 
     /// Cut the Logic thread off, so every later send is refused.
     fn lose_logic(&mut self) {
-        let (_tx, rx) = ambre_bus::conduit::local(1);
+        let (_tx, rx) = ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
         drop(std::mem::replace(&mut self.to_logic, rx));
     }
 

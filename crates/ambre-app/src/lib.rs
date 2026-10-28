@@ -36,7 +36,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
-use ambre_bus::conduit;
+use ambre_bus::conduit::{self, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role,
@@ -93,13 +93,15 @@ use tofu::TofuPrompt;
 /// it. The hot viewport path is coalesced to <=1 send/frame on the UI side
 /// (see `TrameView`). It exists purely as a safety bound so a momentarily-slow
 /// consumer cannot grow an unbounded queue in the shared heap.
-const CHANNEL_CAPACITY: usize = 1024;
+const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
 
-/// Sync events held past a full channel. At the high count the worker stops
-/// reading the relay, and at the low count it starts again
-/// (`ambre-spec-budgets.md section 6`, `SYNC-059`).
-const SYNC_INBOX_HIGH: usize = 4 * CHANNEL_CAPACITY;
-const SYNC_INBOX_LOW: usize = CHANNEL_CAPACITY;
+/// Sync events held past a full channel. At the high mark, four channels'
+/// worth, the worker stops reading the relay. At the low mark, one channel's
+/// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`). The build refuses a pair whose low mark is not below the
+/// high one.
+const SYNC_INBOX_MARKS: Option<Marks> =
+    Marks::new(4 * CHANNEL_CAPACITY.get(), CHANNEL_CAPACITY.get());
+const _: () = assert!(SYNC_INBOX_MARKS.is_some(), "the inbox marks are a pair");
 
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
@@ -120,7 +122,7 @@ type Slot<T> = Rc<RefCell<Option<T>>>;
 /// amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
 /// keeps a stalled child from growing without limit, and it says so out loud.
-const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY;
+const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY.get();
 
 /// Hand `ev` to every live view of `id`, deferring what a full queue refuses
 /// (`TOILE-UI-340`).
@@ -543,11 +545,10 @@ pub fn main() {
     let (sync_to_logic_tx, sync_to_logic_rx) =
         conduit::to_worker::<LogicEvent>(CHANNEL_CAPACITY, &logic_bell);
     // What the Sync -> Logic channel could not take yet, re-offered each frame.
-    let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::with_marks(
-        sync_to_logic_tx,
-        SYNC_INBOX_HIGH,
-        SYNC_INBOX_LOW,
-    )));
+    let sync_inbox: SyncInbox = Rc::new(RefCell::new(match SYNC_INBOX_MARKS {
+        Some(marks) => conduit::Backlog::with_marks(sync_to_logic_tx, marks),
+        None => conduit::Backlog::new(sync_to_logic_tx),
+    }));
     // Logic -> Main, carrying document snapshots and deltas for local
     // persistence. The Main thread owns the IndexedDB store (its callbacks need a
     // live event loop, which the blocking Logic loop cannot offer). It drains
@@ -2025,7 +2026,7 @@ mod fan_out_tests {
     fn a_refused_event_waits_and_arrives_in_order() {
         let (routes, backlog) = fan_out();
         let doc = DocumentId::new();
-        let (tx, rx) = conduit::local::<UiEvent>(1);
+        let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
         routes.borrow_mut().entry(doc).or_default().push(tx);
 
         send_to_child(&routes, &backlog, doc, status(doc, LinkState::Connected));
@@ -2059,7 +2060,7 @@ mod fan_out_tests {
     fn an_overflowing_backlog_says_what_it_dropped() {
         let (routes, backlog) = fan_out();
         let doc = DocumentId::new();
-        let (tx, _rx) = conduit::local::<UiEvent>(1);
+        let (tx, _rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
         routes.borrow_mut().entry(doc).or_default().push(tx);
         let errors = Arc::new(AtomicUsize::new(0));
         let subscriber = tracing_subscriber::layer::SubscriberExt::with(
@@ -2088,7 +2089,7 @@ mod fan_out_tests {
         let (routes, backlog) = fan_out();
         let child = DocumentId::new();
         let board = DocumentId::new();
-        let (tx, rx) = conduit::local::<UiEvent>(4);
+        let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(4));
         routes.borrow_mut().entry(child).or_default().push(tx);
         assert_eq!(
             child_of(&routes, &status(child, LinkState::Connected)),

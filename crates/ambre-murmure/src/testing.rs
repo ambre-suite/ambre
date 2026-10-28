@@ -60,7 +60,7 @@ pub fn channel_of(texts: &[&str], size: ambre_canvas::CssSize) -> (MurmureView, 
         save_file: Rc::new(|_, _| {}),
         warn: Rc::new(|_| {}),
     };
-    let (events, from_logic) = local(8);
+    let (events, from_logic) = local(ambre_bus::conduit::ChannelCapacity::new(8));
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());
     let author = UserId::new();
     let messages = texts
