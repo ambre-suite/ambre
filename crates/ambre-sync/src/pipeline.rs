@@ -1552,4 +1552,69 @@ mod tests {
             b"Budget 2027"
         );
     }
+
+    /// A media blob the build before the typed header splits sealed. Its
+    /// header still reads, and it still opens under its own document and
+    /// address.
+    #[test]
+    fn a_media_blob_the_old_code_sealed_still_reads_and_opens() {
+        let (doc_key, _, author) = keys();
+        let id = DocumentId::from_bytes([7; 16]);
+        let address = ambre_core::MediaAddress::from_array([0xab; 32]);
+        let sealed = FetchedBlob::new(
+            hex::decode(
+                "01b6e14f706ce523ebafb9bf6eb3cbeb9a9baf2dea5ae773139d2499db2dd2ac\
+                 92bbc3240f24e943973cea139eed5162b6955be778488e42b9ef1c4243d0d692\
+                 d12fb0ef81fe774113caf4de8eb443efc6e6176caeaa5e5ad6726969c619cd90\
+                 fb58db3615fa0f646a3b99200fe6c61f08d8010365a843a2f20863acfee9326c\
+                 8f9fcc3f08d46abefb510db0b7ddc66146292306f736cb20066be817d78d3722\
+                 3eb83fe56b4825ab50d04c9f9f33538dc7627042df7ac1d9e6a4bdf237baa85b\
+                 2ed451",
+            )
+            .unwrap(),
+        );
+        assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
+        assert_eq!(object_author(&sealed).unwrap(), author);
+        assert_eq!(
+            open_object(&sealed, &media_aad(id, &address), &doc_key)
+                .unwrap()
+                .to_plaintext(),
+            b"\x89PNG media"
+        );
+    }
+
+    /// The body of an update as the build before the typed nonce split laid
+    /// it out. It holds the session nonce, the summary marker, the summary
+    /// when there is one, then the delta. Each later build writes and reads
+    /// these bytes.
+    #[test]
+    fn an_update_body_keeps_the_bytes_of_the_old_layout() {
+        let nonce = SessionNonce([0x5a; SESSION_NONCE_LEN]);
+        let delta = ambre_core::DeltaBytes::new(b"delta".to_vec());
+        let summary = ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: vec![UserId::from_bytes([0xA7; 16])],
+            mentions_all: ambre_bus::MentionScope::Named,
+            anchor: None,
+        };
+        for (summary, golden) in [
+            (None, "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0064656c7461"),
+            (
+                Some(summary),
+                "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a01000001a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a70064656c7461",
+            ),
+        ] {
+            let body = update_body(&nonce, summary.as_ref(), &delta).unwrap();
+            assert_eq!(hex::encode(body.as_bytes()), golden);
+            let read = split_update_body(frame(&hex::decode(golden).unwrap())).unwrap();
+            assert_eq!(
+                read,
+                UpdateBody {
+                    nonce,
+                    summary,
+                    delta: delta.clone()
+                }
+            );
+        }
+    }
 }

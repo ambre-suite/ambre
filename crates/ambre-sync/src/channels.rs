@@ -2069,4 +2069,28 @@ pub(crate) mod tests {
             [LogicEvent::ChannelRequestFailed { channel_id: id, .. }] if *id == channel_id
         ));
     }
+
+    /// A catalogue entry the build before the typed key id and nonce splits
+    /// sealed: `space key id || nonce || ciphertext`. A later build still
+    /// names its space key and opens it to the same channel key and anchor.
+    #[test]
+    fn a_channel_key_the_old_code_sealed_still_names_its_space_key_and_opens() {
+        let space_key = DocumentKey::from_array([0x22; 32]);
+        let channel_key = DocumentKey::from_array([0x33; 32]);
+        let channel_id = ChannelId::from_bytes([0x44; 16]);
+        let sealed = SealedChannelKey::from_bytes(
+            hex::decode(
+                "9479381e0c27f84d6d91c3eecc99fba280ff12c6dbadd55baceaf1a971b717dd\
+                 bb8e06ccc1472565a445c65bce964f3b821d5e5186794395e27463cff52a757f\
+                 12be02fa8ce015225ff9540c0b1c2c2056f65168431c8105a7133b643b528149\
+                 d07d0299074b87ebc5a0c46a35094821d47111cc8215ab7e",
+            )
+            .unwrap(),
+        );
+        assert_eq!(sealed_under(&sealed), Some(space_key.id()));
+        let (opened, anchor) =
+            unseal_channel_key(channel_id, &sealed, &ring(&space_key, &[])).expect("open");
+        assert_eq!(opened.id(), channel_key.id());
+        assert_eq!(anchor, Some(ANCHOR));
+    }
 }

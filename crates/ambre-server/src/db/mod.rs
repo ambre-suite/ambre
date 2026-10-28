@@ -265,6 +265,19 @@ mod tests {
         }
     }
 
+    /// A stored key id reads back at its own length, and at no other.
+    #[test]
+    fn a_stored_key_id_reads_at_its_own_length_only() {
+        let id = decode_key_id(vec![9; 16]).expect("sixteen bytes");
+        assert_eq!(id.as_array(), &[9; 16]);
+        for len in [0, 15, 17] {
+            assert!(
+                matches!(decode_key_id(vec![9; len]), Err(sqlx::Error::Decode(_))),
+                "{len} bytes must not decode"
+            );
+        }
+    }
+
     /// `covered_seq` survives the insert and both read paths. This is the value a
     /// client gates its post-open `RequestMissing` on, so a silent reset to 0
     /// would resurrect the full-history replay.
