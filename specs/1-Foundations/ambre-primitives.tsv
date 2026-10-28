@@ -312,6 +312,16 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId.0 |
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | DisplayCell.text | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | FilterViewId.0 | field | String	newtype-inner	id newtype
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats.max | field | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats.min | field | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats.sum | field | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::avg() | ret | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::max() | ret | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::min() | ret | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::of(n) | param | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::of_all(numbers) | param | impl IntoIterator<Item=f64>	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::sum() | ret | f64	math	a cell number, or a total of the numbers of a selection
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NumericStats::with(n) | param | f64	math	a cell number, or a total of the numbers of a selection
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId.0 | field | String	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::as_str() | ret | &str	newtype-inner	id newtype
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
@@ -321,10 +331,6 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Merg
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.avg | field | f64	math	selection aggregate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.max | field | f64	math	selection aggregate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.min | field | f64	math	selection aggregate
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::SelectionStats.sum | field | f64	math	selection aggregate
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::ValidationWarning.message | field | String	free-text	user-facing message
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
@@ -3279,10 +3285,6 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | H_
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NUMBER_FORMATS | const | &[(CellFormat,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.avg | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.max | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.min | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/chrome/status.rs | crate::chrome::status | SelStats.sum | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num(v) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.bold | field | RwSignal<bool>	generic	state flag

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level -- the reply `TrameEvent::SelectionStats` carries six numbers with no cell in them, and the signal the band reads has one writer, the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the Logic side | none | verified |
+| `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level -- the reply `TrameEvent::SelectionStats` carries a count and the numeric totals, with no cell in them, and the signal the band reads has one writer, the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the Logic side | none | verified |
 | `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- it asserts the outcome carries no update | none | verified |
 | `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | `ambre_trame::logic::tests::group4::selection_stats_covers_the_whole_band` -- a whole-column band tallies an off-screen row; `::selection_stats_totals_a_disjoint_selection` -- two rectangles are tallied together | none | verified |
 | `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
@@ -59,20 +59,21 @@ status values are normative in `ambre-spec-template.md`.
 | Shape | Direction | Carries |
 |---|---|---|
 | `TrameCommand::RequestSelectionStats` | UI to Logic | nothing: the Logic thread resolves the tracked selection itself (`TRAME-UI-103`) |
-| `TrameEvent::SelectionStats { sum, avg, count, count_num, min, max }` | Logic to UI | the six numbers, and nothing else |
+| `TrameEvent::SelectionStats { count, numbers }` | Logic to UI | the count, and the totals of the numbers when there is one; nothing else |
 
 **Display shape** (`ambre-trame`, the chrome side):
 
 ```rust
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub sum:       f64,
-    pub avg:       f64,
-    pub count:     CellCount,   // non-empty cells
-    pub count_num: CellCount,   // numeric cells; zero hides sum, avg, min and max
-    pub min:       f64,
-    pub max:       f64,
+    pub count:   CellCount,             // non-empty cells
+    pub numbers: Option<NumericStats>,  // `None` hides sum, avg, min and max
 }
+
+/// The totals of at least one number (`ambre-bus`): its count, sum, minimum
+/// and maximum, and the average they give.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericStats { /* private */ }
 ```
 
 **Steps, when the Logic thread answers a request:**
@@ -80,9 +81,9 @@ pub struct SelStats {
 1. bring the formula cache up to date, so each cell is read at its computed value;
 2. walk every tracked selection rectangle, the rows the filter hides included (`TRAME-UI-110`);
 3. tally every non-empty cell into `count`;
-4. tally each number into `count_num`, and fold it into the sum, the minimum and the maximum;
-5. divide the sum by the numeric count for the average, and answer zero for an empty one;
-6. reply with the six numbers, and emit no delta (`TRAME-UI-106`).
+4. fold each number into the totals: its count, the sum, the minimum and the maximum;
+5. leave the totals out when no number was found, so no aggregate reads an empty zero;
+6. reply with the count and the totals, and emit no delta (`TRAME-UI-106`).
 
 **Steps, on the UI side:**
 

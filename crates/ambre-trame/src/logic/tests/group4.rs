@@ -611,20 +611,14 @@ fn selection_stats_aggregate_numeric_cells() {
 
     let evts = state.handle_command(TrameCommand::RequestSelectionStats);
     match &evts.display[0] {
-        TrameEvent::SelectionStats {
-            sum,
-            avg,
-            count,
-            count_num,
-            min,
-            max,
-        } => {
+        TrameEvent::SelectionStats { count, numbers } => {
+            let numbers = numbers.expect("three numbers are selected");
             assert_eq!(count.get(), 4, "10/20/30/apple are non-empty");
-            assert_eq!(count_num.get(), 3, "only 10/20/30 are numeric");
-            assert_eq!(*sum, 60.0);
-            assert_eq!(*avg, 20.0);
-            assert_eq!(*min, 10.0);
-            assert_eq!(*max, 30.0);
+            assert_eq!(numbers.count().get(), 3, "only 10/20/30 are numeric");
+            assert_eq!(numbers.sum(), 60.0);
+            assert_eq!(numbers.avg(), 20.0);
+            assert_eq!(numbers.min(), 10.0);
+            assert_eq!(numbers.max(), 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }
@@ -690,15 +684,11 @@ fn selection_stats_covers_the_whole_band() {
     });
     let evts = state.handle_command(TrameCommand::RequestSelectionStats);
     match &evts.display[0] {
-        TrameEvent::SelectionStats {
-            sum,
-            count,
-            count_num,
-            ..
-        } => {
+        TrameEvent::SelectionStats { count, numbers } => {
+            let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "the off-screen row is tallied");
-            assert_eq!(count_num.get(), 2);
-            assert_eq!(*sum, 30.0);
+            assert_eq!(numbers.count().get(), 2);
+            assert_eq!(numbers.sum(), 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }
@@ -734,15 +724,11 @@ fn selection_stats_totals_a_disjoint_selection() {
     });
     let evts = state.handle_command(TrameCommand::RequestSelectionStats);
     match &evts.display[0] {
-        TrameEvent::SelectionStats {
-            sum,
-            count,
-            count_num,
-            ..
-        } => {
+        TrameEvent::SelectionStats { count, numbers } => {
+            let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "both rectangles are tallied");
-            assert_eq!(count_num.get(), 2);
-            assert_eq!(*sum, 30.0);
+            assert_eq!(numbers.count().get(), 2);
+            assert_eq!(numbers.sum(), 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }

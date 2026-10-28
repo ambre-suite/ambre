@@ -147,20 +147,9 @@ impl TrameRelay {
             TrameEvent::SheetList { sheets, .. } => self.sheets.set(sheets.clone()),
             // The view clears the band on a single cell. The Logic thread's
             // totals fill it here.
-            TrameEvent::SelectionStats {
-                sum,
-                avg,
-                count,
-                count_num,
-                min,
-                max,
-            } => self.sel_stats.set(Some(SelStats {
-                sum: *sum,
-                avg: *avg,
+            TrameEvent::SelectionStats { count, numbers } => self.sel_stats.set(Some(SelStats {
                 count: *count,
-                count_num: *count_num,
-                min: *min,
-                max: *max,
+                numbers: *numbers,
             })),
             _ => {}
         }

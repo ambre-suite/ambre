@@ -24,16 +24,12 @@ use crate::chrome::commands::status_label;
 
 /// Selection aggregates rendered by the status bar, mirrored from
 /// [`TrameEvent::SelectionStats`](ambre_bus::TrameEvent::SelectionStats). `count`
-/// is the non-empty cell count; `count_num` the numeric one and gates whether
-/// `sum`/`avg`/`min`/`max` are shown (they are meaningless without a number).
+/// is the non-empty cell count; `numbers` the totals of the numeric cells, shown
+/// only when there is one.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub sum: f64,
-    pub avg: f64,
     pub count: ambre_bus::app::trame::CellCount,
-    pub count_num: ambre_bus::app::trame::CellCount,
-    pub min: f64,
-    pub max: f64,
+    pub numbers: Option<ambre_bus::app::trame::NumericStats>,
 }
 
 /// Format an aggregate value: an integer shows without decimals, otherwise two
@@ -60,12 +56,12 @@ pub fn StatusBar(
     let aggregates = move || {
         stats.get().map(|s| {
             // Numeric aggregates only when at least one number is selected.
-            let nums = (!s.count_num.is_zero()).then(|| {
+            let nums = s.numbers.map(|n| {
                 view! {
-                    <span class="stat">"Sum: " {fmt_num(s.sum)}</span>
-                    <span class="stat">"Avg: " {fmt_num(s.avg)}</span>
-                    <span class="stat">"Min: " {fmt_num(s.min)}</span>
-                    <span class="stat">"Max: " {fmt_num(s.max)}</span>
+                    <span class="stat">"Sum: " {fmt_num(n.sum())}</span>
+                    <span class="stat">"Avg: " {fmt_num(n.avg())}</span>
+                    <span class="stat">"Min: " {fmt_num(n.min())}</span>
+                    <span class="stat">"Max: " {fmt_num(n.max())}</span>
                 }
             });
             view! {

@@ -13,6 +13,75 @@ use ambre_core::{DocPx, Rgb};
 // Trame (spreadsheet) -- events (Logic -> UI)
 // -----------------------------------------------------------------------------
 
+/// The totals of the numeric cells of a selection (`trame-status-bar`). There
+/// is always at least one number: a selection with none has no totals, so no
+/// aggregate is ever an empty one's zero.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericStats {
+    count: CellCount,
+    sum: f64,
+    min: f64,
+    max: f64,
+}
+
+impl NumericStats {
+    /// The totals of the single number `n`.
+    #[must_use]
+    pub fn of(n: f64) -> Self {
+        Self {
+            count: CellCount::new(1),
+            sum: n,
+            min: n,
+            max: n,
+        }
+    }
+
+    /// The totals with one more number, `n`.
+    #[must_use]
+    pub fn with(self, n: f64) -> Self {
+        Self {
+            count: self.count.incremented(),
+            sum: self.sum + n,
+            min: self.min.min(n),
+            max: self.max.max(n),
+        }
+    }
+
+    /// The totals of `numbers`, `None` when there is none.
+    pub fn of_all(numbers: impl IntoIterator<Item = f64>) -> Option<Self> {
+        numbers.into_iter().fold(None, |stats, n| {
+            Some(stats.map_or_else(|| Self::of(n), |stats: Self| stats.with(n)))
+        })
+    }
+
+    /// How many numbers were totalled, never zero.
+    #[must_use]
+    pub const fn count(&self) -> CellCount {
+        self.count
+    }
+
+    #[must_use]
+    pub const fn sum(&self) -> f64 {
+        self.sum
+    }
+
+    /// The sum over the count.
+    #[must_use]
+    pub fn avg(&self) -> f64 {
+        self.sum / self.count.as_f64()
+    }
+
+    #[must_use]
+    pub const fn min(&self) -> f64 {
+        self.min
+    }
+
+    #[must_use]
+    pub const fn max(&self) -> f64 {
+        self.max
+    }
+}
+
 /// Display events emitted by the Trame logic to the UI Thread.
 #[derive(Debug, Clone)]
 pub enum TrameEvent {
@@ -185,17 +254,12 @@ pub enum TrameEvent {
 
     /// Selection aggregates for the status bar (`trame-status-bar`), replying to
     /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats). `count` is
-    /// the number of non-empty cells in the selection. `count_num` is the number of numeric
-    /// cells, and drives whether the UI shows `sum`/`avg`/`min`/`max` (they are
-    /// meaningless, and left at `0.0`, when `count_num == 0`). `avg` is `sum / count_num`
-    /// (0.0 for no numeric cell).
+    /// the number of non-empty cells in the selection. `numbers` totals its numeric
+    /// cells, and is `None` when it holds none: the UI then shows no numeric
+    /// aggregate.
     SelectionStats {
-        sum: f64,
-        avg: f64,
         count: CellCount,
-        count_num: CellCount,
-        min: f64,
-        max: f64,
+        numbers: Option<NumericStats>,
     },
 
     /// A local [`ClearFilter`](super::TrameCommand::ClearFilter) removed the
@@ -532,5 +596,22 @@ ambre_core::define_flag! {
         Text,
         /// A number.
         Number,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Totals exist only over at least one number, and the average is the sum
+    /// over the count.
+    #[test]
+    fn numeric_totals_need_a_number_and_average_over_their_count() {
+        assert_eq!(NumericStats::of_all([]), None);
+        let totals = NumericStats::of_all([10.0, -4.0, 6.0]).expect("three numbers");
+        assert_eq!(totals.count().get(), 3);
+        assert_eq!(totals.sum(), 12.0);
+        assert_eq!(totals.avg(), 4.0);
+        assert_eq!((totals.min(), totals.max()), (-4.0, 10.0));
     }
 }

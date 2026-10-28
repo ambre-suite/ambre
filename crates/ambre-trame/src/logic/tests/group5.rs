@@ -388,7 +388,7 @@ fn status_bar_total_matches_sum_under_a_filter() {
         kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::RequestSelectionStats);
-    let [TrameEvent::SelectionStats { sum, count, .. }] = &out.display[..] else {
+    let [TrameEvent::SelectionStats { numbers, count }] = &out.display[..] else {
         panic!("expected SelectionStats")
     };
     state.handle_command(TrameCommand::SetCellText {
@@ -397,7 +397,7 @@ fn status_bar_total_matches_sum_under_a_filter() {
         text: "=SUM(B1:B3)".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 3), "3");
-    assert_eq!(*sum, 3.0);
+    assert_eq!(numbers.map(|n| n.sum()), Some(3.0));
     assert_eq!(count.get(), 3);
 }
 

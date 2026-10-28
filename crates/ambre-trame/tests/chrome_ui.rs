@@ -260,12 +260,8 @@ where
 fn status_bar_renders_label_and_aggregates() {
     let container = mount_in_container(|| {
         let stats = RwSignal::new(Some(SelStats {
-            sum: 6.0,
-            avg: 2.0,
             count: ambre_bus::app::trame::CellCount::new(3),
-            count_num: ambre_bus::app::trame::CellCount::new(3),
-            min: 1.0,
-            max: 3.0,
+            numbers: ambre_bus::app::trame::NumericStats::of_all([1.0, 2.0, 3.0]),
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
         let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
@@ -750,12 +746,8 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
         assert!(!text.contains(absent), "{absent} in {text}");
     }
     let text = status_text(Some(SelStats {
-        sum: 5.0,
-        avg: 5.0,
         count: ambre_bus::app::trame::CellCount::new(4),
-        count_num: ambre_bus::app::trame::CellCount::new(1),
-        min: 5.0,
-        max: 5.0,
+        numbers: Some(ambre_bus::app::trame::NumericStats::of(5.0)),
     }));
     for present in ["Sum: 5", "Avg: 5", "Min: 5", "Max: 5", "Count: 4"] {
         assert!(text.contains(present), "{present} not in {text}");
@@ -768,14 +760,10 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
 #[wasm_bindgen_test]
 fn an_aggregate_reads_whole_or_with_two_decimals() {
     let text = status_text(Some(SelStats {
-        sum: 7.5,
-        avg: 2.5,
         count: ambre_bus::app::trame::CellCount::new(3),
-        count_num: ambre_bus::app::trame::CellCount::new(3),
-        min: -2.0,
-        max: 1.0 / 3.0,
+        numbers: ambre_bus::app::trame::NumericStats::of_all([-2.0, 1.0 / 3.0, 9.5 - 1.0 / 3.0]),
     }));
-    for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 0.33"] {
+    for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 9.17"] {
         assert!(text.contains(present), "{present} not in {text}");
     }
     assert!(!text.contains("-2.00"), "{text}");

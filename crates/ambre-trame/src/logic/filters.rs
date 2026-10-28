@@ -105,19 +105,16 @@ impl TrameState {
     /// Walks the selection rectangle, pulling each cell's evaluated value through
     /// the formula cache. Rows a filter hides count, as they do in `SUM`, so the
     /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`). `count` tallies non-empty cells;
-    /// numeric cells additionally feed `count_num`/`sum`/`min`/`max`. A read-only
+    /// numeric cells additionally feed the `NumericStats` totals. A read-only
     /// query: no CRDT delta.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
-        use ambre_bus::app::trame::CellCount;
+        use ambre_bus::app::trame::{CellCount, NumericStats};
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
         let mut count = CellCount::ZERO;
-        let mut count_num = CellCount::ZERO;
-        let mut sum = 0.0_f64;
-        let mut min = f64::INFINITY;
-        let mut max = f64::NEG_INFINITY;
+        let mut numbers: Option<NumericStats> = None;
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for at in self.selected_cells() {
             let v = self
@@ -128,32 +125,12 @@ impl TrameState {
                 CellValue::Empty => {}
                 CellValue::Number(n) => {
                     count = count.incremented();
-                    count_num = count_num.incremented();
-                    sum += n;
-                    min = min.min(n);
-                    max = max.max(n);
+                    numbers = Some(numbers.map_or_else(|| NumericStats::of(n), |s| s.with(n)));
                 }
                 _ => count = count.incremented(),
             }
         }
-        let avg = if !count_num.is_zero() {
-            sum / count_num.as_f64()
-        } else {
-            0.0
-        };
-        let (sum, min, max) = if !count_num.is_zero() {
-            (sum, min, max)
-        } else {
-            (0.0, 0.0, 0.0)
-        };
-        TrameOutcome::display_only(vec![TrameEvent::SelectionStats {
-            sum,
-            avg,
-            count,
-            count_num,
-            min,
-            max,
-        }])
+        TrameOutcome::display_only(vec![TrameEvent::SelectionStats { count, numbers }])
     }
 
     /// Clear the active shared filter: drop every `filter_hidden_{sheet}` entry
