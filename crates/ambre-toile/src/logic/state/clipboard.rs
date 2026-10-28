@@ -83,9 +83,6 @@ impl ToileState {
                     LoroValue::Map(f) => {
                         let f = FieldValues::<ElementKey>::of(&f);
                         capture_scalars(f, ElementKey::ALL, &[ElementKey::Notes])
-                            .into_iter()
-                            .map(|(key, value)| (key.as_str().to_owned(), value))
-                            .collect()
                     }
                     _ => Vec::new(),
                 },
@@ -134,10 +131,7 @@ impl ToileState {
                                 f,
                                 ConnectorKey::ALL,
                                 &[ConnectorKey::From, ConnectorKey::To],
-                            )
-                            .into_iter()
-                            .map(|(key, value)| (key.as_str().to_owned(), value))
-                            .collect(),
+                            ),
                         });
                     }
                 }
@@ -179,10 +173,9 @@ impl ToileState {
             else {
                 continue;
             };
-            // A key the schema does not name is a malformed paste, and it is
-            // skipped like a dangling slot.
-            let fields = clip.fields.iter();
-            let fields = fields.filter_map(|(key, value)| Some((ElementKey::parse(key)?, value)));
+            // A key the schema does not name was skipped when the payload was
+            // read, like a dangling slot.
+            let fields = clip.fields.iter().map(|(key, value)| (*key, value));
             write_clip_fields(&em, fields, offset);
             // A frame is born with its two containers, here as at every other
             // birth. The membership list makes the copy a frame an element can
@@ -223,8 +216,7 @@ impl ToileState {
             else {
                 continue;
             };
-            let fields = c.fields.iter();
-            let fields = fields.filter_map(|(key, value)| Some((ConnectorKey::parse(key)?, value)));
+            let fields = c.fields.iter().map(|(key, value)| (*key, value));
             write_clip_fields(&cm, fields, Vec2::ZERO);
             let _ = cm.insert(ConnectorKey::From, from.as_str());
             let _ = cm.insert(ConnectorKey::To, to.as_str());
@@ -250,13 +242,15 @@ impl ToileState {
 mod tests {
     use kurbo::{Point, Size};
 
-    use crate::logic::command::{ClipValue, InitContent, ToileCommand, ToileEvent};
+    use crate::logic::command::{
+        ClipValue, ClipboardPayload, InitContent, ToileCommand, ToileEvent,
+    };
     use crate::logic::model::{ElementKind, ShapeKind};
     use crate::logic::state::ToileState;
 
     /// A pasted payload is read through the schema of the map it lands in. A
-    /// field the schema does not name is skipped, so a paste never writes a
-    /// key the board does not read.
+    /// field the schema does not name is skipped as the clipboard bytes are
+    /// read. A paste never writes a key the board does not read.
     #[test]
     fn a_paste_writes_only_the_keys_the_schema_names() {
         let mut st = ToileState::new();
@@ -275,15 +269,32 @@ mod tests {
             panic!("no ElementCreated");
         };
         let copy = st.handle_command(ToileCommand::CopyElements { ids: vec![id] });
-        let Some(mut payload) = copy.display.into_iter().find_map(|e| match e {
+        let Some(copied) = copy.display.into_iter().find_map(|e| match e {
             ToileEvent::Clipboard(p) => Some(p),
             _ => None,
         }) else {
             panic!("no Clipboard");
         };
-        payload.elements[0]
+        // The bytes a board that names one more key would put on the
+        // clipboard: each key as the word it stores, then the stray one.
+        let mut fields: Vec<(String, ClipValue)> = copied.elements[0]
             .fields
-            .push(("stray".to_owned(), ClipValue::Bool(true)));
+            .iter()
+            .map(|(key, value)| (key.as_str().to_owned(), value.clone()))
+            .collect();
+        fields.push(("stray".to_owned(), ClipValue::Bool(true)));
+        let raw = (
+            vec![(fields, copied.elements[0].notes.clone())],
+            &copied.connectors,
+            &copied.membership,
+            copied.origin,
+        );
+        let bytes = postcard::to_allocvec(&raw).expect("a payload encodes");
+        let payload: ClipboardPayload = postcard::from_bytes(&bytes).expect("the payload reads");
+        assert_eq!(
+            payload, copied,
+            "the stray key is dropped as the bytes are read"
+        );
         let paste = st.handle_command(ToileCommand::PasteElements {
             payload,
             at: Point::new(100.0, 100.0),

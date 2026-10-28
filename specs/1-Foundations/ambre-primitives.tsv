@@ -231,9 +231,8 @@ ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bo
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes.0 | field | Vec<u8>	newtype-inner	the bytes of one captured binary clipboard field
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes::as_bytes() | ret | &[u8]	newtype-inner	the bytes of one captured binary clipboard field
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes::new(bytes) | param | Vec<u8>	newtype-inner	the bytes of one captured binary clipboard field
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.notes | field | Option<String>	free-text	user text
+ambre-bus | src/app/toile.rs | crate::app::toile | ClipKey::parse_key(word) | param | &str	generic	a stored field word read back into its schema key, or none
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Bool.0 | field | bool	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::F64.0 | field | f64	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Str.0 | field | String	newtype-inner	clipboard field value variant

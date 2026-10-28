@@ -941,13 +941,120 @@ impl std::fmt::Debug for ClipBytes {
     }
 }
 
+ambre_core::crdt_names! {
+    /// The fields of one element map. Each kind writes a part of the set.
+    pub enum ElementKey: FieldKey {
+        /// The element type tag, as `ElementKind::type_tag` spells it.
+        Type = "type",
+        /// The world AABB, top-left, before the rotation.
+        X = "x",
+        Y = "y",
+        W = "w",
+        H = "h",
+        /// The rotation in radians, about the AABB centre.
+        Rot = "rot",
+        /// The advisory lock.
+        Locked = "locked",
+        /// The whole style, one register (`TOILE-018`).
+        Style = "style",
+        /// The link target. An absent key means no link.
+        Link = "link",
+        /// The frame title.
+        Name = "name",
+        /// The body of a sticky or a text element, a text container
+        /// (`TOILE-030`).
+        Body = "text",
+        /// The shape kind tag of a shape.
+        Shape = "shape",
+        /// The SVG path data of a vector node.
+        Path = "path",
+        /// The raw stroke samples of a drawing.
+        Points = "points",
+        /// The key of an image in `media`.
+        Hash = "hash",
+        /// The address of an embed.
+        Url = "url",
+        /// The reference of a nested document.
+        DocId = "doc_id",
+        DocType = "doc_type",
+        /// The auto-layout register of a frame. An absent key means free
+        /// positioning.
+        Autolayout = "autolayout",
+        /// The member list of a group or a frame.
+        Children = "children",
+        /// The speaker notes of a frame, a text container.
+        Notes = "notes",
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The fields of one connector map.
+    pub enum ConnectorKey: FieldKey {
+        /// The endpoint element ids.
+        From = "from",
+        To = "to",
+        /// The endpoint anchors.
+        FromAnch = "from_anch",
+        ToAnch = "to_anch",
+        PathType = "path_type",
+        /// The two end caps.
+        ArrowStart = "arrow_start",
+        ArrowEnd = "arrow_end",
+        /// The edge caption, a text container seeded at birth (`TOILE-047`).
+        Label = "label",
+        /// The whole style, one register.
+        Style = "style",
+    }
+}
+
+/// A schema of map fields a copied element or connector carries. A paste
+/// reads only the keys the schema names.
+trait ClipKey: Sized {
+    fn parse_key(word: &str) -> Option<Self>;
+}
+
+macro_rules! clip_key {
+    ($($name:ident),+) => {$(
+        impl ClipKey for $name {
+            fn parse_key(word: &str) -> Option<Self> {
+                Self::parse(word)
+            }
+        }
+
+        /// A key travels as the word the board stores, as the `String` it
+        /// replaced did, so a payload already on the clipboard reads the same.
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+    )+};
+}
+
+clip_key!(ElementKey, ConnectorKey);
+
+/// Reads captured fields, skipping each one whose key the schema `K` does not
+/// name. A payload a newer board wrote still pastes what this one reads.
+fn known_fields<'de, D, K>(deserializer: D) -> Result<Vec<(K, ClipValue)>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    K: ClipKey,
+{
+    let fields: Vec<(String, ClipValue)> = Deserialize::deserialize(deserializer)?;
+    Ok(fields
+        .into_iter()
+        .filter_map(|(key, value)| Some((K::parse_key(&key)?, value)))
+        .collect())
+}
+
 /// An element captured id-free: the full scalar field set of its map (type,
 /// geometry, style blob, per-type payload). Referenced elsewhere in the payload
 /// by its **slot** (index in [`ClipboardPayload::elements`]), never by id, so an
 /// old id can never leak into the paste.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipElement {
-    pub fields: Vec<(String, ClipValue)>,
+    #[serde(deserialize_with = "known_fields")]
+    pub fields: Vec<(ElementKey, ClipValue)>,
     /// A frame's speaker notes, captured as their text (`TOILE-137`). They are
     /// a shared text container on the board, not a scalar field. So they travel
     /// beside the fields, and are written back into a container of their own.
@@ -992,7 +1099,8 @@ pub struct ClipConnector {
     pub from_slot: ClipSlot,
     pub to_slot: ClipSlot,
     /// Non-endpoint scalar fields (anchors, path type, arrows).
-    pub fields: Vec<(String, ClipValue)>,
+    #[serde(deserialize_with = "known_fields")]
+    pub fields: Vec<(ConnectorKey, ClipValue)>,
 }
 
 /// Group / frame membership remapped from ids to element slot indices.
@@ -2625,6 +2733,33 @@ mod tests {
         assert_eq!(encoded, expected, "variant index 3, then the bare bytes");
         assert_eq!(postcard::from_bytes::<ClipValue>(&encoded), Ok(field));
         assert_eq!(format!("{:?}", ClipBytes::new(bytes)), "ClipBytes(4 bytes)");
+    }
+
+    /// A copied element's field keys encode as the words the board stores,
+    /// the bytes a `String` key gave. A key no schema names is skipped as the
+    /// bytes are read, and the fields beside it are kept.
+    #[test]
+    fn a_clipboard_key_travels_as_its_word_and_an_unknown_one_is_skipped() {
+        let element = ClipElement {
+            fields: vec![(ElementKey::X, ClipValue::F64(1.5))],
+            notes: None,
+        };
+        let as_words = (vec![("x".to_owned(), ClipValue::F64(1.5))], None::<String>);
+        let bytes = postcard::to_allocvec(&element).expect("an element encodes");
+        assert_eq!(
+            bytes,
+            postcard::to_allocvec(&as_words).expect("words encode")
+        );
+
+        let stray = (
+            vec![
+                ("stray".to_owned(), ClipValue::Bool(true)),
+                ("x".to_owned(), ClipValue::F64(1.5)),
+            ],
+            None::<String>,
+        );
+        let bytes = postcard::to_allocvec(&stray).expect("words encode");
+        assert_eq!(postcard::from_bytes::<ClipElement>(&bytes), Ok(element));
     }
 
     /// `TOILE-267`: an address that crosses a channel is parsed again on the

@@ -49,71 +49,9 @@ ambre_core::crdt_names! {
     }
 }
 
-ambre_core::crdt_names! {
-    /// The fields of one element map. Each kind writes a part of the set.
-    pub(crate) enum ElementKey: FieldKey {
-        /// The element type tag, as `ElementKind::type_tag` spells it.
-        Type = "type",
-        /// The world AABB, top-left, before the rotation.
-        X = "x",
-        Y = "y",
-        W = "w",
-        H = "h",
-        /// The rotation in radians, about the AABB centre.
-        Rot = "rot",
-        /// The advisory lock.
-        Locked = "locked",
-        /// The whole style, one register (`TOILE-018`).
-        Style = "style",
-        /// The link target. An absent key means no link.
-        Link = "link",
-        /// The frame title.
-        Name = "name",
-        /// The body of a sticky or a text element, a text container
-        /// (`TOILE-030`).
-        Body = "text",
-        /// The shape kind tag of a shape.
-        Shape = "shape",
-        /// The SVG path data of a vector node.
-        Path = "path",
-        /// The raw stroke samples of a drawing.
-        Points = "points",
-        /// The key of an image in `media`.
-        Hash = "hash",
-        /// The address of an embed.
-        Url = "url",
-        /// The reference of a nested document.
-        DocId = "doc_id",
-        DocType = "doc_type",
-        /// The auto-layout register of a frame. An absent key means free
-        /// positioning.
-        Autolayout = "autolayout",
-        /// The member list of a group or a frame.
-        Children = "children",
-        /// The speaker notes of a frame, a text container.
-        Notes = "notes",
-    }
-}
-
-ambre_core::crdt_names! {
-    /// The fields of one connector map.
-    pub(crate) enum ConnectorKey: FieldKey {
-        /// The endpoint element ids.
-        From = "from",
-        To = "to",
-        /// The endpoint anchors.
-        FromAnch = "from_anch",
-        ToAnch = "to_anch",
-        PathType = "path_type",
-        /// The two end caps.
-        ArrowStart = "arrow_start",
-        ArrowEnd = "arrow_end",
-        /// The edge caption, a text container seeded at birth (`TOILE-047`).
-        Label = "label",
-        /// The whole style, one register.
-        Style = "style",
-    }
-}
+/// The fields of an element map and of a connector map. They live in
+/// `ambre-bus`, because a copied element carries its fields under them.
+pub(crate) use ambre_bus::app::toile::{ConnectorKey, ElementKey};
 
 ambre_core::crdt_names! {
     /// The fields of one media map.
