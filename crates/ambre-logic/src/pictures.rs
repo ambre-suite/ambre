@@ -160,11 +160,13 @@ fn fit(size: ImageSize) -> ImageSize {
 }
 
 /// The pixels of `image` at `size`.
-fn scale(image: RgbaImage, size: ImageSize) -> Vec<u8> {
+fn scale(image: RgbaImage, size: ImageSize) -> ambre_core::RgbaPixels {
     if image.dimensions() == (size.width, size.height) {
-        return image.into_raw();
+        return image.into_raw().into();
     }
-    image::imageops::resize(&image, size.width, size.height, FilterType::Triangle).into_raw()
+    image::imageops::resize(&image, size.width, size.height, FilterType::Triangle)
+        .into_raw()
+        .into()
 }
 
 fn delay(ms: Millis) -> Millis {

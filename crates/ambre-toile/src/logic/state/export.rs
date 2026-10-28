@@ -48,7 +48,7 @@ impl ToileState {
         let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
         let size = ambre_core::ImageSize::new(rgba.width(), rgba.height());
         Some(crate::ui::render::DecodedImage {
-            pixels: rgba.into_raw(),
+            pixels: rgba.into_raw().into(),
             size,
         })
     }
@@ -222,7 +222,7 @@ impl ToileState {
             out.insert(
                 ambre_core::ContentHash::from(hash.as_str()),
                 crate::ui::render::DecodedImage {
-                    pixels: rgba.into_raw(),
+                    pixels: rgba.into_raw().into(),
                     size,
                 },
             );

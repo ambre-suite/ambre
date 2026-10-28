@@ -1076,7 +1076,7 @@ mod tests {
         images.insert(
             "h1".into(),
             DecodedImage {
-                pixels: vec![0u8; 4],
+                pixels: vec![0u8; 4].into(),
                 size: ambre_core::ImageSize::new(1, 1),
             },
         );
@@ -1127,7 +1127,7 @@ mod tests {
         images.insert(
             "h1".into(),
             DecodedImage {
-                pixels: vec![255u8; 2 * 2 * 4],
+                pixels: vec![255u8; 2 * 2 * 4].into(),
                 size: ambre_core::ImageSize::new(2, 2),
             },
         );
@@ -2132,7 +2132,7 @@ mod tests {
         pass.images.insert(
             "h".into(),
             DecodedImage {
-                pixels: vec![255u8; 2 * 2 * 4],
+                pixels: vec![255u8; 2 * 2 * 4].into(),
                 size: ambre_core::ImageSize::new(2, 2),
             },
         );

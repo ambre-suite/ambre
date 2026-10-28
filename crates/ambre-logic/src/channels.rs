@@ -1347,10 +1347,7 @@ impl LogicState {
                 let document_id = channel.meta_id().document_id();
                 self.send_to_sync(SyncCommand::Rest {
                     id,
-                    cmd: RestCommand::UploadMedia {
-                        document_id,
-                        data: ambre_core::MediaBytes::new(data),
-                    },
+                    cmd: RestCommand::UploadMedia { document_id, data },
                 });
             }
             MurmureCommand::FetchFile { id, media_ref } => {
@@ -3790,7 +3787,7 @@ mod tests {
         for asked in [
             MurmureCommand::UploadFile {
                 id: up,
-                data: vec![1, 2, 3],
+                data: vec![1, 2, 3].into(),
             },
             MurmureCommand::FetchFile {
                 id: down,
@@ -3983,7 +3980,7 @@ mod tests {
         };
         assert_eq!((*to, media_ref), (channel_id, &file));
         assert_eq!(picture.size, ambre_core::ImageSize::new(4, 2));
-        assert_eq!(picture.frames[0].pixels[..4], [9, 8, 7, 255]);
+        assert_eq!(picture.frames[0].pixels.as_bytes()[..4], [9, 8, 7, 255]);
 
         let media_ref = file.clone();
         command(

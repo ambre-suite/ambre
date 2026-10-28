@@ -262,7 +262,7 @@ fn dropped_files_wait_for_the_region_and_are_taken_once() {
     let file = |name: &str| ambre_murmure::uploads::PickedFile {
         name: name.to_owned(),
         media_type: ambre_core::MediaType::from("image/png"),
-        data: vec![1],
+        data: vec![1].into(),
     };
     relay.drop_file(file("a.png"));
     relay.drop_file(file("b.png"));

@@ -75,11 +75,11 @@ const OPENED_FOR: ambre_core::Millis = ambre_core::Millis(60_000);
 /// Hand the browser a file a member fetched. A raster image opens in a tab of
 /// its own. Any other file saves, typed as a plain stream of bytes. So no
 /// file a member sent runs in this page's origin.
-fn save_file(file: &Attachment, data: Vec<u8>) {
+fn save_file(file: &Attachment, data: ambre_core::MediaBytes) {
     use wasm_bindgen::JsCast;
     let opens = opens_as(&file.media_type);
     let parts = js_sys::Array::new();
-    parts.push(&js_sys::Uint8Array::from(data.as_slice()).buffer());
+    parts.push(&js_sys::Uint8Array::from(data.as_bytes()).buffer());
     let options = web_sys::BlobPropertyBag::new();
     options.set_type(
         opens
@@ -410,7 +410,7 @@ mod tests {
             media_type: ambre_core::MediaType::from(media_type),
             size: ambre_bus::ByteSize(1),
         };
-        save_file(&file("image/png"), vec![1]);
+        save_file(&file("image/png"), vec![1].into());
         js_sys::Reflect::set(&window, &key, &original).expect("open restored");
         let opened = js_sys::Reflect::get(&window, &"__murmureFiles".into()).expect("a record");
         let opened: Vec<Vec<String>> = js_sys::Array::from(&opened)

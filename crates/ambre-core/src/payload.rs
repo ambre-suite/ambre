@@ -120,6 +120,12 @@ define_payload! {
 }
 
 define_payload! {
+    /// A decoded image: non-premultiplied RGBA8 samples, row-major, four bytes
+    /// a pixel. Decoded on the Logic thread, painted on the UI thread.
+    RgbaPixels
+}
+
+define_payload! {
     /// One row of the local store, sealed by the Sync worker under the store
     /// key (`RESID-025`). The Main thread moves it between the worker and the
     /// browser's database and cannot open it. A plaintext snapshot or delta is
@@ -233,7 +239,7 @@ impl<'a> From<&'a SnapshotBytes> for LoroPayloadRef<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeltaBytes, EphemeralBytes, LoroPayload, SnapshotBytes};
+    use super::{DeltaBytes, EphemeralBytes, LoroPayload, RgbaPixels, SnapshotBytes};
 
     #[test]
     fn debug_prints_the_length_alone() {
@@ -248,6 +254,10 @@ mod tests {
         assert_eq!(
             format!("{:?}", EphemeralBytes::default()),
             "EphemeralBytes(0 bytes)"
+        );
+        assert_eq!(
+            format!("{:?}", RgbaPixels::new(vec![9, 8, 7, 255])),
+            "RgbaPixels(4 bytes)"
         );
     }
 

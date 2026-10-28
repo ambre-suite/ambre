@@ -216,7 +216,7 @@ mod tests {
             frames: delays
                 .iter()
                 .map(|&delay| PictureFrame {
-                    pixels: vec![0; bytes],
+                    pixels: vec![0; bytes].into(),
                     delay: ambre_core::Millis(u64::from(delay)),
                 })
                 .collect(),

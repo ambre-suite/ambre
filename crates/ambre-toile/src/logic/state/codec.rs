@@ -9,7 +9,7 @@ use ambre_core::crdt::FieldKey;
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
-use crate::logic::command::{ClipValue, InitContent, MediaRef};
+use crate::logic::command::{ClipBytes, ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
@@ -97,7 +97,7 @@ pub(super) fn capture_scalars<K: FieldKey + PartialEq>(
             Some(LoroValue::Double(d)) => ClipValue::F64(*d),
             Some(LoroValue::Bool(b)) => ClipValue::Bool(*b),
             Some(LoroValue::String(s)) => ClipValue::Str(s.to_string()),
-            Some(LoroValue::Binary(b)) => ClipValue::Bin(b.to_vec()),
+            Some(LoroValue::Binary(b)) => ClipValue::Bin(ClipBytes::new(b.to_vec())),
             _ => continue,
         };
         out.push((key, cv));
@@ -143,7 +143,7 @@ pub(super) fn write_clip_fields<'a, K: FieldKey>(
                 let _ = m.insert(k, s.as_str());
             }
             ClipValue::Bin(b) => {
-                let _ = m.insert(k, LoroValue::Binary(b.clone().into()));
+                let _ = m.insert(k, LoroValue::Binary(b.as_bytes().to_vec().into()));
             }
         }
     }

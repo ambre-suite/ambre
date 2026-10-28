@@ -231,7 +231,11 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         if image.pixels.len() != expected || expected == 0 {
             return; // malformed source: skip rather than embed garbage
         }
-        let img = Image::from_rgba8(image.pixels.to_vec(), image.size.width, image.size.height);
+        let img = Image::from_rgba8(
+            image.pixels.as_bytes().to_vec(),
+            image.size.width,
+            image.size.height,
+        );
         // krilla draws the image occupying (0,0)..(size) in the current space, so
         // translate to the destination origin and size it to the rect. Balanced
         // push/pop, matching the transform-stack contract.
@@ -425,9 +429,9 @@ mod tests {
             let mut surface = page.surface();
             let mut s = KrillaSurface::new(&mut surface);
             // 2x2 opaque RGBA checkerboard.
-            let pixels = [
+            let pixels = ambre_draw::RgbaPixels::new(vec![
                 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
-            ];
+            ]);
             let src = ImageSource {
                 key: ImageKey(1),
                 pixels: &pixels,
@@ -439,7 +443,7 @@ mod tests {
             // Malformed source (wrong length): skipped.
             let bad = ImageSource {
                 key: ImageKey(2),
-                pixels: &[0, 1, 2],
+                pixels: &ambre_draw::RgbaPixels::new(vec![0, 1, 2]),
                 size: ambre_draw::ImageSize::new(2, 2),
             };
             s.draw_image(&bad, Rect::new(0.0, 0.0, 10.0, 10.0));

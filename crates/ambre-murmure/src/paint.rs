@@ -1502,7 +1502,7 @@ pub(crate) mod tests {
         shelf.begin_paint(crate::Region::Channel);
         assert!(shelf.want(&file.media_ref));
         let frame = |delay| PictureFrame {
-            pixels: vec![0; 2 * 4],
+            pixels: vec![0; 2 * 4].into(),
             delay,
         };
         let gif = Picture {

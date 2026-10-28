@@ -19,7 +19,7 @@ pub struct PickedFile {
     pub name: String,
     /// The type the browser named, empty when it named none.
     pub media_type: MediaType,
-    pub data: Vec<u8>,
+    pub data: ambre_core::MediaBytes,
 }
 
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".

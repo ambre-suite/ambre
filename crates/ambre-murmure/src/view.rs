@@ -134,7 +134,7 @@ pub struct PageReads {
 }
 
 /// What the page does with a file fetched, and its bytes.
-pub type SaveFile = Rc<dyn Fn(&Attachment, Vec<u8>)>;
+pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::MediaBytes)>;
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
@@ -482,7 +482,7 @@ impl MurmureView {
                 evt: RestEvent::MediaDownloaded { data, .. },
             } if self.fetching.borrow().contains_key(&id) => {
                 if let Some(file) = self.fetching.borrow_mut().remove(&id) {
-                    (self.reads.save_file)(&file, data.into_bytes());
+                    (self.reads.save_file)(&file, data);
                 }
             }
             UiEvent::ApiError { id: Some(id), .. } => {
@@ -1903,7 +1903,7 @@ mod tests {
     }
 
     /// A file the view handed the page, and its bytes.
-    type Saved = (Attachment, Vec<u8>);
+    type Saved = (Attachment, ambre_core::MediaBytes);
 
     /// A format bar the view handed the page, and whether the thread's
     /// region shows it.
@@ -3634,7 +3634,7 @@ mod tests {
         page.dropped.borrow_mut().push(PickedFile {
             name: name.to_owned(),
             media_type: MediaType(String::new()),
-            data: vec![7; 3],
+            data: vec![7; 3].into(),
         });
         frame_with_fonts(&mut page.view);
         let mut uploads = Vec::new();
@@ -3644,7 +3644,7 @@ mod tests {
                 command: MurmureCommand::UploadFile { id, data },
             } = command
             {
-                assert_eq!((channel_id, data), (channel, vec![7; 3]));
+                assert_eq!((channel_id, data.as_bytes()), (channel, &[7; 3][..]));
                 uploads.push(id);
             }
         }
@@ -3817,7 +3817,7 @@ mod tests {
             .try_send(UiEvent::Rest { id, evt })
             .expect("room");
         frame_with_fonts(&mut page.view);
-        assert_eq!(*page.saved.borrow(), vec![(file, vec![1, 2, 3])]);
+        assert_eq!(*page.saved.borrow(), vec![(file, vec![1, 2, 3].into())]);
     }
 
     /// The pictures a paint asked the Logic thread for since the last call.
@@ -3870,7 +3870,7 @@ mod tests {
         assert_eq!(pictures_asked(&page), 0, "asked once");
 
         let frame = || PictureFrame {
-            pixels: vec![0; 2 * 4],
+            pixels: vec![0; 2 * 4].into(),
             delay: ambre_core::Millis(100),
         };
         let gif = Picture {
@@ -3908,7 +3908,7 @@ mod tests {
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
         let frame = || PictureFrame {
-            pixels: vec![0; 4],
+            pixels: vec![0; 4].into(),
             delay: ambre_core::Millis(100),
         };
         let picture = Some(Picture {

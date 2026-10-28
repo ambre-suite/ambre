@@ -45,7 +45,6 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | r
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
-ambre-app | src/host/murmure.rs | crate::host::murmure | save_file(data) | param | Vec<u8>	generic	file bytes
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	trait	trait
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	trait	trait
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
@@ -143,10 +142,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageDraft.text | field
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.text | field | String	free-text	message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown() | ret | String	free-text	rendered message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView::shown_at() | ret | (String,CharVec<ByteOffset>)	free-text	the text shown, beside its typed byte offsets
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::UploadFile.data | field | Vec<u8>	generic	uploaded file bytes
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureCommand::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MurmureEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-bus | src/app/murmure.rs | crate::app::murmure | PictureFrame.pixels | field | Vec<u8>	generic	decoded RGBA8 pixels
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
@@ -231,10 +228,12 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(ra
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
+ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes.0 | field | Vec<u8>	newtype-inner	the bytes of one captured binary clipboard field
+ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes::as_bytes() | ret | &[u8]	newtype-inner	the bytes of one captured binary clipboard field
+ambre-bus | src/app/toile.rs | crate::app::toile | ClipBytes::new(bytes) | param | Vec<u8>	newtype-inner	the bytes of one captured binary clipboard field
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipElement.notes | field | Option<String>	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Bin.0 | field | Vec<u8>	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Bool.0 | field | bool	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::F64.0 | field | f64	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Str.0 | field | String	newtype-inner	clipboard field value variant
@@ -288,7 +287,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.sk
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportReport.skipped | field | Vec<String>	free-text	file name / skipped item labels
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::MediaDecoded.pixels | field | Vec<u8>	generic	imported file bytes / decoded pixels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress.0 | field | String	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
@@ -1191,7 +1189,6 @@ ambre-draw | src/lib.rs | crate | DrawSurface::stroke_line(width) | param | f64	
 ambre-draw | src/lib.rs | crate | DrawSurface::stroke_rect(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
 ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str	newtype-inner	ImageKey constructor
-ambre-draw | src/lib.rs | crate | ImageSource.pixels | field | &'a[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	newtype-inner	enum's own name accessor
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
@@ -1318,7 +1315,6 @@ ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret |
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | decode(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-logic | src/pictures.rs | crate::pictures | scale() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1676,7 +1672,6 @@ ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	generic	state 
 ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result
 ambre-murmure | src/uploads.rs | crate::uploads | Pending.name | field | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.data | field | Vec<u8>	generic	opaque file content bytes
 ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | Uploaded::Failed.name | field | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin() | ret | bool	generic	state flag/predicate
@@ -1715,7 +1710,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move() | ret | bo
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | SaveFile | alias | Rc<dyn Fn(&Attachment,Vec<u8>)>	generic	opaque file content bytes
 ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	generic	the computed bool the one constructor of WindowWidth reads into its variant
 ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
@@ -3271,7 +3265,6 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glid
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | DecodedImage.pixels | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
