@@ -19,7 +19,7 @@ use base64::engine::general_purpose::URL_SAFE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The nonce an AEAD seal opens with, as `ambre_crypto::aead` writes it.
-const NONCE_LEN: usize = 24;
+const NONCE_LEN: usize = crate::Nonce::SIZE.0 as usize;
 /// The tag an AEAD seal closes with.
 const TAG_LEN: usize = 16;
 /// A document key, and a master seed.
@@ -27,8 +27,16 @@ const KEY_LEN: usize = 32;
 /// The digest of a log's first entry, sealed beside a wrapped key.
 const ANCHOR_LEN: usize = 32;
 /// The header of a sealed object, as Sync writes it. The layout byte, the key
-/// id, the author's key, the signature, the commitment and the nonce.
-const OBJECT_HEADER_LEN: usize = 1 + 16 + 32 + 64 + 32 + NONCE_LEN;
+/// id, the author's key, the signature, the commitment and the nonce, each at
+/// the size its own type states. The layout byte's type lives in `ambre-sync`,
+/// which this crate cannot see, so its one byte is written here.
+const OBJECT_HEADER_LEN: usize = crate::ByteSize(1)
+    .saturating_add(crate::KeyId::SIZE)
+    .saturating_add(crate::PublicKey::SIZE)
+    .saturating_add(crate::Signature::SIZE)
+    .saturating_add(crate::CommitmentTag::SIZE)
+    .saturating_add(crate::Nonce::SIZE)
+    .0 as usize;
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;
 

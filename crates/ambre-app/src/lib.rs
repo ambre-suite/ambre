@@ -1494,7 +1494,8 @@ pub fn main() {
                     evt: ambre_bus::RestEvent::DocFileOpenFailed,
                     ..
                 } => toasts.error(
-                    "That file did not open. The passphrase may be wrong, or the file may be damaged.",
+                    "That file did not open. The passphrase may be wrong, \
+                     or the file may be damaged.",
                 ),
                 // Share dialog: the current member list landed -> render it.
                 UiEvent::Rest {
