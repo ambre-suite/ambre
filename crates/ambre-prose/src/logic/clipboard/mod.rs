@@ -28,12 +28,12 @@ use ambre_bus::app::prose::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
 /// the same clipboard type never decodes as this one.
-const MAGIC: [u8; 4] = *b"APR1";
+const MAGIC: ambre_core::FormatMagic = ambre_core::FormatMagic::new(*b"APR1");
 
 /// What a copy carries in this application's own bytes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Payload {
-    magic: [u8; 4],
+    magic: ambre_core::FormatMagic,
     blocks: Vec<ClipBlock>,
 }
 
@@ -129,8 +129,8 @@ impl ClipValue {
 }
 
 /// The longest link and family name a paste keeps, in bytes.
-const HREF_MAX: usize = 2048;
-const FAMILY_MAX: usize = 64;
+const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
+const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
 /// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
@@ -150,7 +150,7 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
 /// that runs.
 fn safe_link(href: &str) -> bool {
     let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    href.len() <= HREF_MAX
+    ambre_core::ByteSize::of_len(href.len()) <= HREF_MAX
         && ["http://", "https://", "mailto:"]
             .iter()
             .any(|scheme| lower.starts_with(scheme))
@@ -160,7 +160,7 @@ fn safe_link(href: &str) -> bool {
 /// a control character or one that closes a style declaration.
 fn safe_family(name: &str) -> bool {
     !name.is_empty()
-        && name.len() <= FAMILY_MAX
+        && ambre_core::ByteSize::of_len(name.len()) <= FAMILY_MAX
         && name
             .chars()
             .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'))
@@ -635,7 +635,7 @@ mod tests {
     /// never lands, so no export writes it.
     #[test]
     fn a_crafted_link_lands_only_when_a_reader_may_follow_it() {
-        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX));
+        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX.as_len()));
         let written = pasted_marks(vec![
             run("a", text("javascript:alert(1)")),
             run("a", text("data:text/html,<script>alert(1)</script>")),

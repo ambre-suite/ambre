@@ -2192,11 +2192,7 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.tex
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Bool.0 | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	newtype-inner	newtype inner field
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | FAMILY_MAX | const | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | HREF_MAX | const | usize	math	count, size or local index
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | MAGIC | const | [u8;4]	math	count, size or local index
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | Payload.magic | field | [u8;4]	math	count, size or local index
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	text content / label / parser input
@@ -4118,3 +4114,5 @@ ambre-murmure | src/members.rs | crate::members | SampleTag::byte() | ret | u8	g
 ambre-murmure | src/watchers.rs | crate::watchers | SampleState::byte() | ret | u8	generic	byte codec of the private state byte of a channel sample
 ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::byte() | ret | u8	generic	byte codec of the private tag of a channel sample
 ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::from_byte(byte) | param | u8	generic	byte codec of the private tag of a channel sample; an unknown byte reads as None
+ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	newtype-inner	FormatMagic newtype
+ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor

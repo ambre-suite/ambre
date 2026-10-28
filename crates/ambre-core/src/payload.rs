@@ -175,6 +175,21 @@ define_payload! {
     ClipboardBytes
 }
 
+/// The four bytes that open an encoding of Ambre's own, so bytes another
+/// encoding wrote under the same type never decode as this one. Transparent
+/// to serde, so the bytes are those of the bare array it replaced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct FormatMagic([u8; 4]);
+
+impl FormatMagic {
+    /// The magic of an encoding, spelled as its four bytes.
+    #[must_use]
+    pub const fn new(bytes: [u8; 4]) -> Self {
+        Self(bytes)
+    }
+}
+
 /// What a CRDT document imports: one delta, or a whole snapshot. The engine
 /// imports both alike. The holder knows which it is, and a local store, a
 /// ledger or a test may treat the two apart.
