@@ -5670,6 +5670,8 @@
   {"edge": "verified-by", "from": "TOILE-104", "to": "ambre_toile::logic::stroke::tests::empty_and_single_point"},
   {"edge": "cites-section", "from": "TOILE-259", "section": "3", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},
   {"edge": "verified-by", "from": "TOILE-259", "to": "ambre_toile::logic::stroke::tests::empty_and_single_point"},
+  {"edge": "cites-section", "from": "TOILE-268", "section": "3", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},
+  {"edge": "verified-by", "from": "TOILE-268", "to": "ambre_toile::logic::state::derive::tests::an_out_of_range_pressure_reads_clamped"},
   {"edge": "cites-section", "from": "TOILE-040", "section": "4", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},
   {"edge": "verified-by", "from": "TOILE-040", "to": "ambre_toile::ui::tool::tests::draw_stream_emits_commit_stroke"},
   {"edge": "cites-section", "from": "TOILE-105", "section": "4", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},

@@ -16,6 +16,7 @@ use crate::logic::command::{
 use crate::logic::connector::outline_meets;
 use crate::logic::model::{
     ConnectorId, ElementId, ElementKind, ElementStyle, LinkTarget, ShapeKind, StrokePoint,
+    UnitFraction,
 };
 use crate::logic::stroke::smooth_stroke;
 
@@ -26,6 +27,36 @@ use super::codec::{
     read_connector, rotation_of, stored_rect, str_of,
 };
 use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
+
+/// A stored stroke sample as the reader takes it: the same 12 bytes as a
+/// [`StrokePoint`], with a pressure the reader clamps (`TOILE-268`).
+///
+/// A pressure above 1 reads as 1, a pressure below 0 reads as 0, and NaN
+/// reads as 1, the value every writer stores. A peer that wrote a bad
+/// pressure thus loses no stroke over a field the board never draws.
+#[derive(serde::Deserialize)]
+struct StoredPoint {
+    x: ambre_core::StrokeCoord,
+    y: ambre_core::StrokeCoord,
+    #[serde(deserialize_with = "clamped_pressure")]
+    pressure: UnitFraction,
+}
+
+impl StoredPoint {
+    fn into_sample(self) -> StrokePoint {
+        StrokePoint {
+            x: self.x,
+            y: self.y,
+            pressure: self.pressure,
+        }
+    }
+}
+
+/// Read a stored pressure, clamped into `0 ..= 1`, NaN as 1.
+fn clamped_pressure<'de, D: serde::Deserializer<'de>>(reader: D) -> Result<UnitFraction, D::Error> {
+    let stored = <f32 as serde::Deserialize>::deserialize(reader)?;
+    Ok(UnitFraction::new(stored.clamp(0.0, 1.0)).unwrap_or(UnitFraction::ONE))
+}
 
 impl ToileState {
     pub(super) fn viewport_event(&self) -> ToileEvent {
@@ -217,7 +248,7 @@ impl ToileState {
                 str_of(em, ElementKey::Hash).unwrap_or_default(),
             )),
             // A peer may have written any text here, so the stored address
-            // passes the same check as a typed one (`TOILE-267`).
+            // passes the same check as a typed one (`TOILE-268`).
             ElementKind::Embed => DisplayGeom::Embed(
                 str_of(em, ElementKey::Url)
                     .and_then(|url| ambre_bus::app::toile::WebAddress::parse(&url).ok()),
@@ -249,13 +280,15 @@ impl ToileState {
             ElementKind::Drawing => {
                 // No samples read as an empty stroke, which is not a decode failure.
                 let raw = bin_of(em, ElementKey::Points).unwrap_or_default();
-                let pts: Vec<StrokePoint> = postcard::from_bytes(&raw).unwrap_or_else(|_| {
-                    // A stroke this build cannot decode draws as no stroke at
-                    // all, which is an absence the user is owed a word about
-                    // (`SCHEMA-003`).
-                    self.note_undecodable(&raw);
-                    Vec::new()
-                });
+                let pts: Vec<StrokePoint> = postcard::from_bytes::<Vec<StoredPoint>>(&raw)
+                    .map(|stored| stored.into_iter().map(StoredPoint::into_sample).collect())
+                    .unwrap_or_else(|_| {
+                        // A stroke this build cannot decode draws as no stroke
+                        // at all, which is an absence the user is owed a word
+                        // about (`SCHEMA-003`).
+                        self.note_undecodable(&raw);
+                        Vec::new()
+                    });
                 let mut out = Vec::new();
                 smooth_stroke(&pts, &mut out);
                 DisplayGeom::Stroke(out)
@@ -319,7 +352,13 @@ mod tests {
     use crate::logic::command::{
         DisplayNode, DisplayViewport, InitContent, ToileCommand, ToileEvent, Viewport,
     };
-    use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
+    use loro::LoroValue;
+
+    use crate::logic::command::DisplayGeom;
+    use crate::logic::model::{
+        ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint,
+    };
+    use crate::logic::state::names::ElementKey;
     use crate::logic::state::{BoardKey, ToileState};
 
     fn rect_at(x: f64, y: f64) -> ToileCommand {
@@ -421,5 +460,56 @@ mod tests {
         let mut tail = painted[1..].to_vec();
         tail.sort();
         assert_eq!(&painted[1..], &tail[..], "the omitted tail is in id order");
+    }
+
+    /// `TOILE-268`: a stored pressure of 2.0, -0.5 or NaN reads clamped, so
+    /// the stroke still draws and raises no undecodable notice.
+    #[test]
+    fn an_out_of_range_pressure_reads_clamped() {
+        let mut st = ToileState::new();
+        let sample = |x: f32| {
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(x),
+                ambre_core::StrokeCoord::new(x),
+            )
+        };
+        let id = st
+            .handle_command(ToileCommand::CommitStroke {
+                points: vec![sample(0.0), sample(10.0)],
+                style: ElementStyle::default(),
+            })
+            .display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            })
+            .expect("CommitStroke must report the stroke it minted");
+        // Three samples a foreign peer wrote, each 12 bytes like a `StrokePoint`.
+        let forged: Vec<(f32, f32, f32)> =
+            vec![(0.0, 0.0, 2.0), (5.0, 2.0, -0.5), (10.0, 5.0, f32::NAN)];
+        let bytes = postcard::to_allocvec(&forged).expect("three f32 tuples encode");
+        let em = st.element_map(&id).expect("the stroke is in the document");
+        let _ = em.insert(ElementKey::Points, LoroValue::Binary(bytes.into()));
+        st.doc.commit();
+
+        let geom = st
+            .derive_viewport()
+            .nodes
+            .into_iter()
+            .find_map(|n| match n {
+                DisplayNode::Element(de) if de.id == id => Some(de.geom),
+                _ => None,
+            });
+        match geom {
+            Some(DisplayGeom::Stroke(path)) => {
+                assert!(!path.is_empty(), "the stroke draws")
+            }
+            other => panic!("the stroke paints as a stroke, not {other:?}"),
+        }
+        assert!(
+            !st.undecodable.get(),
+            "a clamped pressure is no decode failure"
+        );
     }
 }

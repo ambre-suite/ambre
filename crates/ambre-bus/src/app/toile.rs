@@ -746,7 +746,8 @@ pub struct StrokePoint {
     pub x: ambre_core::StrokeCoord,
     pub y: ambre_core::StrokeCoord,
     /// How hard the pen pressed, [`UnitFraction::ONE`] when the input device
-    /// reports none. A stored sample outside `0 ..= 1` does not decode.
+    /// reports none. The type refuses a value outside `0 ..= 1`; the board
+    /// reader clamps a stored one (`TOILE-268`).
     pub pressure: UnitFraction,
 }
 

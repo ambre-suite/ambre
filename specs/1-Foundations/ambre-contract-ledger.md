@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3756 rows: 3200 shipped, of which 9 loose. 556 unbuilt.**
+**3757 rows: 3201 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 428 | 818 | 611 | 417 | 3191 |
+| `verified` | 917 | 428 | 819 | 611 | 417 | 3192 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -116,7 +116,7 @@
 | `ambre-spec-toile-engine.md` | 39 | 39 | 39 |  |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-toile-frames.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-toile-freehand.md` | 12 | 12 | 12 |  |  |
+| `ambre-spec-toile-freehand.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-toile-groups.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 41 |  | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 12 |  |  |
@@ -298,7 +298,7 @@
 | `ambre-spec-toile-engine.md` | TOILE-001..002,004..005,017,023,089..093,206..215,217..223,236,240,244..245,265; TOILE-UI-099..101,312..314 |
 | `ambre-spec-toile-find.md` | TOILE-079..080,082,142..145; TOILE-UI-111..118 |
 | `ambre-spec-toile-frames.md` | TOILE-011,048..051,099..102,237,247..256,261..262; TOILE-UI-390 |
-| `ambre-spec-toile-freehand.md` | TOILE-008,038..041,103..108,259 |
+| `ambre-spec-toile-freehand.md` | TOILE-008,038..041,103..108,259,268 |
 | `ambre-spec-toile-groups.md` | TOILE-009..010,052..056,149..162,246,264,266; TOILE-UI-119..120 |
 | `ambre-spec-toile-import-export.md` | TOILE-IO-001..004,010..012,014..028,068..098 |
 | `ambre-spec-toile-links.md` | TOILE-062..066,109..115 |
