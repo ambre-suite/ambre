@@ -41,6 +41,22 @@ fn roundtrip_envelope() {
     assert_eq!(opened.to_plaintext(), plaintext);
 }
 
+/// A media seal is the envelope of any other plaintext: it opens through
+/// [`envelope::open`] and fails under another AAD.
+#[test]
+fn a_media_seal_opens_as_any_envelope() {
+    let doc_key = fixed_doc_key();
+    let signing = fixed_seed().derive_signing_key();
+    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let aad = &Aad::of(b"public-data");
+    let media = MediaBytes::new(b"\x89PNG a picture".to_vec());
+
+    let sealed = envelope::seal_media(&media, aad, &doc_key, &signing).unwrap();
+    let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
+    assert_eq!(opened.to_plaintext(), media.as_bytes());
+    assert!(envelope::open(&sealed, &Aad::of(b"other"), &doc_key, &author).is_err());
+}
+
 /// `ZK-017`: the debug form of an envelope prints its length and none of its
 /// bytes, so a `{:?}` in a log carries no payload.
 #[test]

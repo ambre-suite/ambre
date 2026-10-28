@@ -8,7 +8,7 @@
 //! Assembly into `ambre_protocol::{Update,Snapshot,Ephemeral}` and the
 //! compression version byte live in the Sync thread, not here.
 
-use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, SecretBytes, Signature};
+use ambre_core::{Ciphertext, CommitmentTag, MediaBytes, Nonce, PublicKey, SecretBytes, Signature};
 use ed25519_dalek::SigningKey;
 
 use crate::aead;
@@ -55,14 +55,43 @@ pub fn seal(
     signing_key: &SigningKey,
 ) -> Result<Sealed, CryptoError> {
     let (nonce, ciphertext) = aead::seal(plaintext.secret().expose(), aad, doc_key)?;
+    Ok(envelope_of(nonce, ciphertext, aad, doc_key, signing_key))
+}
+
+/// Seals a media file as [`seal`] seals any plaintext, borrowed from the
+/// [`MediaBytes`] that holds it. A media file is often megabytes long, and
+/// this path makes no copy of it before the cipher.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`] from the AEAD, as [`seal`].
+pub fn seal_media(
+    plaintext: &MediaBytes,
+    aad: &ambre_core::Aad,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<Sealed, CryptoError> {
+    let (nonce, ciphertext) = aead::seal(plaintext.as_bytes(), aad, doc_key)?;
+    Ok(envelope_of(nonce, ciphertext, aad, doc_key, signing_key))
+}
+
+/// Completes the envelope of a ciphertext: the commitment tag, then the
+/// signature over all of it.
+fn envelope_of(
+    nonce: Nonce,
+    ciphertext: Ciphertext,
+    aad: &ambre_core::Aad,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Sealed {
     let commitment_tag = commitment::commitment_tag(doc_key, &nonce, &ciphertext, aad);
     let signature = signature::sign(signing_key, &nonce, &ciphertext, aad, &commitment_tag);
-    Ok(Sealed {
+    Sealed {
         nonce,
         ciphertext,
         commitment_tag,
         signature,
-    })
+    }
 }
 
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,

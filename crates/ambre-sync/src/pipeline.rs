@@ -713,8 +713,9 @@ pub fn snapshot_blob(
         .map_err(|_| PipelineError::Postcard)
 }
 
-/// Seals a media blob into a standalone object bound for object storage,
-/// through [`seal_object`].
+/// Seals a media blob into a standalone object bound for object storage, in
+/// the layout and under the AAD of [`seal_object`]. The cipher reads the
+/// blob where it lies, with no copy into a `SecretBytes` first.
 ///
 /// # Errors
 ///
@@ -725,8 +726,9 @@ pub fn object_blob(
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<SealedBlob, PipelineError> {
-    let plaintext = SecretBytes::new(plaintext.as_bytes().to_vec());
-    seal_object(&plaintext, aad, doc_key, signing_key)
+    let key_id = doc_key.id();
+    let sealed = envelope::seal_media(plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
+    Ok(object_bytes(key_id, signing_key, &sealed))
 }
 
 // -- Standalone objects: a document name, a media blob -------------------------
