@@ -97,11 +97,14 @@ const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
 
 /// Sync events held past a full channel. At the high mark, four channels'
 /// worth, the worker stops reading the relay. At the low mark, one channel's
-/// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`). The build refuses a pair whose low mark is not below the
-/// high one.
-const SYNC_INBOX_MARKS: Option<Marks> =
-    Marks::new(4 * CHANNEL_CAPACITY.get(), CHANNEL_CAPACITY.get());
-const _: () = assert!(SYNC_INBOX_MARKS.is_some(), "the inbox marks are a pair");
+/// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
+/// The build refuses a pair whose low mark is not below the high one: the
+/// match runs at compile time, so its refusal is a build error.
+const SYNC_INBOX_MARKS: Marks = match Marks::new(4 * CHANNEL_CAPACITY.get(), CHANNEL_CAPACITY.get())
+{
+    Some(marks) => marks,
+    None => panic!("the inbox marks are a pair"),
+};
 
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
@@ -545,10 +548,10 @@ pub fn main() {
     let (sync_to_logic_tx, sync_to_logic_rx) =
         conduit::to_worker::<LogicEvent>(CHANNEL_CAPACITY, &logic_bell);
     // What the Sync -> Logic channel could not take yet, re-offered each frame.
-    let sync_inbox: SyncInbox = Rc::new(RefCell::new(match SYNC_INBOX_MARKS {
-        Some(marks) => conduit::Backlog::with_marks(sync_to_logic_tx, marks),
-        None => conduit::Backlog::new(sync_to_logic_tx),
-    }));
+    let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::with_marks(
+        sync_to_logic_tx,
+        SYNC_INBOX_MARKS,
+    )));
     // Logic -> Main, carrying document snapshots and deltas for local
     // persistence. The Main thread owns the IndexedDB store (its callbacks need a
     // live event loop, which the blocking Logic loop cannot offer). It drains
