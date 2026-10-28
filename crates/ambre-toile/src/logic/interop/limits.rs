@@ -6,10 +6,16 @@
 //! is applied (invariant). Coordinates are clamped rather than rejected so a
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
-use ambre_core::WholePx;
+use ambre_core::{BoardLength, ElementCount, WholePx};
 use kurbo::{Point, Rect};
 
 use super::ImportError;
+
+ambre_core::define_tally! {
+    /// How deep an import has walked into nested groups and frames: the root
+    /// is depth zero.
+    pub struct ImportDepth;
+}
 
 /// The per-import bounds. Defaults are generous headroom over the performance
 /// budget (a 5 000-node SVG) while still bounding a pathological file.
@@ -17,13 +23,13 @@ use super::ImportError;
 pub struct Limits {
     /// Maximum number of elements a single import may create. Guards the R-tree
     /// and memory against an element-count bomb.
-    pub max_elements: usize,
+    pub max_elements: ElementCount,
     /// Maximum group/frame nesting depth walked. Guards against a deeply nested
     /// tree causing unbounded recursion / stack growth.
-    pub max_depth: usize,
+    pub max_depth: ImportDepth,
     /// Absolute world-coordinate clamp (applied per axis, symmetric). A coordinate
     /// outside `[-coord_clamp, coord_clamp]` is clamped to the bound.
-    pub coord_clamp: f64,
+    pub coord_clamp: BoardLength,
     /// Maximum decoded image size, each edge apart. An image past it on either
     /// edge aborts the import (memory-exhaustion vector).
     pub max_image: ambre_core::ImageSize,
@@ -33,11 +39,11 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             // ~2x the 5 000-node budget: comfortable for real files, still a bound.
-            max_elements: 10_000,
-            max_depth: 64,
+            max_elements: ElementCount::new(10_000),
+            max_depth: ImportDepth::new(64),
             // +/- 1e6 world units: far past any real board, safely inside f32 range
             // for the CRDT geometry fields.
-            coord_clamp: 1_000_000.0,
+            coord_clamp: BoardLength::new(1_000_000.0),
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
             max_image: ambre_core::ImageSize::new(WholePx::new(8_192), WholePx::new(8_192)),
         }
@@ -51,7 +57,7 @@ impl Limits {
         if !v.is_finite() {
             return 0.0;
         }
-        v.clamp(-self.coord_clamp, self.coord_clamp)
+        v.clamp(-self.coord_clamp.get(), self.coord_clamp.get())
     }
 
     /// Clamp a point to the world bound.
@@ -75,7 +81,7 @@ impl Limits {
     /// # Errors
     ///
     /// [`ImportError::TooManyElements`], carrying the limit it holds.
-    pub fn check_element_count(&self, current: usize) -> Result<(), ImportError> {
+    pub fn check_element_count(&self, current: ElementCount) -> Result<(), ImportError> {
         if current >= self.max_elements {
             Err(ImportError::TooManyElements {
                 limit: self.max_elements,
@@ -90,7 +96,7 @@ impl Limits {
     /// # Errors
     ///
     /// [`ImportError::TooDeep`], carrying the limit it holds.
-    pub fn check_depth(&self, depth: usize) -> Result<(), ImportError> {
+    pub fn check_depth(&self, depth: ImportDepth) -> Result<(), ImportError> {
         if depth > self.max_depth {
             Err(ImportError::TooDeep {
                 limit: self.max_depth,
@@ -124,7 +130,7 @@ mod tests {
     #[test]
     fn coord_clamp_bounds_and_sanitizes() {
         let l = Limits {
-            coord_clamp: 100.0,
+            coord_clamp: BoardLength::new(100.0),
             ..Limits::default()
         };
         assert_eq!(l.clamp_coord(50.0), 50.0);
@@ -137,7 +143,7 @@ mod tests {
     #[test]
     fn rect_clamp_keeps_non_negative_extent() {
         let l = Limits {
-            coord_clamp: 100.0,
+            coord_clamp: BoardLength::new(100.0),
             ..Limits::default()
         };
         let r = l.clamp_rect(Rect::new(-999.0, -999.0, 999.0, 999.0));
@@ -148,26 +154,26 @@ mod tests {
     #[test]
     fn element_count_guard() {
         let l = Limits {
-            max_elements: 3,
+            max_elements: ElementCount::new(3),
             ..Limits::default()
         };
-        assert!(l.check_element_count(2).is_ok());
+        assert!(l.check_element_count(ElementCount::new(2)).is_ok());
         assert!(matches!(
-            l.check_element_count(3),
-            Err(ImportError::TooManyElements { limit: 3 })
+            l.check_element_count(ElementCount::new(3)),
+            Err(ImportError::TooManyElements { limit }) if limit == ElementCount::new(3)
         ));
     }
 
     #[test]
     fn depth_guard() {
         let l = Limits {
-            max_depth: 2,
+            max_depth: ImportDepth::new(2),
             ..Limits::default()
         };
-        assert!(l.check_depth(2).is_ok());
+        assert!(l.check_depth(ImportDepth::new(2)).is_ok());
         assert!(matches!(
-            l.check_depth(3),
-            Err(ImportError::TooDeep { limit: 2 })
+            l.check_depth(ImportDepth::new(3)),
+            Err(ImportError::TooDeep { limit }) if limit == ImportDepth::new(2)
         ));
     }
 

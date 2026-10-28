@@ -132,8 +132,8 @@ pub struct CanvasCursor(pub Cow<'static, str>);
 /// grab hand for the pan-only Hand tool, and the default arrow for Select. Pure
 /// so the chrome can bind it to the active-tool signal without any canvas
 /// round-trip, and host-tested.
-pub fn cursor_css(tool: Tool) -> &'static str {
-    match tool {
+pub fn cursor_css(tool: Tool) -> CanvasCursor {
+    CanvasCursor(Cow::Borrowed(match tool {
         Tool::Select => "default",
         Tool::Hand => "grab",
         Tool::Sticky(_) => STICKY_CURSOR,
@@ -144,7 +144,7 @@ pub fn cursor_css(tool: Tool) -> &'static str {
         | Tool::Draw
         | Tool::Comment
         | Tool::Laser => "crosshair",
-    }
+    }))
 }
 
 /// A rotation cursor (inlined SVG data URI) shown on the rotate handle so it is
@@ -375,15 +375,18 @@ mod tests {
 
     #[test]
     fn cursor_reflects_the_active_tool() {
-        assert_eq!(cursor_css(Tool::Select), "default");
-        assert_eq!(cursor_css(Tool::Hand), "grab");
-        assert_eq!(cursor_css(Tool::Sticky(STICKY_DEFAULT_FILL)), STICKY_CURSOR);
+        assert_eq!(cursor_css(Tool::Select).0, "default");
+        assert_eq!(cursor_css(Tool::Hand).0, "grab");
+        assert_eq!(
+            cursor_css(Tool::Sticky(STICKY_DEFAULT_FILL)).0,
+            STICKY_CURSOR
+        );
         assert!(STICKY_CURSOR.starts_with("url("));
-        assert_eq!(cursor_css(Tool::Text), "crosshair");
-        assert_eq!(cursor_css(Tool::Shape(ShapeKind::Rect)), "crosshair");
-        assert_eq!(cursor_css(Tool::Pen), "crosshair");
-        assert_eq!(cursor_css(Tool::Connector), "crosshair");
-        assert_eq!(cursor_css(Tool::Draw), "crosshair");
+        assert_eq!(cursor_css(Tool::Text).0, "crosshair");
+        assert_eq!(cursor_css(Tool::Shape(ShapeKind::Rect)).0, "crosshair");
+        assert_eq!(cursor_css(Tool::Pen).0, "crosshair");
+        assert_eq!(cursor_css(Tool::Connector).0, "crosshair");
+        assert_eq!(cursor_css(Tool::Draw).0, "crosshair");
     }
 
     #[test]

@@ -1026,7 +1026,10 @@ fn writing_commands_are_mutating() {
         AppCommand::Toile(ToileCommand::Undo),
         // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
         AppCommand::Toile(ToileCommand::React {
-            target: ElementId::mint(ambre_core::PeerId(1), 1),
+            target: ElementId::mint(
+                ambre_core::PeerId(1),
+                ambre_bus::app::toile::IdCounter::new(1),
+            ),
             reaction: None,
         }),
     ];

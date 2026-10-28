@@ -536,7 +536,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
-    use ambre_core::Rgba;
+    use ambre_core::{ElementCount, Rgba};
     use kurbo::{Point, Size};
 
     use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
@@ -566,7 +566,7 @@ mod tests {
         };
         let (report, outcome) = st.apply_import(batch);
         assert_eq!(report.imported.get(), 5);
-        assert_eq!(st.element_count(), 5);
+        assert_eq!(st.element_count(), ElementCount::new(5));
         assert!(outcome.update.is_some(), "one CRDT delta is broadcast");
         assert!(
             outcome.requests.is_empty(),
@@ -574,7 +574,7 @@ mod tests {
         );
         // The single strongest invariant: one Undo empties the whole import.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     #[test]
@@ -624,10 +624,10 @@ mod tests {
         let (report, _) = st.apply_import(batch);
         assert_eq!(report.imported.get(), 3);
         // Three rects plus two group elements.
-        assert_eq!(st.element_count(), 5);
+        assert_eq!(st.element_count(), ElementCount::new(5));
         // Still one undo group: a single Undo removes every element AND group.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     #[test]
@@ -761,7 +761,7 @@ mod tests {
         assert!(out.update.is_some());
         assert!(out.requests.is_empty());
         assert!(has_report(&out), "an ImportReport is surfaced");
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ElementCount::new(1));
         assert_eq!(st.pending_import_count(), 0);
     }
 
@@ -802,7 +802,7 @@ mod tests {
                 .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
         );
         assert!(out.update.is_none());
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     /// Covers `TOILE-IO-071`: an import onto a populated board leaves each
@@ -836,7 +836,7 @@ mod tests {
             bytes: ambre_core::FileBytes::new(svg.to_vec()),
             at: Point::ZERO,
         });
-        assert!(st.element_count() > 1, "the file landed");
+        assert!(st.element_count() > ElementCount::new(1), "the file landed");
         assert_eq!(
             st.element_map(&held).expect("held").map().get_deep_value(),
             before
@@ -874,7 +874,7 @@ mod tests {
                 out.display
             );
         }
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     #[test]
@@ -888,7 +888,7 @@ mod tests {
         // Async: one upload issued, nothing applied yet.
         assert_eq!(out.requests.len(), 1);
         assert!(out.update.is_none(), "board unchanged until media resolves");
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
         assert_eq!(st.pending_import_count(), 1);
 
         // Sync returns the real hash: the batch lands with it, no `pending:` left.
@@ -905,13 +905,13 @@ mod tests {
             done.update.is_some(),
             "the applied batch broadcasts a delta"
         );
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ElementCount::new(1));
         assert_eq!(st.media_count(), 1);
         assert!(st.media_meta("realhash").is_some());
         assert_eq!(st.pending_import_count(), 0);
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     /// Covers `TOILE-IO-031`: a picture on the board reaches the page as its
@@ -980,11 +980,20 @@ mod tests {
                 content_hash: ambre_core::ContentHash("realhash".to_owned()),
             },
         );
-        assert_eq!((st.element_count(), st.media_count()), (1, 1));
+        assert_eq!(
+            (st.element_count(), st.media_count()),
+            (ElementCount::new(1), 1)
+        );
         st.handle_command(ToileCommand::Undo);
-        assert_eq!((st.element_count(), st.media_count()), (0, 0));
+        assert_eq!(
+            (st.element_count(), st.media_count()),
+            (ElementCount::ZERO, 0)
+        );
         st.handle_command(ToileCommand::Redo);
-        assert_eq!((st.element_count(), st.media_count()), (1, 1));
+        assert_eq!(
+            (st.element_count(), st.media_count()),
+            (ElementCount::new(1), 1)
+        );
         assert!(st.media_meta("realhash").is_some());
     }
 
@@ -1004,7 +1013,11 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
         );
-        assert_eq!(st.element_count(), 0, "board untouched (atomicity)");
+        assert_eq!(
+            st.element_count(),
+            ElementCount::ZERO,
+            "board untouched (atomicity)"
+        );
         assert_eq!(st.pending_import_count(), 0, "the registry is drained");
     }
 
@@ -1022,7 +1035,7 @@ mod tests {
         );
         assert!(out.display.is_empty());
         assert!(out.update.is_none());
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 
     // -- slicing (`TOILE-IO-028`) -------------------------------------------
@@ -1051,7 +1064,10 @@ mod tests {
         let first = st.handle_command(large_import());
         assert!(first.update.is_some(), "the first slice is broadcast");
         assert!(!has_report(&first), "the import is not over");
-        assert_eq!(st.element_count(), super::IMPORT_SLICE);
+        assert_eq!(
+            st.element_count(),
+            ElementCount::of_len(super::IMPORT_SLICE)
+        );
         assert!(st.has_pending_work());
         let mut resumes = 0;
         let mut last = None;
@@ -1064,7 +1080,7 @@ mod tests {
         // A unit is a create or a style, and the SVG converter styles every slot.
         assert_eq!(resumes, (2 * LARGE).div_ceil(super::IMPORT_SLICE) - 1);
         assert!(has_report(&last.expect("a last slice")));
-        assert_eq!(st.element_count(), LARGE);
+        assert_eq!(st.element_count(), ElementCount::of_len(LARGE));
         assert!(st.resume().update.is_none(), "nothing left to resume");
     }
 
@@ -1080,7 +1096,10 @@ mod tests {
             size: Size::new(800.0, 600.0),
         }));
         assert!(out.update.is_none());
-        assert_eq!(st.element_count(), super::IMPORT_SLICE);
+        assert_eq!(
+            st.element_count(),
+            ElementCount::of_len(super::IMPORT_SLICE)
+        );
         assert!(st.has_pending_work());
     }
 
@@ -1097,8 +1116,8 @@ mod tests {
         assert!(!st.has_pending_work(), "the edit finished the import");
         assert!(has_report(&edit), "the edit's answer closes the import");
         peer.apply_remote(&edit.update.expect("one delta"));
-        assert_eq!(st.element_count(), LARGE + 1);
-        assert_eq!(peer.element_count(), LARGE + 1);
+        assert_eq!(st.element_count(), ElementCount::of_len(LARGE + 1));
+        assert_eq!(peer.element_count(), ElementCount::of_len(LARGE + 1));
     }
 
     /// One Undo removes a sliced import whole: every slice shares one undo
@@ -1111,9 +1130,13 @@ mod tests {
         while st.has_pending_work() {
             st.resume();
         }
-        assert_eq!(st.element_count(), LARGE + 1);
+        assert_eq!(st.element_count(), ElementCount::of_len(LARGE + 1));
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 1, "the earlier rect stays");
+        assert_eq!(
+            st.element_count(),
+            ElementCount::new(1),
+            "the earlier rect stays"
+        );
     }
 
     /// An Undo that arrives mid-import lands the import first, then removes
@@ -1125,6 +1148,6 @@ mod tests {
         st.handle_command(large_import());
         st.handle_command(ToileCommand::Undo);
         assert!(!st.has_pending_work());
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ElementCount::new(1));
     }
 }

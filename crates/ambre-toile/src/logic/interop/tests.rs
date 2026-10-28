@@ -177,7 +177,11 @@ fn a_group_of_one_member_is_reported_rather_than_dropped() {
     assert_eq!(batch.commands.len(), 1, "the member still imports");
     assert!(batch.groups.is_empty(), "no group the board would refuse");
     assert!(
-        batch.report.skipped.iter().any(|s| s.contains("group")),
+        batch
+            .report
+            .skipped
+            .iter()
+            .any(|s| s.as_str().contains("group")),
         "the lost structure was not reported: {:?}",
         batch.report.skipped
     );
@@ -197,7 +201,11 @@ fn text_the_reader_cannot_parse_is_reported() {
     let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
     assert_eq!(batch.commands.len(), 1, "the shape still imports");
     assert!(
-        batch.report.skipped.iter().any(|s| s.contains("text")),
+        batch
+            .report
+            .skipped
+            .iter()
+            .any(|s| s.as_str().contains("text")),
         "the lost text was not reported: {:?}",
         batch.report.skipped
     );
@@ -217,7 +225,11 @@ fn nested_groups_are_rebuilt_innermost_first() {
     )));
     // No group is reported as lost.
     assert!(
-        !batch.report.skipped.iter().any(|s| s.contains("flatten")),
+        !batch
+            .report
+            .skipped
+            .iter()
+            .any(|s| s.as_str().contains("flatten")),
         "no group should be flattened: {:?}",
         batch.report.skipped
     );
@@ -285,11 +297,16 @@ fn too_many_elements_aborts_atomically() {
     }
     svg.push_str("</svg>");
     let limits = Limits {
-        max_elements: 4,
+        max_elements: ambre_core::ElementCount::new(4),
         ..Limits::default()
     };
     let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
-    assert_eq!(err, ImportError::TooManyElements { limit: 4 });
+    assert_eq!(
+        err,
+        ImportError::TooManyElements {
+            limit: ambre_core::ElementCount::new(4)
+        }
+    );
 }
 
 #[test]
@@ -305,11 +322,16 @@ fn too_deep_nesting_aborts_atomically() {
     }
     svg.push_str("</svg>");
     let limits = Limits {
-        max_depth: 3,
+        max_depth: super::ImportDepth::new(3),
         ..Limits::default()
     };
     let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
-    assert_eq!(err, ImportError::TooDeep { limit: 3 });
+    assert_eq!(
+        err,
+        ImportError::TooDeep {
+            limit: super::ImportDepth::new(3)
+        }
+    );
 }
 
 #[test]
@@ -317,7 +339,7 @@ fn coordinates_are_clamped_to_the_world_bound() {
     let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\">\
         <rect x=\"0\" y=\"0\" width=\"100000\" height=\"100000\"/></svg>";
     let limits = Limits {
-        coord_clamp: 500.0,
+        coord_clamp: ambre_core::BoardLength::new(500.0),
         ..Limits::default()
     };
     let batch = import_svg(svg.as_bytes(), &limits).unwrap();

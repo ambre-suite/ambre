@@ -126,7 +126,7 @@ pub struct ToileState {
     /// the reads that would walk take `&self`.
     board_walks: Cell<u64>,
     /// Per-session monotonic id-minting counter.
-    counter: u32,
+    counter: ambre_bus::app::toile::IdCounter,
     peer: ambre_core::PeerId,
     /// Last viewport the UI reported; drives culling.
     viewport: Viewport,
@@ -214,11 +214,11 @@ pub struct ToileState {
 /// text as read, so a refusal means it changed between the read and the write.
 fn write_edits(text: &loro::LoroText, edits: &[Edit]) -> loro::LoroResult<()> {
     for e in edits {
-        if e.delete > 0 {
-            text.delete(e.at, e.delete)?;
+        if !e.delete.is_zero() {
+            text.delete(e.at.to_usize(), e.delete.to_usize())?;
         }
         if !e.insert.is_empty() {
-            text.insert(e.at, &e.insert)?;
+            text.insert(e.at.to_usize(), &e.insert)?;
         }
     }
     Ok(())
@@ -358,7 +358,7 @@ impl ToileState {
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
             board_walks: Cell::new(0),
-            counter: 0,
+            counter: ambre_bus::app::toile::IdCounter::ZERO,
             peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
             viewport_version: ambre_bus::ViewportVersion(0),
@@ -457,12 +457,12 @@ impl ToileState {
     // -- id minting -----------------------------------------------------
 
     pub(super) fn mint_element_id(&mut self) -> ElementId {
-        self.counter += 1;
+        self.counter = self.counter.incremented();
         ElementId::mint(self.peer, self.counter)
     }
 
     pub(super) fn mint_connector_id(&mut self) -> ConnectorId {
-        self.counter += 1;
+        self.counter = self.counter.incremented();
         ConnectorId::mint(self.peer, self.counter)
     }
 
@@ -1174,8 +1174,8 @@ impl ToileState {
     // -- test / integration accessors -----------------------------------------
 
     /// Number of elements currently in the CRDT. Test helper.
-    pub fn element_count(&self) -> usize {
-        self.bounds.len()
+    pub fn element_count(&self) -> ambre_core::ElementCount {
+        ambre_core::ElementCount::of_len(self.bounds.len())
     }
 
     /// How many times the whole element map has been resolved. Test helper.
@@ -1402,7 +1402,11 @@ mod schema_tests {
                 binary: SCHEMA_VERSION,
             }
         );
-        assert_eq!(st.element_count(), 1, "nothing was merged in");
+        assert_eq!(
+            st.element_count(),
+            ambre_core::ElementCount::new(1),
+            "nothing was merged in"
+        );
         assert_eq!(
             st.export_snapshot(),
             before,

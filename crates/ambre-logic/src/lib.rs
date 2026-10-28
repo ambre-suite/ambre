@@ -1561,7 +1561,7 @@ mod pass_tests {
         }
     }
 
-    fn elements(state: &LogicState, document_id: DocumentId) -> usize {
+    fn elements(state: &LogicState, document_id: DocumentId) -> ambre_core::ElementCount {
         match &state.docs[&document_id].state {
             DocState::Toile(board) => board.element_count(),
             other => panic!("the registry opened {other:?}"),
@@ -1586,7 +1586,10 @@ mod pass_tests {
             .expect("queued");
         state.drain_pass(&from_ui, &from_sync);
         let first = elements(&state, document_id);
-        assert!(first > 0 && first < 1_000, "one slice landed: {first}");
+        assert!(
+            first > ambre_core::ElementCount::ZERO && first < ambre_core::ElementCount::new(1_000),
+            "one slice landed: {first}"
+        );
         assert!(state.has_pending_work(), "the loop comes back unasked");
         let mut passes = 1;
         while state.has_pending_work() {
@@ -1594,7 +1597,10 @@ mod pass_tests {
             passes += 1;
         }
         assert!(passes > 2, "the import took {passes} passes");
-        assert_eq!(elements(&state, document_id), 1_000);
+        assert_eq!(
+            elements(&state, document_id),
+            ambre_core::ElementCount::new(1_000)
+        );
     }
 
     /// `ARCH-031`: a board closed mid-import saves the whole import, never
@@ -1633,7 +1639,10 @@ mod pass_tests {
             Order::Snapshot(Seq::ZERO),
             ambre_core::LoroPayloadRef::Snapshot(&snapshot),
         );
-        assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
+        assert_eq!(
+            elements(&reopened.state, reopened.document_id),
+            ambre_core::ElementCount::new(1_000)
+        );
     }
 
     /// `ARCH-031`: a peer's delta that arrives mid-import lands the import
@@ -1668,14 +1677,17 @@ mod pass_tests {
             ambre_core::LoroPayloadRef::Delta(&delta),
         );
         assert!(!state.has_pending_work(), "the import landed first");
-        assert_eq!(elements(&state, document_id), 1_001);
+        assert_eq!(
+            elements(&state, document_id),
+            ambre_core::ElementCount::new(1_001)
+        );
         state.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::Undo),
         });
         assert_eq!(
             elements(&state, document_id),
-            1,
+            ambre_core::ElementCount::new(1),
             "one Undo takes the file back"
         );
     }

@@ -150,7 +150,11 @@ fn a_birth_box_of_no_usable_size_is_refused() {
         let out = create(&mut st, kind, Point::ZERO, size);
         assert!(out.update.is_none(), "{size:?} wrote a change");
         assert_eq!(errors(&out), [&ToileError::UnusableSize], "{size:?}");
-        assert_eq!(st.element_count(), 0, "{size:?}");
+        assert_eq!(
+            st.element_count(),
+            ambre_core::ElementCount::ZERO,
+            "{size:?}"
+        );
     }
     let mut st = ToileState::new();
     let out = create(
@@ -214,7 +218,7 @@ fn a_seed_of_another_kind_is_refused() {
         assert!(out.update.is_none());
         assert_eq!(errors(&out), [&ToileError::ContentKindMismatch]);
     }
-    assert_eq!(st.element_count(), 0);
+    assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
     assert!(st.layer_order().is_empty());
 }
 
@@ -244,7 +248,7 @@ fn a_write_to_a_missing_element_is_refused() {
         assert!(out.update.is_none());
         assert_eq!(errors(&out), [&ToileError::NoSuchElement(ghost.clone())]);
     }
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
     assert_eq!(st.bounds_of(&kept), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
@@ -325,7 +329,11 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
         lock: ambre_bus::app::toile::LockState::Unlocked,
     });
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
-    assert_eq!(st.element_count(), 0, "the unlock frees the delete");
+    assert_eq!(
+        st.element_count(),
+        ambre_core::ElementCount::ZERO,
+        "the unlock frees the delete"
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -486,7 +494,7 @@ fn deleting_a_group_spares_a_bystander() {
     let by = rect(&mut st, 5.0, 5.0);
     let g = group(&mut st, &[&a, &b]);
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
     assert_eq!(order(&st), nodes(&[&by]));
 }
 
@@ -710,7 +718,7 @@ fn a_remote_batch_repaints_once() {
     let mut batched = ToileState::with_peer(ambre_core::PeerId(2));
     let events = batched.apply_remote_batch(&deltas);
     assert_eq!(viewports(&events), 1);
-    assert_eq!(batched.element_count(), 5);
+    assert_eq!(batched.element_count(), ambre_core::ElementCount::new(5));
     let mut single = ToileState::with_peer(ambre_core::PeerId(3));
     let each: usize = deltas
         .iter()
@@ -731,15 +739,21 @@ fn a_remote_batch_repaints_once() {
 fn every_id_the_board_writes_has_the_minted_width() {
     for (peer, counter) in [(0, 0), (u64::MAX, u32::MAX)] {
         assert_eq!(
-            ElementId::mint(ambre_core::PeerId(peer), counter)
-                .as_str()
-                .len(),
+            ElementId::mint(
+                ambre_core::PeerId(peer),
+                ambre_bus::app::toile::IdCounter::new(counter)
+            )
+            .as_str()
+            .len(),
             25
         );
         assert_eq!(
-            ConnectorId::mint(ambre_core::PeerId(peer), counter)
-                .as_str()
-                .len(),
+            ConnectorId::mint(
+                ambre_core::PeerId(peer),
+                ambre_bus::app::toile::IdCounter::new(counter)
+            )
+            .as_str()
+            .len(),
             25
         );
     }

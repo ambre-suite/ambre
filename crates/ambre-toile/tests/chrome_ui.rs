@@ -876,7 +876,7 @@ fn an_import_report_reaches_the_user() {
     owner.set();
     let root = mount_notified(ToileEvent::ImportReport {
         imported: ambre_bus::app::toile::ElementCount::new(4),
-        skipped: vec!["gradient".to_owned()],
+        skipped: vec![ambre_bus::app::toile::SkipReason::new("gradient")],
     });
     let toast = root
         .query_selector(".ambre-toast")

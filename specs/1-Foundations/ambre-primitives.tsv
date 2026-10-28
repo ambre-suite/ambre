@@ -223,7 +223,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | CommentMessage.body | field |
 ambre-bus | src/app/toile.rs | crate::app::toile | CommentSummary.preview | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ConnectorId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ConnectorId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
-ambre-bus | src/app/toile.rs | crate::app::toile | ConnectorId::mint(counter) | param | u32	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | DeckFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayConnector.label | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Frame.0 | field | String	free-text	user text
@@ -231,7 +230,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::mint(counter) | param | u32	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementKind::type_tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
@@ -264,7 +262,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::DocumentRefused.0
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ExportFailed.0 | field | String	free-text	error message
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportFailed.0 | field | String	free-text	error message
-ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::ImportReport.skipped | field | Vec<String>	free-text	file name / skipped item labels
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress.0 | field | String	newtype-inner	WebAddress newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | WebAddress::as_str() | ret | &str	newtype-inner	WebAddress newtype
@@ -2652,11 +2649,6 @@ ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.max | fie
 ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.min | field | [f64;2]	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::len() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.coord_clamp | field | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.max_depth | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits.max_elements | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::check_depth(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::check_element_count(current) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_coord() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_coord(v) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2672,11 +2664,8 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::De
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.format | field | &'static str	free-text	format label in an error message (variant unused)
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.msg | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Parse.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::TooDeep.limit | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::TooManyElements.limit | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Group.0 | field | usize	newtype-inner	ImportRef variant carries its own index space
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Slot.0 | field | usize	newtype-inner	ImportRef variant carries its own index space
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport.skipped | field | Vec<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | PdfExportError::Serialize.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUMB_MAX_EDGE | const | u32	math	geometry, layout, count or size local to the algorithm
@@ -2699,7 +2688,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | walk_group(depth) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
@@ -2775,7 +2763,6 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::seed_media() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.counter | field | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
@@ -2783,7 +2770,6 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_s
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_push_layer_raw(s) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_raw_layers() | ret | Vec<String>	generic	debug/test accessor over raw fields
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::element_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_remote(update) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
@@ -2805,8 +2791,6 @@ ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | en
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.at | field | usize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.delete | field | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.insert | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.end | field | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.start | field | usize	math	diff/merge algorithm index, codepoints throughout
@@ -2913,7 +2897,6 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &
 ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message(skipped) | param | &[String]	free-text	label, message or user text
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	generic	the computed bool the one constructor of Under reads into its variant
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -2935,7 +2918,6 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if
 ambre-toile | src/ui/palette.rs | crate::ui::palette | MOVE_PATHS | static | std::sync::LazyLock<String>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | ROTATE_CURSOR | static | std::sync::LazyLock<String>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | STICKY_CURSOR | const | &str	generic	CSS cursor text
-ambre-toile | src/ui/palette.rs | crate::ui::palette | cursor_css() | ret | &'static str	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | is_editable_tag() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/palette.rs | crate::ui::palette | is_editable_tag(tag_name) | param | &str	generic	DOM tag name
 ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword() | ret | &'static str	generic	CSS cursor text
@@ -4017,3 +3999,6 @@ ambre-commands | src/keybinding.rs | crate::keybinding | FunctionKey::from_dom_n
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar.0 | field | char	newtype-inner	the inside of the character of a key, lowercased for an ASCII letter
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::get() | ret | char	newtype-inner	the one way out of the character of a key, to a label or a menu initial
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param | char	newtype-inner	the constructor of the character of a key; it lowercases an ASCII letter
+ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
+ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
+ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::new(reason) | param | impl Into<String>	newtype-inner	the constructor of a skip reason, from the line an importer writes

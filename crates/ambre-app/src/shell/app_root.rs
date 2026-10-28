@@ -421,11 +421,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // A position-dependent override wins: a directional resize or grab
             // cursor over a selection edge or corner, or during a transform.
             // Otherwise the cursor is the pure function of the active tool.
-            let cursor = toile_cursor.get().map(|c| c.0).unwrap_or_else(|| {
-                std::borrow::Cow::Borrowed(ambre_toile::ui::palette::cursor_css(
-                    toile_active_tool.get(),
-                ))
-            });
+            let cursor = toile_cursor
+                .get()
+                .unwrap_or_else(|| ambre_toile::ui::palette::cursor_css(toile_active_tool.get()))
+                .0;
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
                 && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()

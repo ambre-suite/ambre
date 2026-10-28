@@ -189,7 +189,7 @@ mod tests {
             sources: Sources::Consume,
         });
         // Sources consumed, one result element remains.
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
         assert!(out.update.is_some(), "should broadcast a CRDT delta");
     }
 
@@ -203,7 +203,7 @@ mod tests {
             ids: vec![a, b],
             sources: Sources::Keep,
         });
-        assert_eq!(st.element_count(), 3); // two sources + result
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(3)); // two sources + result
     }
 
     #[test]
@@ -216,10 +216,10 @@ mod tests {
             ids: vec![a, b],
             sources: Sources::Consume,
         });
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
         // One undo restores both sources and removes the result.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 2);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(2));
     }
 
     #[test]
@@ -231,7 +231,7 @@ mod tests {
             ids: vec![a],
             sources: Sources::Consume,
         });
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
         assert!(matches!(
             out.display.first(),
             Some(ToileEvent::Error(ToileError::BooleanNeedsTwo))

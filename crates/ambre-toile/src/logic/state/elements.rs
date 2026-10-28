@@ -683,7 +683,7 @@ mod inner_tests {
             refused,
             Err(crate::logic::command::ToileError::ContentKindMismatch)
         );
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
     }
 
     #[test]
@@ -693,10 +693,10 @@ mod inner_tests {
             rect_at(&mut st, i as f64 * 20.0);
         }
         st.doc.commit();
-        assert_eq!(st.element_count(), 5);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(5));
         // A single Undo unwinds all five: they landed in one commit.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
     }
 
     #[test]
@@ -714,10 +714,10 @@ mod inner_tests {
         st.rematerialize_layers();
         st.recompute_groups();
         // Two rects plus the group element.
-        assert_eq!(st.element_count(), 3);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(3));
         // One Undo removes the whole batch (creates + restyle + group).
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
     }
 
     /// A rect of `w` x 10 at `(x, y)`, committed on its own. Each fixture is
@@ -841,7 +841,7 @@ mod inner_tests {
         });
         // The last undo item is still the second create, which it unwinds.
         st.handle_command(ToileCommand::Undo);
-        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(1));
         assert!(st.bounds_of(&a).is_some());
     }
 

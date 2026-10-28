@@ -34,7 +34,7 @@ mod svg_import;
 #[cfg(test)]
 mod tests;
 
-pub use limits::Limits;
+pub use limits::{ImportDepth, Limits};
 pub use media::{ContentHash, MediaCache, MediaState, RequestOutcome};
 #[cfg(all(test, feature = "pdf"))]
 pub(crate) use pdf_export::paint_page;
@@ -137,13 +137,14 @@ pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ImportReport {
     pub imported: ambre_bus::app::toile::ElementCount,
-    pub skipped: Vec<String>,
+    pub skipped: Vec<ambre_bus::app::toile::SkipReason>,
 }
 
 impl ImportReport {
     /// Record a dropped/unsupported construct in the report.
     pub fn skip(&mut self, reason: impl Into<String>) {
-        self.skipped.push(reason.into());
+        self.skipped
+            .push(ambre_bus::app::toile::SkipReason::new(reason));
     }
 }
 
@@ -171,9 +172,9 @@ pub enum ImportError {
     #[error("failed to decode image: {0}")]
     Decode(String),
     #[error("import exceeds the element limit ({limit})")]
-    TooManyElements { limit: usize },
+    TooManyElements { limit: ambre_core::ElementCount },
     #[error("import exceeds the nesting-depth limit ({limit})")]
-    TooDeep { limit: usize },
+    TooDeep { limit: ImportDepth },
     #[error(
         "decoded image {}x{} exceeds the dimension limit ({}x{})",
         size.width,

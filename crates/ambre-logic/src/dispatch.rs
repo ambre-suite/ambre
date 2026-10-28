@@ -1765,7 +1765,7 @@ mod tests {
         assert_eq!(document_id, doc_id);
         let mut reopened = ToileState::new();
         let _ = reopened.import_snapshot(&payload);
-        assert_eq!(reopened.element_count(), 1);
+        assert_eq!(reopened.element_count(), ambre_core::ElementCount::new(1));
     }
 
     // -- Service-plane routing: interop media uploads (`toile-media`) ------

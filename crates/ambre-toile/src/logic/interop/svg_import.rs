@@ -44,12 +44,12 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
-use ambre_core::{Rgb, Rgba};
+use ambre_core::{ElementCount, Rgb, Rgba};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
 use super::raster::decode_media;
-use super::{ImportBatch, ImportError, ImportGroup, ImportRef, Limits};
+use super::{ImportBatch, ImportDepth, ImportError, ImportGroup, ImportRef, Limits};
 use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 
@@ -87,7 +87,7 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
     let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
-    walk_group(tree.root(), root_xml, 0, limits, &mut batch)?;
+    walk_group(tree.root(), root_xml, ImportDepth::ZERO, limits, &mut batch)?;
 
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
@@ -125,7 +125,7 @@ fn import_text_node(
             .skip("text: a node the reader could not read a body from");
         return Ok(None);
     }
-    limits.check_element_count(batch.commands.len())?;
+    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
     let x = node
         .attribute("x")
         .and_then(|v| v.parse::<f64>().ok())
@@ -180,7 +180,7 @@ fn is_drawn(node: roxmltree::Node) -> bool {
 fn walk_group(
     group: &usvg::Group,
     xml: Option<roxmltree::Node>,
-    depth: usize,
+    depth: ImportDepth,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Vec<ImportRef>, ImportError> {
@@ -217,7 +217,7 @@ fn walk_group(
         let paired = take_text_before_next!();
         match node {
             usvg::Node::Group(g) => {
-                let child_members = walk_group(g, paired, depth + 1, limits, batch)?;
+                let child_members = walk_group(g, paired, depth.incremented(), limits, batch)?;
                 match child_members.len() {
                     // A group of one member, or of none, is not a group the
                     // board can rebuild. Its children keep their geometry and
@@ -269,7 +269,7 @@ fn import_path(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<ImportRef, ImportError> {
-    limits.check_element_count(batch.commands.len())?;
+    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
 
     let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
     let bounds = bez.bounding_box();
@@ -298,7 +298,7 @@ fn import_image(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
-    limits.check_element_count(batch.commands.len())?;
+    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
 
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),

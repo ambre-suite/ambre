@@ -6,7 +6,7 @@
 // than discovered at a drop.
 // ============================================================================
 
-use ambre_bus::app::toile::ElementCount;
+use ambre_bus::app::toile::{ElementCount, SkipReason};
 use ambre_draw::Point;
 
 /// The `accept` attribute of the import picker: the formats a converter reads
@@ -35,7 +35,7 @@ pub struct DroppedFile {
 /// user who dropped a drawing wants to know it arrived. A lossy import says so
 /// in the same breath, naming the first few constructs it dropped. A list nobody
 /// reads at the corner of a screen is the rejected alternative.
-pub fn import_message(imported: ElementCount, skipped: &[String]) -> String {
+pub fn import_message(imported: ElementCount, skipped: &[SkipReason]) -> String {
     let head = match imported.get() {
         1 => "Imported 1 element".to_owned(),
         n => format!("Imported {n} elements"),
@@ -46,7 +46,7 @@ pub fn import_message(imported: ElementCount, skipped: &[String]) -> String {
     let named: Vec<&str> = skipped
         .iter()
         .take(SKIPPED_NAMED)
-        .map(String::as_str)
+        .map(SkipReason::as_str)
         .collect();
     let rest = skipped.len() - named.len();
     let tail = if rest == 0 {
@@ -99,7 +99,7 @@ mod tests {
 #[cfg(test)]
 mod message_tests {
     use super::import_message;
-    use ambre_bus::app::toile::ElementCount;
+    use ambre_bus::app::toile::{ElementCount, SkipReason};
 
     #[test]
     fn a_clean_import_reports_its_count() {
@@ -115,7 +115,7 @@ mod message_tests {
 
     #[test]
     fn a_lossy_import_names_what_it_dropped() {
-        let skipped = vec!["gradient".to_owned(), "filter".to_owned()];
+        let skipped = vec![SkipReason::new("gradient"), SkipReason::new("filter")];
         assert_eq!(
             import_message(ElementCount::new(3), &skipped),
             "Imported 3 elements; dropped gradient, filter"
@@ -126,7 +126,7 @@ mod message_tests {
     /// construct dropped in silence by another means.
     #[test]
     fn a_long_list_of_dropped_constructs_is_counted() {
-        let skipped: Vec<String> = (0..7).map(|i| format!("c{i}")).collect();
+        let skipped: Vec<SkipReason> = (0..7).map(|i| SkipReason::new(format!("c{i}"))).collect();
         assert_eq!(
             import_message(ElementCount::new(1), &skipped),
             "Imported 1 element; dropped c0, c1, c2, and 4 more"

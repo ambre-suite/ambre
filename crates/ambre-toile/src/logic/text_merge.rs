@@ -7,6 +7,8 @@
 //! It is pure and holds no CRDT, so the UI may call it (`UI-THREAD-051`).
 //! Both threads then compute the same text from the same three strings.
 
+use ambre_core::{CharCount, CharOffset};
+
 /// Edit steps past which a diff stops looking for the shortest script. A
 /// longer change becomes one hunk over everything between the common prefix
 /// and the common suffix, which bounds the cost of a close.
@@ -42,8 +44,8 @@ enum Step {
 /// reads the text with the edits before it already applied.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Edit {
-    pub at: usize,
-    pub delete: usize,
+    pub at: CharOffset,
+    pub delete: CharCount,
     pub insert: String,
 }
 
@@ -87,7 +89,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     );
     let shift = base.get(..head).unwrap_or_default().chars().count();
     for e in &mut merge.edits {
-        e.at += shift;
+        e.at += CharCount::from_len(shift);
     }
     let mut text = String::with_capacity(head + merge.text.len() + tail);
     text.push_str(base.get(..head).unwrap_or_default());
@@ -160,8 +162,8 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
                 out.push_str(&s);
                 out.push_str(&t);
                 let insert = Edit {
-                    at: pos,
-                    delete: 0,
+                    at: CharOffset::from_usize(pos),
+                    delete: CharCount::ZERO,
                     insert: t,
                 };
                 pos += insert.insert.chars().count();
@@ -174,8 +176,8 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
             (None, Some(t)) => {
                 out.push_str(&t);
                 let replace = Edit {
-                    at: pos,
-                    delete: run(&base, first.start, end).len(),
+                    at: CharOffset::from_usize(pos),
+                    delete: CharCount::from_len(run(&base, first.start, end).len()),
                     insert: t,
                 };
                 pos += replace.insert.chars().count();
@@ -473,8 +475,9 @@ mod tests {
             let merge = merge_edits(&base, &stored, &typed);
             let mut text: Vec<char> = stored.chars().collect();
             for e in &merge.edits {
-                proptest::prop_assert!(e.at + e.delete <= text.len());
-                text.splice(e.at..e.at + e.delete, e.insert.chars());
+                let (at, delete) = (e.at.to_usize(), e.delete.to_usize());
+                proptest::prop_assert!(at + delete <= text.len());
+                text.splice(at..at + delete, e.insert.chars());
             }
             proptest::prop_assert_eq!(text.into_iter().collect::<String>(), merge.text);
         }

@@ -56,8 +56,8 @@ pub type TargetId = ElementId;
 
 impl ElementId {
     /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: ambre_core::PeerId, counter: u32) -> Self {
-        Self(format!("{peer:016x}_{counter:08x}"))
+    pub fn mint(peer: ambre_core::PeerId, counter: IdCounter) -> Self {
+        Self(format!("{peer:016x}_{:08x}", counter.get()))
     }
     pub fn as_str(&self) -> &str {
         &self.0
@@ -66,8 +66,8 @@ impl ElementId {
 
 impl ConnectorId {
     /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: ambre_core::PeerId, counter: u32) -> Self {
-        Self(format!("{peer:016x}_{counter:08x}"))
+    pub fn mint(peer: ambre_core::PeerId, counter: IdCounter) -> Self {
+        Self(format!("{peer:016x}_{:08x}", counter.get()))
     }
     pub fn as_str(&self) -> &str {
         &self.0
@@ -1364,11 +1364,38 @@ impl std::fmt::Display for VoteTotal {
 
 pub use ambre_core::ElementCount;
 
+/// Why an import or an export left a construct behind, as the user reads it:
+/// "path fill: non-solid paint dropped".
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkipReason(String);
+
+impl SkipReason {
+    /// The reason `reason` spells.
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self(reason.into())
+    }
+
+    /// The reason, for a toast or a log line.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 ambre_core::define_tally! {
     /// How many votes were cast on one target.
     pub struct VoteCount;
     /// How many users reacted to one target with one emoji.
     pub struct ReactionCount;
+    /// How many ids one session has minted: the part of an [`ElementId`] or
+    /// a [`ConnectorId`] after its peer.
+    pub struct IdCounter;
 }
 
 /// Read-time tally derived from a target's reaction sub-map
@@ -2582,7 +2609,7 @@ pub enum ToileEvent {
     /// (`toile-import-export`).
     ImportReport {
         imported: ElementCount,
-        skipped: Vec<String>,
+        skipped: Vec<SkipReason>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
     /// safety-limit breach, or a media upload failure). The board still holds
@@ -2744,6 +2771,23 @@ pub struct DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A minted id spells its peer and its counter in fixed-width hex, as the
+    /// board stores it. An id written before the counter was typed reads the
+    /// same.
+    #[test]
+    fn a_minted_id_spells_its_peer_and_counter_in_hex() {
+        let peer = ambre_core::PeerId(0x1f);
+        let counter = IdCounter::new(0x2a);
+        assert_eq!(
+            ElementId::mint(peer, counter).as_str(),
+            "000000000000001f_0000002a"
+        );
+        assert_eq!(
+            ConnectorId::mint(peer, counter.incremented()).as_str(),
+            "000000000000001f_0000002b"
+        );
+    }
 
     /// A binary clipboard field encodes as the bare bytes a `Vec<u8>` did.
     /// A payload already on the clipboard reads back, and `Debug` prints the

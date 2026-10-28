@@ -7,7 +7,7 @@
 //! to compare, only state and derived structures.
 
 use ambre_core::Rgba;
-use ambre_core::{CharCount, CharOffset, StepDirection};
+use ambre_core::{CharCount, CharOffset, ElementCount, StepDirection};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -153,7 +153,7 @@ fn create_rect(st: &mut ToileState, at: Point, size: Size) -> ElementId {
 fn create_registers_bounds_and_layer() {
     let mut st = ToileState::new();
     let id = create_rect(&mut st, Point::new(10.0, 20.0), Size::new(100.0, 50.0));
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
     assert_eq!(st.bounds_of(&id), Some(Rect::new(10.0, 20.0, 110.0, 70.0)));
     assert_eq!(st.layer_order(), &[NodeId::Element(id)]);
 }
@@ -467,7 +467,7 @@ fn delete_drops_owned_connectors() {
         ids: vec![a.clone()],
     });
     // The deleted element and the now-orphaned connector are both gone.
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
     assert_eq!(st.layer_order(), &[NodeId::Element(b)]);
 }
 
@@ -724,7 +724,7 @@ fn commit_stroke_creates_drawing() {
     });
     let id = created_id(&out);
     assert!(st.bounds_of(&id).is_some());
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
 }
 
 #[test]
@@ -1025,7 +1025,7 @@ fn group_and_drawing_are_not_creatable() {
                 crate::logic::command::ToileError::NotCreatable { .. }
             ))
         ));
-        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.element_count(), ElementCount::ZERO);
     }
 }
 
@@ -1132,7 +1132,7 @@ fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
     // One undo item: the name goes, the frame stays.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(st.frame_name(&frame).unwrap_or_default(), "");
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
     st.handle_command(ToileCommand::Redo);
     assert_eq!(st.frame_name(&frame).unwrap_or_default(), "Agenda");
 
@@ -1446,7 +1446,11 @@ fn a_stroke_in_flight_reaches_the_other_users() {
         Some(tail),
         "the watcher sees no pen"
     );
-    assert_eq!(watcher.element_count(), 0, "nothing landed on the board");
+    assert_eq!(
+        watcher.element_count(),
+        ElementCount::ZERO,
+        "nothing landed on the board"
+    );
 }
 
 #[test]
@@ -1477,7 +1481,11 @@ fn presence_command_broadcasts_ephemeral_only() {
     // `TOILE-183`: the sample pushed no undo item. The first undo takes back
     // the sticky, the last edit before it.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 0, "the first undo took the sticky back");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::ZERO,
+        "the first undo took the sticky back"
+    );
 }
 
 #[test]
@@ -1709,7 +1717,7 @@ fn an_import_is_not_broadcast_back() {
     naive.apply_remote(&delta);
     assert_eq!(
         naive.element_count(),
-        0,
+        ElementCount::ZERO,
         "the delta must carry no operation the reader merely imported"
     );
 
@@ -1717,7 +1725,7 @@ fn an_import_is_not_broadcast_back() {
     let mut third = ToileState::new();
     third.apply_remote_snapshot(&snapshot);
     third.apply_remote(&delta);
-    assert_eq!(third.element_count(), 2);
+    assert_eq!(third.element_count(), ElementCount::new(2));
 }
 
 /// The board opens by committing its own scaffolding, and the first import
@@ -1749,7 +1757,7 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
     author.apply_remote(&delta);
     assert_eq!(
         author.element_count(),
-        2,
+        ElementCount::new(2),
         "the delta must carry everything it depends on"
     );
 }
@@ -1770,7 +1778,7 @@ fn a_restore_still_offers_what_this_client_wrote_offline() {
     reopened
         .import_snapshot(&disk)
         .expect("a board this build wrote reads back at the current schema");
-    assert_eq!(reopened.element_count(), 1);
+    assert_eq!(reopened.element_count(), ElementCount::new(1));
 
     let out = reopened.handle_command(ToileCommand::MoveElements {
         ids: vec![
@@ -1794,7 +1802,7 @@ fn a_restore_still_offers_what_this_client_wrote_offline() {
     peer.apply_remote(&delta);
     assert_eq!(
         peer.element_count(),
-        1,
+        ElementCount::new(1),
         "the restored history must still be offered to a peer"
     );
 }
@@ -2064,7 +2072,7 @@ fn deleting_a_group_cascades_to_members() {
         ids: vec![a.clone(), b.clone()],
     }));
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
-    assert_eq!(st.element_count(), 0);
+    assert_eq!(st.element_count(), ElementCount::ZERO);
     assert!(st.layer_order().is_empty());
 }
 
@@ -2142,7 +2150,11 @@ fn each_link_write_is_one_undo_item() {
     );
     st.handle_command(ToileCommand::Undo);
     assert_eq!(link_of(&st, &id), None, "a second undo takes it away");
-    assert_eq!(st.element_count(), 1, "the element is not undone");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::new(1),
+        "the element is not undone"
+    );
     st.handle_command(ToileCommand::Redo);
     assert!(link_of(&st, &id).is_some(), "a redo sets it again");
 }
@@ -2159,7 +2171,11 @@ fn a_jump_is_not_an_undo_item() {
     });
     assert!(out.update.is_none(), "the jump writes nothing");
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 0, "the undo takes back the frame");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::ZERO,
+        "the undo takes back the frame"
+    );
 }
 
 /// `TOILE-111`: setting a link writes the link register alone -- the style, the
@@ -2612,7 +2628,7 @@ fn copy_does_not_mutate_and_paste_remints_offset() {
         ids: vec![a.clone()],
     });
     assert!(copy.update.is_none(), "copy must not produce a CRDT delta");
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
     let payload = clip_of(&copy);
     assert_eq!(payload.origin, Rect::new(10.0, 10.0, 30.0, 30.0));
 
@@ -2622,7 +2638,7 @@ fn copy_does_not_mutate_and_paste_remints_offset() {
         at: Point::new(110.0, 210.0),
     });
     assert!(paste.update.is_some(), "paste must broadcast a CRDT delta");
-    assert_eq!(st.element_count(), 2);
+    assert_eq!(st.element_count(), ElementCount::new(2));
     let pasted = created_ids(&paste);
     assert_eq!(pasted.len(), 1);
     assert_ne!(pasted[0], a, "pasted element must get a fresh id");
@@ -2944,7 +2960,7 @@ fn an_empty_paste_writes_nothing() {
     assert!(out.update.is_none(), "no delta leaves");
     assert!(created_ids(&out).is_empty());
     assert_eq!(st.history(), history, "and nothing is written");
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
 }
 
 #[test]
@@ -2953,18 +2969,18 @@ fn duplicate_a_group_is_one_undo_item() {
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
     let g = created_id(&st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] }));
-    assert_eq!(st.element_count(), 3);
+    assert_eq!(st.element_count(), ElementCount::new(3));
 
     // Duplicating the group re-mints the group and both members (subtree copy).
     st.handle_command(ToileCommand::DuplicateElements {
         ids: vec![g],
         delta: Vec2::new(200.0, 0.0),
     });
-    assert_eq!(st.element_count(), 6);
+    assert_eq!(st.element_count(), ElementCount::new(6));
 
     // The whole duplicate collapses under a single undo.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 3);
+    assert_eq!(st.element_count(), ElementCount::new(3));
 }
 
 #[test]
@@ -2993,12 +3009,12 @@ fn paste_reproduces_selection_on_a_separate_board() {
     let payload = clip_of(&src.handle_command(ToileCommand::CopyElements { ids: vec![a, b] }));
 
     let mut dst = ToileState::new();
-    assert_eq!(dst.element_count(), 0);
+    assert_eq!(dst.element_count(), ElementCount::ZERO);
     let out = dst.handle_command(ToileCommand::PasteElements {
         payload,
         at: Point::new(5.0, 5.0), // origin top-left is (5,5): zero offset
     });
-    assert_eq!(dst.element_count(), 2);
+    assert_eq!(dst.element_count(), ElementCount::new(2));
     assert_eq!(created_ids(&out).len(), 2);
 }
 
@@ -3010,14 +3026,14 @@ fn paste_reproduces_selection_on_a_separate_board() {
 fn undo_reverts_create_and_redo_restores() {
     let mut st = ToileState::new();
     let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
 
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 0);
+    assert_eq!(st.element_count(), ElementCount::ZERO);
     assert!(st.bounds_of(&id).is_none());
 
     st.handle_command(ToileCommand::Redo);
-    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.element_count(), ElementCount::new(1));
     assert_eq!(st.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
@@ -3029,16 +3045,16 @@ fn a_history_step_reaches_the_other_peer_as_a_delta() {
     let mut b = ToileState::new();
     let id = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     b.apply_remote_snapshot(&a.export_snapshot());
-    assert_eq!(b.element_count(), 1);
+    assert_eq!(b.element_count(), ElementCount::new(1));
 
     let undo = a.handle_command(ToileCommand::Undo);
     b.apply_remote(&undo.update.expect("an undo writes"));
-    assert_eq!(b.element_count(), 0);
+    assert_eq!(b.element_count(), ElementCount::ZERO);
     assert!(b.bounds_of(&id).is_none());
 
     let redo = a.handle_command(ToileCommand::Redo);
     b.apply_remote(&redo.update.expect("a redo writes"));
-    assert_eq!(b.element_count(), 1);
+    assert_eq!(b.element_count(), ElementCount::new(1));
     assert_eq!(b.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
@@ -3101,10 +3117,10 @@ fn undo_reverts_group_as_one_item() {
     st.handle_command(ToileCommand::GroupElements {
         ids: vec![a.clone(), b.clone()],
     });
-    assert_eq!(st.element_count(), 3);
+    assert_eq!(st.element_count(), ElementCount::new(3));
     // A single undo drops the whole group, leaving the two members intact.
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 2);
+    assert_eq!(st.element_count(), ElementCount::new(2));
     assert_eq!(st.layer_order(), &[NodeId::Element(a), NodeId::Element(b)]);
 }
 
@@ -5086,9 +5102,17 @@ fn placing_the_same_reaction_again_does_nothing() {
     // next undo item is the target itself.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(st.my_reaction(&t), None);
-    assert_eq!(st.element_count(), 1, "the target is still there");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::new(1),
+        "the target is still there"
+    );
     st.handle_command(ToileCommand::Undo);
-    assert_eq!(st.element_count(), 0, "the next undo item is the target");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::ZERO,
+        "the next undo item is the target"
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -5458,7 +5482,7 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
 
     assert_eq!(
         st.element_count(),
-        0,
+        ElementCount::ZERO,
         "undo reverts the last drawing action"
     );
     assert_eq!(
@@ -6500,7 +6524,11 @@ fn a_batch_with_one_failed_delta_reports_the_failure() {
             .iter()
             .any(|e| matches!(e, ToileEvent::Error(ToileError::RemoteImportFailed)))
     );
-    assert_eq!(st.element_count(), 1, "the surviving delta still merges");
+    assert_eq!(
+        st.element_count(),
+        ElementCount::new(1),
+        "the surviving delta still merges"
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -6790,7 +6818,7 @@ fn a_combine_consumes_only_its_sources() {
     assert!(st.bounds_of(&locked).is_some(), "the locked shape stays");
     assert!(st.bounds_of(&note).is_some(), "the note stays");
     assert!(st.bounds_of(&one).is_none() && st.bounds_of(&two).is_none());
-    assert_eq!(st.element_count(), 3);
+    assert_eq!(st.element_count(), ElementCount::new(3));
 }
 
 /// `TOILE-FEAT-037`: an empty result is refused, and nothing is written.
@@ -6811,7 +6839,7 @@ fn an_empty_combine_is_refused() {
     ));
     assert!(out.update.is_none());
     assert_eq!(st.crdt().oplog_vv(), before);
-    assert_eq!(st.element_count(), 2);
+    assert_eq!(st.element_count(), ElementCount::new(2));
 }
 
 fn sample(x: f32, y: f32) -> StrokePoint {

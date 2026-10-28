@@ -93,7 +93,10 @@ mod tests {
         locked: ambre_bus::app::toile::LockState,
     ) -> DisplayElement {
         DisplayElement {
-            id: ElementId::mint(ambre_core::PeerId(1), n),
+            id: ElementId::mint(
+                ambre_core::PeerId(1),
+                ambre_bus::app::toile::IdCounter::new(n),
+            ),
             kind,
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
