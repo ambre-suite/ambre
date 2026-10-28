@@ -311,6 +311,17 @@ mod tests {
         assert!(SurfaceSize::new(0, 150, 2.0).is_none());
     }
 
+    /// A view lays out in CSS pixels, whatever the density.
+    #[test]
+    fn the_view_size_is_the_css_box() {
+        let two = SurfaceSize::new(800, 600, 2.0).unwrap();
+        assert_eq!(
+            two.view(),
+            ambre_core::ViewSize::new(ViewPx::new(800.0), ViewPx::new(600.0))
+        );
+        assert_eq!(SurfaceSize::new(800, 600, 1.0).unwrap().view(), two.view());
+    }
+
     /// A shift is copied in device pixels, so it is scaled with the buffer.
     #[test]
     fn a_scroll_shift_is_copied_in_device_pixels() {

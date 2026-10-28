@@ -55,7 +55,7 @@ pub fn ZoomChip(
     title: Option<String>,
 ) -> impl IntoView {
     // The preset menu is collapsed by default: only the readout shows.
-    let show = RwSignal::new(false);
+    let show = RwSignal::new(crate::Openness::Closed);
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
     let presets = presets.unwrap_or_else(|| ZOOM_PRESETS.to_vec());
     // The presets may run either way, so the range is their extremes.
@@ -85,19 +85,19 @@ pub fn ZoomChip(
                 class="statusbar-zoom-btn"
                 title=title
                 aria-haspopup="menu"
-                aria-expanded=move || crate::Openness::from_bool(show.get()).aria()
-                on:click=move |_| show.update(|v| *v = !*v)
+                aria-expanded=move || show.get().aria()
+                on:click=move |_| show.update(|v| *v = v.toggled())
             >
                 {move || format!("{:.0} %", zoom.get().get() * 100.0)}
             </button>
-            <Show when=move || show.get() fallback=|| ()>
+            <Show when=move || show.get() == crate::Openness::Open fallback=|| ()>
                 <ul
                     class="statusbar-zoom-menu"
                     role="menu"
                     node_ref=menu_ref
                     on:keydown=move |ev| {
                         if let Some(menu) = menu_ref.get_untracked() {
-                            crate::menu::on_menu_keydown(&ev, &menu, || show.set(false));
+                            crate::menu::on_menu_keydown(&ev, &menu, || show.set(crate::Openness::Closed));
                         }
                     }
                 >
@@ -119,7 +119,7 @@ pub fn ZoomChip(
                                         aria-checked=move || crate::Checked::from_bool(selected()).aria()
                                         on:click=move |_| {
                                             zoom.set(z.clamped(lo, hi));
-                                            show.set(false);
+                                            show.set(crate::Openness::Closed);
                                         }
                                     >
                                         {pct}

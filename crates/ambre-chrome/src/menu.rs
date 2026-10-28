@@ -45,6 +45,15 @@ impl Openness {
             Self::Open => "true",
         }
     }
+
+    /// The other state: what a click on the control's toggle leads to.
+    #[must_use]
+    pub const fn toggled(self) -> Self {
+        match self {
+            Self::Closed => Self::Open,
+            Self::Open => Self::Closed,
+        }
+    }
 }
 
 impl Checked {
@@ -271,6 +280,13 @@ mod tests {
             menu_key(Key::Tab, Modifiers::SHIFT, 0, &ITEMS),
             MenuKey::Focus(3)
         );
+    }
+
+    /// A toggle flips a closed control open and an open one closed.
+    #[test]
+    fn a_toggle_flips_the_openness() {
+        assert_eq!(Openness::Closed.toggled(), Openness::Open);
+        assert_eq!(Openness::Open.toggled(), Openness::Closed);
     }
 
     /// Home and End jump to an end.

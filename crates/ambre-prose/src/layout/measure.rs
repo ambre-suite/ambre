@@ -92,7 +92,8 @@ pub struct EffectiveStyle {
     pub at_least_floor: Option<DocPx>,
     /// The face the block's text is set in, before its marks.
     pub weight: Weight,
-    pub italic: bool,
+    /// The slant the block's text is set in, before its marks.
+    pub italic: ambre_core::Slant,
     pub align: Align,
     pub indent_first: DocPx,
     pub indent_left: DocPx,
@@ -133,7 +134,7 @@ impl EffectiveStyle {
             line_height: line_height_of(paragraph, defaults),
             at_least_floor: at_least_floor_of(paragraph),
             weight,
-            italic: false,
+            italic: ambre_core::Slant::Upright,
             align: paragraph.align.unwrap_or(Align::Left),
             indent_first: paragraph.indent_first.unwrap_or(Pt::ZERO).to_doc_px(),
             indent_left: paragraph.indent_left.unwrap_or(Pt::ZERO).to_doc_px(),
@@ -728,7 +729,7 @@ fn build(
     if style.weight == Weight::Bold {
         builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
     }
-    if style.italic {
+    if style.italic == ambre_core::Slant::Italic {
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
     }
     for span in marks {

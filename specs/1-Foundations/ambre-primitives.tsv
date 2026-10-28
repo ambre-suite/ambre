@@ -881,7 +881,7 @@ ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | 
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	newtype-inner	error carries the refused raw input
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint.0 | field | String	newtype-inner	KeyFingerprint newtype
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() | ret | &str	newtype-inner	KeyFingerprint newtype
-ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	newtype-inner	FontFamily constructor or accessor
+ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	free-text	a font family label as written, read into a known family or kept whole
 ambre-core | src/font.rs | crate::font | <FontSize as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::from_whole_points(points) | param | u16	newtype-inner	FontSize field, constructor or accessor
@@ -1979,7 +1979,6 @@ ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	local: a bare ratio of the content height, read only as the factor of DocPx * f32; a ratio is no length
-ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.italic | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_together | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_with_next | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MAX_SEGMENTS | const | usize	math	count, size or local index

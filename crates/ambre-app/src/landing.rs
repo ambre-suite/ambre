@@ -269,7 +269,7 @@ pub fn NewDocPicker(
 ) -> impl IntoView {
     // Whether the type menu is expanded. A picked entry (or a re-click on the
     // button) collapses it.
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
     // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
     Effect::new(move |_| {
@@ -283,19 +283,19 @@ pub fn NewDocPicker(
             <button
                 class="ambre-new-doc"
                 aria-haspopup="menu"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
-                on:click=move |_| open.update(|o| *o = !*o)
+                aria-expanded=move || open.get().aria()
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 "New document"
             </button>
-            <Show when=move || open.get()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open>
                 <ul
                     class="ambre-new-doc-menu"
                     role="menu"
                     node_ref=menu_ref
                     on:keydown=move |ev| {
                         if let Some(menu) = menu_ref.get_untracked() {
-                            ambre_chrome::on_menu_keydown(&ev, &menu, || open.set(false));
+                            ambre_chrome::on_menu_keydown(&ev, &menu, || open.set(ambre_chrome::Openness::Closed));
                         }
                     }
                 >
@@ -309,7 +309,7 @@ pub fn NewDocPicker(
                                     tabindex="-1"
                                     aria-label=doc_type.generic_label()
                                     on:click=move |_| {
-                                        open.set(false);
+                                        open.set(ambre_chrome::Openness::Closed);
                                         on_pick.run(doc_type);
                                     }
                                 >

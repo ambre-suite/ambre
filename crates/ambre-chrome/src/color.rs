@@ -153,7 +153,7 @@ pub fn ColorPopover<C: PickedColour>(
     reset_label: &'static str,
     on_pick: Callback<Option<C>>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(crate::Openness::Closed);
     let (rgb_drag, alpha_drag) = (Debouncer::new(), Debouncer::new());
     // The wrapper node, so a global pointerdown can tell clicks inside the popover
     // apart from clicks elsewhere (another cell, the canvas, a sibling control).
@@ -161,7 +161,7 @@ pub fn ColorPopover<C: PickedColour>(
     // Close on any pointer-down outside the control: selecting another cell hits
     // the canvas, which is outside this node, so the popover dismisses.
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == crate::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -170,7 +170,7 @@ pub fn ColorPopover<C: PickedColour>(
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(crate::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -179,11 +179,11 @@ pub fn ColorPopover<C: PickedColour>(
             <button
                 aria-label=title
                 aria-haspopup="true"
-                aria-expanded=move || crate::menu::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 // Keep the canvas' focus: a button steals it on mousedown, which
                 // would clear the active selection before on:click can apply.
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=icon />
                 // Thin strip tinted to the current colour (themed default when unset).
@@ -194,7 +194,7 @@ pub fn ColorPopover<C: PickedColour>(
                     }
                 ></span>
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == crate::Openness::Open fallback=|| ()>
                 <div class="ambre-color-popover">
                     // Reset entry: "Automatic" (text) / "No fill (transparent)" (fill).
                     <button
@@ -202,7 +202,7 @@ pub fn ColorPopover<C: PickedColour>(
                         on:mousedown=move |ev| ev.prevent_default()
                         on:click=move |_| {
                             on_pick.run(None);
-                            open.set(false);
+                            open.set(crate::Openness::Closed);
                         }
                     >
                         {reset_label}
@@ -220,7 +220,7 @@ pub fn ColorPopover<C: PickedColour>(
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
                                             on_pick.run(Some(repaint(current.get_untracked(), Pick::keeping_alpha(rgb))));
-                                            open.set(false);
+                                            open.set(crate::Openness::Closed);
                                         }
                                     ></button>
                                 }

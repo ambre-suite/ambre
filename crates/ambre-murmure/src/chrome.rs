@@ -229,13 +229,13 @@ pub fn MemberList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl Int
 /// of the pin, and closes the list.
 #[component]
 pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let query = RwSignal::new(String::new());
     let target = relay.invite_target();
     // Another channel closes the list.
     Effect::new(move |_| {
         target.track();
-        open.set(false);
+        open.set(ambre_chrome::Openness::Closed);
     });
     let rows = relay.invitees();
     let found = move || {
@@ -253,12 +253,12 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
             <div class="murmure-invite">
                 <button
                     class="murmure-invite-toggle"
-                    aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
-                    on:click=move |_| open.update(|o| *o = !*o)
+                    aria-expanded=move || open.get().aria()
+                    on:click=move |_| open.update(|o| *o = o.toggled())
                 >
                     "Invite"
                 </button>
-                <Show when=move || open.get()>
+                <Show when=move || open.get() == ambre_chrome::Openness::Open>
                     <div class="murmure-invite-picker">
                         <input
                             class="murmure-invite-filter"
@@ -278,7 +278,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
                                             if let Some(command) = relay.invite(user) {
                                                 send.run(command);
                                             }
-                                            open.set(false);
+                                            open.set(ambre_chrome::Openness::Closed);
                                             query.set(String::new());
                                         });
                                         member_view(member, Watching::Elsewhere, Some((choose, "Invite")))

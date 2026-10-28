@@ -82,12 +82,12 @@ pub fn FontPicker(
     current: Signal<Option<FontFamily>>,
     on_pick: Callback<Option<FontFamily>>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(crate::Openness::Closed);
     // The wrapper node, so a global pointer-down can tell clicks inside the menu
     // apart from clicks elsewhere (another control, the canvas).
     let root_ref = NodeRef::<html::Span>::new();
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == crate::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -96,7 +96,7 @@ pub fn FontPicker(
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(crate::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -118,16 +118,16 @@ pub fn FontPicker(
                 class="font-trigger"
                 aria-label="Font"
                 aria-haspopup="true"
-                aria-expanded=move || crate::menu::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 style:font-family=current_css
                 // Keep DOM focus on the canvas text pipe (the FormatBar hazard).
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <span class="label">{current_label}</span>
                 <Icon icon=icondata::BiDownArrowSolid />
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == crate::Openness::Open fallback=|| ()>
                 <div class="ambre-font-popover">
                     {FONT_FAMILIES
                         .iter()
@@ -144,7 +144,7 @@ pub fn FontPicker(
                                     on:click=move |_| {
                                         // "Default" clears the explicit family (None).
                                         on_pick.run(picked.clone());
-                                        open.set(false);
+                                        open.set(crate::Openness::Closed);
                                     }
                                 >
                                     <span class="check">

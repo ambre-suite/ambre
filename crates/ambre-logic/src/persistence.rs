@@ -193,6 +193,10 @@ pub enum Stored {
 }
 
 /// Whether a write meant to outlive the page committed.
+///
+/// It does not reuse [`Stored`]: it answers on the transaction's commit, not
+/// on the request's success. A caller about to leave the page acts on landed
+/// or lost alone, and a quota refusal is lost all the same.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Commit {
     /// The write failed, or its transaction aborted: the bytes are not there.
