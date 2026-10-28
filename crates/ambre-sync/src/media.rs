@@ -37,10 +37,11 @@ fn open_blob(
     let address =
         MediaAddress::parse(content_hash).ok_or(SyncError::Malformed(Part::MediaAddress))?;
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
+    let data = ambre_core::MediaBytes::new(data);
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
         return Err(SyncError::BlobMismatch);
     }
-    Ok(ambre_core::MediaBytes::new(data))
+    Ok(data)
 }
 
 /// Opens a downloaded blob with the one key it names: the current key, a
@@ -106,7 +107,7 @@ impl SyncState {
             });
             return;
         };
-        let address = ambre_crypto::commitment::media_address(&doc_key, data.as_bytes());
+        let address = ambre_crypto::commitment::media_address(&doc_key, &data);
         let content_hash = address.content_hash();
         let Some(tx) = event_tx else {
             self.reply(
@@ -521,7 +522,7 @@ mod tests {
                 _ => None,
             });
             let address = answer.expect("the upload answered with an address");
-            let expected = ambre_crypto::commitment::media_address(&key, &picture);
+            let expected = ambre_crypto::commitment::media_address(&key, &picture.clone().into());
             assert_eq!(address, expected.content_hash());
             addresses.push(address);
         }
@@ -715,7 +716,7 @@ mod tests {
     async fn a_failed_upload_step_confirms_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
         let document_id = DocumentId::new();
-        let address = ambre_crypto::commitment::media_address(&key, b"a picture");
+        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
         let upload = |id| Upload {
             id,
             document_id,
@@ -805,7 +806,7 @@ mod tests {
         key: &DocumentKey,
     ) -> (Vec<u8>, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
-        let address = ambre_crypto::commitment::media_address(key, data);
+        let address = ambre_crypto::commitment::media_address(key, &data.to_vec().into());
         let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
         (blob.as_bytes().to_vec(), address.content_hash())
     }
@@ -868,7 +869,7 @@ mod tests {
         let (served, _) = sealed(b"another picture", document_id, &key);
         assert!(open_blob(&served, document_id, &wanted, &key).is_err());
 
-        let address = ambre_crypto::commitment::media_address(&key, b"a picture");
+        let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let forged = seal_blob(b"other bytes", document_id, &address, &key, &signing).unwrap();
         let forged = forged.as_bytes();

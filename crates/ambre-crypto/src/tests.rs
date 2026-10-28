@@ -4,11 +4,18 @@ use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
-use ambre_core::{Aad, Ciphertext, EntryDigest, FileSalt, MasterKeySalt, Nonce};
+use ambre_core::{
+    Aad, Ciphertext, EntryDigest, FileSalt, MasterKeySalt, MediaBytes, Nonce, SealedRowBytes,
+};
 
 /// A passphrase as a prompt hands it over.
 fn pass(text: &str) -> ambre_core::Passphrase {
     ambre_core::Passphrase::new(text.to_owned())
+}
+
+/// Plaintext bytes as the envelope takes them.
+fn secret(bytes: &[u8]) -> ambre_core::SecretBytes {
+    ambre_core::SecretBytes::new(bytes.to_vec())
 }
 
 fn fixed_doc_key() -> DocumentKey {
@@ -29,7 +36,7 @@ fn roundtrip_envelope() {
     let aad = &Aad::of(b"public-data");
     let plaintext = b"hello, encrypted world";
 
-    let sealed = envelope::seal(plaintext, aad, &doc_key, &signing).unwrap();
+    let sealed = envelope::seal(&secret(plaintext), aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
     assert_eq!(opened.to_plaintext(), plaintext);
 }
@@ -39,8 +46,13 @@ fn roundtrip_envelope() {
 #[test]
 fn an_envelope_debug_form_prints_no_byte_of_it() {
     let signing = fixed_seed().derive_signing_key();
-    let mut sealed =
-        envelope::seal(b"payload", &Aad::of(b"aad"), &fixed_doc_key(), &signing).unwrap();
+    let mut sealed = envelope::seal(
+        &secret(b"payload"),
+        &Aad::of(b"aad"),
+        &fixed_doc_key(),
+        &signing,
+    )
+    .unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
     sealed.ciphertext = Ciphertext(vec![0xAB; 7]);
     sealed.nonce = Nonce([0xCD; aead::NONCE_LEN]);
@@ -55,7 +67,7 @@ fn tampered_ciphertext_fails() {
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
 
-    let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
+    let mut sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
     sealed.ciphertext.0[0] ^= 0xFF;
     // Signature covers the ciphertext, so this trips the signature check first.
     assert!(matches!(
@@ -70,7 +82,13 @@ fn commitment_tag_wrong_aad_rejected() {
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
 
-    let sealed = envelope::seal(b"payload", &Aad::of(b"document-A"), &doc_key, &signing).unwrap();
+    let sealed = envelope::seal(
+        &secret(b"payload"),
+        &Aad::of(b"document-A"),
+        &doc_key,
+        &signing,
+    )
+    .unwrap();
     // Re-sign over the altered aad so the signature passes but the HMAC commitment
     // (and the AEAD aad) no longer match -- models inter-document substitution.
     let forged_aad = &Aad::of(b"document-B");
@@ -98,7 +116,15 @@ fn every_seal_draws_a_fresh_nonce() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
     let sealed: Vec<_> = (0..64)
-        .map(|_| envelope::seal(b"same payload", &Aad::of(b"aad"), &doc_key, &signing).unwrap())
+        .map(|_| {
+            envelope::seal(
+                &secret(b"same payload"),
+                &Aad::of(b"aad"),
+                &doc_key,
+                &signing,
+            )
+            .unwrap()
+        })
         .collect();
     let nonces: std::collections::HashSet<Nonce> = sealed.iter().map(|s| s.nonce).collect();
     let ciphertexts: std::collections::HashSet<&[u8]> =
@@ -119,7 +145,7 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
     let signing = fixed_seed().derive_signing_key();
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
-    let mut forged = envelope::seal(b"payload", aad, &other_key, &signing).unwrap();
+    let mut forged = envelope::seal(&secret(b"payload"), aad, &other_key, &signing).unwrap();
     forged.ciphertext.0[0] ^= 0xFF;
     let resign = |sealed: &mut envelope::Sealed| {
         sealed.signature = signature::sign(
@@ -155,7 +181,7 @@ fn invalid_signature_rejected() {
     let signing = fixed_seed().derive_signing_key();
     let aad = &Aad::of(b"aad");
 
-    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
+    let sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
     let wrong_author = ambre_core::PublicKey::from_array(
         MasterSeed::from_array([0x99; 32])
             .derive_signing_key()
@@ -175,7 +201,7 @@ fn wrong_document_key_rejected() {
     let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
 
-    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
+    let sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
     let other_key = DocumentKey::from_array([0x44; 32]);
     assert!(matches!(
         envelope::open(&sealed, aad, &other_key, &author),
@@ -264,8 +290,11 @@ fn a_store_row_opens_only_where_it_was_sealed() {
         &key,
     )
     .unwrap();
-    assert_eq!(row.first(), Some(&aead::RowLayout::CURRENT.byte()));
-    assert!(!row.windows(6).any(|w| w == b"a copy"));
+    assert_eq!(
+        row.as_bytes().first(),
+        Some(&aead::RowLayout::CURRENT.byte())
+    );
+    assert!(!row.as_bytes().windows(6).any(|w| w == b"a copy"));
     assert_eq!(
         aead::open_row(&row, &Aad::of(b"doc:0a"), &key)
             .unwrap()
@@ -276,22 +305,21 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     let stranger = MasterSeed::from_array([0x33; 32]).derive_store_key();
     assert!(aead::open_row(&row, &Aad::of(b"doc:0a"), &stranger).is_err());
     assert!(aead::open_row(&row, &Aad::of(b"doc:0b"), &key).is_err());
-    let mut flipped = row.clone();
+    let mut flipped = row.clone().into_bytes();
     if let Some(last) = flipped.last_mut() {
         *last ^= 1;
     }
+    let flipped = SealedRowBytes::new(flipped);
     assert!(aead::open_row(&flipped, &Aad::of(b"doc:0a"), &key).is_err());
     // A row the store held in the clear, or a stub, opens as nothing.
-    assert!(aead::open_row(b"a copy", &Aad::of(b"doc:0a"), &key).is_err());
-    assert!(aead::open_row(&[], &Aad::of(b"doc:0a"), &key).is_err());
-    assert!(
-        aead::open_row(
-            &[aead::RowLayout::CURRENT.byte()],
-            &Aad::of(b"doc:0a"),
-            &key
-        )
-        .is_err()
-    );
+    for stub in [
+        b"a copy".to_vec(),
+        Vec::new(),
+        vec![aead::RowLayout::CURRENT.byte()],
+    ] {
+        let stub = SealedRowBytes::new(stub);
+        assert!(aead::open_row(&stub, &Aad::of(b"doc:0a"), &key).is_err());
+    }
 }
 
 // -- ECDH --------------------------------------------------------------------
@@ -574,21 +602,22 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
 fn a_media_address_needs_the_document_key() {
     use blake2::{Blake2b512, Digest};
 
-    let picture = b"the same picture, used twice";
-    let address = commitment::media_address(&fixed_doc_key(), picture);
+    let picture = MediaBytes::new(b"the same picture, used twice".to_vec());
+    let address = commitment::media_address(&fixed_doc_key(), &picture);
     assert_eq!(
         address,
-        commitment::media_address(&fixed_doc_key(), picture)
+        commitment::media_address(&fixed_doc_key(), &picture)
     );
     assert_ne!(
         address,
-        commitment::media_address(&DocumentKey::from_array([0x12; 32]), picture)
+        commitment::media_address(&DocumentKey::from_array([0x12; 32]), &picture)
     );
+    let another = MediaBytes::new(b"another picture".to_vec());
     assert_ne!(
         address,
-        commitment::media_address(&fixed_doc_key(), b"another picture")
+        commitment::media_address(&fixed_doc_key(), &another)
     );
-    let plain = Blake2b512::digest(picture);
+    let plain = Blake2b512::digest(picture.as_bytes());
     assert_ne!(address.as_bytes()[..], plain[..32]);
 }
 
@@ -601,7 +630,7 @@ proptest! {
         let signing = fixed_seed().derive_signing_key();
         let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
         let aad = &Aad::of(b"aad");
-        let sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
+        let sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
         prop_assert_eq!(opened.to_plaintext(), data);
     }
@@ -616,7 +645,7 @@ proptest! {
         let signing = fixed_seed().derive_signing_key();
         let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
         let aad = &Aad::of(b"aad");
-        let mut sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
+        let mut sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
             0 => sealed.ciphertext.0[0] ^= mask,
@@ -858,7 +887,8 @@ fn the_commitment_tag_keeps_its_bytes() {
 
 #[test]
 fn the_media_address_keeps_its_bytes() {
-    let address = commitment::media_address(&fixed_doc_key(), b"a picture");
+    let picture = MediaBytes::new(b"a picture".to_vec());
+    let address = commitment::media_address(&fixed_doc_key(), &picture);
     let expected: [u8; 32] =
         golden("c72a97882edaf9922202a868bba98c10b9d8391391ee833ce679124602fd0f98")
             .try_into()
@@ -936,9 +966,9 @@ fn a_row_the_old_code_sealed_still_opens() {
     // A row sealed by the build that wrote `RowLayout::V1` as a bare byte:
     // the layout byte, the nonce, then the ciphertext. A store a user holds
     // today keeps rows of this shape, so every later build opens them.
-    let row = golden(
+    let row = SealedRowBytes::new(golden(
         "01a11182bb03cf28fbbeb25b10c25f4d53019867ee3101ff1ca1d3e4b463358f16a8df15edbd570d3cfd0c5ac5fdcb",
-    );
+    ));
     let key = fixed_seed().derive_store_key();
     assert_eq!(
         aead::open_row(&row, &Aad::of(b"doc:0a"), &key)

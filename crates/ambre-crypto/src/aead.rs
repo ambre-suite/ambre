@@ -5,7 +5,7 @@
 //! The associated data (`aad`) binds the ciphertext to the message's public
 //! metadata without encrypting it.
 
-use ambre_core::{Ciphertext, EntryDigest, Nonce, Secret, SecretBytes};
+use ambre_core::{Ciphertext, EntryDigest, Nonce, SealedRowBytes, Secret, SecretBytes};
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
@@ -109,13 +109,13 @@ pub fn seal_row(
     plaintext: &SecretBytes,
     context: &ambre_core::Aad,
     key: &StoreKey,
-) -> Result<Vec<u8>, CryptoError> {
+) -> Result<SealedRowBytes, CryptoError> {
     let (nonce, ciphertext) = seal_under(plaintext.secret().expose(), context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(&nonce.0);
     row.extend_from_slice(&ciphertext.0);
-    Ok(row)
+    Ok(SealedRowBytes::new(row))
 }
 
 /// Opens a row [`seal_row`] sealed under the same `context`.
@@ -126,11 +126,11 @@ pub fn seal_row(
 /// hold a nonce, a wrong key, another `context` or a modified row. The caller
 /// treats them alike: the row is not one this session can read.
 pub fn open_row(
-    row: &[u8],
+    row: &SealedRowBytes,
     context: &ambre_core::Aad,
     key: &StoreKey,
 ) -> Result<SecretBytes, CryptoError> {
-    let Some((&first, rest)) = row.split_first() else {
+    let Some((&first, rest)) = row.as_bytes().split_first() else {
         return Err(CryptoError::AeadFailed);
     };
     let Some(RowLayout::V1) = RowLayout::from_byte(first) else {

@@ -322,6 +322,7 @@ fn seal_payload(
     let mut plaintext = Vec::with_capacity(1 + body.len());
     plaintext.push(version.byte());
     plaintext.extend_from_slice(&body);
+    let plaintext = ambre_core::SecretBytes::new(plaintext);
     Ok(envelope::seal(&plaintext, aad, doc_key, signing_key)?)
 }
 
@@ -735,7 +736,8 @@ pub fn seal_object(
     signing_key: &SigningKey,
 ) -> Result<Vec<u8>, PipelineError> {
     let key_id = doc_key.id();
-    let sealed = envelope::seal(plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
+    let plaintext = ambre_core::SecretBytes::new(plaintext.to_vec());
+    let sealed = envelope::seal(&plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
     Ok(object_bytes(key_id, signing_key, &sealed))
 }
 

@@ -17,16 +17,29 @@ use crate::keys::DocumentKey;
 /// Length of the derived user key, in bytes.
 pub const USER_KEY_LEN: usize = 32;
 
-/// Argon2id parameters, v1. Tuned for a mid-range 2024 mobile SoC: ~64 MiB, 3
-/// passes, single lane. Reviewed against `argon2` 0.5.3 (no relevant RUSTSEC
-/// advisory). The single lane is deliberate: the KDF runs in a single-threaded
-/// WASM Sync worker, where p > 1 adds sequential work and no speedup. Argon2's
-/// memory-hardness is set by `MEM_KIB` (total memory), not by the lane count.
-/// Parameters are versioned, so the lane count can be raised without breaking
-/// existing accounts if a threaded target lands.
-const MEM_KIB: u32 = 64 * 1024;
-const ITERATIONS: u32 = 3;
-const LANES: u32 = 1;
+/// The Argon2id work factor of one parameter version: its memory, its passes,
+/// its lanes and its output length. The salt and the version travel with the
+/// stored key material, so a version never changes once an account uses it.
+#[derive(Debug, Clone)]
+struct Argon2Cost(Params);
+
+impl Argon2Cost {
+    /// Argon2id parameters, v1. Tuned for a mid-range 2024 mobile SoC: 64 MiB
+    /// of memory, 3 passes, a single lane. Reviewed against `argon2` 0.5.3 (no
+    /// relevant RUSTSEC advisory).
+    ///
+    /// The single lane is deliberate: the KDF runs in a single-threaded WASM
+    /// Sync worker, where p > 1 adds sequential work and no speedup. Argon2's
+    /// memory-hardness is set by the total memory, not by the lane count.
+    /// Parameters are versioned, so the lane count can be raised without
+    /// breaking existing accounts if a threaded target lands.
+    ///
+    /// The match runs at compile time, so a refused parameter is a build error.
+    const V1: Self = match Params::new(64 * 1024, 3, 1, Some(USER_KEY_LEN)) {
+        Ok(params) => Self(params),
+        Err(_) => panic!("the v1 Argon2id parameters are in range"),
+    };
+}
 
 /// The key a passphrase derives to unwrap the server-stored master key. It is
 /// wiped on drop and prints none of its bytes.
@@ -50,9 +63,10 @@ impl UserKey {
 ///
 /// # Errors
 ///
-/// [`CryptoError::Argon2Failed`] when Argon2id refuses the parameters or the
-/// inputs. A [`MasterKeySalt`](ambre_core::MasterKeySalt) holds its fixed
-/// width, so neither is reachable from a well-built salt.
+/// [`CryptoError::Argon2Failed`] when Argon2id refuses the inputs. The
+/// parameters are checked at compile time, and a
+/// [`MasterKeySalt`](ambre_core::MasterKeySalt) holds its fixed width, so
+/// neither failure is reachable from a well-built salt.
 pub fn derive_user_key(
     passphrase: &ambre_core::Passphrase,
     salt: &ambre_core::MasterKeySalt,
@@ -68,9 +82,7 @@ pub(crate) fn argon2id(
     passphrase: &ambre_core::Passphrase,
     salt: &[u8],
 ) -> Result<Secret<[u8; USER_KEY_LEN]>, CryptoError> {
-    let params = Params::new(MEM_KIB, ITERATIONS, LANES, Some(USER_KEY_LEN))
-        .map_err(|_| CryptoError::Argon2Failed)?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Argon2Cost::V1.0);
     Secret::try_filled(|out: &mut [u8; USER_KEY_LEN]| {
         argon2
             .hash_password_into(passphrase.secret().expose().as_bytes(), salt, out)

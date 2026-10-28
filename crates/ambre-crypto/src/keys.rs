@@ -244,7 +244,8 @@ impl DocumentKey {
         aad: &ambre_core::Aad,
         signing_key: &SigningKey,
     ) -> Result<crate::Sealed, CryptoError> {
-        crate::envelope::seal(previous.as_bytes(), aad, self, signing_key)
+        let plaintext = ambre_core::SecretBytes::new(previous.as_bytes().to_vec());
+        crate::envelope::seal(&plaintext, aad, self, signing_key)
     }
 
     /// Opens what [`Self::seal_previous`] sealed, against the author's key.

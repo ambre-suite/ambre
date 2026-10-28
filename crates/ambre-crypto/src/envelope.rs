@@ -49,12 +49,12 @@ impl core::fmt::Debug for Sealed {
 /// [`CryptoError::EncryptionFailed`] from the AEAD. The commitment tag and the
 /// signature are infallible.
 pub fn seal(
-    plaintext: &[u8],
+    plaintext: &SecretBytes,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Sealed, CryptoError> {
-    let (nonce, ciphertext) = aead::seal(plaintext, aad, doc_key)?;
+    let (nonce, ciphertext) = aead::seal(plaintext.secret().expose(), aad, doc_key)?;
     let commitment_tag = commitment::commitment_tag(doc_key, &nonce, &ciphertext, aad);
     let signature = signature::sign(signing_key, &nonce, &ciphertext, aad, &commitment_tag);
     Ok(Sealed {

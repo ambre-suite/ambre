@@ -34,12 +34,7 @@ impl SyncState {
         };
         let key = seed.derive_store_key();
         match ambre_crypto::aead::seal_row(&plaintext, &place_bytes(&place), &key) {
-            Ok(sealed) => self.reply(
-                id,
-                RestEvent::LocalRowSealed {
-                    sealed: ambre_core::SealedRowBytes::new(sealed),
-                },
-            ),
+            Ok(sealed) => self.reply(id, RestEvent::LocalRowSealed { sealed }),
             // Past the AEAD size limit: nothing is stored, as for a seed that
             // is missing.
             Err(_) => {
@@ -60,8 +55,7 @@ impl SyncState {
         let rows = rows
             .iter()
             .map(|row| {
-                ambre_crypto::aead::open_row(row.sealed.as_bytes(), &place_bytes(&row.place), &key)
-                    .ok()
+                ambre_crypto::aead::open_row(&row.sealed, &place_bytes(&row.place), &key).ok()
             })
             .collect();
         self.reply(id, RestEvent::LocalRowsOpened { rows });

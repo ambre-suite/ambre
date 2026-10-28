@@ -71,7 +71,10 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 /// # Panics
 ///
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
-pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> ambre_core::MediaAddress {
+pub fn media_address(
+    key: &DocumentKey,
+    plaintext: &ambre_core::MediaBytes,
+) -> ambre_core::MediaAddress {
     // The subkey is key material, so the HMAC writes it in place under the
     // wiping wrapper, and no bare copy of it leaves this function.
     let subkey: Secret<[u8; TAG_LEN]> = Secret::filled(|out: &mut [u8; TAG_LEN]| {
@@ -80,7 +83,7 @@ pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> ambre_core::MediaAd
         FixedOutput::finalize_into(m, out.into());
     });
     let mut m = keyed(subkey.expose());
-    m.update(plaintext);
+    m.update(plaintext.as_bytes());
     ambre_core::MediaAddress::from_array(m.finalize().into_bytes().into())
 }
 
