@@ -544,3 +544,113 @@ fn a_close_code_is_one_a_close_frame_can_carry() {
     assert_eq!(CloseCode::SETUP_REQUIRED.reason(), Some("setup required"));
     assert_eq!(CloseCode::new(1006).and_then(CloseCode::reason), None);
 }
+
+/// The Blake2b digest of `frame`, first 16 bytes, in hex: the form the frames
+/// below are frozen in.
+fn frozen_digest(frame: &[u8]) -> String {
+    use blake2::{Blake2b512, Digest};
+    let mut hasher = Blake2b512::new();
+    hasher.update((frame.len() as u64).to_le_bytes());
+    hasher.update(frame);
+    hex::encode(&hasher.finalize()[..16])
+}
+
+/// The bytes a key link, a membership entry, the two signed transcripts and
+/// the signaling frames take, frozen. No version digest covers them: a link
+/// and an entry are stored, and a signature over a transcript must keep
+/// verifying. A type that wraps one of them leaves these digests as they are.
+#[test]
+fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
+    use crate::membership::{ENTRY_SIGNATURE_LEN, EntryDigest};
+    use crate::snapshot_report::report_transcript;
+    use ambre_core::Role;
+    let document = DocumentId::from_bytes([1; 16]);
+    let link = KeyLink {
+        document_id: document,
+        key: KeyId::from_array([2; 16]),
+        previous: KeyId::from_array([3; 16]),
+        sealed: ambre_core::SealedPreviousKey::new(vec![7; 5]),
+    };
+    let entry = MembershipEntry {
+        document,
+        position: LogPosition::new(1),
+        member: UserId::from_bytes([2; 16]),
+        member_key: PublicKey::from_array([3; 32]),
+        act: MembershipAct::Invite,
+        role: Role::Editor,
+        key: Some(KeyId::from_array([4; 16])),
+        previous: Some(EntryDigest([5; 32])),
+        author: UserId::from_bytes([6; 16]),
+        signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+    };
+    let transcript = report_transcript(
+        document,
+        SnapshotId::from_bytes([8; 16]),
+        &PublicKey::from_array([9; 32]),
+    );
+    let peer = UserId::from_bytes([10; 16]);
+    let client = [
+        SignalingClientMsg::Offer {
+            target_user_id: peer,
+            sdp: "v=0 offer".to_owned(),
+        },
+        SignalingClientMsg::Answer {
+            target_user_id: peer,
+            sdp: "v=0 answer".to_owned(),
+        },
+        SignalingClientMsg::Ice {
+            target_user_id: peer,
+            candidate: "candidate:1 1 udp".to_owned(),
+        },
+    ];
+    let server = [
+        SignalingServerMsg::Offer {
+            from_user_id: peer,
+            sdp: "v=0 offer".to_owned(),
+        },
+        SignalingServerMsg::Answer {
+            from_user_id: peer,
+            sdp: "v=0 answer".to_owned(),
+        },
+        SignalingServerMsg::Ice {
+            from_user_id: peer,
+            candidate: "candidate:1 1 udp".to_owned(),
+        },
+        SignalingServerMsg::ParticipantJoined { user_id: peer },
+        SignalingServerMsg::ParticipantLeft { user_id: peer },
+    ];
+    let mut signaling = Vec::new();
+    for msg in &client {
+        signaling.extend(postcard::to_allocvec(msg).expect("a frame encodes"));
+    }
+    for msg in &server {
+        signaling.extend(postcard::to_allocvec(msg).expect("a frame encodes"));
+    }
+    let frames = [
+        ("key link", link.encode().expect("a link encodes")),
+        ("entry", entry.encode().expect("an entry encodes")),
+        (
+            "entry signed",
+            entry.signed_bytes().expect("an entry encodes"),
+        ),
+        ("report", transcript),
+        ("signaling", signaling),
+    ];
+    let digests: Vec<(&str, String)> = frames
+        .iter()
+        .map(|(name, frame)| (*name, frozen_digest(frame)))
+        .collect();
+    assert_eq!(
+        digests,
+        [
+            ("key link", "cbf2375a41882f5485f3e8bc4221acf7".to_owned()),
+            ("entry", "c934239d013f5c75ff1467e32d503f16".to_owned()),
+            (
+                "entry signed",
+                "5794caa1a99cb3f42d232280d662a90b".to_owned()
+            ),
+            ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
+            ("signaling", "6a9b7d2c9be10fb8fc203094c53eff55".to_owned()),
+        ]
+    );
+}
