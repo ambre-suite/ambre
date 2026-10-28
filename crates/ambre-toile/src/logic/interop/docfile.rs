@@ -32,7 +32,11 @@ pub fn export_ambre_plaintext(
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("[Toile] .ambre export failed, writing no file: {e:?}"))
         .ok()?;
-    Some(write_ambre_plaintext(DocType::Toile, doc_id, &payload))
+    Some(write_ambre_plaintext(
+        DocType::Toile,
+        doc_id,
+        &ambre_core::SnapshotBytes::new(payload),
+    ))
 }
 
 /// Validate a plaintext `.ambre` as a *Toile* document and hand back the header
@@ -51,5 +55,5 @@ pub fn export_ambre_plaintext(
 pub fn import_ambre_plaintext(
     data: &ambre_core::PlaintextContainer,
 ) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Toile, data.as_bytes())
+    read_ambre_plaintext_as(DocType::Toile, data)
 }

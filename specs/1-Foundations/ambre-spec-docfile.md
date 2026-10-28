@@ -217,16 +217,17 @@ nor either read rule (`DOCFILE-007`).
 // ambre-core
 
 /// The writer rule: no version parameter, because there is no write mode to pick.
-pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &[u8])
+pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &SnapshotBytes)
     -> PlaintextContainer;
 
 /// Any `DocType`, version-recovery rule applied. What a file-open router reads
 /// before it knows which app to hand the bytes to.
-pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError>;
 
 /// The same, plus the dispatch rule against the caller's own type. The whole body
 /// of each app's `import_ambre_plaintext`.
-pub fn read_ambre_plaintext_as(expected: DocType, data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+pub fn read_ambre_plaintext_as(expected: DocType, file: &PlaintextContainer)
+    -> Result<AmbreHeader, DocFileError>;
 
 /// The strict layout parse: current version only, no recovery. Used by the two
 /// above and by anything reading raw bytes -- a header dump, a migration step
@@ -254,8 +255,9 @@ container assembles and parses the envelope, and its caller fills it (`DOCFILE-0
 
 /// The cheapest question a reader can ask, and the first one it must: which
 /// lineage, at which version. Five bytes answer it, so it answers for a file too
-/// short to hold either header in full.
-pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError>;
+/// short to hold either header in full. It reads a file in any of its three roles:
+/// picked and not yet classified, plaintext, or sealed.
+pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileError>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContainerKind { Plaintext(ContainerVersion), Sealed(ContainerVersion) }
@@ -273,7 +275,7 @@ pub fn write_ambre_sealed(
 ) -> SealedContainer;
 
 /// The current sealed layout exactly, with no recovery walk behind it.
-pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError>;
+pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFileError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedAmbre {

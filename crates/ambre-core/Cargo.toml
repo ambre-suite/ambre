@@ -32,7 +32,7 @@ zeroize = { workspace = true }
 # `Secret` compares two secrets in constant time. Already in the tree through
 # the RustCrypto stack; named here so the comparison is ours, not a `==`.
 subtle = { workspace = true }
-# `serde` feature: the manifest digest is `#[serde(with = "hex")]`, which reads
+# `serde` feature: the file digest is `#[serde(with = "hex")]`, which reads
 # `hex::serialize` / `hex::deserialize` off the crate root (`FIXTURE-011`). A
 # raw `[u8; 32]` would serialize as 32 JSON integers and defeat the readable
 # diff the sidecar exists for.

@@ -113,9 +113,9 @@ pub fn dev_seed(username: &ambre_core::DisplayName) -> crate::keys::MasterSeed {
     ))
 }
 
-/// A keyless 32-byte digest of a whole file, for the fixture sidecar that
-/// catches a flipped byte. Not a link of the snapshot chain: its head is
+/// A keyless 32-byte digest of a whole container file, for the fixture
+/// sidecar that catches a flipped byte. Not a link of the snapshot chain: its head is
 /// empty, which keeps the digests of the committed corpus.
-pub fn file_digest(bytes: &[u8]) -> [u8; HASH_LEN] {
-    length_prefixed(Head(&[]), Tail(bytes))
+pub fn file_digest<F: ambre_core::ContainerFile>(file: &F) -> ambre_core::FileDigest {
+    ambre_core::FileDigest::from_array(length_prefixed(Head(&[]), Tail(file.as_ref())))
 }

@@ -111,7 +111,7 @@ fn routing_reads_the_type_off_the_header_without_asking_an_app_first() {
         (trame_file(), DocType::Trame),
         (toile_file(), DocType::Toile),
     ] {
-        let header = read_ambre_plaintext(bytes.as_bytes()).expect("a valid container");
+        let header = read_ambre_plaintext(&bytes).expect("a valid container");
         assert_eq!(header.doc_type, expected);
         // The container is app-agnostic: the two files differ in one header byte
         // and their payloads, in nothing else.

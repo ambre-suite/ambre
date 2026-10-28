@@ -61,7 +61,7 @@ impl SyncState {
         sealed: ambre_core::SealedContainer,
         passphrase: ambre_core::Passphrase,
     ) {
-        let Ok(envelope) = parse_sealed_header(sealed.as_bytes()) else {
+        let Ok(envelope) = parse_sealed_header(&sealed) else {
             tracing::warn!("Sync: OpenDocFile: not a sealed .ambre file");
             self.reply(id, RestEvent::DocFileOpenFailed);
             return;

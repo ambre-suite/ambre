@@ -91,7 +91,6 @@ ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(plac
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
 ambre-app | src/platform.rs | crate::platform | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	free-text	worker URL
@@ -882,16 +881,11 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | classify(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_ambre() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_ambre(bytes) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_steps() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | migrate_steps(bytes) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | parse_header(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | parse_sealed_header(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | read_ambre_plaintext_as(data) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | write_ambre_plaintext(payload) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
@@ -932,7 +926,6 @@ ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() 
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::generator_version() | ret | u32	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::name() | ret | &'static str	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::seed() | ret | u64	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.digest | field | [u8;32]	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator | field | String	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator_version | field | u32	generic	fixture generator metadata (test support)
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.seed | field | u64	generic	fixture generator metadata (test support)
@@ -1270,15 +1263,11 @@ ambre-logic | src/fixtures.rs | crate::fixtures | artifact_path(name) | param | 
 ambre-logic | src/fixtures.rs | crate::fixtures | artifact_stems() | ret | Result<Vec<String>,FixtureError>	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | collect_stems(out) | param | &mut Vec<String>	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | digest_of() | ret | [u8;32]	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | digest_of(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | freeze(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | generate_bench_into() | ret | Result<Vec<&'static str>,FixtureError>	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | import_fixture(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | load_bench_fixture(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture_from(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | manifest_for(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | manifest_path(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | read_manifest(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3789,8 +3778,6 @@ ambre-bus | src/app/find.rs | crate::app::find | FindQuery<O>::new(text) | param
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
-ambre-crypto | src/hash.rs | crate::hash | file_digest() | ret | [u8;HASH_LEN]	generic	keyless digest of any file, for the fixture sidecar
-ambre-crypto | src/hash.rs | crate::hash | file_digest(bytes) | param | &[u8]	generic	keyless digest of any file, for the fixture sidecar
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; chain_hash and dev_seed wrap the result, file_digest returns it
 ambre-crypto | src/hash.rs | crate::hash | Head.0 | field | &'a[u8]	newtype-inner	the length-bounded input of length_prefixed, typed apart from Tail so a swap does not compile
 ambre-crypto | src/hash.rs | crate::hash | Tail.0 | field | &'a[u8]	newtype-inner	the input after the bounded field of length_prefixed, typed apart from Head so a swap does not compile
@@ -4141,3 +4128,6 @@ ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | fi
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | bool	generic	predicate result: a const comparison, which Marks::new runs at compile time
+ambre-core | src/docfile.rs | crate::docfile | FileDigest.0 | field | [u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
+ambre-core | src/docfile.rs | crate::docfile | FileDigest::as_array() | ret | &[u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
+ambre-core | src/docfile.rs | crate::docfile | FileDigest::from_array(bytes) | param | [u8;32]	newtype-inner	FileDigest newtype, from the hasher that wrote it

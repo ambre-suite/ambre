@@ -177,7 +177,10 @@ fn the_manifest_describes_the_artifact_beside_it() {
     let bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name())).expect("artifact");
 
     // `digest` matches the whole `.ambre` file, header included (C8).
-    assert_eq!(manifest.digest, digest_of(&bytes));
+    assert_eq!(
+        manifest.digest,
+        digest_of(&ambre_core::PlaintextContainer::new(bytes.to_vec()))
+    );
     // `ambre_version` matches the version the artifact itself carries.
     assert_eq!(manifest.ambre_version, AMBRE_VERSION);
     assert_eq!(manifest.ambre_version.as_u8(), bytes[4]);
@@ -228,7 +231,10 @@ fn a_flipped_header_byte_moves_the_digest() {
     let bytes = TRAME.build().into_bytes();
     let mut tampered = bytes.clone();
     tampered[10] ^= 0x01; // inside `document_id`, not the payload
-    assert_ne!(digest_of(&bytes), digest_of(&tampered));
+    assert_ne!(
+        digest_of(&ambre_core::PlaintextContainer::new(bytes.to_vec())),
+        digest_of(&ambre_core::PlaintextContainer::new(tampered.to_vec()))
+    );
 }
 
 #[test]
@@ -255,7 +261,7 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
         }
     }
     assert!(matches!(
-        manifest_for(&Liar, Liar.build().as_bytes()),
+        manifest_for(&Liar, &Liar.build()),
         Err(FixtureError::Container(DocFileError::WrongDocType {
             found: DocType::Trame
         }))
@@ -467,7 +473,12 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
         ),
         (
             "valid Trame header, payload the engine refuses",
-            write_ambre_plaintext(DocType::Trame, doc_id, b"not a loro snapshot").into_bytes(),
+            write_ambre_plaintext(
+                DocType::Trame,
+                doc_id,
+                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+            )
+            .into_bytes(),
             DocFileError::PayloadRejected,
         ),
         (
@@ -476,14 +487,19 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             // inferred rejection from an empty event vector would accept this one
             // and hand back an empty board.
             "valid Toile header, payload the engine refuses",
-            write_ambre_plaintext(DocType::Toile, doc_id, b"not a loro snapshot").into_bytes(),
+            write_ambre_plaintext(
+                DocType::Toile,
+                doc_id,
+                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+            )
+            .into_bytes(),
             DocFileError::PayloadRejected,
         ),
     ];
 
     for (label, bytes, expected) in cases {
         let before = bytes.clone();
-        match fixtures::import_fixture(&bytes) {
+        match fixtures::import_fixture(&ambre_core::PlaintextContainer::new(bytes.to_vec())) {
             Err(FixtureError::Container(actual)) => {
                 assert_eq!(actual, expected, "{label}")
             }
@@ -495,8 +511,7 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
     // A *valid* container for another app is not a rejection here. The loader is
     // type-agnostic by design: it reads `doc_type` off the header and routes. A
     // Toile artifact loads as a Toile document.
-    let (_id, state) =
-        fixtures::import_fixture(TOILE.build().as_bytes()).expect("a Toile fixture loads");
+    let (_id, state) = fixtures::import_fixture(&TOILE.build()).expect("a Toile fixture loads");
     assert_eq!(state.doc_type(), DocType::Toile);
 }
 
@@ -508,9 +523,9 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     let murmure = write_ambre_plaintext(
         DocType::Murmure,
         DocumentId::from_bytes([0x44; 16]),
-        b"payload",
+        &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
     );
-    match fixtures::import_fixture(murmure.as_bytes()) {
+    match fixtures::import_fixture(&murmure) {
         Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Murmure),
         other => panic!("expected NoEngine, got {other:?}"),
     }
@@ -519,9 +534,9 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     let prose = write_ambre_plaintext(
         DocType::Prose,
         DocumentId::from_bytes([0x44; 16]),
-        b"payload",
+        &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
     );
-    match fixtures::import_fixture(prose.as_bytes()) {
+    match fixtures::import_fixture(&prose) {
         Err(FixtureError::Container(DocFileError::PayloadRejected)) => {}
         other => panic!("expected PayloadRejected, got {other:?}"),
     }
@@ -533,7 +548,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
 
 #[test]
 fn the_shape_counts_what_the_document_holds() {
-    let (_id, trame) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
+    let (_id, trame) = fixtures::import_fixture(&TRAME.build()).expect("loads");
     match shape_of(&trame).body {
         ShapeBody::Trame {
             cells,
@@ -547,7 +562,7 @@ fn the_shape_counts_what_the_document_holds() {
         other => panic!("a Trame fixture must carry a Trame shape, got {other:?}"),
     }
 
-    let (_id, toile) = fixtures::import_fixture(TOILE.build().as_bytes()).expect("loads");
+    let (_id, toile) = fixtures::import_fixture(&TOILE.build()).expect("loads");
     match shape_of(&toile).body {
         ShapeBody::Toile {
             elements,
@@ -564,7 +579,7 @@ fn the_shape_counts_what_the_document_holds() {
 
 #[test]
 fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
-    let (_id, solo) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
+    let (_id, solo) = fixtures::import_fixture(&TRAME.build()).expect("loads");
     // The importing state commits its own scaffolding under its own peer before
     // the merge. A restored document always carries one peer that is the reader
     // rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
@@ -593,7 +608,7 @@ fn the_canonical_dump_carries_both_representations_of_a_formula() {
     // dumping only the source would let an evaluation regression pass
     // unnoticed; dumping only the result would hide a change in what is
     // persisted. Both go in.
-    let (_id, state) = fixtures::import_fixture(TRAME.build().as_bytes()).expect("loads");
+    let (_id, state) = fixtures::import_fixture(&TRAME.build()).expect("loads");
     let dump = canonical_dump(&state);
     assert!(
         dump.contains("raw==A1*2"),

@@ -700,7 +700,7 @@ fn read_ambre_file(
             toasts.error("Ambre could not read that file");
             return;
         };
-        let bytes = js_sys::Uint8Array::new(&buf).to_vec();
+        let picked = ambre_core::PickedContainer::new(js_sys::Uint8Array::new(&buf).to_vec());
 
         // A sealed file is a container of the other lineage, and the version
         // byte alone says which (`DOCFILE-010`). Nothing here can read it: it
@@ -708,15 +708,17 @@ fn read_ambre_file(
         // worker derives. So the bytes go to the caller's prompt, and the
         // plaintext path below resumes on what comes back (`DOCFILE-015`).
         if matches!(
-            ambre_core::classify(&bytes),
+            ambre_core::classify(&picked),
             Ok(ambre_core::ContainerKind::Sealed(_))
         ) {
-            on_sealed.run(ambre_core::SealedContainer::new(bytes));
+            on_sealed.run(ambre_core::SealedContainer::new(picked.into_bytes()));
             return;
         }
         // The per-frame relay holds the store's seal, and resumes from here
         // (`RESID-025`).
-        opened.set(Some(OpenedFile(ambre_core::PlaintextContainer::new(bytes))));
+        opened.set(Some(OpenedFile(ambre_core::PlaintextContainer::new(
+            picked.into_bytes(),
+        ))));
     });
 }
 
@@ -736,8 +738,7 @@ pub(crate) fn open_plaintext_container(
     toasts: Toasts,
     vault: crate::vault::Vault,
 ) {
-    let Some((document_id, doc_type, payload)) = read_container(container.as_bytes(), toasts)
-    else {
+    let Some((document_id, doc_type, payload)) = read_container(&container, toasts) else {
         return;
     };
     // The payload lands as every copy does, sealed under the session's key.
@@ -761,10 +762,10 @@ pub(crate) fn open_plaintext_container(
 /// The container's document, its type and its payload, once this build
 /// can render it. A refusal reaches the user by name.
 fn read_container(
-    bytes: &[u8],
+    container: &ambre_core::PlaintextContainer,
     toasts: Toasts,
 ) -> Option<(DocumentId, ambre_bus::DocType, ambre_core::SnapshotBytes)> {
-    let header = match ambre_core::docfile::read_ambre_plaintext(bytes) {
+    let header = match ambre_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
             toasts.error(format!("Ambre cannot open that file: {e}"));

@@ -31,7 +31,11 @@ pub fn export_ambre_plaintext(
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("Prose: .ambre export failed, writing no file: {e:?}"))
         .ok()?;
-    Some(write_ambre_plaintext(DocType::Prose, doc_id, &payload))
+    Some(write_ambre_plaintext(
+        DocType::Prose,
+        doc_id,
+        &ambre_core::SnapshotBytes::new(payload),
+    ))
 }
 
 /// Validate a plaintext `.ambre` as a Prose document and hand back the header
@@ -47,7 +51,7 @@ pub fn export_ambre_plaintext(
 pub fn import_ambre_plaintext(
     data: &ambre_core::PlaintextContainer,
 ) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Prose, data.as_bytes())
+    read_ambre_plaintext_as(DocType::Prose, data)
 }
 
 impl ProseState {
@@ -184,7 +188,11 @@ mod tests {
     /// its type, and the document is untouched.
     #[test]
     fn a_file_of_another_application_is_handed_back() {
-        let bytes = write_ambre_plaintext(DocType::Trame, doc_id(), b"not prose");
+        let bytes = write_ambre_plaintext(
+            DocType::Trame,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"not prose".to_vec()),
+        );
         let mut state = populated();
         let before = state.doc.oplog_vv();
         let refused = state.import_ambre_plaintext(&bytes);
@@ -201,7 +209,11 @@ mod tests {
     /// the document is untouched.
     #[test]
     fn a_payload_the_engine_refuses_is_typed() {
-        let bytes = write_ambre_plaintext(DocType::Prose, doc_id(), b"not a snapshot");
+        let bytes = write_ambre_plaintext(
+            DocType::Prose,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"not a snapshot".to_vec()),
+        );
         let mut state = populated();
         let before = state.doc.oplog_vv();
         assert!(state.import_ambre_plaintext(&bytes).is_err());

@@ -186,8 +186,7 @@ pub struct FixtureManifest {
     /// is `hash::file_digest`, keyless and 32 bytes. Hex, not 32
     /// raw integers, which would defeat the readable diff this sidecar exists
     /// for.
-    #[serde(with = "hex")]
-    pub digest: [u8; 32],
+    pub digest: crate::FileDigest,
 
     pub shape: FixtureShape,
 }
@@ -236,7 +235,7 @@ mod tests {
             doc_type: DocType::Trame,
             ambre_version: crate::AMBRE_VERSION,
             schema_version: crate::SCHEMA_VERSION_ABSENT,
-            digest: [0xAB; 32],
+            digest: crate::FileDigest::from_array([0xAB; 32]),
             shape: FixtureShape {
                 peers: 2,
                 body: ShapeBody::Trame {

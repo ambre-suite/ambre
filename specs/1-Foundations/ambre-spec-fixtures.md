@@ -170,9 +170,8 @@ pub struct FixtureManifest {
     pub schema_version: SchemaVersion,
     /// BLAKE2b over the whole file, header included (`FIXTURE-011`). Hex, not
     /// 32 raw integers, which would defeat the readable diff this sidecar
-    /// exists for.
-    #[serde(with = "hex")]
-    pub digest: [u8; 32],
+    /// exists for: `FileDigest` is `#[serde(with = "hex")]` inside.
+    pub digest: FileDigest,
     pub shape: FixtureShape,
 }
 
@@ -292,13 +291,14 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 /// rejection off that vector would accept a corrupt artifact and hand back an
 /// empty document. The application importer returns a typed error instead,
 /// carried out verbatim (`FIXTURE-014`).
-pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureError>;
+pub fn import_fixture(container: &PlaintextContainer) -> Result<(DocumentId, DocState), FixtureError>;
 
 pub fn artifact_path(dir: &Path, name: &str) -> PathBuf;
 pub fn manifest_path(dir: &Path, name: &str) -> PathBuf;
 pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError>;
-pub fn manifest_for(generator: &dyn FixtureGen, bytes: &[u8]) -> Result<FixtureManifest, FixtureError>;
-pub fn digest_of(bytes: &[u8]) -> [u8; 32];
+pub fn manifest_for(generator: &dyn FixtureGen, container: &PlaintextContainer)
+    -> Result<FixtureManifest, FixtureError>;
+pub fn digest_of(container: &PlaintextContainer) -> FileDigest;
 pub fn write_fixture(generator: &dyn FixtureGen, dir: &Path) -> Result<FixtureManifest, FixtureError>;
 pub fn generate_into(registry: &[&dyn FixtureGen], dir: &Path) -> Result<Vec<FixtureManifest>, FixtureError>;
 

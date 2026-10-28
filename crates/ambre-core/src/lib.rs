@@ -102,9 +102,9 @@ pub use color::{InvalidOpacity, Opacity, Rgb, Rgba};
 pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
-    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, ContainerVersion,
-    DocFileError, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN, SEALED_AAD_LEN,
-    SEALED_HEADER_LEN, SealedAmbre, classify, migrate_ambre, parse_sealed_header,
+    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerFile, ContainerKind,
+    ContainerVersion, DocFileError, FileDigest, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN,
+    SEALED_AAD_LEN, SEALED_HEADER_LEN, SealedAmbre, classify, migrate_ambre, parse_sealed_header,
     read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad, write_ambre_plaintext,
     write_ambre_sealed,
 };
@@ -148,8 +148,8 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, LoroPayload, LoroPayloadRef, MediaBytes,
-    PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey, SealedRowBytes,
-    SnapshotBytes,
+    PickedContainer, PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey,
+    SealedRowBytes, SnapshotBytes,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};

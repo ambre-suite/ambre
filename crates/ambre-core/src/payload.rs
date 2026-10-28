@@ -140,6 +140,13 @@ define_payload! {
 }
 
 define_payload! {
+    /// A whole file the picker read, before [`crate::classify`] names its
+    /// lineage. Its version byte says whether it goes on as a
+    /// [`PlaintextContainer`] or as a [`SealedContainer`].
+    PickedContainer
+}
+
+define_payload! {
     /// A whole passphrase-sealed `.ambre` container, header included, as it
     /// sits on the user's disk (`DOCFILE-010`). Only the Sync worker opens it,
     /// to a [`PlaintextContainer`]; a store row is a [`SealedRowBytes`]

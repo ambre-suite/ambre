@@ -157,7 +157,11 @@ mod tests {
 
     #[test]
     fn a_trame_file_is_re_dispatched_not_coerced() {
-        let trame = write_ambre_plaintext(DocType::Trame, doc_id(), b"whatever");
+        let trame = write_ambre_plaintext(
+            DocType::Trame,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+        );
         assert_eq!(
             import_ambre_plaintext(&trame),
             Err(DocFileError::WrongDocType {
@@ -173,12 +177,16 @@ mod tests {
             })
         );
         // The same bytes are accepted, unchanged, by the importer they name.
-        assert!(read_ambre_plaintext_as(DocType::Trame, trame.as_bytes()).is_ok());
+        assert!(read_ambre_plaintext_as(DocType::Trame, &trame).is_ok());
     }
 
     #[test]
     fn a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic() {
-        let bytes = write_ambre_plaintext(DocType::Toile, doc_id(), b"not a loro snapshot");
+        let bytes = write_ambre_plaintext(
+            DocType::Toile,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+        );
         let mut state = ToileState::new();
         assert_eq!(
             state.import_ambre_plaintext(&bytes).err(),
@@ -210,8 +218,18 @@ mod tests {
                 b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
-            write_ambre_plaintext(DocType::Trame, doc_id(), b"whatever").into_bytes(),
-            write_ambre_plaintext(DocType::Toile, doc_id(), b"not a loro snapshot").into_bytes(),
+            write_ambre_plaintext(
+                DocType::Trame,
+                doc_id(),
+                &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+            )
+            .into_bytes(),
+            write_ambre_plaintext(
+                DocType::Toile,
+                doc_id(),
+                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+            )
+            .into_bytes(),
         ];
         for bytes in cases {
             let before_bytes = bytes.clone();

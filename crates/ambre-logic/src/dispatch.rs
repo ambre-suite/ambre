@@ -1014,8 +1014,10 @@ mod tests {
         for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let document_id = DocumentId::new();
             let bytes = exported_file(doc_type, document_id);
-            let header = ambre_core::docfile::read_ambre_plaintext(&bytes)
-                .expect("the command wrote a valid container");
+            let header = ambre_core::docfile::read_ambre_plaintext(
+                &ambre_core::PlaintextContainer::new(bytes.to_vec()),
+            )
+            .expect("the command wrote a valid container");
             assert_eq!(header.doc_type, doc_type, "the header names the wrong app");
             assert_eq!(
                 header.document_id, document_id,
@@ -1047,7 +1049,10 @@ mod tests {
             }),
         });
         let saved = exported_file_from(&state, document_id);
-        let header = ambre_core::docfile::read_ambre_plaintext(&saved).expect("valid container");
+        let header = ambre_core::docfile::read_ambre_plaintext(
+            &ambre_core::PlaintextContainer::new(saved.to_vec()),
+        )
+        .expect("valid container");
 
         // A second session, as a page load after the open gesture. Nothing is
         // live, and the file's payload arrives the way the store hands it over.
@@ -1135,8 +1140,10 @@ mod tests {
     fn a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui() {
         for doc_type in [DocType::Trame, DocType::Toile] {
             let (_state, ui, _id, plaintext) = sealing(doc_type);
-            let header = ambre_core::docfile::read_ambre_plaintext(&plaintext)
-                .expect("Sync was handed a valid plaintext container");
+            let header = ambre_core::docfile::read_ambre_plaintext(
+                &ambre_core::PlaintextContainer::new(plaintext.to_vec()),
+            )
+            .expect("Sync was handed a valid plaintext container");
             assert_eq!(header.doc_type, doc_type);
             assert_eq!(
                 export_bytes(&ui),

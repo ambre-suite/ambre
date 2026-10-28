@@ -536,10 +536,11 @@ fn the_keyless_digests_keep_their_bytes() {
     blake2::Digest::update(&mut hasher, 0u64.to_le_bytes());
     blake2::Digest::update(&mut hasher, b"file");
     let full = blake2::Digest::finalize(hasher);
-    assert_eq!(hash::file_digest(b"file")[..], full[..32]);
+    let file = ambre_core::PickedContainer::new(b"file".to_vec());
+    assert_eq!(hash::file_digest(&file).as_array()[..], full[..32]);
     assert_eq!(
-        hash::chain_hash(None, &Ciphertext(b"file".to_vec())).0,
-        hash::file_digest(b"file")
+        &hash::chain_hash(None, &Ciphertext(b"file".to_vec())).0,
+        hash::file_digest(&file).as_array()
     );
 }
 
@@ -921,7 +922,8 @@ fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
     );
     let headless = golden("997889dc0af01e9390d3155a446f283600e018a8cccc32c15085956fe8ef4a79");
     assert_eq!(hash::chain_hash(None, &snapshot).0.to_vec(), headless);
-    assert_eq!(hash::file_digest(&snapshot.0).to_vec(), headless);
+    let file = ambre_core::PickedContainer::new(snapshot.0.clone());
+    assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 
 #[test]

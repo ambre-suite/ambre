@@ -521,7 +521,7 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
         }
         Err(e) => return Err(FixtureError::Io(e)),
     };
-    import_fixture(&bytes)
+    import_fixture(&ambre_core::PlaintextContainer::new(bytes))
 }
 
 /// Parse plaintext `.ambre` bytes into a live state through the production import
@@ -544,8 +544,10 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 ///
 /// [`FixtureError::Container`] on bytes the container or the engine refuses,
 /// and [`FixtureError::NoEngine`] for a type with no engine.
-pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureError> {
-    let doc_type = read_ambre_plaintext(bytes)?.doc_type;
+pub fn import_fixture(
+    container: &ambre_core::PlaintextContainer,
+) -> Result<(DocumentId, DocState), FixtureError> {
+    let doc_type = read_ambre_plaintext(container)?.doc_type;
     // Pinned reader, not `DocState::new`: the receiving state commits its own
     // scaffolding before the merge, so the peer it picks lands in the imported
     // document. A random one would make a restored fixture differ run to run,
@@ -564,11 +566,10 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     // `read_ambre_plaintext_as`, which is also where the dispatch rule fires.
     // That re-reads (and re-copies) the payload, which is the price of keeping
     // one import path instead of two; nothing here is on a hot path.
-    let container = ambre_core::PlaintextContainer::new(bytes.to_vec());
     let document_id = match &mut state {
-        DocState::Trame(trame) => trame.import_ambre_plaintext(&container).map(|(id, _)| id),
-        DocState::Toile(toile) => toile.import_ambre_plaintext(&container).map(|(id, _)| id),
-        DocState::Prose(prose) => prose.import_ambre_plaintext(&container).map(|(id, _)| id),
+        DocState::Trame(trame) => trame.import_ambre_plaintext(container).map(|(id, _)| id),
+        DocState::Toile(toile) => toile.import_ambre_plaintext(container).map(|(id, _)| id),
+        DocState::Prose(prose) => prose.import_ambre_plaintext(container).map(|(id, _)| id),
     }?;
     Ok((document_id, state))
 }
@@ -628,9 +629,9 @@ pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureE
 /// another type than the generator declares.
 pub fn manifest_for(
     generator: &dyn FixtureGen,
-    bytes: &[u8],
+    container: &ambre_core::PlaintextContainer,
 ) -> Result<FixtureManifest, FixtureError> {
-    let (_document_id, state) = import_fixture(bytes)?;
+    let (_document_id, state) = import_fixture(container)?;
     if state.doc_type() != generator.doc_type() {
         return Err(FixtureError::Container(DocFileError::WrongDocType {
             found: state.doc_type(),
@@ -646,7 +647,7 @@ pub fn manifest_for(
         // from the generated state rather than assumed. A manifest that names a
         // version the artefact does not hold is worse than no manifest.
         schema_version: state.schema_version(),
-        digest: digest_of(bytes),
+        digest: digest_of(container),
         shape: shape_of(&state),
     })
 }
@@ -656,8 +657,8 @@ pub fn manifest_for(
 ///
 /// The keyless digest is [`ambre_crypto::hash::file_digest`], never a link
 /// of the snapshot chain.
-pub fn digest_of(bytes: &[u8]) -> [u8; 32] {
-    ambre_crypto::hash::file_digest(bytes)
+pub fn digest_of(container: &ambre_core::PlaintextContainer) -> ambre_core::FileDigest {
+    ambre_crypto::hash::file_digest(container)
 }
 
 /// Run one generator and write its artifact plus sidecar under `dir`.
@@ -673,8 +674,8 @@ pub fn write_fixture(
     dir: &Path,
 ) -> Result<FixtureManifest, FixtureError> {
     let container = generator.build();
+    let manifest = manifest_for(generator, &container)?;
     let bytes = container.as_bytes();
-    let manifest = manifest_for(generator, bytes)?;
     let artifact = artifact_path(dir, generator.name());
     if let Some(parent) = artifact.parent() {
         fs::create_dir_all(parent)?;
@@ -1018,7 +1019,7 @@ pub fn check_corpus(
         let name = generator.name();
         let fresh = write_fixture(*generator, scratch)?;
         let committed = match fs::read(artifact_path(&current, name)) {
-            Ok(bytes) => bytes,
+            Ok(bytes) => ambre_core::PlaintextContainer::new(bytes),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 report.drifts.push(Drift::Missing {
                     name: name.to_owned(),
@@ -1134,7 +1135,8 @@ fn check_frozen(
             Some(slot) => slot.1 += 1,
             None => per_type.push((manifest.doc_type, 1)),
         }
-        let bytes = fs::read(artifact_path(&frozen, &entry.stem))?;
+        let bytes =
+            ambre_core::PlaintextContainer::new(fs::read(artifact_path(&frozen, &entry.stem))?);
         if digest_of(&bytes) != manifest.digest {
             report.drifts.push(Drift::Frozen {
                 stem: entry.stem.clone(),

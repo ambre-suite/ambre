@@ -56,7 +56,10 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Ciphertext, DocType, DocumentId, Nonce, PlaintextContainer, SealedContainer, Uuid};
+use crate::{
+    Ciphertext, DocType, DocumentId, Nonce, PickedContainer, PlaintextContainer, SealedContainer,
+    SnapshotBytes, Uuid,
+};
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
 pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
@@ -283,6 +286,45 @@ pub enum ContainerKind {
     Sealed(ContainerVersion),
 }
 
+/// The keyless digest of a whole `.ambre` file, header included, so a flipped
+/// `document_id` byte changes it. The fixture sidecar records it to catch a
+/// flipped byte. It is never a link of the snapshot chain. Serde sees it as hex
+/// text, the shape the sidecar always held.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct FileDigest(#[serde(with = "hex")] [u8; 32]);
+
+impl FileDigest {
+    /// The digest a hasher wrote.
+    #[must_use]
+    pub const fn from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// The digest bytes.
+    #[must_use]
+    pub const fn as_array(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// A whole `.ambre` file in one of its roles: picked, plaintext or sealed.
+/// [`classify`] reads any of them. The trait is sealed, so a snapshot or a
+/// store row never reaches it.
+pub trait ContainerFile: AsRef<[u8]> + container_file::Sealed {}
+
+mod container_file {
+    /// Closes [`super::ContainerFile`] to the three container roles.
+    pub trait Sealed {}
+    impl Sealed for crate::PickedContainer {}
+    impl Sealed for crate::PlaintextContainer {}
+    impl Sealed for crate::SealedContainer {}
+}
+
+impl ContainerFile for PickedContainer {}
+impl ContainerFile for PlaintextContainer {}
+impl ContainerFile for SealedContainer {}
+
 /// Read the magic and the version byte, and say which lineage the file belongs
 /// to -- nothing more.
 ///
@@ -293,10 +335,11 @@ pub enum ContainerKind {
 ///
 /// # Errors
 ///
-/// [`DocFileError::TruncatedHeader`] when `data` is shorter than 5 bytes, and
+/// [`DocFileError::TruncatedHeader`] when `file` is shorter than 5 bytes, and
 /// [`DocFileError::InvalidMagic`] when the first four bytes are not
 /// [`AMBRE_MAGIC`].
-pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
+pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileError> {
+    let data = file.as_ref();
     let Some(&byte) = data.get(VERSION_AT) else {
         return Err(DocFileError::TruncatedHeader);
     };
@@ -322,7 +365,7 @@ pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
 pub fn write_ambre_plaintext(
     doc_type: DocType,
     document_id: DocumentId,
-    payload: &[u8],
+    payload: &SnapshotBytes,
 ) -> PlaintextContainer {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
@@ -330,7 +373,7 @@ pub fn write_ambre_plaintext(
     out.push(doc_type.as_u8());
     out.extend_from_slice(document_id.as_bytes());
     debug_assert_eq!(out.len(), HEADER_LEN);
-    out.extend_from_slice(payload);
+    out.extend_from_slice(payload.as_bytes());
     PlaintextContainer::new(out)
 }
 
@@ -402,10 +445,11 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 /// the container needs the migration walk. A version above [`AMBRE_VERSION`]
 /// keeps its [`DocFileError::UnsupportedVersion`]: this build cannot read
 /// forward.
-pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
+pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+    let data = file.as_bytes();
     match parse_header(data) {
         // Older container: migrate forward, then parse the result. The migrated
-        // buffer is a fresh allocation, so nothing here touches `data`.
+        // buffer is a fresh allocation, so nothing here touches `file`.
         Err(DocFileError::UnsupportedVersion { found }) if found < AMBRE_VERSION => {
             parse_header(&migrate_ambre(found, data)?)
         }
@@ -428,9 +472,9 @@ pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 /// the same bytes.
 pub fn read_ambre_plaintext_as(
     expected: DocType,
-    data: &[u8],
+    file: &PlaintextContainer,
 ) -> Result<AmbreHeader, DocFileError> {
-    let header = read_ambre_plaintext(data)?;
+    let header = read_ambre_plaintext(file)?;
     if header.doc_type != expected {
         return Err(DocFileError::WrongDocType {
             found: header.doc_type,
@@ -532,15 +576,15 @@ pub fn write_ambre_sealed(
 /// Every error of [`classify`], plus [`DocFileError::NotSealed`] on a plaintext
 /// container, [`DocFileError::SealedVersionUnsupported`] on an unknown layout,
 /// and [`DocFileError::TruncatedHeader`] below [`SEALED_HEADER_LEN`].
-pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
-    let version = match classify(data)? {
+pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFileError> {
+    let version = match classify(file)? {
         ContainerKind::Plaintext(_) => return Err(DocFileError::NotSealed),
         ContainerKind::Sealed(version) => version,
     };
     if version != AMBRE_SEALED_VERSION {
         return Err(DocFileError::SealedVersionUnsupported { found: version });
     }
-    let Some((head, ciphertext)) = data.split_first_chunk::<SEALED_HEADER_LEN>() else {
+    let Some((head, ciphertext)) = file.as_bytes().split_first_chunk::<SEALED_HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
     };
     let salt = head
@@ -649,8 +693,24 @@ mod tests {
         DocumentId::from_bytes(DOC_ID)
     }
 
+    fn plain(bytes: &[u8]) -> PlaintextContainer {
+        PlaintextContainer::new(bytes.to_vec())
+    }
+
+    fn sealed(bytes: &[u8]) -> SealedContainer {
+        SealedContainer::new(bytes.to_vec())
+    }
+
+    fn picked(bytes: &[u8]) -> PickedContainer {
+        PickedContainer::new(bytes.to_vec())
+    }
+
+    fn snap(bytes: &[u8]) -> SnapshotBytes {
+        SnapshotBytes::new(bytes.to_vec())
+    }
+
     fn sample(doc_type: DocType) -> Vec<u8> {
-        write_ambre_plaintext(doc_type, doc_id(), b"snapshot-bytes").into_bytes()
+        write_ambre_plaintext(doc_type, doc_id(), &snap(b"snapshot-bytes")).into_bytes()
     }
 
     #[test]
@@ -667,7 +727,7 @@ mod tests {
     #[test]
     fn round_trip_is_the_identity_on_the_container() {
         let bytes = sample(DocType::Trame);
-        let header = read_ambre_plaintext(&bytes).expect("valid container");
+        let header = read_ambre_plaintext(&plain(&bytes)).expect("valid container");
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Trame);
         assert_eq!(header.document_id, doc_id());
@@ -675,11 +735,7 @@ mod tests {
         // Re-writing the parsed parts reproduces the file byte for byte (I1 at
         // the container layer).
         assert_eq!(
-            write_ambre_plaintext(
-                header.doc_type,
-                header.document_id,
-                header.payload.as_bytes()
-            ),
+            write_ambre_plaintext(header.doc_type, header.document_id, &header.payload),
             bytes
         );
     }
@@ -688,8 +744,8 @@ mod tests {
     fn an_empty_payload_is_a_valid_container() {
         // A header failure and an empty document are different conditions: the
         // container reports the second faithfully and lets the engine judge it.
-        let bytes = write_ambre_plaintext(DocType::Trame, doc_id(), &[]);
-        let header = read_ambre_plaintext(bytes.as_bytes()).expect("valid container");
+        let bytes = write_ambre_plaintext(DocType::Trame, doc_id(), &snap(&[]));
+        let header = read_ambre_plaintext(&bytes).expect("valid container");
         assert!(header.payload.is_empty());
     }
 
@@ -712,7 +768,7 @@ mod tests {
         let mut bytes = sample(DocType::Trame);
         bytes[0] = b'X';
         assert_eq!(
-            read_ambre_plaintext(&bytes),
+            read_ambre_plaintext(&plain(&bytes)),
             Err(DocFileError::InvalidMagic)
         );
     }
@@ -722,7 +778,7 @@ mod tests {
         let mut newer = sample(DocType::Trame);
         newer[VERSION_AT] = AMBRE_VERSION.as_u8() + 1;
         assert_eq!(
-            read_ambre_plaintext(&newer),
+            read_ambre_plaintext(&plain(&newer)),
             Err(DocFileError::UnsupportedVersion {
                 found: ContainerVersion(AMBRE_VERSION.as_u8() + 1)
             }),
@@ -735,7 +791,7 @@ mod tests {
         let mut older = sample(DocType::Trame);
         older[VERSION_AT] = 0;
         assert_eq!(
-            read_ambre_plaintext(&older),
+            read_ambre_plaintext(&plain(&older)),
             Err(DocFileError::UnsupportedVersion {
                 found: ContainerVersion(0)
             })
@@ -747,7 +803,7 @@ mod tests {
         let mut bytes = sample(DocType::Trame);
         bytes[DOC_TYPE_AT] = 9;
         assert_eq!(
-            read_ambre_plaintext(&bytes),
+            read_ambre_plaintext(&plain(&bytes)),
             Err(DocFileError::UnknownDocType { found: 9 })
         );
     }
@@ -756,14 +812,15 @@ mod tests {
     fn dispatch_reports_the_type_that_wrote_the_file() {
         let toile = sample(DocType::Toile);
         assert_eq!(
-            read_ambre_plaintext_as(DocType::Trame, &toile),
+            read_ambre_plaintext_as(DocType::Trame, &plain(&toile)),
             Err(DocFileError::WrongDocType {
                 found: DocType::Toile
             }),
             "the caller must be able to re-dispatch, so the type is carried"
         );
         // The importer they name accepts the same bytes, unchanged.
-        let header = read_ambre_plaintext_as(DocType::Toile, &toile).expect("right importer");
+        let header =
+            read_ambre_plaintext_as(DocType::Toile, &plain(&toile)).expect("right importer");
         assert_eq!(header.payload, b"snapshot-bytes");
     }
 
@@ -804,11 +861,11 @@ mod tests {
         ];
         for bytes in cases {
             let before = bytes.clone();
-            let _ = read_ambre_plaintext(&bytes);
-            let _ = read_ambre_plaintext_as(DocType::Trame, &bytes);
+            let _ = read_ambre_plaintext(&plain(&bytes));
+            let _ = read_ambre_plaintext_as(DocType::Trame, &plain(&bytes));
             let _ = migrate_ambre(ContainerVersion(0), &bytes);
-            let _ = classify(&bytes);
-            let _ = parse_sealed_header(&bytes);
+            let _ = classify(&picked(&bytes));
+            let _ = parse_sealed_header(&sealed(&bytes));
             assert_eq!(bytes, before, "an error path rewrote its input");
         }
     }
@@ -940,7 +997,7 @@ mod tests {
         // the opener recovers it from the parsed envelope. Both must be the
         // bytes on disk, or a file seals against one and opens against another.
         let bytes = sealed_sample();
-        let envelope = parse_sealed_header(&bytes).expect("valid sealed container");
+        let envelope = parse_sealed_header(&sealed(&bytes)).expect("valid sealed container");
         assert_eq!(sealed_aad(&SALT).as_bytes(), &bytes[..SEALED_AAD_LEN]);
         assert_eq!(envelope.aad(), sealed_aad(&SALT));
         // The nonce is deliberately outside it: the AEAD authenticates the
@@ -950,7 +1007,8 @@ mod tests {
 
     #[test]
     fn a_sealed_round_trip_recovers_the_envelope() {
-        let envelope = parse_sealed_header(&sealed_sample()).expect("valid sealed container");
+        let envelope =
+            parse_sealed_header(&sealed(&sealed_sample())).expect("valid sealed container");
         assert_eq!(envelope.version, AMBRE_SEALED_VERSION);
         assert_eq!(envelope.salt, SALT);
         assert_eq!(envelope.nonce, NONCE);
@@ -966,26 +1024,26 @@ mod tests {
         // `DOCFILE-010`: the header, and only the header, says which lineage a
         // file belongs to -- five bytes of it, before any field that moved.
         assert_eq!(
-            classify(&sample(DocType::Trame)),
+            classify(&picked(&sample(DocType::Trame))),
             Ok(ContainerKind::Plaintext(AMBRE_VERSION))
         );
         assert_eq!(
-            classify(&sealed_sample()),
+            classify(&picked(&sealed_sample())),
             Ok(ContainerKind::Sealed(AMBRE_SEALED_VERSION))
         );
         // Five bytes is the whole input it needs: a file too short to hold
         // either header still classifies.
         assert_eq!(
-            classify(&sealed_sample()[..5]),
+            classify(&picked(&sealed_sample()[..5])),
             Ok(ContainerKind::Sealed(AMBRE_SEALED_VERSION))
         );
         assert_eq!(
-            classify(&sealed_sample()[..4]),
+            classify(&picked(&sealed_sample()[..4])),
             Err(DocFileError::TruncatedHeader)
         );
         let mut bad = sealed_sample();
         bad[0] = b'X';
-        assert_eq!(classify(&bad), Err(DocFileError::InvalidMagic));
+        assert_eq!(classify(&picked(&bad)), Err(DocFileError::InvalidMagic));
     }
 
     #[test]
@@ -995,22 +1053,28 @@ mod tests {
         // client is the wrong message.
         let bytes = sealed_sample();
         assert_eq!(parse_header(&bytes), Err(DocFileError::SealedFile));
-        assert_eq!(read_ambre_plaintext(&bytes), Err(DocFileError::SealedFile));
         assert_eq!(
-            read_ambre_plaintext_as(DocType::Trame, &bytes),
+            read_ambre_plaintext(&plain(&bytes)),
+            Err(DocFileError::SealedFile)
+        );
+        assert_eq!(
+            read_ambre_plaintext_as(DocType::Trame, &plain(&bytes)),
             Err(DocFileError::SealedFile)
         );
         // Every sealed version, not just the one this build writes: the
         // partition is the bit, not the value.
         let mut future = sealed_sample();
         future[VERSION_AT] = 0xFF;
-        assert_eq!(read_ambre_plaintext(&future), Err(DocFileError::SealedFile));
+        assert_eq!(
+            read_ambre_plaintext(&plain(&future)),
+            Err(DocFileError::SealedFile)
+        );
     }
 
     #[test]
     fn the_sealed_parser_refuses_a_plaintext_file_by_name() {
         assert_eq!(
-            parse_sealed_header(&sample(DocType::Trame)),
+            parse_sealed_header(&sealed(&sample(DocType::Trame))),
             Err(DocFileError::NotSealed)
         );
     }
@@ -1020,7 +1084,7 @@ mod tests {
         let mut bytes = sealed_sample();
         bytes[VERSION_AT] = 0x81;
         assert_eq!(
-            parse_sealed_header(&bytes),
+            parse_sealed_header(&sealed(&bytes)),
             Err(DocFileError::SealedVersionUnsupported {
                 found: ContainerVersion(0x81)
             }),
@@ -1042,13 +1106,13 @@ mod tests {
         for len in 0..SEALED_HEADER_LEN {
             assert!(
                 matches!(
-                    parse_sealed_header(&bytes[..len]),
+                    parse_sealed_header(&sealed(&bytes[..len])),
                     Err(DocFileError::TruncatedHeader)
                 ),
                 "a {len}-byte sealed file must not parse"
             );
         }
-        assert!(parse_sealed_header(&bytes[..SEALED_HEADER_LEN]).is_ok());
+        assert!(parse_sealed_header(&sealed(&bytes[..SEALED_HEADER_LEN])).is_ok());
     }
 
     #[test]
@@ -1056,10 +1120,9 @@ mod tests {
         // This module owns no tag width (`DOCFILE-006`), so it cannot tell a
         // ciphertext too short to be one from a valid short document. It reports
         // the envelope faithfully; the open fails one layer up.
-        let envelope = parse_sealed_header(
-            write_ambre_sealed(&SALT, &NONCE, &Ciphertext(Vec::new())).as_bytes(),
-        )
-        .expect("a header with no ciphertext is still a header");
+        let envelope =
+            parse_sealed_header(&write_ambre_sealed(&SALT, &NONCE, &Ciphertext(Vec::new())))
+                .expect("a header with no ciphertext is still a header");
         assert!(envelope.ciphertext.is_empty());
     }
 }

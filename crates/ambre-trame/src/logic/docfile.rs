@@ -34,7 +34,11 @@ pub fn export_ambre_plaintext(
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("[Trame] .ambre export failed, writing no file: {e:?}"))
         .ok()?;
-    Some(write_ambre_plaintext(DocType::Trame, doc_id, &payload))
+    Some(write_ambre_plaintext(
+        DocType::Trame,
+        doc_id,
+        &ambre_core::SnapshotBytes::new(payload),
+    ))
 }
 
 /// Validate a plaintext `.ambre` as a *Trame* document and hand back the header
@@ -53,7 +57,7 @@ pub fn export_ambre_plaintext(
 pub fn import_ambre_plaintext(
     data: &ambre_core::PlaintextContainer,
 ) -> Result<AmbreHeader, DocFileError> {
-    read_ambre_plaintext_as(DocType::Trame, data.as_bytes())
+    read_ambre_plaintext_as(DocType::Trame, data)
 }
 
 impl TrameState {
@@ -209,7 +213,11 @@ mod tests {
 
     #[test]
     fn a_toile_file_is_re_dispatched_not_coerced() {
-        let toile = write_ambre_plaintext(DocType::Toile, doc_id(), b"whatever");
+        let toile = write_ambre_plaintext(
+            DocType::Toile,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+        );
         assert_eq!(
             import_ambre_plaintext(&toile),
             Err(DocFileError::WrongDocType {
@@ -228,7 +236,11 @@ mod tests {
 
     #[test]
     fn a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic() {
-        let bytes = write_ambre_plaintext(DocType::Trame, doc_id(), b"not a loro snapshot");
+        let bytes = write_ambre_plaintext(
+            DocType::Trame,
+            doc_id(),
+            &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+        );
         let mut state = TrameState::new();
         assert_eq!(
             state.import_ambre_plaintext(&bytes).err(),
@@ -259,8 +271,18 @@ mod tests {
                 b[4] = AMBRE_VERSION.as_u8() + 1;
                 b
             },
-            write_ambre_plaintext(DocType::Toile, doc_id(), b"whatever").into_bytes(),
-            write_ambre_plaintext(DocType::Trame, doc_id(), b"not a loro snapshot").into_bytes(),
+            write_ambre_plaintext(
+                DocType::Toile,
+                doc_id(),
+                &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+            )
+            .into_bytes(),
+            write_ambre_plaintext(
+                DocType::Trame,
+                doc_id(),
+                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+            )
+            .into_bytes(),
         ];
         for bytes in cases {
             let before_bytes = bytes.clone();

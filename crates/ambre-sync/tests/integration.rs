@@ -508,7 +508,11 @@ fn full_session_flow_unlock_create_open_close_logout() {
 fn a_sealed_file_round_trips_through_the_service_plane() {
     let (mut state, rx, _mock) = setup(false);
     let doc_id = ambre_core::DocumentId::new();
-    let plaintext = ambre_core::write_ambre_plaintext(DocType::Prose, doc_id, b"body");
+    let plaintext = ambre_core::write_ambre_plaintext(
+        DocType::Prose,
+        doc_id,
+        &ambre_core::SnapshotBytes::new(b"body".to_vec()),
+    );
 
     let seal_id = RequestId::next();
     send_rest(
@@ -527,12 +531,14 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
     // The sealed bytes are a container of the other lineage, and they do not
     // carry the plaintext header the plaintext reader would otherwise find.
     assert!(matches!(
-        ambre_core::classify(&sealed),
+        ambre_core::classify(&ambre_core::PickedContainer::new(sealed.clone())),
         Ok(ambre_core::ContainerKind::Sealed(
             ambre_core::AMBRE_SEALED_VERSION
         ))
     ));
-    assert!(ambre_core::read_ambre_plaintext(&sealed).is_err());
+    // Read as a plaintext container, the same bytes are refused.
+    let misread = ambre_core::PlaintextContainer::new(sealed.clone());
+    assert!(ambre_core::read_ambre_plaintext(&misread).is_err());
 
     let open_id = RequestId::next();
     send_rest(
@@ -549,6 +555,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         RestEvent::DocFileOpened { plaintext: opened } => {
             let opened = opened.to_plaintext();
             assert_eq!(opened, plaintext.as_bytes());
+            let opened = ambre_core::PlaintextContainer::new(opened);
             let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
             assert_eq!(header.doc_type, DocType::Prose);
             assert_eq!(header.document_id, doc_id);
@@ -560,8 +567,11 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
 #[test]
 fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext =
-        ambre_core::write_ambre_plaintext(DocType::Prose, ambre_core::DocumentId::new(), b"body");
+    let plaintext = ambre_core::write_ambre_plaintext(
+        DocType::Prose,
+        ambre_core::DocumentId::new(),
+        &ambre_core::SnapshotBytes::new(b"body".to_vec()),
+    );
 
     let seal_id = RequestId::next();
     send_rest(
@@ -618,8 +628,11 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
 #[test]
 fn opening_a_plaintext_file_fails_without_deriving_a_key() {
     let (mut state, rx, _mock) = setup(false);
-    let plaintext =
-        ambre_core::write_ambre_plaintext(DocType::Prose, ambre_core::DocumentId::new(), b"body");
+    let plaintext = ambre_core::write_ambre_plaintext(
+        DocType::Prose,
+        ambre_core::DocumentId::new(),
+        &ambre_core::SnapshotBytes::new(b"body".to_vec()),
+    );
 
     // The header says plaintext, so the answer comes from the parse. Nothing
     // pays the work factor: an unsealed file is not a guessing attempt.
