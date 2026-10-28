@@ -313,6 +313,26 @@ mod tests {
         }
     }
 
+    /// Each sample keeps the bytes every earlier build sent: its tag, the
+    /// state `1`, then the root or sixteen zeros. A peer on another build
+    /// reads them so.
+    #[test]
+    fn a_sample_keeps_its_bytes() {
+        let root = MessageId::from_bytes([0x42; 16]);
+        let with = |tag: u8, rest: [u8; 16]| {
+            let mut bytes = vec![tag, 1];
+            bytes.extend(rest);
+            bytes
+        };
+        assert_eq!(Sample::Watching.bytes(), with(0x57, [0; 16]));
+        assert_eq!(Sample::Typing.bytes(), with(0x54, [0; 16]));
+        assert_eq!(Sample::TypingIn(root).bytes(), with(0x74, [0x42; 16]));
+        for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
+            let earlier = ambre_core::EphemeralBytes::new(sample.bytes().into_bytes());
+            assert_eq!(Sample::read(&earlier), Some(sample));
+        }
+    }
+
     // --- MURMURE-536 ---
 
     /// A member typing in a thread types there alone: the channel's list

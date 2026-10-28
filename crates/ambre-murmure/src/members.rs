@@ -294,6 +294,15 @@ mod tests {
         assert!(!is_presence_sample(&sample_of(&[0, ONLINE])));
     }
 
+    /// The sample keeps the bytes every earlier build sent: the tag `0x50`,
+    /// then the state `1`. A peer on another build reads it so.
+    #[test]
+    fn the_sample_keeps_its_bytes() {
+        assert_eq!(presence_sample(), [0x50, 1]);
+        let earlier = ambre_core::EphemeralBytes::new(vec![0x50, 1]);
+        assert!(is_presence_sample(&earlier));
+    }
+
     /// The filter keeps the members whose name holds what the user types,
     /// whatever the case, in the order of the list (`MURMURE-453`).
     #[test]

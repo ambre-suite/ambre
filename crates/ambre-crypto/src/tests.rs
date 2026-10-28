@@ -908,3 +908,42 @@ fn the_dev_seed_keeps_its_bytes() {
             .verifying_key()
     );
 }
+
+#[test]
+fn an_old_passphrase_derives_the_key_it_always_did() {
+    // Pinned against the Argon2id v1 parameters before they took a type. A
+    // cost that moved by one byte would lock every account out, and every
+    // sealed file.
+    let user = passphrase::derive_user_key(
+        &pass("correct horse"),
+        &MasterKeySalt::from_array([0xAB; 32]),
+    )
+    .unwrap();
+    assert_eq!(
+        user.as_bytes().to_vec(),
+        golden("2d10bdb7ee0406ce92f33836f189f2527051e4ccd9666dec855d4dfa3bcebdfd")
+    );
+    let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
+        .unwrap();
+    assert_eq!(
+        file.as_bytes().to_vec(),
+        golden("3aa4da2953c8cdf77f2c64d721d4926ec230466b9bf2e9bd670d8ac793ce5ebe")
+    );
+}
+
+#[test]
+fn a_row_the_old_code_sealed_still_opens() {
+    // A row sealed by the build that wrote `RowLayout::V1` as a bare byte:
+    // the layout byte, the nonce, then the ciphertext. A store a user holds
+    // today keeps rows of this shape, so every later build opens them.
+    let row = golden(
+        "01a11182bb03cf28fbbeb25b10c25f4d53019867ee3101ff1ca1d3e4b463358f16a8df15edbd570d3cfd0c5ac5fdcb",
+    );
+    let key = fixed_seed().derive_store_key();
+    assert_eq!(
+        aead::open_row(&row, &Aad::of(b"doc:0a"), &key)
+            .unwrap()
+            .to_plaintext(),
+        b"a copy"
+    );
+}

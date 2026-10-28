@@ -584,6 +584,29 @@ mod tests {
             .collect()
     }
 
+    /// A copy keeps the bytes every earlier build wrote: the magic `APR1`,
+    /// then the blocks. A payload an earlier build put on the clipboard
+    /// pastes, and one this build writes reads the same there.
+    #[test]
+    fn a_payload_keeps_its_bytes() {
+        let payload = Payload {
+            magic: MAGIC,
+            blocks: vec![ClipBlock {
+                kind: ClipKind::Paragraph,
+                runs: vec![run("b", text(""))],
+            }],
+        };
+        let earlier = [
+            0x41, 0x50, 0x52, 0x31, 0x01, 0x00, 0x01, 0x01, 0x78, 0x01, 0x01, 0x62, 0x03, 0x00,
+        ];
+        let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
+        assert_eq!(bytes, earlier);
+        assert_eq!(
+            postcard::from_bytes::<Payload>(&earlier).ok(),
+            Some(payload)
+        );
+    }
+
     /// `PROSE-UI-234`: a crafted payload writes only the formatting marks a
     /// typed mark may carry. A colour, a size or a flag value the grammar
     /// refuses is dropped, and so is an anchor and a value of no mark shape.

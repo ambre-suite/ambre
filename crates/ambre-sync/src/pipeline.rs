@@ -1422,4 +1422,31 @@ mod tests {
         );
         assert!(open_object(&sealed, &name_aad(DocumentId::new()), &doc_key).is_err());
     }
+
+    /// A name the build before the typed layout sealed: `layout || key id ||
+    /// author key || signature || commitment tag || nonce || ciphertext`. The
+    /// relay keeps such objects across releases, so each later build reads its
+    /// header and opens it.
+    #[test]
+    fn an_object_the_old_code_sealed_still_reads_and_opens() {
+        let (doc_key, _, author) = keys();
+        let id = DocumentId::from_bytes([7; 16]);
+        let sealed = hex::decode(
+            "01b6e14f706ce523ebafb9bf6eb3cbeb9a9baf2dea5ae773139d2499db2dd2ac\
+             92bbc3240f24e943973cea139eed5162b6778951fb570716916c42c0cc88465a\
+             9fb25cc10cb41b75948d220a81172bfa6d9eca4481d7f078f020364a7ddc484e\
+             50398b47023371369177cfd328459f5c04cba8ec92312677c2ca9f706c4e2d52\
+             f91e2d47354e6d833e7b12136c92d10e4f4d3856b7f787bb2da2d508f26c3c4d\
+             8876ffa08bc6b42302ca3d36b85c61954f077ce20d9469edff91c361d3b358d5\
+             720a7c78",
+        )
+        .unwrap();
+        assert_eq!(sealed.first(), Some(&1));
+        assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
+        assert_eq!(object_author(&sealed).unwrap(), author);
+        assert_eq!(
+            open_object(&sealed, &name_aad(id), &doc_key).unwrap(),
+            b"Budget 2027"
+        );
+    }
 }
