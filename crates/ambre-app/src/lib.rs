@@ -98,8 +98,8 @@ const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
 /// Sync events held past a full channel. At the high mark, four channels'
 /// worth, the worker stops reading the relay. At the low mark, one channel's
 /// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
-/// The build refuses a pair whose low mark is not below the high one: the
-/// match runs at compile time, so its refusal is a build error.
+/// The match runs at compile time. A low mark that is not below the high one
+/// is thus a build error.
 const SYNC_INBOX_MARKS: Marks = match Marks::new(4 * CHANNEL_CAPACITY.get(), CHANNEL_CAPACITY.get())
 {
     Some(marks) => marks,
