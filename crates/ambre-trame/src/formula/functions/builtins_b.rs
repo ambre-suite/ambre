@@ -456,28 +456,21 @@ pub(crate) fn date(args: &[CellValue]) -> CellValue {
         _ => return CellValue::Error(FormulaError::TypeError),
     };
     let year = if (0..1900).contains(&y) { y + 1900 } else { y };
-    // Normalize month overflow/underflow into the year (Excel allows it).
-    let year = year + (m - 1).div_euclid(12);
-    let month = (m - 1).rem_euclid(12) + 1;
-    let serial = CivilDate {
-        year,
-        month,
-        day: d,
-    }
-    .serial();
+    // A month past either end of the year carries into it (Excel allows it).
+    let serial = CivilDate::of_months(Year::new(year), m - 1, DayOfMonth::new(d)).serial();
     CellValue::Number(serial.get() as f64)
 }
 
 pub(crate) fn year(args: &[CellValue]) -> CellValue {
-    date_part(args, |date| date.year)
+    date_part(args, |date| date.year.get())
 }
 
 pub(crate) fn month(args: &[CellValue]) -> CellValue {
-    date_part(args, |date| date.month)
+    date_part(args, |date| date.month.get())
 }
 
 pub(crate) fn day(args: &[CellValue]) -> CellValue {
-    date_part(args, |date| date.day)
+    date_part(args, |date| date.day.get())
 }
 
 pub(crate) fn date_part(args: &[CellValue], pick: fn(CivilDate) -> i64) -> CellValue {

@@ -50,6 +50,7 @@ pub(crate) fn format_date(serial: DateSerial) -> String {
         month: m,
         day: d,
     } = serial.day().civil();
+    let (y, m, d) = (y.get(), m.get(), d.get());
     format!("{y:04}-{m:02}-{d:02}")
 }
 
@@ -390,6 +391,7 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
         month: mo,
         day: d,
     } = serial.day().civil();
+    let (y, mo, d) = (y.get(), mo.get(), d.get());
     let TimeOfDay {
         hours: h,
         minutes: mi,

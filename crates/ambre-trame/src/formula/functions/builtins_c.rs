@@ -630,20 +630,23 @@ pub(crate) fn weekday(args: &[CellValue]) -> CellValue {
 }
 
 /// Number of days in the month of `date`.
-pub(crate) fn days_in_month(date: CivilDate) -> i64 {
-    let first = CivilDate { day: 1, ..date };
+pub(crate) fn days_in_month(date: CivilDate) -> DayCount {
+    let first = CivilDate {
+        day: DayOfMonth::new(1),
+        ..date
+    };
     first.next_month_start().serial().days_since(first.serial())
+}
+
+/// The last day of the month of `date`.
+fn last_day(date: CivilDate) -> DayOfMonth {
+    DayOfMonth::new(days_in_month(date).get())
 }
 
 /// Shift the month of `date` by `months`, normalizing into a valid month. The
 /// day is kept as it stands.
 pub(crate) fn shift_month(date: CivilDate, months: i64) -> CivilDate {
-    let total = (date.month - 1) + months;
-    CivilDate {
-        year: date.year + total.div_euclid(12),
-        month: total.rem_euclid(12) + 1,
-        day: date.day,
-    }
+    CivilDate::of_months(date.year, date.month.get() - 1 + months, date.day)
 }
 
 /// EDATE(start, months) -- same day-of-month `months` away (clamped to the
@@ -657,7 +660,7 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
         _ => return CellValue::Error(FormulaError::TypeError),
     };
     let shifted = shift_month(DaySerial::new(serial).civil(), months);
-    let day = shifted.day.min(days_in_month(shifted));
+    let day = shifted.day.min(last_day(shifted));
     CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
 }
 
@@ -671,6 +674,6 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
         _ => return CellValue::Error(FormulaError::TypeError),
     };
     let shifted = shift_month(DaySerial::new(serial).civil(), months);
-    let day = days_in_month(shifted);
+    let day = last_day(shifted);
     CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
 }

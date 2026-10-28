@@ -30,8 +30,8 @@ impl DaySerial {
     }
 
     /// The days from `earlier` to `self`.
-    pub const fn days_since(self, earlier: Self) -> i64 {
-        self.0 - earlier.0
+    pub const fn days_since(self, earlier: Self) -> DayCount {
+        DayCount(self.0 - earlier.0)
     }
 
     /// The proleptic-Gregorian date of this day. The inverse of
@@ -47,10 +47,83 @@ impl DaySerial {
         let day = doy - (153 * mp + 2) / 5 + 1;
         let month = if mp < 10 { mp + 3 } else { mp - 9 };
         CivilDate {
-            year: if month <= 2 { y + 1 } else { y },
-            month,
-            day,
+            year: Year(if month <= 2 { y + 1 } else { y }),
+            month: Month(month),
+            day: DayOfMonth(day),
         }
+    }
+}
+
+/// A signed number of days between two dates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DayCount(i64);
+
+impl DayCount {
+    /// A count of `days`, negative when the later date comes first.
+    pub const fn new(days: i64) -> Self {
+        Self(days)
+    }
+
+    /// The count itself.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// A proleptic-Gregorian year. Year 0 is 1 BC, and any year reads as one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Year(i64);
+
+impl Year {
+    /// The year `year`.
+    pub const fn new(year: i64) -> Self {
+        Self(year)
+    }
+
+    /// The year itself.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// A month of the year, from 1 for January to 12 for December.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Month(i64);
+
+impl Month {
+    /// The month numbered `month`, `None` outside 1 to 12. A count of months
+    /// past either end of a year is [`CivilDate::of_months`].
+    pub const fn new(month: i64) -> Option<Self> {
+        if matches!(month, 1..=12) {
+            Some(Self(month))
+        } else {
+            None
+        }
+    }
+
+    /// The month's number, from 1 to 12.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// A day of a month, counted from 1 on the first.
+///
+/// It may run past either end of its month. [`CivilDate::serial`] counts it
+/// on from the first, so day 0 is the last day of the month before, as `DATE`
+/// reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DayOfMonth(i64);
+
+impl DayOfMonth {
+    /// The day `day` of a month.
+    pub const fn new(day: i64) -> Self {
+        Self(day)
+    }
+
+    /// The day's number.
+    pub const fn get(self) -> i64 {
+        self.0
     }
 }
 
@@ -90,21 +163,31 @@ impl DateSerial {
 
 /// A proleptic-Gregorian date by its year, its month and its day.
 ///
-/// The month runs from 1 to 12 in a date [`DaySerial::civil`] gives. The day
-/// may run past either end of its month, and [`CivilDate::serial`] counts it
-/// on from the first. Day 0 is then the last day of the month before, as
-/// `DATE` reads it.
+/// The month always runs from 1 to 12. The day may run past either end of
+/// its month, and [`CivilDate::serial`] counts it on from the first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CivilDate {
-    pub year: i64,
-    pub month: i64,
-    pub day: i64,
+    pub year: Year,
+    pub month: Month,
+    pub day: DayOfMonth,
 }
 
 impl CivilDate {
+    /// The date `months` months after January of `year`, on `day`. The count
+    /// runs past either end of the year and carries into it, as `DATE` and
+    /// `EDATE` read a month out of range. Twelve months after January 2024
+    /// is January 2025.
+    pub const fn of_months(year: Year, months: i64, day: DayOfMonth) -> Self {
+        Self {
+            year: Year(year.0 + months.div_euclid(12)),
+            month: Month(months.rem_euclid(12) + 1),
+            day,
+        }
+    }
+
     /// The day this date names, after Howard Hinnant's `days_from_civil`.
     pub const fn serial(self) -> DaySerial {
-        let Self { year, month, day } = self;
+        let (year, month, day) = (self.year.0, self.month.0, self.day.0);
         let yy = year - if month <= 2 { 1 } else { 0 };
         let era = if yy >= 0 { yy } else { yy - 399 } / 400;
         let yoe = yy - era * 400;
@@ -116,19 +199,7 @@ impl CivilDate {
 
     /// The first day of the month after this date's month.
     pub const fn next_month_start(self) -> Self {
-        if self.month >= 12 {
-            Self {
-                year: self.year + 1,
-                month: 1,
-                day: 1,
-            }
-        } else {
-            Self {
-                year: self.year,
-                month: self.month + 1,
-                day: 1,
-            }
-        }
+        Self::of_months(self.year, self.month.0, DayOfMonth(1))
     }
 }
 
@@ -137,7 +208,7 @@ mod tests {
     use super::*;
 
     const fn date(year: i64, month: i64, day: i64) -> CivilDate {
-        CivilDate { year, month, day }
+        CivilDate::of_months(Year(year), month - 1, DayOfMonth(day))
     }
 
     #[test]
@@ -159,6 +230,26 @@ mod tests {
     fn the_next_month_of_december_opens_the_next_year() {
         assert_eq!(date(2024, 12, 31).next_month_start(), date(2025, 1, 1));
         assert_eq!(date(2024, 2, 10).next_month_start(), date(2024, 3, 1));
+    }
+
+    /// A month is numbered 1 to 12, and a count of months past either end
+    /// of a year carries into the year.
+    #[test]
+    fn a_month_runs_from_one_to_twelve_and_a_count_carries_into_the_year() {
+        for refused in [0, 13, -1] {
+            assert_eq!(Month::new(refused), None, "{refused}");
+        }
+        assert_eq!(Month::new(12).map(Month::get), Some(12));
+        let carried = CivilDate::of_months(Year::new(2024), 12, DayOfMonth::new(5));
+        assert_eq!((carried.year.get(), carried.month.get()), (2025, 1));
+        let back = CivilDate::of_months(Year::new(2024), -1, DayOfMonth::new(5));
+        assert_eq!((back.year.get(), back.month.get()), (2023, 12));
+        assert_eq!(
+            date(2024, 3, 1)
+                .serial()
+                .days_since(date(2024, 2, 1).serial()),
+            DayCount::new(29)
+        );
     }
 
     #[test]
