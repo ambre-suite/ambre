@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-060` | `OBS` | An entry's page number MUST be the page its heading starts on in the layout being drawn. | this spec section 3 | `ambre_prose::logic::derived::tests::an_entry_reads_the_page_its_heading_starts_on` | none | verified |
 | `PROSE-FEAT-113` | `INV` | The document MUST hold no entry: the block carries the deepest level it shows and whether it numbers them, and nothing else. | this spec section 3; this spec section 5 | `ambre_prose::logic::derived::tests::the_block_holds_its_two_settings_and_no_entry` | none | verified |
 | `PROSE-FEAT-061` | `OBS` | A heading deeper than the configured level MUST NOT appear in the table of contents. | this spec section 3 | `ambre_prose::logic::derived::tests::a_heading_deeper_than_the_depth_is_left_out` | none | verified |
-| `PROSE-FEAT-062` | `OBS` | A section number MUST appear in front of an entry only while the table of contents is configured as numbered. | this spec section 3 | `ambre_prose::logic::derived::tests::a_section_number_shows_only_while_numbered` | none | verified |
+| `PROSE-FEAT-062` | `OBS` | A heading number MUST appear in front of an entry only while the table of contents is configured as numbered. | this spec section 3 | `ambre_prose::logic::derived::tests::a_heading_number_shows_only_while_numbered` | none | verified |
 | `PROSE-FEAT-114` | `CONC` | Two peers whose settings have converged MUST list the same entries, at the same depth, numbered the same way. | this spec section 2; this spec section 5 | `ambre_prose::logic::derived::tests::two_converged_peers_list_the_same_entries` | none | verified |
 
 ### 1.2 Insert a table of contents
@@ -70,7 +70,7 @@ Two peers over one outline. The last column names the test that plays the row, u
 | edits a heading's text | -- | the new text, in the heading alone | the entry reading the new text, on both screens | `the_entries_are_the_headings_in_order_reading_their_own_text` |
 | types a page of text before a heading | -- | the text | the entry's page number one higher, on both screens | `an_entry_reads_the_page_its_heading_starts_on` |
 | lowers the configured level | raises it at the same moment | one setting, the later of the two | the same depth of entries on both screens | `two_converged_peers_list_the_same_entries` |
-| turns numbering on | -- | the setting | a section number in front of every entry, on both screens | `a_section_number_shows_only_while_numbered` |
+| turns numbering on | -- | the setting | a heading number in front of every entry, on both screens | `a_heading_number_shows_only_while_numbered` |
 | deletes the last heading of a level | -- | one heading fewer | that entry gone, and every following number shifted | `the_entries_are_the_headings_in_order_reading_their_own_text` |
 
 ---
@@ -92,7 +92,7 @@ pub struct TocEntry {
     pub level:          HeadingLevel,
     pub text:           String,
     /// Present only when the block is configured as numbered (`PROSE-FEAT-062`).
-    pub section_number: Option<HeadingNumber>,
+    pub heading_number: Option<HeadingNumber>,
     /// The page number the heading starts on, read from the layout (`PROSE-FEAT-060`).
     /// `None` while the layout places no block that holds the heading.
     pub page:           Option<PageNumber>,
@@ -116,7 +116,7 @@ pub enum TocNumbering { #[default] Plain, Numbered }
    heading inside a table cell is kept, and takes the page its table starts on.
 3. read each kept heading's text from its own body, and its start page from the layout
    (`PROSE-FEAT-060`).
-4. when the block is numbered, prefix the section number the headings feature derives
+4. when the block is numbered, prefix the heading number the headings feature derives
    (`features/ambre-spec-prose-headings.md`, `PROSE-FEAT-030`); otherwise leave it out
    (`PROSE-FEAT-062`).
 
@@ -154,7 +154,7 @@ changing the heading it reads.
 |---|---|
 | the slash command, or the insert menu | a table of contents at the caret |
 | the level control of its own menu | shows fewer or more levels |
-| the numbering switch | shows or hides the section numbers |
+| the numbering switch | shows or hides the heading numbers |
 | a click on an entry | moves the view to that heading |
 
 An entry is a link when the document is exported to PDF, and the link resolves to the heading

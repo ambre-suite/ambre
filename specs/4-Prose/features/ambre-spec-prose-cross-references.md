@@ -22,8 +22,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-072` | `INV` | A reference's stored value MUST be a record whose parts are delimited by their length; it MUST NOT be a string split on a separator. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::xref::tests::a_value_is_a_length_prefixed_record_and_never_a_joined_string` | none | verified |
 | `PROSE-FEAT-128` | `IO` | A reference read back MUST carry the label the author typed, whatever characters it holds. | this spec section 3; this spec section 5 | `ambre_prose::xref::tests::a_label_holding_any_character_reads_back_whole` | none | verified |
 | `PROSE-FEAT-129` | `INV` | The value a reference is drawn as MUST NOT be stored in the document. | this spec section 3; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_page_reference_follows_its_target_to_a_later_page` | none | verified |
-| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_page_reference_follows_its_target_to_a_later_page`; `::a_reference_shows_the_section_number_and_the_page_of_its_target` | none | verified |
-| `PROSE-FEAT-131` | `OBS` | A reference to a section MUST show the section number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | `ambre_prose::logic::xrefs::tests::a_reference_shows_the_section_number_and_the_page_of_its_target` | none | verified |
+| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_page_reference_follows_its_target_to_a_later_page`; `::a_reference_shows_the_heading_number_and_the_page_of_its_target` | none | verified |
+| `PROSE-FEAT-131` | `OBS` | A reference to a heading MUST show the heading number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | `ambre_prose::logic::xrefs::tests::a_reference_shows_the_heading_number_and_the_page_of_its_target` | none | verified |
 | `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
 | `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
 | `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | `ambre_prose::logic::xrefs::tests::following_a_reference_reveals_its_target_and_writes_nothing` | none | verified |
 
 * **Budget.** none of its own: a reference is resolved with the page it is drawn on, from the
-  layout and the section numbers the headings derive. Both figures are rows of
+  layout and the heading numbers the headings derive. Both figures are rows of
   `ambre-spec-budgets.md section 1`, owned by pagination and by the headings.
 * **Boundary.** none of its own: a reference is a mark on the text, and `ZK-001` seals every
   payload before it leaves the client.
@@ -63,9 +63,9 @@ rests on where none does.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| refers to a heading further down | -- | the reference and the heading's identity | the heading's page number, on both screens | `a_reference_shows_the_section_number_and_the_page_of_its_target` |
+| refers to a heading further down | -- | the reference and the heading's identity | the heading's page number, on both screens | `a_reference_shows_the_heading_number_and_the_page_of_its_target` |
 | types a page of text above the target | -- | the text | the reference's page number one higher, on both screens | `a_page_reference_follows_its_target_to_a_later_page` |
-| moves the target heading to another chapter | -- | the same identity, in a new place | the reference showing the new page, on both screens | `a_reference_shows_the_section_number_and_the_page_of_its_target` |
+| moves the target heading to another chapter | -- | the same identity, in a new place | the reference showing the new page, on both screens | `a_reference_shows_the_heading_number_and_the_page_of_its_target` |
 | deletes the target | -- | the reference, with nothing to resolve | a broken reference on both screens, not a neighbour's number | `a_gone_target_breaks_the_reference_and_the_reference_stays` |
 | undoes that deletion | -- | the target again | the reference resolving again, on both screens | `a_target_an_undo_restores_resolves_again_on_the_other_peer` |
 | refers to a heading with a label of her own containing a colon | -- | the label, whole | the label as she typed it, on both screens | `a_label_holding_any_character_reads_back_whole` |
@@ -101,8 +101,8 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)>;
 pub enum CrossRefKind {
     /// The page the target starts on.
     PageNumber,
-    /// The target heading's derived section number.
-    SectionNumber,
+    /// The derived number of the target heading.
+    HeadingNumber,
     /// A label the author wrote. It may hold any character, because the record
     /// carries its length rather than a separator.
     CustomText(String),
@@ -150,7 +150,7 @@ the view as `CrossRefsUpdated`, after an insert and at each pause in typing.
 | Trigger | Behaviour |
 |---|---|
 | the cross-reference entry of the insert menu | a picker of the document's headings, then a reference at the caret |
-| the kind control of the picker | a page number, a section number, or a label to type |
+| the kind control of the picker | a page number, a heading number, or a label to type |
 | a click on a reference | moves the view to its target (`PROSE-UI-085`), and writes nothing (`PROSE-UI-086`) |
 | a broken reference | drawn as a neutral broken mark, or as its own label |
 | deleting the character | removes the reference |
@@ -166,7 +166,7 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
 | :--- | :--- | :--- |
 | The target is named by its identity | naming the target by its text | it breaks the moment the heading is reworded, and matches the wrong heading when two read alike. A block's identity survives a move, an indent and a regroup, and nothing else in the document has that property (`PROSE-FEAT-073`) |
 | The value is a length-prefixed record | joining the target and the kind with a separator | a label is free text and may contain that separator, so the parse splits in the wrong place. Length-prefixing makes the parse independent of the content, so no label can be misread (`PROSE-FEAT-072`) |
-| The displayed value is resolved when the page is drawn | storing the resolved number in the mark | it is wrong one keystroke later and races between two peers. A page number and a section number are facts about a layout and an outline, both of which change on edits far from the reference, so resolving late keeps it out of the merge path |
+| The displayed value is resolved when the page is drawn | storing the resolved number in the mark | it is wrong one keystroke later and races between two peers. A page number and a heading number are facts about a layout and an outline, both of which change on edits far from the reference, so resolving late keeps it out of the merge path |
 | A broken reference is kept, not removed | deleting the mark when the target dies | it loses the author's pointer permanently on a remote peer's edit. The deletion may be a mistake, a concurrent edit or an undo away from being reversed, and keeping the reference makes the repair automatic (`PROSE-FEAT-074`) |
 | A broken reference never resolves to a neighbour | resolving to the nearest surviving block | it produces a reference that is confidently wrong. A neighbour is a different block, and a reference silently pointing somewhere else is worse than one visibly broken, because the reader has no way to know it moved (`PROSE-FEAT-014`) |
 | A label survives its target | showing the broken mark for every kind | it throws away a label the reference is carrying. The label is the reference's own text, so nothing about it depends on the target existing (`PROSE-UI-048`) |
@@ -179,7 +179,7 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
 * **Nothing rules on what a reference may target.** The picker above offers the headings. The
   stored value names any block, so a reference to a table, a picture or a paragraph is
   representable and undecided.
-* **A reference to a numbered item shows no label of its own.** A page number and a section number
+* **A reference to a numbered item shows no label of its own.** A page number and a heading number
   resolve to a bare figure. Nothing says whether "see" or "page" is drawn with it or typed by
   the author.
 * **The import path drops what this document keeps.** `features/ambre-spec-prose-engine.md section 3`

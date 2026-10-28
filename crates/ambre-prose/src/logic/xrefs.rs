@@ -140,7 +140,7 @@ mod tests {
         let (mut state, ids) = document();
         let heading_text = state.text_of(&ids[2]);
         let heading_marks = doc::get_block_text(state.document(), &tree_id(ids[2])).to_delta();
-        refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);
+        refer(&mut state, ids[1], ids[2], CrossRefKind::HeadingNumber);
         let anchors = doc::anchors(state.document(), crate::mark::MarkRoot::CrossRef);
         assert_eq!(anchors.len(), 1);
         let (named, _) = xref::decode(&anchors[0].value).expect("a record");
@@ -159,9 +159,9 @@ mod tests {
     }
 
     #[test]
-    fn a_reference_shows_the_section_number_and_the_page_of_its_target() {
+    fn a_reference_shows_the_heading_number_and_the_page_of_its_target() {
         let (mut state, ids) = document();
-        refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);
+        refer(&mut state, ids[1], ids[2], CrossRefKind::HeadingNumber);
         refer(&mut state, ids[1], ids[0], CrossRefKind::PageNumber);
         assert_eq!(
             shown(&mut state),
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn a_target_an_undo_restores_resolves_again_on_the_other_peer() {
         let (mut alice, ids) = document();
-        refer(&mut alice, ids[1], ids[2], CrossRefKind::SectionNumber);
+        refer(&mut alice, ids[1], ids[2], CrossRefKind::HeadingNumber);
         let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document");
         bob.load_faces(&crate::layout::fonts::shipped_faces());
         bob.import_snapshot(&alice.export_snapshot())
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn a_gone_target_breaks_the_reference_and_the_reference_stays() {
         let (mut state, ids) = document();
-        refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);
+        refer(&mut state, ids[1], ids[2], CrossRefKind::HeadingNumber);
         refer(
             &mut state,
             ids[1],
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn the_resolved_list_names_where_each_reference_sits() {
         let (mut state, ids) = document();
-        refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);
+        refer(&mut state, ids[1], ids[2], CrossRefKind::HeadingNumber);
         let _ = state.paginate(&[]);
         assert_eq!(
             state.cross_refs_event(),

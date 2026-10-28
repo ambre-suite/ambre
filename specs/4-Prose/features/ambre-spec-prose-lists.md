@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-145` | `POST` | Outdenting a nested item MUST make it a child of its grandparent, placed after the subtree of its former parent. | this spec section 3 | `ambre_prose::logic::lists::tests::an_outdented_item_rises_after_the_subtree_it_leaves` | none | verified |
 | `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | `ambre_prose::logic::lists::tests::an_outdented_item_rises_after_the_subtree_it_leaves`; `ambre_prose::logic::lists::tests::outdenting_a_top_level_item_leaves_the_list` -- the item left behind keeps its marker | none | verified |
 
-* **Budget.** the ordinal and the section numbering, one row of
+* **Budget.** the ordinal and the heading numbering, one row of
   `ambre-spec-budgets.md section 1`. Both are read-time walks over the block tree, and
   pagination pays for them once per layout.
 * **Boundary.** none of its own: a list item is a block like any other, and `ZK-001` seals every
@@ -145,7 +145,7 @@ ordinary paragraph and loses its style (`PROSE-FEAT-027`). That is the gesture b
 leaves a list from the keyboard.
 
 **Code:** `crates/ambre-prose/src/logic/lists.rs` for the three gestures, and
-`crates/ambre-prose/src/numbering.rs` for the ordinal and the depth, beside the section numbering
+`crates/ambre-prose/src/numbering.rs` for the ordinal and the depth, beside the heading numbering
 that reads the same tree.
 
 ---

@@ -1232,8 +1232,8 @@ pub struct Suggestion {
 pub enum CrossRefKind {
     /// The page the target starts on.
     PageNumber,
-    /// The target heading's derived section number.
-    SectionNumber,
+    /// The derived number of the target heading.
+    HeadingNumber,
     /// A label the author wrote, whatever characters it holds.
     CustomText(String),
 }
@@ -1253,9 +1253,6 @@ pub struct ResolvedCrossRef {
 /// The number drawn in front of a heading, one counter per level from the
 /// first (`PROSE-FEAT-030`). The first second-level heading under the second
 /// first-level one is `2.1`. It is derived, stored nowhere, and never empty.
-///
-/// The name is not `SectionNumber`, which [`CrossRefKind`] already spends on
-/// the variant that shows one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadingNumber(Vec<u32>);
 
@@ -1295,7 +1292,7 @@ pub struct TocEntry {
     pub text: String,
     /// Present only while the block is configured as numbered
     /// (`PROSE-FEAT-062`).
-    pub section_number: Option<HeadingNumber>,
+    pub heading_number: Option<HeadingNumber>,
     /// The page the heading starts on (`PROSE-FEAT-060`). `None` while the
     /// layout places no block that holds the heading.
     pub page: Option<PageNumber>,
@@ -1310,14 +1307,14 @@ pub struct TableOfContents {
     pub numbered: TocNumbering,
 }
 
-/// Whether a table of contents prints each heading's section number
+/// Whether a table of contents prints the number of each heading
 /// (`PROSE-FEAT-062`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TocNumbering {
-    /// The entries show no section number.
+    /// The entries show no heading number.
     #[default]
     Plain,
-    /// Each entry shows its heading's section number.
+    /// Each entry shows the number of its heading.
     Numbered,
 }
 

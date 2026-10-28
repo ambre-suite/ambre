@@ -549,7 +549,7 @@ snapshot carries no header and is sealed by the Sync worker, and the file is not
 |---|---|
 | a custom style Word has no name for | falls back to the normal style, and warns (`PROSE-IO-006`) |
 | a background colour outside the eight | approximated, and warned |
-| the automatic section numbering | not written: Word numbers through its own fields, and the writer warns |
+| the automatic heading numbering | not written: Word numbers through its own fields, and the writer warns |
 | a picture in a metafile or a tag image format | skipped and warned: neither decodes in the client |
 | a Word checkbox control | read as a to-do item when it is recognisable, warned when it is not |
 | a picture inside a cell | lifted beside the table, and the lift is reported (`PROSE-IO-026`) |

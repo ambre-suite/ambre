@@ -21,7 +21,7 @@ use crate::numbering;
 /// The entries one table of contents lists (`PROSE-FEAT-003`).
 ///
 /// Every heading no deeper than the block's depth, in document order, reading
-/// its own text (`PROSE-FEAT-061`). The section number is present only while
+/// its own text (`PROSE-FEAT-061`). The heading number is present only while
 /// the block is numbered (`PROSE-FEAT-062`). `pages` maps a heading to the page
 /// it starts on. A heading it does not name shows no page.
 /// `None` when `toc` names no live table of contents.
@@ -36,7 +36,7 @@ pub fn build(
         max_level,
         numbered,
     } = doc::toc_settings(tree, toc)?;
-    let entries = numbering::section_numbers(tree)
+    let entries = numbering::heading_numbers(tree)
         .into_iter()
         .filter_map(|(heading, number)| {
             let level = doc::heading_level_of(tree, &heading)?.clamped();
@@ -44,7 +44,7 @@ pub fn build(
                 block_id: block_id(heading),
                 level,
                 text: doc::get_block_text(document, &heading).to_string(),
-                section_number: numbered.is_numbered().then_some(number),
+                heading_number: numbered.is_numbered().then_some(number),
                 page: pages.get(&heading).copied(),
             })
         })
@@ -67,7 +67,7 @@ pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID,
         .map(|block| (block.block_id, block.page_start.number()))
         .collect();
     let mut pages = HashMap::new();
-    for (heading, _) in numbering::section_numbers(tree) {
+    for (heading, _) in numbering::heading_numbers(tree) {
         let mut current = heading;
         loop {
             if let Some(page) = placed.get(&current) {
@@ -84,7 +84,7 @@ pub fn heading_pages(tree: &LoroTree, blocks: &[BlockLayout]) -> HashMap<TreeID,
 }
 
 /// The text a table of contents is measured on: one line per entry, the
-/// section number, the heading's text and the page.
+/// heading number, the heading's text and the page.
 ///
 /// It is what the block paints, so its height is the block's height. And a
 /// page number that grows a digit may wrap a line (`PROSE-019`).
@@ -95,7 +95,7 @@ pub fn lines(toc: &TableOfContents) -> String {
         if index > 0 {
             out.push('\n');
         }
-        if let Some(number) = &entry.section_number {
+        if let Some(number) = &entry.heading_number {
             out.push_str(&number.to_string());
             out.push(' ');
         }

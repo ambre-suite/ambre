@@ -11,8 +11,8 @@
 //! (`features/ambre-spec-prose-lists.md section 3`). It is read the same way
 //! and stored just as little (`PROSE-FEAT-002`).
 //!
-//! [`section_numbers`] is the shape a reader of the whole document wants: one
-//! walk, every heading. [`compute_section_number`] answers for one heading and
+//! [`heading_numbers`] is the shape a reader of the whole document wants: one
+//! walk, every heading. [`compute_heading_number`] answers for one heading and
 //! stops there, so neither form turns a numbering pass into a walk per heading.
 
 use loro::{LoroTree, TreeID};
@@ -62,7 +62,7 @@ impl Counters {
 /// for (`ambre-spec-budgets.md section 1`). A document with no heading answers
 /// an empty vector.
 #[must_use]
-pub fn section_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
+pub fn heading_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
     let mut counters = Counters::new();
     let mut out = Vec::new();
     walk(tree, &mut |tree, id| {
@@ -80,10 +80,10 @@ pub fn section_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
 /// heading (`PROSE-FEAT-030`).
 ///
 /// The walk stops at the heading rather than numbering the rest of the
-/// document. Numbering every heading is [`section_numbers`], which costs one
+/// document. Numbering every heading is [`heading_numbers`], which costs one
 /// walk for all of them.
 #[must_use]
-pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber> {
+pub fn compute_heading_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber> {
     let mut counters = Counters::new();
     let mut found = None;
     walk(tree, &mut |tree, id| {
@@ -225,7 +225,7 @@ mod tests {
 
     /// The numbers of the document, in document order.
     fn numbers(state: &ProseState) -> Vec<Vec<u32>> {
-        section_numbers(&doc::blocks(state.document()))
+        heading_numbers(&doc::blocks(state.document()))
             .into_iter()
             .map(|(_, number)| number.parts().to_vec())
             .collect()
@@ -315,7 +315,7 @@ mod tests {
         }
         let before = state.document().get_deep_value();
         let _ = numbers(&state);
-        let _ = compute_section_number(
+        let _ = compute_heading_number(
             &doc::blocks(state.document()),
             &crate::events::tree_id(state.root_blocks()[1]),
         );
@@ -331,8 +331,8 @@ mod tests {
             heading(&mut state, level);
         }
         let tree = doc::blocks(state.document());
-        for (id, number) in section_numbers(&tree) {
-            assert_eq!(compute_section_number(&tree, &id), Some(number));
+        for (id, number) in heading_numbers(&tree) {
+            assert_eq!(compute_heading_number(&tree, &id), Some(number));
         }
     }
 
@@ -344,8 +344,8 @@ mod tests {
         heading(&mut state, 1);
         let tree = doc::blocks(state.document());
         assert!(
-            compute_section_number(&tree, &crate::events::tree_id(paragraph)).is_none(),
-            "a paragraph carries no section number"
+            compute_heading_number(&tree, &crate::events::tree_id(paragraph)).is_none(),
+            "a paragraph carries no heading number"
         );
     }
 

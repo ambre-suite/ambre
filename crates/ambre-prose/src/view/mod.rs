@@ -649,7 +649,7 @@ pub(crate) mod tests {
             block_id: block_id(far.block_id),
             level: crate::events::HeadingLevel::H1,
             text: String::new(),
-            section_number: None,
+            heading_number: None,
             page: Some(far.page_start.number()),
         };
         ui.follow_toc_entry(&entry);

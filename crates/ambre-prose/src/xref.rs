@@ -82,8 +82,8 @@ pub fn resolve(
             .iter()
             .find(|placed| placed.block_id == *target)
             .map(|placed| placed.page_start.number().to_string()),
-        CrossRefKind::SectionNumber => {
-            numbering::compute_section_number(&tree, target).map(|number| number.to_string())
+        CrossRefKind::HeadingNumber => {
+            numbering::compute_heading_number(&tree, target).map(|number| number.to_string())
         }
         CrossRefKind::CustomText(_) => None,
     }
@@ -118,7 +118,7 @@ mod tests {
             let kind = CrossRefKind::CustomText(label.to_owned());
             assert_eq!(decode(&encode(target, &kind)), Some((target, kind)));
         }
-        for kind in [CrossRefKind::PageNumber, CrossRefKind::SectionNumber] {
+        for kind in [CrossRefKind::PageNumber, CrossRefKind::HeadingNumber] {
             assert_eq!(decode(&encode(target, &kind)), Some((target, kind)));
         }
     }

@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn a_section_number_shows_only_while_numbered() {
+    fn a_heading_number_shows_only_while_numbered() {
         let mut state = fresh();
         let toc = insert_toc(&mut state, 6, TocNumbering::Plain);
         heading(&mut state, 1, "One");
@@ -360,7 +360,7 @@ mod tests {
             plain
                 .entries
                 .iter()
-                .all(|entry| entry.section_number.is_none())
+                .all(|entry| entry.heading_number.is_none())
         );
         state.handle_command(ProseCommand::UpdateTocConfig {
             block_id: toc,
@@ -371,7 +371,7 @@ mod tests {
         let numbers: Vec<Option<Vec<u32>>> = numbered
             .entries
             .iter()
-            .map(|entry| entry.section_number.as_ref().map(|n| n.parts().to_vec()))
+            .map(|entry| entry.heading_number.as_ref().map(|n| n.parts().to_vec()))
             .collect();
         assert_eq!(numbers, [Some(vec![1]), Some(vec![1, 1])]);
     }

@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | `ambre_prose::logic::blocks::tests::a_level_makes_a_heading_and_taking_it_away_makes_a_paragraph` -- it drives the gesture both ways and reads the type back | none | verified |
 | `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | `ambre_prose::logic::blocks::tests::setting_a_level_leaves_every_other_block_as_it_was` -- it reads the neighbour text, type and document order back | none | verified |
 
-* **Budget.** the section numbering, shared with the list ordinals in one row of
+* **Budget.** the heading numbering, shared with the list ordinals in one row of
   `ambre-spec-budgets.md section 1`: both walk the block tree once per layout.
 * **Boundary.** none of its own: a heading is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
@@ -67,9 +67,9 @@ that precede the block in document order (`PROSE-FEAT-030`) and stored nowhere
 (`PROSE-FEAT-090`).
 
 ```rust
-/// The section number of a heading, as one counter per level; `None` for a
+/// The number of a heading, as one counter per level; `None` for a
 /// block that is no live heading.
-pub fn compute_section_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber>;
+pub fn compute_heading_number(tree: &LoroTree, heading_id: &TreeID) -> Option<HeadingNumber>;
 
 /// The stored level of a block, when it is a heading. Raw: the numbering reads
 /// `StoredLevel::clamped`, not this (`PROSE-FEAT-029`).

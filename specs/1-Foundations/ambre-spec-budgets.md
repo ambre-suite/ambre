@@ -67,7 +67,7 @@
 | Prose `export_snapshot()`, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose table-of-contents build, 50 headings | < 1 ms | -- | Logic | **none exists**, and no code either |
 | Prose list ordinals, 100 items | < 500 us | -- | Logic | derived at read time, never stored (`PROSE-FEAT-002`) -- **none exists**, and no code either |
-| Prose heading section numbers, 50 headings | < 500 us | -- | Logic | **none exists**, and no code either |
+| Prose heading numbers, 50 headings | < 500 us | -- | Logic | **none exists**, and no code either |
 | Prose track-changes command intercept | < 100 us | -- | Logic | on the path of every mutation while suggesting is on -- **none exists**, and no code either |
 | Prose accept all, 100 suggestions | < 5 ms | -- | Logic | **none exists**, and no code either |
 | Prose find, 100 pages, 10-character query | < 20 ms | -- | Logic | **none exists**, and no code either |
