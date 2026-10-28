@@ -17,6 +17,26 @@ pub const MAX_MENTIONS: usize = 64;
 /// thread root, never content.
 pub const MAX_ANCHOR_LEN: usize = 64;
 
+crate::define_flag! {
+    /// Whether a document saw an update past the reader's cursor, counted or
+    /// not (`RESID-015`).
+    pub enum Activity {
+        /// Nothing happened.
+        Quiet,
+        /// Something happened.
+        Active,
+    }
+
+    /// Whether an update names every member, as an `@channel` does, or only
+    /// the members it lists.
+    pub enum MentionScope {
+        /// Only the members the update lists.
+        Named,
+        /// Every member.
+        All,
+    }
+}
+
 /// What kind of activity an update is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivityKind {
@@ -79,8 +99,8 @@ pub struct ActivitySummary {
     pub kind: ActivityKind,
     /// The members the update names, at most [`MAX_MENTIONS`].
     pub mentions: Vec<UserId>,
-    /// The update names every member, as an `@channel` does.
-    pub mentions_all: bool,
+    /// Whether the update names every member, as an `@channel` does.
+    pub mentions_all: MentionScope,
     /// The application key it points at, such as a thread root.
     pub anchor: Option<ActivityAnchor>,
 }
@@ -125,7 +145,11 @@ impl ActivitySummary {
         let anchor_len = u8::try_from(anchor.len()).map_err(|_| SummaryError::LongAnchor)?;
         let mut out = Vec::with_capacity(4 + 16 * self.mentions.len() + anchor.len());
         out.push(self.kind.byte());
-        out.push(if self.mentions_all { FLAG_ALL } else { 0 });
+        out.push(if self.mentions_all == MentionScope::All {
+            FLAG_ALL
+        } else {
+            0
+        });
         out.push(count);
         for user in &self.mentions {
             out.extend_from_slice(user.as_bytes());
@@ -169,7 +193,7 @@ impl ActivitySummary {
         let summary = Self {
             kind,
             mentions,
-            mentions_all: flags & FLAG_ALL != 0,
+            mentions_all: MentionScope::from_bool(flags & FLAG_ALL != 0),
             anchor: (!anchor.is_empty()).then(|| ActivityAnchor(anchor.to_vec())),
         };
         Ok((summary, rest))
@@ -205,8 +229,8 @@ pub struct ActivityCounters {
     pub other: OtherUpdates,
     /// Updates that name this user, or every member.
     pub mentions: MentionUpdates,
-    /// Something happened, counted or not (`RESID-015`).
-    pub active: bool,
+    /// Whether something happened, counted or not (`RESID-015`).
+    pub active: Activity,
 }
 
 impl ActivityCounters {
@@ -214,7 +238,7 @@ impl ActivityCounters {
     /// summary marks the document active and counts nothing (`RESID-015`).
     /// With no `me`, only a mention of every member counts.
     pub fn advance(&mut self, summary: Option<&ActivitySummary>, me: Option<UserId>) {
-        self.active = true;
+        self.active = Activity::Active;
         let Some(summary) = summary else {
             return;
         };
@@ -224,7 +248,9 @@ impl ActivityCounters {
             ActivityKind::Edit => self.edits = self.edits.incremented(),
             ActivityKind::Other => self.other = self.other.incremented(),
         }
-        if summary.mentions_all || me.is_some_and(|me| summary.mentions.contains(&me)) {
+        if summary.mentions_all == MentionScope::All
+            || me.is_some_and(|me| summary.mentions.contains(&me))
+        {
             self.mentions = self.mentions.incremented();
         }
     }
@@ -242,7 +268,7 @@ mod tests {
         ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![user(1), user(2)],
-            mentions_all: false,
+            mentions_all: MentionScope::Named,
             anchor: ActivityAnchor::new(b"root".to_vec()),
         }
     }
@@ -285,7 +311,7 @@ mod tests {
             Some(&ActivitySummary {
                 kind: ActivityKind::Reaction,
                 mentions: Vec::new(),
-                mentions_all: true,
+                mentions_all: MentionScope::All,
                 anchor: None,
             }),
             None,
@@ -297,7 +323,7 @@ mod tests {
                 content: ContentUpdates::new(2),
                 reactions: ReactionUpdates::new(1),
                 mentions: MentionUpdates::new(2),
-                active: true,
+                active: Activity::Active,
                 ..ActivityCounters::default()
             }
         );
@@ -310,7 +336,7 @@ mod tests {
         assert_eq!(
             counters,
             ActivityCounters {
-                active: true,
+                active: Activity::Active,
                 ..ActivityCounters::default()
             }
         );

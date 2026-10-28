@@ -419,7 +419,7 @@ mod tests {
         ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![UserId::from_bytes([7; 16])],
-            mentions_all: false,
+            mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         }
     }
@@ -484,7 +484,7 @@ mod tests {
             })
             .collect();
         let active = ActivityCounters {
-            active: true,
+            active: ambre_bus::Activity::Active,
             ..ActivityCounters::default()
         };
         assert_eq!(counters, vec![active, active]);

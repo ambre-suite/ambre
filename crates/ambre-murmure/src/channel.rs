@@ -2084,7 +2084,7 @@ fn reaction_summary() -> ActivitySummary {
     ActivitySummary {
         kind: ActivityKind::Reaction,
         mentions: Vec::new(),
-        mentions_all: false,
+        mentions_all: ambre_bus::MentionScope::Named,
         anchor: None,
     }
 }
@@ -2094,12 +2094,12 @@ fn reaction_summary() -> ActivitySummary {
 /// channel itself is named. An `@channel` lists no member (`MURMURE-230`).
 fn summary_of(marked: &[Mention]) -> ActivitySummary {
     let mut mentions: Vec<UserId> = Vec::new();
-    let mut mentions_all = false;
+    let mut mentions_all = ambre_bus::MentionScope::Named;
     for mention in marked {
         match &mention.target {
             MentionTarget::User(user) if !mentions.contains(user) => mentions.push(*user),
             MentionTarget::User(_) => {}
-            MentionTarget::Channel => mentions_all = true,
+            MentionTarget::Channel => mentions_all = ambre_bus::MentionScope::All,
         }
     }
     ActivitySummary {

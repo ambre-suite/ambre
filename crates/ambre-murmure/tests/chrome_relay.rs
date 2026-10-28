@@ -792,7 +792,7 @@ fn a_jump_opens_the_next_active_channel_and_moves_no_read_cursor() {
     let (_owner, relay, [budget, zeta, direct]) = three_named();
     let active = |channel_id| ChannelActivity {
         channel_id,
-        active: true,
+        active: ambre_bus::Activity::Active,
         unread: None,
         mentions: None,
     };
@@ -1374,7 +1374,7 @@ fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
     assert!(relay.search_groups().get_untracked().is_empty());
 }
 
-fn news(channel_id: ChannelId, mention: bool) -> UiEvent {
+fn news(channel_id: ChannelId, mention: ambre_bus::MentionState) -> UiEvent {
     UiEvent::NewMessage {
         channel_id,
         mention,
@@ -1395,7 +1395,7 @@ fn a_notice_opens_its_channel_at_its_message() {
     };
     let event = UiEvent::NewMessage {
         channel_id: direct,
-        mention: false,
+        mention: ambre_bus::MentionState::Unmentioned,
         message: Some((at.segment, at.message)),
     };
     let notice = relay
@@ -1413,7 +1413,10 @@ fn a_notice_opens_its_channel_at_its_message() {
     );
     relay.pane.set(MurmurePane::ChannelList);
     let closed = relay
-        .notice(&news(direct, false), PageVisibility::Visible)
+        .notice(
+            &news(direct, ambre_bus::MentionState::Unmentioned),
+            PageVisibility::Visible,
+        )
         .expect("notifies");
     assert_eq!(closed.at, None);
     assert!(relay.open_at(direct, closed.at).is_none());
@@ -1481,15 +1484,24 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
     relay.pane.set(MurmurePane::ChannelList);
 
     assert_eq!(
-        relay.notice(&news(general, false), PageVisibility::Visible),
+        relay.notice(
+            &news(general, ambre_bus::MentionState::Unmentioned),
+            PageVisibility::Visible
+        ),
         None
     );
     let mention = relay
-        .notice(&news(general, true), PageVisibility::Visible)
+        .notice(
+            &news(general, ambre_bus::MentionState::Mentioned),
+            PageVisibility::Visible,
+        )
         .expect("a mention notifies");
     assert_eq!(mention.channel_id, general);
     assert_eq!(mention.title, "You were mentioned in general");
-    for named in [false, true] {
+    for named in [
+        ambre_bus::MentionState::Unmentioned,
+        ambre_bus::MentionState::Mentioned,
+    ] {
         let message = relay
             .notice(&news(direct, named), PageVisibility::Visible)
             .expect("a direct message notifies");
@@ -1508,18 +1520,27 @@ fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
 fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
     let (_owner, relay, direct) = shown_direct();
     assert_eq!(
-        relay.notice(&news(direct, true), PageVisibility::Visible),
+        relay.notice(
+            &news(direct, ambre_bus::MentionState::Mentioned),
+            PageVisibility::Visible
+        ),
         None
     );
     assert!(
         relay
-            .notice(&news(direct, true), PageVisibility::Hidden)
+            .notice(
+                &news(direct, ambre_bus::MentionState::Mentioned),
+                PageVisibility::Hidden
+            )
             .is_some()
     );
     relay.pane.set(MurmurePane::ChannelList);
     assert!(
         relay
-            .notice(&news(direct, false), PageVisibility::Visible)
+            .notice(
+                &news(direct, ambre_bus::MentionState::Unmentioned),
+                PageVisibility::Visible
+            )
             .is_some()
     );
 }

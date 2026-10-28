@@ -588,12 +588,12 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
         .expect("send");
     assert_eq!(sent.summary.kind, ambre_bus::ActivityKind::Content);
     assert_eq!(sent.summary.mentions, [bob, carol]);
-    assert!(sent.summary.mentions_all);
+    assert_eq!(sent.summary.mentions_all, ambre_bus::MentionScope::All);
     let plain = state
         .send(&draft("no one"), UserId::new(), NOW)
         .expect("send");
     assert!(plain.summary.mentions.is_empty());
-    assert!(!plain.summary.mentions_all);
+    assert_eq!(plain.summary.mentions_all, ambre_bus::MentionScope::Named);
 }
 
 #[test]

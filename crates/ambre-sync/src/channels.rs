@@ -1180,7 +1180,7 @@ pub(crate) fn activity_of(entries: &[http::ActivityEntry]) -> Vec<DocumentActivi
             channel_id: e.channel_id,
             document_id: e.document_id,
             kind: e.kind,
-            active: e.active,
+            active: ambre_bus::Activity::from_bool(e.active),
             read: e.read,
             last: e.last,
         })
@@ -1278,7 +1278,7 @@ pub(crate) mod tests {
                 channel_id: channel,
                 document_id: segment,
                 kind: ChannelDocumentKind::Thread,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 read: Seq(7),
                 last: Some(Seq(9)),
             }]

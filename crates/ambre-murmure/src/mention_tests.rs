@@ -175,7 +175,7 @@ fn an_at_channel_names_the_channel_and_no_member() {
             NOW,
         )
         .expect("send");
-    assert!(sent.summary.mentions_all);
+    assert_eq!(sent.summary.mentions_all, ambre_bus::MentionScope::All);
     assert!(sent.summary.mentions.is_empty());
     assert_eq!(
         stored_marks(&state, 0),

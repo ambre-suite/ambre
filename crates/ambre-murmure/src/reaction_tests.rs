@@ -133,7 +133,8 @@ fn a_reaction_adds_one_entry_and_leaves_the_message() {
 
     let sent = bob.react(message, THUMB);
     assert_eq!(sent.summary.kind, ActivityKind::Reaction);
-    assert!(sent.summary.mentions.is_empty() && !sent.summary.mentions_all);
+    assert!(sent.summary.mentions.is_empty());
+    assert_eq!(sent.summary.mentions_all, ambre_bus::MentionScope::Named);
     alice.receive(&bob, &sent, 2);
 
     let after = alice.only_message();

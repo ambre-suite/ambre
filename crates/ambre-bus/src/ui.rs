@@ -30,6 +30,17 @@ use crate::{
 // UiEvent -- Logic thread -> UI Thread
 // -----------------------------------------------------------------------------
 
+ambre_core::define_flag! {
+    /// Whether a new message names this user or the channel, as its sealed
+    /// summary says (the Murmure notifications spec).
+    pub enum MentionState {
+        /// The message names neither this user nor the channel.
+        Unmentioned,
+        /// The message names this user or the channel.
+        Mentioned,
+    }
+}
+
 /// Message sent from the Logic thread to the UI Thread.
 #[derive(Debug, Clone)]
 pub enum UiEvent {
@@ -111,14 +122,14 @@ pub enum UiEvent {
     ChannelActivity { channels: Vec<ChannelActivity> },
 
     /// Another member wrote a message in a channel, as its sealed summary
-    /// says (the Murmure notifications spec). `mention` holds when the
-    /// summary names this user or the channel. The view decides whether it
+    /// says (the Murmure notifications spec). `mention` is `Mentioned` when
+    /// the summary names this user or the channel. The view decides whether it
     /// notifies: it alone knows the direct messages and what is on screen.
     /// `message` names the message and its segment when the channel is open.
     /// A closed channel is counted by the relay alone, so it names none.
     NewMessage {
         channel_id: ChannelId,
-        mention: bool,
+        mention: MentionState,
         message: Option<(crate::SegmentId, crate::MessageId)>,
     },
 

@@ -2016,7 +2016,7 @@ mod seal_tests {
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![UserId::from_bytes([5; 16])],
-            mentions_all: false,
+            mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         };
         let signing_key = state.signing_key.take();

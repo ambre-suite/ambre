@@ -35,7 +35,7 @@ pub struct DocumentActivity {
     pub document_id: DocumentId,
     /// A segment or a thread. A thread counts its mentions alone.
     pub kind: ChannelDocumentKind,
-    pub active: bool,
+    pub active: crate::Activity,
     /// The caller's own read cursor on the document: the sequence number it
     /// has read up to. The client counts against it once it holds the
     /// document.
@@ -52,7 +52,7 @@ pub struct DocumentActivity {
 pub struct ChannelActivity {
     pub channel_id: ChannelId,
     /// The mark the sidebar shows before any count is known (`MURMURE-119`).
-    pub active: bool,
+    pub active: crate::Activity,
     /// The new messages of the channel, once the loaded document gives the
     /// number (`MURMURE-120`). `None` while only the mark is known.
     pub unread: Option<UnreadCount>,

@@ -174,7 +174,7 @@ mod tests {
                     channel_id,
                     document_id,
                     kind,
-                    active: false,
+                    active: ambre_bus::Activity::Quiet,
                     read: Seq::ZERO,
                     last: Some(LAST),
                 })
@@ -258,14 +258,14 @@ mod tests {
                 channel_id: channel,
                 document_id: segment,
                 kind: ChannelDocumentKind::Segment,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 read: Seq(2),
                 last: Some(Seq(50)),
             }],
         });
         let mark = ChannelActivity {
             channel_id: channel,
-            active: true,
+            active: ambre_bus::Activity::Active,
             unread: None,
             mentions: None,
         };
@@ -292,7 +292,7 @@ mod tests {
         drain(&ui);
         drain(&sync);
         let message = ActivityCounters {
-            active: true,
+            active: ambre_bus::Activity::Active,
             content: ambre_core::activity::ContentUpdates::new(1),
             ..ActivityCounters::default()
         };
@@ -303,21 +303,21 @@ mod tests {
         let shown = drain(&ui);
         let mark = ChannelActivity {
             channel_id: channel,
-            active: true,
+            active: ambre_bus::Activity::Active,
             unread: None,
             mentions: None,
         };
         assert!(
             matches!(shown.as_slice(), [
                 UiEvent::ChannelActivity { channels },
-                UiEvent::NewMessage { channel_id, mention: false, message: None },
+                UiEvent::NewMessage { channel_id, mention: ambre_bus::MentionState::Unmentioned, message: None },
             ] if *channels == [mark] && *channel_id == channel),
             "got {shown:?}"
         );
         state.handle_logic_event(LogicEvent::Activity {
             document_id: meta.document_id(),
             counters: ActivityCounters {
-                active: true,
+                active: ambre_bus::Activity::Active,
                 ..ActivityCounters::default()
             },
         });

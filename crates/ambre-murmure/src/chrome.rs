@@ -24,7 +24,7 @@ use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
 };
-use ambre_bus::AppCommand;
+use ambre_bus::{AppCommand, MentionState};
 use ambre_bus::{
     ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
     MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
@@ -773,9 +773,11 @@ impl MurmureRelay {
             let title = match (direct, mention, name) {
                 (true, _, Some(name)) => format!("New message from {name}"),
                 (true, _, None) => "New direct message".to_owned(),
-                (false, true, Some(name)) => format!("You were mentioned in {name}"),
-                (false, true, None) => "You were mentioned".to_owned(),
-                (false, false, _) => return None,
+                (false, MentionState::Mentioned, Some(name)) => {
+                    format!("You were mentioned in {name}")
+                }
+                (false, MentionState::Mentioned, None) => "You were mentioned".to_owned(),
+                (false, MentionState::Unmentioned, _) => return None,
             };
             Some(Notice {
                 channel_id,

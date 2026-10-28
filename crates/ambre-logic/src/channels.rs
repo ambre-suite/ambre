@@ -164,7 +164,7 @@ impl ClosedChannel {
             None => (!since.unread.is_zero() || since.mentions != MentionCount::ZERO).then_some(
                 ChannelActivity {
                     channel_id,
-                    active: true,
+                    active: ambre_bus::Activity::Active,
                     unread: None,
                     mentions: None,
                 },
@@ -201,7 +201,9 @@ impl Counts {
     fn activity(self, channel_id: ChannelId) -> ChannelActivity {
         ChannelActivity {
             channel_id,
-            active: !self.unread.is_zero() || self.mentions != MentionCount::ZERO,
+            active: ambre_bus::Activity::from_bool(
+                !self.unread.is_zero() || self.mentions != MentionCount::ZERO,
+            ),
             unread: Some(self.unread),
             mentions: Some(self.mentions),
         }
@@ -665,7 +667,9 @@ impl LogicState {
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is
         // news (the Murmure notifications spec).
-        let news = (now.unread > before.unread).then_some(now.mentions > before.mentions);
+        let news = (now.unread > before.unread).then_some(ambre_bus::MentionState::from_bool(
+            now.mentions > before.mentions,
+        ));
         if let Some(mark) = closed.mark(
             channel_id,
             threads::mentions_of(&self.watched_threads, channel_id),
@@ -1416,7 +1420,7 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::MarkRead { live, finals });
                 let mark = self.counted(channel_id).unwrap_or(ChannelActivity {
                     channel_id,
-                    active: false,
+                    active: ambre_bus::Activity::Quiet,
                     unread: None,
                     mentions: None,
                 });
@@ -1851,13 +1855,13 @@ impl LogicState {
                 document.document_id,
                 ReadCursor {
                     read: document.read,
-                    active: document.active,
+                    active: document.active.as_bool(),
                 },
             );
             match index.get(&document.channel_id) {
                 Some(&i) => {
                     if let Some(channel) = channels.get_mut(i) {
-                        channel.active |= document.active;
+                        channel.active = channel.active.max(document.active);
                     }
                 }
                 None => {
@@ -1987,9 +1991,9 @@ impl LogicState {
         for (delta, verdict) in deltas.iter().zip(verdicts) {
             let accepted = verdict.is_ok();
             if accepted && open.is_some() {
-                fresh = self
-                    .news_of(delta)
-                    .map_or(fresh, |mention| Some(mention || fresh.unwrap_or(false)));
+                fresh = self.news_of(delta).map_or(fresh, |mention| {
+                    Some(mention.max(fresh.unwrap_or_default()))
+                });
             }
             self.record_channel_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
             match verdict {
@@ -2035,21 +2039,21 @@ impl LogicState {
     }
 
     /// Whether a delta is a message another member wrote, from its sealed
-    /// summary alone (the Murmure notifications spec). `Some(true)` when it
-    /// names this user or the channel. A delta with no summary is none.
-    fn news_of(&self, delta: &SignedDelta) -> Option<bool> {
+    /// summary alone (the Murmure notifications spec). `Some(Mentioned)` when
+    /// it names this user or the channel. A delta with no summary is none.
+    fn news_of(&self, delta: &SignedDelta) -> Option<ambre_bus::MentionState> {
         let summary = delta.summary.as_ref()?;
         if summary.kind != ambre_bus::ActivityKind::Content
             || (delta.user.is_some() && delta.user == self.my_user_id)
         {
             return None;
         }
-        Some(
-            summary.mentions_all
+        Some(ambre_bus::MentionState::from_bool(
+            summary.mentions_all == ambre_bus::MentionScope::All
                 || self
                     .my_user_id
                     .is_some_and(|me| summary.mentions.contains(&me)),
-        )
+        ))
     }
 
     /// Search every open channel for `query` (the Murmure search spec). Each
@@ -2428,18 +2432,22 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
+        use ambre_bus::MentionState::{Mentioned, Unmentioned};
         let [plain, named] = <[_; 2]>::try_from(deltas).expect("two deltas");
         // The same message as bob's own, which the engine would refuse
         // under alice's peer: the filter is read on its own.
         let (doc, mut own) = plain.clone();
         own.user = Some(bob_id);
         assert_eq!(bob.news_of(&own), None);
-        assert_eq!(bob.news_of(&plain.1), Some(false));
+        assert_eq!(bob.news_of(&plain.1), Some(Unmentioned));
         let (_, mut bare) = plain.clone();
         bare.summary = None;
-        assert_eq!(news(&mut bob, (doc, bare)), Vec::<(bool, bool)>::new());
-        assert_eq!(news(&mut bob, plain), [(false, true)]);
-        assert_eq!(news(&mut bob, named), [(true, true)]);
+        assert_eq!(
+            news(&mut bob, (doc, bare)),
+            Vec::<(ambre_bus::MentionState, bool)>::new()
+        );
+        assert_eq!(news(&mut bob, plain), [(Unmentioned, true)]);
+        assert_eq!(news(&mut bob, named), [(Mentioned, true)]);
     }
 
     /// An open channel keeps its documents while its view shows it (the
@@ -2490,7 +2498,7 @@ mod tests {
 
     fn activity(content: u32) -> ambre_core::activity::ActivityCounters {
         ambre_core::activity::ActivityCounters {
-            active: true,
+            active: ambre_bus::Activity::Active,
             content: ambre_core::activity::ContentUpdates::new(content),
             ..Default::default()
         }
@@ -2521,7 +2529,7 @@ mod tests {
                 UiEvent::ChannelActivity { channels } => Some(channels),
                 UiEvent::NewMessage {
                     channel_id: c,
-                    mention: false,
+                    mention: ambre_bus::MentionState::Unmentioned,
                     message: None,
                 } if c == channel_id => {
                     news += 1;
@@ -2533,7 +2541,7 @@ mod tests {
         let mark = |unread| {
             vec![ChannelActivity {
                 channel_id,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 unread: Some(UnreadCount(unread)),
                 mentions: Some(MentionCount::ZERO),
             }]
@@ -2562,7 +2570,7 @@ mod tests {
             UiEvent::ChannelActivity { channels },
             UiEvent::NewMessage {
                 channel_id: news,
-                mention: true,
+                mention: ambre_bus::MentionState::Mentioned,
                 message: None,
             },
         ] = shown.as_slice()
@@ -2574,7 +2582,7 @@ mod tests {
             channels,
             &[ChannelActivity {
                 channel_id,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 unread: Some(UnreadCount(2)),
                 mentions: Some(MentionCount(1)),
             }]
@@ -2605,7 +2613,10 @@ mod tests {
         let shown = drain(&ui);
         let [
             UiEvent::ChannelActivity { channels },
-            UiEvent::NewMessage { mention: false, .. },
+            UiEvent::NewMessage {
+                mention: ambre_bus::MentionState::Unmentioned,
+                ..
+            },
         ] = shown.as_slice()
         else {
             panic!("expected the channel's mark, then the news, got {shown:?}");
@@ -2614,7 +2625,7 @@ mod tests {
             channels,
             &[ChannelActivity {
                 channel_id,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 unread: None,
                 mentions: None,
             }]
@@ -3061,7 +3072,7 @@ mod tests {
             *channels,
             [ChannelActivity {
                 channel_id,
-                active: false,
+                active: ambre_bus::Activity::Quiet,
                 unread: Some(UnreadCount::ZERO),
                 mentions: Some(MentionCount::ZERO),
             }]
@@ -3083,10 +3094,10 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: vec![
-                entry(busy, false),
-                entry(quiet, false),
-                entry(busy, true),
-                entry(quiet, false),
+                entry(busy, ambre_bus::Activity::Quiet),
+                entry(quiet, ambre_bus::Activity::Quiet),
+                entry(busy, ambre_bus::Activity::Active),
+                entry(quiet, ambre_bus::Activity::Quiet),
             ],
         });
 
@@ -3099,13 +3110,13 @@ mod tests {
             [
                 ChannelActivity {
                     channel_id: busy,
-                    active: true,
+                    active: ambre_bus::Activity::Active,
                     unread: None,
                     mentions: None,
                 },
                 ChannelActivity {
                     channel_id: quiet,
-                    active: false,
+                    active: ambre_bus::Activity::Quiet,
                     unread: None,
                     mentions: None,
                 },
@@ -3266,7 +3277,7 @@ mod tests {
                     channel_id: self.channel_id,
                     document_id: self.active.document_id(),
                     kind: ChannelDocumentKind::Segment,
-                    active: true,
+                    active: ambre_bus::Activity::Active,
                     read: Seq(read),
                     last: None,
                 }],
@@ -4342,7 +4353,7 @@ mod tests {
         };
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
-        assert!(summary.mentions_all);
+        assert_eq!(summary.mentions_all, ambre_bus::MentionScope::All);
         drain(&ui);
 
         // A reply is held with its thread, so the view sends it back there.
@@ -6122,7 +6133,7 @@ mod tests {
             m.bob.counted(m.channel_id),
             Some(ChannelActivity {
                 channel_id: m.channel_id,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 unread: Some(UnreadCount(0)),
                 mentions: Some(MentionCount(1)),
             })
@@ -6168,7 +6179,7 @@ mod tests {
             panic!("expected the channel's mark and its first unread, got {shown:?}");
         };
         assert_eq!(channels[0].mentions, Some(MentionCount(0)));
-        assert!(!channels[0].active);
+        assert_eq!(channels[0].active, ambre_bus::Activity::Quiet);
     }
 
     /// Bob holds a thread of the channel with one reply of Alice's that
@@ -6275,7 +6286,7 @@ mod tests {
                     channel_id,
                     document_id,
                     kind: ChannelDocumentKind::Thread,
-                    active: true,
+                    active: ambre_bus::Activity::Active,
                     read,
                     last: None,
                 })
@@ -6394,7 +6405,7 @@ mod tests {
                 UiEvent::ChannelActivity { channels },
                 UiEvent::NewMessage {
                     channel_id: news,
-                    mention: true,
+                    mention: ambre_bus::MentionState::Mentioned,
                     ..
                 },
             ] = shown.as_slice()
@@ -6406,7 +6417,7 @@ mod tests {
                 channels,
                 &[ChannelActivity {
                     channel_id,
-                    active: true,
+                    active: ambre_bus::Activity::Active,
                     unread: Some(UnreadCount(0)),
                     mentions: Some(MentionCount(1)),
                 }]
@@ -6440,7 +6451,10 @@ mod tests {
         let shown = drain(&ui);
         let [
             UiEvent::ChannelActivity { channels },
-            UiEvent::NewMessage { mention: true, .. },
+            UiEvent::NewMessage {
+                mention: ambre_bus::MentionState::Mentioned,
+                ..
+            },
         ] = shown.as_slice()
         else {
             panic!("expected the channel's mark, then a mention, got {shown:?}");
@@ -6449,7 +6463,7 @@ mod tests {
             channels,
             &[ChannelActivity {
                 channel_id,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 unread: None,
                 mentions: None,
             }]

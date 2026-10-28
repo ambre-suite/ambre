@@ -151,7 +151,8 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
 
     let sent = alice.edit(message, &draft);
     assert_eq!(sent.summary.kind, ActivityKind::Edit);
-    assert!(sent.summary.mentions.is_empty() && !sent.summary.mentions_all);
+    assert!(sent.summary.mentions.is_empty());
+    assert_eq!(sent.summary.mentions_all, ambre_bus::MentionScope::Named);
     bob.receive(&alice, &sent, 2);
 
     for member in [&alice, &bob] {

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::UserId;
 
+pub use sealed::{Activity, MentionScope};
+
 /// What one update holds, readable with no Loro document.
 ///
 /// A member can lie in a summary. The lie costs one false badge, and the
@@ -21,8 +23,9 @@ pub struct ActivitySummary {
     pub kind: ActivityKind,
     /// The users the update names.
     pub mentions: Vec<UserId>,
-    /// Whether the update names every member, an `@channel`.
-    pub mentions_all: bool,
+    /// Whether the update names every member, an `@channel`. It writes the
+    /// byte of a `bool`.
+    pub mentions_all: MentionScope,
     /// An application key, for example a thread root. Opaque here.
     pub anchor: Option<ActivityAnchor>,
 }
@@ -51,7 +54,7 @@ impl ActivitySummary {
     #[must_use]
     pub fn to_sealed(&self) -> sealed::ActivitySummary {
         let (mentions, mentions_all) = if self.mentions.len() > sealed::MAX_MENTIONS {
-            (Vec::new(), true)
+            (Vec::new(), MentionScope::All)
         } else {
             (self.mentions.clone(), self.mentions_all)
         };
@@ -101,7 +104,7 @@ mod tests {
         let within = ActivitySummary {
             kind: ActivityKind::Edit,
             mentions: vec![UserId::from_bytes([1; 16])],
-            mentions_all: false,
+            mentions_all: crate::MentionScope::Named,
             anchor: Some(ActivityAnchor(vec![9; 8])),
         };
         assert_eq!(ActivitySummary::from(within.to_sealed()), within);
@@ -111,7 +114,8 @@ mod tests {
             ..within
         };
         let sealed = past.to_sealed();
-        assert!(sealed.mentions.is_empty() && sealed.mentions_all);
+        assert!(sealed.mentions.is_empty());
+        assert_eq!(sealed.mentions_all, MentionScope::All);
         assert_eq!(sealed.anchor, None);
         assert!(sealed.encode().is_ok());
     }

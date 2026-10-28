@@ -217,7 +217,7 @@ impl LogicState {
         if named {
             self.send_to_ui(UiEvent::NewMessage {
                 channel_id,
-                mention: true,
+                mention: ambre_bus::MentionState::Mentioned,
                 message: None,
             });
         }

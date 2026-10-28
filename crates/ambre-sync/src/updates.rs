@@ -2107,7 +2107,7 @@ mod tests {
         let summary = ActivitySummary {
             kind: ActivityKind::Reaction,
             mentions: Vec::new(),
-            mentions_all: true,
+            mentions_all: ambre_bus::MentionScope::All,
             anchor: None,
         };
         let public_data = UpdatePublicData {

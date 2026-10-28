@@ -247,7 +247,7 @@ fn sync_command_roundtrips_through_postcard() {
         summary: Some(ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![UserId::new()],
-            mentions_all: true,
+            mentions_all: ambre_bus::MentionScope::All,
             anchor: Some(ActivityAnchor(vec![1, 2])),
         }),
     });
@@ -285,7 +285,7 @@ fn logic_event_roundtrips_through_postcard() {
             summary: Some(ambre_bus::ActivitySummary {
                 kind: ambre_bus::ActivityKind::Content,
                 mentions: vec![UserId::from_bytes([3; 16])],
-                mentions_all: false,
+                mentions_all: ambre_bus::MentionScope::Named,
                 anchor: None,
             }),
         },
@@ -470,7 +470,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             summary: Some(ActivitySummary {
                 kind: ActivityKind::Content,
                 mentions: vec![user],
-                mentions_all: false,
+                mentions_all: ambre_bus::MentionScope::Named,
                 anchor: Some(ActivityAnchor(vec![3])),
             }),
         },
@@ -714,7 +714,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 channel_id: chan,
                 document_id: segment.document_id(),
                 kind: ChannelDocumentKind::Segment,
-                active: true,
+                active: ambre_bus::Activity::Active,
                 read: Seq(2),
                 last: Some(Seq(5)),
             }],

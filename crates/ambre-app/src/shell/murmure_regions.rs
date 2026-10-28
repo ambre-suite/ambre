@@ -236,7 +236,11 @@ impl Acme {
     }
 }
 
-fn activity(channel_id: ChannelId, active: bool, counts: Option<(u32, u32)>) -> UiEvent {
+fn activity(
+    channel_id: ChannelId,
+    active: ambre_bus::Activity,
+    counts: Option<(u32, u32)>,
+) -> UiEvent {
     UiEvent::ChannelActivity {
         channels: vec![ChannelActivity {
             channel_id,
@@ -599,16 +603,26 @@ async fn a_channel_shows_its_mark_then_its_counts() {
     };
     assert_eq!(badges(&frame), (false, None, None));
 
-    frame.absorb(activity(acme.sales, true, None)).await;
+    frame
+        .absorb(activity(acme.sales, ambre_bus::Activity::Active, None))
+        .await;
     assert_eq!(badges(&frame), (true, None, None), "the mark, no count yet");
 
-    frame.absorb(activity(acme.sales, true, Some((3, 1)))).await;
+    frame
+        .absorb(activity(
+            acme.sales,
+            ambre_bus::Activity::Active,
+            Some((3, 1)),
+        ))
+        .await;
     assert_eq!(
         badges(&frame),
         (false, Some("3".to_owned()), Some("1".to_owned()))
     );
 
-    frame.absorb(activity(acme.general, true, None)).await;
+    frame
+        .absorb(activity(acme.general, ambre_bus::Activity::Active, None))
+        .await;
     assert_eq!(
         badges(&frame),
         (false, Some("3".to_owned()), Some("1".to_owned())),
@@ -616,7 +630,11 @@ async fn a_channel_shows_its_mark_then_its_counts() {
     );
 
     frame
-        .absorb(activity(acme.sales, false, Some((0, 0))))
+        .absorb(activity(
+            acme.sales,
+            ambre_bus::Activity::Quiet,
+            Some((0, 0)),
+        ))
         .await;
     assert_eq!(
         badges(&frame),

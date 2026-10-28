@@ -39,7 +39,7 @@ pub mod sync_warning;
 pub mod ui;
 
 // Re-export the main types for convenient use.
-pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
+pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, MentionScope};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
     Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
@@ -77,7 +77,7 @@ pub use rest::{
     RowPlace, SealedRow, SecretBytes, SecretString, UserInfo,
 };
 pub use sink::CommandSink;
-pub use ui::{AppEvent, UiEvent};
+pub use ui::{AppEvent, MentionState, UiEvent};
 
 /// App-agnostic clipboard transport carried across the host <-> view seam and, serialized,
 /// across the OS clipboard. `text` is the `text/plain` mirror for cross-app paste. `ambre`

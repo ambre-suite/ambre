@@ -49,7 +49,7 @@ impl Activity {
     /// The activity a channel answer states.
     pub fn of(answer: &ChannelActivity) -> Self {
         match (answer.unread, answer.mentions) {
-            (None, None) if answer.active => Self::Some,
+            (None, None) if answer.active == ambre_bus::Activity::Active => Self::Some,
             (None, None) => Self::None,
             (messages, mentions) => {
                 let messages = messages.unwrap_or(UnreadCount::ZERO);
@@ -982,11 +982,14 @@ mod tests {
         let of = |sidebar: &Sidebar, id| sidebar.entry(id).activity;
         assert_eq!(of(&sidebar, a), Activity::None);
 
-        sidebar.set_activity(&[answer(a, true, None, None), answer(b, false, None, None)]);
+        sidebar.set_activity(&[
+            answer(a, ambre_bus::Activity::Active, None, None),
+            answer(b, ambre_bus::Activity::Quiet, None, None),
+        ]);
         assert_eq!(of(&sidebar, a), Activity::Some);
         assert_eq!(of(&sidebar, b), Activity::None);
 
-        sidebar.set_activity(&[answer(a, true, Some(3), Some(1))]);
+        sidebar.set_activity(&[answer(a, ambre_bus::Activity::Active, Some(3), Some(1))]);
         assert_eq!(
             of(&sidebar, a),
             Activity::Count {
@@ -994,12 +997,12 @@ mod tests {
                 mentions: MentionCount(1)
             }
         );
-        sidebar.set_activity(&[answer(b, true, None, None)]);
+        sidebar.set_activity(&[answer(b, ambre_bus::Activity::Active, None, None)]);
         assert!(
             matches!(of(&sidebar, a), Activity::Count { .. }),
             "a keeps its count"
         );
-        sidebar.set_activity(&[answer(a, false, Some(0), Some(0))]);
+        sidebar.set_activity(&[answer(a, ambre_bus::Activity::Quiet, Some(0), Some(0))]);
         assert_eq!(
             of(&sidebar, a),
             Activity::None,
@@ -1036,7 +1039,7 @@ mod tests {
         );
         let active = |channel_id| ChannelActivity {
             channel_id,
-            active: true,
+            active: ambre_bus::Activity::Active,
             unread: None,
             mentions: None,
         };
@@ -1077,7 +1080,7 @@ mod tests {
         );
 
         sidebar.set_activity(&[ChannelActivity {
-            active: false,
+            active: ambre_bus::Activity::Quiet,
             ..active(c)
         }]);
         assert_eq!(

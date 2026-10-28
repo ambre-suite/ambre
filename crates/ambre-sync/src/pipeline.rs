@@ -1083,7 +1083,7 @@ mod tests {
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![mentioned],
-            mentions_all: false,
+            mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         };
         let seal = |summary: Option<&ActivitySummary>| {
