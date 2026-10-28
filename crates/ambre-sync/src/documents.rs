@@ -395,9 +395,9 @@ pub(crate) fn unwrap_listed_key(
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
     let wrapped_bytes = doc_key_enc.as_bytes();
-    let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
+    let (nonce, ciphertext) = ambre_core::Nonce::split_from(wrapped_bytes)?;
     let wrapped = ambre_crypto::WrappedKey {
-        nonce: ambre_core::Nonce(*nonce),
+        nonce,
         ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
     };
     let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {

@@ -998,14 +998,14 @@ fn outcome(txn: Option<web_sys::IdbTransaction>) -> oneshot::Receiver<Stored> {
 }
 
 /// Parse one `sessions` row: the PeerID's eight little-endian bytes, then
-/// the sixteen bytes of the nonce. `None` for any other length.
+/// the bytes of the nonce. `None` for any other length.
 fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, SessionNonce)> {
-    let (peer, nonce) = row.split_first_chunk::<8>()?;
-    let nonce = <[u8; 16]>::try_from(nonce).ok()?;
-    Some((
-        ambre_core::PeerId(u64::from_le_bytes(*peer)),
-        SessionNonce(nonce),
-    ))
+    let (peer, rest) = row.split_first_chunk::<{ size_of::<u64>() }>()?;
+    let (nonce, rest) = SessionNonce::split_from(rest)?;
+    if !rest.is_empty() {
+        return None;
+    }
+    Some((ambre_core::PeerId(u64::from_le_bytes(*peer)), nonce))
 }
 
 /// The key range holding every row of `document`, in a store whose keys open
