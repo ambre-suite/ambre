@@ -4041,12 +4041,11 @@ ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	ne
 ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor
 ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
 ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in the whole pixels a span shape stores
+ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in whole units of the width its text breaks to
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::get() | ret | u16	newtype-inner	the indent unwrapped, for a view that lays out in f64
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::new(units) | param | u16	newtype-inner	the constructor of the indent newtype
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::layout_units() | ret | f32	math	the indent in the f32 units parley lays out in
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
-ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::get() | ret | f64	newtype-inner	the bare count, for a view that measures a notch
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
 ambre-core | src/span.rs | crate::span | FrameRate.0 | field | f32	newtype-inner	the inside of the frame-rate newtype

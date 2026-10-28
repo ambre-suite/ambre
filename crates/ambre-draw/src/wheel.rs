@@ -58,12 +58,6 @@ impl WheelAmount {
         Self(units)
     }
 
-    /// The bare count of units.
-    #[must_use]
-    pub const fn get(self) -> f64 {
-        self.0
-    }
-
     /// The amount as CSS pixels, one unit being worth `unit`.
     #[must_use]
     fn scaled(self, unit: f64) -> CssPx {
