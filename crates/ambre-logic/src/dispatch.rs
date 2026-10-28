@@ -2214,7 +2214,7 @@ mod tests {
         state.open_with_identity(before, DocType::Prose);
         assert_eq!(
             state.docs[&before].state.face_count(),
-            0,
+            ambre_prose::logic::FaceCount::ZERO,
             "nothing has been delivered yet"
         );
 
@@ -2223,7 +2223,7 @@ mod tests {
         });
         assert_eq!(
             state.docs[&before].state.face_count(),
-            faces.len(),
+            ambre_prose::logic::FaceCount::of_len(faces.len()),
             "a document open at delivery takes the faces"
         );
 
@@ -2231,7 +2231,7 @@ mod tests {
         state.open_with_identity(after, DocType::Prose);
         assert_eq!(
             state.docs[&after].state.face_count(),
-            faces.len(),
+            ambre_prose::logic::FaceCount::of_len(faces.len()),
             "a document opened afterwards takes the same set"
         );
 
@@ -2242,7 +2242,7 @@ mod tests {
         for id in [before, after] {
             assert_eq!(
                 state.docs[&id].state.face_count(),
-                faces.len() + 1,
+                ambre_prose::logic::FaceCount::of_len(faces.len() + 1),
                 "a face fetched later reaches an open document too"
             );
         }

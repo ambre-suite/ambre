@@ -24,17 +24,33 @@ struct Record {
     kind: CrossRefKind,
 }
 
+/// The value the carrier mark of a reference stores: its [`Record`] in hex,
+/// two digits a byte. [`decode`] reads it back. It spells a label of the
+/// document, so it has no `Debug`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct CrossRefMark(String);
+
+impl CrossRefMark {
+    /// The hex text, as the mark stores it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// The mark value of a reference to `target`.
 #[must_use]
-pub fn encode(target: TreeID, kind: &CrossRefKind) -> String {
+pub fn encode(target: TreeID, kind: &CrossRefKind) -> CrossRefMark {
     let record = Record {
         peer: ambre_core::PeerId(target.peer),
         counter: ambre_core::OpCounter(target.counter),
         kind: kind.clone(),
     };
-    postcard::to_allocvec(&record)
-        .map(|bytes| bytes.iter().map(|byte| format!("{byte:02x}")).collect())
-        .unwrap_or_default()
+    CrossRefMark(
+        postcard::to_allocvec(&record)
+            .map(|bytes| bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+            .unwrap_or_default(),
+    )
 }
 
 /// The target and the kind a mark value names, or `None` for a value that is
@@ -116,10 +132,10 @@ mod tests {
         let target = TreeID::new(7, 42);
         for label in ["see: 1:2", "a|b,c", "", "\u{e9}t\u{e9} \u{1f600}"] {
             let kind = CrossRefKind::CustomText(label.to_owned());
-            assert_eq!(decode(&encode(target, &kind)), Some((target, kind)));
+            assert_eq!(decode(encode(target, &kind).as_str()), Some((target, kind)));
         }
         for kind in [CrossRefKind::PageNumber, CrossRefKind::HeadingNumber] {
-            assert_eq!(decode(&encode(target, &kind)), Some((target, kind)));
+            assert_eq!(decode(encode(target, &kind).as_str()), Some((target, kind)));
         }
     }
 
@@ -127,15 +143,16 @@ mod tests {
     fn a_value_is_a_length_prefixed_record_and_never_a_joined_string() {
         let target = TreeID::new(1, 2);
         let value = encode(target, &CrossRefKind::CustomText(":".to_owned()));
-        assert!(value.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(value.as_str().bytes().all(|byte| byte.is_ascii_hexdigit()));
         assert!(
-            !value.contains(':'),
+            !value.as_str().contains(':'),
             "no separator reaches the stored value"
         );
         assert_eq!(decode("zz"), None);
         // The kind is the record's last byte: a code no kind holds is not read.
         let page = encode(target, &CrossRefKind::PageNumber);
         let head = page
+            .as_str()
             .strip_suffix("00")
             .expect("a page number ends in its code");
         assert_eq!(

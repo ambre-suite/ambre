@@ -237,9 +237,7 @@ impl ProseState {
                 Some(ListStyle::Todo(done)) => ClipKind::Todo(done),
                 _ => ClipKind::Bullet,
             },
-            Some(BlockType::CodeBlock) => {
-                ClipKind::Code(self.code_lang_of(&block_id(*id)).and_then(CodeLang::new))
-            }
+            Some(BlockType::CodeBlock) => ClipKind::Code(self.code_lang_of(&block_id(*id))),
             _ => ClipKind::Paragraph,
         }
     }
@@ -893,8 +891,8 @@ mod tests {
         if let Some(style) = state.list_style_of(block) {
             kind.push_str(&format!(" list={style:?}"));
         }
-        if let Some(lang) = state.code_lang_of(block).filter(|lang| !lang.is_empty()) {
-            kind.push_str(&format!(" lang={lang}"));
+        if let Some(lang) = state.code_lang_of(block) {
+            kind.push_str(&format!(" lang={}", lang.as_str()));
         }
         let mut out = kind;
         let Some(LoroValue::List(runs)) = state.marks_of(block) else {

@@ -435,7 +435,7 @@ impl ProseState {
             BlockType::CodeBlock => IrBlock::CodeBlock {
                 lang: self
                     .code_lang_of(&crate::events::block_id(id))
-                    .filter(|lang| !lang.is_empty()),
+                    .map(|lang| lang.as_str().to_owned()),
                 text: self.body_of(&id).map(|b| b.to_string()).unwrap_or_default(),
             },
             BlockType::Table => {

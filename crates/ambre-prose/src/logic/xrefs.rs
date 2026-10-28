@@ -36,7 +36,7 @@ impl ProseState {
             return Self::err_bad_range();
         }
         let value = xref::encode(*target, kind);
-        if let Err(e) = Self::write_carrier(&body, at, MarkRoot::CrossRef, &value) {
+        if let Err(e) = Self::write_carrier(&body, at, MarkRoot::CrossRef, value.as_str()) {
             return Self::err_write(e);
         }
         let mut outcome = self.commit_with(Vec::new());

@@ -113,12 +113,12 @@ impl ProseState {
             return Self::err_no_block(&block);
         };
         let at = pos.to_usize().min(body.len_unicode());
-        let (key, value) = crate::band::field_mark(field);
+        let mark = crate::band::FieldMark::of(field);
         let mut buffer = [0_u8; 4];
         if let Err(e) = body.insert(at, FIELD_CHAR.encode_utf8(&mut buffer)) {
             return Self::err_write(e);
         }
-        if let Err(e) = body.mark(at..at + 1, key, value) {
+        if let Err(e) = body.mark(at..at + 1, mark.key(), mark.value()) {
             return Self::err_write(e);
         }
         self.commit_bands()

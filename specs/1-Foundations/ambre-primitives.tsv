@@ -1917,7 +1917,6 @@ ambre-prose | src/input.rs | crate::input | Sent::Text.1 | field | Option<String
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Frame::List.ordered | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | MAX_LIST_DEPTH | const | usize	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.image | field | u32	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.italic | field | u32	math	count, size or local index
@@ -2046,7 +2045,6 @@ ambre-prose | src/link.rs | crate::link | OpenableScheme::as_str() | ret | &'sta
 ambre-prose | src/link.rs | crate::link | OpenableScheme::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predicate result
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	free-text	text content / label / parser input
-ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::code_lang_of() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
@@ -2154,7 +2152,6 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState::face_count() | ret | usize	math	count, size or local index
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
@@ -2265,7 +2262,6 @@ ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/walk.rs | crate::view::walk | PageWalk.highlights_walked | field | u64	math	count, size or local index
 ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/xref.rs | crate::xref | encode() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	text content / label / parser input
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
@@ -3491,7 +3487,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) |
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(start) | param | &str	free-text	free text: user content, label, message or display string
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
-ambre-prose | src/band.rs | crate::band | field_mark() | ret | (&'static str,&'static str)	foreign-api	the mark key and value LoroText::mark stores for a HeaderField; field_of is the one reader, so the codec lives in this file alone
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of field_mark
 ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	foreign-api	the name performance.measure and performance.mark take, which the profiler shows
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
@@ -4002,3 +3997,7 @@ ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::new(reason) | param | impl Into<String>	newtype-inner	the constructor of a skip reason, from the line an importer writes
+ambre-prose | src/band.rs | crate::band | FieldMark::key() | ret | &'static str	newtype-inner	the mark key LoroText::mark stores for FieldMark's field; field_of is the one reader
+ambre-prose | src/band.rs | crate::band | FieldMark::value() | ret | &'static str	newtype-inner	the mark value LoroText::mark stores for FieldMark's field; field_of is the one reader
+ambre-prose | src/xref.rs | crate::xref | CrossRefMark.0 | field | String	newtype-inner	CrossRefMark's own hex text
+ambre-prose | src/xref.rs | crate::xref | CrossRefMark::as_str() | ret | &str	newtype-inner	CrossRefMark's own hex text, as the carrier mark stores it

@@ -22,7 +22,12 @@ pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.
-pub const MAX_LIST_DEPTH: usize = 16;
+pub const MAX_LIST_DEPTH: ListDepth = ListDepth::new(16);
+
+ambre_core::define_tally! {
+    /// How many list items an item nests inside: zero for a top item.
+    pub struct ListDepth;
+}
 
 /// Read `bytes` as Markdown.
 ///
@@ -408,11 +413,12 @@ impl Reader {
     /// item that would nest past [`MAX_LIST_DEPTH`] waits to land after the
     /// deepest item allowed, as its sibling.
     fn place(&mut self, block: IrBlock) {
-        let depth = self
-            .frames
-            .iter()
-            .filter(|f| matches!(f, Frame::Item { .. }))
-            .count();
+        let depth = ListDepth::of_len(
+            self.frames
+                .iter()
+                .filter(|f| matches!(f, Frame::Item { .. }))
+                .count(),
+        );
         let is_item = matches!(block, IrBlock::ListItem { .. });
         for frame in self.frames.iter_mut().rev() {
             if let Frame::Item {
@@ -597,7 +603,11 @@ mod tests {
                 .max()
                 .unwrap_or(0)
         }
-        assert!(depth(&ir.blocks) <= MAX_LIST_DEPTH, "{}", depth(&ir.blocks));
+        assert!(
+            ListDepth::of_len(depth(&ir.blocks)) <= MAX_LIST_DEPTH,
+            "{}",
+            depth(&ir.blocks)
+        );
         assert!(!report.warnings.is_empty());
     }
 

@@ -90,6 +90,11 @@ use crate::layout::run::ShapedLayout;
 use crate::mark;
 use crate::schema;
 
+ambre_core::define_tally! {
+    /// How many font faces a document measures on (`PROSE-115`).
+    pub struct FaceCount;
+}
+
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
 pub const WINDOW_PAGES: PageCount = PageCount::new(8);
 
@@ -432,8 +437,8 @@ impl ProseState {
     /// Zero means every run shapes into tofu: the measuring context is sealed
     /// and nothing has been handed to it yet.
     #[must_use]
-    pub fn face_count(&self) -> usize {
-        self.faces.len()
+    pub fn face_count(&self) -> FaceCount {
+        FaceCount::of_len(self.faces.len())
     }
 
     /// Hand the document the faces pagination measures on (`PROSE-114`).

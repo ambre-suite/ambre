@@ -398,10 +398,10 @@ impl DocState {
     /// How many faces this document measures on, zero for an engine that
     /// measures nothing on this thread (`PROSE-115`).
     #[cfg(test)]
-    fn face_count(&self) -> usize {
+    fn face_count(&self) -> ambre_prose::logic::FaceCount {
         match self {
             DocState::Prose(state) => state.face_count(),
-            DocState::Trame(_) | DocState::Toile(_) => 0,
+            DocState::Trame(_) | DocState::Toile(_) => ambre_prose::logic::FaceCount::ZERO,
         }
     }
 

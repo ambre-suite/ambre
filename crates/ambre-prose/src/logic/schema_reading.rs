@@ -438,7 +438,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
     };
     Some(match doc::AttrKey::parse(stored.key(2)?)? {
         doc::AttrKey::Level => format!("at level {}", doc::heading_level_of(&tree, id)?),
-        doc::AttrKey::Lang => format!("in {:?}", reader.code_lang_of(&block_id(*id))?),
+        doc::AttrKey::Lang => format!("in {:?}", reader.stored_lang(id)?.as_str()),
         doc::AttrKey::Marker | doc::AttrKey::Spelling | doc::AttrKey::Ticked => {
             // The frozen reading prints the checkbox as its stored bool.
             match doc::list_style_of(&tree, id)? {

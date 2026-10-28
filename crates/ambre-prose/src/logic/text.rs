@@ -379,6 +379,7 @@ mod tests {
     use crate::events::HeadingLevel;
     use crate::events::{BlockInit, ProseCommand};
     use crate::logic::ProseState;
+    use ambre_bus::app::prose::CodeLang;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::DocSpan;
 
@@ -729,6 +730,12 @@ mod tests {
                 _ => None,
             })
             .expect("the split names the new block");
-        assert_eq!(state.code_lang_of(&new_block).as_deref(), Some("rust"));
+        assert_eq!(
+            state
+                .code_lang_of(&new_block)
+                .as_ref()
+                .map(CodeLang::as_str),
+            Some("rust")
+        );
     }
 }

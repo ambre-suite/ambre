@@ -52,22 +52,43 @@ pub fn resolve(
     out
 }
 
-/// The mark key and the stored value of a field. The date stores its format
+/// The mark a field stores: a key and a value. The date stores its format
 /// and nothing else (`PROSE-FEAT-162`). [`field_of`] reads them back.
-#[must_use]
-pub const fn field_mark(field: HeaderField) -> (&'static str, &'static str) {
-    match field {
-        HeaderField::PageNumber => ("f:pn", ""),
-        HeaderField::PageCount => ("f:pc", ""),
-        HeaderField::Title => ("f:ti", ""),
-        HeaderField::Date(DateFieldFormat::Short) => ("f:dt", "short"),
-        HeaderField::Date(DateFieldFormat::Long) => ("f:dt", "long"),
-        HeaderField::Date(DateFieldFormat::Iso) => ("f:dt", "iso"),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FieldMark(HeaderField);
+
+impl FieldMark {
+    /// The mark that stores `field`.
+    #[must_use]
+    pub const fn of(field: HeaderField) -> Self {
+        Self(field)
+    }
+
+    /// The mark key.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self.0 {
+            HeaderField::PageNumber => "f:pn",
+            HeaderField::PageCount => "f:pc",
+            HeaderField::Title => "f:ti",
+            HeaderField::Date(_) => "f:dt",
+        }
+    }
+
+    /// The stored value: the date format, or the empty text.
+    #[must_use]
+    pub const fn value(self) -> &'static str {
+        match self.0 {
+            HeaderField::PageNumber | HeaderField::PageCount | HeaderField::Title => "",
+            HeaderField::Date(DateFieldFormat::Short) => "short",
+            HeaderField::Date(DateFieldFormat::Long) => "long",
+            HeaderField::Date(DateFieldFormat::Iso) => "iso",
+        }
     }
 }
 
 /// The field a mark carries, or `None` for a mark that is not a field. A date
-/// whose stored format is not one [`field_mark`] writes draws the ISO date,
+/// whose stored format is not one [`FieldMark`] writes draws the ISO date,
 /// as an unknown format always has.
 #[must_use]
 pub fn field_of(key: &str, value: &LoroValue) -> Option<HeaderField> {
@@ -314,6 +335,24 @@ mod tests {
         (date.year(), date.month(), date.day())
     }
 
+    /// The stored marks are document bytes: each field keeps the pair it
+    /// has always written.
+    #[test]
+    fn each_field_stores_the_mark_it_always_stored() {
+        let stored = [
+            (HeaderField::PageNumber, ("f:pn", "")),
+            (HeaderField::PageCount, ("f:pc", "")),
+            (HeaderField::Title, ("f:ti", "")),
+            (HeaderField::Date(DateFieldFormat::Short), ("f:dt", "short")),
+            (HeaderField::Date(DateFieldFormat::Long), ("f:dt", "long")),
+            (HeaderField::Date(DateFieldFormat::Iso), ("f:dt", "iso")),
+        ];
+        for (field, pair) in stored {
+            let mark = FieldMark::of(field);
+            assert_eq!((mark.key(), mark.value()), pair);
+        }
+    }
+
     #[test]
     fn every_field_reads_back_from_the_mark_it_writes() {
         let fields = [
@@ -325,8 +364,11 @@ mod tests {
             HeaderField::Date(DateFieldFormat::Iso),
         ];
         for field in fields {
-            let (key, value) = field_mark(field);
-            assert_eq!(field_of(key, &LoroValue::from(value)), Some(field));
+            let mark = FieldMark::of(field);
+            assert_eq!(
+                field_of(mark.key(), &LoroValue::from(mark.value())),
+                Some(field)
+            );
         }
         assert_eq!(field_of("b", &LoroValue::from("")), None);
     }

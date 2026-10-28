@@ -7,6 +7,8 @@
 
 use loro::{TreeID, TreeParentId};
 
+use ambre_bus::app::prose::CodeLang;
+
 use crate::doc;
 use crate::doc::StoredLevel;
 use crate::events::{
@@ -76,10 +78,16 @@ impl ProseState {
 
     /// The language a live code block carries.
     #[must_use]
-    pub fn code_lang_of(&self, id: &BlockId) -> Option<String> {
-        let attrs = self.attrs_of(&tree_id(*id))?;
+    pub fn code_lang_of(&self, id: &BlockId) -> Option<CodeLang> {
+        CodeLang::new(self.stored_lang(&tree_id(*id))?.to_string())
+    }
+
+    /// The language text a block stores as written. The empty text of a
+    /// plain code block is kept, for a copy or a reading that needs it.
+    pub(super) fn stored_lang(&self, id: &TreeID) -> Option<loro::LoroStringValue> {
+        let attrs = self.attrs_of(id)?;
         match attrs.get(doc::AttrKey::Lang)?.into_value() {
-            Ok(loro::LoroValue::String(lang)) => Some(lang.to_string()),
+            Ok(loro::LoroValue::String(lang)) => Some(lang),
             _ => None,
         }
     }
@@ -466,7 +474,7 @@ impl ProseState {
         // The attributes the split must carry. Without them the second half
         // of a heading has no level, and that of a code block no language.
         let level = self.heading_level_of(&crate::events::block_id(*source));
-        let lang = self.code_lang_of(&crate::events::block_id(*source));
+        let lang = self.stored_lang(source);
         if level.is_some() || lang.is_some() {
             let attrs = doc::attrs_at(&target_node)
                 .ok_or(doc::WriteError::Refused(doc::RefusalCause::AttrMapRefused))?;
