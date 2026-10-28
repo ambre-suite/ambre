@@ -2149,7 +2149,7 @@ impl ProseCommand {
             Self::EditFootnote { .. } => "editing the footnote",
             Self::DeleteFootnote { .. } => "deleting the footnote",
             Self::AddComment { .. } => "adding a comment",
-            Self::ReplyToComment { .. } => "replying to the comment",
+            Self::ReplyToComment { .. } => CommandName::REPLY_TO_COMMENT.0,
             Self::ResolveComment { .. } => "resolving the comment",
             Self::ReopenComment { .. } => "reopening the comment",
             Self::DeleteComment { .. } => "deleting the comment",
@@ -2322,12 +2322,17 @@ pub enum ProseEvent {
 // =============================================================================
 
 /// The words a refusal uses for a command (`PROSE-105`). Only
-/// [`ProseCommand::name`] builds one, so a refusal names only a command that
-/// exists, and a test that reads it compares two names, never two strings.
+/// [`ProseCommand::name`] and the constants below build one, so a refusal
+/// names only a command that exists. A test that reads it compares two names,
+/// never two strings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommandName(&'static str);
 
 impl CommandName {
+    /// The name of [`ProseCommand::ReplyToComment`], for a reader that must
+    /// recognise that refusal without a command to ask.
+    pub const REPLY_TO_COMMENT: Self = Self("replying to the comment");
+
     /// The words a refusal prints for this command.
     #[must_use]
     pub fn label(self) -> &'static str {

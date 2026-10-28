@@ -5,7 +5,7 @@
 // the mapping from event to toast lives here, as Trame's and Toile's do.
 // ============================================================================
 
-use ambre_bus::app::prose::{ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction};
+use ambre_bus::app::prose::{CommandName, ProseError, ProseEvent, ProseRefusal, RefusedAction};
 use ambre_bus::{AppEvent, UiEvent};
 use ambre_chrome::Toasts;
 
@@ -46,16 +46,8 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
 }
 
 /// Whether a refusal turned down a reply because its thread is gone. The
-/// command is rebuilt only to read its name, which is the one the engine put
-/// on the refusal.
+/// engine puts the name of the reply command on that refusal.
 fn is_refused_reply(error: &ProseError) -> bool {
-    let ProseRefusal::NoSuchComment(comment_id) = error.reason else {
-        return false;
-    };
-    let reply = ProseCommand::ReplyToComment {
-        comment_id,
-        text: String::new(),
-        now: ambre_core::Timestamp(0),
-    };
-    error.refused == RefusedAction::Command(reply.name())
+    matches!(error.reason, ProseRefusal::NoSuchComment(_))
+        && error.refused == RefusedAction::Command(CommandName::REPLY_TO_COMMENT)
 }
