@@ -552,8 +552,8 @@ impl FrameHost {
         };
 
         let phases = Phases::of(plan.content, plan.overlay);
-        let content_active = phases.build_content;
-        let overlay_redraw = phases.build_overlay;
+        let content_active = phases.content == LayerRepaint::Redraw;
+        let overlay_redraw = phases.overlay == LayerRepaint::Redraw;
         let any_dirty = phases.any_build();
 
         let stats = FrameStats {
@@ -630,7 +630,7 @@ impl FrameHost {
 
         // -- GPU encoding + present. ------------------------------------------
         // Every frame presents, a reused layer re-blitted (`CANVAS-010`).
-        if !phases.present {
+        if phases.present == ambre_canvas::Present::Skip {
             return;
         }
         let t_gpu_start = ambre_core::PageTime(self.perf.now());
@@ -691,7 +691,7 @@ impl FrameHost {
             &RepaintPlan {
                 content: ContentRepaint::Full,
                 content_strip: None,
-                overlay: OverlayRepaint::Redraw,
+                overlay: LayerRepaint::Redraw,
                 backdrop: FATAL_BACKDROP,
             },
         );

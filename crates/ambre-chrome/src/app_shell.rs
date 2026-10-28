@@ -136,11 +136,11 @@ pub fn AppShell(
     focus: Option<Signal<ShellRegion>>,
     /// Whether the panel is open. A closed panel leaves the DOM. Open when unset.
     #[prop(optional, into)]
-    panel_open: Option<Signal<bool>>,
+    panel_open: Option<Signal<crate::Openness>>,
 ) -> impl IntoView {
     let canvas_id = canvas_id.unwrap_or(ambre_core::CanvasId::CONTENT);
     let focus = focus.unwrap_or_else(|| Signal::stored(ShellRegion::Content));
-    let panel_open = panel_open.unwrap_or_else(|| Signal::stored(true));
+    let panel_open = panel_open.unwrap_or_else(|| Signal::stored(crate::Openness::Open));
     let folded = RwSignal::new(false);
     view! {
         <div class="ambre-shell">
@@ -153,12 +153,12 @@ pub fn AppShell(
                         <nav
                             class="ambre-sidebar"
                             aria-label=sidebar.label
-                            data-expanded=move || crate::Expanded::from_bool(!folded.get()).aria()
+                            data-expanded=move || crate::Openness::from_bool(!folded.get()).aria()
                         >
                             <button
                                 class="icon ambre-sidebar-fold"
                                 aria-label="Fold the sidebar"
-                                aria-expanded=move || crate::Expanded::from_bool(!folded.get()).aria()
+                                aria-expanded=move || crate::Openness::from_bool(!folded.get()).aria()
                                 on:click=move |_| folded.update(|f| *f = !*f)
                             >
                                 {move || if folded.get() { "\u{203a}" } else { "\u{2039}" }}
@@ -183,7 +183,7 @@ pub fn AppShell(
                     let label = panel.label;
                     let children = panel.children;
                     move || {
-                        panel_open.get().then(|| {
+                        (panel_open.get() == crate::Openness::Open).then(|| {
                             view! {
                                 <aside class="ambre-panel" aria-label=move || label.get()>
                                     {children()}

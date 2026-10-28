@@ -100,11 +100,7 @@ ambre-app | src/route.rs | crate::route | needs_reload() | ret | bool	generic	pr
 ambre-app | src/route.rs | crate::route | parse(path) | param | &str	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | slug_to_type(slug) | param | &str	generic	generic codec/parser/bytes API
 ambre-app | src/route.rs | crate::route | type_slug() | ret | &'static str	generic	generic codec/parser/bytes API
-ambre-app | src/shell/app_root.rs | crate::shell::app_root | ShellHeader(about_open) | param | RwSignal<bool>	generic	UI open flag signal
-ambre-app | src/shell/app_root.rs | crate::shell::app_root | ShellHeader(share_open) | param | RwSignal<bool>	generic	UI open flag signal
 ambre-app | src/shell/app_root.rs | crate::shell::app_root | follow_shell_nav(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
-ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.palette_open | field | RwSignal<bool>	generic	UI open flag signal
-ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath.seal_open | field | RwSignal<bool>	generic	UI open flag signal
 ambre-app | src/shell/commands.rs | crate::shell::commands | CommandPath::key() | ret | bool	generic	predicate result
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_ref) | param | RwSignal<String>	free-text	formula bar text
 ambre-app | src/shell/mod.rs | crate::shell | mount_shell(formula_text) | param | RwSignal<String>	free-text	formula bar text
@@ -481,9 +477,6 @@ ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<Stri
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
 ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::observe(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::requested_count() | ret | usize	math	count of font loads, read by tests and diagnostics
-ambre-canvas | src/frame.rs | crate::frame | Phases.build_content | field | bool	generic	named state or style flag, local
-ambre-canvas | src/frame.rs | crate::frame | Phases.build_overlay | field | bool	generic	named state or style flag, local
-ambre-canvas | src/frame.rs | crate::frame | Phases.present | field | bool	generic	named state or style flag, local
 ambre-canvas | src/frame.rs | crate::frame | Phases::any_build() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | RafControl::is_running() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | draw_centered(text) | param | &str	free-text	text, label or message
@@ -670,10 +663,8 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | registered_family_name() 
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::label() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | ContentKind::role_description() | ret | &'static str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | TYPING_ATTR | const | &str	free-text	text, label or message
-ambre-canvas | src/text_input.rs | crate::text_input | TextInput.composing | field | Rc<Cell<bool>>	generic	named state or style flag, local
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput.focus_requests | field | Rc<Cell<u32>>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::announce(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_input.rs | crate::text_input | TextInput::composing() | ret | Rc<Cell<bool>>	generic	predicate result
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::focus_requests() | ret | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | Typing::text_if(typing) | param | bool	generic	the computed bool the one constructor of Typing reads into its variant
 ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	text, label or message
@@ -706,7 +697,6 @@ ambre-canvas | src/view.rs | crate::view | PerfSnapshot.cells_drawn | field | u3
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.fps | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PointerButton::from_dom(button) | param | i16	foreign-api	the DOM PointerEvent.button number, read into the enum here
-ambre-chrome | src/app_shell.rs | crate::app_shell | AppShell(panel_open) | param | Option<Signal<bool>>	generic	reactive state signal or its map, selects no mode
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
@@ -728,20 +718,18 @@ ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.label | fiel
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem::label() | ret | &str	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(class) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/dialog.rs | crate::dialog | Dialog(label) | param | Option<String>	free-text	text, label or user content
-ambre-chrome | src/dialog.rs | crate::dialog | Dialog(open) | param | RwSignal<bool>	generic	state flag/predicate
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold.0 | field | Arc<dyn Fn(bool)+Send+Sync>	newtype-inner	newtype inner
 ambre-chrome | src/dialog.rs | crate::dialog | ModalHold::new(set) | param | impl Fn(bool)+Send+Sync+'static	newtype-inner	ModalHold constructor
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(auto_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
-ambre-chrome | src/format.rs | crate::format | FormatToggle(pressed) | param | Signal<bool>	generic	state flag/predicate
 ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-chrome | src/format.rs | crate::format | Pressed::from_bool(on) | param | bool	generic	the enum's own constructor from the bool it replaces, On or Off
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
 ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &'static str	newtype-inner	the enum's own accept filter, unwrapped at the DOM set_attribute call
 ambre-chrome | src/menu.rs | crate::menu | Checked::aria() | ret | &'static str	generic	the enum's own aria-checked value
-ambre-chrome | src/menu.rs | crate::menu | Expanded::aria() | ret | &'static str	generic	the enum's own aria-expanded value
+ambre-chrome | src/menu.rs | crate::menu | Openness::aria() | ret | &'static str	generic	the enum's own aria-expanded value
 ambre-chrome | src/menu.rs | crate::menu | Selected::aria() | ret | &'static str	generic	the enum's own aria-selected value
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Choose.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | MenuKey::Focus.0 | field | usize	newtype-inner	newtype inner
@@ -751,7 +739,6 @@ ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	loc
 ambre-chrome | src/menu.rs | crate::menu | menu_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | event_menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | event_menu_key(initials) | param | &[char]	free-text	text, label or user content
-ambre-chrome | src/palette.rs | crate::palette | CommandPalette(open) | param | RwSignal<bool>	generic	state flag/predicate
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.hint | field | Option<&'static str>	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.label | field | String	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | filter(query) | param | &str	free-text	text, label or user content
@@ -759,7 +746,6 @@ ambre-chrome | src/palette.rs | crate::palette | matches() | ret | bool	generic	
 ambre-chrome | src/palette.rs | crate::palette | matches(label) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | matches(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | rows(query) | param | &str	free-text	text, label or user content
-ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseDialog(open) | param | RwSignal<bool>	generic	state flag/predicate
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
 ambre-chrome | src/status.rs | crate::status | PerfChip(fps) | param | Signal<f32>	math	layout geometry in logical px
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
@@ -1283,7 +1269,6 @@ ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
-ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::save_snapshot_committed() | ret | oneshot::Receiver<bool>	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/persistence.rs | crate::persistence | bytes_to_js(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
@@ -1346,7 +1331,6 @@ ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelStat
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendments_failed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::is_amendments() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::note_amendments_session() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | Linked.open | field | bool	generic	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::is_successor() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::owes_rotation_close() | ret | bool	generic	state flag/predicate
@@ -1363,7 +1347,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Seek.lost | field | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ThreadLinked.open | field | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	state flag/predicate
@@ -1372,7 +1355,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'sta
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay.keys | field | RwSignal<bool>	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
@@ -1389,12 +1371,10 @@ ambre-murmure | src/chrome.rs | crate::chrome | coverage() | ret | String	free-t
 ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | panel_label() | ret | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | panel_open() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
-ambre-murmure | src/commands.rs | crate::commands | MessageTarget.deleted | field | bool	generic	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.notice | field | bool	generic	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
@@ -1924,7 +1904,6 @@ ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	text content / label / parser input
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<CommentId,String>>	free-text	text content / label / parser input
-ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.over_link | field | RwSignal<bool>	generic	independent flag or predicate
 ambre-prose | src/chrome/notify.rs | crate::chrome::notify | is_refused_reply() | ret | bool	generic	predicate result
 ambre-prose | src/commands.rs | crate::commands | bold_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | code_title() | ret | String	free-text	text content / label / parser input
@@ -2065,7 +2044,6 @@ ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	local: a bare ratio of the content height, read only as the factor of DocPx * f32; a ratio is no length
-ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.bold | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.italic | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_together | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_with_next | field | bool	generic	independent flag or predicate
@@ -2701,21 +2679,16 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret |
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(open) | param | RwSignal<bool>	local	private: the open signal of the one dialog the helper closes; the only bool signal in the call
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(open) | param | RwSignal<bool>	local	private: the open signal of the one dialog the helper closes; the only bool signal in the call
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | CommentsPanel(state) | param | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/chrome/deck.rs | crate::chrome::deck | DeckPanel(state) | param | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_doc_open | field | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_open | field | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_text | field | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_open | field | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_text | field | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | String	free-text	user-facing label of a media type
 ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'static str	free-text	label, message or user text

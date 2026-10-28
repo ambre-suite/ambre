@@ -221,8 +221,8 @@ pub struct MessageTarget {
     pub styles: Vec<StyleMark>,
     /// The message is a notice the channel wrote, not a member.
     pub notice: bool,
-    /// The message reads deleted already.
-    pub deleted: bool,
+    /// Whether the message reads deleted already.
+    pub deleted: ambre_bus::Deletion,
     /// Where a long press held, in the pixels of the region's canvas. `None`
     /// for a right-click, whose event places the menu itself.
     pub pressed: Option<ambre_core::ViewPoint>,
@@ -413,7 +413,7 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
     if in_channel && !target.notice {
         ids.push(REPLY);
     }
-    if !target.notice && !target.deleted {
+    if !target.notice && target.deleted == ambre_bus::Deletion::Live {
         ids.push(REACT);
     }
     if in_channel {
@@ -422,7 +422,8 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
     if !target.text.is_empty() {
         ids.push(COPY_TEXT);
     }
-    let own = me == Some(target.author) && !target.notice && !target.deleted;
+    let own =
+        me == Some(target.author) && !target.notice && target.deleted == ambre_bus::Deletion::Live;
     if own {
         ids.extend([EDIT, DELETE]);
     }
@@ -649,7 +650,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             notice,
-            deleted: text.is_empty(),
+            deleted: ambre_bus::Deletion::from_bool(text.is_empty()),
             pressed: None,
             canvas: ambre_core::CanvasId::CONTENT,
             from_thread: None,

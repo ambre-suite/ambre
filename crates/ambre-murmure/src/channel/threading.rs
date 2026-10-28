@@ -114,7 +114,7 @@ pub struct ThreadLinked {
     pub root: Option<Sent>,
     /// Whether the document is to open: this client's own, for its session,
     /// or another member's, for its bytes.
-    pub open: bool,
+    pub open: super::LinkedOpening,
     /// This client's own document, which lost the race to another member's
     /// (`SRV-214`). What waited on it waits on the winner.
     pub replaced: Option<DocumentId>,
@@ -242,7 +242,7 @@ impl ChannelState {
         let root = self.name_thread(segment, root, thread)?;
         Ok(ThreadLinked {
             root,
-            open,
+            open: super::LinkedOpening::from_bool(open),
             replaced,
         })
     }

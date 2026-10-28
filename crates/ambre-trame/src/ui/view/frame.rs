@@ -428,9 +428,9 @@ impl TrameView {
         };
 
         let overlay = if any_dirty {
-            OverlayRepaint::Redraw
+            LayerRepaint::Redraw
         } else {
-            OverlayRepaint::Reuse
+            LayerRepaint::Reuse
         };
 
         // Consume the per-frame flags.

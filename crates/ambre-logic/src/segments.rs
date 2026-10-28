@@ -506,7 +506,7 @@ impl LogicState {
                 .or_default()
                 .extend(waiting);
         }
-        if linked.open {
+        if linked.open == ambre_murmure::LinkedOpening::Open {
             self.send_to_sync(SyncCommand::OpenDocument {
                 document_id: amendments,
                 doc_type: DocType::Murmure,

@@ -256,7 +256,7 @@ fn read() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::OverlayRepaint;
+    use crate::render::LayerRepaint;
 
     fn scroll(dx: f32, dy: f32) -> RepaintPlan {
         RepaintPlan {
@@ -265,7 +265,7 @@ mod tests {
                 dy: ViewPx::new(dy),
             },
             content_strip: Some(ambre_draw::Rect::new(0.0, 0.0, 10.0, 10.0)),
-            overlay: OverlayRepaint::Reuse,
+            overlay: LayerRepaint::Reuse,
             backdrop: ambre_draw::Color::WHITE,
         }
     }

@@ -108,8 +108,8 @@ pub fn SortDialog(
     // The shared modal traps the focus and leaves the sheet inert
     // (`CHROME-028`, `CHROME-068`). Its signal follows the snapshot, and a
     // native close, Escape or the backdrop, clears the snapshot.
-    let open = RwSignal::new(false);
-    Effect::new(move |_| open.set(state.get().is_some()));
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    Effect::new(move |_| open.set(ambre_chrome::Openness::from_bool(state.get().is_some())));
 
     let body = move || {
         state.get().map(|st| {

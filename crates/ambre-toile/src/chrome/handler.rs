@@ -15,7 +15,7 @@
 use ambre_bus::AppCommand;
 use ambre_bus::app::toile::ToileCommand;
 use ambre_chrome::commands::CommandId;
-use ambre_chrome::{CommandHandler, KeyRoute, ShellAction, Toasts};
+use ambre_chrome::{CommandHandler, KeyRoute, Openness, ShellAction, Toasts};
 use ambre_draw::Point;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -33,15 +33,15 @@ use super::{EMBED_DOC, EMBED_WEB, FIND, IMPORT_FILE, LINK_SET, PALETTE, SAVE_SEA
 #[derive(Clone, Copy)]
 pub struct ToileDialogs {
     /// The web embed dialog is open.
-    pub embed_web_open: RwSignal<bool>,
+    pub embed_web_open: RwSignal<Openness>,
     /// The address typed into the web embed dialog.
     pub embed_web_text: RwSignal<String>,
     /// Why the typed address was refused, read beside the field.
     pub embed_web_error: RwSignal<Option<&'static str>>,
     /// The document embed dialog is open.
-    pub embed_doc_open: RwSignal<bool>,
+    pub embed_doc_open: RwSignal<Openness>,
     /// The link chooser is open.
-    pub link_open: RwSignal<bool>,
+    pub link_open: RwSignal<Openness>,
     /// The address typed into the link chooser.
     pub link_text: RwSignal<String>,
     /// Why the typed link address was refused.
@@ -52,11 +52,11 @@ impl ToileDialogs {
     /// Every chooser closed and empty.
     pub fn new() -> Self {
         Self {
-            embed_web_open: RwSignal::new(false),
+            embed_web_open: RwSignal::new(Openness::Closed),
             embed_web_text: RwSignal::new(String::new()),
             embed_web_error: RwSignal::new(None),
-            embed_doc_open: RwSignal::new(false),
-            link_open: RwSignal::new(false),
+            embed_doc_open: RwSignal::new(Openness::Closed),
+            link_open: RwSignal::new(Openness::Closed),
             link_text: RwSignal::new(String::new()),
             link_error: RwSignal::new(None),
         }
@@ -102,18 +102,18 @@ impl CommandHandler for ToileHandler {
             EMBED_WEB => {
                 dialogs.embed_web_text.set(String::new());
                 dialogs.embed_web_error.set(None);
-                dialogs.embed_web_open.set(true);
+                dialogs.embed_web_open.set(Openness::Open);
             }
             EMBED_DOC => {
                 // A document shared since the landing screen fetched is one the
                 // user expects to find here.
-                dialogs.embed_doc_open.set(true);
+                dialogs.embed_doc_open.set(Openness::Open);
                 return vec![ShellAction::RefreshDocuments];
             }
             LINK_SET => {
                 dialogs.link_text.set(String::new());
                 dialogs.link_error.set(None);
-                dialogs.link_open.set(true);
+                dialogs.link_open.set(Openness::Open);
                 // Both lists are read again. A frame may have been added since
                 // the panel last read the deck, and a document shared since the
                 // landing screen fetched.

@@ -123,10 +123,10 @@ pub fn landing_view(
     // prompt owns the passphrase and nothing else, and the two only meet on
     // submission.
     let sealed_file = RwSignal::new(None::<ambre_core::SealedContainer>);
-    let passphrase_open = RwSignal::new(false);
+    let passphrase_open = RwSignal::new(ambre_chrome::Openness::Closed);
     let on_sealed = Callback::new(move |file: ambre_core::SealedContainer| {
         sealed_file.set(Some(file));
-        passphrase_open.set(true);
+        passphrase_open.set(ambre_chrome::Openness::Open);
     });
     let on_passphrase = {
         let to_logic = to_logic.clone();
@@ -283,7 +283,7 @@ pub fn NewDocPicker(
             <button
                 class="ambre-new-doc"
                 aria-haspopup="menu"
-                aria-expanded=move || ambre_chrome::Expanded::from_bool(open.get()).aria()
+                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 "New document"
@@ -494,8 +494,8 @@ fn DeleteConfirm(
     /// The dispatch, run with the confirmed document.
     on_confirm: Callback<DocumentId>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
-    Effect::new(move |_| open.set(pending.get().is_some()));
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    Effect::new(move |_| open.set(ambre_chrome::Openness::from_bool(pending.get().is_some())));
     let on_close = Callback::new(move |()| pending.set(None));
     let confirm = move |_| {
         if let Some((document_id, _)) = pending.get_untracked() {

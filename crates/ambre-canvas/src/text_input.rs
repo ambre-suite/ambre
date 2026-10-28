@@ -81,6 +81,17 @@ impl ContentKind {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether an IME composition is under way in the pipe: between
+    /// `compositionstart` and `compositionend`.
+    pub enum Composition {
+        /// No composition: the `input` listener reads the value.
+        Idle,
+        /// A composition is under way: the value is half-formed.
+        Composing,
+    }
+}
+
 /// Handle to the transparent input pipe + content a11y mirror. Cheap to clone
 /// (element refs plus a shared flag); lives on the UI thread only, so `!Send`.
 #[derive(Clone)]
@@ -88,10 +99,11 @@ pub struct TextInput {
     /// The DOM half. `None` for a detached pipe, which a host test builds:
     /// every call that would touch the DOM is then a no-op.
     dom: Option<Pipe>,
-    /// True between `compositionstart` and `compositionend`. Shared with the
-    /// host's `input` listener so it skips the half-formed value mid-composition
-    /// (the canvas shows the preview from the composition events instead).
-    composing: Rc<Cell<bool>>,
+    /// `Composing` between `compositionstart` and `compositionend`. Shared
+    /// with the host's `input` listener so it skips the half-formed value
+    /// mid-composition (the canvas shows the preview from the composition
+    /// events instead).
+    composing: Rc<Cell<Composition>>,
     /// How many times a view asked for the focus. A host test reads it to state
     /// that a gesture left the focus where it was.
     focus_requests: Rc<Cell<u32>>,
@@ -141,7 +153,7 @@ impl TextInput {
     pub fn detached() -> Self {
         Self {
             dom: None,
-            composing: Rc::new(Cell::new(false)),
+            composing: Rc::new(Cell::new(Composition::Idle)),
             focus_requests: Rc::new(Cell::new(0)),
             typing: Rc::new(Cell::new(Typing::Text)),
         }
@@ -202,7 +214,7 @@ impl TextInput {
 
         Self {
             dom: Some(Pipe { textarea, live }),
-            composing: Rc::new(Cell::new(false)),
+            composing: Rc::new(Cell::new(Composition::Idle)),
             focus_requests: Rc::new(Cell::new(0)),
             typing: Rc::new(Cell::new(Typing::Text)),
         }
@@ -225,8 +237,8 @@ impl TextInput {
             .textarea
     }
 
-    /// Shared composing flag, handed to the host's `input` listener.
-    pub fn composing(&self) -> Rc<Cell<bool>> {
+    /// Shared composition state, handed to the host's `input` listener.
+    pub fn composing(&self) -> Rc<Cell<Composition>> {
         Rc::clone(&self.composing)
     }
 

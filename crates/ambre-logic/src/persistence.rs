@@ -192,6 +192,15 @@ pub enum Stored {
     Failed,
 }
 
+/// Whether a write meant to outlive the page committed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Commit {
+    /// The write failed, or its transaction aborted: the bytes are not there.
+    Lost,
+    /// The transaction committed: the bytes are durable.
+    Landed,
+}
+
 /// An open IndexedDB handle for persisting document CRDT snapshots.
 ///
 /// Created once per session via [`open`](PersistenceStore::open). The database
@@ -469,22 +478,23 @@ impl PersistenceStore {
     ///
     /// So this one resolves on the transaction's `complete`, not on the request's
     /// `success`. The former is the commit; the latter only says the write was
-    /// accepted into it. `false` on any failure, so a caller can tell the user
-    /// the file did not land instead of navigating to an empty document.
+    /// accepted into it. [`Commit::Lost`] on any failure, so a caller can tell
+    /// the user the file did not land instead of navigating to an empty
+    /// document.
     pub fn save_snapshot_committed(
         &self,
         document_id: DocumentId,
         snapshot: SealedRowBytes,
-    ) -> oneshot::Receiver<bool> {
+    ) -> oneshot::Receiver<Commit> {
         let (tx, rx) = answer();
         let Some(txn) = self.write_snapshot(document_id, &snapshot) else {
-            tx.send(false);
+            tx.send(Commit::Lost);
             return rx;
         };
 
         let tx_done = tx.clone();
         let on_complete = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
-            tx_done.send(true);
+            tx_done.send(Commit::Landed);
         });
         txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
         on_complete.forget();
@@ -493,12 +503,12 @@ impl PersistenceStore {
         // means the bytes are not there; both answer the same way.
         let tx_err = tx.clone();
         let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
-            tx_err.send(false);
+            tx_err.send(Commit::Lost);
         });
         txn.set_onerror(Some(on_error.as_ref().unchecked_ref()));
         on_error.forget();
         let on_abort = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
-            tx.send(false);
+            tx.send(Commit::Lost);
         });
         txn.set_onabort(Some(on_abort.as_ref().unchecked_ref()));
         on_abort.forget();

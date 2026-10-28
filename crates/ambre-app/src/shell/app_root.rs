@@ -98,8 +98,8 @@ fn ShellHeader(
     toasts: Toasts,
     chrome_status: RwSignal<ChromeStatus>,
     current_doc: RwSignal<Option<DocumentId>>,
-    share_open: RwSignal<bool>,
-    about_open: RwSignal<bool>,
+    share_open: RwSignal<ambre_chrome::Openness>,
+    about_open: RwSignal<ambre_chrome::Openness>,
     username: RwSignal<Option<ambre_core::DisplayName>>,
     me: RwSignal<Option<UserId>>,
 ) -> impl IntoView {
@@ -137,8 +137,8 @@ fn ShellHeader(
                 title="Share"
                 aria-label="Share document"
                 aria-haspopup="dialog"
-                aria-expanded=move || ambre_chrome::Expanded::from_bool(share_open.get()).aria()
-                on:click=move |_| share_open.set(true)
+                aria-expanded=move || share_open.get().aria()
+                on:click=move |_| share_open.set(ambre_chrome::Openness::Open)
             >
                 <Icon icon=icondata::AiShareAltOutlined />
             </button>
@@ -148,8 +148,8 @@ fn ShellHeader(
             title="About"
             aria-label="About Ambre"
             aria-haspopup="dialog"
-            aria-expanded=move || ambre_chrome::Expanded::from_bool(about_open.get()).aria()
-            on:click=move |_| about_open.set(true)
+            aria-expanded=move || about_open.get().aria()
+            on:click=move |_| about_open.set(ambre_chrome::Openness::Open)
         >
             "?"
         </button>
@@ -289,11 +289,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
     // About modal. Every `Dialog` suspends the canvas rAF through the
     // `ModalHold` the shell provides, so no modal here wires the loop.
-    let about_open = RwSignal::new(false);
+    let about_open = RwSignal::new(ambre_chrome::Openness::Closed);
 
     // Share modal. Opening it requests the current member list so the dialog
     // renders it; the relay fills `members` on the `DocumentMembers` response.
-    let share_open = RwSignal::new(false);
+    let share_open = RwSignal::new(ambre_chrome::Openness::Closed);
     let share_on_open = Callback::new({
         let to_logic = to_logic.clone();
         move |()| {
@@ -333,10 +333,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // The link cursor over a link's text, the text cursor elsewhere
         // (`PROSE-UI-153`).
         Effect::new(move |_| {
-            let cursor = if prose_signals.over_link.get() {
-                "pointer"
-            } else {
-                "text"
+            let cursor = match prose_signals.over_link.get() {
+                ambre_prose::chrome::LinkHover::OverLink => "pointer",
+                ambre_prose::chrome::LinkHover::Elsewhere => "text",
             };
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
                 && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
@@ -684,7 +683,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 <h2>"Ambre"</h2>
                 <p>"Collaborative office suite, 100% Rust, E2EE encrypted."</p>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| about_open.set(false)>"Close"</button>
+                    <button on:click=move |_| about_open.set(ambre_chrome::Openness::Closed)>"Close"</button>
                 </div>
             </div>
         </Dialog>
@@ -777,7 +776,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 </form>
 
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| share_open.set(false)>"Close"</button>
+                    <button on:click=move |_| share_open.set(ambre_chrome::Openness::Closed)>"Close"</button>
                 </div>
             </div>
         </Dialog>

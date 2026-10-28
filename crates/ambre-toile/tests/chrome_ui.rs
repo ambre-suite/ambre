@@ -1003,7 +1003,7 @@ fn click_in(root: &web_sys::Element, selector: &str, label: &str) -> bool {
 fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     use ambre_toile::chrome::{AddressError, EmbedTarget};
     let (root, dialogs, placed) = mount_choosers(Vec::new(), ambre_bus::DocumentId::new());
-    dialogs.embed_web_open.set(true);
+    dialogs.embed_web_open.set(ambre_chrome::Openness::Open);
 
     dialogs.embed_web_text.set("javascript:alert(1)".to_owned());
     assert!(click_in(&root, ".ambre-embed-web", "Embed"));
@@ -1012,8 +1012,9 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
         dialogs.embed_web_error.get_untracked(),
         Some(AddressError::NotHttps.message())
     );
-    assert!(
+    assert_eq!(
         dialogs.embed_web_open.get_untracked(),
+        ambre_chrome::Openness::Open,
         "the refusal closed the dialog"
     );
 
@@ -1027,7 +1028,10 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
                 .expect("a safe address")
         )
     );
-    assert!(!dialogs.embed_web_open.get_untracked());
+    assert_eq!(
+        dialogs.embed_web_open.get_untracked(),
+        ambre_chrome::Openness::Closed
+    );
     root.remove();
 }
 
@@ -1052,7 +1056,7 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
         },
     ];
     let (root, dialogs, placed) = mount_choosers(docs, here);
-    dialogs.embed_doc_open.set(true);
+    dialogs.embed_doc_open.set(ambre_chrome::Openness::Open);
 
     let picker = root
         .query_selector(".ambre-embed-doc")
@@ -1071,7 +1075,10 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
             doc_type: DocType::Trame
         }
     );
-    assert!(!dialogs.embed_doc_open.get_untracked());
+    assert_eq!(
+        dialogs.embed_doc_open.get_untracked(),
+        ambre_chrome::Openness::Closed
+    );
     root.remove();
 }
 

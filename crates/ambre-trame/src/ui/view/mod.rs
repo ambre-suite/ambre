@@ -17,7 +17,7 @@ use ambre_bus::{
 };
 use ambre_canvas::{
     Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
-    InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
+    InputEvent, LayerRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
     Theme, ThemeControl,
 };
 use ambre_commands::ClipboardWrite;

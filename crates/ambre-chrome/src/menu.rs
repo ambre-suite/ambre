@@ -11,9 +11,9 @@ ambre_core::define_flag! {
     /// Whether a control's menu or panel is open, as `aria-expanded` reads it.
     /// The attribute always carries its value: an absent `aria-expanded` says
     /// "this opens nothing" (`CHROME-066`).
-    pub enum Expanded {
+    pub enum Openness {
         /// The menu or panel is closed.
-        Collapsed,
+        Closed,
         /// The menu or panel is open.
         Open,
     }
@@ -37,11 +37,11 @@ ambre_core::define_flag! {
     }
 }
 
-impl Expanded {
+impl Openness {
     /// The `aria-expanded` value: `"true"` or `"false"`, never absent.
     pub const fn aria(self) -> &'static str {
         match self {
-            Self::Collapsed => "false",
+            Self::Closed => "false",
             Self::Open => "true",
         }
     }
@@ -343,8 +343,8 @@ mod tests {
     /// A two-state attribute says false rather than vanishing.
     #[test]
     fn a_two_state_attribute_always_has_a_value() {
-        assert_eq!(Expanded::Open.aria(), "true");
-        assert_eq!(Expanded::Collapsed.aria(), "false");
+        assert_eq!(Openness::Open.aria(), "true");
+        assert_eq!(Openness::Closed.aria(), "false");
         assert_eq!(Selected::On.aria(), "true");
         assert_eq!(Selected::Off.aria(), "false");
         assert_eq!(Checked::On.aria(), "true");
@@ -353,8 +353,8 @@ mod tests {
         assert_eq!(crate::Pressed::Off.aria(), "false");
         // Each flag reads back as itself through its stored `bool`, and a
         // toggle's `bool` reads as the pressed state of the same name.
-        for flag in [Expanded::Open, Expanded::Collapsed] {
-            assert_eq!(Expanded::from_bool(flag.as_bool()), flag);
+        for flag in [Openness::Open, Openness::Closed] {
+            assert_eq!(Openness::from_bool(flag.as_bool()), flag);
         }
         for flag in [Selected::On, Selected::Off] {
             assert_eq!(Selected::from_bool(flag.as_bool()), flag);

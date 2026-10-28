@@ -77,7 +77,7 @@ impl PassphraseRefusal {
 #[component]
 pub fn PassphraseDialog(
     /// Visibility, owned by the caller (the command that opens it).
-    open: RwSignal<bool>,
+    open: RwSignal<crate::Openness>,
     /// Seal or open: the two differ only by the confirmation field and the
     /// wording.
     intent: PassphraseIntent,
@@ -105,7 +105,7 @@ pub fn PassphraseDialog(
         }
         on_submit.run(typed);
         clear();
-        open.set(false);
+        open.set(crate::Openness::Closed);
     };
 
     // Enter submits from either field: the second field is the natural place to
@@ -163,7 +163,7 @@ pub fn PassphraseDialog(
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| {
                         clear();
-                        open.set(false);
+                        open.set(crate::Openness::Closed);
                     }>"Cancel"</button>
                     <button on:click=move |_| submit()>
                         {if sealing { "Save" } else { "Open" }}

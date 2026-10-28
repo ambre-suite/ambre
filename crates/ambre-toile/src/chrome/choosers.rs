@@ -12,7 +12,7 @@
 
 use ambre_bus::app::toile::LinkTarget;
 use ambre_bus::{DocType, DocumentId};
-use ambre_chrome::{ComposedName, Dialog};
+use ambre_chrome::{ComposedName, Dialog, Openness};
 use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
@@ -96,7 +96,7 @@ pub fn ToileChoosers(
                     {move || embed_web_error.get().unwrap_or("")}
                 </p>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| embed_web_open.set(false)>"Cancel"</button>
+                    <button on:click=move |_| embed_web_open.set(Openness::Closed)>"Cancel"</button>
                     <button on:click=move |_| place_web()>"Embed"</button>
                 </div>
             </div>
@@ -117,7 +117,7 @@ pub fn ToileChoosers(
                                 <li>
                                     <button on:click=move |_| {
                                         placed.set(Some(PlacedEmbed { target: target.clone(), at: None }));
-                                        embed_doc_open.set(false);
+                                        embed_doc_open.set(Openness::Closed);
                                     }>{label(&doc)}</button>
                                 </li>
                             }
@@ -125,7 +125,7 @@ pub fn ToileChoosers(
                     </For>
                 </ul>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| embed_doc_open.set(false)>"Cancel"</button>
+                    <button on:click=move |_| embed_doc_open.set(Openness::Closed)>"Cancel"</button>
                 </div>
             </div>
         </Dialog>
@@ -176,7 +176,7 @@ pub fn ToileChoosers(
                                 <li>
                                     <button on:click=move |_| {
                                         set_link.set(Some(LinkEdit(Some(LinkTarget::Frame(id.clone())))));
-                                        link_open.set(false);
+                                        link_open.set(Openness::Closed);
                                     }>{label}</button>
                                 </li>
                             }
@@ -193,7 +193,7 @@ pub fn ToileChoosers(
                                     <button on:click=move |_| {
                                         let target = LinkTarget::Document { document_id, doc_type };
                                         set_link.set(Some(LinkEdit(Some(target))));
-                                        link_open.set(false);
+                                        link_open.set(Openness::Closed);
                                     }>{label(&doc)}</button>
                                 </li>
                             }
@@ -201,7 +201,7 @@ pub fn ToileChoosers(
                     </For>
                 </ul>
                 <div class="ambre-dialog-actions">
-                    <button on:click=move |_| link_open.set(false)>"Cancel"</button>
+                    <button on:click=move |_| link_open.set(Openness::Closed)>"Cancel"</button>
                     <button on:click=move |_| link_web()>"Link"</button>
                 </div>
             </div>
@@ -222,7 +222,7 @@ fn label(doc: &DocChoice) -> impl IntoView + use<> {
 fn place_web_embed(
     typed: RwSignal<String>,
     error: RwSignal<Option<&'static str>>,
-    open: RwSignal<bool>,
+    open: RwSignal<Openness>,
     placed: RwSignal<Option<PlacedEmbed>>,
 ) {
     match WebAddress::parse(&typed.get_untracked()) {
@@ -231,7 +231,7 @@ fn place_web_embed(
                 target: EmbedTarget::Web(url),
                 at: None,
             }));
-            open.set(false);
+            open.set(Openness::Closed);
         }
         Err(e) => error.set(Some(e.message())),
     }
@@ -242,7 +242,7 @@ fn place_web_embed(
 fn set_web_link(
     typed: RwSignal<String>,
     error: RwSignal<Option<&'static str>>,
-    open: RwSignal<bool>,
+    open: RwSignal<Openness>,
     edit: RwSignal<Option<LinkEdit>>,
 ) {
     match WebAddress::parse(&typed.get_untracked()) {
@@ -250,7 +250,7 @@ fn set_web_link(
             edit.set(Some(LinkEdit(Some(LinkTarget::Url(
                 ambre_core::LinkUrl::new(url.into_string()),
             )))));
-            open.set(false);
+            open.set(Openness::Closed);
         }
         Err(e) => error.set(Some(e.message())),
     }

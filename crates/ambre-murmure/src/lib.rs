@@ -92,7 +92,7 @@ mod unread_tests;
 
 pub use channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot, FoldSnapshot,
-    Linked, MessageCount, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
+    Linked, LinkedOpening, MessageCount, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
     SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, ThreadLinked,
     ThreadTarget,
 };

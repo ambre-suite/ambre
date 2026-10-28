@@ -66,7 +66,7 @@ pub use format::{
 };
 pub use handler::{CommandHandler, FileAccept, FilePick, KeyRoute, KeyTarget, ShellAction};
 pub use menu::{
-    Checked, Expanded, MenuKey, Selected, focus_first_item, initial, menu_key, on_menu_keydown,
+    Checked, MenuKey, Openness, Selected, focus_first_item, initial, menu_key, on_menu_keydown,
 };
 pub use palette::{
     CommandPalette, PaletteEntry, PaletteKey, PaletteRow, filter as filter_commands,

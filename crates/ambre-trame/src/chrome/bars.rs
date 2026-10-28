@@ -130,19 +130,19 @@ pub fn FormatBar(
         <FormatToggle
             label=label(BOLD)
             icon=glyph(BOLD)
-            pressed=style.bold.into()
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.bold.get()))
             on_toggle=Callback::new(move |()| on_command.run(BOLD))
         />
         <FormatToggle
             label=label(ITALIC)
             icon=glyph(ITALIC)
-            pressed=style.italic.into()
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.italic.get()))
             on_toggle=Callback::new(move |()| on_command.run(ITALIC))
         />
         <FormatToggle
             label="Underline"
             icon=icondata::BsTypeUnderline
-            pressed=style.underline.into()
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.underline.get()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
                 underline: Some(ambre_bus::Underline::from_bool(
                     !style.underline.get_untracked(),
@@ -153,7 +153,7 @@ pub fn FormatBar(
         <FormatToggle
             label="Strikethrough"
             icon=icondata::BsTypeStrikethrough
-            pressed=style.strikethrough.into()
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.strikethrough.get()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
                 strikethrough: Some(ambre_bus::Strikethrough::from_bool(
                     !style.strikethrough.get_untracked(),

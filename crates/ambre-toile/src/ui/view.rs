@@ -38,7 +38,7 @@ use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
 };
 use ambre_canvas::{
-    BusyPublisher, ContentRepaint, FrameStats, InputEvent, NoticePublisher, OverlayRepaint,
+    BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
     ThemeControl, WHEEL_LINE, WheelDelta,
 };
@@ -3943,9 +3943,9 @@ impl ToileView {
             ContentRepaint::Reuse
         };
         let overlay = if any_dirty {
-            OverlayRepaint::Redraw
+            LayerRepaint::Redraw
         } else {
-            OverlayRepaint::Reuse
+            LayerRepaint::Reuse
         };
 
         self.needs_full = false;

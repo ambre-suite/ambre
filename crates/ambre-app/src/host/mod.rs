@@ -39,7 +39,7 @@ use ambre_bus::app::toile::ElementId;
 use ambre_bus::{DocType, DocumentId, LogicCommand, PasteSource};
 use ambre_canvas::{
     ContentRepaint, CssSize, DensityWatch, DevicePx, FATAL_BACKDROP, FrameStats, GpuState,
-    InputEvent, Layer, OverlayRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache,
+    InputEvent, Layer, LayerRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache,
     TextInput, Tick, WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal,
     size_backing_store, start_raf_loop,
 };

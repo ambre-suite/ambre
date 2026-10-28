@@ -202,8 +202,8 @@ pub(crate) fn mount_shell(
             to_logic: to_logic.clone(),
             clipboard_paste,
             toasts,
-            palette_open: RwSignal::new(false),
-            seal_open: RwSignal::new(false),
+            palette_open: RwSignal::new(ambre_chrome::Openness::Closed),
+            seal_open: RwSignal::new(ambre_chrome::Openness::Closed),
         };
         *commands_slot.borrow_mut() = Some(commands.clone());
 

@@ -91,7 +91,7 @@ fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, DeltaByte
     let linked = state
         .thread_linked(state.active_id(), root, thread)
         .expect("link");
-    assert!(linked.open && linked.replaced.is_none());
+    assert!(linked.open == crate::LinkedOpening::Open && linked.replaced.is_none());
     (thread, first, linked.root.expect("the root names it"))
 }
 
@@ -322,7 +322,10 @@ fn two_first_replies_converge_on_the_thread_the_relay_linked() {
     };
     let (winner, _, alice_root) = threaded(&mut alice, root);
     let linked = bob.thread_linked(segment, root, winner).expect("link");
-    assert_eq!((linked.open, linked.replaced), (true, Some(own)));
+    assert_eq!(
+        (linked.open, linked.replaced),
+        (crate::LinkedOpening::Open, Some(own))
+    );
     let bob_root = linked.root.expect("Bob names the winner too");
     assert_eq!(bob.reply_target(root, NOW), Ok(ThreadTarget::Write(winner)));
     // Each imports the other's write of the same value.
@@ -754,7 +757,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
     let (foreign, foreign_first, _) = threaded(&mut alice, other);
     let segment = alice.active_id();
     let misnamed = carol.thread_linked(segment, third, foreign).expect("link");
-    assert!(misnamed.open);
+    assert_eq!(misnamed.open, crate::LinkedOpening::Open);
     carol
         .apply_signed(
             foreign,

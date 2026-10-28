@@ -24,7 +24,7 @@
 
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
-    FormatToggle, Header, MenuEntry, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
+    FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
     ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
 };
 use ambre_commands::CommandId;
@@ -320,7 +320,7 @@ async fn a_toggle_reports_its_click_and_waits_for_the_value() {
             <FormatToggle
                 label="Bold"
                 icon=icondata::BsTypeBold
-                pressed=pressed.into()
+                pressed=Signal::derive(move || Pressed::from_bool(pressed.get()))
                 on_toggle=Callback::new(move |()| clicks.update(|c| *c += 1))
             />
         }
@@ -361,7 +361,7 @@ async fn format_toggle_reflects_pressed_and_reports_clicks() {
             <FormatToggle
                 label="Bold"
                 icon=icondata::BsTypeBold
-                pressed=pressed.into()
+                pressed=Signal::derive(move || Pressed::from_bool(pressed.get()))
                 on_toggle=Callback::new(move |()| clicks.update(|c| *c += 1))
             />
         }
@@ -769,7 +769,7 @@ fn palette_labels(root: &web_sys::Element) -> Vec<String> {
 fn palette_lists_every_declared_command() {
     let owner = Owner::new();
     owner.set();
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let root = mount_in_container(move || {
         view! {
             <ambre_chrome::CommandPalette
@@ -801,7 +801,7 @@ fn palette_lists_every_declared_command() {
 async fn palette_row_invokes_its_command_and_closes() {
     let owner = Owner::new();
     owner.set();
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
     let root = mount_in_container(move || {
         view! {
@@ -818,7 +818,11 @@ async fn palette_row_invokes_its_command_and_closes() {
     last.click();
 
     assert_eq!(invoked.get_untracked(), Some(CommandId("t.merge")));
-    assert!(!open.get_untracked(), "selecting a row closes the palette");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
+        "selecting a row closes the palette"
+    );
 
     leptos::task::tick().await;
     root.remove();
@@ -831,7 +835,7 @@ async fn palette_row_invokes_its_command_and_closes() {
 async fn palette_entry_comes_first_and_hands_back_its_key() {
     let owner = Owner::new();
     owner.set();
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let chosen: RwSignal<Option<ambre_chrome::PaletteKey>> = RwSignal::new(None);
     let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
     let key = ambre_chrome::PaletteKey::Channel(ambre_core::ChannelId::from_bytes([7; 16]));
@@ -865,8 +869,9 @@ async fn palette_entry_comes_first_and_hands_back_its_key() {
 
     assert_eq!(chosen.get_untracked(), Some(key));
     assert_eq!(invoked.get_untracked(), None);
-    assert!(
-        !open.get_untracked(),
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
         "choosing an entry closes the palette"
     );
 
@@ -907,7 +912,7 @@ impl Modal {
 
 /// Mount a `Dialog` under a `ModalHold` that counts takes and releases, as
 /// the launcher provides one.
-fn mount_modal(open: RwSignal<bool>) -> Modal {
+fn mount_modal(open: RwSignal<Openness>) -> Modal {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicI32, Ordering};
     let holds = Arc::new(AtomicI32::new(0));
@@ -951,21 +956,25 @@ fn mount_modal(open: RwSignal<bool>) -> Modal {
 /// hold and notifies no one.
 #[wasm_bindgen_test]
 async fn a_close_landing_after_a_reopen_leaves_the_modal_open() {
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let modal = mount_modal(open);
     leptos::task::tick().await;
     assert_eq!(modal.holds(), 1);
 
     let closed = modal.closed();
-    open.set(false);
+    open.set(Openness::Closed);
     leptos::task::tick().await;
     assert!(!modal.dialog.open(), "closed, its event queued");
-    open.set(true);
+    open.set(Openness::Open);
     leptos::task::tick().await;
     assert!(modal.dialog.open(), "open again before the event");
     closed.await.unwrap();
     assert!(modal.dialog.open(), "the stale close closed nothing");
-    assert!(open.get_untracked(), "nor cleared the signal");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Open,
+        "nor cleared the signal"
+    );
     assert_eq!(modal.holds(), 1, "nor released the loop");
     assert_eq!(modal.heard.get_untracked(), 0, "nor notified");
     modal.root.remove();
@@ -975,7 +984,7 @@ async fn a_close_landing_after_a_reopen_leaves_the_modal_open() {
 /// `on_close` is gone notifies no one, and panics nothing.
 #[wasm_bindgen_test]
 async fn a_close_after_its_callback_is_gone_notifies_no_one() {
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let heard = RwSignal::new(0);
     let owner = Owner::new();
     let on_close = owner.with(|| Callback::new(move |()| heard.update(|n| *n += 1)));
@@ -1022,7 +1031,11 @@ async fn a_close_after_its_callback_is_gone_notifies_no_one() {
         .unwrap();
     assert_eq!(thrown.get(), 0, "the handler threw");
     assert_eq!(heard.get_untracked(), 0, "the callback was gone");
-    assert!(!open.get_untracked(), "the signal still follows");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
+        "the signal still follows"
+    );
     modal.root.remove();
 }
 
@@ -1031,18 +1044,18 @@ async fn a_close_after_its_callback_is_gone_notifies_no_one() {
 /// loop back (`CHROME-089`).
 #[wasm_bindgen_test]
 async fn a_modal_follows_its_signal_and_holds_the_loop_while_open() {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(Openness::Closed);
     let modal = mount_modal(open);
     assert!(!modal.dialog.open());
     assert_eq!(modal.holds(), 0);
 
-    open.set(true);
+    open.set(Openness::Open);
     leptos::task::tick().await;
     assert!(modal.dialog.open(), "the element is shown");
     assert_eq!(modal.holds(), 1, "the loop is held");
 
     let closed = modal.closed();
-    open.set(false);
+    open.set(Openness::Closed);
     closed.await.unwrap();
     assert!(!modal.dialog.open(), "the element is hidden");
     assert_eq!(modal.holds(), 0, "the loop is released");
@@ -1053,7 +1066,7 @@ async fn a_modal_follows_its_signal_and_holds_the_loop_while_open() {
 /// signal (`CHROME-092`). A click inside it does neither.
 #[wasm_bindgen_test]
 async fn a_backdrop_click_dismisses_the_modal_and_clears_its_signal() {
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let modal = mount_modal(open);
     leptos::task::tick().await;
     assert!(modal.dialog.open());
@@ -1068,14 +1081,22 @@ async fn a_backdrop_click_dismisses_the_modal_and_clears_its_signal() {
     inside.click();
     leptos::task::tick().await;
     sleep(10).await;
-    assert!(open.get_untracked(), "a click inside keeps the modal");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Open,
+        "a click inside keeps the modal"
+    );
 
     let closed = modal.closed();
     let click = web_sys::MouseEvent::new("click").unwrap();
     modal.dialog.dispatch_event(&click).unwrap();
     closed.await.unwrap();
     assert!(!modal.dialog.open(), "the backdrop closes it");
-    assert!(!open.get_untracked(), "and clears the signal");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
+        "and clears the signal"
+    );
     assert_eq!(modal.holds(), 0);
     modal.root.remove();
 }
@@ -1087,17 +1108,21 @@ async fn a_backdrop_click_dismisses_the_modal_and_clears_its_signal() {
 /// element as the browser does, then reopens it through the signal.
 #[wasm_bindgen_test]
 async fn a_native_close_clears_the_signal_and_the_modal_reopens() {
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let modal = mount_modal(open);
     leptos::task::tick().await;
 
     let closed = modal.closed();
     modal.dialog.close();
     closed.await.unwrap();
-    assert!(!open.get_untracked(), "the signal follows the element");
+    assert_eq!(
+        open.get_untracked(),
+        Openness::Closed,
+        "the signal follows the element"
+    );
     assert_eq!(modal.holds(), 0, "the loop is released");
 
-    open.set(true);
+    open.set(Openness::Open);
     leptos::task::tick().await;
     assert!(modal.dialog.open(), "the next open is not blocked");
     assert_eq!(modal.holds(), 1);
@@ -1114,7 +1139,7 @@ async fn an_open_modal_traps_the_focus_and_makes_the_page_inert() {
     document().body().unwrap().append_child(&outside).unwrap();
     let outside: web_sys::HtmlElement = outside.dyn_into().unwrap();
 
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let modal = mount_modal(open);
     leptos::task::tick().await;
     assert!(modal.dialog.matches(":modal").unwrap(), "opened as a modal");
@@ -1125,7 +1150,7 @@ async fn an_open_modal_traps_the_focus_and_makes_the_page_inert() {
     assert_eq!(active().as_ref(), Some(&inside), "the page behind is inert");
 
     let closed = modal.closed();
-    open.set(false);
+    open.set(Openness::Closed);
     closed.await.unwrap();
     outside.focus().unwrap();
     assert_eq!(
@@ -1141,7 +1166,7 @@ async fn an_open_modal_traps_the_focus_and_makes_the_page_inert() {
 /// `close` event fires, so only the cleanup can release the hold.
 #[wasm_bindgen_test]
 async fn an_open_modal_unmounted_releases_the_loop() {
-    let open = RwSignal::new(true);
+    let open = RwSignal::new(Openness::Open);
     let mut modal = mount_modal(open);
     leptos::task::tick().await;
     assert_eq!(modal.holds(), 1);

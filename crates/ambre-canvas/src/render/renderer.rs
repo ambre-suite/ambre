@@ -73,13 +73,14 @@ pub enum ContentRepaint<P = ViewPx> {
     Reuse,
 }
 
-/// How to repaint the OVERLAY (transient, swapchain) layer this frame.
+/// How to repaint one layer this frame: the plan's choice for the OVERLAY
+/// (transient, swapchain) layer, and the frame's choice for each layer.
 ///
-/// `Redraw` uploads the freshly pushed overlay geometry to the GPU.
+/// `Redraw` uploads the freshly pushed geometry to the GPU.
 /// `Reuse` skips the upload and re-issues the draw call using the previously
 /// uploaded GPU buffer -- used on idle frames where nothing visible changed.
-#[derive(Clone, Copy, Debug)]
-pub enum OverlayRepaint {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LayerRepaint {
     Redraw,
     Reuse,
 }
@@ -1189,7 +1190,7 @@ impl QuadRenderer {
         self.atlas.flush_uploads(queue);
         // Only uploads when this frame called the matching `begin_rebuild`.
         self.cells.upload_if_rebuilding(device, queue, "cells");
-        if matches!(overlay, OverlayRepaint::Redraw) {
+        if matches!(overlay, LayerRepaint::Redraw) {
             self.overlay.upload_if_rebuilding(device, queue, "overlay");
         }
 

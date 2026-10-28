@@ -94,11 +94,11 @@ pub fn focus_of(pane: MurmurePane) -> ShellRegion {
 
 /// Whether the panel is open: only while the user is in a thread or in the
 /// member list.
-pub fn panel_open(pane: MurmurePane) -> bool {
-    matches!(
+pub fn panel_open(pane: MurmurePane) -> ambre_chrome::Openness {
+    ambre_chrome::Openness::from_bool(matches!(
         pane,
         MurmurePane::Thread { .. } | MurmurePane::Members { .. }
-    )
+    ))
 }
 
 /// The accessible name of the panel: what it holds.
@@ -253,7 +253,7 @@ pub fn InviteControl(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
             <div class="murmure-invite">
                 <button
                     class="murmure-invite-toggle"
-                    aria-expanded=move || ambre_chrome::Expanded::from_bool(open.get()).aria()
+                    aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
                     on:click=move |_| open.update(|o| *o = !*o)
                 >
                     "Invite"
@@ -412,7 +412,7 @@ pub struct MurmureRelay {
     /// loads it into the composer (`MURMURE-203`).
     pub editing: RwSignal<Option<PendingEdit>>,
     /// The list of keys shows (`MURMURE-540`).
-    pub keys: RwSignal<bool>,
+    pub keys: RwSignal<ambre_chrome::Openness>,
     /// The `@channel` the dialog asks the author about (`MURMURE-557`).
     /// `None` once sent or cancelled.
     pub asking_all: RwSignal<Option<AskedAll>>,
@@ -522,7 +522,7 @@ impl MurmureRelay {
             editing: RwSignal::new(None),
             asking_all: RwSignal::new(None),
             returned: RwSignal::new(None),
-            keys: RwSignal::new(false),
+            keys: RwSignal::new(ambre_chrome::Openness::Closed),
             drafts: StoredValue::new_local(DraftShelf::default()),
             picking: RwSignal::new(None),
             picked_emoji: RwSignal::new(None),
@@ -1395,7 +1395,7 @@ impl MurmureHandler {
                 None
             }
             KEYS => {
-                self.relay.keys.set(true);
+                self.relay.keys.set(ambre_chrome::Openness::Open);
                 None
             }
             _ => return false,
@@ -1540,8 +1540,12 @@ pub fn DeleteConfirm(
     send: Callback<LogicCommand>,
     now: Callback<(), Timestamp>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
-    Effect::new(move |_| open.set(relay.deleting.with(Option::is_some)));
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    Effect::new(move |_| {
+        open.set(ambre_chrome::Openness::from_bool(
+            relay.deleting.with(Option::is_some),
+        ))
+    });
     let cancel = move || relay.deleting.set(None);
     let confirm = move |_| {
         if let Some(command) = relay.confirm_delete(now.run(())) {
@@ -1578,8 +1582,12 @@ pub fn ChannelMentionConfirm(
     send: Callback<LogicCommand>,
     now: Callback<(), Timestamp>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
-    Effect::new(move |_| open.set(relay.asking_all.with(Option::is_some)));
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
+    Effect::new(move |_| {
+        open.set(ambre_chrome::Openness::from_bool(
+            relay.asking_all.with(Option::is_some),
+        ))
+    });
     let title = move || {
         relay
             .asking_all
@@ -1718,14 +1726,14 @@ pub fn EmojiPicker(
     send: Callback<LogicCommand>,
     now: Callback<(), Timestamp>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let query = RwSignal::new(String::new());
     Effect::new(move |_| {
         let picking = relay.picking.with(Option::is_some);
         if picking {
             query.set(String::new());
         }
-        open.set(picking);
+        open.set(ambre_chrome::Openness::from_bool(picking));
     });
     let pick = move |emoji: &ambre_bus::Emoji| {
         if let Some(command) = relay.pick_emoji(emoji.clone(), now.run(())) {
@@ -1830,7 +1838,7 @@ pub fn KeyList(relay: MurmureRelay) -> impl IntoView {
                 </tbody>
             </table>
             <div class="ambre-dialog-actions">
-                <button class="murmure-keys-close" on:click=move |_| relay.keys.set(false)>
+                <button class="murmure-keys-close" on:click=move |_| relay.keys.set(ambre_chrome::Openness::Closed)>
                     "Close"
                 </button>
             </div>

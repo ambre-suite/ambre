@@ -366,7 +366,7 @@ impl Bound {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
             let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
-            if phases.build_content {
+            if phases.content == LayerRepaint::Redraw {
                 surface.begin_layer(Layer::Content);
                 view.paint_content(
                     &mut surface,
@@ -375,7 +375,7 @@ impl Bound {
                     plan.content_strip,
                 );
             }
-            if phases.build_overlay {
+            if phases.overlay == LayerRepaint::Redraw {
                 surface.begin_layer(Layer::Overlay);
                 view.paint_overlay(
                     &mut surface,
@@ -385,7 +385,7 @@ impl Bound {
                 );
             }
         }
-        if phases.present {
+        if phases.present == ambre_canvas::Present::Run {
             present(gpu, &plan);
         }
         Some(plan)

@@ -881,7 +881,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         notice: false,
-        deleted: false,
+        deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
@@ -951,7 +951,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         mentions: Vec::new(),
         styles: Vec::new(),
         notice: false,
-        deleted: false,
+        deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
@@ -1020,7 +1020,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         mentions: Vec::new(),
         styles: Vec::new(),
         notice: false,
-        deleted: false,
+        deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,
@@ -1142,7 +1142,7 @@ async fn the_keys_command_opens_the_list_of_every_key() {
     close.dyn_into::<web_sys::HtmlElement>().unwrap().click();
     leptos::task::tick().await;
     assert!(!dialog.open());
-    assert!(!relay.keys.get_untracked());
+    assert_eq!(relay.keys.get_untracked(), ambre_chrome::Openness::Closed);
     root.remove();
 }
 
@@ -1167,7 +1167,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         mentions: Vec::new(),
         styles: Vec::new(),
         notice: false,
-        deleted: false,
+        deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
         from_thread: None,

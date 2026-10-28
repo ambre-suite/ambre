@@ -82,7 +82,7 @@ impl LogicState {
                 .extend(waiting);
             self.forget_murmure_session(lost);
         }
-        if linked.open {
+        if linked.open == ambre_murmure::LinkedOpening::Open {
             self.send_to_sync(SyncCommand::OpenDocument {
                 document_id: thread,
                 doc_type: DocType::Murmure,

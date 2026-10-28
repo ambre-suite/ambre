@@ -66,13 +66,13 @@ impl OwnedHold {
 /// A modal dialog driven by an `open` signal.
 ///
 /// Opening calls `show_modal()`; closing (Escape, backdrop click, or `open`
-/// set false) calls `close()`. The component keeps `open` in sync with the
+/// set to `Closed`) calls `close()`. The component keeps `open` in sync with the
 /// native state in every direction, so callers can both command and observe it.
 #[component]
 pub fn Dialog(
-    /// Visibility. Set `false` to close; the component flips it back on Escape
+    /// Visibility. Set `Closed` to close; the component sets it back on Escape
     /// and backdrop click so it always reflects the true state.
-    open: RwSignal<bool>,
+    open: RwSignal<crate::Openness>,
     /// Fired after the modal opens, for work of the caller's own. The frame
     /// loop is the `ModalHold`'s, not this callback's.
     #[prop(optional, into)]
@@ -99,7 +99,7 @@ pub fn Dialog(
     // Reflect `open` into the native modal state.
     let open_hold = hold.clone();
     Effect::new(move |_| {
-        let want_open = open.get();
+        let want_open = open.get() == crate::Openness::Open;
         let Some(el) = dialog_ref.get() else { return };
         if want_open && !el.open() {
             let _ = el.show_modal();
@@ -122,7 +122,7 @@ pub fn Dialog(
         if dialog_ref.get_untracked().is_some_and(|el| el.open()) {
             return;
         }
-        open.set(false);
+        open.set(crate::Openness::Closed);
         if let Some(hold) = &hold {
             hold.release();
         }
@@ -143,7 +143,7 @@ pub fn Dialog(
             .and_then(|t| t.dyn_into::<web_sys::HtmlDialogElement>().ok())
             .is_some();
         if on_backdrop {
-            open.set(false);
+            open.set(crate::Openness::Closed);
         }
     };
 

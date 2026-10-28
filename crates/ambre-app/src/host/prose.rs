@@ -27,8 +27,8 @@ use ambre_bus::app::prose::WordCount;
 use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, CssSize, FrameStats, InputEvent, NoticePublisher,
-    OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
+    BusyPublisher, ContentKind, ContentRepaint, CssSize, FrameStats, InputEvent, LayerRepaint,
+    NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
 use ambre_core::{CssPoint, CssPx, ViewPoint, ViewPx};
@@ -467,9 +467,9 @@ impl ProseView {
             },
             content_strip: None,
             overlay: if dirty {
-                OverlayRepaint::Redraw
+                LayerRepaint::Redraw
             } else {
-                OverlayRepaint::Reuse
+                LayerRepaint::Reuse
             },
             backdrop: self.theme.palette().content_bg,
         }
@@ -560,7 +560,9 @@ impl ProseView {
                     if self.state.hover(*at) {
                         self.publish_hover();
                     }
-                    let over_link = self.state.link_at(*at).is_some();
+                    let over_link = ambre_prose::chrome::LinkHover::from_bool(
+                        self.state.link_at(*at).is_some(),
+                    );
                     if self.annotations.over_link.get_untracked() != over_link {
                         self.annotations.over_link.set(over_link);
                     }

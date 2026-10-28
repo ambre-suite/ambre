@@ -1951,7 +1951,7 @@ fn plan(rig: &mut Rig) -> (bool, bool) {
         .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
     (
         matches!(p.content, ContentRepaint::Full),
-        matches!(p.overlay, OverlayRepaint::Redraw),
+        matches!(p.overlay, LayerRepaint::Redraw),
     )
 }
 

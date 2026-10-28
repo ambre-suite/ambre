@@ -180,25 +180,25 @@ pub fn SelectionToolbar(
                             <FormatToggle
                                 label="Bold"
                                 icon=icondata::BsTypeBold
-                                pressed=bold.into()
+                                pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(bold.get()))
                                 on_toggle=on_bold
                             />
                             <FormatToggle
                                 label="Italic"
                                 icon=icondata::BsTypeItalic
-                                pressed=italic.into()
+                                pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(italic.get()))
                                 on_toggle=on_italic
                             />
                             <FormatToggle
                                 label="Underline"
                                 icon=icondata::BsTypeUnderline
-                                pressed=underline.into()
+                                pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(underline.get()))
                                 on_toggle=on_underline
                             />
                             <FormatToggle
                                 label="Strikethrough"
                                 icon=icondata::BsTypeStrikethrough
-                                pressed=strikethrough.into()
+                                pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(strikethrough.get()))
                                 on_toggle=on_strike
                             />
                             {mixed_hint(

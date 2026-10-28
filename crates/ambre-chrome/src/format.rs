@@ -98,7 +98,7 @@ pub fn FontSizeSelect(
 pub fn FormatToggle(
     #[prop(into)] label: String,
     #[prop(into)] icon: Option<icondata::Icon>,
-    pressed: Signal<bool>,
+    pressed: Signal<Pressed>,
     on_toggle: Callback<()>,
 ) -> impl IntoView {
     let title = label.clone();
@@ -106,7 +106,7 @@ pub fn FormatToggle(
         <button
             aria-label=label
             title=title
-            aria-pressed=move || crate::Pressed::from_bool(pressed.get()).aria()
+            aria-pressed=move || pressed.get().aria()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_toggle.run(())
         >

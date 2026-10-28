@@ -52,6 +52,17 @@ pub use threading::{Replied, SeekStep, ThreadLinked, ThreadTarget};
 #[cfg(test)]
 pub(crate) use {amending::folded_amendments, folding::header_fold};
 
+ambre_core::define_flag! {
+    /// Whether a linked document is to open: this client's own, for its
+    /// session, or another member's, for its bytes.
+    pub enum LinkedOpening {
+        /// The document is not opened: another link of it already asked.
+        Skip,
+        /// The document is opened.
+        Open,
+    }
+}
+
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
 #[derive(Debug)]

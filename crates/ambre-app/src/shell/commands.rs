@@ -77,9 +77,9 @@ pub(crate) struct CommandPath {
     pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     pub(crate) toasts: Toasts,
     /// The command palette, a shell overlay.
-    pub(crate) palette_open: RwSignal<bool>,
+    pub(crate) palette_open: RwSignal<ambre_chrome::Openness>,
     /// The passphrase prompt of a sealed save, a shell overlay.
-    pub(crate) seal_open: RwSignal<bool>,
+    pub(crate) seal_open: RwSignal<ambre_chrome::Openness>,
 }
 
 impl CommandPath {
@@ -128,8 +128,8 @@ impl CommandPath {
     fn perform(&self, action: ShellAction<AppCommand>) {
         match action {
             ShellAction::Send(command) => self.send(command),
-            ShellAction::OpenPalette => self.palette_open.set(true),
-            ShellAction::OpenSealedSave => self.seal_open.set(true),
+            ShellAction::OpenPalette => self.palette_open.set(ambre_chrome::Openness::Open),
+            ShellAction::OpenSealedSave => self.seal_open.set(ambre_chrome::Openness::Open),
             ShellAction::Copy(write) => exec_clipboard(write),
             ShellAction::CopyText(text) => {
                 if let Some(win) = web_sys::window() {

@@ -83,7 +83,7 @@ fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, DeltaBy
         .expect("adopt")
         .expect("the header travels");
     let linked = state.amendments_linked(segment, amendments).expect("link");
-    assert!(linked.open && linked.replaced.is_none());
+    assert!(linked.open == crate::LinkedOpening::Open && linked.replaced.is_none());
     (amendments, first, linked.meta.expect("meta names them"))
 }
 
@@ -195,7 +195,10 @@ fn a_lost_race_fetches_the_amendments_the_relay_linked() {
     };
     let winner = DocumentId::new();
     let linked = alice.amendments_linked(segment, winner).expect("link");
-    assert_eq!((linked.open, linked.replaced), (true, Some(own)));
+    assert_eq!(
+        (linked.open, linked.replaced),
+        (crate::LinkedOpening::Open, Some(own))
+    );
     assert!(linked.meta.is_some(), "meta names the winner");
     assert_eq!(
         alice.change_target(segment, NOW),

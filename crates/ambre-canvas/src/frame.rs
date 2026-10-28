@@ -18,7 +18,7 @@ use ambre_core::ViewPx;
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect};
 use parley::FontContext;
 
-use crate::render::{ContentRepaint, OverlayRepaint};
+use crate::render::{ContentRepaint, LayerRepaint};
 use crate::text_cache::TextCache;
 use crate::theme::{FONT_BODY, FONT_HEADING};
 
@@ -155,29 +155,42 @@ impl Tick {
 /// What a frame does with each layer, from its repaint plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Phases {
-    /// Rebuild the content layer's CPU batch, and so upload it.
-    pub build_content: bool,
-    /// Rebuild the overlay layer's CPU batch, and so upload it.
-    pub build_overlay: bool,
-    /// Encode the composite and present it.
-    pub present: bool,
+    /// Whether the content layer's CPU batch is rebuilt, and so uploaded.
+    pub content: LayerRepaint,
+    /// Whether the overlay layer's CPU batch is rebuilt, and so uploaded.
+    pub overlay: LayerRepaint,
+    /// Whether the composite is encoded and presented.
+    pub present: Present,
+}
+
+ambre_core::define_flag! {
+    /// Whether a frame encodes the composite and presents it.
+    pub enum Present {
+        /// The frame ends before the encode.
+        Skip,
+        /// The frame encodes the composite and presents it.
+        Run,
+    }
 }
 
 impl Phases {
     /// The phases a plan asks for. A layer planned `Reuse` is neither built
     /// nor uploaded (`CANVAS-003`). The present runs on every frame: the
     /// swapchain texture is fresh and undefined each time (`CANVAS-010`).
-    pub fn of<P>(content: ContentRepaint<P>, overlay: OverlayRepaint) -> Self {
+    pub fn of<P>(content: ContentRepaint<P>, overlay: LayerRepaint) -> Self {
         Self {
-            build_content: !matches!(content, ContentRepaint::Reuse),
-            build_overlay: matches!(overlay, OverlayRepaint::Redraw),
-            present: true,
+            content: match content {
+                ContentRepaint::Reuse => LayerRepaint::Reuse,
+                ContentRepaint::Full | ContentRepaint::Scroll { .. } => LayerRepaint::Redraw,
+            },
+            overlay,
+            present: Present::Run,
         }
     }
 
     /// Whether any layer is rebuilt this frame.
     pub fn any_build(self) -> bool {
-        self.build_content || self.build_overlay
+        self.content == LayerRepaint::Redraw || self.overlay == LayerRepaint::Redraw
     }
 }
 
@@ -442,23 +455,21 @@ mod tests {
             ContentRepaint::Reuse,
         ];
         for content in contents {
-            for overlay in [OverlayRepaint::Redraw, OverlayRepaint::Reuse] {
+            for overlay in [LayerRepaint::Redraw, LayerRepaint::Reuse] {
                 let phases = Phases::of(content, overlay);
-                assert!(
+                assert_eq!(
                     phases.present,
+                    Present::Run,
                     "{content:?} / {overlay:?} skipped the present"
                 );
                 let reused = matches!(content, ContentRepaint::Reuse);
-                assert_eq!(phases.build_content, !reused);
-                assert_eq!(
-                    phases.build_overlay,
-                    matches!(overlay, OverlayRepaint::Redraw)
-                );
+                assert_eq!(phases.content == LayerRepaint::Reuse, reused);
+                assert_eq!(phases.overlay, overlay);
             }
         }
         let idle = Phases::of(
             ContentRepaint::<ambre_core::ViewPx>::Reuse,
-            OverlayRepaint::Reuse,
+            LayerRepaint::Reuse,
         );
         assert!(!idle.any_build(), "an idle frame builds no batch");
     }

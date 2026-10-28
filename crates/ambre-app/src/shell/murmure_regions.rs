@@ -1345,7 +1345,7 @@ async fn the_list_of_keys_shows_its_keys_at_every_width() {
             0.0,
             "closed at {width}"
         );
-        frame.relay.keys.set(true);
+        frame.relay.keys.set(ambre_chrome::Openness::Open);
         leptos::task::tick().await;
         assert!(
             frame.width_of(".murmure-keys-key") > 0.0,

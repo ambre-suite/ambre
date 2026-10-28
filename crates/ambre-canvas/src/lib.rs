@@ -83,17 +83,18 @@ pub use editor::{
 };
 pub use fatal::{fatal_message, signal_fatal};
 pub use frame::{
-    Cover, FATAL_BACKDROP, FatalScreen, Health, Phases, RafControl, Tick, drive_frame, paint_fatal,
+    Cover, FATAL_BACKDROP, FatalScreen, Health, Phases, Present, RafControl, Tick, drive_frame,
+    paint_fatal,
 };
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};
 pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
-pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
+pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
 pub use text_cache::{
     Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
 };
-pub use text_input::{ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
+pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};
 pub use view::{FrameStats, HudTick, InputEvent, PerfSnapshot, PointerButton, RepaintPlan};

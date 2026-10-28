@@ -21,7 +21,7 @@ use ambre_bus::{
     TextStyle, Timestamp, UiEvent, UserId,
 };
 use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PointerButton, RepaintPlan, TextCache,
+    ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
@@ -718,7 +718,7 @@ impl MurmureView {
             mentions: message.mentions.clone(),
             styles: message.styles.clone(),
             notice: message.notice.is_some(),
-            deleted: message.deleted.as_bool(),
+            deleted: message.deleted,
             pressed: None,
             canvas: match self.region {
                 Region::Channel => CHANNEL_CANVAS,
@@ -1191,7 +1191,7 @@ impl MurmureView {
                 ContentRepaint::Reuse
             },
             content_strip: None,
-            overlay: OverlayRepaint::Reuse,
+            overlay: LayerRepaint::Reuse,
             backdrop: self.theme.palette().content_bg,
         }
     }
@@ -3311,7 +3311,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             notice: false,
-            deleted: false,
+            deleted: ambre_bus::Deletion::Live,
             pressed: None,
             canvas: CHANNEL_CANVAS,
             from_thread: None,
@@ -3379,7 +3379,7 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
             notice: false,
-            deleted: false,
+            deleted: ambre_bus::Deletion::Live,
             pressed: Some(pointer(10.0, y)),
             canvas: THREAD_CANVAS,
             from_thread: None,

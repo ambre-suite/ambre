@@ -90,7 +90,8 @@ pub struct EffectiveStyle {
     /// The floor an `AtLeast` line height sets, in pixels. `None` for the two
     /// modes parley expresses on its own.
     pub at_least_floor: Option<DocPx>,
-    pub bold: bool,
+    /// The face the block's text is set in, before its marks.
+    pub weight: Weight,
     pub italic: bool,
     pub align: Align,
     pub indent_first: DocPx,
@@ -131,7 +132,7 @@ impl EffectiveStyle {
             font_size,
             line_height: line_height_of(paragraph, defaults),
             at_least_floor: at_least_floor_of(paragraph),
-            bold: weight == Weight::Bold,
+            weight,
             italic: false,
             align: paragraph.align.unwrap_or(Align::Left),
             indent_first: paragraph.indent_first.unwrap_or(Pt::ZERO).to_doc_px(),
@@ -724,7 +725,7 @@ fn build(
     )));
     builder.push_default(StyleProperty::FontSize(style.font_size.get()));
     builder.push_default(StyleProperty::LineHeight(line_height));
-    if style.bold {
+    if style.weight == Weight::Bold {
         builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
     }
     if style.italic {

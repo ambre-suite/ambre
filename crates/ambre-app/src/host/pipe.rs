@@ -165,7 +165,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
         let ta = text_input.element().clone();
         let ta_read = ta.clone();
         let cb = Closure::<dyn FnMut(web_sys::InputEvent)>::new(move |_event| {
-            if composing.get() {
+            if composing.get() == ambre_canvas::Composition::Composing {
                 return;
             }
             let value = ta_read.value();
@@ -355,7 +355,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
     {
         let composing = text_input.composing();
         let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(move |_event| {
-            composing.set(true);
+            composing.set(ambre_canvas::Composition::Composing);
         });
         text_input
             .element()
@@ -389,7 +389,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
         let ta = text_input.element().clone();
         let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(
             move |event: web_sys::CompositionEvent| {
-                composing.set(false);
+                composing.set(ambre_canvas::Composition::Idle);
                 let text = event.data().unwrap_or_default();
                 host_c
                     .borrow_mut()

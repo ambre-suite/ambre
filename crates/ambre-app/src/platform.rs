@@ -803,7 +803,7 @@ async fn store_container(
     // Durable, not fire-and-forget: the navigation below unloads the page,
     // and an open transaction goes with it.
     let committed = store.save_snapshot_committed(document_id, sealed).await;
-    if committed != Ok(true) {
+    if committed != Ok(ambre_logic::persistence::Commit::Landed) {
         toasts.error("Ambre could not store that file locally");
         return;
     }

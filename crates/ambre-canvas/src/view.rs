@@ -18,7 +18,7 @@ use ambre_commands::{Key, Modifiers};
 use ambre_core::{PageMillis, ViewPoint};
 use ambre_draw::{Color, Rect};
 
-use crate::{ContentRepaint, OverlayRepaint, WheelDelta};
+use crate::{ContentRepaint, LayerRepaint, WheelDelta};
 
 /// Driver-measured per-frame timings, handed to the view so it can render a
 /// debug HUD. All values are spans of the page clock from the *previous* frame.
@@ -70,7 +70,7 @@ pub enum HudTick {
 pub struct RepaintPlan<P = ambre_core::ViewPx> {
     pub content: ContentRepaint<P>,
     pub content_strip: Option<Rect>,
-    pub overlay: OverlayRepaint,
+    pub overlay: LayerRepaint,
     /// The colour a full rebuild clears to, read from the view's palette. The
     /// renderer holds no colour of its own (`CANVAS-060`).
     pub backdrop: Color,

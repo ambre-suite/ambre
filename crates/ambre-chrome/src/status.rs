@@ -85,7 +85,7 @@ pub fn ZoomChip(
                 class="statusbar-zoom-btn"
                 title=title
                 aria-haspopup="menu"
-                aria-expanded=move || crate::Expanded::from_bool(show.get()).aria()
+                aria-expanded=move || crate::Openness::from_bool(show.get()).aria()
                 on:click=move |_| show.update(|v| *v = !*v)
             >
                 {move || format!("{:.0} %", zoom.get().get() * 100.0)}

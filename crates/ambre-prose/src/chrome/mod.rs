@@ -31,6 +31,17 @@ use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
 
+ambre_core::define_flag! {
+    /// Whether the pointer rests on a link's text, which picks the canvas
+    /// cursor (`PROSE-UI-153`).
+    pub enum LinkHover {
+        /// The pointer is off every link: the text cursor shows.
+        Elsewhere,
+        /// The pointer rests on a link: the link cursor shows.
+        OverLink,
+    }
+}
+
 /// The signals the chrome and the shell share with the view.
 ///
 /// The view publishes its positions in pixels of the view, from the canvas's
@@ -51,7 +62,7 @@ pub struct ProseSignals {
     pub intent: RwSignal<Option<AnnotationIntent>>,
     /// The pointer rests on a link: the canvas shows the link cursor
     /// (`PROSE-UI-153`).
-    pub over_link: RwSignal<bool>,
+    pub over_link: RwSignal<LinkHover>,
     /// A link target to open, until the shell takes it (`PROSE-UI-071`).
     pub followed: RwSignal<Option<ambre_core::LinkUrl>>,
     /// The format bar, its anchor in CSS pixels (`PROSE-UI-053`).
@@ -96,7 +107,7 @@ impl ProseSignals {
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
             intent: RwSignal::new(None),
-            over_link: RwSignal::new(false),
+            over_link: RwSignal::new(LinkHover::Elsewhere),
             followed: RwSignal::new(None),
             toolbar: RwSignal::new(ToolbarState::default()),
             format: RwSignal::new(None),

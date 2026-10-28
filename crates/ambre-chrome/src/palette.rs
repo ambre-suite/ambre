@@ -124,7 +124,7 @@ enum Chosen {
 #[component]
 pub fn CommandPalette(
     /// Visibility, driven by the launcher when the palette command is invoked.
-    open: RwSignal<bool>,
+    open: RwSignal<crate::Openness>,
     /// Every command the active application declares (`CHROME-008`).
     table: &'static [Command],
     on_command: Callback<CommandId>,
@@ -143,7 +143,7 @@ pub fn CommandPalette(
     // caret. A palette that reopens on the last search is a palette that runs
     // the wrong command on the next Enter.
     Effect::new(move |_| {
-        if open.get() {
+        if open.get() == crate::Openness::Open {
             query.set(String::new());
             focused.set(0);
             if let Some(el) = input_ref.get() {
@@ -169,7 +169,7 @@ pub fn CommandPalette(
     });
 
     let run = move |chosen: Chosen| {
-        open.set(false);
+        open.set(crate::Openness::Closed);
         match chosen {
             Chosen::Command(id) => on_command.run(id),
             Chosen::Entry(key) => {
@@ -197,7 +197,7 @@ pub fn CommandPalette(
                     run(*chosen);
                 }
             }
-            "Escape" => open.set(false),
+            "Escape" => open.set(crate::Openness::Closed),
             _ => {}
         }
     };
