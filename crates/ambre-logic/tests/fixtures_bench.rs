@@ -64,6 +64,7 @@ fn the_scale_corpus_is_ignored_by_git() {
 fn every_scale_generator_writes_under_the_ignored_directory() {
     for generator in BENCH_REGISTRY {
         let name = generator.name();
+        let name = name.as_str();
         let relative = Path::new(name);
         assert!(
             relative.is_relative() && !name.contains(".."),
@@ -92,17 +93,17 @@ fn no_generator_shares_a_name_or_a_seed_with_another() {
     for (i, one) in all.iter().enumerate() {
         for other in all.iter().skip(i + 1) {
             assert_ne!(
-                one.name(),
-                other.name(),
+                one.name().as_str(),
+                other.name().as_str(),
                 "two generators share the name `{}`, so one overwrites the other",
-                one.name()
+                one.name().as_str()
             );
             assert_ne!(
                 one.seed(),
                 other.seed(),
                 "`{}` and `{}` share a seed, so their documents share an id",
-                one.name(),
-                other.name()
+                one.name().as_str(),
+                other.name().as_str()
             );
         }
     }

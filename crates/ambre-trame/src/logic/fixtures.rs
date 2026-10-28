@@ -25,7 +25,8 @@
 use std::collections::BTreeMap;
 
 use ambre_core::{
-    DocType, FixtureGen, FixtureShape, ShapeBody, fixture_peer_count, seeded_document_id,
+    CellCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, FormulaCount,
+    GeneratorVersion, ShapeBody, SheetCount, fixture_peer_count, seeded_document_id,
 };
 
 use super::*;
@@ -41,8 +42,8 @@ impl TrameState {
     /// engine's bytecode cache. The cache is a derived, local structure, and the
     /// manifest describes the document.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut cells = 0u32;
-        let mut formulas = 0u32;
+        let mut cells = CellCount::ZERO;
+        let mut formulas = FormulaCount::ZERO;
         let sheet_ids = self.fixture_sheet_ids();
         for sheet in &sheet_ids {
             if let LoroValue::Map(map) = self
@@ -51,9 +52,9 @@ impl TrameState {
                 .get_value()
             {
                 for value in map.values() {
-                    cells = cells.saturating_add(1);
+                    cells = cells.incremented();
                     if matches!(value, LoroValue::String(s) if s.starts_with('=')) {
-                        formulas = formulas.saturating_add(1);
+                        formulas = formulas.incremented();
                     }
                 }
             }
@@ -62,7 +63,7 @@ impl TrameState {
             peers: self.fixture_peer_count(),
             body: ShapeBody::Trame {
                 cells,
-                sheets: u16::try_from(sheet_ids.len()).unwrap_or(u16::MAX),
+                sheets: SheetCount::of_len(sheet_ids.len()),
                 formulas,
             },
         }
@@ -202,7 +203,7 @@ impl TrameState {
     /// `oplog_vv()` derefs to a map keyed by `PeerID`; the codebase already calls
     /// it on both engines' sync paths. The count drops the loader's own pinned
     /// peer, so a restored solo document still reports one author.
-    fn fixture_peer_count(&self) -> u8 {
+    fn fixture_peer_count(&self) -> ambre_core::PeerCount {
         fixture_peer_count(
             self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
             super::scaffold_identity(),
@@ -256,37 +257,37 @@ pub const TRAME_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for TrameFixture {
-    fn name(&self) -> &'static str {
-        match self {
+    fn name(&self) -> FixtureName {
+        FixtureName::declared(match self {
             Self::GridLiterals => "trame/grid_literals",
             Self::FormulaDag => "trame/formula_dag",
             Self::MultiSheet => "trame/multi_sheet",
             Self::TwoPeerMerge => "trame/two_peer_merge",
-        }
+        })
     }
 
     fn doc_type(&self) -> DocType {
         DocType::Trame
     }
 
-    fn seed(&self) -> u64 {
+    fn seed(&self) -> FixtureSeed {
         // Distinct per generator, so no two artifacts share a `document_id` and
         // a copied file is visible in the diff rather than plausible.
-        match self {
+        FixtureSeed::new(match self {
             Self::GridLiterals => 0x5EED_7A1E_0000_0001,
             Self::FormulaDag => 0x5EED_7A1E_0000_0002,
             Self::MultiSheet => 0x5EED_7A1E_0000_0003,
             Self::TwoPeerMerge => 0x5EED_7A1E_0000_0004,
-        }
+        })
     }
 
-    fn generator_version(&self) -> u32 {
-        1
+    fn generator_version(&self) -> GeneratorVersion {
+        GeneratorVersion::new(1)
     }
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
+        let mut state = TrameState::with_peer(ambre_core::PeerId(seed.get()));
         match self {
             Self::GridLiterals => build_grid_literals(&mut state),
             Self::FormulaDag => build_formula_dag(&mut state),
@@ -417,8 +418,8 @@ fn build_multi_sheet(state: &mut TrameState) {
 /// grid concatenates both axes (20 rows, 6 columns) instead of overlapping them.
 /// That is what merging two documents born apart looks like, and the corpus wants
 /// it on record.
-fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
-    let mut other = TrameState::with_peer(ambre_core::PeerId(seed ^ 0xFFFF_FFFF));
+fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
+    let mut other = TrameState::with_peer(ambre_core::PeerId(seed.get() ^ 0xFFFF_FFFF));
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..10)
             .map(|row| {
@@ -519,37 +520,37 @@ pub const TRAME_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for TrameBenchFixture {
-    fn name(&self) -> &'static str {
-        match self {
+    fn name(&self) -> FixtureName {
+        FixtureName::declared(match self {
             Self::DenseGrid100k => "trame/bench_dense_grid_100k",
             Self::FormulaGrid100k => "trame/bench_formula_grid_100k",
             Self::FormulaDag10k => "trame/bench_formula_dag_10k",
             Self::ExportSheet10k => "trame/bench_export_sheet_10k",
-        }
+        })
     }
 
     fn doc_type(&self) -> DocType {
         DocType::Trame
     }
 
-    fn seed(&self) -> u64 {
+    fn seed(&self) -> FixtureSeed {
         // A range of its own, disjoint from the correctness seeds above, so no
         // scale artifact shares a `document_id` with a committed one.
-        match self {
+        FixtureSeed::new(match self {
             Self::DenseGrid100k => 0x5EED_B0C4_0000_0001,
             Self::FormulaGrid100k => 0x5EED_B0C4_0000_0002,
             Self::FormulaDag10k => 0x5EED_B0C4_0000_0003,
             Self::ExportSheet10k => 0x5EED_B0C4_0000_0004,
-        }
+        })
     }
 
-    fn generator_version(&self) -> u32 {
-        1
+    fn generator_version(&self) -> GeneratorVersion {
+        GeneratorVersion::new(1)
     }
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
+        let mut state = TrameState::with_peer(ambre_core::PeerId(seed.get()));
         match self {
             Self::DenseGrid100k => build_literal_grid(&mut state, 12_500, 8),
             Self::FormulaGrid100k => build_formula_grid(&mut state),

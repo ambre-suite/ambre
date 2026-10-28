@@ -638,7 +638,7 @@ pub fn manifest_for(
         }));
     }
     Ok(FixtureManifest {
-        generator: generator.name().to_owned(),
+        generator: generator.name(),
         generator_version: generator.generator_version(),
         seed: generator.seed(),
         doc_type: generator.doc_type(),
@@ -676,7 +676,7 @@ pub fn write_fixture(
     let container = generator.build();
     let manifest = manifest_for(generator, &container)?;
     let bytes = container.as_bytes();
-    let artifact = artifact_path(dir, generator.name());
+    let artifact = artifact_path(dir, generator.name().as_str());
     if let Some(parent) = artifact.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -685,11 +685,11 @@ pub fn write_fixture(
     // a diff, and a single-line JSON blob would be as opaque as the binary it
     // describes.
     let mut json = serde_json::to_string_pretty(&manifest).map_err(|e| FixtureError::Manifest {
-        name: generator.name().to_owned(),
+        name: generator.name().to_string(),
         reason: e.to_string(),
     })?;
     json.push('\n');
-    fs::write(manifest_path(dir, generator.name()), json)?;
+    fs::write(manifest_path(dir, generator.name().as_str()), json)?;
     Ok(manifest)
 }
 
@@ -732,11 +732,13 @@ pub fn generate_into(
 pub fn generate_bench_into(
     registry: &[&dyn FixtureGen],
     dir: &Path,
-) -> Result<Vec<&'static str>, FixtureError> {
+) -> Result<Vec<ambre_core::FixtureName>, FixtureError> {
     let mut built = Vec::new();
     for generator in registry {
         let name = generator.name();
-        if artifact_path(dir, name).is_file() && manifest_path(dir, name).is_file() {
+        if artifact_path(dir, name.as_str()).is_file()
+            && manifest_path(dir, name.as_str()).is_file()
+        {
             continue;
         }
         write_fixture(*generator, dir)?;
@@ -873,7 +875,9 @@ pub fn retain_frozen(
     let mut dropped = Vec::new();
     // Newest first, so the cap keeps the head of each document type's run.
     for entry in entries.iter().rev() {
-        let live = registry.iter().find(|g| g.name() == entry.generator);
+        let live = registry
+            .iter()
+            .find(|g| g.name().as_str() == entry.generator);
         let doc_type = match read_manifest(&frozen, &entry.stem) {
             Ok(manifest) => manifest.doc_type,
             // An unreadable sidecar leaves the artifact unattributable, and the
@@ -1017,6 +1021,7 @@ pub fn check_corpus(
 
     for generator in registry {
         let name = generator.name();
+        let name = name.as_str();
         let fresh = write_fixture(*generator, scratch)?;
         let committed = match fs::read(artifact_path(&current, name)) {
             Ok(bytes) => ambre_core::PlaintextContainer::new(bytes),
@@ -1047,7 +1052,7 @@ pub fn check_corpus(
     }
 
     for name in artifact_stems(&current)? {
-        if registry.iter().any(|g| g.name() == name) {
+        if registry.iter().any(|g| g.name().as_str() == name) {
             continue;
         }
         report.drifts.push(Drift::Orphan { name });
@@ -1174,7 +1179,7 @@ fn check_frozen(
             });
             continue;
         }
-        let (_id, live_state) = match load_fixture_from(&current, live.name()) {
+        let (_id, live_state) = match load_fixture_from(&current, live.name().as_str()) {
             Ok(loaded) => loaded,
             Err(e) => {
                 report.drifts.push(Drift::Frozen {
@@ -1219,7 +1224,7 @@ pub fn prune_orphans(
 ) -> Result<Vec<PathBuf>, FixtureError> {
     let mut removed = Vec::new();
     for name in artifact_stems(dir)? {
-        if registry.iter().any(|g| g.name() == name) {
+        if registry.iter().any(|g| g.name().as_str() == name) {
             continue;
         }
         fs::remove_file(artifact_path(dir, &name))?;

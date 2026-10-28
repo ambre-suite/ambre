@@ -69,6 +69,69 @@ macro_rules! define_tally {
     )+};
 }
 
+define_tally! {
+    /// How many elements a selection, a board or an import holds.
+    pub struct ElementCount;
+}
+
+/// How many cells a selection or a sheet holds of some kind. A sheet's cells
+/// run past 32 bits, rows times columns, so the tally is 64 bits wide.
+///
+/// Transparent to serde: a manifest or a message carries the bare number.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct CellCount(u64);
+
+impl CellCount {
+    /// No cell.
+    pub const ZERO: Self = Self(0);
+
+    /// A tally of `n` cells.
+    pub const fn new(n: u64) -> Self {
+        Self(n)
+    }
+
+    /// The count itself.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// Whether no cell was counted.
+    pub const fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
+    /// The tally one more, held at the top.
+    #[must_use]
+    pub const fn incremented(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// The count as a divisor of a sum, for an average.
+    #[allow(clippy::cast_precision_loss)]
+    pub const fn as_f64(self) -> f64 {
+        self.0 as f64
+    }
+}
+
+impl std::fmt::Display for CellCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     define_tally! {

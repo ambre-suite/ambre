@@ -152,14 +152,17 @@ diff, so a binary encoding would defeat the sidecar's only purpose.
 pub struct FixtureManifest {
     /// Generator identity, for example "trame/formula_dag_deep". Also the
     /// artifact **stem**: the whole filename in `current/`, the part before the
-    /// `@` in `frozen/`. Owned, because a manifest is read back off disk.
-    pub generator: String,
+    /// `@` in `frozen/`. A borrowed literal in a generator, owned once a
+    /// manifest is read back off disk. Serde sees the bare string.
+    pub generator: FixtureName,
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how a frozen fixture and
     /// the current one are found to be no longer comparable (`FIXTURE-020`).
-    pub generator_version: u32,
+    pub generator_version: GeneratorVersion,
     /// Declared by the generator, and pins the `PeerID` and the `document_id`.
-    pub seed: u64,
+    /// The name, the version and the seed are transparent newtypes: the
+    /// sidecar carries the bare string and numbers.
+    pub seed: FixtureSeed,
     pub doc_type: DocType,
     /// The document's two independent versions at write time -- current for a
     /// generated artifact, superseded for a frozen one. `schema_version` is read
@@ -181,18 +184,19 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Distinct peers whose ops are present; 1 for a solo document.
-    pub peers: u8,
+    pub peers: PeerCount,
     pub body: ShapeBody,
 }
 
 /// Per-application rather than a union of nullable counters: an application
 /// that joins later adds a variant instead of widening every existing row with
-/// a field that means nothing to it.
+/// a field that means nothing to it. Each count is a tally of its own kind,
+/// and serde sees the bare number.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
-    Trame { cells: u32, sheets: u16, formulas: u32 },
-    Toile { elements: u32, frames: u16, connectors: u32 },
-    Prose { blocks: u32, characters: u32 },
+    Trame { cells: CellCount, sheets: SheetCount, formulas: FormulaCount },
+    Toile { elements: ElementCount, frames: BoardFrameCount, connectors: ConnectorCount },
+    Prose { blocks: DocBlockCount, characters: CharCount },
 }
 ```
 
@@ -205,18 +209,18 @@ trait objects, and a trait of bare constants is not object-safe.
 pub trait FixtureGen {
     /// Stable identity: the manifest's `generator` and the artifact stem. Unique
     /// across the registry (`FIXTURE-010`).
-    fn name(&self) -> &'static str;
+    fn name(&self) -> FixtureName;
     fn doc_type(&self) -> DocType;
 
     /// A constant the generator author picks once. It belongs to the generator
     /// rather than the driver because a seed supplied from outside could differ
     /// between runs, turning the drift gate into noise. Changing it is a content
     /// change and takes a `generator_version` bump with it.
-    fn seed(&self) -> u64;
+    fn seed(&self) -> FixtureSeed;
 
     /// Bumped by the author when the produced document changes on purpose; the
     /// driver copies it into the manifest, having no other source for it.
-    fn generator_version(&self) -> u32;
+    fn generator_version(&self) -> GeneratorVersion;
 
     /// Build the document and return the plaintext `.ambre` bytes. Not a raw
     /// snapshot: the header makes the artifact self-describing and loadable

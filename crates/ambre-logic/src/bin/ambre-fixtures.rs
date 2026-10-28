@@ -134,6 +134,7 @@ fn bench_corpus() -> Result<ExitCode, FixtureError> {
     // alone, so this line is the only reading those two rows have.
     for generator in BENCH_REGISTRY {
         let name = generator.name();
+        let name = name.as_str();
         let bytes = std::fs::metadata(fixtures::artifact_path(&dir, name))?.len();
         println!("{name}: {:.2} MB", bytes as f64 / (1024.0 * 1024.0));
     }

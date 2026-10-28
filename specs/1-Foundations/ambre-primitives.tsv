@@ -890,23 +890,6 @@ ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | 
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	newtype-inner	error carries the refused raw input
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint.0 | field | String	newtype-inner	KeyFingerprint newtype
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() | ret | &str	newtype-inner	KeyFingerprint newtype
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::generator_version() | ret | u32	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::name() | ret | &'static str	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureGen::seed() | ret | u64	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator | field | String	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.generator_version | field | u32	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureManifest.seed | field | u64	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | FixtureShape.peers | field | u8	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Prose.blocks | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Prose.characters | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Toile.connectors | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Toile.elements | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Toile.frames | field | u16	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Trame.cells | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Trame.formulas | field | u32	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | ShapeBody::Trame.sheets | field | u16	math	fixture shape counts
-ambre-core | src/fixtures.rs | crate::fixtures | fixture_peer_count() | ret | u8	generic	fixture generator metadata (test support)
-ambre-core | src/fixtures.rs | crate::fixtures | seeded_document_id(seed) | param | u64	generic	fixture generator metadata (test support)
 ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	newtype-inner	FontFamily constructor or accessor
 ambre-core | src/font.rs | crate::font | <FontSize as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
@@ -1220,7 +1203,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | artifact_stems() | ret | Resul
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | collect_stems(out) | param | &mut Vec<String>	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | freeze(name) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | generate_bench_into() | ret | Result<Vec<&'static str>,FixtureError>	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | load_bench_fixture(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture(name) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | load_fixture_from(name) | param | &str	free-text	free text: message, label, name or report
@@ -2162,12 +2144,7 @@ ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(r
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | match_offsets(hay) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::generator_version() | ret | u32	trait	signature fixed by foreign trait
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::name() | ret | &'static str	trait	signature fixed by foreign trait
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | <ProseFixture as FixtureGen>::seed() | ret | u64	trait	signature fixed by foreign trait
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | AUTHOR_SEED | const | u64	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | ProseState::canonical_dump() | ret | String	generic	fixtures feature, test support
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | build_styled_document(seed) | param | u64	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename(value) | param | &str	generic	fixtures feature, test support
@@ -2784,12 +2761,6 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_mat
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileBenchFixture as FixtureGen>::generator_version() | ret | u32	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileBenchFixture as FixtureGen>::name() | ret | &'static str	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileBenchFixture as FixtureGen>::seed() | ret | u64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileFixture as FixtureGen>::generator_version() | ret | u32	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileFixture as FixtureGen>::name() | ret | &'static str	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | <ToileFixture as FixtureGen>::seed() | ret | u64	trait	signature fixed by the trait (HitTest, FrameHandler, Fixture, DrawSurface)
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | ToileState::canonical_dump() | ret | String	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck(slides) | param | u32	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck::PITCH | const | f64	math	a constant local to one function
@@ -3315,21 +3286,13 @@ ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	gen
 ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only fold_needle hands it, or a cell's displayed text
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::generator_version() | ret | u32	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::name() | ret | &'static str	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameBenchFixture as FixtureGen>::seed() | ret | u64	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as FixtureGen>::generator_version() | ret | u32	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as FixtureGen>::name() | ret | &'static str	trait	fixture trait from the shared fixtures harness
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | <TrameFixture as FixtureGen>::seed() | ret | u64	trait	fixture trait from the shared fixtures harness
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::canonical_dump() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::fixture_peer_count() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::CASCADE | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::ROWS | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_dag::DEPTH | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_grid::ROWS | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(cols) | param | u32	math	fixture grid dimensions
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(rows) | param | u32	math	fixture grid dimensions
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_two_peer_merge(seed) | param | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | new_sheet_id(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values::rank() | ret | u8	math	a value local to one algorithm
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
@@ -3743,11 +3706,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal::new(total) | param
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight.0 | field | i32	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight::get() | ret | i32	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteWeight::new(weight) | param | i32	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::as_f64() | ret | f64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::is_zero() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-chrome | src/font.rs | crate::font | DEFAULT_LABEL | const | &str	free-text	UI label of the picker entry that names no family
 ambre-chrome | src/font.rs | crate::font | FamilyChoice.css | field | &'static str	foreign-api	the CSS font-family stack the browser previews the entry in
 ambre-chrome | src/font.rs | crate::font | FamilyChoice::label() | ret | &'static str	free-text	the closed set's display label
@@ -4053,3 +4011,16 @@ ambre-core | src/span.rs | crate::span | FrameRate::get() | ret | f32	newtype-in
 ambre-core | src/span.rs | crate::span | FrameRate::new(per_second) | param | f32	newtype-inner	the constructor of the frame-rate newtype
 ambre-prose | src/probe.rs | crate::probe | Percentiles.median | field | f64	math	a sample of a probe's series, in milliseconds or frames
 ambre-prose | src/probe.rs | crate::probe | Percentiles.p95 | field | f64	math	a sample of a probe's series, in milliseconds or frames
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureName.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::declared(name) | param | &'static str	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | FixtureSeed::new(seed) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | GeneratorVersion.0 | field | u32	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/fixtures.rs | crate::fixtures | GeneratorVersion::new(version) | param | u32	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/tally.rs | crate::tally | CellCount.0 | field | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/tally.rs | crate::tally | CellCount::as_f64() | ret | f64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/tally.rs | crate::tally | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/tally.rs | crate::tally | CellCount::is_zero() | ret | bool	newtype-inner	a predicate on the newtype's own inside
+ambre-core | src/tally.rs | crate::tally | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor

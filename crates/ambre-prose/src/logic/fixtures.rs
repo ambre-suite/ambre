@@ -15,7 +15,8 @@ use std::collections::{BTreeMap, HashMap};
 use ambre_bus::app::grid::{CellPos, Col, ColCount, Row, RowCount};
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
 use ambre_core::{
-    DocType, FixtureGen, FixtureShape, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
+    CharCount, DocBlockCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape,
+    GeneratorVersion, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -33,13 +34,13 @@ impl ProseState {
     /// declaring its own shape would assert only that it agrees with itself.
     #[must_use]
     pub fn fixture_shape(&self) -> FixtureShape {
-        let blocks = u32::try_from(self.document_order().len()).unwrap_or(u32::MAX);
+        let blocks = DocBlockCount::of_len(self.document_order().len());
         let characters = self
             .document_order()
             .iter()
             .filter_map(|id| self.body_of(id))
-            .fold(0u32, |total, body| {
-                total.saturating_add(u32::try_from(body.len_unicode()).unwrap_or(u32::MAX))
+            .fold(CharCount::ZERO, |total, body| {
+                total + CharCount::from_len(body.len_unicode())
             });
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -279,24 +280,24 @@ pub enum ProseFixture {
 pub const PROSE_FIXTURES: &[&dyn FixtureGen] = &[&ProseFixture::StyledDocument];
 
 impl FixtureGen for ProseFixture {
-    fn name(&self) -> &'static str {
-        match self {
+    fn name(&self) -> FixtureName {
+        FixtureName::declared(match self {
             Self::StyledDocument => "prose/styled_document",
-        }
+        })
     }
 
     fn doc_type(&self) -> DocType {
         DocType::Prose
     }
 
-    fn seed(&self) -> u64 {
-        match self {
+    fn seed(&self) -> FixtureSeed {
+        FixtureSeed::new(match self {
             Self::StyledDocument => 0x5EED_9905_0000_0001,
-        }
+        })
     }
 
-    fn generator_version(&self) -> u32 {
-        1
+    fn generator_version(&self) -> GeneratorVersion {
+        GeneratorVersion::new(1)
     }
 
     fn build(&self) -> ambre_core::PlaintextContainer {
@@ -317,7 +318,7 @@ impl FixtureGen for ProseFixture {
 
 /// The author's identity, pinned apart from the peer: two routes to one
 /// document share an author and differ in peer.
-const AUTHOR_SEED: u64 = 0x5EED_9905_A117_0001;
+const AUTHOR_SEED: FixtureSeed = FixtureSeed::new(0x5EED_9905_A117_0001);
 
 /// The comment's clock, pinned: a real one would differ run to run.
 const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp(1_700_000_000_000);
@@ -373,8 +374,8 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, FixtureError>
         .ok_or(FixtureError::Missing("no block after the one just written"))
 }
 
-fn build_styled_document(seed: u64) -> Result<ProseState, FixtureError> {
-    let mut state = ProseState::with_peer(ambre_core::PeerId(seed))
+fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> {
+    let mut state = ProseState::with_peer(ambre_core::PeerId(seed.get()))
         .ok_or(FixtureError::Missing("no document"))?;
     state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
     state.set_display_name(
@@ -562,12 +563,12 @@ mod tests {
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
-        assert_eq!(shape.peers, 1);
+        assert_eq!(shape.peers, ambre_core::PeerCount::new(1));
         assert_eq!(
             shape.body,
             ambre_core::ShapeBody::Prose {
-                blocks: 1,
-                characters: 5
+                blocks: ambre_core::DocBlockCount::new(1),
+                characters: ambre_core::CharCount::new(5)
             }
         );
     }
@@ -622,8 +623,10 @@ mod tests {
     /// though every block and annotation id differs.
     #[test]
     fn the_dump_is_blind_to_the_ids_a_route_mints() {
-        let first = build_styled_document(11).expect("every command lands");
-        let second = build_styled_document(12).expect("every command lands");
+        let first =
+            build_styled_document(ambre_core::FixtureSeed::new(11)).expect("every command lands");
+        let second =
+            build_styled_document(ambre_core::FixtureSeed::new(12)).expect("every command lands");
         assert_eq!(first.canonical_dump(), second.canonical_dump());
         assert_ne!(first.export_snapshot(), second.export_snapshot());
     }

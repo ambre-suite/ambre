@@ -16,7 +16,96 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DocType, DocumentId};
+use crate::{CellCount, CharCount, DocType, DocumentId, ElementCount};
+
+// -----------------------------------------------------------------------------
+// Generator identity
+// -----------------------------------------------------------------------------
+
+/// The stable name of one generator, for example `"trame/formula_dag_deep"`.
+/// It is also the artifact stem.
+///
+/// A generator names itself with a `'static` literal. A manifest read back off
+/// disk owns its copy, because owned deserialization cannot borrow `'static`.
+/// Transparent to serde, so the manifest carries the bare string.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+#[serde(transparent)]
+pub struct FixtureName(std::borrow::Cow<'static, str>);
+
+impl FixtureName {
+    /// The name a generator declares for itself.
+    #[must_use]
+    pub const fn declared(name: &'static str) -> Self {
+        Self(std::borrow::Cow::Borrowed(name))
+    }
+
+    /// The name, for a path or a message.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for FixtureName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// The constant a generator author picks once. It pins the `PeerID`, the
+/// commit clock and the `document_id` (I1). Transparent to serde.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Hash)]
+#[serde(transparent)]
+pub struct FixtureSeed(u64);
+
+impl FixtureSeed {
+    /// The seed `seed`.
+    #[must_use]
+    pub const fn new(seed: u64) -> Self {
+        Self(seed)
+    }
+
+    /// The seed itself, for the mixer and the peer id it pins.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// The version a generator author bumps when the produced document changes on
+/// purpose. Transparent to serde.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct GeneratorVersion(u32);
+
+impl GeneratorVersion {
+    /// The version `version`.
+    #[must_use]
+    pub const fn new(version: u32) -> Self {
+        Self(version)
+    }
+}
+
+impl std::fmt::Display for GeneratorVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+crate::define_tally! {
+    /// How many distinct peers wrote ops into a fixture.
+    pub struct PeerCount;
+    /// How many sheets a workbook fixture holds.
+    pub struct SheetCount;
+    /// How many stored formula sources a workbook fixture holds.
+    pub struct FormulaCount;
+    /// How many frame elements a board fixture holds.
+    pub struct BoardFrameCount;
+    /// How many connectors a board fixture holds.
+    pub struct ConnectorCount;
+    /// How many blocks a document fixture holds, in document order.
+    pub struct DocBlockCount;
+}
 
 // -----------------------------------------------------------------------------
 // Seed -> document identity
@@ -35,8 +124,8 @@ use crate::{DocType, DocumentId};
 /// Crypto-free by design: the mixer is SplitMix64, a finalizer chosen for being
 /// short and dependency-free. It is **not** a hash and nothing here relies on it
 /// being one -- a fixture's identity is public by construction.
-pub fn seeded_document_id(seed: u64) -> DocumentId {
-    let mut state = seed;
+pub fn seeded_document_id(seed: FixtureSeed) -> DocumentId {
+    let mut state = seed.get();
     let mut bytes = [0u8; 16];
     for chunk in bytes.chunks_mut(8) {
         // SplitMix64: advance, then finalize. Two draws fill the sixteen bytes.
@@ -82,12 +171,13 @@ pub const FIXTURE_IMPORT_PEER: crate::PeerId = crate::PeerId(0x10AD_0000_0000_00
 pub fn fixture_peer_count(
     peers: impl IntoIterator<Item = crate::PeerId>,
     scaffold: crate::PeerId,
-) -> u8 {
-    let authors = peers
-        .into_iter()
-        .filter(|peer| *peer != FIXTURE_IMPORT_PEER && *peer != scaffold)
-        .count();
-    u8::try_from(authors).unwrap_or(u8::MAX)
+) -> PeerCount {
+    PeerCount::of_len(
+        peers
+            .into_iter()
+            .filter(|peer| *peer != FIXTURE_IMPORT_PEER && *peer != scaffold)
+            .count(),
+    )
 }
 
 // -----------------------------------------------------------------------------
@@ -104,7 +194,7 @@ pub trait FixtureGen {
     /// Stable identity: the manifest's [`FixtureManifest::generator`] and the
     /// artifact **stem** -- the whole filename in `current/`, the part before the
     /// `@` in `frozen/`.
-    fn name(&self) -> &'static str;
+    fn name(&self) -> FixtureName;
 
     /// Which app's engine this generator drives, and therefore which importer
     /// reads the artifact back.
@@ -115,14 +205,14 @@ pub trait FixtureGen {
     /// between runs, turning the drift gate into noise. Changing it is a content
     /// change and takes a [`generator_version`](Self::generator_version) bump
     /// with it.
-    fn seed(&self) -> u64;
+    fn seed(&self) -> FixtureSeed;
 
     /// Bumped by the author when the produced document changes on purpose; the
     /// driver copies it into the manifest, having no other source for it. No
     /// recipe reads it. It exists for the reviewer reading the manifest diff, and
     /// for the frozen belt, which retires its semantic comparison when this no
     /// longer matches.
-    fn generator_version(&self) -> u32;
+    fn generator_version(&self) -> GeneratorVersion;
 
     /// Build the document and return the plaintext `.ambre` container, that is,
     /// the output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
@@ -154,18 +244,17 @@ pub trait FixtureGen {
 pub struct FixtureManifest {
     /// Generator identity, for example `"trame/formula_dag_deep"`. Also the artifact
     /// **stem**: the whole filename in `current/`, the part before the `@` in
-    /// `frozen/`. `String` because `fixtures-check` reads manifests back
-    /// off disk, and owned deserialization cannot borrow `'static`.
-    pub generator: String,
+    /// `frozen/`.
+    pub generator: FixtureName,
 
     /// Bumped by the generator author when the produced document changes on
     /// purpose. Frozen into the artifact too: that is how detects a frozen
     /// fixture and the current one are no longer comparable.
-    pub generator_version: u32,
+    pub generator_version: GeneratorVersion,
 
     /// Declared by the generator ([`FixtureGen::seed`]), and pins the `PeerID`
     /// and `document_id` (I1).
-    pub seed: u64,
+    pub seed: FixtureSeed,
 
     pub doc_type: DocType,
 
@@ -198,7 +287,7 @@ pub struct FixtureManifest {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Number of distinct peers whose ops are present (1 for a solo document).
-    pub peers: u8,
+    pub peers: PeerCount,
     pub body: ShapeBody,
 }
 
@@ -208,18 +297,18 @@ pub struct FixtureShape {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
     Trame {
-        cells: u32,
-        sheets: u16,
-        formulas: u32,
+        cells: CellCount,
+        sheets: SheetCount,
+        formulas: FormulaCount,
     },
     Toile {
-        elements: u32,
-        frames: u16,
-        connectors: u32,
+        elements: ElementCount,
+        frames: BoardFrameCount,
+        connectors: ConnectorCount,
     },
     Prose {
-        blocks: u32,
-        characters: u32,
+        blocks: DocBlockCount,
+        characters: CharCount,
     },
 }
 
@@ -229,19 +318,19 @@ mod tests {
 
     fn sample() -> FixtureManifest {
         FixtureManifest {
-            generator: "trame/formula_dag_deep".to_owned(),
-            generator_version: 3,
-            seed: 0x0123_4567_89AB_CDEF,
+            generator: FixtureName::declared("trame/formula_dag_deep"),
+            generator_version: GeneratorVersion::new(3),
+            seed: FixtureSeed::new(0x0123_4567_89AB_CDEF),
             doc_type: DocType::Trame,
             ambre_version: crate::AMBRE_VERSION,
             schema_version: crate::SCHEMA_VERSION_ABSENT,
             digest: crate::FileDigest::from_array([0xAB; 32]),
             shape: FixtureShape {
-                peers: 2,
+                peers: PeerCount::new(2),
                 body: ShapeBody::Trame {
-                    cells: 12,
-                    sheets: 2,
-                    formulas: 4,
+                    cells: CellCount::new(12),
+                    sheets: SheetCount::new(2),
+                    formulas: FormulaCount::new(4),
                 },
             },
         }
@@ -252,6 +341,23 @@ mod tests {
         let json = serde_json::to_string_pretty(&sample()).expect("serializes");
         let back: FixtureManifest = serde_json::from_str(&json).expect("deserializes");
         assert_eq!(back, sample());
+    }
+
+    #[test]
+    fn the_typed_fields_keep_the_bare_json_of_the_manifest() {
+        // The names, seeds, versions and tallies are newtypes. A committed
+        // manifest is a frozen artifact, so the sidecar must read as it did
+        // when they were bare.
+        let json = serde_json::to_string(&sample()).expect("serializes");
+        assert!(json.starts_with(concat!(
+            "{\"generator\":\"trame/formula_dag_deep\",",
+            "\"generator_version\":3,",
+            "\"seed\":81985529216486895,"
+        )));
+        assert!(json.ends_with(concat!(
+            "\"shape\":{\"peers\":2,",
+            "\"body\":{\"Trame\":{\"cells\":12,\"sheets\":2,\"formulas\":4}}}}"
+        )));
     }
 
     #[test]
@@ -277,18 +383,18 @@ mod tests {
     fn a_seeded_document_id_is_stable_distinct_and_well_formed() {
         // I1's third entropy source: same seed, same id -- or the drift gate
         // fires on the header alone, whatever the payload does.
-        assert_eq!(seeded_document_id(7), seeded_document_id(7));
-        assert_ne!(seeded_document_id(7), seeded_document_id(8));
+        let id = |seed| seeded_document_id(FixtureSeed::new(seed));
+        assert_eq!(id(7), id(7));
+        assert_ne!(id(7), id(8));
         // Two neighbouring seeds must not collide in the version/variant stamp
         // either: the nibbles are fixed, the other 122 bits are not.
         for seed in 0..64u64 {
-            let bytes = *seeded_document_id(seed).as_bytes();
+            let bytes = *id(seed).as_bytes();
             assert_eq!(bytes[6] >> 4, 7, "version nibble for seed {seed}");
             assert_eq!(bytes[8] >> 6, 0b10, "variant bits for seed {seed}");
         }
-        let all: std::collections::HashSet<[u8; 16]> = (0..256u64)
-            .map(|s| *seeded_document_id(s).as_bytes())
-            .collect();
+        let all: std::collections::HashSet<[u8; 16]> =
+            (0..256u64).map(|s| *id(s).as_bytes()).collect();
         assert_eq!(all.len(), 256, "seeds must not collide");
     }
 
@@ -297,9 +403,9 @@ mod tests {
         // The Toile variant carries no Trame field and vice versa: a later app
         // adds a variant rather than widening every row.
         let toile = ShapeBody::Toile {
-            elements: 5,
-            frames: 1,
-            connectors: 2,
+            elements: ElementCount::new(5),
+            frames: BoardFrameCount::new(1),
+            connectors: ConnectorCount::new(2),
         };
         let json = serde_json::to_string(&toile).expect("serializes");
         assert!(json.contains("Toile"), "{json}");

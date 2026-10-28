@@ -22,7 +22,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::{
-    DocType, FixtureGen, FixtureShape, ShapeBody, fixture_peer_count, seeded_document_id,
+    BoardFrameCount, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName, FixtureSeed,
+    FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -44,21 +45,21 @@ impl ToileState {
     /// checks the manifest against a recomputed shape; a generator declaring
     /// its own would assert only that it agrees with itself.
     pub fn fixture_shape(&self) -> FixtureShape {
-        let mut elements = 0u32;
-        let mut frames = 0u16;
+        let mut elements = ElementCount::ZERO;
+        let mut frames = BoardFrameCount::ZERO;
         if let LoroValue::Map(map) = self.doc.get_map(Root::Elements.as_str()).get_deep_value() {
             for value in map.values() {
-                elements = elements.saturating_add(1);
+                elements = elements.incremented();
                 if let LoroValue::Map(fields) = value
                     && value_has_type(FieldValues::of(fields), ElementKind::Frame)
                 {
-                    frames = frames.saturating_add(1);
+                    frames = frames.incremented();
                 }
             }
         }
         let connectors = match self.doc.get_map(Root::Connectors.as_str()).get_value() {
-            LoroValue::Map(map) => u32::try_from(map.len()).unwrap_or(u32::MAX),
-            _ => 0,
+            LoroValue::Map(map) => ConnectorCount::of_len(map.len()),
+            _ => ConnectorCount::ZERO,
         };
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -243,35 +244,35 @@ pub const TOILE_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for ToileFixture {
-    fn name(&self) -> &'static str {
-        match self {
+    fn name(&self) -> FixtureName {
+        FixtureName::declared(match self {
             Self::ShapesAndFrame => "toile/shapes_and_frame",
             Self::ConnectorsAndGroups => "toile/connectors_and_groups",
-        }
+        })
     }
 
     fn doc_type(&self) -> DocType {
         DocType::Toile
     }
 
-    fn seed(&self) -> u64 {
+    fn seed(&self) -> FixtureSeed {
         // Distinct per generator, so no two artifacts share a `document_id` and
         // a copied file is visible in the diff rather than plausible.
-        match self {
+        FixtureSeed::new(match self {
             Self::ShapesAndFrame => 0x5EED_70115_u64 << 16 | 0x0001,
             Self::ConnectorsAndGroups => 0x5EED_70115_u64 << 16 | 0x0002,
-        }
+        })
     }
 
-    fn generator_version(&self) -> u32 {
+    fn generator_version(&self) -> GeneratorVersion {
         // 2: a colour is stored `0xRRGGBBAA`. An artifact frozen before
         // stores `0xAARRGGBB`, and no migration rewrites it.
-        2
+        GeneratorVersion::new(2)
     }
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
+        let mut state = ToileState::with_peer(ambre_core::PeerId(seed.get()));
         match self {
             Self::ShapesAndFrame => build_shapes_and_frame(&mut state),
             Self::ConnectorsAndGroups => build_connectors_and_groups(&mut state),
@@ -465,35 +466,35 @@ pub const TOILE_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
 ];
 
 impl FixtureGen for ToileBenchFixture {
-    fn name(&self) -> &'static str {
-        match self {
+    fn name(&self) -> FixtureName {
+        FixtureName::declared(match self {
             Self::Board50k => "toile/bench_board_50k",
             Self::DenseViewport2k => "toile/bench_dense_viewport_2k",
             Self::Deck50 => "toile/bench_deck_50",
-        }
+        })
     }
 
     fn doc_type(&self) -> DocType {
         DocType::Toile
     }
 
-    fn seed(&self) -> u64 {
+    fn seed(&self) -> FixtureSeed {
         // A range of its own, disjoint from the correctness seeds above, so no
         // scale artifact shares a `document_id` with a committed one.
-        match self {
+        FixtureSeed::new(match self {
             Self::Board50k => 0x5EED_B0C4_0001_0001,
             Self::DenseViewport2k => 0x5EED_B0C4_0001_0002,
             Self::Deck50 => 0x5EED_B0C4_0001_0003,
-        }
+        })
     }
 
-    fn generator_version(&self) -> u32 {
-        1
+    fn generator_version(&self) -> GeneratorVersion {
+        GeneratorVersion::new(1)
     }
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
+        let mut state = ToileState::with_peer(ambre_core::PeerId(seed.get()));
         match self {
             // 100 tiles of 500 on a 4 000-unit pitch: far wider than one
             // viewport, so a cull that returned everything shows up as a figure.

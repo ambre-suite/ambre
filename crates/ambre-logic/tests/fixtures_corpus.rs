@@ -53,17 +53,17 @@ struct TrameGen {
 }
 
 impl FixtureGen for TrameGen {
-    fn name(&self) -> &'static str {
-        self.name
+    fn name(&self) -> ambre_core::FixtureName {
+        ambre_core::FixtureName::declared(self.name)
     }
     fn doc_type(&self) -> DocType {
         DocType::Trame
     }
-    fn seed(&self) -> u64 {
-        self.seed
+    fn seed(&self) -> ambre_core::FixtureSeed {
+        ambre_core::FixtureSeed::new(self.seed)
     }
-    fn generator_version(&self) -> u32 {
-        self.version
+    fn generator_version(&self) -> ambre_core::GeneratorVersion {
+        ambre_core::GeneratorVersion::new(self.version)
     }
     fn build(&self) -> ambre_core::PlaintextContainer {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
@@ -75,7 +75,7 @@ impl FixtureGen for TrameGen {
             });
         }
         state
-            .export_ambre_plaintext(seeded_document_id(self.seed))
+            .export_ambre_plaintext(seeded_document_id(ambre_core::FixtureSeed::new(self.seed)))
             .expect("the document reads")
     }
 }
@@ -87,17 +87,17 @@ struct ToileGen {
 }
 
 impl FixtureGen for ToileGen {
-    fn name(&self) -> &'static str {
-        self.name
+    fn name(&self) -> ambre_core::FixtureName {
+        ambre_core::FixtureName::declared(self.name)
     }
     fn doc_type(&self) -> DocType {
         DocType::Toile
     }
-    fn seed(&self) -> u64 {
-        self.seed
+    fn seed(&self) -> ambre_core::FixtureSeed {
+        ambre_core::FixtureSeed::new(self.seed)
     }
-    fn generator_version(&self) -> u32 {
-        1
+    fn generator_version(&self) -> ambre_core::GeneratorVersion {
+        ambre_core::GeneratorVersion::new(1)
     }
     fn build(&self) -> ambre_core::PlaintextContainer {
         let mut state = ToileState::with_peer(ambre_core::PeerId(self.seed));
@@ -120,7 +120,7 @@ impl FixtureGen for ToileGen {
             correlate: None,
         });
         state
-            .export_ambre_plaintext(seeded_document_id(self.seed))
+            .export_ambre_plaintext(seeded_document_id(ambre_core::FixtureSeed::new(self.seed)))
             .expect("the document reads")
     }
 }
@@ -174,7 +174,8 @@ fn the_manifest_describes_the_artifact_beside_it() {
     let dir = TempCorpus::new("manifest");
     let manifest = write_fixture(&TRAME, dir.path()).expect("the generator builds and writes");
 
-    let bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name())).expect("artifact");
+    let bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str()))
+        .expect("artifact");
 
     // `digest` matches the whole `.ambre` file, header included (C8).
     assert_eq!(
@@ -199,7 +200,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
 
     // `shape` matches `shape_of` recomputed from the decoded state, which is what
     // catches a manifest committed out of sync with its artifact.
-    let (_id, state) = load_fixture_from(dir.path(), TRAME.name()).expect("loads");
+    let (_id, state) = load_fixture_from(dir.path(), TRAME.name().as_str()).expect("loads");
     assert_eq!(manifest.shape, shape_of(&state));
 }
 
@@ -207,7 +208,7 @@ fn the_manifest_describes_the_artifact_beside_it() {
 fn the_sidecar_is_readable_json_and_reads_back_equal() {
     let dir = TempCorpus::new("sidecar");
     let written = write_fixture(&TOILE, dir.path()).expect("writes");
-    let path = fixtures::manifest_path(dir.path(), TOILE.name());
+    let path = fixtures::manifest_path(dir.path(), TOILE.name().as_str());
     let text = std::fs::read_to_string(&path).expect("a sidecar");
 
     // The whole reason the sidecar is JSON: a reviewer reads this diff.
@@ -221,7 +222,10 @@ fn the_sidecar_is_readable_json_and_reads_back_equal() {
         "the digest must be a hex string, not a byte array: {text}"
     );
 
-    assert_eq!(read_manifest(dir.path(), TOILE.name()).unwrap(), written);
+    assert_eq!(
+        read_manifest(dir.path(), TOILE.name().as_str()).unwrap(),
+        written
+    );
 }
 
 #[test]
@@ -244,17 +248,17 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
     // written. It is not committed and discovered later by a confused importer.
     struct Liar;
     impl FixtureGen for Liar {
-        fn name(&self) -> &'static str {
-            "liar"
+        fn name(&self) -> ambre_core::FixtureName {
+            ambre_core::FixtureName::declared("liar")
         }
         fn doc_type(&self) -> DocType {
             DocType::Toile
         }
-        fn seed(&self) -> u64 {
-            1
+        fn seed(&self) -> ambre_core::FixtureSeed {
+            ambre_core::FixtureSeed::new(1)
         }
-        fn generator_version(&self) -> u32 {
-            1
+        fn generator_version(&self) -> ambre_core::GeneratorVersion {
+            ambre_core::GeneratorVersion::new(1)
         }
         fn build(&self) -> ambre_core::PlaintextContainer {
             TRAME.build()
@@ -285,8 +289,8 @@ fn the_driver_walks_a_whole_registry_and_creates_its_subdirectories() {
         // A generator name carries a `/`, which is a subdirectory the driver
         // creates. It is not an escape. It is not a flat filename with a slash
         // in it.
-        assert!(fixtures::artifact_path(dir.path(), generator.name()).is_file());
-        assert!(fixtures::manifest_path(dir.path(), generator.name()).is_file());
+        assert!(fixtures::artifact_path(dir.path(), generator.name().as_str()).is_file());
+        assert!(fixtures::manifest_path(dir.path(), generator.name().as_str()).is_file());
     }
     assert!(dir.path().join("trame").is_dir());
 }
@@ -297,9 +301,11 @@ fn regenerating_rewrites_the_same_bytes() {
     // second run over an existing tree reproduces it exactly.
     let dir = TempCorpus::new("regen");
     let first = write_fixture(&TRAME, dir.path()).expect("writes");
-    let first_bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name())).unwrap();
+    let first_bytes =
+        std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str())).unwrap();
     let second = write_fixture(&TRAME, dir.path()).expect("rewrites");
-    let second_bytes = std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name())).unwrap();
+    let second_bytes =
+        std::fs::read(fixtures::artifact_path(dir.path(), TRAME.name().as_str())).unwrap();
     assert_eq!(first, second);
     assert_eq!(first_bytes, second_bytes);
 }
@@ -309,7 +315,10 @@ fn the_shipping_registry_has_no_duplicate_names() {
     // A name is the artifact stem, so two generators sharing one would silently
     // overwrite each other's fixture on every run. The emptiness check is part of
     // the rule here: an empty registry passes the dedup and verifies nothing.
-    let mut names: Vec<&str> = fixtures::REGISTRY.iter().map(|g| g.name()).collect();
+    let mut names: Vec<String> = fixtures::REGISTRY
+        .iter()
+        .map(|g| g.name().to_string())
+        .collect();
     assert!(!names.is_empty(), "an empty registry verifies nothing here");
     let count = names.len();
     names.sort_unstable();
@@ -325,7 +334,7 @@ fn the_shipping_registry_has_no_duplicate_names() {
 fn a_written_fixture_loads_back_through_the_production_importer() {
     let dir = TempCorpus::new("load");
     write_fixture(&TRAME, dir.path()).expect("writes");
-    let (id, state) = load_fixture_from(dir.path(), TRAME.name()).expect("loads");
+    let (id, state) = load_fixture_from(dir.path(), TRAME.name().as_str()).expect("loads");
     // The `document_id` survives the round trip and is the one the seed derives.
     assert_eq!(id, seeded_document_id(TRAME.seed()));
     assert_eq!(state.doc_type(), DocType::Trame);
@@ -555,9 +564,9 @@ fn the_shape_counts_what_the_document_holds() {
             sheets,
             formulas,
         } => {
-            assert_eq!(cells, 3, "three written cells");
-            assert_eq!(sheets, 1, "the implicit default sheet");
-            assert_eq!(formulas, 1, "one `=`-prefixed source");
+            assert_eq!(cells.get(), 3, "three written cells");
+            assert_eq!(sheets.get(), 1, "the implicit default sheet");
+            assert_eq!(formulas.get(), 1, "one `=`-prefixed source");
         }
         other => panic!("a Trame fixture must carry a Trame shape, got {other:?}"),
     }
@@ -569,9 +578,9 @@ fn the_shape_counts_what_the_document_holds() {
             frames,
             connectors,
         } => {
-            assert_eq!(elements, 4, "three rects and a frame");
-            assert_eq!(frames, 1);
-            assert_eq!(connectors, 0);
+            assert_eq!(elements.get(), 4, "three rects and a frame");
+            assert_eq!(frames.get(), 1);
+            assert_eq!(connectors.get(), 0);
         }
         other => panic!("a Toile fixture must carry a Toile shape, got {other:?}"),
     }
@@ -584,7 +593,7 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     // the merge. A restored document always carries one peer that is the reader
     // rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
     // subtract exactly that one, so a solo document still reports one.
-    assert_eq!(shape_of(&solo).peers, 1, "one author");
+    assert_eq!(shape_of(&solo).peers.get(), 1, "one author");
 
     let mut alice = TrameState::with_peer(ambre_core::PeerId(1));
     let mut bob = TrameState::with_peer(ambre_core::PeerId(2));
@@ -600,7 +609,11 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     });
     alice.apply_remote_snapshot(&bob.export_snapshot());
     let merged = DocState::Trame(Box::new(alice));
-    assert_eq!(shape_of(&merged).peers, 2, "two peers' ops are present");
+    assert_eq!(
+        shape_of(&merged).peers.get(),
+        2,
+        "two peers' ops are present"
+    );
 }
 
 #[test]

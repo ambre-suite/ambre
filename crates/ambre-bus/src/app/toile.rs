@@ -1362,9 +1362,9 @@ impl std::fmt::Display for VoteTotal {
     }
 }
 
+pub use ambre_core::ElementCount;
+
 ambre_core::define_tally! {
-    /// How many elements a selection, a board or an import holds.
-    pub struct ElementCount;
     /// How many votes were cast on one target.
     pub struct VoteCount;
     /// How many users reacted to one target with one emoji.

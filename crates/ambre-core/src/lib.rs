@@ -119,8 +119,9 @@ pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, File
 pub use fingerprint::KeyFingerprint;
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
-    FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
-    seeded_document_id,
+    BoardFrameCount, ConnectorCount, DocBlockCount, FIXTURE_IMPORT_PEER, FixtureGen,
+    FixtureManifest, FixtureName, FixtureSeed, FixtureShape, FormulaCount, GeneratorVersion,
+    PeerCount, ShapeBody, SheetCount, fixture_peer_count, seeded_document_id,
 };
 pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight, Slant, Strikethrough,
@@ -172,6 +173,7 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
+pub use tally::{CellCount, ElementCount};
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
     CharSpan, CharVec, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
