@@ -789,7 +789,7 @@ fn css_color(value: &str) -> Option<Rgba> {
         "orange" => 0xff_a500,
         _ => return None,
     };
-    Some(Rgb::from_bits(named).to_rgba(u8::MAX))
+    Some(Rgb::from_bits(named).to_rgba(ambre_core::Alpha::OPAQUE))
 }
 
 #[cfg(test)]

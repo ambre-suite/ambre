@@ -82,8 +82,30 @@ impl Rgb {
 
     /// This colour with an alpha, packed alpha last.
     #[must_use]
-    pub const fn to_rgba(self, alpha: u8) -> Rgba {
-        Rgba((self.0 << 8) | alpha as u32)
+    pub const fn to_rgba(self, alpha: Alpha) -> Rgba {
+        Rgba((self.0 << 8) | alpha.0 as u32)
+    }
+}
+
+/// The alpha channel of a packed colour, as a byte: 0 shows nothing, 255
+/// shows everything. Every byte is an alpha, so nothing is refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Alpha(u8);
+
+impl Alpha {
+    /// Everything shows.
+    pub const OPAQUE: Self = Self(u8::MAX);
+
+    /// The alpha a channel byte `byte` holds.
+    #[must_use]
+    pub const fn new(byte: u8) -> Self {
+        Self(byte)
+    }
+
+    /// The byte, for the call into a renderer that takes the channel.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
     }
 }
 
@@ -165,11 +187,10 @@ impl Opacity {
         Self::clamped(self.0 + (to.0 - self.0) * t as f32)
     }
 
-    /// The alpha byte of a channel of alpha `alpha`, from 0 to 1, drawn at
-    /// this opacity.
+    /// The alpha a channel of alpha `alpha` draws with at this opacity.
     #[must_use]
-    pub fn alpha_byte(self, alpha: f32) -> u8 {
-        (alpha * self.0 * 255.0).round() as u8
+    pub fn fade(self, alpha: Alpha) -> Alpha {
+        Alpha((f32::from(alpha.0) / 255.0 * self.0 * 255.0).round() as u8)
     }
 }
 
@@ -207,7 +228,7 @@ impl From<Opacity> for f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Opacity, Rgb, Rgba};
+    use super::{Alpha, Opacity, Rgb, Rgba};
 
     // One orange in the two packings: red 0xff, green 0x80, blue 0x20,
     // alpha 0x40.
@@ -233,8 +254,8 @@ mod tests {
         let rgba = Rgba::from_bits(ORANGE_RGBA);
         let rgb = Rgb::from_bits(ORANGE_RGB);
         assert_eq!(rgba.rgb(), rgb);
-        assert_eq!(rgb.to_rgba(0x40), rgba);
-        assert_eq!(rgba.rgb().to_rgba(0x40), rgba);
+        assert_eq!(rgb.to_rgba(Alpha::new(0x40)), rgba);
+        assert_eq!(rgba.rgb().to_rgba(Alpha::new(0x40)), rgba);
     }
 
     #[test]
@@ -266,7 +287,10 @@ mod tests {
         assert_eq!(Opacity::clamped(-1.0), Opacity::TRANSPARENT);
         assert_eq!(Opacity::clamped(f32::NAN), Opacity::TRANSPARENT);
         assert_eq!(Opacity::OPAQUE.scaled(2.0), Opacity::OPAQUE);
-        assert_eq!(Opacity::OPAQUE.alpha_byte(0.5), 128);
+        assert_eq!(
+            Opacity::new(0.5).unwrap().fade(Alpha::OPAQUE),
+            Alpha::new(128)
+        );
         let past: Result<Opacity, _> = serde_json::from_str("2.0");
         assert!(past.is_err(), "a decoded opacity past 1 is refused");
     }

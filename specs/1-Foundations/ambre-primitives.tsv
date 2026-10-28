@@ -690,7 +690,6 @@ ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | ColorPopover(title) | param | &'static str	free-text	text, label or user content
-ambre-chrome | src/color.rs | crate::color | Pick.alpha | field | Option<u8>	local	private: the alpha byte an eight-digit spelling carries, handed once to Rgb::to_rgba
 ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	foreign-api	the value an `<input type="color">` reports
 ambre-chrome | src/composed.rs | crate::composed | BRAND | const | &str	free-text	UI text/label const
 ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | String	newtype-inner	newtype inner
@@ -797,7 +796,6 @@ ambre-core | src/color.rs | crate::color | Rgb::from_bits(bits) | param | u32	ne
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgb::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
-ambre-core | src/color.rs | crate::color | Rgb::to_rgba(alpha) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba.0 | field | u32	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::bits() | ret | u32	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::channels() | ret | [u8;4]	newtype-inner	Rgba/Rgb constructor or accessor
@@ -809,8 +807,6 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	n
 ambre-core | src/color.rs | crate::color | <Opacity as TryFrom<f32>>::try_from(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/color.rs | crate::color | InvalidOpacity.0 | field | f32	newtype-inner	the refused value an error reports
 ambre-core | src/color.rs | crate::color | Opacity.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-core | src/color.rs | crate::color | Opacity::alpha_byte() | ret | u8	foreign-api	the 8-bit alpha channel of a packed RGBA pixel
-ambre-core | src/color.rs | crate::color | Opacity::alpha_byte(alpha) | param | f32	math	a colour channel's own alpha, from 0 to 1
 ambre-core | src/color.rs | crate::color | Opacity::clamped(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/color.rs | crate::color | Opacity::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/color.rs | crate::color | Opacity::lerp(t) | param | f64	math	interpolation fraction
@@ -4017,3 +4013,6 @@ ambre-core | src/tally.rs | crate::tally | CellCount::new(n) | param | u64	newty
 ambre-core | src/unit.rs | crate::unit | WholePx.0 | field | u32	newtype-inner	the inside of a pixel edge typed by its space; the u32 is what wgpu, the canvas element and the image decoders take
 ambre-core | src/unit.rs | crate::unit | WholePx<P>::get() | ret | u32	newtype-inner	the one way out of a pixel edge, to wgpu, the canvas element and the image decoders
 ambre-core | src/unit.rs | crate::unit | WholePx<P>::new(n) | param | u32	newtype-inner	the constructor of a pixel edge typed by its space
+ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	the inside of the alpha channel of a packed colour, as a renderer takes it
+ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
+ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one

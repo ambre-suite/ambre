@@ -20,7 +20,7 @@
 
 use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 
-use ambre_core::{Rgb, Rgba};
+use ambre_core::{Alpha, Rgb, Rgba};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -76,7 +76,7 @@ impl PickedColour for Rgb {
     const ALPHA: AlphaEdit = AlphaEdit::Absent;
 
     fn as_rgba(self) -> Rgba {
-        self.to_rgba(u8::MAX)
+        self.to_rgba(Alpha::OPAQUE)
     }
 
     fn from_rgba(rgba: Rgba) -> Self {
@@ -103,7 +103,7 @@ struct Pick {
     rgb: Rgb,
     /// The alpha an eight-digit spelling carries. A pick without one keeps
     /// the alpha of the colour it replaces.
-    alpha: Option<u8>,
+    alpha: Option<Alpha>,
 }
 
 impl Pick {
@@ -126,7 +126,7 @@ fn parse_hex_color(s: &str) -> Option<Pick> {
             let [r, g, b, alpha] = bits.to_be_bytes();
             Some(Pick {
                 rgb: Rgb::from_channels(r, g, b),
-                alpha: Some(alpha),
+                alpha: Some(Alpha::new(alpha)),
             })
         }
         _ => None,
@@ -138,7 +138,7 @@ fn parse_hex_color(s: &str) -> Option<Pick> {
 /// alpha drops it.
 fn repaint<C: PickedColour>(current: Option<C>, picked: Pick) -> C {
     let [.., kept] = current.map_or(UNSET, PickedColour::as_rgba).channels();
-    C::from_rgba(picked.rgb.to_rgba(picked.alpha.unwrap_or(kept)))
+    C::from_rgba(picked.rgb.to_rgba(picked.alpha.unwrap_or(Alpha::new(kept))))
 }
 
 /// A composed colour control. `on_pick` receives `Some(colour)` for a chosen
@@ -298,7 +298,7 @@ mod tests {
     fn parse_hex_reads_an_eight_digit_spelling_with_its_alpha() {
         let pick = Pick {
             rgb: Rgb::from_bits(0x80_ff00),
-            alpha: Some(0x40),
+            alpha: Some(Alpha::new(0x40)),
         };
         assert_eq!(parse_hex_color("#80ff0040"), Some(pick));
     }

@@ -133,7 +133,7 @@ pub fn parse_color(raw: &str) -> Result<Rgba, MarkValueError> {
     }
     match digits.len() {
         6 => u32::from_str_radix(digits, 16)
-            .map(|rgb| Rgb::from_bits(rgb).to_rgba(0xFF))
+            .map(|rgb| Rgb::from_bits(rgb).to_rgba(ambre_core::Alpha::OPAQUE))
             .map_err(|_| bad()),
         8 => u32::from_str_radix(digits, 16)
             .map(Rgba::from_bits)

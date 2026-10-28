@@ -476,7 +476,7 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
 fn paint_rgba(paint: &usvg::Paint, opacity: ambre_core::Opacity) -> Option<Rgba> {
     match paint {
         usvg::Paint::Color(c) => {
-            let a = opacity.alpha_byte(1.0);
+            let a = opacity.fade(ambre_core::Alpha::OPAQUE);
             Some(Rgb::from_channels(c.red, c.green, c.blue).to_rgba(a))
         }
         _ => None,

@@ -98,7 +98,7 @@ pub mod zoom;
 pub use authorship::{OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
-pub use color::{InvalidOpacity, Opacity, Rgb, Rgba};
+pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
 pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
