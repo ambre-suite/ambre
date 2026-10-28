@@ -24,22 +24,49 @@ pub const PRESENCE_EXPIRY: Millis = REFRESH_PERIOD.times(3);
 
 /// The first byte of a presence sample. Another ephemeral of the space
 /// document takes another tag, so neither reads as the other.
-const SAMPLE_TAG: u8 = 0x50;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum SampleTag {
+    /// A presence sample of the space.
+    Presence = 0x50,
+}
 
-/// The state byte of an online member.
-const ONLINE: u8 = 1;
+impl SampleTag {
+    /// The byte that opens the sample.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+}
+
+/// The state byte of a presence sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum SampleState {
+    /// The member is online.
+    Online = 1,
+}
+
+impl SampleState {
+    /// The byte after the tag.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+}
+
+/// The two bytes of the one presence sample a space carries.
+const SAMPLE: [u8; 2] = [SampleTag::Presence.byte(), SampleState::Online.byte()];
 
 /// The presence sample of a space: its tag, then the state, and nothing else.
 /// It names no channel, so it cannot show which channel a member reads
 /// (`MURMURE-446`).
 pub fn presence_sample() -> ambre_core::EphemeralBytes {
-    ambre_core::EphemeralBytes::new(vec![SAMPLE_TAG, ONLINE])
+    ambre_core::EphemeralBytes::new(SAMPLE.to_vec())
 }
 
 /// Whether `payload` is a presence sample of a space. A sample that does not
 /// decode is dropped without an error (`PRESENCE-013`).
 pub fn is_presence_sample(payload: &ambre_core::EphemeralBytes) -> bool {
-    payload.as_bytes() == [SAMPLE_TAG, ONLINE]
+    payload.as_bytes() == SAMPLE
 }
 
 /// The members of `members` whose display name answers `query`, in the order
@@ -289,9 +316,10 @@ mod tests {
         assert!(is_presence_sample(&sample));
         let sample_of = |bytes: &[u8]| ambre_core::EphemeralBytes::new(bytes.to_vec());
         assert!(!is_presence_sample(&sample_of(&[])));
-        assert!(!is_presence_sample(&sample_of(&[SAMPLE_TAG])));
-        assert!(!is_presence_sample(&sample_of(&[SAMPLE_TAG, ONLINE, 0])));
-        assert!(!is_presence_sample(&sample_of(&[0, ONLINE])));
+        let (tag, online) = (SampleTag::Presence.byte(), SampleState::Online.byte());
+        assert!(!is_presence_sample(&sample_of(&[tag])));
+        assert!(!is_presence_sample(&sample_of(&[tag, online, 0])));
+        assert!(!is_presence_sample(&sample_of(&[0, online])));
     }
 
     /// The sample keeps the bytes every earlier build sent: the tag `0x50`,

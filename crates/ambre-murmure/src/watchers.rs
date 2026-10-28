@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::Timestamp;
-use ambre_core::{MessageId, Millis, UserId};
+use ambre_core::{ByteSize, MessageId, Millis, UserId};
 
 use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
@@ -28,16 +28,49 @@ pub const TYPING_EXPIRY: Millis = TYPING_REFRESH.times(2);
 
 /// The first byte of a channel sample. A space sample takes another tag, so
 /// neither reads as the other.
-const WATCHING_TAG: u8 = 0x57;
-const TYPING_TAG: u8 = 0x54;
-const TYPING_IN_TAG: u8 = 0x74;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum SampleTag {
+    /// A connection watches the channel.
+    Watching = 0x57,
+    /// Its member types in the channel's composer.
+    Typing = 0x54,
+    /// Its member types in a thread's composer.
+    TypingIn = 0x74,
+}
+
+impl SampleTag {
+    /// The byte that opens the sample.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+
+    /// The tag `byte` names, `None` for a byte no sample opens with.
+    fn from_byte(byte: u8) -> Option<Self> {
+        [Self::Watching, Self::Typing, Self::TypingIn]
+            .into_iter()
+            .find(|tag| tag.byte() == byte)
+    }
+}
 
 /// The state byte of a sample.
-const ON: u8 = 1;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum SampleState {
+    /// The sample holds.
+    On = 1,
+}
+
+impl SampleState {
+    /// The byte after the tag.
+    const fn byte(self) -> u8 {
+        self as u8
+    }
+}
 
 /// The length of every sample: a tag, the state, and a root or zeros. One
 /// length for all, so the sealed size never tells a thread from its channel.
-const SAMPLE_LEN: usize = 18;
+const SAMPLE_LEN: ByteSize = ByteSize(18);
 
 /// What a sample on the `meta` document of a channel says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,12 +96,12 @@ impl Sample {
     /// channel a member reads (`MURMURE-127`).
     pub fn bytes(self) -> ambre_core::EphemeralBytes {
         let (tag, root) = match self {
-            Self::Watching => (WATCHING_TAG, [0; 16]),
-            Self::Typing => (TYPING_TAG, [0; 16]),
-            Self::TypingIn(root) => (TYPING_IN_TAG, *root.as_bytes()),
+            Self::Watching => (SampleTag::Watching, [0; 16]),
+            Self::Typing => (SampleTag::Typing, [0; 16]),
+            Self::TypingIn(root) => (SampleTag::TypingIn, *root.as_bytes()),
         };
-        let mut bytes = Vec::with_capacity(SAMPLE_LEN);
-        bytes.extend([tag, ON]);
+        let mut bytes = Vec::with_capacity(SAMPLE_LEN.as_len());
+        bytes.extend([tag.byte(), SampleState::On.byte()]);
         bytes.extend(root);
         ambre_core::EphemeralBytes::new(bytes)
     }
@@ -76,15 +109,18 @@ impl Sample {
     /// The sample `payload` holds. One that does not decode is `None`, and
     /// is dropped without an error (`PRESENCE-013`).
     pub fn read(payload: &ambre_core::EphemeralBytes) -> Option<Self> {
-        let [tag, ON, rest @ ..] = payload.as_bytes() else {
+        let [tag, state, rest @ ..] = payload.as_bytes() else {
             return None;
         };
+        if *state != SampleState::On.byte() {
+            return None;
+        }
         let root: [u8; 16] = rest.try_into().ok()?;
         let zeros = root == [0; 16];
-        match *tag {
-            WATCHING_TAG if zeros => Some(Self::Watching),
-            TYPING_TAG if zeros => Some(Self::Typing),
-            TYPING_IN_TAG if !zeros => Some(Self::TypingIn(MessageId::from_bytes(root))),
+        match SampleTag::from_byte(*tag)? {
+            SampleTag::Watching if zeros => Some(Self::Watching),
+            SampleTag::Typing if zeros => Some(Self::Typing),
+            SampleTag::TypingIn if !zeros => Some(Self::TypingIn(MessageId::from_bytes(root))),
             _ => None,
         }
     }
@@ -292,21 +328,27 @@ mod tests {
     fn a_sample_names_no_channel_and_nothing_else_reads_as_one() {
         let root = MessageId::new();
         for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
-            assert_eq!(sample.bytes().len(), SAMPLE_LEN);
+            assert_eq!(ByteSize::of_len(sample.bytes().len()), SAMPLE_LEN);
             assert_eq!(Sample::read(&sample.bytes()), Some(sample));
         }
         assert_ne!(Sample::Watching.bytes(), crate::presence_sample());
         let mut zero_root = Sample::Typing.bytes().into_bytes();
-        zero_root[0] = TYPING_IN_TAG;
+        zero_root[0] = SampleTag::TypingIn.byte();
         let mut rooted_watch = Sample::TypingIn(root).bytes().into_bytes();
-        rooted_watch[0] = WATCHING_TAG;
-        let short = &Sample::Typing.bytes().into_bytes()[..SAMPLE_LEN - 1];
+        rooted_watch[0] = SampleTag::Watching.byte();
+        let short = &Sample::Typing.bytes().into_bytes()[..SAMPLE_LEN.as_len() - 1];
+        let mut unknown_tag = Sample::Typing.bytes().into_bytes();
+        unknown_tag[0] = 0x55;
+        let mut off = Sample::Typing.bytes().into_bytes();
+        off[1] = 0;
         for payload in [
             &[][..],
-            &[WATCHING_TAG, ON],
+            &[SampleTag::Watching.byte(), SampleState::On.byte()],
             short,
             &zero_root,
             &rooted_watch,
+            &unknown_tag,
+            &off,
         ] {
             let payload = ambre_core::EphemeralBytes::new(payload.to_vec());
             assert_eq!(Sample::read(&payload), None);

@@ -1554,11 +1554,9 @@ ambre-murmure | src/markers.rs | crate::markers | kept_styles(old) | param | &st
 ambre-murmure | src/markers.rs | crate::markers | line_marker(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | link(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | outside(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/members.rs | crate::members | ONLINE | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/members.rs | crate::members | Roster::heard() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/members.rs | crate::members | Roster::left() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/members.rs | crate::members | Roster::tick() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/members.rs | crate::members | SAMPLE_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/members.rs | crate::members | find_members(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/members.rs | crate::members | is_presence_sample() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | fits() | ret | bool	generic	state flag/predicate
@@ -1621,8 +1619,8 @@ ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
-ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
-ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	foreign-api	a scalar the document stores, typed by the caller
+ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	generic	the text the document stores under a key, parsed into its role by the caller
+ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
 ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	newtype-inner	Loro storage adapter for Timestamp
 ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	foreign-api	a scalar the document stores, typed by the caller
 ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	free-text	text, label or user content
@@ -1693,11 +1691,6 @@ ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn 
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	generic	the computed bool the one constructor of WindowWidth reads into its variant
-ambre-murmure | src/watchers.rs | crate::watchers | ON | const | u8	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | SAMPLE_LEN | const | usize	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | TYPING_IN_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | TYPING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
-ambre-murmure | src/watchers.rs | crate::watchers | WATCHING_TAG | const | u8	newtype-inner	private wire tag behind Sample enum
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::heard() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::is_new() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::left() | ret | bool	generic	state flag/predicate
@@ -4119,3 +4112,9 @@ ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedName as Stor
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedPreviousKey as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedPreviousKey's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::into_bytes() | ret | Vec<u8>	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | StoredObject::object() | ret | &[u8]	generic	the laid-out bytes the header readers split, from any role that holds an object
+ambre-murmure | src/members.rs | crate::members | SAMPLE | const | [u8;2]	generic	the two wire bytes of the space presence sample, its tag then its state
+ambre-murmure | src/members.rs | crate::members | SampleState::byte() | ret | u8	generic	byte codec of the private state byte of a presence sample
+ambre-murmure | src/members.rs | crate::members | SampleTag::byte() | ret | u8	generic	byte codec of the private tag of a presence sample
+ambre-murmure | src/watchers.rs | crate::watchers | SampleState::byte() | ret | u8	generic	byte codec of the private state byte of a channel sample
+ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::byte() | ret | u8	generic	byte codec of the private tag of a channel sample
+ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::from_byte(byte) | param | u8	generic	byte codec of the private tag of a channel sample; an unknown byte reads as None
