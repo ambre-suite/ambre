@@ -8,17 +8,17 @@
 //!
 //! | Type | Unit | Example |
 //! | :--- | :--- | :--- |
-//! | [`DocPx`] | a pixel of the document, before the zoom | a column width, a run offset |
-//! | [`ViewPx`] | a pixel of the zoomed view, from the canvas's top-left corner | a pointer, a caret |
+//! | [`DocPx`] | a document pixel, before the zoom | a column width, a run offset |
+//! | [`ViewPx`] | a pixel of the zoomed view, from the canvas corner | a pointer, a caret |
 //! | [`CssPx`] | a CSS pixel of the page, outside any canvas | a wheel delta, a fixed element |
-//! | [`SurfacePx`] | a pixel of a drawing surface, in the `f64` it takes | an absolute sheet position |
+//! | [`SurfacePx`] | a drawing-surface pixel, as an `f64` | an absolute sheet position |
 //! | [`Pt`] | a typographic point, 1/72 inch | an indent, a table column |
 //! | [`Mm`] | a millimetre | a page size, a margin |
 //! | [`Radians`] | an angle | a rotated element |
 //! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
-//! | [`BoardLength`] | a world unit of a board, before the camera's zoom | a frame's padding, a hit reach |
-//! | [`StrokeCoord`] | a world unit of a board, held in the `f32` a stroke stores | a freehand sample |
+//! | [`BoardLength`] | a board world unit, before the zoom | a frame's padding, a hit reach |
+//! | [`StrokeCoord`] | a board world unit, as the `f32` a stroke stores | a freehand sample |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
