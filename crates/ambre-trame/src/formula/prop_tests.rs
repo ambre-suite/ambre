@@ -54,11 +54,11 @@ fn cell(row: u32, col: u32) -> CellId {
         EngineSheet::ACTIVE,
         Uid {
             peer: ambre_core::PeerId(1),
-            counter: row,
+            counter: ambre_core::IdCounter::new(row),
         },
         Uid {
             peer: ambre_core::PeerId(2),
-            counter: col,
+            counter: ambre_core::IdCounter::new(col),
         },
     )
 }

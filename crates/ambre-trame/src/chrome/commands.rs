@@ -250,10 +250,10 @@ fn entry(row: registry::MenuRow) -> Option<MenuEntry> {
 }
 
 /// The right-click context-menu entries Trame contributes, grouped, iconed and
-/// separated (`trame-context-menu`). `scope` and `filter_active` select the
+/// separated (`trame-context-menu`). `scope` and `filter` select the
 /// layout; see [`registry::context_layout`].
-pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntry> {
-    registry::context_layout(scope, filter_active)
+pub fn context_entries_for(scope: CtxScope, filter: super::SheetFilter) -> Vec<MenuEntry> {
+    registry::context_layout(scope, filter)
         .into_iter()
         .filter_map(entry)
         .collect()
@@ -263,7 +263,7 @@ pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntr
 /// the launcher's initial layout; a header right-click swaps in
 /// [`context_entries_for`] with the resolved scope and live filter state.
 pub fn context_entries() -> Vec<MenuEntry> {
-    context_entries_for(CtxScope::Cell, false)
+    context_entries_for(CtxScope::Cell, super::SheetFilter::Unfiltered)
 }
 
 /// The status-bar label for a Trame document.

@@ -508,16 +508,23 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 // -----------------------------------------------------------------------------
 
 /// The longest formula the parser reads, in characters: Excel's own limit.
-pub const MAX_FORMULA_CHARS: usize = 8_192;
+pub const MAX_FORMULA_CHARS: ambre_core::CharCount = ambre_core::CharCount::new(8_192);
 
 /// The deepest parenthesis or call nesting it reads: Excel's own limit.
-pub const MAX_FORMULA_NESTING: usize = 64;
+pub const MAX_FORMULA_NESTING: FormulaNesting = FormulaNesting::new(64);
 
 /// The most operators it reads. Each one can add a level to the tree, and the
 /// parser, the compiler and the drop all walk the tree by recursion. A release
 /// build overflows a 1 MiB stack past about 256 nested levels and 2 048
 /// operators, so both bounds keep a margin of four.
-pub const MAX_FORMULA_OPERATORS: usize = 512;
+pub const MAX_FORMULA_OPERATORS: OperatorCount = OperatorCount::new(512);
+
+ambre_core::define_tally! {
+    /// How deep the parentheses and calls of a formula nest.
+    pub struct FormulaNesting;
+    /// How many operators a formula holds.
+    pub struct OperatorCount;
+}
 
 /// Refuse, before any recursion, a formula that could nest deeper than the
 /// stack holds (`TRAME-013`). One linear scan; text between double quotes is
@@ -548,13 +555,13 @@ fn within_bounds(input: &str) -> Result<(), ParseError> {
             _ => {}
         }
     }
-    if chars > MAX_FORMULA_CHARS {
+    if ambre_core::CharCount::from_len(chars) > MAX_FORMULA_CHARS {
         return Err(ParseError::TooLong);
     }
-    if deepest > MAX_FORMULA_NESTING {
+    if FormulaNesting::of_len(deepest) > MAX_FORMULA_NESTING {
         return Err(ParseError::TooDeep);
     }
-    if operators > MAX_FORMULA_OPERATORS {
+    if OperatorCount::of_len(operators) > MAX_FORMULA_OPERATORS {
         return Err(ParseError::TooManyOperators);
     }
     Ok(())

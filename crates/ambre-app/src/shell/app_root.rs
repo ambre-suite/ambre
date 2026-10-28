@@ -538,7 +538,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         } else if boot_is_murmure {
             murmure_relay.menu_entries().get()
         } else {
-            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get().is_filtered())
+            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
         }
     });
 

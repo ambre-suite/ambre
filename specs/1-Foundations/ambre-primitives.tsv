@@ -3052,7 +3052,6 @@ ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	ge
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/commands.rs | crate::chrome::commands | context_entries_for(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/find_replace.rs | crate::chrome::find_replace | FindPosition::label() | ret | String	free-text	free text: user content, label, message or display string
@@ -3062,7 +3061,6 @@ ambre-trame | src/chrome/formula_bar.rs | crate::chrome::formula_bar | FormulaBa
 ambre-trame | src/chrome/handler.rs | crate::chrome::handler | TrameHandler.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FILTER_OPS | const | &[(FilterOp,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | FilterPopover(values) | param | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/chrome/popovers/filter.rs | crate::chrome::popovers::filter | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_BUTTONS | const | &[(BorderPreset,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | BORDER_STYLES | const | &[(BorderStyle,&str,&str)]	free-text	free text: user content, label, message or display string
@@ -3129,9 +3127,6 @@ ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criteri
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	generic	predicate over typed qualifiers, the caller's filter
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor_on(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	local	private predicate: whether a reference names the edited sheet; the only closure in the call
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_CHARS | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_NESTING | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | MAX_FORMULA_OPERATORS | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | add_sub() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | add_sub(input) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | atom() | ret | nom::IResult<&str,Expr>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3229,11 +3224,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains()
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/vm.rs | crate::formula::vm | EvalContext.range_cells_left | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_PASS_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | MAX_RANGE_CELLS | const | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/vm.rs | crate::formula::vm | RangeGrant.0 | field | usize	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/vm.rs | crate::formula::vm | grant_range(left) | param | &mut usize	math	local: the pass budget of range cells, private to vm.rs; the only other cell count in scope is the grant it debits
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
@@ -3271,7 +3261,6 @@ ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.uid_counter | field | u32	newtype-inner	per-session mint counter feeding the id formatter
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3332,11 +3321,9 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 |
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	foreign-api	the stored cell key, for the Loro call into the map
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid.counter | field | u32	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	newtype-inner	Uid's own field, key-part formatter and parser
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
-ambre-trame | src/render/cells.rs | crate::render::cells | draw_cells_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.bold | field | bool	generic	independent state or style flag, not a mode selector
@@ -3369,9 +3356,6 @@ ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | Str
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/walk.rs | crate::render::walk | SheetWalk.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/ui/commands.rs | crate::ui::commands | context_layout(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/ui/commands.rs | crate::ui::commands | filter_command(filter_active) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
@@ -3405,7 +3389,6 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DrawStats.cells_drawn | field | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | ERROR_MARK_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | BADGE_RADIUS | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_DASH | const | f64	math	local geometry / pixel arithmetic
@@ -4001,3 +3984,4 @@ ambre-prose | src/band.rs | crate::band | FieldMark::key() | ret | &'static str	
 ambre-prose | src/band.rs | crate::band | FieldMark::value() | ret | &'static str	newtype-inner	the mark value LoroText::mark stores for FieldMark's field; field_of is the one reader
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark.0 | field | String	newtype-inner	CrossRefMark's own hex text
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark::as_str() | ret | &str	newtype-inner	CrossRefMark's own hex text, as the carrier mark stores it
+ambre-trame | src/ui/commands.rs | crate::ui::commands | SheetFilter::is_filtered() | ret | bool	generic	predicate or did-it-change return

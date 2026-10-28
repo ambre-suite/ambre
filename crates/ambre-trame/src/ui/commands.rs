@@ -198,6 +198,21 @@ const MERGE_GROUP: &[CommandId] = &[MERGE, UNMERGE];
 /// Whole-sheet sort, for the corner menu.
 const CORNER_SORT_GROUP: &[CommandId] = &[SORT_SHEET_ASC, SORT_SHEET_DESC];
 
+/// Whether the active sheet is filtered (`trame-shared-filter`). The context
+/// menu offers "Clear filter" only on a filtered sheet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SheetFilter {
+    #[default]
+    Unfiltered,
+    Filtered,
+}
+
+impl SheetFilter {
+    pub fn is_filtered(self) -> bool {
+        self == Self::Filtered
+    }
+}
+
 /// The shared-filter entry (`trame-shared-filter`).
 ///
 /// Truly contextual: a single entry that toggles meaning with the active
@@ -205,11 +220,10 @@ const CORNER_SORT_GROUP: &[CommandId] = &[SORT_SHEET_ASC, SORT_SHEET_DESC];
 /// popover); with a filter active it offers "Remove filter" (drops it). Never
 /// both -- the user complained the old menu always listed a clear-filter that
 /// did nothing.
-pub fn filter_command(filter_active: bool) -> CommandId {
-    if filter_active {
-        CLEAR_FILTER
-    } else {
-        FILTER_COLUMN
+pub fn filter_command(filter: SheetFilter) -> CommandId {
+    match filter {
+        SheetFilter::Filtered => CLEAR_FILTER,
+        SheetFilter::Unfiltered => FILTER_COLUMN,
     }
 }
 
@@ -218,9 +232,9 @@ pub fn filter_command(filter_active: bool) -> CommandId {
 /// clipboard + full structural + sort/filter + merge. The column- or
 /// row-header menu carries axis-scoped structural + sort/filter, with no
 /// clipboard or merge. The corner menu carries whole-sheet sort + filter.
-/// `filter_active` drives the dynamic [`filter_command`] (Filter by column XOR
+/// `filter` drives the dynamic [`filter_command`] (Filter by column XOR
 /// Remove filter).
-pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
+pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
     /// Append one group of commands to a layout under construction.
     fn group(rows: &mut Vec<MenuRow>, ids: &[CommandId]) {
         rows.extend(ids.iter().map(|&id| MenuRow::Command(id)));
@@ -234,7 +248,7 @@ pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
             group(&mut rows, STRUCTURAL_GROUP);
             rows.push(MenuRow::Separator);
             group(&mut rows, SORT_GROUP);
-            group(&mut rows, &[filter_command(filter_active)]);
+            group(&mut rows, &[filter_command(filter)]);
             rows.push(MenuRow::Separator);
             group(&mut rows, MERGE_GROUP);
         }
@@ -242,7 +256,7 @@ pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
             group(&mut rows, COLUMN_STRUCTURAL_GROUP);
             rows.push(MenuRow::Separator);
             group(&mut rows, SORT_GROUP);
-            group(&mut rows, &[filter_command(filter_active)]);
+            group(&mut rows, &[filter_command(filter)]);
         }
         CtxScope::Row => {
             group(&mut rows, ROW_STRUCTURAL_GROUP);
@@ -250,14 +264,14 @@ pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
             group(&mut rows, SORT_GROUP);
             // Filtering is column-oriented, so a row menu only ever offers to
             // drop an active filter (never to create one from a row).
-            if filter_active {
+            if filter.is_filtered() {
                 group(&mut rows, &[CLEAR_FILTER]);
             }
         }
         CtxScope::Corner => {
             // The corner selects the whole sheet: only whole-sheet ops apply.
             group(&mut rows, CORNER_SORT_GROUP);
-            if filter_active {
+            if filter.is_filtered() {
                 rows.push(MenuRow::Separator);
                 group(&mut rows, &[CLEAR_FILTER]);
             }
@@ -418,8 +432,8 @@ mod tests {
             CtxScope::Corner,
         ];
         for scope in scopes {
-            for filter_active in [false, true] {
-                for row in context_layout(scope, filter_active) {
+            for filter in [SheetFilter::Unfiltered, SheetFilter::Filtered] {
+                for row in context_layout(scope, filter) {
                     let MenuRow::Command(id) = row else { continue };
                     assert!(
                         title(id, &Locale::En).is_some(),
@@ -433,9 +447,9 @@ mod tests {
     /// The filter entry offers one command, never both.
     #[test]
     fn the_filter_entry_switches_with_the_filter_state() {
-        assert_eq!(filter_command(false), FILTER_COLUMN);
-        assert_eq!(filter_command(true), CLEAR_FILTER);
-        let cell = context_layout(CtxScope::Cell, true);
+        assert_eq!(filter_command(SheetFilter::Unfiltered), FILTER_COLUMN);
+        assert_eq!(filter_command(SheetFilter::Filtered), CLEAR_FILTER);
+        let cell = context_layout(CtxScope::Cell, SheetFilter::Filtered);
         assert!(cell.contains(&MenuRow::Command(CLEAR_FILTER)));
         assert!(!cell.contains(&MenuRow::Command(FILTER_COLUMN)));
     }
@@ -477,16 +491,16 @@ mod tests {
     /// active it offers only to remove it.
     #[test]
     fn a_row_menu_never_offers_to_filter() {
-        for filter_active in [false, true] {
-            let rows = context_layout(CtxScope::Row, filter_active);
+        for filter in [SheetFilter::Unfiltered, SheetFilter::Filtered] {
+            let rows = context_layout(CtxScope::Row, filter);
             assert!(!rows.contains(&MenuRow::Command(FILTER_COLUMN)), "{rows:?}");
             assert_eq!(
                 rows.contains(&MenuRow::Command(CLEAR_FILTER)),
-                filter_active
+                filter.is_filtered()
             );
         }
         // The column menu, by contrast, offers it.
-        let cols = context_layout(CtxScope::Column, false);
+        let cols = context_layout(CtxScope::Column, SheetFilter::Unfiltered);
         assert!(cols.contains(&MenuRow::Command(FILTER_COLUMN)));
     }
 }

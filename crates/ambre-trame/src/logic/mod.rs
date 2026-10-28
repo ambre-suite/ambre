@@ -242,7 +242,7 @@ pub struct TrameState {
     /// concurrently materialize/insert a line mint distinct uids that both
     /// survive. Not persisted -- once minted, a uid lives in the CRDT as the list
     /// element's value.
-    uid_counter: u32,
+    uid_counter: ambre_core::IdCounter,
     /// Set once the first [`TrameCommand::ScrollViewport`] has been served. The
     /// UI thread has no dedicated "fetch sheet list" command. The first viewport
     /// request (sent on load) therefore rides a [`TrameEvent::SheetList`] back,
@@ -408,7 +408,7 @@ impl TrameState {
             edit_anchor: None,
             undo_manager,
             sheet_counter: 0,
-            uid_counter: 0,
+            uid_counter: ambre_core::IdCounter::ZERO,
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
             entry_end: None,

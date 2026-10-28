@@ -20,12 +20,13 @@ use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
 use ambre_bus::DateSerial;
+use ambre_core::CellCount;
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
 /// formula (for example `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
 /// 1M cells covers any realistic used area while capping the blast radius.
-const MAX_RANGE_CELLS: usize = 1_000_000;
+const MAX_RANGE_CELLS: CellCount = CellCount::new(1_000_000);
 
 /// Ceiling on the range cells one recomputation pass may read, all ranges
 /// together (`TRAME-210`). `MAX_RANGE_CELLS` bounds the memory of one range,
@@ -33,23 +34,23 @@ const MAX_RANGE_CELLS: usize = 1_000_000;
 /// formulas each just under it cost a hundred million reads on every recompute.
 /// The ceiling clears a running total over ten thousand rows (`SUM(A$1:An)`,
 /// fifty million reads), the heaviest shape a real sheet takes.
-pub(crate) const MAX_PASS_RANGE_CELLS: usize = 64_000_000;
+pub(crate) const MAX_PASS_RANGE_CELLS: CellCount = CellCount::new(64_000_000);
 
 /// Leave to materialize one range: the count of member cells it may hold.
 /// Only [`grant_range`] makes one, and the range buffer is sized by it alone.
 /// So no range over the caps is ever allocated (`TRAME-209`).
 #[derive(Debug, PartialEq, Eq)]
-struct RangeGrant(usize);
+struct RangeGrant(CellCount);
 
 /// Grant a `rows` x `cols` range against the per-range cap and what the pass
 /// has `left`. A grant debits `left`. A refusal leaves it whole and allocates
 /// nothing (`TRAME-209`, `TRAME-210`).
-fn grant_range(rows: RowCount, cols: ColCount, left: &mut usize) -> Option<RangeGrant> {
-    let cells = rows.to_usize().saturating_mul(cols.to_usize());
+fn grant_range(rows: RowCount, cols: ColCount, left: &mut CellCount) -> Option<RangeGrant> {
+    let cells = CellCount::new(u64::from(rows.get()) * u64::from(cols.get()));
     if cells > MAX_RANGE_CELLS || cells > *left {
         return None;
     }
-    *left -= cells;
+    *left = CellCount::new(left.get() - cells.get());
     Some(RangeGrant(cells))
 }
 
@@ -79,7 +80,7 @@ pub struct EvalContext<'a> {
     pub current_col: Option<Col>,
     /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
     /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
-    pub range_cells_left: usize,
+    pub range_cells_left: CellCount,
 }
 
 impl<'a> EvalContext<'a> {
@@ -323,7 +324,7 @@ impl<'a> EvalContext<'a> {
         let Some(RangeGrant(cells)) = grant_range(rows, cols, &mut self.range_cells_left) else {
             return RangeValue::broken_ref();
         };
-        let mut values = Vec::with_capacity(cells);
+        let mut values = Vec::with_capacity(usize::try_from(cells.get()).unwrap_or_default());
         for rp in rs.through(re) {
             for cp in cs.through(ce) {
                 let v = match (idx.row_id(rp), idx.col_id(cp)) {
@@ -432,11 +433,11 @@ mod tests {
             EngineSheet::ACTIVE,
             Uid {
                 peer: ambre_core::PeerId(1),
-                counter: row,
+                counter: ambre_core::IdCounter::new(row),
             },
             Uid {
                 peer: ambre_core::PeerId(2),
-                counter: col,
+                counter: ambre_core::IdCounter::new(col),
             },
         )
     }
@@ -648,7 +649,7 @@ mod tests {
         );
         assert_eq!(
             grant_range(
-                RowCount::from_len(MAX_RANGE_CELLS + 1),
+                RowCount::new(u32::try_from(MAX_RANGE_CELLS.get() + 1).expect("fits a row count")),
                 ColCount::ONE,
                 &mut left
             ),
@@ -659,7 +660,10 @@ mod tests {
             grant_range(RowCount::new(1_000), ColCount::new(1_000), &mut left),
             Some(RangeGrant(MAX_RANGE_CELLS))
         );
-        assert_eq!(left, MAX_PASS_RANGE_CELLS - MAX_RANGE_CELLS);
+        assert_eq!(
+            left,
+            CellCount::new(MAX_PASS_RANGE_CELLS.get() - MAX_RANGE_CELLS.get())
+        );
         // Through the evaluator: the over-cap range leaves the budget whole.
         let ast = parse_formula("SUM(A1:ZZ100000)").unwrap();
         let indices = indices_with(10, 10);
@@ -682,10 +686,10 @@ mod tests {
         let mut ctx = EvalContext::new(&bc_cache, &cache, &indices, DateSerial::new(0.0));
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
         // Room for two reads of the hundred cells, not three.
-        ctx.range_cells_left = 250;
+        ctx.range_cells_left = CellCount::new(250);
         assert_eq!(ctx.execute(&bc).to_display(), "0");
         assert_eq!(ctx.execute(&bc).to_display(), "0");
-        assert_eq!(ctx.range_cells_left, 50);
+        assert_eq!(ctx.range_cells_left, CellCount::new(50));
         assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
     }
 

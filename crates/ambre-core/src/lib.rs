@@ -173,7 +173,7 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, ElementCount};
+pub use tally::{CellCount, ElementCount, IdCounter};
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
     CharSpan, CharVec, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,

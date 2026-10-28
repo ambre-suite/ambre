@@ -102,7 +102,7 @@ pub fn draw_cells<S: DrawSurface>(
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
         stats.background = ambre_core::PageMillis::ZERO;
         stats.cells = ambre_core::PageMillis::ZERO;
-        stats.cells_drawn = 0;
+        stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
         return;
     }
 
@@ -124,7 +124,7 @@ pub fn draw_cells<S: DrawSurface>(
     let mut walk = SheetWalk {
         font_cx,
         text_cache,
-        cells_drawn: 0,
+        cells_drawn: ambre_canvas::CellsDrawn::ZERO,
     };
     surface.push_transform(camera);
     walk.walk(&view, region, surface);

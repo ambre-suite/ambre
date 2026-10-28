@@ -434,7 +434,8 @@ fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::comma
 
 #[wasm_bindgen_test]
 fn cell_menu_has_clipboard_and_merge() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Cell, false);
+    let entries =
+        chrome::context_entries_for(chrome::CtxScope::Cell, chrome::SheetFilter::Unfiltered);
     let cmds = item_commands(&entries);
     // Clipboard + merge are cell-only; structural + sort/filter are shared.
     for expected in [
@@ -456,7 +457,8 @@ fn cell_menu_has_clipboard_and_merge() {
 
 #[wasm_bindgen_test]
 fn column_menu_keeps_column_ops_drops_cell_and_row_ops() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Column, false);
+    let entries =
+        chrome::context_entries_for(chrome::CtxScope::Column, chrome::SheetFilter::Unfiltered);
     let cmds = item_commands(&entries);
     // Column-axis structural + sort/filter survive...
     for expected in [
@@ -484,7 +486,8 @@ fn column_menu_keeps_column_ops_drops_cell_and_row_ops() {
 
 #[wasm_bindgen_test]
 fn row_menu_keeps_row_ops_drops_column_inserts() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Row, false);
+    let entries =
+        chrome::context_entries_for(chrome::CtxScope::Row, chrome::SheetFilter::Unfiltered);
     let cmds = item_commands(&entries);
     for expected in [
         chrome::INSERT_ROW_ABOVE,
@@ -501,7 +504,8 @@ fn row_menu_keeps_row_ops_drops_column_inserts() {
 
 #[wasm_bindgen_test]
 fn corner_menu_has_sheet_sort_only() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Corner, false);
+    let entries =
+        chrome::context_entries_for(chrome::CtxScope::Corner, chrome::SheetFilter::Unfiltered);
     let cmds = item_commands(&entries);
     assert!(cmds.contains(&chrome::SORT_SHEET_ASC));
     // No per-row/column structural or clipboard ops on a whole-sheet selection.
@@ -518,11 +522,17 @@ fn corner_menu_has_sheet_sort_only() {
 #[wasm_bindgen_test]
 fn filter_entry_toggles_with_filter_state() {
     // No active filter -> "Filter by column" offered, "Clear filter" absent.
-    let none = item_commands(&chrome::context_entries_for(chrome::CtxScope::Cell, false));
+    let none = item_commands(&chrome::context_entries_for(
+        chrome::CtxScope::Cell,
+        chrome::SheetFilter::Unfiltered,
+    ));
     assert!(none.contains(&chrome::FILTER_COLUMN));
     assert!(!none.contains(&chrome::CLEAR_FILTER));
     // Active filter -> "Remove filter" offered, "Filter by column" absent.
-    let active = item_commands(&chrome::context_entries_for(chrome::CtxScope::Cell, true));
+    let active = item_commands(&chrome::context_entries_for(
+        chrome::CtxScope::Cell,
+        chrome::SheetFilter::Filtered,
+    ));
     assert!(active.contains(&chrome::CLEAR_FILTER));
     assert!(!active.contains(&chrome::FILTER_COLUMN));
 }

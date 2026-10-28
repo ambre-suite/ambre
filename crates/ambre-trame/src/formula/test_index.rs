@@ -11,13 +11,13 @@ pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
     for i in 0..rows {
         idx.push_row(Uid {
             peer: ambre_core::PeerId(1),
-            counter: i as u32,
+            counter: ambre_core::IdCounter::new(i as u32),
         });
     }
     for i in 0..cols {
         idx.push_col(Uid {
             peer: ambre_core::PeerId(2),
-            counter: i as u32,
+            counter: ambre_core::IdCounter::new(i as u32),
         });
     }
     idx

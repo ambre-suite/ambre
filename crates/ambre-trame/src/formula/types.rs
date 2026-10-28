@@ -516,12 +516,21 @@ impl fmt::Display for ParseError {
         use super::parser::{MAX_FORMULA_CHARS, MAX_FORMULA_NESTING, MAX_FORMULA_OPERATORS};
         match self {
             Self::Empty => write!(f, "empty formula"),
-            Self::TooLong => write!(f, "formula longer than {MAX_FORMULA_CHARS} characters"),
-            Self::TooDeep => write!(f, "formula nested deeper than {MAX_FORMULA_NESTING} levels"),
+            Self::TooLong => write!(
+                f,
+                "formula longer than {} characters",
+                MAX_FORMULA_CHARS.to_usize()
+            ),
+            Self::TooDeep => write!(
+                f,
+                "formula nested deeper than {} levels",
+                MAX_FORMULA_NESTING
+            ),
             Self::TooManyOperators => {
                 write!(
                     f,
-                    "formula with more than {MAX_FORMULA_OPERATORS} operators"
+                    "formula with more than {} operators",
+                    MAX_FORMULA_OPERATORS
                 )
             }
             Self::TrailingInput(rest) => write!(f, "unexpected trailing input: '{rest}'"),
@@ -989,13 +998,13 @@ mod tests {
     fn row_uid(p: u32) -> Uid {
         Uid {
             peer: ambre_core::PeerId(1),
-            counter: p,
+            counter: ambre_core::IdCounter::new(p),
         }
     }
     fn col_uid(p: u32) -> Uid {
         Uid {
             peer: ambre_core::PeerId(2),
-            counter: p,
+            counter: ambre_core::IdCounter::new(p),
         }
     }
     fn bound_range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {

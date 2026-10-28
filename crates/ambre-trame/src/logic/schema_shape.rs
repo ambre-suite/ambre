@@ -234,7 +234,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     // A fixed uid, so the layout holds the column's key part bytes.
     let col = Uid {
         peer: ambre_core::PeerId(1),
-        counter: 1,
+        counter: ambre_core::IdCounter::new(1),
     };
     let condition = FilterRecord {
         col,

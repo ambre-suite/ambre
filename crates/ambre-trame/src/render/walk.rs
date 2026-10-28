@@ -125,7 +125,7 @@ pub struct SheetWalk<'t> {
     /// The shaped-text cache.
     pub text_cache: &'t mut TextCache,
     /// Cells whose text the last call drew.
-    pub cells_drawn: u32,
+    pub cells_drawn: ambre_canvas::CellsDrawn,
 }
 
 impl DocumentWalk for SheetWalk<'_> {

@@ -395,7 +395,7 @@ mod tests {
     fn a_filter_column_is_a_uid_stored_as_its_key_part() {
         let uid = Uid {
             peer: ambre_core::PeerId(1),
-            counter: 1,
+            counter: ambre_core::IdCounter::new(1),
         };
         let kind = FilterKind::Values(vec!["v".to_owned()]);
         let typed = postcard::to_allocvec(&FilterRecord {

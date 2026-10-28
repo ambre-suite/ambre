@@ -1393,10 +1393,9 @@ ambre_core::define_tally! {
     pub struct VoteCount;
     /// How many users reacted to one target with one emoji.
     pub struct ReactionCount;
-    /// How many ids one session has minted: the part of an [`ElementId`] or
-    /// a [`ConnectorId`] after its peer.
-    pub struct IdCounter;
 }
+
+pub use ambre_core::IdCounter;
 
 /// Read-time tally derived from a target's reaction sub-map
 /// (`toile-reactions`). Never stored

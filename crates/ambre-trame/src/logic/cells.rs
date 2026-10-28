@@ -189,7 +189,7 @@ impl TrameState {
             peer: ambre_core::PeerId(self.doc.peer_id()),
             counter: self.uid_counter,
         };
-        self.uid_counter += 1;
+        self.uid_counter = self.uid_counter.incremented();
         uid
     }
 

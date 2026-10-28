@@ -703,7 +703,7 @@ fn multi_sheet_isolation_and_name_lookup() {
         .push(
             Uid {
                 peer: ambre_core::PeerId(1),
-                counter: 0,
+                counter: ambre_core::IdCounter::new(0),
             }
             .to_key_part()
             .as_str(),

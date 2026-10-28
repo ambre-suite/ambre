@@ -142,7 +142,7 @@ fn draw_cells_on_fills_each_and_counts_nonempty_text() {
         2,
     );
     // ...but only the non-empty one is tallied.
-    assert_eq!(drawn, 1);
+    assert_eq!(drawn, ambre_canvas::CellsDrawn::new(1));
     assert_eq!(s.clip_depth(), 0);
 }
 
@@ -486,7 +486,11 @@ fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) ->
         [(at(row, col), content)],
         |_| true,
     );
-    assert_eq!(drawn, 1, "the cell has text, so it is drawn");
+    assert_eq!(
+        drawn,
+        ambre_canvas::CellsDrawn::new(1),
+        "the cell has text, so it is drawn"
+    );
     assert_eq!(s.clip_depth(), 0);
     s.ops().to_vec()
 }

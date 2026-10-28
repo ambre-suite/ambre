@@ -66,13 +66,13 @@ pub fn draw_cells_on<'a, S, I, E>(
     text_pass: TextPass,
     cells: I,
     is_empty: E,
-) -> u32
+) -> ambre_canvas::CellsDrawn
 where
     S: DrawSurface,
     I: IntoIterator<Item = (CellPos, CellContent<'a>)>,
     E: Fn(CellPos) -> bool,
 {
-    let mut drawn = 0u32;
+    let mut drawn = ambre_canvas::CellsDrawn::ZERO;
 
     for (at, content) in cells {
         let CellPos { row, col } = at;
@@ -181,7 +181,7 @@ where
         if needs_clip {
             surface.pop_clip();
         }
-        drawn += 1;
+        drawn = drawn.incremented();
     }
 
     drawn

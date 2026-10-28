@@ -257,7 +257,7 @@ fn render_stored(c: &StoredCell) -> String {
 
 /// A line uid in its shortest form, lowercase hex with no leading zero.
 fn render_uid(uid: Uid) -> String {
-    format!("{:x}_{:x}", uid.peer, uid.counter)
+    format!("{:x}_{:x}", uid.peer, uid.counter.get())
 }
 
 fn render_qualifier(q: &SheetQualifier) -> String {

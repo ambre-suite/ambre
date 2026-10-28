@@ -446,7 +446,7 @@ impl TrameView {
         if matches!(content, ContentRepaint::Reuse) {
             self.draw_stats.background = ambre_core::PageMillis::ZERO;
             self.draw_stats.cells = ambre_core::PageMillis::ZERO;
-            self.draw_stats.cells_drawn = 0;
+            self.draw_stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
         }
 
         RepaintPlan {
@@ -516,7 +516,7 @@ impl TrameView {
             background: self.draw_stats.background,
             cells: self.draw_stats.cells,
             headers: self.draw_stats.headers,
-            cells_drawn: ambre_canvas::CellsDrawn::new(self.draw_stats.cells_drawn),
+            cells_drawn: self.draw_stats.cells_drawn,
             input_latency: self.draw_stats.input_latency,
             glyph_misses: ambre_canvas::GlyphMisses::of_len(text_cache.frame_misses),
         });

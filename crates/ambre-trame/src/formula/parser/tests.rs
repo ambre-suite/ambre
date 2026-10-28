@@ -487,14 +487,15 @@ fn bool_literal_matches_only_a_whole_word() {
 /// overflowed the stack. Past each bound the formula is refused as an error.
 #[test]
 fn a_formula_past_a_bound_is_refused_before_it_recurses() {
+    let operators = usize::try_from(MAX_FORMULA_OPERATORS.get()).expect("a bound fits a usize");
     let nested = format!("{}1{}", "(".repeat(2_356), ")".repeat(2_356));
     assert!(parse_formula(&nested).is_err());
-    let long = "1".repeat(MAX_FORMULA_CHARS + 1);
+    let long = "1".repeat(MAX_FORMULA_CHARS.to_usize() + 1);
     assert!(parse_formula(&long).is_err());
-    let chain = vec!["1"; MAX_FORMULA_OPERATORS + 2].join("+");
+    let chain = vec!["1"; operators + 2].join("+");
     assert!(parse_formula(&chain).is_err());
     // Inside a string an operator or a parenthesis is text.
-    let text = format!("\"{}\"", "(-".repeat(MAX_FORMULA_OPERATORS));
+    let text = format!("\"{}\"", "(-".repeat(operators));
     assert!(parse_formula(&text).is_ok());
 }
 
@@ -503,15 +504,13 @@ fn a_formula_past_a_bound_is_refused_before_it_recurses() {
 /// build spends several times the stack per level, so it gets 16 MiB.
 #[test]
 fn the_worst_admitted_formula_fits_a_small_stack() {
+    let operators = usize::try_from(MAX_FORMULA_OPERATORS.get()).expect("a bound fits a usize");
+    let nesting = usize::try_from(MAX_FORMULA_NESTING.get()).expect("a bound fits a usize");
     let worst = [
-        format!(
-            "{}1{}",
-            "SUM(".repeat(MAX_FORMULA_NESTING),
-            ")".repeat(MAX_FORMULA_NESTING)
-        ),
-        vec!["1"; MAX_FORMULA_OPERATORS + 1].join("^"),
-        vec!["1"; MAX_FORMULA_OPERATORS + 1].join("+"),
-        format!("{}1", "-".repeat(MAX_FORMULA_OPERATORS)),
+        format!("{}1{}", "SUM(".repeat(nesting), ")".repeat(nesting)),
+        vec!["1"; operators + 1].join("^"),
+        vec!["1"; operators + 1].join("+"),
+        format!("{}1", "-".repeat(operators)),
     ];
     let run = std::thread::Builder::new()
         .stack_size(if cfg!(debug_assertions) {
