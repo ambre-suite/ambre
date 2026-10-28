@@ -81,7 +81,7 @@ use ambre_core::{HistoryStep, StepDirection, UserId};
 use crate::doc;
 use crate::events::{
     PageCount, PageIndex, PageSpan, ProseCommand, ProseError, ProseEvent, ProseOutcome,
-    ProseRefusal, block_id, tree_id,
+    ProseRefusal, RefusedAction, block_id, tree_id,
 };
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::Paginator;
@@ -1157,7 +1157,7 @@ impl ProseState {
         }
         if doc::grow_root(&self.doc).is_none() {
             return vec![ProseEvent::Error(ProseError::new(
-                "keeping a block",
+                RefusedAction::KeepingBlock,
                 ProseRefusal::WriteFailed("the document could not keep a block".to_owned()),
             ))];
         }
@@ -1355,7 +1355,7 @@ impl ProseState {
     /// asked for (`PROSE-105`).
     fn err_remote() -> ProseEvent {
         ProseEvent::Error(ProseError::new(
-            "a collaborator's update",
+            RefusedAction::RemoteUpdate,
             ProseRefusal::RemoteImportFailed,
         ))
     }
@@ -1400,7 +1400,7 @@ mod tests {
             range: DocSpan::from_usize_range(0..1),
         });
         let error = refusal(&outcome);
-        assert_eq!(error.refused, "deleting text");
+        assert_eq!(error.refused, RefusedAction::Command("deleting text"));
         assert_eq!(error.reason, ProseRefusal::NoSuchBlock(absent));
     }
 
@@ -1442,7 +1442,7 @@ mod tests {
             value: Some("huge".to_owned()),
         });
         let error = refusal(&outcome);
-        assert_eq!(error.refused, "applying the style");
+        assert_eq!(error.refused, RefusedAction::Command("applying the style"));
         assert_eq!(
             error.reason,
             ProseRefusal::BadMarkValue {

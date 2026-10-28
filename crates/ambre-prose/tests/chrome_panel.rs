@@ -184,7 +184,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
         &UiEvent::Viewport {
             document_id: DocumentId::new(),
             event: AppEvent::Prose(ProseEvent::Error(ProseError::new(
-                "replying to the comment",
+                ambre_bus::app::prose::RefusedAction::Command("replying to the comment"),
                 ProseRefusal::NoSuchComment(CommentId::new()),
             ))),
         },

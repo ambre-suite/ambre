@@ -2269,6 +2269,47 @@ pub enum ProseEvent {
 // Errors
 // =============================================================================
 
+/// What the engine turned down, as a refusal names it (`PROSE-105`).
+///
+/// A command names itself through [`ProseCommand::name`]. The other variants
+/// name what the engine refused when no command of the author was the cause.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefusedAction {
+    /// A refusal built deep in a handler, before the entry point names the
+    /// command it came from. It reaches a screen only if a handler refuses
+    /// where no command drives the engine, and no such path exists today.
+    Unnamed,
+    /// A command, under the name [`ProseCommand::name`] gives it.
+    Command(&'static str),
+    /// Growing a block back into a document that a command left empty.
+    KeepingBlock,
+    /// A collaborator's update. It enters the engine the way a command does
+    /// and fails on the same terms.
+    RemoteUpdate,
+    /// Writing the document out to a file.
+    Exporting,
+}
+
+impl RefusedAction {
+    /// The words a refusal prints for what it refused.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unnamed => "that",
+            Self::Command(name) => name,
+            Self::KeepingBlock => "keeping a block",
+            Self::RemoteUpdate => "a collaborator's update",
+            Self::Exporting => "exporting",
+        }
+    }
+}
+
+impl fmt::Display for RefusedAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
 /// One refusal, as the author is told about it.
 ///
 /// A number and a message named neither the command nor a reason, so a view
@@ -2278,17 +2319,15 @@ pub enum ProseEvent {
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[error("{refused} refused: {reason}")]
 pub struct ProseError {
-    /// What the engine turned down: a command, under the name
-    /// [`ProseCommand::name`] gives it. A collaborator's update names itself,
-    /// entering the engine the same way and failing on the same terms.
-    pub refused: &'static str,
+    /// What the engine turned down.
+    pub refused: RefusedAction,
     /// Why.
     pub reason: ProseRefusal,
 }
 
 impl ProseError {
     #[must_use]
-    pub fn new(refused: &'static str, reason: ProseRefusal) -> Self {
+    pub fn new(refused: RefusedAction, reason: ProseRefusal) -> Self {
         Self { refused, reason }
     }
 }
@@ -2423,6 +2462,26 @@ pub enum ProseRefusal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each refused action prints the words a refusal printed before it was
+    /// typed (`PROSE-105`).
+    #[test]
+    fn each_refused_action_keeps_its_label() {
+        for (action, label) in [
+            (RefusedAction::Unnamed, "that"),
+            (RefusedAction::Command("deleting text"), "deleting text"),
+            (RefusedAction::KeepingBlock, "keeping a block"),
+            (RefusedAction::RemoteUpdate, "a collaborator's update"),
+            (RefusedAction::Exporting, "exporting"),
+        ] {
+            assert_eq!(action.label(), label);
+            let error = ProseError::new(action, ProseRefusal::NestingRefused);
+            assert_eq!(
+                error.to_string(),
+                format!("{label} refused: {}", ProseRefusal::NestingRefused)
+            );
+        }
+    }
 
     #[test]
     fn every_block_discriminant_round_trips() {

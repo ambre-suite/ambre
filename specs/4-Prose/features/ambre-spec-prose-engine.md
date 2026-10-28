@@ -617,13 +617,24 @@ pub enum ProseEvent {
     Error(ProseError),
 }
 
+/// What a refusal names. `Display` prints `label()`: "that", the command's
+/// name, "keeping a block", "a collaborator's update" or "exporting".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefusedAction {
+    Unnamed,
+    /// The command, under the name `ProseCommand::name` gives it.
+    Command(&'static str),
+    KeepingBlock,
+    /// A collaborator's update, entering the engine the way a command does.
+    RemoteUpdate,
+    Exporting,
+}
+
 /// One refusal, as the author is told about it.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[error("{refused} refused: {reason}")]
 pub struct ProseError {
-    /// The command, under the name `ProseCommand::name` gives it. A
-    /// collaborator's update names itself, entering the engine the same way.
-    pub refused: &'static str,
+    pub refused: RefusedAction,
     pub reason: ProseRefusal,
 }
 ```

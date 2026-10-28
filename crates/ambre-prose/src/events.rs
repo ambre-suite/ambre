@@ -18,9 +18,9 @@ pub use ambre_bus::app::prose::{
     GraphemeCount, HeaderField, HeadingLevel, HfTarget, KeepTogether, KeepWithNext, LineHeight,
     LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle, PageCount,
     PageIndex, PageNumber, PageSpan, ParagraphCount, ParagraphStyle, PatternKind, PresencePayload,
-    ProseCommand, ProseError, ProseEvent, ProseRefusal, RemoteCursor, ResolvedCrossRef, StyleId,
-    Suggestion, SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry,
-    TocNumbering, TodoMark, TriState, VAlign, WordCount, WordTotal,
+    ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction, RemoteCursor,
+    ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents,
+    TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign, WordCount, WordTotal,
 };
 
 use loro::TreeID;
@@ -92,7 +92,10 @@ impl ProseOutcome {
     /// the one place that holds it.
     #[must_use]
     pub fn refused(reason: ProseRefusal) -> Self {
-        Self::display_only(vec![ProseEvent::Error(ProseError::new(UNNAMED, reason))])
+        Self::display_only(vec![ProseEvent::Error(ProseError::new(
+            RefusedAction::Unnamed,
+            reason,
+        ))])
     }
 
     /// Name every refusal this outcome carries after the command that drew it
@@ -101,14 +104,9 @@ impl ProseOutcome {
     pub fn named(mut self, refused: &'static str) -> Self {
         for event in &mut self.display {
             if let ProseEvent::Error(error) = event {
-                error.refused = refused;
+                error.refused = RefusedAction::Command(refused);
             }
         }
         self
     }
 }
-
-/// What a refusal names before the entry point names the command it came from.
-/// It reaches a screen only if a handler refuses somewhere the engine is not
-/// driven by a command, and no such path exists today.
-const UNNAMED: &str = "that";

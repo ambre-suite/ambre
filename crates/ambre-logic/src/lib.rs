@@ -330,7 +330,7 @@ impl DocState {
             }
             DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
                 ambre_bus::app::prose::ProseError::new(
-                    "exporting",
+                    ambre_bus::app::prose::RefusedAction::Exporting,
                     ambre_bus::app::prose::ProseRefusal::WriteFailed(reason),
                 ),
             )),
