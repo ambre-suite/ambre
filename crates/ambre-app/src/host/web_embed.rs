@@ -90,7 +90,7 @@ impl WebFrames {
             // Until the embed is entered the frame lets the pointer through, so
             // the board's own move and resize stay reachable. Entering it hands
             // the page its events directly (`TOILE-UI-091`, `TOILE-UI-324`).
-            let input = if e.focused {
+            let input = if e.focused == ambre_bus::app::toile::InputFocus::Entered {
                 PointerInput::Taken
             } else {
                 PointerInput::FallsThrough
@@ -188,7 +188,7 @@ mod tests {
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
             layout_size: Size::new(200.0, 100.0),
             to_screen: Affine::IDENTITY,
-            focused: false,
+            focused: ambre_bus::app::toile::InputFocus::Board,
         };
         let mut frames = WebFrames::default();
         frames.sync(&layer, std::slice::from_ref(&embed));

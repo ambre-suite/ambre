@@ -757,8 +757,8 @@ fn every_id_the_board_writes_has_the_minted_width() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     st.handle_command(ToileCommand::CommitStroke {

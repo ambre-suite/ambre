@@ -144,8 +144,8 @@ mod tests {
             path,
             style: ElementStyle::default(),
             arrows: EndCaps {
-                start: false,
-                end: true,
+                start: ambre_bus::app::toile::Cap::Plain,
+                end: ambre_bus::app::toile::Cap::Arrow,
             },
             label: String::new(),
         })

@@ -457,8 +457,8 @@ fn delete_drops_owned_connectors() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     // One element node + one element node + one connector node.
@@ -486,8 +486,8 @@ fn create_connector(st: &mut ToileState) -> ConnectorId {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     // The newest connector is the last node in the paint order, which is where
@@ -2743,8 +2743,8 @@ fn an_arrow_stranded_by_a_peer_is_announced() {
             to_anch: Anchor::Left,
             path_type: PathType::Straight,
             arrows: EndCaps {
-                start: false,
-                end: true,
+                start: ambre_bus::app::toile::Cap::Plain,
+                end: ambre_bus::app::toile::Cap::Arrow,
             },
         })
         .update
@@ -2801,8 +2801,8 @@ fn paste_keeps_fully_copied_connector_drops_half_copied() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     assert_eq!(connector_count(&st), 1);
@@ -2909,8 +2909,8 @@ fn a_pasted_arrow_joins_the_copies() {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     let before = st.connector_ids();
@@ -3122,8 +3122,8 @@ fn connect(st: &mut ToileState, from: ElementId, to: ElementId) -> ConnectorId {
         to_anch: Anchor::Left,
         path_type: PathType::Straight,
         arrows: EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
     });
     st.connector_ids()
@@ -3287,8 +3287,8 @@ fn an_arrow_off_screen_is_culled() {
         to_anch: Anchor::Bottom,
         path_type: PathType::Curved,
         arrows: EndCaps {
-            start: false,
-            end: false,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Plain,
         },
     });
     let bulge = st.connector_ids().pop().expect("the curve exists");
@@ -4643,7 +4643,11 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
     assert_eq!(document_id, child, "the child reference did not round-trip");
     assert_eq!(doc_type, ambre_core::DocType::Trame);
     // Focus is view-local state, never CRDT: derive always says false.
-    assert!(!focused, "focus must not be derived from the document");
+    assert_eq!(
+        focused,
+        ambre_bus::app::toile::InputFocus::Board,
+        "focus must not be derived from the document"
+    );
 }
 
 #[test]
@@ -6052,8 +6056,8 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
                 to_anch: Anchor::Left,
                 path_type: PathType::Straight,
                 arrows: EndCaps {
-                    start: false,
-                    end: true,
+                    start: ambre_bus::app::toile::Cap::Plain,
+                    end: ambre_bus::app::toile::Cap::Arrow,
                 },
             }),
             _ => return None,
@@ -6577,8 +6581,8 @@ fn a_create_to_a_missing_element_is_refused() {
             to_anch: Anchor::Left,
             path_type: PathType::Straight,
             arrows: EndCaps {
-                start: false,
-                end: true,
+                start: ambre_bus::app::toile::Cap::Plain,
+                end: ambre_bus::app::toile::Cap::Arrow,
             },
         });
         assert!(out.update.is_none(), "a refused create writes nothing");

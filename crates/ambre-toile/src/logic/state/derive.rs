@@ -231,7 +231,7 @@ impl ToileState {
                     (Some(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
                         document_id,
                         doc_type,
-                        focused: false,
+                        focused: ambre_bus::app::toile::InputFocus::Board,
                     },
                     _ => DisplayGeom::Frame(String::new()),
                 }

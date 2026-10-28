@@ -824,12 +824,32 @@ pub enum PathType {
     Curved,
 }
 
+ambre_core::define_flag! {
+    /// What one end of a connector draws.
+    pub enum Cap {
+        /// The line ends with no head.
+        Plain,
+        /// The line ends in an arrowhead.
+        Arrow,
+    }
+
+    /// Whether a nested document or a web embed takes the input
+    /// (`toile-embeds`, "Input focus"). A click enters it, and a drag moves it.
+    pub enum InputFocus {
+        /// The board takes the input, so the pointer passes through the embed.
+        Board,
+        /// The embed takes the input.
+        Entered,
+    }
+}
+
 /// Arrowheads per connector end -- a restyle-class LWW field, persisted in the
-/// CRDT and surfaced on the `DisplayConnector`.
+/// CRDT and surfaced on the `DisplayConnector`. Each [`Cap`] writes the byte
+/// of a `bool`.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct EndCaps {
-    pub start: bool,
-    pub end: bool,
+    pub start: Cap,
+    pub end: Cap,
 }
 
 // =============================================================================
@@ -2544,7 +2564,7 @@ pub enum DisplayGeom {
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
-        focused: bool,
+        focused: InputFocus,
     },
 }
 

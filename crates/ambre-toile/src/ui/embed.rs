@@ -25,7 +25,7 @@ use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, InitContent,
-    ToileCommand, WebAddress,
+    InputFocus, ToileCommand, WebAddress,
 };
 use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_draw::{Affine, Point, Rect, Size};
@@ -72,9 +72,9 @@ pub struct VisibleEmbed {
     /// corner instead puts the child straight, in the wrong place, while the
     /// pointer arrives as though the element had turned it.
     pub to_screen: Affine,
-    /// View-local focus ("Input focus"): while true, `FrameHost` maps canvas
+    /// View-local focus ("Input focus"): while `Entered`, `FrameHost` maps canvas
     /// input into this child and hands it to the child's own `handle_input`.
-    pub focused: bool,
+    pub focused: InputFocus,
 }
 
 /// Map a screen point into a `doc_embed`'s child pixel space.
@@ -169,7 +169,7 @@ pub fn visible_embeds(
                 screen_rect: screen_aabb(e, cam),
                 child_size: child_size(e, cam),
                 to_screen: to_screen(e, cam),
-                focused: focused == Some(&e.id),
+                focused: InputFocus::from_bool(focused == Some(&e.id)),
             })
         })
         .collect()
@@ -306,7 +306,7 @@ pub struct VisibleWebEmbed {
     /// View-local focus, on the same arbitration as a nested document's: a click
     /// enters, a drag moves. Until the user enters it, the frame must let the
     /// pointer through to the board, or no one could move or resize the embed.
-    pub focused: bool,
+    pub focused: InputFocus,
 }
 
 /// The web `embed`s of `display`, projected for the shell. Order follows the
@@ -337,7 +337,7 @@ pub fn visible_web_embeds(
                 to_screen: cam.world_to_screen()
                     * e.transform
                     * Affine::translate((e.bounds.x0, e.bounds.y0)),
-                focused: focused == Some(&e.id),
+                focused: InputFocus::from_bool(focused == Some(&e.id)),
             })
         })
         .collect()
@@ -620,7 +620,7 @@ mod tests {
                 document_id,
                 doc_type: DocType::Trame,
                 // Never true off the CRDT: focus is view-local.
-                focused: false,
+                focused: ambre_bus::app::toile::InputFocus::Board,
             },
             link: None,
             group: None,
@@ -782,8 +782,8 @@ mod tests {
         ]);
         let out = visible_embeds(&dv, &cam, Some(&ElementId("e2".into())));
         assert_eq!(out.len(), 2);
-        assert!(!out[0].focused);
-        assert!(out[1].focused);
+        assert_eq!(out[0].focused, ambre_bus::app::toile::InputFocus::Board);
+        assert_eq!(out[1].focused, ambre_bus::app::toile::InputFocus::Entered);
         // The published id is the CHILD's, not the board element's: it is the key
         // into FrameHost's child views and the id the child's commands carry.
         assert_eq!(out[1].document_id, b);

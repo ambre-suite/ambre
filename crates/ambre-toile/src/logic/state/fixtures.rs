@@ -365,8 +365,8 @@ fn build_connectors_and_groups(state: &mut ToileState) {
             to_anch: Anchor::Left,
             path_type,
             arrows: EndCaps {
-                start: false,
-                end: true,
+                start: ambre_bus::app::toile::Cap::Plain,
+                end: ambre_bus::app::toile::Cap::Arrow,
             },
         });
         state.handle_command(ToileCommand::SetConnectorLabel {

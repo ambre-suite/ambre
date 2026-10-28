@@ -251,8 +251,8 @@ pub(super) fn write_connector(
     let _ = cm.insert(ConnectorKey::To, to.as_str());
     let _ = cm.insert(ConnectorKey::ToAnch, encode_anchor(to_anch));
     let _ = cm.insert(ConnectorKey::PathType, encode_path_type(path_type));
-    let _ = cm.insert(ConnectorKey::ArrowStart, arrows.start);
-    let _ = cm.insert(ConnectorKey::ArrowEnd, arrows.end);
+    let _ = cm.insert(ConnectorKey::ArrowStart, arrows.start.as_bool());
+    let _ = cm.insert(ConnectorKey::ArrowEnd, arrows.end.as_bool());
     // The style register is seeded like an element's: an LWW binary the
     // deriver reads back. So an arrow carries its own colour and width rather
     // than borrowing a default (`TOILE-046`).
@@ -306,8 +306,14 @@ pub(super) fn read_connector(id: ConnectorId, cm: &Fields<ConnectorKey>) -> Opti
         path_type: decode_path_type(&text(ConnectorKey::PathType)),
         // A connector that stores no cap draws none at that end.
         arrows: EndCaps {
-            start: bool_of(cm, ConnectorKey::ArrowStart).unwrap_or(false),
-            end: bool_of(cm, ConnectorKey::ArrowEnd).unwrap_or(false),
+            start: bool_of(cm, ConnectorKey::ArrowStart).map_or(
+                ambre_bus::app::toile::Cap::Plain,
+                ambre_bus::app::toile::Cap::from_bool,
+            ),
+            end: bool_of(cm, ConnectorKey::ArrowEnd).map_or(
+                ambre_bus::app::toile::Cap::Plain,
+                ambre_bus::app::toile::Cap::from_bool,
+            ),
         },
     })
 }

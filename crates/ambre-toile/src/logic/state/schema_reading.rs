@@ -441,8 +441,11 @@ fn connector_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             connector.path_type,
             route.to_svg()
         )),
-        ConnectorKey::ArrowStart => Some(format!("arrowhead at start {}", shown.arrows.start)),
-        ConnectorKey::ArrowEnd => Some(format!("arrowhead at end {}", shown.arrows.end)),
+        ConnectorKey::ArrowStart => Some(format!(
+            "arrowhead at start {}",
+            shown.arrows.start.as_bool()
+        )),
+        ConnectorKey::ArrowEnd => Some(format!("arrowhead at end {}", shown.arrows.end.as_bool())),
         ConnectorKey::Style => Some(style_reading(&shown.style)),
         ConnectorKey::Label => Some(format!("captioned {:?}", shown.label)),
     }

@@ -856,8 +856,8 @@ mod tests {
                     path,
                     style: ElementStyle::default(),
                     arrows: ambre_bus::app::toile::EndCaps {
-                        start: false,
-                        end: true,
+                        start: ambre_bus::app::toile::Cap::Plain,
+                        end: ambre_bus::app::toile::Cap::Arrow,
                     },
                     label: "yes".to_owned(),
                 }),
@@ -1479,8 +1479,8 @@ mod tests {
                 path,
                 style: ElementStyle::default(),
                 arrows: ambre_bus::app::toile::EndCaps {
-                    start: false,
-                    end: true,
+                    start: ambre_bus::app::toile::Cap::Plain,
+                    end: ambre_bus::app::toile::Cap::Arrow,
                 },
                 label: String::new(),
             })],
@@ -1891,8 +1891,8 @@ mod tests {
                 ..ElementStyle::default()
             },
             arrows: ambre_bus::app::toile::EndCaps {
-                start: false,
-                end: true,
+                start: ambre_bus::app::toile::Cap::Plain,
+                end: ambre_bus::app::toile::Cap::Arrow,
             },
             label: String::new(),
         })
@@ -2015,7 +2015,7 @@ mod tests {
         let doc = DisplayGeom::DocEmbed {
             document_id: ambre_bus::DocumentId::new(),
             doc_type: ambre_bus::DocType::Trame,
-            focused: false,
+            focused: ambre_bus::app::toile::InputFocus::Board,
         };
         for geom in [
             DisplayGeom::Embed(

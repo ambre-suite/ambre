@@ -137,9 +137,12 @@ pub enum Anchor { Top, Bottom, Left, Right, Center, Free { u: UnitFraction, v: U
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum PathType { Straight, Elbow, Curved }
 
+/// What one end draws; `define_flag!`, so it writes the byte of a `bool`.
+pub enum Cap { Plain, Arrow }
+
 /// Directional decoration, persisted as two flags on the connector.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-pub struct EndCaps { pub start: bool, pub end: bool }
+pub struct EndCaps { pub start: Cap, pub end: Cap }
 ```
 
 **Commands** (`ambre-bus`), one undo item each: `CreateConnector` with both endpoints, both anchors,

@@ -809,8 +809,8 @@ impl ToolMachine {
                             to_anch,
                             path_type: PathType::Straight,
                             arrows: EndCaps {
-                                start: false,
-                                end: true,
+                                start: ambre_bus::app::toile::Cap::Plain,
+                                end: ambre_bus::app::toile::Cap::Arrow,
                             },
                         })
                     }
@@ -2158,7 +2158,13 @@ mod tests {
             }) => {
                 assert_eq!(from, ElementId("a".into()));
                 assert_eq!(to, ElementId("b".into()));
-                assert!(arrows.end && !arrows.start);
+                assert_eq!(
+                    (arrows.start, arrows.end),
+                    (
+                        ambre_bus::app::toile::Cap::Plain,
+                        ambre_bus::app::toile::Cap::Arrow
+                    )
+                );
             }
             other => panic!("expected CreateConnector, got {other:?}"),
         }

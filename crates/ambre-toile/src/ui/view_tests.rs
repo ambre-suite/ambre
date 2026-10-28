@@ -222,8 +222,8 @@ fn arrow(id: &str) -> DisplayConnector {
         path,
         style: Default::default(),
         arrows: ambre_bus::app::toile::EndCaps {
-            start: false,
-            end: true,
+            start: ambre_bus::app::toile::Cap::Plain,
+            end: ambre_bus::app::toile::Cap::Arrow,
         },
         label: "yes".to_owned(),
     }
