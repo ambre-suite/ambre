@@ -476,8 +476,8 @@ pub struct Backlog<T> {
 /// gap between them keeps one burst from flapping the source on and off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Marks {
-    high: usize,
-    low: usize,
+    high: BacklogLength,
+    low: BacklogLength,
 }
 
 impl Marks {
@@ -485,8 +485,8 @@ impl Marks {
     /// `None` unless `low` sits below `high`: the source would never be
     /// released.
     #[must_use]
-    pub const fn new(high: usize, low: usize) -> Option<Self> {
-        if low < high {
+    pub const fn new(high: BacklogLength, low: BacklogLength) -> Option<Self> {
+        if low.0 < high.0 {
             Some(Self { high, low })
         } else {
             None
@@ -495,14 +495,32 @@ impl Marks {
 
     /// The length at which the source is asked to stop.
     #[must_use]
-    pub const fn high(self) -> usize {
+    pub const fn high(self) -> BacklogLength {
         self.high
     }
 
     /// The length at which the source is asked to send again.
     #[must_use]
-    pub const fn low(self) -> usize {
+    pub const fn low(self) -> BacklogLength {
         self.low
+    }
+}
+
+/// How many values a [`Backlog`] holds, as a [`Marks`] pair names a length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BacklogLength(usize);
+
+impl BacklogLength {
+    /// A length of `values` held.
+    #[must_use]
+    pub const fn new(values: usize) -> Self {
+        Self(values)
+    }
+
+    /// The number of values.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
     }
 }
 
@@ -559,10 +577,10 @@ impl<T> Backlog<T> {
     pub fn pressure(&mut self) -> Option<Pressure> {
         let marks = self.marks?;
         let len = self.held.len();
-        if !self.holding && len >= marks.high {
+        if !self.holding && len >= marks.high.get() {
             self.holding = true;
             Some(Pressure::Hold)
-        } else if self.holding && len <= marks.low {
+        } else if self.holding && len <= marks.low.get() {
             self.holding = false;
             Some(Pressure::Release)
         } else {
@@ -728,10 +746,17 @@ mod tests {
     /// hold its source for good, and is refused.
     #[test]
     fn a_low_mark_must_sit_below_the_high_one() {
-        assert_eq!(Marks::new(3, 3), None);
-        assert_eq!(Marks::new(1, 3), None);
-        let marks = Marks::new(3, 1).expect("1 sits below 3");
-        assert_eq!((marks.high(), marks.low()), (3, 1));
+        assert_eq!(
+            Marks::new(BacklogLength::new(3), BacklogLength::new(3)),
+            None
+        );
+        assert_eq!(
+            Marks::new(BacklogLength::new(1), BacklogLength::new(3)),
+            None
+        );
+        let marks =
+            Marks::new(BacklogLength::new(3), BacklogLength::new(1)).expect("1 sits below 3");
+        assert_eq!((marks.high().get(), marks.low().get()), (3, 1));
     }
 
     /// `ARCH-024`: the last sender gone reads as a disconnection, once the
@@ -806,7 +831,10 @@ mod tests {
     #[test]
     fn a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low() {
         let (tx, rx) = local(ChannelCapacity::new(1));
-        let mut backlog = Backlog::with_marks(tx, Marks::new(3, 1).expect("1 sits below 3"));
+        let mut backlog = Backlog::with_marks(
+            tx,
+            Marks::new(BacklogLength::new(3), BacklogLength::new(1)).expect("1 sits below 3"),
+        );
         let mut asked = Vec::new();
         for n in 0..5 {
             backlog.push(n);

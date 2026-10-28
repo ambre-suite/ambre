@@ -65,10 +65,10 @@ pub use app::trame::{
     ColSpan, ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter,
     DateSerial, DayCount, DayOfMonth, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell,
     EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge,
-    MergeSpan, Month, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec, SelectionKind,
-    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, Slant, SortKey,
-    SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline, VAlign,
-    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    MergeSpan, Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec,
+    SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos,
+    Slant, SortKey, SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline,
+    VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};

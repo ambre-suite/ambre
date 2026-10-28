@@ -457,7 +457,8 @@ pub(crate) fn date(args: &[CellValue]) -> CellValue {
     };
     let year = if (0..1900).contains(&y) { y + 1900 } else { y };
     // A month past either end of the year carries into it (Excel allows it).
-    let serial = CivilDate::of_months(Year::new(year), m - 1, DayOfMonth::new(d)).serial();
+    let serial =
+        CivilDate::of_months(Year::new(year), MonthCount::new(m - 1), DayOfMonth::new(d)).serial();
     CellValue::Number(serial.get() as f64)
 }
 

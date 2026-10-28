@@ -646,7 +646,11 @@ fn last_day(date: CivilDate) -> DayOfMonth {
 /// Shift the month of `date` by `months`, normalizing into a valid month. The
 /// day is kept as it stands.
 pub(crate) fn shift_month(date: CivilDate, months: i64) -> CivilDate {
-    CivilDate::of_months(date.year, date.month.get() - 1 + months, date.day)
+    CivilDate::of_months(
+        date.year,
+        MonthCount::new(date.month.get() - 1 + months),
+        date.day,
+    )
 }
 
 /// EDATE(start, months) -- same day-of-month `months` away (clamped to the

@@ -36,7 +36,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
-use ambre_bus::conduit::{self, ChannelCapacity, Marks};
+use ambre_bus::conduit::{self, BacklogLength, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role,
@@ -100,8 +100,10 @@ const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
 /// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
 /// The match runs at compile time. A low mark that is not below the high one
 /// is thus a build error.
-const SYNC_INBOX_MARKS: Marks = match Marks::new(4 * CHANNEL_CAPACITY.get(), CHANNEL_CAPACITY.get())
-{
+const SYNC_INBOX_MARKS: Marks = match Marks::new(
+    BacklogLength::new(4 * CHANNEL_CAPACITY.get()),
+    BacklogLength::new(CHANNEL_CAPACITY.get()),
+) {
     Some(marks) => marks,
     None => panic!("the inbox marks are a pair"),
 };

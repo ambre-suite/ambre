@@ -211,11 +211,11 @@ ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	new
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue.0 | field | String	newtype-inner	the inside of MarkValue; validate_value and canonical_value are the only ways in
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	newtype-inner	newtype inner field
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	newtype-inner	newtype inner field
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(value) | param | f32	math	layout geometry local to algorithm
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(value) | param | f32	math	a font size or colour component, spelled as a mark value
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
@@ -291,7 +291,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction.0 | field | f32	
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | CivilDate::of_months(months) | param | i64	math	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayCount.0 | field | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayCount::get() | ret | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayCount::new(days) | param | i64	newtype-inner	the number a calendar part wraps
@@ -353,8 +352,8 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormat
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::GreaterThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::LessThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.max | field | f64	math	validation bound, echoed in the refusal
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.min | field | f64	math	validation bound, echoed in the refusal
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.max | field | f64	generic	the refused bound the error echoes
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.min | field | f64	generic	the refused bound the error echoes
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds.max | field | f64	math	validation bound of a checked number range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds.min | field | f64	math	validation bound of a checked number range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds::max() | ret | f64	math	validation bound of a checked number range
@@ -381,16 +380,13 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.
 ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
+ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
+ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::get() | ret | usize	newtype-inner	the number of values a backlog holds, as a mark names it
+ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | Marks.high | field | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | Marks.low | field | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/conduit.rs | crate::conduit | Marks::high() | ret | usize	math	a backlog length at which a source is held or released
-ambre-bus | src/conduit.rs | crate::conduit | Marks::low() | ret | usize	math	a backlog length at which a source is held or released
-ambre-bus | src/conduit.rs | crate::conduit | Marks::new(high) | param | usize	math	a backlog length at which a source is held or released
-ambre-bus | src/conduit.rs | crate::conduit | Marks::new(low) | param | usize	math	a backlog length at which a source is held or released
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
@@ -3765,6 +3761,9 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DaySerial::new(days) | param | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount.0 | field | i64	newtype-inner	a count of months from January, past either end of the year
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::get() | ret | i64	newtype-inner	a count of months from January, past either end of the year
+ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	newtype-inner	newtype inner, accessor or constructor

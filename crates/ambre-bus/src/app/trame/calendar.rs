@@ -92,7 +92,8 @@ pub struct Month(i64);
 
 impl Month {
     /// The month numbered `month`, `None` outside 1 to 12. A count of months
-    /// past either end of a year is [`CivilDate::of_months`].
+    /// past either end of a year is a [`MonthCount`], which
+    /// [`CivilDate::of_months`] reads.
     pub const fn new(month: i64) -> Option<Self> {
         if matches!(month, 1..=12) {
             Some(Self(month))
@@ -102,6 +103,23 @@ impl Month {
     }
 
     /// The month's number, from 1 to 12.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// A count of months, from January of some year. It may run past December
+/// or below January, as `DATE` and `EDATE` read a month out of range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MonthCount(i64);
+
+impl MonthCount {
+    /// A count of `months`, of either sign.
+    pub const fn new(months: i64) -> Self {
+        Self(months)
+    }
+
+    /// The number of months.
     pub const fn get(self) -> i64 {
         self.0
     }
@@ -177,10 +195,10 @@ impl CivilDate {
     /// runs past either end of the year and carries into it, as `DATE` and
     /// `EDATE` read a month out of range. Twelve months after January 2024
     /// is January 2025.
-    pub const fn of_months(year: Year, months: i64, day: DayOfMonth) -> Self {
+    pub const fn of_months(year: Year, months: MonthCount, day: DayOfMonth) -> Self {
         Self {
-            year: Year(year.0 + months.div_euclid(12)),
-            month: Month(months.rem_euclid(12) + 1),
+            year: Year(year.0 + months.0.div_euclid(12)),
+            month: Month(months.0.rem_euclid(12) + 1),
             day,
         }
     }
@@ -199,7 +217,7 @@ impl CivilDate {
 
     /// The first day of the month after this date's month.
     pub const fn next_month_start(self) -> Self {
-        Self::of_months(self.year, self.month.0, DayOfMonth(1))
+        Self::of_months(self.year, MonthCount(self.month.0), DayOfMonth(1))
     }
 }
 
@@ -208,7 +226,7 @@ mod tests {
     use super::*;
 
     const fn date(year: i64, month: i64, day: i64) -> CivilDate {
-        CivilDate::of_months(Year(year), month - 1, DayOfMonth(day))
+        CivilDate::of_months(Year(year), MonthCount(month - 1), DayOfMonth(day))
     }
 
     #[test]
@@ -240,9 +258,10 @@ mod tests {
             assert_eq!(Month::new(refused), None, "{refused}");
         }
         assert_eq!(Month::new(12).map(Month::get), Some(12));
-        let carried = CivilDate::of_months(Year::new(2024), 12, DayOfMonth::new(5));
+        let carried =
+            CivilDate::of_months(Year::new(2024), MonthCount::new(12), DayOfMonth::new(5));
         assert_eq!((carried.year.get(), carried.month.get()), (2025, 1));
-        let back = CivilDate::of_months(Year::new(2024), -1, DayOfMonth::new(5));
+        let back = CivilDate::of_months(Year::new(2024), MonthCount::new(-1), DayOfMonth::new(5));
         assert_eq!((back.year.get(), back.month.get()), (2023, 12));
         assert_eq!(
             date(2024, 3, 1)
