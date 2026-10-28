@@ -328,13 +328,37 @@ fn open_payload(
     aad: &Aad,
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<OpenedPayload, PipelineError> {
     // The model reads the bytes, so they are copied once, through the door
     // `ARCH-047` admits. Nothing wipes that copy: the wrapper is typing only
     // here, with no wipe gain.
     let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?.to_plaintext();
     let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
-    decompress(CompressionVersion::from_byte(*version)?, body)
+    decompress(CompressionVersion::from_byte(*version)?, body).map(OpenedPayload)
+}
+
+/// A payload opened and decompressed, before its caller names its role. Each
+/// open moves it into the one role it reads, with no copy on the way. A
+/// `SecretBytes` here would cost a second copy through `to_plaintext`. Its
+/// wipe would gain nothing, since the role keeps the bytes in the clear
+/// (`ARCH-047`).
+struct OpenedPayload(Vec<u8>);
+
+impl OpenedPayload {
+    /// The payload as the frame of an update, for [`split_update_body`].
+    fn into_frame(self) -> UpdateFrame {
+        UpdateFrame(self.0)
+    }
+
+    /// The payload as a full CRDT state.
+    fn into_snapshot(self) -> SnapshotBytes {
+        SnapshotBytes::new(self.0)
+    }
+
+    /// The payload as one presence sample.
+    fn into_ephemeral(self) -> EphemeralBytes {
+        EphemeralBytes::new(self.0)
+    }
 }
 
 fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Aad, PipelineError> {
@@ -405,13 +429,13 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame
         &update.commitment_tag,
         &update.signature,
     );
-    let plaintext = open_payload(&sealed, &aad, doc_key, &update.public_data.pub_key)?;
+    let frame = open_payload(&sealed, &aad, doc_key, &update.public_data.pub_key)?.into_frame();
     tracing::debug!(
         "[Pipeline] open_update: {} bytes ciphertext -> {} bytes plaintext",
         update.ciphertext.0.len(),
-        plaintext.len(),
+        frame.len(),
     );
-    Ok(UpdateFrame(plaintext))
+    Ok(frame)
 }
 
 // -- Snapshot ------------------------------------------------------------------
@@ -473,7 +497,8 @@ pub fn open_snapshot(
         &snapshot.commitment_tag,
         &snapshot.signature,
     );
-    open_payload(&sealed, &aad, doc_key, &snapshot.public_data.pub_key).map(SnapshotBytes::new)
+    open_payload(&sealed, &aad, doc_key, &snapshot.public_data.pub_key)
+        .map(OpenedPayload::into_snapshot)
 }
 
 // -- Ephemeral -----------------------------------------------------------------
@@ -512,7 +537,8 @@ pub fn open_ephemeral(
         &ephemeral.commitment_tag,
         &ephemeral.signature,
     );
-    open_payload(&sealed, &aad, doc_key, &ephemeral.public_data.pub_key).map(EphemeralBytes::new)
+    open_payload(&sealed, &aad, doc_key, &ephemeral.public_data.pub_key)
+        .map(OpenedPayload::into_ephemeral)
 }
 
 // -- What leaves the worker ----------------------------------------------------
