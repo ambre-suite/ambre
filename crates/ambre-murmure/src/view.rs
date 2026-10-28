@@ -5737,20 +5737,22 @@ mod tests {
             })
             .collect();
         let code = Some(ambre_core::FontFamily::Mono);
+        use ambre_core::Slant::Upright;
+        use ambre_core::Underline::{Plain, Underlined};
         assert_eq!(
             spans,
             [
-                (3..4, (Some(700), false, None, None), false, None),
+                (3..4, (Some(700), Upright, None, None), Plain, None),
                 (
                     5..6,
-                    (None, false, code, None),
-                    false,
+                    (None, Upright, code, None),
+                    Plain,
                     Some(palette.header_hover)
                 ),
                 (
                     7..8,
-                    (None, false, None, Some(palette.selection)),
-                    true,
+                    (None, Upright, None, Some(palette.selection)),
+                    Underlined,
                     None
                 ),
             ]
@@ -5758,7 +5760,8 @@ mod tests {
         type_slowly(&mut page, " _e_");
         let spans = page.view.composer().spans(channel);
         assert_eq!(spans.len(), 4);
-        assert!(spans[3].italic && spans[3].range == ByteSpan::from_usize_range(9..10));
+        assert_eq!(spans[3].italic, ambre_core::Slant::Italic);
+        assert_eq!(spans[3].range, ByteSpan::from_usize_range(9..10));
         // A draft with no mark draws none.
         for _ in 0.."é b c d e".chars().count() {
             key(

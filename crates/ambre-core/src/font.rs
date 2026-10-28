@@ -164,6 +164,43 @@ impl From<FontWeight> for u16 {
     }
 }
 
+crate::define_flag! {
+    /// The weight of a text's face: the family's regular face or its real
+    /// bold. A record that stores a bold toggle keeps the byte of its `bool`;
+    /// a record that stores a weight on the CSS scale holds a [`FontWeight`].
+    pub enum Weight {
+        Regular,
+        Bold,
+    }
+
+    /// The slant of a text's face: upright, or the family's real italic.
+    pub enum Slant {
+        Upright,
+        Italic,
+    }
+
+    /// Where a line may break: between words only, or within a word too, so
+    /// a long unbreakable token wraps instead of overflowing.
+    pub enum WordBreak {
+        Whole,
+        Anywhere,
+    }
+
+    /// Whether a run of text is underlined.
+    pub enum Underline {
+        Plain,
+        /// A line just below the baseline.
+        Underlined,
+    }
+
+    /// Whether a run of text is struck through.
+    pub enum Strikethrough {
+        Plain,
+        /// A line through the middle of the glyphs.
+        Struck,
+    }
+}
+
 /// A serde adapter for an `Option<FontSize>` stored as whole points, a
 /// `u16`, for a record whose layout predates [`FontSize`].
 ///

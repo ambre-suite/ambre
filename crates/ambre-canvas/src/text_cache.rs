@@ -85,59 +85,7 @@ impl std::hash::Hash for CacheKey {
     }
 }
 
-/// The weight of a text's face: the family's regular face or its real bold.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Weight {
-    #[default]
-    Regular,
-    Bold,
-}
-
-impl Weight {
-    /// The bold face when `bold` holds, the regular one otherwise.
-    pub fn bold_if(bold: bool) -> Self {
-        if bold { Weight::Bold } else { Weight::Regular }
-    }
-}
-
-/// The slant of a text's face: upright, or the family's real italic.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Slant {
-    #[default]
-    Upright,
-    Italic,
-}
-
-impl Slant {
-    /// The italic face when `italic` holds, the upright one otherwise.
-    pub fn italic_if(italic: bool) -> Self {
-        if italic {
-            Slant::Italic
-        } else {
-            Slant::Upright
-        }
-    }
-}
-
-/// Where a line may break: between words only, or within a word too, so a
-/// long unbreakable token wraps instead of overflowing.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum WordBreak {
-    #[default]
-    Whole,
-    Anywhere,
-}
-
-impl WordBreak {
-    /// Within a word too when `wrap` holds, between words only otherwise.
-    pub fn anywhere_if(wrap: bool) -> Self {
-        if wrap {
-            WordBreak::Anywhere
-        } else {
-            WordBreak::Whole
-        }
-    }
-}
+pub use ambre_core::{Slant, Weight, WordBreak};
 
 /// What a span shapes over its byte range: a weight, a slant, a family, an
 /// underline, an indent. Its ink and its tint are drawn over the layout, so
@@ -146,9 +94,9 @@ impl WordBreak {
 pub struct SpanShape {
     pub range: ByteSpan,
     pub weight: Option<ambre_core::FontWeight>,
-    pub italic: bool,
+    pub italic: Slant,
     pub family: Option<ambre_core::FontFamily>,
-    pub underline: bool,
+    pub underline: ambre_core::Underline,
     /// How far right each paragraph holding bytes of the range starts, in
     /// the units of the width the text breaks to (`CANVAS-084`).
     pub indent: u16,
@@ -252,7 +200,7 @@ pub(crate) fn push_shape(
         let weight = FontWeight::new(f32::from(weight.get()));
         builder.push(StyleProperty::FontWeight(weight), range.clone());
     }
-    if shape.italic {
+    if shape.italic == Slant::Italic {
         builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
     }
     if let Some(family) = &shape.family {
@@ -260,7 +208,7 @@ pub(crate) fn push_shape(
         let stack = FontFamily::Single(FontFamilyName::Named(face.into()));
         builder.push(StyleProperty::FontFamily(stack), range.clone());
     }
-    if shape.underline {
+    if shape.underline == ambre_core::Underline::Underlined {
         builder.push(StyleProperty::Underline(true), range.clone());
     }
     true

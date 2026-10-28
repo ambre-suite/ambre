@@ -94,11 +94,11 @@ unit (`TRAME-016`).
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellStyle {
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub underline: Underline,     // each flag is stored as the byte of a bool
+    pub strikethrough: Strikethrough,
     pub h_align: HAlign,          // Auto | Left | Center | Right
     pub v_align: VAlign,          // Top | Middle | Bottom
-    pub wrap: bool,
+    pub wrap: WordBreak,
     pub fg: Option<Rgb>,          // None = the theme default
     pub bg: Option<Rgb>,          // None = transparent
     pub font: Option<FontFamily>,
@@ -110,20 +110,20 @@ pub struct CellStyle {
 
 #[derive(Serialize, Deserialize, Default)]
 pub(super) struct StyleRecord {   // what the register actually holds
-    pub(super) bold: bool,        // bold and italic ride here, not in CellStyle
-    pub(super) italic: bool,
+    pub(super) bold: Weight,      // bold and italic ride here, not in CellStyle
+    pub(super) italic: Slant,
     pub(super) style: CellStyle,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StylePatch {           // one toolbar control, one sparse edit
-    pub bold: Option<bool>,
-    pub italic: Option<bool>,
-    pub underline: Option<bool>,
-    pub strikethrough: Option<bool>,
+    pub bold: Option<Weight>,
+    pub italic: Option<Slant>,
+    pub underline: Option<Underline>,
+    pub strikethrough: Option<Strikethrough>,
     pub h_align: Option<HAlign>,
     pub v_align: Option<VAlign>,
-    pub wrap: Option<bool>,
+    pub wrap: Option<WordBreak>,
     pub fg: Option<Option<Rgb>>,       // None leaves, Some(None) clears, Some(Some) sets
     pub bg: Option<Option<Rgb>>,
     pub font: Option<Option<FontFamily>>,

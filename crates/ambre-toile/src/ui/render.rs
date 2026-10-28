@@ -2071,8 +2071,8 @@ mod tests {
         ) else {
             panic!("rotated_elem builds an element")
         };
-        e.style.font.underline = true;
-        e.style.font.strikethrough = true;
+        e.style.font.underline = ambre_core::Underline::Underlined;
+        e.style.font.strikethrough = ambre_core::Strikethrough::Struck;
         let surface = paint_pass(
             &board(vec![DisplayNode::Element(e)]),
             &cam(),

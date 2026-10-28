@@ -21,6 +21,7 @@ pub use ambre_core::FontFamily;
 use ambre_core::FontSize;
 use ambre_core::Rgba;
 use ambre_core::UserId;
+use ambre_core::{Slant, Strikethrough, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -215,9 +216,9 @@ pub struct FontSpec {
     /// The size, or automatic: a note's body then tracks its card.
     pub size: FontSizeChoice,
     pub weight: ambre_core::FontWeight,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub italic: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
 }
 
 impl Default for FontSpec {
@@ -226,9 +227,9 @@ impl Default for FontSpec {
             family: None,
             size: FontSizeChoice::DEFAULT,
             weight: ambre_core::FontWeight::REGULAR,
-            italic: false,
-            underline: false,
-            strikethrough: false,
+            italic: Slant::Upright,
+            underline: Underline::Plain,
+            strikethrough: Strikethrough::Plain,
         }
     }
 }
@@ -2663,9 +2664,9 @@ mod tests {
                 family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: ambre_core::FontWeight::new(600).unwrap(),
-                italic: true,
-                underline: false,
-                strikethrough: true,
+                italic: Slant::Italic,
+                underline: Underline::Plain,
+                strikethrough: Strikethrough::Struck,
             },
             ..ElementStyle::default()
         };

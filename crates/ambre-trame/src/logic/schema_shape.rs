@@ -203,14 +203,14 @@ fn shape_of(doc: &LoroDoc) -> Shape {
 /// records must fail to compile rather than encode silently.
 fn postcard_layouts() -> Vec<(String, String)> {
     let style = StyleRecord {
-        bold: true,
-        italic: true,
+        bold: ambre_bus::Weight::Bold,
+        italic: ambre_bus::Slant::Italic,
         style: CellStyle {
-            underline: true,
-            strikethrough: true,
+            underline: ambre_bus::Underline::Underlined,
+            strikethrough: ambre_bus::Strikethrough::Struck,
             h_align: HAlign::Right,
             v_align: VAlign::Bottom,
-            wrap: true,
+            wrap: ambre_bus::WordBreak::Anywhere,
             fg: Some(Rgb::from_bits(0x01_02_03)),
             bg: Some(Rgb::from_bits(0x04_05_06)),
             font: Some(ambre_core::FontFamily::Other("f".to_owned())),
@@ -361,7 +361,7 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         // A size and a colour beside the bold, so the reading belt has a
         // measure and a colour to resolve (`SCHEMA-017`).
         patch: StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             size: Some(Some(ambre_core::FontSize::from_whole_points(14))),
             fg: Some(Some(Rgb::from_bits(0x33_66_99))),
             ..Default::default()

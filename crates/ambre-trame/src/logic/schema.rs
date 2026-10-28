@@ -566,7 +566,7 @@ mod tests {
         });
         source.handle_command(TrameCommand::SetCellStyle {
             patch: crate::StylePatch {
-                bold: Some(true),
+                bold: Some(ambre_bus::Weight::Bold),
                 ..Default::default()
             },
         });

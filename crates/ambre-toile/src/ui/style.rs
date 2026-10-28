@@ -315,11 +315,17 @@ mod tests {
             ..Default::default()
         };
         let a = ElementStyle {
-            font: font_with(false, false),
+            font: font_with(
+                ambre_core::Underline::Plain,
+                ambre_core::Strikethrough::Plain,
+            ),
             ..ElementStyle::default()
         };
         let b = ElementStyle {
-            font: font_with(true, true),
+            font: font_with(
+                ambre_core::Underline::Underlined,
+                ambre_core::Strikethrough::Struck,
+            ),
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);
@@ -327,8 +333,11 @@ mod tests {
         assert!(model.mixed.underline);
         assert!(model.mixed.strikethrough);
         // The base is the first element; its decorations are off.
-        assert!(!model.base.font.underline);
-        assert!(!model.base.font.strikethrough);
+        assert_eq!(model.base.font.underline, ambre_core::Underline::Plain);
+        assert_eq!(
+            model.base.font.strikethrough,
+            ambre_core::Strikethrough::Plain
+        );
         // Weight / italic agree, so they are not flagged.
         assert!(!model.mixed.bold);
         assert!(!model.mixed.italic);

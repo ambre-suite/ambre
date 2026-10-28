@@ -433,8 +433,8 @@ impl TrameState {
                     self.formula_display(&self.cell_raw(at), &self.active_sheet, &lines)
                         .into_string()
                 },
-                bold: self.bold.contains(&at),
-                italic: self.italic.contains(&at),
+                bold: Weight::from_bool(self.bold.contains(&at)),
+                italic: Slant::from_bool(self.italic.contains(&at)),
                 underline: style.underline,
                 strikethrough: style.strikethrough,
                 h_align: style.h_align,

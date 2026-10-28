@@ -252,9 +252,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
             weight: ambre_core::FontWeight::BOLD,
-            italic: true,
-            underline: true,
-            strikethrough: true,
+            italic: ambre_core::Slant::Italic,
+            underline: ambre_core::Underline::Underlined,
+            strikethrough: ambre_core::Strikethrough::Struck,
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),

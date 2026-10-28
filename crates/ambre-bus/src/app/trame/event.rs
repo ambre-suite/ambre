@@ -51,8 +51,8 @@ pub enum TrameEvent {
     /// [`CellStyle`]: super::CellStyle
     StyleApplied {
         style: super::CellStyle,
-        bold: bool,
-        italic: bool,
+        bold: super::Weight,
+        italic: super::Slant,
         /// Whether the active cell is part of a merge (a master or a covered
         /// cell), driving the toolbar's merge/unmerge toggle pressed state.
         merged: bool,
@@ -460,13 +460,13 @@ pub struct DisplayCell {
     /// not its computed result. Equals `text` for plain cells.
     pub raw: String,
     /// Bold run applied to this cell (pinned to the cell, not the selection).
-    pub bold: bool,
+    pub bold: super::Weight,
     /// Italic run applied to this cell.
-    pub italic: bool,
+    pub italic: super::Slant,
     /// Underline run applied to this cell (`trame-cell-styles`).
-    pub underline: bool,
+    pub underline: super::Underline,
     /// Strikethrough run applied to this cell.
-    pub strikethrough: bool,
+    pub strikethrough: super::Strikethrough,
     /// Horizontal text alignment.
     pub h_align: super::HAlign,
     /// The cell's computed value is a number, before any format renders it.
@@ -477,7 +477,7 @@ pub struct DisplayCell {
     /// Vertical text alignment.
     pub v_align: super::VAlign,
     /// Wrap long text onto multiple lines inside the cell.
-    pub wrap: bool,
+    pub wrap: super::WordBreak,
     /// Text colour, packed `0xRRGGBB` (`None` = theme default).
     pub fg: Option<Rgb>,
     /// Fill colour, packed `0xRRGGBB` (`None` = transparent).

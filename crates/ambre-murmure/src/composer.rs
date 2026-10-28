@@ -136,12 +136,12 @@ pub fn typing_line(names: &[Option<ambre_core::DisplayName>]) -> Option<String> 
 fn body_style(color: Color) -> TextEditorStyle {
     TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
-        italic: false,
+        italic: ambre_core::Slant::Upright,
         family: FAMILY,
         base_size: ambre_core::DocPx::new(FONT_BODY.get()),
         color,
-        underline: false,
-        strikethrough: false,
+        underline: ambre_core::Underline::Plain,
+        strikethrough: ambre_core::Strikethrough::Plain,
     }
 }
 

@@ -138,7 +138,7 @@ ambre_core::define_tally! {
 pub struct CondStyle {
     pub fg: Option<Rgb>,
     pub bg: Rgb,
-    pub bold: bool,
+    pub bold: super::Weight,
 }
 
 /// Whether a number range admits its two bounds.

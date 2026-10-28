@@ -132,12 +132,12 @@ impl CellEditor {
     pub fn new(at: CellPos, session: EditSessionId, text: String) -> Self {
         let style = TextEditorStyle {
             weight: ambre_core::FontWeight::REGULAR,
-            italic: false,
+            italic: ambre_core::Slant::Upright,
             family: ambre_core::FontFamily::Sans,
             base_size: BODY_SIZE,
             color: Color::from_rgba8(0, 0, 0, 255),
-            underline: false,
-            strikethrough: false,
+            underline: ambre_core::Underline::Plain,
+            strikethrough: ambre_core::Strikethrough::Plain,
         };
         Self {
             at,

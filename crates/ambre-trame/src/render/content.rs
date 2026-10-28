@@ -73,38 +73,14 @@ pub struct Decoration {
     pub strikethrough: Strikethrough,
 }
 
-/// Whether a run of text is underlined (`trame-cell-styles`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Underline {
-    #[default]
-    Plain,
-    /// A 1px line just below the baseline.
-    Underlined,
-}
-
-/// Whether a run of text is struck through (`trame-cell-styles`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Strikethrough {
-    #[default]
-    Plain,
-    /// A 1px line at about 0.3em above the baseline.
-    Struck,
-}
+pub use ambre_core::{Strikethrough, Underline};
 
 impl Decoration {
     /// The lines the style of `content` asks for.
     pub fn of(content: &CellContent<'_>) -> Self {
         Self {
-            underline: if content.underline {
-                Underline::Underlined
-            } else {
-                Underline::Plain
-            },
-            strikethrough: if content.strikethrough {
-                Strikethrough::Struck
-            } else {
-                Strikethrough::Plain
-            },
+            underline: Underline::from_bool(content.underline),
+            strikethrough: Strikethrough::from_bool(content.strikethrough),
         }
     }
 }

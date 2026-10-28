@@ -31,10 +31,10 @@ mod group7;
 mod group8;
 mod group9;
 
-/// A bold patch over `bold: Some(true)`.
-fn bold_patch(on: bool) -> crate::StylePatch {
+/// A patch that sets the bold weight, and nothing else.
+fn bold_patch() -> crate::StylePatch {
     crate::StylePatch {
-        bold: Some(on),
+        bold: Some(ambre_bus::Weight::Bold),
         ..Default::default()
     }
 }

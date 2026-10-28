@@ -22,11 +22,14 @@ fn bold_stays_on_the_cell_not_the_selection() {
         kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SetCellStyle {
-        patch: bold_patch(true),
+        patch: bold_patch(),
     });
     assert!(matches!(
         evts.display[0],
-        TrameEvent::StyleApplied { bold: true, .. }
+        TrameEvent::StyleApplied {
+            bold: ambre_bus::Weight::Bold,
+            ..
+        }
     ));
 
     // Move the selection to B2 (1,1): the active cell is not bold, so the
@@ -41,7 +44,10 @@ fn bold_stays_on_the_cell_not_the_selection() {
     });
     assert!(matches!(
         evts.display[0],
-        TrameEvent::StyleApplied { bold: false, .. }
+        TrameEvent::StyleApplied {
+            bold: ambre_bus::Weight::Regular,
+            ..
+        }
     ));
 
     // A viewport covering both cells: only A1 carries the bold run.
@@ -63,8 +69,12 @@ fn bold_stays_on_the_cell_not_the_selection() {
         .iter()
         .find(|c| c.row == Row::new(1) && c.col == Col::new(1))
         .unwrap();
-    assert!(a1.bold, "A1 must stay bold");
-    assert!(!b2.bold, "B2 must not become bold");
+    assert_eq!(a1.bold, ambre_bus::Weight::Bold, "A1 must stay bold");
+    assert_eq!(
+        b2.bold,
+        ambre_bus::Weight::Regular,
+        "B2 must not become bold"
+    );
 }
 
 /// Bold and italic survive a snapshot round-trip (the F5 reload path):
@@ -82,8 +92,8 @@ fn formatting_survives_snapshot_roundtrip() {
     });
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(true),
-            italic: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
+            italic: Some(ambre_bus::Slant::Italic),
             ..Default::default()
         },
     });
@@ -109,8 +119,16 @@ fn formatting_survives_snapshot_roundtrip() {
         .iter()
         .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
         .unwrap();
-    assert!(a1.bold, "A1 must stay bold after reload");
-    assert!(a1.italic, "A1 must stay italic after reload");
+    assert_eq!(
+        a1.bold,
+        ambre_bus::Weight::Bold,
+        "A1 must stay bold after reload"
+    );
+    assert_eq!(
+        a1.italic,
+        ambre_bus::Slant::Italic,
+        "A1 must stay italic after reload"
+    );
 }
 
 /// `SetCellStyle` applies a [`StylePatch`] over the selection and persists it
@@ -143,7 +161,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
             format: Some(CellFormat::Percent),
             decimals: Some(crate::Decimals::new(1)),
             h_align: Some(HAlign::Right),
-            underline: Some(true),
+            underline: Some(ambre_bus::Underline::Underlined),
             ..Default::default()
         },
     });
@@ -158,7 +176,7 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .expect("StyleApplied emitted");
     assert_eq!(style_ev.format, CellFormat::Percent);
     assert_eq!(style_ev.h_align, HAlign::Right);
-    assert!(style_ev.underline);
+    assert_eq!(style_ev.underline, ambre_bus::Underline::Underlined);
 
     // Reload from a snapshot: the style must persist in the CRDT.
     let snapshot = state.export_snapshot();
@@ -180,7 +198,11 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         .iter()
         .find(|c| c.row == Row::new(0) && c.col == Col::new(0))
         .unwrap();
-    assert!(a1.underline, "underline must survive reload");
+    assert_eq!(
+        a1.underline,
+        ambre_bus::Underline::Underlined,
+        "underline must survive reload"
+    );
     assert_eq!(a1.h_align, HAlign::Right, "alignment must survive reload");
     // 3.14159 -> Percent, 1 decimal -> "314.2%".
     assert_eq!(a1.text, "314.2%");
@@ -841,7 +863,7 @@ fn selection_style_is_a_single_undo() {
         kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
-        patch: bold_patch(true),
+        patch: bold_patch(),
     });
     // One undo.
     state.handle_command(TrameCommand::Undo);
@@ -860,8 +882,9 @@ fn selection_style_is_a_single_undo() {
             .iter()
             .find(|x| x.row == Row::new(0) && x.col == Col::new(c))
             .unwrap();
-        assert!(
-            !cell.bold,
+        assert_eq!(
+            cell.bold,
+            ambre_bus::Weight::Regular,
             "col {c} still bold after ONE undo -> style was multi-undo"
         );
     }
@@ -1002,7 +1025,7 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
     select(&mut state, (0, 0), (0, 0));
     state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             format: Some(CellFormat::Currency),
             ..Default::default()
         },
@@ -1018,7 +1041,7 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
         panic!("expected StyleApplied")
     };
     assert!(merged);
-    assert!(bold, "the block is bold");
+    assert_eq!(bold, ambre_bus::Weight::Bold, "the block is bold");
     assert_eq!(style.format, CellFormat::Currency);
 }
 
@@ -1031,7 +1054,7 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
     select(&mut state, (row, 0), (row, 0));
     let out = state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             ..Default::default()
         },
     });
@@ -1040,9 +1063,17 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
             .iter()
             .any(|e| matches!(e, TrameEvent::Error { .. }))
     );
-    assert!(!read_display(&mut state, row, 0).bold, "nothing drawn");
+    assert_eq!(
+        read_display(&mut state, row, 0).bold,
+        ambre_bus::Weight::Regular,
+        "nothing drawn"
+    );
     let TrameEvent::StyleApplied { bold, .. } = state.style_state_event() else {
         panic!("expected StyleApplied")
     };
-    assert!(!bold, "the toolbar reports what the document holds");
+    assert_eq!(
+        bold,
+        ambre_bus::Weight::Regular,
+        "the toolbar reports what the document holds"
+    );
 }

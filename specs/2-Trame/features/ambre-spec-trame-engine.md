@@ -237,14 +237,14 @@ pub struct DisplayCell {
     pub col: Col,
     pub text: String,                    // the value the user reads
     pub raw: String,                     // the text they typed, for the formula bar
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub bold: Weight,
+    pub italic: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
     pub h_align: HAlign,
     pub numeric: bool,                   // the value is a number: what `Auto` resolves on
     pub v_align: VAlign,
-    pub wrap: bool,
+    pub wrap: WordBreak,
     pub fg: Option<Rgb>,                 // None = the theme's colour
     pub bg: Option<Rgb>,                 // None = transparent
     pub font: Option<FontFamily>,

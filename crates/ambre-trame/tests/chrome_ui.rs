@@ -52,8 +52,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 /// under test sees exactly the shape it does in production.
 fn style_applied(
     style: CellStyle,
-    bold: bool,
-    italic: bool,
+    bold: ambre_bus::Weight,
+    italic: ambre_bus::Slant,
     merged: bool,
     numeric: bool,
 ) -> UiEvent {
@@ -83,14 +83,23 @@ fn style_applied_mirrors_into_style_state() {
 
     let state = StyleState::new();
     let style = CellStyle {
-        underline: true,
-        wrap: true,
+        underline: ambre_bus::Underline::Underlined,
+        wrap: ambre_bus::WordBreak::Anywhere,
         h_align: HAlign::Right,
         v_align: VAlign::Bottom,
         format: CellFormat::Percent,
         ..CellStyle::default()
     };
-    chrome::apply_style_event(&state, &style_applied(style, true, false, true, true));
+    chrome::apply_style_event(
+        &state,
+        &style_applied(
+            style,
+            ambre_bus::Weight::Bold,
+            ambre_bus::Slant::Upright,
+            true,
+            true,
+        ),
+    );
 
     assert!(
         state.bold.get(),

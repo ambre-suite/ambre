@@ -72,10 +72,10 @@ where
                 font_size,
                 ViewPx::new(max_w),
                 Alignment::Start,
-                ambre_canvas::Weight::bold_if(content.bold),
-                ambre_canvas::Slant::italic_if(content.italic),
+                ambre_canvas::Weight::from_bool(content.bold),
+                ambre_canvas::Slant::from_bool(content.italic),
                 content.font,
-                ambre_canvas::WordBreak::anywhere_if(content.wrap),
+                ambre_canvas::WordBreak::from_bool(content.wrap),
             );
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;

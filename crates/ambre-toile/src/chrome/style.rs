@@ -92,9 +92,9 @@ pub fn StyleInspector(
             );
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight.is_bold());
-            italic.set(m.base.font.italic);
-            underline.set(m.base.font.underline);
-            strikethrough.set(m.base.font.strikethrough);
+            italic.set(m.base.font.italic.as_bool());
+            underline.set(m.base.font.underline.as_bool());
+            strikethrough.set(m.base.font.strikethrough.as_bool());
         }
     });
 

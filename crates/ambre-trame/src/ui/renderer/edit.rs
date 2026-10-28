@@ -37,12 +37,12 @@ pub fn draw_edit<S: DrawSurface>(
         .unwrap_or((false, false));
     editor.core.set_style(TextEditorStyle {
         weight: ambre_core::FontWeight::of_bold(bold),
-        italic,
+        italic: ambre_core::Slant::from_bool(italic),
         family: ambre_core::FontFamily::Sans,
         base_size: BODY_SIZE,
         color: palette.cell_text,
-        underline: false,
-        strikethrough: false,
+        underline: ambre_core::Underline::Plain,
+        strikethrough: ambre_core::Strikethrough::Plain,
     });
 
     // Apply queued intents against this frame's layout. The text wraps to the

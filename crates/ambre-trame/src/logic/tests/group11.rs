@@ -258,7 +258,7 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
     select(&mut state, 0, 0, 0, 0);
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
@@ -267,7 +267,11 @@ fn a_merged_fill_carries_the_style_and_shifts_the_formula() {
     for (row, formula) in [(2, "=B3"), (4, "=B5")] {
         let cell = read_display(&mut state, row, 0);
         assert_eq!(cell.raw, formula, "tile at row {row}");
-        assert!(cell.bold, "tile at row {row} lost the bold");
+        assert_eq!(
+            cell.bold,
+            ambre_bus::Weight::Bold,
+            "tile at row {row} lost the bold"
+        );
         assert_eq!(
             cell.bg,
             Some(Rgb::from_bits(0x00ff_0000)),
@@ -465,7 +469,7 @@ fn three_sheets(state: &mut TrameState) -> Vec<SheetId> {
         set(state, 0, 1, "=A1*2");
         select(state, 0, 0, 0, 0);
         state.handle_command(TrameCommand::SetCellStyle {
-            patch: bold_patch(true),
+            patch: bold_patch(),
         });
     }
     state.handle_command(TrameCommand::ActivateSheet {

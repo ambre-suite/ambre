@@ -153,9 +153,9 @@ fn style_reading(bold: bool, italic: bool, style: &CellStyle) -> String {
     for (set, name) in [
         (bold, "bold"),
         (italic, "italic"),
-        (*underline, "underlined"),
-        (*strikethrough, "struck"),
-        (*wrap, "wrapped"),
+        (underline.as_bool(), "underlined"),
+        (strikethrough.as_bool(), "struck"),
+        (wrap.as_bool(), "wrapped"),
     ] {
         if set {
             parts.push(name.to_owned());

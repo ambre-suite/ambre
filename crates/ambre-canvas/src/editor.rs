@@ -133,15 +133,15 @@ pub enum EditIntent {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextEditorStyle {
     pub weight: ambre_core::FontWeight,
-    pub italic: bool,
+    pub italic: ambre_core::Slant,
     pub family: ambre_core::FontFamily,
     pub base_size: ambre_core::DocPx,
     pub color: Color,
     /// Draw a 1px underline under the body (`TOILE-UI-187`). Pinned from the
     /// host element's style so the in-edit body matches the committed look.
-    pub underline: bool,
+    pub underline: ambre_core::Underline,
     /// Draw a 1px strikethrough through the body (`TOILE-UI-187`).
-    pub strikethrough: bool,
+    pub strikethrough: ambre_core::Strikethrough,
 }
 
 /// Whether a draw of the editor shows its caret bar: the phase of the blink
@@ -172,12 +172,12 @@ pub struct TextSpan {
     pub range: ByteSpan,
     /// A weight in place of the pinned one.
     pub weight: Option<ambre_core::FontWeight>,
-    pub italic: bool,
+    pub italic: ambre_core::Slant,
     /// A family in place of the pinned one, resolved the same way.
     pub family: Option<ambre_core::FontFamily>,
     /// An ink in place of the pinned one.
     pub color: Option<Color>,
-    pub underline: bool,
+    pub underline: ambre_core::Underline,
     /// A tint drawn behind the range.
     pub background: Option<Color>,
     /// How far right each paragraph holding bytes of the range starts,
@@ -610,7 +610,7 @@ impl TextEditor {
         [
             StyleProperty::FontSize(self.style.base_size.get() * zoom.get() as f32),
             StyleProperty::FontWeight(FontWeight::new(f32::from(self.style.weight.get()))),
-            StyleProperty::FontStyle(if self.style.italic {
+            StyleProperty::FontStyle(if self.style.italic == ambre_core::Slant::Italic {
                 FontStyle::Italic
             } else {
                 FontStyle::Normal
@@ -850,17 +850,19 @@ impl TextEditor {
                     // (`TOILE-UI-187`): the committed body's underline and
                     // strikethrough, drawn in the body ink. Entering edit does
                     // not drop them.
-                    if self.style.underline || self.style.strikethrough {
+                    let underlined = self.style.underline == ambre_core::Underline::Underlined;
+                    let struck = self.style.strikethrough == ambre_core::Strikethrough::Struck;
+                    if underlined || struck {
                         let adv = run.advance() as f64;
                         let font_size = run.run().font_size() as f64;
                         let mut bar_at = |ay: f64| {
                             let bar = Rect::new(tx, ay, tx + adv, ay + 1.0);
                             surface.fill_path(&rect_path(bar), &brush);
                         };
-                        if self.style.underline {
+                        if underlined {
                             bar_at(ty + 2.0);
                         }
-                        if self.style.strikethrough {
+                        if struck {
                             bar_at(ty - font_size * 0.3);
                         }
                     }
@@ -949,12 +951,12 @@ mod tests {
     fn style() -> TextEditorStyle {
         TextEditorStyle {
             weight: ambre_core::FontWeight::REGULAR,
-            italic: false,
+            italic: ambre_core::Slant::Upright,
             family: ambre_core::FontFamily::Sans,
             base_size: ambre_core::DocPx::new(16.0),
             color: Color::from_rgba8(0, 0, 0, 255),
-            underline: false,
-            strikethrough: false,
+            underline: ambre_core::Underline::Plain,
+            strikethrough: ambre_core::Strikethrough::Plain,
         }
     }
 
@@ -1443,7 +1445,7 @@ mod tests {
             ..span(0..2)
         };
         let italic = TextSpan {
-            italic: true,
+            italic: ambre_core::Slant::Italic,
             ..span(0..2)
         };
         let code = TextSpan {
@@ -1460,7 +1462,7 @@ mod tests {
         );
         let link = TextSpan {
             color: Some(ink),
-            underline: true,
+            underline: ambre_core::Underline::Underlined,
             background: Some(tint),
             ..span(3..5)
         };

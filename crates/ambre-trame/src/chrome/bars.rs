@@ -144,7 +144,9 @@ pub fn FormatBar(
             icon=icondata::BsTypeUnderline
             pressed=style.underline.into()
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                underline: Some(!style.underline.get_untracked()),
+                underline: Some(ambre_bus::Underline::from_bool(
+                    !style.underline.get_untracked(),
+                )),
                 ..Default::default()
             }))
         />
@@ -153,7 +155,9 @@ pub fn FormatBar(
             icon=icondata::BsTypeStrikethrough
             pressed=style.strikethrough.into()
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                strikethrough: Some(!style.strikethrough.get_untracked()),
+                strikethrough: Some(ambre_bus::Strikethrough::from_bool(
+                    !style.strikethrough.get_untracked(),
+                )),
                 ..Default::default()
             }))
         />
@@ -235,7 +239,7 @@ pub fn FormatBar(
             aria-pressed=move || ambre_chrome::Pressed::from_bool(style.wrap.get()).aria()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
-                wrap: Some(!style.wrap.get_untracked()),
+                wrap: Some(ambre_bus::WordBreak::from_bool(!style.wrap.get_untracked())),
                 ..Default::default()
             })
         >

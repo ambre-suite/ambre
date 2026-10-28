@@ -209,8 +209,8 @@ impl Op {
                             dr: RowCount::new(dr as u32),
                             dc: ColCount::new(0),
                             raw,
-                            bold: false,
-                            italic: false,
+                            bold: ambre_bus::Weight::Regular,
+                            italic: ambre_bus::Slant::Upright,
                             style: CellStyle::default(),
                         })
                         .collect(),
@@ -320,7 +320,14 @@ fn program_strategy() -> impl Strategy<Value = Vec<(bool, Op)>> {
 /// Captures everything two converged peers must agree on: formula results
 /// (`text`), formatting (`bold`), merge geometry, and the shared-filter hidden
 /// state (`is_filtered`) elected by LWW.
-type Snapshot = Vec<(CellPos, String, bool, bool, Option<MergeSpan>, bool)>;
+type Snapshot = Vec<(
+    CellPos,
+    String,
+    ambre_bus::Weight,
+    bool,
+    Option<MergeSpan>,
+    bool,
+)>;
 
 fn read_window(state: &mut TrameState) -> Snapshot {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
@@ -438,13 +445,13 @@ proptest! {
 /// the Logic thread folds them into `text`. They cannot be asserted here even
 /// though the register carries them.
 type StyleView = (
-    bool,
-    bool,
-    bool,
-    bool,
+    ambre_bus::Weight,
+    ambre_bus::Slant,
+    ambre_bus::Underline,
+    ambre_bus::Strikethrough,
     HAlign,
     VAlign,
-    bool,
+    ambre_bus::WordBreak,
     Option<Rgb>,
     Option<Rgb>,
     Option<ambre_core::FontFamily>,
@@ -508,9 +515,9 @@ fn apply_style(state: &mut TrameState, patch: StylePatch) {
 /// the race would never happen.
 fn base_style() -> StylePatch {
     StylePatch {
-        bold: Some(true),
-        underline: Some(true),
-        wrap: Some(true),
+        bold: Some(ambre_bus::Weight::Bold),
+        underline: Some(ambre_bus::Underline::Underlined),
+        wrap: Some(ambre_bus::WordBreak::Anywhere),
         h_align: Some(HAlign::Right),
         v_align: Some(VAlign::Bottom),
         fg: Some(Some(Rgb::from_bits(0x00FF_0000))),
@@ -530,11 +537,11 @@ fn base_style() -> StylePatch {
 /// Peer A's edit: clear the cell's style back to the grid defaults.
 fn clear_style() -> StylePatch {
     StylePatch {
-        bold: Some(false),
-        italic: Some(false),
-        underline: Some(false),
-        strikethrough: Some(false),
-        wrap: Some(false),
+        bold: Some(ambre_bus::Weight::Regular),
+        italic: Some(ambre_bus::Slant::Upright),
+        underline: Some(ambre_bus::Underline::Plain),
+        strikethrough: Some(ambre_bus::Strikethrough::Plain),
+        wrap: Some(ambre_bus::WordBreak::Whole),
         h_align: Some(HAlign::default()),
         v_align: Some(VAlign::default()),
         fg: Some(None),
@@ -555,11 +562,11 @@ fn clear_style() -> StylePatch {
 /// differs from [`base_style`], so a register B loses is observable.
 fn other_style() -> StylePatch {
     StylePatch {
-        bold: Some(false),
-        italic: Some(true),
-        underline: Some(false),
-        strikethrough: Some(true),
-        wrap: Some(false),
+        bold: Some(ambre_bus::Weight::Regular),
+        italic: Some(ambre_bus::Slant::Italic),
+        underline: Some(ambre_bus::Underline::Plain),
+        strikethrough: Some(ambre_bus::Strikethrough::Struck),
+        wrap: Some(ambre_bus::WordBreak::Whole),
         h_align: Some(HAlign::Left),
         v_align: Some(VAlign::Top),
         fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
@@ -675,7 +682,7 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     apply_style(
         &mut b,
         StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             fg: Some(Some(Rgb::from_bits(0x0000_00FF))),
             bg: Some(Some(Rgb::from_bits(0x0044_5566))),
             ..Default::default()

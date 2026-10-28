@@ -114,9 +114,11 @@ impl StyleEdit {
             // (`TOILE-UI-180`).
             StyleEdit::Size(s) => style.font.size = s,
             StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of_bold(b),
-            StyleEdit::Italic(i) => style.font.italic = i,
-            StyleEdit::Underline(u) => style.font.underline = u,
-            StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
+            StyleEdit::Italic(i) => style.font.italic = ambre_core::Slant::from_bool(i),
+            StyleEdit::Underline(u) => style.font.underline = ambre_core::Underline::from_bool(u),
+            StyleEdit::Strikethrough(s) => {
+                style.font.strikethrough = ambre_core::Strikethrough::from_bool(s);
+            }
         }
     }
 }
@@ -499,9 +501,9 @@ mod tests {
             font: ambre_bus::app::toile::FontSpec {
                 size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: ambre_core::FontWeight::BOLD,
-                italic: true,
-                underline: false,
-                strikethrough: true,
+                italic: ambre_core::Slant::Italic,
+                underline: ambre_core::Underline::Plain,
+                strikethrough: ambre_core::Strikethrough::Struck,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -511,7 +513,7 @@ mod tests {
         // decorations, the fill and the text colour) exactly as it was.
         let mut s = base.clone();
         StyleEdit::Underline(true).apply_to(&mut s);
-        assert!(s.font.underline);
+        assert_eq!(s.font.underline, ambre_core::Underline::Underlined);
         assert_eq!(s.fill, base.fill);
         assert_eq!(s.text_color, base.text_color);
         assert_eq!(s.font.weight, base.font.weight);
@@ -583,7 +585,7 @@ mod tests {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
                 size: FontSizeChoice::from_whole_points(Some(18)),
                 weight: ambre_core::FontWeight::new(600).unwrap(),
-                italic: true,
+                italic: ambre_core::Slant::Italic,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -644,9 +646,9 @@ mod tests {
                 family: Some(FontFamily::Sans),
                 size: FontSizeChoice::from_whole_points(Some(12)),
                 weight: ambre_core::FontWeight::REGULAR,
-                italic: false,
-                underline: false,
-                strikethrough: false,
+                italic: ambre_core::Slant::Upright,
+                underline: ambre_core::Underline::Plain,
+                strikethrough: ambre_core::Strikethrough::Plain,
             },
             ..ElementStyle::default()
         };
@@ -657,9 +659,9 @@ mod tests {
                 family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
                 weight: ambre_core::FontWeight::BOLD,
-                italic: true,
-                underline: true,
-                strikethrough: true,
+                italic: ambre_core::Slant::Italic,
+                underline: ambre_core::Underline::Underlined,
+                strikethrough: ambre_core::Strikethrough::Struck,
             },
             ..ElementStyle::default()
         };

@@ -136,8 +136,8 @@ impl TrameState {
                 dr: pos.row.count_from(first.row),
                 dc: pos.col.count_from(first.col),
                 raw,
-                bold: self.bold.contains(&pos),
-                italic: self.italic.contains(&pos),
+                bold: Weight::from_bool(self.bold.contains(&pos)),
+                italic: Slant::from_bool(self.italic.contains(&pos)),
                 style: self.styles.get(&pos).cloned().unwrap_or_default(),
             });
         }
@@ -164,12 +164,12 @@ impl TrameState {
     /// source cell: no selection-level preset resolution, since the source already
     /// carries resolved per-edge borders.
     pub(super) fn apply_pasted_style(&mut self, pos: CellPos, cell: &ClipboardCell) {
-        if cell.bold {
+        if cell.bold == Weight::Bold {
             self.bold.insert(pos);
         } else {
             self.bold.remove(&pos);
         }
-        if cell.italic {
+        if cell.italic == Slant::Italic {
             self.italic.insert(pos);
         } else {
             self.italic.remove(&pos);

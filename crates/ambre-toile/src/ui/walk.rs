@@ -608,14 +608,14 @@ fn paint_text<S: DrawSurface>(
         font_size,
         wrap_w,
         Alignment::Start,
-        ambre_canvas::Weight::bold_if(e.style.font.weight.is_bold()),
-        ambre_canvas::Slant::italic_if(e.style.font.italic),
+        ambre_canvas::Weight::from_bool(e.style.font.weight.is_bold()),
+        e.style.font.italic,
         Some(e.style.font.face()),
         ambre_canvas::WordBreak::Whole,
     );
     let brush = Brush::Solid(color);
-    let underline = e.style.font.underline;
-    let strikethrough = e.style.font.strikethrough;
+    let underline = e.style.font.underline == ambre_core::Underline::Underlined;
+    let strikethrough = e.style.font.strikethrough == ambre_core::Strikethrough::Struck;
     // A rotated element rotates its body too: the glyph run origins and the
     // decoration endpoints are mapped through a rotation about the note's
     // center. The text follows the card instead of staying axis-aligned

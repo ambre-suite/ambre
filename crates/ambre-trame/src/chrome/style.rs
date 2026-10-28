@@ -121,12 +121,12 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         ..
     } = ev
     {
-        s.bold.set(*bold);
-        s.italic.set(*italic);
+        s.bold.set(bold.as_bool());
+        s.italic.set(italic.as_bool());
         s.merged.set(*merged);
-        s.underline.set(style.underline);
-        s.strikethrough.set(style.strikethrough);
-        s.wrap.set(style.wrap);
+        s.underline.set(style.underline.as_bool());
+        s.strikethrough.set(style.strikethrough.as_bool());
+        s.wrap.set(style.wrap.as_bool());
         s.h_align.set(style.h_align);
         s.v_align.set(style.v_align);
         s.numeric.set(*numeric);

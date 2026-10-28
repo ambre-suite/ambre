@@ -36,12 +36,12 @@ enum Op {
 fn style() -> TextEditorStyle {
     TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
-        italic: false,
+        italic: ambre_bus::Slant::Upright,
         family: ambre_core::FontFamily::Sans,
         base_size: ambre_core::DocPx::new(16.0),
         color: Color::from_rgba8(0, 0, 0, 255),
-        underline: false,
-        strikethrough: false,
+        underline: ambre_bus::Underline::Plain,
+        strikethrough: ambre_bus::Strikethrough::Plain,
     }
 }
 

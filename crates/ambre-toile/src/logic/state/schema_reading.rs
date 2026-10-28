@@ -220,9 +220,9 @@ fn style_reading(style: &ElementStyle) -> String {
         },
     ];
     for (set, name) in [
-        (*italic, "italic"),
-        (*underline, "underlined"),
-        (*strikethrough, "struck"),
+        (italic.as_bool(), "italic"),
+        (underline.as_bool(), "underlined"),
+        (strikethrough.as_bool(), "struck"),
     ] {
         if set {
             parts.push(name.to_owned());

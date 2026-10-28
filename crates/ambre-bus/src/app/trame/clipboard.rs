@@ -2,7 +2,9 @@
 //! of a copied/cut range, moved to the Logic thread inside
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
-use super::{CellStyle, Col, ColCount, ColSpan, ColVec, Row, RowCount, RowSpan, RowVec};
+use super::{
+    CellStyle, Col, ColCount, ColSpan, ColVec, Row, RowCount, RowSpan, RowVec, Slant, Weight,
+};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -81,8 +83,8 @@ pub struct ClipboardCell {
     /// Raw cell text (for example `=SUM(A1:B1)` for a formula), in display form. A
     /// formula's relative references are reindexed by the Logic thread on paste.
     pub raw: String,
-    pub bold: bool,
-    pub italic: bool,
+    pub bold: Weight,
+    pub italic: Slant,
     /// The cell's resolved rich formatting, written verbatim at the destination.
     pub style: CellStyle,
 }

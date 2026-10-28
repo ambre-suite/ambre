@@ -649,10 +649,18 @@ fn disjoint_selection_styles_every_rectangle() {
         kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
-        patch: bold_patch(true),
+        patch: bold_patch(),
     });
-    assert!(read_display(&mut state, 0, 0).bold, "A1 is styled");
-    assert!(read_display(&mut state, 2, 2).bold, "C3 is styled");
+    assert_eq!(
+        read_display(&mut state, 0, 0).bold,
+        ambre_bus::Weight::Bold,
+        "A1 is styled"
+    );
+    assert_eq!(
+        read_display(&mut state, 2, 2).bold,
+        ambre_bus::Weight::Bold,
+        "C3 is styled"
+    );
 }
 
 /// A whole-column band reaches the Logic thread whole. The aggregate covers the

@@ -3,6 +3,7 @@
 //! formats, borders, and the resolved [`CellStyle`] / sparse [`StylePatch`].
 
 use ambre_core::{FontFamily, FontSize, Rgb};
+pub use ambre_core::{Slant, Strikethrough, Underline, Weight, WordBreak};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -282,12 +283,12 @@ pub struct Borders {
 /// underline run lives here with the rest of the patchable attributes.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellStyle {
-    pub underline: bool,
+    pub underline: Underline,
     /// Strikethrough run drawn through the glyphs (`trame-cell-styles`).
-    pub strikethrough: bool,
+    pub strikethrough: Strikethrough,
     pub h_align: HAlign,
     pub v_align: VAlign,
-    pub wrap: bool,
+    pub wrap: WordBreak,
     /// Text colour, packed `0xRRGGBB`. `None` = theme default (adapts to the
     /// light/dark theme).
     pub fg: Option<Rgb>,
@@ -315,13 +316,13 @@ pub struct CellStyle {
 /// (`None`) from "clear" (`Some(None)`) and "set" (`Some(Some(v))`).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StylePatch {
-    pub bold: Option<bool>,
-    pub italic: Option<bool>,
-    pub underline: Option<bool>,
-    pub strikethrough: Option<bool>,
+    pub bold: Option<Weight>,
+    pub italic: Option<Slant>,
+    pub underline: Option<Underline>,
+    pub strikethrough: Option<Strikethrough>,
     pub h_align: Option<HAlign>,
     pub v_align: Option<VAlign>,
-    pub wrap: Option<bool>,
+    pub wrap: Option<WordBreak>,
     pub fg: Option<Option<Rgb>>,
     pub bg: Option<Option<Rgb>>,
     pub font: Option<Option<FontFamily>>,

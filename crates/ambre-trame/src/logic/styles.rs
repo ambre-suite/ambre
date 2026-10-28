@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 /// per-attribute blend.
 #[derive(Serialize, Deserialize, Default)]
 pub(super) struct StyleRecord {
-    pub(super) bold: bool,
-    pub(super) italic: bool,
+    pub(super) bold: ambre_bus::Weight,
+    pub(super) italic: ambre_bus::Slant,
     pub(super) style: CellStyle,
 }
 
@@ -35,8 +35,8 @@ impl TrameState {
     /// intervening ops out of the broadcast delta (mirrors [`write_cell`]).
     pub(super) fn write_cell_style(&mut self, pos: CellPos) -> Option<()> {
         let record = StyleRecord {
-            bold: self.bold.contains(&pos),
-            italic: self.italic.contains(&pos),
+            bold: ambre_bus::Weight::from_bool(self.bold.contains(&pos)),
+            italic: ambre_bus::Slant::from_bool(self.italic.contains(&pos)),
             style: self.styles.get(&pos).cloned().unwrap_or_default(),
         };
         // Styling a cell pins an identity to it, so it must be materialized just
@@ -46,7 +46,10 @@ impl TrameState {
         let map = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::CellStyle, &self.active_sheet).as_str());
-        if !record.bold && !record.italic && record.style == CellStyle::default() {
+        if record.bold == ambre_bus::Weight::Regular
+            && record.italic == ambre_bus::Slant::Upright
+            && record.style == CellStyle::default()
+        {
             let _ = map.delete(key.as_str());
         } else {
             // postcard is deterministic, so both peers encode the same style to
@@ -107,14 +110,14 @@ impl TrameState {
             // Bold/italic live in their own in-memory sets; they are folded
             // back into the single style record by `persist_cell_style` below.
             if let Some(b) = patch.bold {
-                if b {
+                if b == Weight::Bold {
                     self.bold.insert(cell);
                 } else {
                     self.bold.remove(&cell);
                 }
             }
             if let Some(i) = patch.italic {
-                if i {
+                if i == Slant::Italic {
                     self.italic.insert(cell);
                 } else {
                     self.italic.remove(&cell);
@@ -228,8 +231,8 @@ impl TrameState {
         let shown = self.merge_master(self.active);
         TrameEvent::StyleApplied {
             style: self.styles.get(&shown).cloned().unwrap_or_default(),
-            bold: self.bold.contains(&shown),
-            italic: self.italic.contains(&shown),
+            bold: Weight::from_bool(self.bold.contains(&shown)),
+            italic: Slant::from_bool(self.italic.contains(&shown)),
             merged: self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
             // The test the viewport pack hands the renderer (`TRAME-UI-094`).
             numeric: self.cell_is_numeric(shown),
@@ -267,10 +270,10 @@ impl TrameState {
                 self.note_undecodable(bytes);
                 continue;
             };
-            if record.bold {
+            if record.bold == Weight::Bold {
                 self.bold.insert(cell);
             }
-            if record.italic {
+            if record.italic == Slant::Italic {
                 self.italic.insert(cell);
             }
             // A default `CellStyle` is not tracked in `styles` (absence == default);

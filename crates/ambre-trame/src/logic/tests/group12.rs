@@ -96,8 +96,8 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         dr: RowCount::new(0),
         dc: ColCount::new(0),
         raw: raw.to_owned(),
-        bold: false,
-        italic: false,
+        bold: ambre_bus::Weight::Regular,
+        italic: ambre_bus::Slant::Upright,
         style: crate::CellStyle::default(),
     };
     state.handle_command(TrameCommand::PasteRange {

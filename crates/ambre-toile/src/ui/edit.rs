@@ -117,8 +117,8 @@ impl InlineEditor {
             family: font.face().clone(),
             base_size: super::label::LABEL_FONT_SIZE,
             color: palette.cell_text,
-            underline: false,
-            strikethrough: false,
+            underline: ambre_core::Underline::Plain,
+            strikethrough: ambre_core::Strikethrough::Plain,
         };
         let mut core = TextEditor::new(text, style);
         core.set_alignment(Alignment::Center);
@@ -144,8 +144,8 @@ impl InlineEditor {
             family: font.face().clone(),
             base_size,
             color: palette.cell_text,
-            underline: false,
-            strikethrough: false,
+            underline: ambre_core::Underline::Plain,
+            strikethrough: ambre_core::Strikethrough::Plain,
         };
         Self {
             target: EditTarget::FrameTitle(id),
@@ -302,8 +302,8 @@ mod tests {
             text_color: Some(Rgba::from_bits(0xff00_00ff)),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             font: FontSpec {
-                underline: true,
-                strikethrough: true,
+                underline: ambre_core::Underline::Underlined,
+                strikethrough: ambre_core::Strikethrough::Struck,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -311,8 +311,8 @@ mod tests {
         let e = elem(style, ElementKind::Text);
         let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
         let pinned = editor.style();
-        assert!(pinned.underline);
-        assert!(pinned.strikethrough);
+        assert_eq!(pinned.underline, ambre_core::Underline::Underlined);
+        assert_eq!(pinned.strikethrough, ambre_core::Strikethrough::Struck);
         // Opacity is baked into the ink alpha: opaque red at 0.5 -> alpha 128.
         assert_eq!(pinned.color.to_rgba8().a, 128);
     }

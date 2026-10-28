@@ -62,8 +62,16 @@ impl TrameHandler {
     fn toggle_style(&self, style: StyleToggle) -> AppCommand {
         let mut patch = StylePatch::default();
         match style {
-            StyleToggle::Bold => patch.bold = Some(!self.style.bold.get_untracked()),
-            StyleToggle::Italic => patch.italic = Some(!self.style.italic.get_untracked()),
+            StyleToggle::Bold => {
+                patch.bold = Some(ambre_bus::Weight::from_bool(
+                    !self.style.bold.get_untracked(),
+                ));
+            }
+            StyleToggle::Italic => {
+                patch.italic = Some(ambre_bus::Slant::from_bool(
+                    !self.style.italic.get_untracked(),
+                ));
+            }
         }
         AppCommand::Trame(TrameCommand::SetCellStyle { patch })
     }

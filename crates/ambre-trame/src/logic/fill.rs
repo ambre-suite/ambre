@@ -341,8 +341,8 @@ impl TrameState {
     /// Carry the formatting of `from` (bold/italic + rich style) onto `to`.
     fn carry_style(&mut self, from: CellPos, to: CellPos) {
         let cell = ClipboardCell {
-            bold: self.bold.contains(&from),
-            italic: self.italic.contains(&from),
+            bold: Weight::from_bool(self.bold.contains(&from)),
+            italic: Slant::from_bool(self.italic.contains(&from)),
             style: self.styles.get(&from).cloned().unwrap_or_default(),
             ..Default::default()
         };

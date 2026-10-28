@@ -132,7 +132,7 @@ fn batched_formatting_broadcasts_complete_delta() {
     });
     let delta = author
         .handle_command(TrameCommand::SetCellStyle {
-            patch: bold_patch(true),
+            patch: bold_patch(),
         })
         .update
         .expect("formatting a selection produces a delta");
@@ -143,8 +143,9 @@ fn batched_formatting_broadcasts_complete_delta() {
 
     for row in 0..=2 {
         for col in 0..=2 {
-            assert!(
+            assert_eq!(
                 read_display(&mut reopened, row, col).bold,
+                ambre_bus::Weight::Bold,
                 "bold on ({row},{col}) must survive an incremental reopen"
             );
         }

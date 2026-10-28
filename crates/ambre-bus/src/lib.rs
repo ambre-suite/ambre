@@ -65,8 +65,8 @@ pub use app::trame::{
     DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSessionId, FillMode,
     FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, MergeSpan, Percent, Row, RowCount,
     RowDelta, RowSpan, RowVec, SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal,
-    SheetTab, SheetTabPos, SortKey, SortOrder, StylePatch, TrameCommand, TrameEvent, VAlign,
-    ValidationKind, ValidationOnInvalid,
+    SheetTab, SheetTabPos, Slant, SortKey, SortOrder, Strikethrough, StylePatch, TrameCommand,
+    TrameEvent, Underline, VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};

@@ -111,7 +111,7 @@ fn a_cell_back_to_the_default_style_leaves_no_entry() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             bg: Some(Some(Rgb::from_bits(0x00ff_0000))),
             ..Default::default()
         },
@@ -120,7 +120,7 @@ fn a_cell_back_to_the_default_style_leaves_no_entry() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(false),
+            bold: Some(ambre_bus::Weight::Regular),
             bg: Some(None),
             ..Default::default()
         },
@@ -235,7 +235,7 @@ fn styling_keeps_every_value() {
     style(
         &mut state,
         StylePatch {
-            bold: Some(true),
+            bold: Some(ambre_bus::Weight::Bold),
             format: Some(CellFormat::Number),
             decimals: Some(crate::Decimals::new(0)),
             ..Default::default()
@@ -254,7 +254,7 @@ fn styling_keeps_the_selection() {
     let mut state = TrameState::new();
     select(&mut state, 1, 1, 3, 4);
     let (active, bounds) = (state.active, state.selection_bounds());
-    style(&mut state, bold_patch(true));
+    style(&mut state, bold_patch());
     style(
         &mut state,
         StylePatch {
