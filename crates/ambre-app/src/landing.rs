@@ -38,7 +38,7 @@ use crate::route;
 pub struct DocItem {
     pub document_id: DocumentId,
     pub doc_type: DocType,
-    pub name: Option<String>,
+    pub name: Option<ambre_core::Name>,
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
     pub updated_at: ambre_bus::Timestamp,
     /// Total member count; `> 1` => shared.
@@ -349,7 +349,12 @@ fn doc_card(
 
     // Inline-rename editing state, seeded with the current name.
     let editing = RwSignal::new(false);
-    let edit_value = RwSignal::new(d.name.clone().unwrap_or_default());
+    let edit_value = RwSignal::new(
+        d.name
+            .as_ref()
+            .map(|n| n.as_str().to_owned())
+            .unwrap_or_default(),
+    );
 
     let on_open = {
         let navigate = use_navigate();
@@ -382,7 +387,7 @@ fn doc_card(
                 // Optimistic update -- the relay also re-lists on `DocumentRenamed`.
                 docs.update(|v| {
                     if let Some(item) = v.iter_mut().find(|x| x.document_id == id) {
-                        item.name = Some(name.to_string());
+                        item.name = Some(name);
                     }
                 });
             }
@@ -439,7 +444,7 @@ fn doc_card(
                             docs.get_untracked()
                                 .iter()
                                 .find(|x| x.document_id == id)
-                                .and_then(|x| x.name.clone())
+                                .and_then(|x| x.name.as_ref().map(|n| n.as_str().to_owned()))
                                 .unwrap_or_default(),
                         );
                         editing.set(true);
@@ -454,7 +459,7 @@ fn doc_card(
                         e.stop_propagation();
                         let label = docs.with_untracked(|list| {
                             let doc = list.iter().find(|x| x.document_id == id);
-                            ComposedName::or_placeholder(doc.and_then(|x| x.name.as_deref()))
+                            ComposedName::or_placeholder(doc.and_then(|x| x.name.as_ref()))
                         });
                         pending_delete.set(Some((id, label)));
                     }
@@ -471,14 +476,14 @@ fn doc_card(
 /// It takes the name alone, so no fallback can reach for the identifier or
 /// the kind (`CHROME-079`). The text is a [`ComposedName`], which no rename
 /// can take back (`CHROME-080`).
-fn card_name(name: Option<String>) -> impl IntoView {
-    let named = name.as_deref().is_some_and(|n| !n.trim().is_empty());
+fn card_name(name: Option<ambre_core::Name>) -> impl IntoView {
+    let named = name.as_ref().is_some_and(|n| !n.as_str().trim().is_empty());
     let class = if named {
         "ambre-doc-name"
     } else {
         "ambre-doc-name ambre-doc-name-untitled"
     };
-    let shown = ComposedName::or_placeholder(name.as_deref());
+    let shown = ComposedName::or_placeholder(name.as_ref());
     view! { <span class=class>{shown.into_view()}</span> }
 }
 
@@ -911,7 +916,8 @@ mod tests {
     /// kind word (`CHROME-079`).
     #[wasm_bindgen_test]
     fn a_card_shows_the_name_or_the_placeholder() {
-        let named = mount_in_container(|| card_name(Some("Budget 2026".to_owned())));
+        let named =
+            mount_in_container(|| card_name(Some(ambre_core::Name::new("Budget 2026").unwrap())));
         let span = named.query_selector(".ambre-doc-name").unwrap().unwrap();
         assert_eq!(span.text_content().as_deref(), Some("Budget 2026"));
         assert_eq!(span.class_name(), "ambre-doc-name");
@@ -956,7 +962,8 @@ mod tests {
         };
 
         let id = DocumentId::new();
-        let payroll = || ComposedName::or_placeholder(Some("Payroll"));
+        let payroll =
+            || ComposedName::or_placeholder(Some(&ambre_core::Name::new("Payroll").unwrap()));
         pending.set(Some((id, payroll())));
         leptos::task::tick().await;
         assert!(dialog.open(), "a delete opens the confirmation");
@@ -1050,7 +1057,7 @@ mod tests {
         let item = DocItem {
             document_id: DocumentId::new(),
             doc_type: DocType::Prose,
-            name: Some("Plan".to_owned()),
+            name: Some(ambre_core::Name::new("Plan").unwrap()),
             updated_at: ambre_bus::Timestamp(0),
             member_count: ambre_core::MemberCount::ONE,
         };
@@ -1100,7 +1107,13 @@ mod tests {
                 .is_some(),
             "the field stays open to shorten it"
         );
-        assert_eq!(docs.get_untracked()[0].name.as_deref(), Some("Plan"));
+        assert_eq!(
+            docs.get_untracked()[0]
+                .name
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some("Plan")
+        );
 
         commit("Budget".to_owned());
         tick().await;

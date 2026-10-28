@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 
 use wasm_bindgen::{JsCast, JsValue};
 
-use ambre_prose::probe::{Measure, ProbeName, percentiles};
+use ambre_prose::probe::{FrameCount, Measure, Percentiles, ProbeName, percentiles};
 
 /// How often the summary is printed.
 const SUMMARY_EVERY: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
@@ -83,11 +83,11 @@ impl Timeline {
 
     /// Stamp each count as a mark carrying it in its detail, and keep it
     /// under `?probes`.
-    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<u32>) {
+    pub(crate) fn count(&mut self, name: ProbeName, values: Vec<FrameCount>) {
         for value in values {
             mark_count(name.as_str(), value);
             if let Some(counts) = self.counts.as_mut() {
-                counts.entry(name).or_default().push(f64::from(value));
+                counts.entry(name).or_default().push(f64::from(value.get()));
                 self.fresh = true;
             }
         }
@@ -104,7 +104,7 @@ impl Timeline {
         self.last_summary = now;
         self.fresh = false;
         for (name, values) in samples {
-            if let Some((p50, p95)) = percentiles(values) {
+            if let Some(Percentiles { median: p50, p95 }) = percentiles(values) {
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50:.2} ms p95={p95:.2} ms",
                     name.as_str(),
@@ -113,7 +113,7 @@ impl Timeline {
             }
         }
         for (name, values) in self.counts.iter().flatten() {
-            if let Some((p50, p95)) = percentiles(values) {
+            if let Some(Percentiles { median: p50, p95 }) = percentiles(values) {
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50} frames p95={p95} frames",
                     name.as_str(),
@@ -134,12 +134,12 @@ pub(crate) fn mark(name: &str) {
 
 /// One `performance.mark(name, { detail: value })`, through `Reflect` like
 /// the measures.
-fn mark_count(name: &str, value: u32) {
+fn mark_count(name: &str, value: FrameCount) {
     let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
         return;
     };
     let options = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(&options, &"detail".into(), &value.into());
+    let _ = js_sys::Reflect::set(&options, &"detail".into(), &value.get().into());
     let Ok(function) = js_sys::Reflect::get(&performance, &"mark".into()) else {
         return;
     };

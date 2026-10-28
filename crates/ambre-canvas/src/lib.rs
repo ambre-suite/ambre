@@ -97,4 +97,7 @@ pub use text_cache::{
 };
 pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};
-pub use view::{FrameStats, HudTick, InputEvent, PerfSnapshot, PointerButton, RepaintPlan};
+pub use view::{
+    CellsDrawn, FrameStats, GlyphMisses, HudTick, InputEvent, PerfSnapshot, PointerButton,
+    RepaintPlan,
+};

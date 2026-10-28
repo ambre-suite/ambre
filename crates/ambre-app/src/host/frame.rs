@@ -205,7 +205,7 @@ pub struct FrameHost {
     cells: super::cell::Cells,
 
     render_times: VecDeque<ambre_core::PageTime>,
-    render_fps: f32,
+    render_fps: ambre_core::FrameRate,
     last_frame: ambre_core::PageMillis,
     last_drain: ambre_core::PageMillis,
     last_draw: ambre_core::PageMillis,
@@ -246,7 +246,7 @@ impl FrameHost {
             web_frames_empty: true,
             cells: super::cell::Cells::default(),
             render_times: VecDeque::with_capacity(120),
-            render_fps: 0.0,
+            render_fps: ambre_core::FrameRate::ZERO,
             last_frame: ambre_core::PageMillis::ZERO,
             last_drain: ambre_core::PageMillis::ZERO,
             last_draw: ambre_core::PageMillis::ZERO,
@@ -431,7 +431,7 @@ impl FrameHost {
 
     pub(crate) fn tick_fps(
         times: &mut VecDeque<ambre_core::PageTime>,
-        fps: &mut f32,
+        fps: &mut ambre_core::FrameRate,
         now: ambre_core::PageTime,
     ) {
         const WINDOW: ambre_core::PageMillis = ambre_core::PageMillis::new(1000.0);
@@ -440,10 +440,10 @@ impl FrameHost {
             times.pop_front();
         }
         *fps = match times.front() {
-            Some(&oldest) if times.len() >= 2 => {
-                (times.len() - 1) as f32 / ((now - oldest) / WINDOW) as f32
-            }
-            _ => 0.0,
+            Some(&oldest) if times.len() >= 2 => ambre_core::FrameRate::new(
+                (times.len() - 1) as f32 / ((now - oldest) / WINDOW) as f32,
+            ),
+            _ => ambre_core::FrameRate::ZERO,
         };
     }
 

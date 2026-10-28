@@ -207,14 +207,14 @@ async fn the_zoom_readout_follows_its_signal() {
 async fn the_fps_readout_follows_its_signal() {
     let owner = Owner::new();
     owner.set();
-    let fps = RwSignal::new(58.0_f32);
+    let fps = RwSignal::new(ambre_core::FrameRate::new(58.0));
     let root = mount_in_container(move || {
         view! { <PerfChip fps=Signal::derive(move || fps.get()) /> }
     });
     let btn = root.query_selector(".statusbar-fps").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("58 fps"));
 
-    fps.set(30.0);
+    fps.set(ambre_core::FrameRate::new(30.0));
     leptos::task::tick().await;
     assert_eq!(btn.text_content().as_deref(), Some("30 fps"));
 
@@ -248,7 +248,7 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     owner.set();
     // The chip shows the live fps ("58 fps") and the app-supplied detail panel is
     // collapsed on mount (toggled open on click, an async re-render).
-    let fps = RwSignal::new(58.0_f32);
+    let fps = RwSignal::new(ambre_core::FrameRate::new(58.0));
     let root = mount_in_container(move || {
         view! {
             <PerfChip fps=Signal::derive(move || fps.get())>

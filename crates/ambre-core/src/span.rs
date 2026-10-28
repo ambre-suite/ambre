@@ -227,6 +227,28 @@ impl PageMillis {
     }
 }
 
+/// A frame rate: the frames a canvas showed per second of the page clock, as
+/// a status bar reads it. Measured on the page, never stored or sent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
+pub struct FrameRate(f32);
+
+impl FrameRate {
+    /// No frame shown, or too few frames to measure.
+    pub const ZERO: Self = Self(0.0);
+
+    /// A rate of `per_second` frames a second.
+    #[must_use]
+    pub const fn new(per_second: f32) -> Self {
+        Self(per_second)
+    }
+
+    /// The frames a second.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
+
 /// [`Timestamp`] as a signed 64-bit integer, for a value a document already
 /// stores that way: `#[serde(with = "ambre_core::span::timestamp_as_i64")]`.
 /// A varint codec spells a signed and an unsigned integer apart, so the

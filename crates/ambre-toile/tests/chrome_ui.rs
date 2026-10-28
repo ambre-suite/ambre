@@ -85,7 +85,7 @@ where
 fn mount_bar(
     stats: Option<SelStats>,
     zoom: f64,
-    fps: f32,
+    fps: ambre_core::FrameRate,
 ) -> (web_sys::Element, RwSignal<ZoomFactor>) {
     let stats = RwSignal::new(stats);
     let zoom = RwSignal::new(ZoomFactor::within(zoom, 0.1, 10.0));
@@ -105,7 +105,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
         count: ambre_bus::app::toile::ElementCount::new(3),
         bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
-    let (root, _zoom) = mount_bar(Some(stats), 1.5, 60.0);
+    let (root, _zoom) = mount_bar(Some(stats), 1.5, ambre_core::FrameRate::new(60.0));
 
     // Left side: the app label, the count and the combined-bounds captions.
     let text = root
@@ -133,7 +133,7 @@ fn empty_selection_shows_only_the_chips() {
     owner.set();
     // No selection reply yet: the aggregates area is empty, but the zoom chip
     // (and fps chip) still render.
-    let (root, _zoom) = mount_bar(None, 1.0, 30.0);
+    let (root, _zoom) = mount_bar(None, 1.0, ambre_core::FrameRate::new(30.0));
 
     let stats = root.query_selector(".statusbar-stats").unwrap().unwrap();
     assert_eq!(
@@ -160,7 +160,7 @@ fn single_selection_shows_count_without_bounds() {
         count: ambre_bus::app::toile::ElementCount::new(1),
         bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
-    let (root, _zoom) = mount_bar(Some(stats), 1.0, 60.0);
+    let (root, _zoom) = mount_bar(Some(stats), 1.0, ambre_core::FrameRate::new(60.0));
 
     let text = root
         .query_selector(".statusbar-stats")
@@ -1047,12 +1047,12 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
         DocChoice {
             document_id: here,
             doc_type: DocType::Toile,
-            name: Some("This board".to_owned()),
+            name: Some(ambre_core::Name::new("This board").unwrap()),
         },
         DocChoice {
             document_id: other,
             doc_type: DocType::Trame,
-            name: Some("Budget".to_owned()),
+            name: Some(ambre_core::Name::new("Budget").unwrap()),
         },
     ];
     let (root, dialogs, placed) = mount_choosers(docs, here);

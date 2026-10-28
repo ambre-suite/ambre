@@ -316,9 +316,10 @@ fn member_view(
         Presence::Offline => ("offline", "Offline"),
     };
     let color = ambre_draw::peer_rgb(&member.user_id);
-    let name = member.display_name.into_string();
+    let display_name = member.display_name;
+    let name = display_name.as_str().to_owned();
     let who = view! {
-        <ambre_chrome::Avatar name=name.clone() color=color />
+        <ambre_chrome::Avatar name=display_name color=color />
         <span class="murmure-member-name">{name.clone()}</span>
         <span class="murmure-presence" data-presence=state role="img" aria-label=word></span>
     };

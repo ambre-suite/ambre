@@ -36,7 +36,7 @@ pub fn avatar_initials(name: &str) -> String {
 pub fn Avatar(
     /// The display name the initials come from.
     #[prop(into)]
-    name: Signal<String>,
+    name: Signal<ambre_core::DisplayName>,
     /// The colour of the user's identity.
     #[prop(into)]
     color: Signal<Rgb>,
@@ -45,10 +45,10 @@ pub fn Avatar(
         <span
             class="ambre-avatar"
             aria-hidden="true"
-            title=move || name.get()
+            title=move || name.get().into_string()
             style:background=move || color.get().to_string()
         >
-            {move || avatar_initials(&name.get())}
+            {move || name.with(|name| avatar_initials(name.as_str()))}
         </span>
     }
 }

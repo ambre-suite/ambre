@@ -107,7 +107,7 @@ pub struct KeyProbe {
     /// The animation frames begun so far.
     frame: u64,
     /// The frame counts of the confirmations since the last take.
-    counts: Vec<u32>,
+    counts: Vec<FrameCount>,
     /// The highest acknowledgement number seen in the draft.
     seen: Option<ambre_bus::app::prose::TextAck>,
     undrawn: Vec<Undrawn>,
@@ -121,7 +121,7 @@ impl KeyProbe {
     }
 
     /// The frame counts of the confirmations since the last call.
-    pub fn take_counts(&mut self) -> Vec<u32> {
+    pub fn take_counts(&mut self) -> Vec<FrameCount> {
         std::mem::take(&mut self.counts)
     }
 
@@ -182,7 +182,9 @@ impl KeyProbe {
             if pending.contains(&seq) {
                 return true;
             }
-            counts.push(u32::try_from(frame - at).unwrap_or(u32::MAX));
+            counts.push(FrameCount::new(
+                u32::try_from(frame - at).unwrap_or(u32::MAX),
+            ));
             measures.push(Measure {
                 name: ProbeName::Confirm,
                 start,
@@ -217,9 +219,23 @@ impl KeyProbe {
     }
 }
 
+ambre_core::define_tally! {
+    /// The animation frames a confirmation waited for.
+    pub struct FrameCount;
+}
+
+/// The median and the 95th percentile of a set of samples.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Percentiles {
+    /// The sample at the middle rank.
+    pub median: f64,
+    /// The sample at the 95th percentile rank.
+    pub p95: f64,
+}
+
 /// The median and the 95th percentile of `samples`, or `None` for none.
 #[must_use]
-pub fn percentiles(samples: &[f64]) -> Option<(f64, f64)> {
+pub fn percentiles(samples: &[f64]) -> Option<Percentiles> {
     if samples.is_empty() {
         return None;
     }
@@ -229,7 +245,10 @@ pub fn percentiles(samples: &[f64]) -> Option<(f64, f64)> {
         let rank = (q * (sorted.len() - 1) as f64).round() as usize;
         sorted.get(rank).copied().unwrap_or_default()
     };
-    Some((at(0.5), at(0.95)))
+    Some(Percentiles {
+        median: at(0.5),
+        p95: at(0.95),
+    })
 }
 
 #[cfg(test)]
@@ -448,7 +467,7 @@ mod tests {
         probe.frame();
         draft.confirm(ambre_bus::app::prose::TextAck(1));
         probe.answered(ambre_core::PageTime(33.0), &draft, Answer::Other);
-        assert_eq!(probe.take_counts(), [2]);
+        assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }
 
@@ -456,6 +475,12 @@ mod tests {
     fn percentiles_read_the_sorted_samples() {
         assert_eq!(percentiles(&[]), None);
         let samples: Vec<f64> = (1..=100).map(f64::from).rev().collect();
-        assert_eq!(percentiles(&samples), Some((51.0, 95.0)));
+        assert_eq!(
+            percentiles(&samples),
+            Some(Percentiles {
+                median: 51.0,
+                p95: 95.0
+            })
+        );
     }
 }

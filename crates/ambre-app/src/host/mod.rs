@@ -741,16 +741,16 @@ mod tests {
     #[wasm_bindgen_test]
     fn tick_fps_needs_two_samples() {
         let mut times = VecDeque::new();
-        let mut fps = -1.0f32;
+        let mut fps = ambre_core::FrameRate::new(-1.0);
         FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
         // A single sample cannot establish a rate.
-        assert_eq!(fps, 0.0);
+        assert_eq!(fps, ambre_core::FrameRate::ZERO);
     }
 
     #[wasm_bindgen_test]
     fn tick_fps_computes_rate_over_window() {
         let mut times = VecDeque::new();
-        let mut fps = 0.0f32;
+        let mut fps = ambre_core::FrameRate::ZERO;
         // 60 frames spaced 1/60 s over (just under) a second -> ~60 FPS.
         for i in 0..60 {
             FrameHost::tick_fps(
@@ -759,6 +759,7 @@ mod tests {
                 ambre_core::PageTime(i as f64 * 1000.0 / 60.0),
             );
         }
+        let fps = fps.get();
         assert!((fps - 60.0).abs() < 1.0, "expected ~60 fps, got {fps}");
     }
 
@@ -892,11 +893,11 @@ mod tests {
     #[wasm_bindgen_test]
     fn tick_fps_evicts_samples_older_than_one_second() {
         let mut times = VecDeque::new();
-        let mut fps = 0.0f32;
+        let mut fps = ambre_core::FrameRate::ZERO;
         FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
         FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(5000.0)); // 5 s later
         // The 0.0 sample is > 1 s old and must be evicted, leaving one sample.
         assert_eq!(times.len(), 1);
-        assert_eq!(fps, 0.0);
+        assert_eq!(fps, ambre_core::FrameRate::ZERO);
     }
 }

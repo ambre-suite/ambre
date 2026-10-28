@@ -8,7 +8,6 @@ ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	fre
 ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	free-text	DOM event name
 ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.clip_published | field | Rc<std::cell::Cell<bool>>	generic	flag cell
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.render_fps | field | f32	math	frame-clock stats
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty | field | bool	generic	state flag
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
@@ -18,7 +17,6 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(text) 
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(message) | param | &str	free-text	message
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::tick_fps(fps) | param | &mut f32	math	fps
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children() | ret | bool	generic	a fact, selects no mode: whether the board must recomposite
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(pump) | param | impl FnMut(&mut C)->bool	generic	a fact, selects no mode: whether the pumped child changed on its own
@@ -50,10 +48,8 @@ ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::hand
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline::count(values) | param | Vec<u32>	math	counts
 ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
-ambre-app | src/host/probe.rs | crate::host::probe | mark_count(value) | param | u32	math	count
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text() | ret | bool	generic	consumed answer
@@ -64,10 +60,8 @@ ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(mes
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
-ambre-app | src/landing.rs | crate::landing | DocItem.name | field | Option<String>	free-text	document name for display
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
 ambre-app | src/landing.rs | crate::landing | SignInMode::is_dev() | ret | bool	newtype-inner	newtype inner, accessor or constructor
-ambre-app | src/landing.rs | crate::landing | card_name(name) | param | Option<String>	free-text	document name for display
 ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | &impl Fn(&str,leptos_router::NavigateOptions)	trait	leptos navigate signature
 ambre-app | src/landing.rs | crate::landing | rel_time() | ret | String	free-text	relative time label
 ambre-app | src/lib.rs | crate | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
@@ -684,19 +678,14 @@ ambre-canvas | src/tokens.rs | crate::tokens | generate(source) | param | &str	f
 ambre-canvas | src/tokens.rs | crate::tokens | outputs() | ret | [(TokenFile,&String);2]	free-text	each generated file, paired with the whole text it must hold
 ambre-canvas | src/tokens.rs | crate::tokens | rust_module() | ret | String	free-text	a whole generated file: the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | stylesheet() | ret | String	free-text	a whole generated file: the stylesheet
-ambre-canvas | src/view.rs | crate::view | FrameStats.fps | field | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionEnd.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::CompositionUpdate.text | field | String	free-text	text, label or message
 ambre-canvas | src/view.rs | crate::view | InputEvent::Text.text | field | String	free-text	text, label or message
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.cells_drawn | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.fps | field | f32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/view.rs | crate::view | PerfSnapshot.glyph_misses | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/view.rs | crate::view | PointerButton::from_dom(button) | param | i16	foreign-api	the DOM PointerEvent.button number, read into the enum here
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
 ambre-chrome | src/app_shell.rs | crate::app_shell | Sidebar.label | field | String	free-text	text, label or user content
-ambre-chrome | src/avatar.rs | crate::avatar | Avatar(name) | param | Signal<String>	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
 ambre-chrome | src/color.rs | crate::color | ColorPopover(reset_label) | param | &'static str	free-text	text, label or user content
@@ -705,8 +694,6 @@ ambre-chrome | src/color.rs | crate::color | Pick.alpha | field | Option<u8>	loc
 ambre-chrome | src/color.rs | crate::color | parse_hex_color(s) | param | &str	foreign-api	the value an `<input type="color">` reports
 ambre-chrome | src/composed.rs | crate::composed | BRAND | const | &str	free-text	UI text/label const
 ambre-chrome | src/composed.rs | crate::composed | ComposedName.0 | field | String	newtype-inner	newtype inner
-ambre-chrome | src/composed.rs | crate::composed | ComposedName::or_placeholder(name) | param | Option<&str>	free-text	text, label or user content
-ambre-chrome | src/composed.rs | crate::composed | ComposedName::tab_title(doc) | param | Option<(&'static str,Option<&str>)>	free-text	text, label or user content
 ambre-chrome | src/composed.rs | crate::composed | UNTITLED | const | &str	free-text	UI text/label const
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.disabled | field | bool	generic	state flag/predicate
 ambre-chrome | src/context_menu.rs | crate::context_menu | MenuItem.label | field | String	free-text	text, label or user content
@@ -742,7 +729,6 @@ ambre-chrome | src/palette.rs | crate::palette | matches(label) | param | &str	f
 ambre-chrome | src/palette.rs | crate::palette | matches(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | rows(query) | param | &str	free-text	text, label or user content
 ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::message() | ret | &'static str	free-text	PassphraseRefusal message text
-ambre-chrome | src/status.rs | crate::status | PerfChip(fps) | param | Signal<f32>	math	layout geometry in logical px
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
@@ -2236,13 +2222,10 @@ ambre-prose | src/numbering.rs | crate::numbering | list_depth() | ret | u32	mat
 ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	tree walk callback: continue or stop
-ambre-prose | src/probe.rs | crate::probe | KeyProbe.counts | field | Vec<u32>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.frame | field | u64	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | KeyProbe.unconfirmed | field | Vec<(ambre_bus::app::prose::TextAck,ambre_core::PageTime,u64)>	math	count, size or local index
-ambre-prose | src/probe.rs | crate::probe | KeyProbe::take_counts() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/probe.rs | crate::probe | percentiles() | ret | Option<(f64,f64)>	math	layout geometry local to algorithm
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	the mark values a run carries as read back from the document, never checked: a peer on another build may have written any text, and resolve parses each one and drops what fails
@@ -2661,7 +2644,6 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconne
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
@@ -4067,3 +4049,8 @@ ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-i
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::get() | ret | f64	newtype-inner	the bare count, for a view that measures a notch
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
+ambre-core | src/span.rs | crate::span | FrameRate.0 | field | f32	newtype-inner	the inside of the frame-rate newtype
+ambre-core | src/span.rs | crate::span | FrameRate::get() | ret | f32	newtype-inner	the rate unwrapped, for the status text that prints it
+ambre-core | src/span.rs | crate::span | FrameRate::new(per_second) | param | f32	newtype-inner	the constructor of the frame-rate newtype
+ambre-prose | src/probe.rs | crate::probe | Percentiles.median | field | f64	math	a sample of a probe's series, in milliseconds or frames
+ambre-prose | src/probe.rs | crate::probe | Percentiles.p95 | field | f64	math	a sample of a probe's series, in milliseconds or frames

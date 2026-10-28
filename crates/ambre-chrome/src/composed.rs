@@ -50,21 +50,21 @@ pub struct ComposedName(String);
 
 impl ComposedName {
     /// A document's name, or the placeholder when it has none or only blanks.
-    pub fn or_placeholder(name: Option<&str>) -> Self {
-        match name.map(str::trim) {
+    pub fn or_placeholder(name: Option<&ambre_core::Name>) -> Self {
+        match name.map(|n| n.as_str().trim()) {
             Some(n) if !n.is_empty() => Self(n.to_owned()),
             _ => Self(UNTITLED.to_owned()),
         }
     }
 
     /// The browser tab's title. A tab carries no kind icon, so the name is
-    /// joined to the generic kind `label` (`CHROME-043`). `None` is a page
-    /// with no document open.
-    pub fn tab_title(doc: Option<(&'static str, Option<&str>)>) -> Self {
+    /// joined to the generic label of its kind (`CHROME-043`). `None` is a
+    /// page with no document open.
+    pub fn tab_title(doc: Option<(ambre_core::DocType, Option<&ambre_core::Name>)>) -> Self {
         match doc {
-            Some((label, name)) => {
+            Some((kind, name)) => {
                 let Self(name) = Self::or_placeholder(name);
-                Self(format!("{name} - {label}"))
+                Self(format!("{name} - {}", kind.generic_label()))
             }
             None => Self(BRAND.to_owned()),
         }
@@ -84,21 +84,31 @@ impl ComposedName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{DocType, Name};
+
+    fn name(text: &str) -> Name {
+        Name::new(text).unwrap()
+    }
 
     /// A tab joins the name to the kind label, and a blank name reads as the
     /// placeholder (`CHROME-043`).
     #[test]
     fn a_tab_title_composes_the_name_with_the_kind_label() {
         let title = |doc| ComposedName::tab_title(doc).0;
+        let label = DocType::Trame.generic_label();
+        let (budget, blank) = (name("Budget"), name("  "));
         assert_eq!(
-            title(Some(("Spreadsheet", Some("Budget")))),
-            "Budget - Spreadsheet"
+            title(Some((DocType::Trame, Some(&budget)))),
+            format!("Budget - {label}")
         );
         assert_eq!(
-            title(Some(("Spreadsheet", Some("  ")))),
-            "Untitled - Spreadsheet"
+            title(Some((DocType::Trame, Some(&blank)))),
+            format!("Untitled - {label}")
         );
-        assert_eq!(title(Some(("Spreadsheet", None))), "Untitled - Spreadsheet");
+        assert_eq!(
+            title(Some((DocType::Trame, None))),
+            format!("Untitled - {label}")
+        );
         assert_eq!(title(None), "Ambre");
     }
 
@@ -106,9 +116,9 @@ mod tests {
     /// placeholder.
     #[test]
     fn only_a_missing_or_blank_name_is_the_placeholder() {
-        let shown = |name| ComposedName::or_placeholder(name).0;
-        assert_eq!(shown(Some(" Budget ")), "Budget");
-        assert_eq!(shown(Some(" ")), UNTITLED);
+        let shown = |name: Option<&Name>| ComposedName::or_placeholder(name).0;
+        assert_eq!(shown(Some(&name(" Budget "))), "Budget");
+        assert_eq!(shown(Some(&name(" "))), UNTITLED);
         assert_eq!(shown(None), UNTITLED);
     }
 }

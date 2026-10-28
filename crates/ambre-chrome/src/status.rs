@@ -150,7 +150,7 @@ pub struct PerfDetail {
 pub fn PerfChip(
     /// The live frame rate. Derive it from the app's perf snapshot signal.
     #[prop(into)]
-    fps: Signal<f32>,
+    fps: Signal<ambre_core::FrameRate>,
     #[prop(optional)] perf_detail: Option<PerfDetail>,
 ) -> impl IntoView {
     // The detail panel is collapsed by default: only the fps chip shows.
@@ -168,7 +168,7 @@ pub fn PerfChip(
                     }
                 }
             >
-                {move || format!("{:.0} fps", fps.get())}
+                {move || format!("{:.0} fps", fps.get().get())}
             </button>
             {perf_detail
                 .map(|d| {

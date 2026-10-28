@@ -165,8 +165,8 @@ pub use secret::{
 };
 pub use seq::Seq;
 pub use span::{
-    LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp, UnixMillis,
-    UnixSeconds,
+    FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds, Timestamp,
+    UnixMillis, UnixSeconds,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,

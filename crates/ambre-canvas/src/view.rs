@@ -24,7 +24,7 @@ use crate::{ContentRepaint, LayerRepaint, WheelDelta};
 /// debug HUD. All values are spans of the page clock from the *previous* frame.
 #[derive(Default, Clone, Copy)]
 pub struct FrameStats {
-    pub fps: f32,
+    pub fps: ambre_core::FrameRate,
     pub frame: PageMillis,
     pub drain: PageMillis,
     pub draw: PageMillis,
@@ -38,7 +38,7 @@ pub struct FrameStats {
 /// cache misses. The DOM panel shows the same detail the old overlay did.
 #[derive(Default, Clone, Copy)]
 pub struct PerfSnapshot {
-    pub fps: f32,
+    pub fps: ambre_core::FrameRate,
     pub frame: PageMillis,
     pub drain: PageMillis,
     pub draw: PageMillis,
@@ -46,9 +46,16 @@ pub struct PerfSnapshot {
     pub background: PageMillis,
     pub cells: PageMillis,
     pub headers: PageMillis,
-    pub cells_drawn: u32,
+    pub cells_drawn: CellsDrawn,
     pub input_latency: PageMillis,
-    pub glyph_misses: u32,
+    pub glyph_misses: GlyphMisses,
+}
+
+ambre_core::define_tally! {
+    /// The cells one frame drew, for the performance panel.
+    pub struct CellsDrawn;
+    /// The glyphs one frame shaped afresh rather than read from the cache.
+    pub struct GlyphMisses;
 }
 
 /// Whether this frame is the one that refreshes the HUD's figures. The

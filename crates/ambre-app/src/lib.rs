@@ -1168,7 +1168,7 @@ pub fn main() {
                         .find(|d| d.document_id == document_id)
                         .and_then(|d| d.name.clone())
                 });
-                ComposedName::tab_title(Some((doc_type.generic_label(), name.as_deref())))
+                ComposedName::tab_title(Some((doc_type, name.as_ref())))
             }
             None => ComposedName::tab_title(None),
         };
@@ -1439,7 +1439,7 @@ pub fn main() {
                             .map(|d| DocItem {
                                 document_id: d.document_id,
                                 doc_type: d.doc_type,
-                                name: d.name.clone().map(ambre_core::Name::into_string),
+                                name: d.name.clone(),
                                 updated_at: d.updated_at,
                                 member_count: d.member_count,
                             })

@@ -29,7 +29,7 @@ pub struct DocChoice {
     /// Its kind, which decides how an embed of it renders.
     pub doc_type: DocType,
     /// Its name, if it has one.
-    pub name: Option<String>,
+    pub name: Option<ambre_core::Name>,
 }
 
 /// The web embed, document embed and link dialogs (`TOILE-087`, `TOILE-086`,
@@ -212,7 +212,7 @@ pub fn ToileChoosers(
 /// A document's name as a chooser lists it, which no rename takes back
 /// (`CHROME-080`).
 fn label(doc: &DocChoice) -> impl IntoView + use<> {
-    ComposedName::or_placeholder(doc.name.as_deref()).into_view()
+    ComposedName::or_placeholder(doc.name.as_ref()).into_view()
 }
 
 /// Resolve what the user typed into an address the board may hold, and place
