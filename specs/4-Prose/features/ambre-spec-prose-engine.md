@@ -623,12 +623,17 @@ pub enum ProseEvent {
 pub enum RefusedAction {
     Unnamed,
     /// The command, under the name `ProseCommand::name` gives it.
-    Command(&'static str),
+    Command(CommandName),
     KeepingBlock,
     /// A collaborator's update, entering the engine the way a command does.
     RemoteUpdate,
     Exporting,
 }
+
+/// A command's words in a refusal. The field is private: only `ProseCommand::name` builds
+/// one, so a refusal can name only a command that exists. `Display` prints the words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommandName(&'static str);
 
 /// One refusal, as the author is told about it.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]

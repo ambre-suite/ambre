@@ -179,13 +179,19 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let toasts = ambre_chrome::Toasts::new();
+    let comment_id = CommentId::new();
+    let reply = ambre_bus::app::prose::ProseCommand::ReplyToComment {
+        comment_id,
+        text: String::new(),
+        now: ambre_core::Timestamp(0),
+    };
     chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
             document_id: DocumentId::new(),
             event: AppEvent::Prose(ProseEvent::Error(ProseError::new(
-                ambre_bus::app::prose::RefusedAction::Command("replying to the comment"),
-                ProseRefusal::NoSuchComment(CommentId::new()),
+                ambre_bus::app::prose::RefusedAction::Command(reply.name()),
+                ProseRefusal::NoSuchComment(comment_id),
             ))),
         },
     );

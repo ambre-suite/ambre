@@ -13,15 +13,15 @@
 pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
-    ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
-    EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry, FootnoteOrdinal,
-    GraphemeCount, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether, KeepWithNext,
-    LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction, OrderedStyle,
-    PageCount, PageIndex, PageNumber, PageSpan, ParagraphCount, ParagraphStyle, PatternKind,
-    PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction,
-    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
-    TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign,
-    WordCount, WordTotal,
+    ChangeOrigin, CommandName, CommentReply, CommentThread, CrossRefKind, CursorPosition,
+    DateFieldFormat, EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry,
+    FootnoteOrdinal, GraphemeCount, HeaderField, HeadingLevel, HeadingNumber, HfTarget,
+    KeepTogether, KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan,
+    ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan,
+    ParagraphCount, ParagraphStyle, PatternKind, PresencePayload, ProseCommand, ProseError,
+    ProseEvent, ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
+    SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
+    TodoMark, TriState, VAlign, WordCount, WordTotal,
 };
 
 use loro::TreeID;
@@ -105,7 +105,7 @@ impl ProseOutcome {
     /// Name every refusal this outcome carries after the command that drew it
     /// (`PROSE-105`). An outcome that refused nothing passes through.
     #[must_use]
-    pub fn named(mut self, refused: &'static str) -> Self {
+    pub fn named(mut self, refused: CommandName) -> Self {
         for event in &mut self.display {
             if let ProseEvent::Error(error) = event {
                 error.refused = RefusedAction::Command(refused);

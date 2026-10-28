@@ -2092,8 +2092,8 @@ impl ProseCommand {
     /// (`PROSE-105`). The match is exhaustive, so a command added to the enum
     /// does not compile until it has a name a reader understands.
     #[must_use]
-    pub fn name(&self) -> &'static str {
-        match self {
+    pub fn name(&self) -> CommandName {
+        CommandName(match self {
             Self::Noop => "nothing",
             Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
@@ -2167,7 +2167,7 @@ impl ProseCommand {
             Self::Redo => "redoing",
             Self::ExportDocument { .. } => "saving to a file",
             Self::ImportDocument { .. } => "importing a file",
-        }
+        })
     }
 }
 
@@ -2321,6 +2321,26 @@ pub enum ProseEvent {
 // Errors
 // =============================================================================
 
+/// The words a refusal uses for a command (`PROSE-105`). Only
+/// [`ProseCommand::name`] builds one, so a refusal names only a command that
+/// exists, and a test that reads it compares two names, never two strings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommandName(&'static str);
+
+impl CommandName {
+    /// The words a refusal prints for this command.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        self.0
+    }
+}
+
+impl fmt::Display for CommandName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
 /// What the engine turned down, as a refusal names it (`PROSE-105`).
 ///
 /// A command names itself through [`ProseCommand::name`]. The other variants
@@ -2332,7 +2352,7 @@ pub enum RefusedAction {
     /// where no command drives the engine, and no such path exists today.
     Unnamed,
     /// A command, under the name [`ProseCommand::name`] gives it.
-    Command(&'static str),
+    Command(CommandName),
     /// Growing a block back into a document that a command left empty.
     KeepingBlock,
     /// A collaborator's update. It enters the engine the way a command does
@@ -2348,7 +2368,7 @@ impl RefusedAction {
     pub fn label(self) -> &'static str {
         match self {
             Self::Unnamed => "that",
-            Self::Command(name) => name,
+            Self::Command(name) => name.label(),
             Self::KeepingBlock => "keeping a block",
             Self::RemoteUpdate => "a collaborator's update",
             Self::Exporting => "exporting",
@@ -2531,7 +2551,7 @@ mod tests {
     fn each_refused_action_keeps_its_label() {
         for (action, label) in [
             (RefusedAction::Unnamed, "that"),
-            (RefusedAction::Command("deleting text"), "deleting text"),
+            (RefusedAction::Command(ProseCommand::Undo.name()), "undoing"),
             (RefusedAction::KeepingBlock, "keeping a block"),
             (RefusedAction::RemoteUpdate, "a collaborator's update"),
             (RefusedAction::Exporting, "exporting"),
@@ -2543,6 +2563,25 @@ mod tests {
                 format!("{label} refused: {}", ProseRefusal::NestingRefused)
             );
         }
+    }
+
+    #[test]
+    fn a_command_name_prints_the_words_it_was_given() {
+        for (command, label) in [
+            (ProseCommand::Undo, "undoing"),
+            (ProseCommand::Redo, "redoing"),
+            (ProseCommand::CountWords, "counting the words"),
+            (
+                ProseCommand::AcceptAllSuggestions,
+                "accepting every suggestion",
+            ),
+        ] {
+            let name = command.name();
+            assert_eq!(name.label(), label);
+            assert_eq!(name.to_string(), label);
+            assert_eq!(RefusedAction::Command(name).to_string(), label);
+        }
+        assert_ne!(ProseCommand::Undo.name(), ProseCommand::Redo.name());
     }
 
     #[test]

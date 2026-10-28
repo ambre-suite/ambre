@@ -1405,7 +1405,16 @@ mod tests {
             range: DocSpan::from_usize_range(0..1),
         });
         let error = refusal(&outcome);
-        assert_eq!(error.refused, RefusedAction::Command("deleting text"));
+        assert_eq!(
+            error.refused,
+            RefusedAction::Command(
+                ProseCommand::DeleteText {
+                    block_id: absent,
+                    range: DocSpan::from_usize_range(0..1),
+                }
+                .name()
+            )
+        );
         assert_eq!(error.reason, ProseRefusal::NoSuchBlock(absent));
     }
 
@@ -1447,7 +1456,8 @@ mod tests {
             value: Some(crate::mark::test_value("huge")),
         });
         let error = refusal(&outcome);
-        assert_eq!(error.refused, RefusedAction::Command("applying the style"));
+        assert!(matches!(error.refused, RefusedAction::Command(_)));
+        assert_eq!(error.refused.label(), "applying the style");
         assert_eq!(
             error.reason,
             ProseRefusal::BadMarkValue {

@@ -327,7 +327,7 @@ const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp(1_700_000_000_00
 enum FixtureError {
     /// The engine refused a command the fixture runs.
     Refused {
-        command: &'static str,
+        command: crate::events::CommandName,
         reason: ProseRefusal,
     },
     /// A part the fixture writes into was not there. The sentence names it.

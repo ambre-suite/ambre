@@ -165,6 +165,8 @@ ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::accepts() | ret | 
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | BlockType::has_body() | ret | bool	generic	predicate
+ambre-bus | src/app/prose.rs | crate::app::prose | CommandName.0 | field | &'static str	newtype-inner	newtype inner
+ambre-bus | src/app/prose.rs | crate::app::prose | CommandName::label() | ret | &'static str	free-text	the words a refusal prints for a command
 ambre-bus | src/app/prose.rs | crate::app::prose | CommentReply.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | CrossRefKind::CustomText.0 | field | String	free-text	cross-reference display text
 ambre-bus | src/app/prose.rs | crate::app::prose | DocCount::of(text) | param | &str	free-text	text content / label / parser input
@@ -195,7 +197,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceAll.repl
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplaceOne.replacement | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ReplyToComment.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::is_mutating() | ret | bool	generic	predicate
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::name() | ret | &'static str	generic	command name, the static label ProseCommand::name gives
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::Clipboard.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
@@ -1959,6 +1960,7 @@ ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<CommentId,String>>	free-text	text content / label / parser input
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.over_link | field | RwSignal<bool>	generic	independent flag or predicate
+ambre-prose | src/chrome/notify.rs | crate::chrome::notify | is_refused_reply() | ret | bool	generic	predicate result
 ambre-prose | src/commands.rs | crate::commands | bold_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | code_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | copy_title() | ret | String	free-text	text content / label / parser input
@@ -2002,7 +2004,6 @@ ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	math	coun
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/events.rs | crate::events | ProseOutcome::named(refused) | param | &'static str	free-text	the static command name ProseCommand::name gives, printed in the refusal
 ambre-prose | src/input.rs | crate::input | Press.count | field | u8	math	count, size or local index
 ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	newtype-inner	newtype inner field
 ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	newtype-inner	newtype inner field
@@ -3780,7 +3781,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | re
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Refused.command | field | &'static str	free-text	the literal name of the fixture command, printed in the failure message only
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
@@ -3899,7 +3899,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TocNumbering::numbered_if(num
 ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::done_if(ticked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/prose.rs | crate::app::prose | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
-ambre-bus | src/app/prose.rs | crate::app::prose | RefusedAction::Command.0 | field | &'static str	free-text	the static command name ProseCommand::name gives, printed in the refusal
 ambre-bus | src/app/prose.rs | crate::app::prose | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::is_locked() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::locked_if(locked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
