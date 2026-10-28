@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 macro_rules! define_payload {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive(Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         #[serde(transparent)]
         pub struct $name(Vec<u8>);
 
@@ -94,6 +94,8 @@ macro_rules! define_payload {
         }
     };
 }
+
+pub(crate) use define_payload;
 
 define_payload! {
     /// One CRDT change as the engine exports it, before Sync seals it or

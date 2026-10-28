@@ -241,48 +241,20 @@ fn is_kept_extension(extension: &str) -> bool {
         && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
-/// The bytes of a file crossing an import or an export. They are what the
-/// browser read from a picked file, or what an export writes for it to save.
-///
-/// The bytes are the user's content, so `Debug` prints their length alone.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct FileBytes(Vec<u8>);
+crate::payload::define_payload! {
+    /// The bytes of a file crossing an import or an export. They are what the
+    /// browser read from a picked file, or what an export writes for it to
+    /// save.
+    ///
+    /// The bytes are the user's content, so `Debug` prints their length alone.
+    FileBytes
+}
 
 impl FileBytes {
-    /// Wraps the bytes of one file.
-    #[must_use]
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    /// The bytes, for the parser or the browser call that takes them.
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// The bytes, owned.
-    #[must_use]
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0
-    }
-
     /// The size of the file.
     #[must_use]
     pub fn size(&self) -> ByteSize {
-        ByteSize::of_len(self.0.len())
-    }
-
-    /// Whether the file holds no byte.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl std::fmt::Debug for FileBytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FileBytes({} bytes)", self.0.len())
+        ByteSize::of_len(self.len())
     }
 }
 

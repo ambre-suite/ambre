@@ -309,8 +309,9 @@ impl FileDigest {
 }
 
 /// A whole `.ambre` file in one of its roles: picked, plaintext or sealed.
-/// [`classify`] reads any of them. The trait is sealed, so a snapshot or a
-/// store row never reaches it.
+/// [`classify`] reads any of them. The trait is sealed to these three types:
+/// the type names the role the bytes claim, not their content. Any bytes can
+/// be wrapped as a picked file, and every reader validates what it is given.
 pub trait ContainerFile: AsRef<[u8]> + container_file::Sealed {}
 
 mod container_file {
