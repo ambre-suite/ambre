@@ -12,7 +12,7 @@
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, LeaseId, Millis, SegmentId, Seq, SnapshotBytes,
+    ChannelId, DeltaBytes, DocumentId, FailureCount, LeaseId, Millis, SegmentId, Seq, SnapshotBytes,
 };
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
@@ -37,7 +37,7 @@ pub(super) struct Folding {
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
-    failures: u32,
+    failures: FailureCount,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -121,7 +121,7 @@ impl ChannelState {
                     after: Millis(0),
                     at: None,
                 },
-                failures: 0,
+                failures: FailureCount::ZERO,
             });
         }
         self.folding.as_mut()
@@ -158,7 +158,7 @@ impl ChannelState {
         let Some(folding) = self.fold_step_of(segment) else {
             return;
         };
-        folding.failures = 0;
+        folding.failures = FailureCount::ZERO;
         folding.step = match answer {
             FoldAnswer::Granted {
                 lease,
@@ -187,7 +187,7 @@ impl ChannelState {
     /// fold delay; another member's check decides this one.
     pub fn fold_committed(&mut self, segment: SegmentId) {
         if let Some(folding) = self.fold_step_of(segment) {
-            folding.failures = 0;
+            folding.failures = FailureCount::ZERO;
             folding.step = Step::Due {
                 after: FOLD_DELAY,
                 at: None,
@@ -201,7 +201,7 @@ impl ChannelState {
     pub fn fold_failed(&mut self, segment: SegmentId) {
         if let Some(folding) = self.fold_step_of(segment) {
             let doublings = folding.failures.min(RETRY_DOUBLINGS);
-            folding.failures = folding.failures.saturating_add(1);
+            folding.failures = folding.failures.incremented();
             folding.step = Step::Due {
                 after: FINALIZE_RETRY.doubled(doublings),
                 at: None,

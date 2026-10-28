@@ -8,7 +8,7 @@
 //! each delay is stamped by the next tick.
 
 use ambre_bus::Timestamp;
-use ambre_core::{DeltaBytes, LeaseId, Millis, SegmentId, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, FailureCount, LeaseId, Millis, SegmentId, Seq, SnapshotBytes};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -20,7 +20,7 @@ use crate::schema::{self, Root, SegmentKey, SegmentState};
 pub const FINALIZE_RETRY: Millis = Millis(2_000);
 
 /// The doublings past which the delay stops growing: about half an hour.
-pub(super) const RETRY_DOUBLINGS: u32 = 10;
+pub(super) const RETRY_DOUBLINGS: FailureCount = FailureCount::new(10);
 
 /// The finalization of one closing segment, as this client drives it.
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub(super) struct Finalizing {
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
-    failures: u32,
+    failures: FailureCount,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,7 +98,7 @@ impl ChannelState {
                     after: Millis(0),
                     at: None,
                 },
-                failures: 0,
+                failures: FailureCount::ZERO,
             });
         }
         self.finalizing.as_mut()
@@ -129,7 +129,7 @@ impl ChannelState {
     /// the grace period runs, or another member holds the lease.
     pub fn lease_deferred(&mut self, segment: SegmentId, retry_in: ambre_core::Millis) {
         if let Some(finalizing) = self.finalize_step(segment) {
-            finalizing.failures = 0;
+            finalizing.failures = FailureCount::ZERO;
             finalizing.step = Step::Due {
                 after: retry_in,
                 at: None,
@@ -148,7 +148,7 @@ impl ChannelState {
         expires_in: ambre_core::Millis,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
-            finalizing.failures = 0;
+            finalizing.failures = FailureCount::ZERO;
             finalizing.step = Step::Held {
                 lease,
                 horizon,
@@ -166,7 +166,7 @@ impl ChannelState {
                 return;
             }
             let doublings = finalizing.failures.min(RETRY_DOUBLINGS);
-            finalizing.failures = finalizing.failures.saturating_add(1);
+            finalizing.failures = finalizing.failures.incremented();
             finalizing.step = Step::Due {
                 after: FINALIZE_RETRY.doubled(doublings),
                 at: None,

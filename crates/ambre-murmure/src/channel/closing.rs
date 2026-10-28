@@ -6,7 +6,7 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::{ByteSize, DeltaBytes, Millis, PeerEntryBytes, SegmentId};
+use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, PeerEntryBytes, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
@@ -33,14 +33,14 @@ pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize(2 * 1024 * 1024);
 pub const SUCCESSOR_RETRY: Millis = Millis(1_000);
 
 /// The failures past which a successor is no longer fetched again.
-const SUCCESSOR_FAILURES: u32 = 5;
+const SUCCESSOR_FAILURES: FailureCount = FailureCount::new(5);
 
 /// A successor that failed to open, and when to fetch it again
 /// (`MURMURE-482`).
 #[derive(Debug)]
 pub(super) struct Retry {
     segment: SegmentId,
-    failures: u32,
+    failures: FailureCount,
     /// Stamped by the first tick past the failure: the engine reads no clock.
     at: Option<Timestamp>,
 }
@@ -249,13 +249,13 @@ impl ChannelState {
     pub(super) fn successor_failed(&mut self, segment: SegmentId) {
         match &mut self.successor_retry {
             Some(retry) if retry.segment == segment => {
-                retry.failures += 1;
+                retry.failures = retry.failures.incremented();
                 retry.at = None;
             }
             _ => {
                 self.successor_retry = Some(Retry {
                     segment,
-                    failures: 1,
+                    failures: FailureCount::new(1),
                     at: None,
                 });
             }
@@ -278,7 +278,7 @@ impl ChannelState {
             return None;
         }
         let Some(at) = retry.at else {
-            let delay = SUCCESSOR_RETRY.doubled(retry.failures - 1);
+            let delay = SUCCESSOR_RETRY.doubled(retry.failures.minus(FailureCount::new(1)));
             retry.at = Some(now.plus(delay));
             return None;
         };

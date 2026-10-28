@@ -10,6 +10,12 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+crate::define_tally! {
+    /// How many times in a row one request has failed: the count a retry
+    /// backs off by.
+    pub struct FailureCount;
+}
+
 /// A span of time in whole milliseconds.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
@@ -34,11 +40,11 @@ impl Millis {
         Self(self.0.saturating_mul(n))
     }
 
-    /// The span doubled `doublings` times, saturating at `u64::MAX`
-    /// milliseconds: the delay of a retry that backs off.
+    /// The span doubled once per failure of `failures`, saturating at
+    /// `u64::MAX` milliseconds: the delay of a retry that backs off.
     #[must_use]
-    pub const fn doubled(self, doublings: u32) -> Self {
-        match 1_u64.checked_shl(doublings) {
+    pub const fn doubled(self, failures: FailureCount) -> Self {
+        match 1_u64.checked_shl(failures.get()) {
             Some(factor) => self.times(factor),
             None => Self(u64::MAX),
         }
@@ -344,8 +350,14 @@ mod tests {
     #[test]
     fn a_millisecond_span_scales_and_backs_off_without_overflow() {
         assert_eq!(Millis(2_000).times(3), Millis(6_000));
-        assert_eq!(Millis(2_000).doubled(2), Millis(8_000));
-        assert_eq!(Millis(2).doubled(64), Millis(u64::MAX));
+        assert_eq!(
+            Millis(2_000).doubled(super::FailureCount::new(2)),
+            Millis(8_000)
+        );
+        assert_eq!(
+            Millis(2).doubled(super::FailureCount::new(64)),
+            Millis(u64::MAX)
+        );
         assert_eq!(Millis(u64::MAX).times(2), Millis(u64::MAX));
         assert_eq!(Millis(1_000).to_timer_i32(), 1_000);
         assert_eq!(Millis(u64::MAX).to_timer_i32(), i32::MAX);

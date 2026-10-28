@@ -1028,7 +1028,6 @@ ambre-core | src/span.rs | crate::span | LamportStamp.0 | field | u64	newtype-in
 ambre-core | src/span.rs | crate::span | LamportStamp::from_i64(stored) | param | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | LamportStamp::to_i64_saturating() | ret | i64	newtype-inner	LamportStamp field or storage conversion
 ambre-core | src/span.rs | crate::span | Millis.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Millis::doubled(doublings) | param | u32	math	a count of doublings, not a span
 ambre-core | src/span.rs | crate::span | Millis::times(n) | param | u64	math	a multiplier, not a span
 ambre-core | src/span.rs | crate::span | Millis::to_timer_i32() | ret | i32	newtype-inner	time newtype accessor for the browser timer
 ambre-core | src/span.rs | crate::span | PageTime.0 | field | f64	newtype-inner	time newtype accessor
@@ -1290,12 +1289,7 @@ ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState:
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::owes_rotation_close() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | Retry.failures | field | u32	math	local count/index/counter
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | SUCCESSOR_FAILURES | const | u32	math	local count/index/counter
 ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::refinalize() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | Finalizing.failures | field | u32	math	local count/index/counter
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | RETRY_DOUBLINGS | const | u32	math	local count/index/counter
-ambre-murmure | src/channel/folding.rs | crate::channel::folding | Folding.failures | field | u32	math	local count/index/counter
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::ask_thread() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_probe() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	generic	state flag/predicate
