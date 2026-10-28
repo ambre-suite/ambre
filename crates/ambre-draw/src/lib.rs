@@ -42,7 +42,7 @@ pub use walk::DocumentWalk;
 
 /// The size and the pixels of an image, and the width of a stroke. A back end
 /// sees no other `ambre-core` type.
-pub use ambre_core::{ImageSize, RgbaPixels, SurfacePx};
+pub use ambre_core::{ImageSize, RgbaPixels, SurfacePx, WholePx};
 
 #[cfg(feature = "testing")]
 pub mod testing;

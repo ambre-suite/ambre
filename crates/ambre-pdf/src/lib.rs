@@ -228,14 +228,14 @@ impl DrawSurface for KrillaSurface<'_, '_> {
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
         // krilla wants owned RGBA8 bytes; the source is a borrowed view, so copy
         // once into an image object krilla holds for the page's lifetime.
-        let expected = image.size.width as usize * image.size.height as usize * 4;
+        let expected = image.size.width.get() as usize * image.size.height.get() as usize * 4;
         if image.pixels.len() != expected || expected == 0 {
             return; // malformed source: skip rather than embed garbage
         }
         let img = Image::from_rgba8(
             image.pixels.as_bytes().to_vec(),
-            image.size.width,
-            image.size.height,
+            image.size.width.get(),
+            image.size.height.get(),
         );
         // krilla draws the image occupying (0,0)..(size) in the current space, so
         // translate to the destination origin and size it to the rect. Balanced
@@ -440,7 +440,10 @@ mod tests {
             let src = ImageSource {
                 key: ImageKey(1),
                 pixels: &pixels,
-                size: ambre_draw::ImageSize::new(2, 2),
+                size: ambre_draw::ImageSize::new(
+                    ambre_draw::WholePx::new(2),
+                    ambre_draw::WholePx::new(2),
+                ),
             };
             s.draw_image(&src, Rect::new(10.0, 10.0, 90.0, 90.0));
             // Degenerate destination: no-op, no panic.
@@ -449,7 +452,10 @@ mod tests {
             let bad = ImageSource {
                 key: ImageKey(2),
                 pixels: &ambre_draw::RgbaPixels::new(vec![0, 1, 2]),
-                size: ambre_draw::ImageSize::new(2, 2),
+                size: ambre_draw::ImageSize::new(
+                    ambre_draw::WholePx::new(2),
+                    ambre_draw::WholePx::new(2),
+                ),
             };
             s.draw_image(&bad, Rect::new(0.0, 0.0, 10.0, 10.0));
         }

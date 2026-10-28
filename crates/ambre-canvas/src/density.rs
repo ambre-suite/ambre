@@ -9,6 +9,7 @@
 // ============================================================================
 
 pub use ambre_core::PixelSize;
+use ambre_core::WholePx;
 use ambre_core::{CssPx, ViewPx};
 
 use crate::render::ContentRepaint;
@@ -97,8 +98,8 @@ impl SurfaceSize {
     /// The backing store a browser gives a canvas nobody sized: 300 x 150.
     /// It stands in for a canvas that has no box yet.
     pub const UNSIZED: SurfaceSize = SurfaceSize {
-        logical: CssSize::new(300, 150),
-        physical: DeviceSize::new(300, 150),
+        logical: CssSize::new(WholePx::new(300), WholePx::new(150)),
+        physical: DeviceSize::new(WholePx::new(300), WholePx::new(150)),
         density: DevicePixelRatio::ONE,
     };
 
@@ -108,14 +109,14 @@ impl SurfaceSize {
     pub(crate) fn new(width: u32, height: u32, density: f64) -> Option<Self> {
         let density = DevicePixelRatio::new(density).unwrap_or(DevicePixelRatio::ONE);
         let physical = DeviceSize::new(
-            (f64::from(width) * density.get()).round() as u32,
-            (f64::from(height) * density.get()).round() as u32,
+            WholePx::new((f64::from(width) * density.get()).round() as u32),
+            WholePx::new((f64::from(height) * density.get()).round() as u32),
         );
-        if physical.width == 0 || physical.height == 0 {
+        if physical.width == WholePx::ZERO || physical.height == WholePx::ZERO {
             return None;
         }
         Some(Self {
-            logical: CssSize::new(width, height),
+            logical: CssSize::new(WholePx::new(width), WholePx::new(height)),
             physical,
             density,
         })
@@ -130,7 +131,10 @@ impl SurfaceSize {
     /// is a CSS pixel in size (`CANVAS-032`).
     pub fn view(&self) -> ambre_core::ViewSize {
         #[allow(clippy::cast_precision_loss)]
-        let (width, height) = (self.logical.width as f32, self.logical.height as f32);
+        let (width, height) = (
+            self.logical.width.get() as f32,
+            self.logical.height.get() as f32,
+        );
         ambre_core::ViewSize::new(ViewPx::new(width), ViewPx::new(height))
     }
 
@@ -182,8 +186,8 @@ pub fn size_backing_store(canvas: &web_sys::HtmlCanvasElement) -> Option<Surface
         canvas.client_height().max(0) as u32,
         read(),
     )?;
-    canvas.set_width(size.physical.width);
-    canvas.set_height(size.physical.height);
+    canvas.set_width(size.physical.width.get());
+    canvas.set_height(size.physical.height.get());
     Some(size)
 }
 
@@ -285,7 +289,10 @@ mod tests {
         let one = SurfaceSize::new(800, 600, 1.0).unwrap();
         let two = SurfaceSize::new(800, 600, 2.0).unwrap();
         assert_eq!(one.logical(), two.logical());
-        assert_eq!(two.physical(), DeviceSize::new(1600, 1200));
+        assert_eq!(
+            two.physical(),
+            DeviceSize::new(WholePx::new(1600), WholePx::new(1200))
+        );
     }
 
     /// A density the browser could not report reads as 1, never as a buffer
@@ -296,7 +303,10 @@ mod tests {
             assert_eq!(DevicePixelRatio::new(density), None);
             let size = SurfaceSize::new(300, 150, density).unwrap();
             assert_eq!(size.density(), DevicePixelRatio::ONE);
-            assert_eq!(size.physical(), DeviceSize::new(300, 150));
+            assert_eq!(
+                size.physical(),
+                DeviceSize::new(WholePx::new(300), WholePx::new(150))
+            );
         }
         assert!(SurfaceSize::new(0, 150, 2.0).is_none());
     }

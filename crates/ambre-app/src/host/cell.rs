@@ -571,6 +571,7 @@ mod tests {
     use super::*;
     use crate::host::{MurmureView, THREAD_CANVAS};
     use ambre_canvas::ThemeControl;
+    use ambre_core::WholePx;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// The size of a region, in its view pixels.
@@ -626,7 +627,7 @@ mod tests {
                 TextInput::detached(),
                 std::rc::Rc::new(|_| {}),
             ),
-            CssSize::new(300, 200),
+            CssSize::new(WholePx::new(300), WholePx::new(200)),
             ThemeControl::default(),
         ))
     }
@@ -789,8 +790,10 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_copy_on_a_cell_writes_the_text_it_selects() {
         let (_cell, canvas) = thread_cell(300, 200);
-        let (mut view, _events) =
-            ambre_murmure::testing::channel_of(&["hello", "world"], CssSize::new(300, 200));
+        let (mut view, _events) = ambre_murmure::testing::channel_of(
+            &["hello", "world"],
+            CssSize::new(WholePx::new(300), WholePx::new(200)),
+        );
         paint(&mut view);
         let size = size_backing_store(&canvas).unwrap();
         let typist = Typist::default();
@@ -874,12 +877,16 @@ mod tests {
     #[wasm_bindgen_test]
     fn the_pipe_writes_into_the_cell_whose_field_took_the_keys() {
         let (_cell, canvas) = thread_cell(300, 200);
-        let (mut thread, _thread_events) =
-            ambre_murmure::testing::channel_of(&["hello"], CssSize::new(300, 200));
+        let (mut thread, _thread_events) = ambre_murmure::testing::channel_of(
+            &["hello"],
+            CssSize::new(WholePx::new(300), WholePx::new(200)),
+        );
         paint(&mut thread);
         let (x, y) = field_of(&thread, 200.0);
-        let (mut channel, _channel_events) =
-            ambre_murmure::testing::channel_of(&["hi"], CssSize::new(300, 200));
+        let (mut channel, _channel_events) = ambre_murmure::testing::channel_of(
+            &["hi"],
+            CssSize::new(WholePx::new(300), WholePx::new(200)),
+        );
         paint(&mut channel);
         let mut content = AppView::Murmure(channel);
         let press_content = |content: &mut AppView| {
@@ -1001,7 +1008,10 @@ mod tests {
                 .content,
             ContentRepaint::Reuse
         ));
-        assert_eq!(bound.size.get().logical(), CssSize::new(140, 80));
+        assert_eq!(
+            bound.size.get().logical(),
+            CssSize::new(WholePx::new(140), WholePx::new(80))
+        );
     }
 
     /// A canvas that left the page drops its cell, and one that replaced it

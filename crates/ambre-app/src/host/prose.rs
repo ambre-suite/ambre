@@ -111,8 +111,8 @@ pub struct ProseView {
 /// lays out against. A view pixel is a CSS pixel in size (`CANVAS-032`).
 fn view_size(size: CssSize) -> (ViewPx, ViewPx) {
     (
-        ViewPx::new(size.width as f32),
-        ViewPx::new(size.height as f32),
+        ViewPx::new(size.width.get() as f32),
+        ViewPx::new(size.height.get() as f32),
     )
 }
 
@@ -772,6 +772,7 @@ fn download(
 mod tests {
     use super::*;
     use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
+    use ambre_core::WholePx;
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
@@ -804,7 +805,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            CssSize::new(800, 600),
+            CssSize::new(WholePx::new(800), WholePx::new(600)),
             pipe.clone(),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -850,7 +851,7 @@ mod tests {
             document_id,
             to_logic,
             from_logic,
-            CssSize::new(800, 600),
+            CssSize::new(WholePx::new(800), WholePx::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -910,7 +911,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            CssSize::new(800, 600),
+            CssSize::new(WholePx::new(800), WholePx::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             figures,

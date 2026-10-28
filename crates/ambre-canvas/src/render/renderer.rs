@@ -10,6 +10,7 @@
 use super::*;
 use crate::SurfaceSize;
 use crate::density::{CssSize, DevicePixelRatio, DevicePx, DeviceSize};
+use ambre_core::WholePx;
 use ambre_core::{ByteSize, ImageSize, ViewPx};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
@@ -33,8 +34,8 @@ impl OffscreenTarget {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width: size.width.max(1),
-                height: size.height.max(1),
+                width: (size.width.max(WholePx::new(1))).get(),
+                height: (size.height.max(WholePx::new(1))).get(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -619,13 +620,13 @@ impl QuadRenderer {
             OffscreenTarget::new(
                 device,
                 offscreen_format,
-                DeviceSize::new(1, 1),
+                DeviceSize::new(WholePx::new(1), WholePx::new(1)),
                 "cells_offscreen_a",
             ),
             OffscreenTarget::new(
                 device,
                 offscreen_format,
-                DeviceSize::new(1, 1),
+                DeviceSize::new(WholePx::new(1), WholePx::new(1)),
                 "cells_offscreen_b",
             ),
         ];
@@ -675,7 +676,7 @@ impl QuadRenderer {
             current_offscreen_idx: 0,
             width: 1.0,
             height: 1.0,
-            physical: DeviceSize::new(1, 1),
+            physical: DeviceSize::new(WholePx::new(1), WholePx::new(1)),
             density: DevicePixelRatio::ONE,
         }
     }
@@ -728,8 +729,8 @@ impl QuadRenderer {
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
         let CssSize { width, height, .. } = size.logical();
-        self.width = width as f32;
-        self.height = height as f32;
+        self.width = width.get() as f32;
+        self.height = height.get() as f32;
         self.physical = size.physical();
         self.density = size.density();
     }
@@ -870,7 +871,7 @@ impl QuadRenderer {
         image: &ImageSource<'_>,
         corners: [[f32; 2]; 4],
     ) {
-        if image.size.width == 0 || image.size.height == 0 {
+        if image.size.width == WholePx::ZERO || image.size.height == WholePx::ZERO {
             return;
         }
         if self.images.get(image.key, image.size).is_none() {
@@ -905,16 +906,19 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         image: &ImageSource<'_>,
     ) -> Option<CacheEntry<wgpu::BindGroup>> {
-        let level0 = (image.size.width as usize) * (image.size.height as usize) * 4;
+        let level0 = (image.size.width.get() as usize) * (image.size.height.get() as usize) * 4;
         let level0_pixels = image.pixels.as_bytes().get(..level0)?;
-        let chain =
-            mipmap::build_chain(image.pixels.as_bytes(), image.size.width, image.size.height);
-        let levels = mipmap::level_count(image.size.width, image.size.height);
+        let chain = mipmap::build_chain(
+            image.pixels.as_bytes(),
+            image.size.width.get(),
+            image.size.height.get(),
+        );
+        let levels = mipmap::level_count(image.size.width.get(), image.size.height.get());
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("image_texture"),
             size: wgpu::Extent3d {
-                width: image.size.width,
-                height: image.size.height,
+                width: image.size.width.get(),
+                height: image.size.height.get(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: levels,
@@ -945,7 +949,12 @@ impl QuadRenderer {
                 },
             );
         };
-        write(0, level0_pixels, image.size.width, image.size.height);
+        write(
+            0,
+            level0_pixels,
+            image.size.width.get(),
+            image.size.height.get(),
+        );
         let mut bytes = ByteSize::of_len(level0);
         for (i, level) in chain.iter().enumerate() {
             write(i as u32 + 1, &level.pixels, level.width, level.height);
@@ -1372,7 +1381,7 @@ mod image_cache_tests {
         CacheEntry {
             payload: w,
             bytes: ByteSize(bytes),
-            size: ImageSize::new(w, h),
+            size: ImageSize::new(WholePx::new(w), WholePx::new(h)),
             last_used,
         }
     }
@@ -1385,7 +1394,13 @@ mod image_cache_tests {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
         c.clock = 7;
-        assert_eq!(c.get(ImageKey(1), ImageSize::new(2, 2)), Some(&2));
+        assert_eq!(
+            c.get(
+                ImageKey(1),
+                ImageSize::new(WholePx::new(2), WholePx::new(2))
+            ),
+            Some(&2)
+        );
         assert_eq!(c.map[&ImageKey(1)].last_used, 7);
     }
 
@@ -1396,8 +1411,20 @@ mod image_cache_tests {
     fn a_key_at_another_size_is_a_miss() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
-        assert_eq!(c.get(ImageKey(1), ImageSize::new(4, 4)), None);
-        assert!(c.get(ImageKey(1), ImageSize::new(2, 2)).is_some());
+        assert_eq!(
+            c.get(
+                ImageKey(1),
+                ImageSize::new(WholePx::new(4), WholePx::new(4))
+            ),
+            None
+        );
+        assert!(
+            c.get(
+                ImageKey(1),
+                ImageSize::new(WholePx::new(2), WholePx::new(2))
+            )
+            .is_some()
+        );
     }
 
     /// Over budget, the entry drawn longest ago goes first and the recent ones

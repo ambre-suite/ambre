@@ -418,25 +418,66 @@ impl<P> Size<P> {
 /// or the CSS and device sizes of `ambre-canvas`. The space is a type, so
 /// the size of an image never reaches a place that sizes a buffer or a box.
 ///
-/// Its serde form is the two edges, width first, as two `u32` fields were.
+/// Its serde form is the two edges, width first, as two `u32` fields were:
+/// each edge is a [`WholePx`], transparent to serde.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct PixelSize<P> {
-    pub width: u32,
-    pub height: u32,
-    #[serde(skip)]
-    space: std::marker::PhantomData<P>,
+    pub width: WholePx<P>,
+    pub height: WholePx<P>,
 }
 
 impl<P> PixelSize<P> {
     /// The size of `width` x `height` pixels.
     #[must_use]
-    pub const fn new(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            space: std::marker::PhantomData,
-        }
+    pub const fn new(width: WholePx<P>, height: WholePx<P>) -> Self {
+        Self { width, height }
+    }
+}
+
+/// One edge of a [`PixelSize`]: a whole number of pixels in the space `P`
+/// names. The `u32` is what wgpu, the canvas element and the image decoders
+/// take, so [`WholePx::get`] is the one way out to them.
+///
+/// Transparent to serde: it carries the bare `u32`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent, bound = "")]
+pub struct WholePx<P>(u32, #[serde(skip)] std::marker::PhantomData<P>);
+
+impl<P> WholePx<P> {
+    /// No pixel.
+    pub const ZERO: Self = Self::new(0);
+
+    /// An edge of `n` pixels.
+    #[must_use]
+    pub const fn new(n: u32) -> Self {
+        Self(n, std::marker::PhantomData)
+    }
+
+    /// The bare count, for the call into a foreign API.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// The bare count, as an error message prints a dimension.
+impl<P> std::fmt::Display for WholePx<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+// By hand: a derive would ask the space marker for an order it has no use for.
+impl<P: Eq> PartialOrd for WholePx<P> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<P: Eq> Ord for WholePx<P> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
     }
 }
 
@@ -557,7 +598,8 @@ impl CssPoint {
 #[cfg(test)]
 mod tests {
     use super::{
-        CssPoint, CssPx, DocPx, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewSpeed, ViewVector,
+        CssPoint, CssPx, DocPx, ImageSize, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewSpeed,
+        ViewVector, WholePx,
     };
     use crate::{PageMillis, ZoomFactor};
 
@@ -639,5 +681,18 @@ mod tests {
     #[test]
     fn a_length_serializes_as_its_bare_float() {
         assert_eq!(serde_json::to_string(&Mm::new(210.0)).unwrap(), "210.0");
+    }
+
+    #[test]
+    fn a_pixel_size_keeps_the_bytes_of_its_two_bare_edges() {
+        // The bytes two `u32` fields wrote, before each edge was a `WholePx`.
+        let size = ImageSize::new(WholePx::new(640), WholePx::new(480));
+        assert_eq!(
+            serde_json::to_string(&size).unwrap(),
+            r#"{"width":640,"height":480}"#
+        );
+        let bytes = postcard::to_allocvec(&size).unwrap();
+        assert_eq!(bytes, [0x80, 0x05, 0xE0, 0x03]);
+        assert_eq!(postcard::from_bytes::<ImageSize>(&bytes).unwrap(), size);
     }
 }

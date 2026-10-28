@@ -7,6 +7,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_core::WholePx;
 
 /// The container the shell mounts over the canvas for a board's web embeds
 /// (`TOILE-088`). `None` before the shell renders, and for a host page that does
@@ -99,10 +100,10 @@ fn reconcile_children<C>(
     let mut dirty = false;
     for e in embeds {
         let size = CssSize::new(
-            e.child_size.width.round().max(0.0) as u32,
-            e.child_size.height.round().max(0.0) as u32,
+            WholePx::new(e.child_size.width.round().max(0.0) as u32),
+            WholePx::new(e.child_size.height.round().max(0.0) as u32),
         );
-        if size.width == 0 || size.height == 0 {
+        if size.width == WholePx::ZERO || size.height == WholePx::ZERO {
             continue;
         }
         if sizes.get(&e.element) == Some(&size) && children.contains_key(&e.element) {

@@ -3535,10 +3535,6 @@ ambre-canvas | src/density.rs | crate::density | DevicePx.0 | field | i32	newtyp
 ambre-canvas | src/density.rs | crate::density | DevicePx::get() | ret | i32	newtype-inner	the device pixel unwrapped for wgpu, which takes the integer
 ambre-canvas | src/density.rs | crate::density | DevicePx::new(value) | param | i32	newtype-inner	the constructor of the device pixel newtype
 ambre-canvas | src/density.rs | crate::density | DevicePx::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a shift, in the unsigned texel coordinate wgpu takes
-ambre-core | src/unit.rs | crate::unit | PixelSize.height | field | u32	newtype-inner	the inside of a size typed by its pixel space; the u32 is what wgpu, the canvas element and the image decoders take
-ambre-core | src/unit.rs | crate::unit | PixelSize.width | field | u32	newtype-inner	the inside of a size typed by its pixel space; the u32 is what wgpu, the canvas element and the image decoders take
-ambre-core | src/unit.rs | crate::unit | PixelSize<P>::new(height) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
-ambre-core | src/unit.rs | crate::unit | PixelSize<P>::new(width) | param | u32	newtype-inner	the constructor of a size typed by its pixel space
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field | f32	newtype-inner	the inside of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
@@ -4018,3 +4014,6 @@ ambre-core | src/tally.rs | crate::tally | CellCount::as_f64() | ret | f64	newty
 ambre-core | src/tally.rs | crate::tally | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/tally.rs | crate::tally | CellCount::is_zero() | ret | bool	newtype-inner	a predicate on the newtype's own inside
 ambre-core | src/tally.rs | crate::tally | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-core | src/unit.rs | crate::unit | WholePx.0 | field | u32	newtype-inner	the inside of a pixel edge typed by its space; the u32 is what wgpu, the canvas element and the image decoders take
+ambre-core | src/unit.rs | crate::unit | WholePx<P>::get() | ret | u32	newtype-inner	the one way out of a pixel edge, to wgpu, the canvas element and the image decoders
+ambre-core | src/unit.rs | crate::unit | WholePx<P>::new(n) | param | u32	newtype-inner	the constructor of a pixel edge typed by its space

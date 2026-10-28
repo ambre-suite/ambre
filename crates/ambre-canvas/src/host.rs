@@ -52,7 +52,7 @@ impl GpuState {
         let DeviceSize { width, height, .. } = size.physical();
         self.surface.configure(
             &self.device,
-            &surface_config(self.surface_format, width, height),
+            &surface_config(self.surface_format, width.get(), height.get()),
         );
         self.quad_renderer.resize_offscreens(&self.device, size);
         self.size = size;
@@ -64,7 +64,7 @@ impl GpuState {
         let DeviceSize { width, height, .. } = self.size.physical();
         self.surface.configure(
             &self.device,
-            &surface_config(self.surface_format, width, height),
+            &surface_config(self.surface_format, width.get(), height.get()),
         );
     }
 }
@@ -274,7 +274,7 @@ async fn create_gpu_state(
         return None;
     };
 
-    surface.configure(&device, &surface_config(format, width, height));
+    surface.configure(&device, &surface_config(format, width.get(), height.get()));
 
     let mut quad_renderer = QuadRenderer::new(&device, format);
     // Size the ping-pong offscreens to the initial canvas. ResizeObserver

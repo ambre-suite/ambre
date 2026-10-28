@@ -12,6 +12,7 @@
 use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::interop::{ExportElement, export_svg};
 use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
+use ambre_core::WholePx;
 
 use super::ToileState;
 use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, str_of};
@@ -46,7 +47,8 @@ impl ToileState {
             return None;
         };
         let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
-        let size = ambre_core::ImageSize::new(rgba.width(), rgba.height());
+        let size =
+            ambre_core::ImageSize::new(WholePx::new(rgba.width()), WholePx::new(rgba.height()));
         Some(crate::ui::render::DecodedImage {
             pixels: rgba.into_raw().into(),
             size,
@@ -218,7 +220,8 @@ impl ToileState {
                 continue;
             };
             let rgba = img.to_rgba8();
-            let size = ambre_core::ImageSize::new(rgba.width(), rgba.height());
+            let size =
+                ambre_core::ImageSize::new(WholePx::new(rgba.width()), WholePx::new(rgba.height()));
             out.insert(
                 ambre_core::ContentHash::from(hash.as_str()),
                 crate::ui::render::DecodedImage {
@@ -424,7 +427,10 @@ mod media_request_tests {
             media: crate::logic::command::MediaRef::Stored(ContentHash(hash.to_owned())),
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from("image/png"),
-            size: ambre_core::ImageSize::new(w, h),
+            size: ambre_core::ImageSize::new(
+                ambre_core::WholePx::new(w),
+                ambre_core::WholePx::new(h),
+            ),
             thumb: ambre_core::ThumbnailPng::new(thumb),
         }
     }
@@ -459,7 +465,10 @@ mod media_request_tests {
             })
             .expect("the request is answered");
         assert_eq!(answer.0.as_str(), "img");
-        assert_eq!(answer.1, ambre_core::ImageSize::new(4, 2));
+        assert_eq!(
+            answer.1,
+            ambre_core::ImageSize::new(ambre_core::WholePx::new(4), ambre_core::WholePx::new(2))
+        );
         // RGBA8, row-major, no padding: exactly four bytes a texel.
         assert_eq!(answer.2, 4 * 2 * 4);
     }

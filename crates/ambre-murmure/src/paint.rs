@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx, ViewSize};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx, ViewSize, WholePx};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
     Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
@@ -837,10 +837,12 @@ fn preview_boxes<'r>(
     for file in previewed(row, pics) {
         let aspect = pics
             .and_then(|pics| pics.shelf.get(&file.media_ref))
-            .filter(|picture| picture.size.width > 0 && picture.size.height > 0)
+            .filter(|picture| {
+                picture.size.width > WholePx::ZERO && picture.size.height > WholePx::ZERO
+            })
             .map_or(PLACEHOLDER_ASPECT, |picture| {
                 #[allow(clippy::cast_precision_loss)]
-                let aspect = picture.size.width as f32 / picture.size.height as f32;
+                let aspect = picture.size.width.get() as f32 / picture.size.height.get() as f32;
                 aspect
             });
         y += SPACE_2;
@@ -1506,7 +1508,7 @@ pub(crate) mod tests {
             delay,
         };
         let gif = Picture {
-            size: ambre_core::ImageSize::new(2, 1),
+            size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(1)),
             frames: vec![
                 frame(ambre_core::Millis(100)),
                 frame(ambre_core::Millis(100)),

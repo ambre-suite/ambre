@@ -151,7 +151,7 @@ const REVEAL_SLACK: ViewPx = ViewPx::new(0.5);
 /// pixel is a CSS pixel in size (`CANVAS-032`).
 fn view_size(size: ambre_canvas::CssSize) -> ViewSize {
     #[allow(clippy::cast_precision_loss)]
-    let (width, height) = (size.width as f32, size.height as f32);
+    let (width, height) = (size.width.get() as f32, size.height.get() as f32);
     ViewSize::new(ViewPx::new(width), ViewPx::new(height))
 }
 
@@ -2029,7 +2029,10 @@ mod tests {
             }),
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
         };
-        let size = ambre_canvas::CssSize::new(300, 400);
+        let size = ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        );
         let view = MurmureView::new(
             Some(from_logic),
             Some(to_logic),
@@ -2147,7 +2150,10 @@ mod tests {
         assert!(frame(&mut page.view));
         assert_eq!(laid_out(&page.view), Some(3));
         assert_eq!(reads(&page).0, 1, "a new latest message moves it again");
-        page.view.resize(ambre_canvas::CssSize::new(300, 400));
+        page.view.resize(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         assert!(frame(&mut page.view));
         assert_eq!(reads(&page).0, 0, "the same latest message moves it once");
     }
@@ -2173,7 +2179,10 @@ mod tests {
             messages: replies.to_vec(),
         };
         send(&page, channel, ev);
-        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         page.pane.set(MurmurePane::Thread {
             channel,
             root: MessageRef {
@@ -3068,7 +3077,10 @@ mod tests {
             message: root.id,
         };
         page.pane.set(MurmurePane::Thread { channel, root: at });
-        let mut view = page.view.region(ambre_canvas::CssSize::new(300, 200));
+        let mut view = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(200),
+        ));
         frame(&mut page.view);
         frame(&mut view);
         assert!(page.said.borrow().is_empty(), "the first list is not news");
@@ -3352,7 +3364,10 @@ mod tests {
             messages: vec![reply.clone()],
         };
         send(&page, channel, ev);
-        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         page.pane.set(MurmurePane::Thread {
             channel,
             root: MessageRef {
@@ -3876,7 +3891,10 @@ mod tests {
             delay: ambre_core::Millis(100),
         };
         let gif = Picture {
-            size: ambre_core::ImageSize::new(2, 1),
+            size: ambre_core::ImageSize::new(
+                ambre_core::WholePx::new(2),
+                ambre_core::WholePx::new(1),
+            ),
             frames: vec![frame(), frame()],
         };
         let picture = Some(gif);
@@ -3914,7 +3932,10 @@ mod tests {
             delay: ambre_core::Millis(100),
         };
         let picture = Some(Picture {
-            size: ambre_core::ImageSize::new(1, 1),
+            size: ambre_core::ImageSize::new(
+                ambre_core::WholePx::new(1),
+                ambre_core::WholePx::new(1),
+            ),
             frames: vec![frame(), frame()],
         });
         let media_ref = file.media_ref.clone();
@@ -4520,7 +4541,10 @@ mod tests {
             "the composer's Escape reads nothing"
         );
 
-        let thread_view = composing.view.region(ambre_canvas::CssSize::new(300, 400));
+        let thread_view = composing.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         let mut thread = Page {
             view: thread_view,
             ..composing
@@ -4796,7 +4820,10 @@ mod tests {
         });
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "a channel new on screen ticks at once");
-        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(300, 400));
+        let mut thread_view = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         page.clock.set(ambre_bus::PageTime(
             10.0 * TICK_PERIOD.to_page_millis().get(),
         ));
@@ -4939,7 +4966,10 @@ mod tests {
             message: root.id,
         };
         page.pane.set(MurmurePane::Thread { channel, root: at });
-        let thread = page.view.region(ambre_canvas::CssSize::new(300, 400));
+        let thread = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         let mut channel_view = std::mem::replace(&mut page.view, thread);
         frame_with_fonts(&mut channel_view);
         frame_with_fonts(&mut page.view);
@@ -5198,7 +5228,10 @@ mod tests {
             ambre_bus::PageTime(0.0),
         );
         drop(std::mem::replace(&mut page.view, channel_view));
-        page.view = page.view.region(ambre_canvas::CssSize::new(300, 400));
+        page.view = page.view.region(ambre_canvas::CssSize::new(
+            ambre_core::WholePx::new(300),
+            ambre_core::WholePx::new(400),
+        ));
         page.pane.set(pane);
         let of = DraftOf::Thread(channel, root);
         assert_eq!(painted(&mut page, of).as_deref(), Some("later"));

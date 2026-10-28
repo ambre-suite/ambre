@@ -474,7 +474,8 @@ fn copy_offscreen_with_offset(
     dx: DevicePx,
     dy: DevicePx,
 ) {
-    let (width, height) = (size.width, size.height);
+    // wgpu takes the bare edges.
+    let (width, height) = (size.width.get(), size.height.get());
     // Compute the overlapping region: source rect that has a valid mapping
     // into the destination. Out-of-range deltas leave nothing to copy.
     let dx_abs = dx.unsigned_abs();

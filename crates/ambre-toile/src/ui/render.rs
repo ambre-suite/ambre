@@ -592,6 +592,7 @@ mod tests {
         DisplayConnector, DisplayElement, ElementId, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_core::Rgba;
+    use ambre_core::WholePx;
     use ambre_draw::Color;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -1077,7 +1078,7 @@ mod tests {
             "h1".into(),
             DecodedImage {
                 pixels: vec![0u8; 4].into(),
-                size: ambre_core::ImageSize::new(1, 1),
+                size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(1)),
             },
         );
         let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
@@ -1128,7 +1129,7 @@ mod tests {
             "h1".into(),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
-                size: ambre_core::ImageSize::new(2, 2),
+                size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
             },
         );
         let mut surface = RecordingSurface::new();
@@ -2133,7 +2134,7 @@ mod tests {
             "h".into(),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
-                size: ambre_core::ImageSize::new(2, 2),
+                size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
             },
         );
         pass.anim.insert(tween.id.clone(), tween.clone());

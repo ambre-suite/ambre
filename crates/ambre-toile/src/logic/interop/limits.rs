@@ -6,6 +6,7 @@
 //! is applied (invariant). Coordinates are clamped rather than rejected so a
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
+use ambre_core::WholePx;
 use kurbo::{Point, Rect};
 
 use super::ImportError;
@@ -38,7 +39,7 @@ impl Default for Limits {
             // for the CRDT geometry fields.
             coord_clamp: 1_000_000.0,
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
-            max_image: ambre_core::ImageSize::new(8_192, 8_192),
+            max_image: ambre_core::ImageSize::new(WholePx::new(8_192), WholePx::new(8_192)),
         }
     }
 }
@@ -173,16 +174,19 @@ mod tests {
     #[test]
     fn image_dim_guard() {
         let l = Limits {
-            max_image: ambre_core::ImageSize::new(256, 256),
+            max_image: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
             ..Limits::default()
         };
         assert!(
-            l.check_image_dims(ambre_core::ImageSize::new(256, 128))
-                .is_ok()
+            l.check_image_dims(ambre_core::ImageSize::new(
+                WholePx::new(256),
+                WholePx::new(128)
+            ))
+            .is_ok()
         );
         assert!(matches!(
-            l.check_image_dims(ambre_core::ImageSize::new(257, 10)),
-            Err(ImportError::ImageTooLarge { limit, .. }) if limit == ambre_core::ImageSize::new(256, 256)
+            l.check_image_dims(ambre_core::ImageSize::new(WholePx::new(257), WholePx::new(10))),
+            Err(ImportError::ImageTooLarge { limit, .. }) if limit == ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256))
         ));
     }
 }
