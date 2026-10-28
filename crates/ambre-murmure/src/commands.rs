@@ -13,7 +13,8 @@ use ambre_bus::{
     MurmureCommand, StyleMark, Timestamp,
 };
 use ambre_commands::{
-    Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
+    Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
+    Modifiers,
 };
 use ambre_core::{DocumentId, UserId};
 
@@ -136,7 +137,7 @@ pub const COMMANDS: &[Command] = &[
         icon: None,
         // Not Shift+Escape: Chrome opens its task manager on it, and the
         // page never sees the key.
-        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::Char('a'))],
+        keybindings: &[KeyBinding::new(Modifiers::ALT_SHIFT, Key::Char(KeyChar::A))],
         category: UNREAD,
     },
     Command {
@@ -571,7 +572,7 @@ pub const REGION_KEYS: &[RegionKey] = &[
         KeyPlace::ThreadList,
     ),
     region_key(
-        KeyBinding::shift(Key::F(10)),
+        KeyBinding::shift(Key::F(FunctionKey::F10)),
         "Open the actions of the focused message",
         KeyPlace::List,
     ),

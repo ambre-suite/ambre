@@ -111,7 +111,7 @@ pub fn menu_key(key: Key, mods: Modifiers, at: usize, initials: &[char]) -> Menu
         // The key holds its letter lowercased already.
         Key::Char(ch) => (1..=len)
             .map(|off| (at + off) % len)
-            .find(|&i| initials.get(i) == Some(&ch))
+            .find(|&i| initials.get(i) == Some(&ch.get()))
             .map_or(MenuKey::Pass, MenuKey::Focus),
         _ => MenuKey::Pass,
     }
@@ -244,6 +244,7 @@ pub fn on_menu_keydown(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_commands::FunctionKey;
 
     const ITEMS: [char; 4] = ['c', 'p', 'c', 'd'];
 
@@ -322,7 +323,7 @@ mod tests {
             MenuKey::Dismiss
         );
         assert_eq!(
-            menu_key(Key::F(1), Modifiers::NONE, 1, &ITEMS),
+            menu_key(Key::F(FunctionKey::F1), Modifiers::NONE, 1, &ITEMS),
             MenuKey::Pass
         );
     }

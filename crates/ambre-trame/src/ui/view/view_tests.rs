@@ -4,7 +4,7 @@
 //! reads a clock the test moves.
 
 use ambre_canvas::PointerButton;
-use ambre_commands::{Key, Modifiers};
+use ambre_commands::{FunctionKey, Key, Modifiers};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -710,7 +710,7 @@ fn a_session_on_a_formula_starts_from_the_formula() {
     let mut rig = Rig::new();
     rig.store((0, 0), "=1+2", "3");
     rig.frame();
-    rig.key(Key::F(2));
+    rig.key(Key::F(FunctionKey::F2));
     assert_eq!(
         rig.view.editor.as_ref().map(|e| e.text()).as_deref(),
         Some("=1+2")

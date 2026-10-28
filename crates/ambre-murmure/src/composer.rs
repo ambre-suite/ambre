@@ -33,7 +33,7 @@ use ambre_bus::{
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
-use ambre_commands::{Key, Modifiers};
+use ambre_commands::{Key, KeyChar, Modifiers};
 use ambre_core::{
     ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize,
     ZoomFactor, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
@@ -856,8 +856,8 @@ impl Composer {
                 self.blur();
                 return true;
             }
-            Key::Char('z' | 'y') if primary => {
-                let step = if shift || key == Key::Char('y') {
+            Key::Char(KeyChar::Z | KeyChar::Y) if primary => {
+                let step = if shift || key == Key::Char(KeyChar::Y) {
                     HistoryStep::Redo
                 } else {
                     HistoryStep::Undo
@@ -868,7 +868,7 @@ impl Composer {
                 self.saying = Some((of, Say::Draft));
                 return true;
             }
-            Key::Char('a') if primary => EditIntent::SelectAll,
+            Key::Char(KeyChar::A) if primary => EditIntent::SelectAll,
             Key::Backspace => EditIntent::Backspace,
             Key::Delete => EditIntent::Delete,
             Key::ArrowLeft => EditIntent::Left {

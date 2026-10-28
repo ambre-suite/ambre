@@ -24,7 +24,7 @@ use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
 };
-use ambre_commands::{ClipboardWrite, Key, KeyBinding, Modifiers};
+use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
 use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
@@ -1656,7 +1656,9 @@ impl MurmureView {
                 let shift = mods.shift();
                 match key {
                     Key::ContextMenu => (self.reads.act_on)(self.target_of_focus()),
-                    Key::F(10) if shift => (self.reads.act_on)(self.target_of_focus()),
+                    Key::F(FunctionKey::F10) if shift => {
+                        (self.reads.act_on)(self.target_of_focus())
+                    }
                     Key::PageUp if shift => self.rest_at_first_unread(),
                     Key::PageDown => self.page(1.0),
                     Key::PageUp => self.page(-1.0),
@@ -3447,14 +3449,14 @@ mod tests {
             ambre_bus::PageTime(30.0)
         ));
         let shift_f10 = InputEvent::Key {
-            key: Key::F(10),
+            key: Key::F(FunctionKey::F10),
             mods: Modifiers::SHIFT,
         };
         assert!(page.view.handle_input(&shift_f10));
         assert!(
             !key(
                 &mut page,
-                Key::F(10),
+                Key::F(FunctionKey::F10),
                 Modifiers::NONE,
                 ambre_bus::PageTime(40.0)
             ),
@@ -4097,7 +4099,7 @@ mod tests {
         assert!(
             !key(
                 &mut page,
-                Key::F(5),
+                Key::F(FunctionKey::F5),
                 Modifiers::NONE,
                 ambre_bus::PageTime(0.0)
             ),

@@ -75,7 +75,7 @@ use super::viewport::ViewportTransform;
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, CommandId, Key, Modifiers};
+use ambre_commands::{ClipboardWrite, CommandId, Key, KeyChar, Modifiers};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
@@ -3003,18 +3003,18 @@ impl ToileView {
             match key {
                 // Undo / redo (`toile-undo`). Ctrl+Shift+Z and
                 // Ctrl+Y both redo.
-                Key::Char('z') if shift => {
+                Key::Char(KeyChar::Z) if shift => {
                     self.send_edit(ToileCommand::Redo);
                 }
-                Key::Char('z') => {
+                Key::Char(KeyChar::Z) => {
                     self.send_edit(ToileCommand::Undo);
                 }
-                Key::Char('y') => {
+                Key::Char(KeyChar::Y) => {
                     self.send_edit(ToileCommand::Redo);
                 }
                 // Duplicate the selection with a small diagonal nudge
                 // (`toile-undo`).
-                Key::Char('d') if !self.selection.is_empty() => {
+                Key::Char(KeyChar::D) if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::DuplicateElements {
                         ids: self.selection.clone(),
                         delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
@@ -3023,19 +3023,19 @@ impl ToileView {
                 // Group / ungroup the selection (`toile-groups`).
                 // One command for the whole selection, so one undo item
                 // (`TOILE-094`).
-                Key::Char('g') if shift => {
+                Key::Char(KeyChar::G) if shift => {
                     if let Some(cmd) = super::menu::ungroup_chord(&self.selection) {
                         self.send_edit(cmd);
                     }
                 }
-                Key::Char('g') if !self.selection.is_empty() => {
+                Key::Char(KeyChar::G) if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::GroupElements {
                         ids: self.selection.clone(),
                     });
                 }
                 // Local select-all over every displayed element (connectors are
                 // selected with their endpoints, not directly).
-                Key::Char('a') => self.select_all(),
+                Key::Char(KeyChar::A) => self.select_all(),
                 _ => return false,
             }
             self.needs_full = true;
@@ -3550,7 +3550,7 @@ impl ToileView {
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
         if cmd {
             match key {
-                Key::Char('a') => {
+                Key::Char(KeyChar::A) => {
                     self.push_intent(EditIntent::SelectAll);
                     return true;
                 }

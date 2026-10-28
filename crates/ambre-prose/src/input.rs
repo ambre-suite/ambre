@@ -8,7 +8,7 @@
 
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
-use ambre_commands::{ClipboardWrite, Key, Modifiers, SelectionMode};
+use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers, SelectionMode};
 use ambre_core::{StepDirection, ViewPoint, ViewPx};
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
@@ -68,9 +68,9 @@ impl ProseKey {
             Key::Delete => Self::Delete,
             Key::Enter => Self::Enter,
             Key::Escape => Self::Escape,
-            Key::Char('a') if ctrl => Self::SelectAll,
-            Key::Char('z') if ctrl => Self::Undo,
-            Key::Char('y') if ctrl => Self::Redo,
+            Key::Char(KeyChar::A) if ctrl => Self::SelectAll,
+            Key::Char(KeyChar::Z) if ctrl => Self::Undo,
+            Key::Char(KeyChar::Y) if ctrl => Self::Redo,
             _ => return None,
         })
     }

@@ -3,7 +3,7 @@
 
 use super::*;
 use ambre_canvas::PointerButton;
-use ambre_commands::{Key, Modifiers, SelectionMode};
+use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
 use ambre_core::{ViewPoint, ViewPx};
 use ambre_draw::kinetic::Release;
 
@@ -416,13 +416,13 @@ impl TrameView {
                     // Delete / Backspace clear the active cell.
                     Key::Delete | Key::Backspace => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
-                    Key::F(2) => {
+                    Key::F(FunctionKey::F2) => {
                         let seed = self.cell_seed(self.state.active_cell());
                         self.begin_edit(seed);
                         true
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
-                    Key::Char('t') if mods.alt() => {
+                    Key::Char(KeyChar::T) if mods.alt() => {
                         self.text_pass = match self.text_pass {
                             TextPass::Shapes => TextPass::WithText,
                             TextPass::WithText => TextPass::Shapes,

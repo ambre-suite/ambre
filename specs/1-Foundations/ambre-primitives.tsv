@@ -737,8 +737,6 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
-ambre-commands | src/keybinding.rs | crate::keybinding | Key::Char.0 | field | char	newtype-inner	newtype inner
-ambre-commands | src/keybinding.rs | crate::keybinding | Key::F.0 | field | u8	newtype-inner	newtype inner
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::char(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary_shift(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
@@ -1455,7 +1453,6 @@ ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | 
 ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	newtype-inner	table keyed by TextStyle enum
-ambre-murmure | src/markers.rs | crate::markers | MARK_CHORDS | const | [(char,TextStyle);3]	newtype-inner	table keyed by TextStyle enum
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	free-text	the draft text after an edit, as its chars; the three offsets it returns are CharOffset
@@ -4016,3 +4013,7 @@ ambre-core | src/unit.rs | crate::unit | WholePx<P>::new(n) | param | u32	newtyp
 ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	the inside of the alpha channel of a packed colour, as a renderer takes it
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
 ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one
+ambre-commands | src/keybinding.rs | crate::keybinding | FunctionKey::from_dom_number(digits) | param | &str	foreign-api	the digits a DOM KeyboardEvent.key spells after its F
+ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar.0 | field | char	newtype-inner	the inside of the character of a key, lowercased for an ASCII letter
+ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::get() | ret | char	newtype-inner	the one way out of the character of a key, to a label or a menu initial
+ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param | char	newtype-inner	the constructor of the character of a key; it lowercases an ASCII letter

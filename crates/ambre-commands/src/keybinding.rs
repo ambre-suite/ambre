@@ -124,12 +124,123 @@ ambre_core::define_flag! {
     }
 }
 
+/// The printable character of a [`Key::Char`]. An ASCII letter is lowercased
+/// at construction, so 'B' and 'b' chord identically. The shift state, if
+/// any, lives in [`Modifiers`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct KeyChar(char);
+
+/// One constant per ASCII letter, so a match arm names a letter key.
+macro_rules! key_letters {
+    ($($name:ident $c:literal),* $(,)?) => {
+        impl KeyChar {
+            $(
+                #[doc = concat!("The letter key `", $c, "`.")]
+                pub const $name: Self = Self($c);
+            )*
+        }
+    };
+}
+
+key_letters! {
+    A 'a', B 'b', C 'c', D 'd', E 'e', F 'f', G 'g', H 'h', I 'i', J 'j', K 'k', L 'l', M 'm',
+    N 'n', O 'o', P 'p', Q 'q', R 'r', S 's', T 't', U 'u', V 'v', W 'w', X 'x', Y 'y', Z 'z',
+}
+
+impl KeyChar {
+    /// The key of the character `c`, lowercased for an ASCII letter.
+    #[must_use]
+    pub const fn new(c: char) -> Self {
+        Self(c.to_ascii_lowercase())
+    }
+
+    /// The character, lowercased for an ASCII letter.
+    #[must_use]
+    pub const fn get(self) -> char {
+        self.0
+    }
+}
+
+/// A function key, F1 to F24: the keys a DOM `KeyboardEvent.key` names
+/// "F1" to "F24". Its discriminant is its number.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(u8)]
+pub enum FunctionKey {
+    F1 = 1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    F13,
+    F14,
+    F15,
+    F16,
+    F17,
+    F18,
+    F19,
+    F20,
+    F21,
+    F22,
+    F23,
+    F24,
+}
+
+impl FunctionKey {
+    /// Every function key, in the order of its number.
+    pub const ALL: [Self; 24] = [
+        Self::F1,
+        Self::F2,
+        Self::F3,
+        Self::F4,
+        Self::F5,
+        Self::F6,
+        Self::F7,
+        Self::F8,
+        Self::F9,
+        Self::F10,
+        Self::F11,
+        Self::F12,
+        Self::F13,
+        Self::F14,
+        Self::F15,
+        Self::F16,
+        Self::F17,
+        Self::F18,
+        Self::F19,
+        Self::F20,
+        Self::F21,
+        Self::F22,
+        Self::F23,
+        Self::F24,
+    ];
+
+    /// The key a DOM name spells after its "F": "1" to "24".
+    fn from_dom_number(digits: &str) -> Option<Self> {
+        let n: usize = digits.parse().ok()?;
+        n.checked_sub(1).and_then(|at| Self::ALL.get(at)).copied()
+    }
+}
+
+/// The name a key cap prints: "F10".
+impl core::fmt::Display for FunctionKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "F{}", *self as u8)
+    }
+}
+
 /// Logical key of a chord. Letters are normalized to a lowercase `Char` so a
 /// chord is shift-state independent except through `Modifiers::SHIFT`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
     /// A printable character, lowercased for ASCII letters at construction.
-    Char(char),
+    Char(KeyChar),
     Enter,
     Escape,
     Tab,
@@ -148,7 +259,7 @@ pub enum Key {
     PageUp,
     PageDown,
     /// Function key F1..=F24.
-    F(u8),
+    F(FunctionKey),
     /// The key that opens a context menu, beside the right Alt.
     ContextMenu,
 }
@@ -157,7 +268,7 @@ impl Key {
     /// Build a character key, lowercasing ASCII letters so 'B' and 'b' chord
     /// identically (the shift state, if any, lives in `Modifiers`).
     pub const fn char(c: char) -> Self {
-        Self::Char(c.to_ascii_lowercase())
+        Self::Char(KeyChar::new(c))
     }
 
     /// The key a DOM `KeyboardEvent.key` names, `None` for a key the set does
@@ -183,11 +294,8 @@ impl Key {
             "ContextMenu" => Self::ContextMenu,
             other => {
                 // Function keys "F1".."F24".
-                if let Some(n) = other.strip_prefix('F').and_then(|d| d.parse::<u8>().ok()) {
-                    if (1..=24).contains(&n) {
-                        return Some(Self::F(n));
-                    }
-                    return None;
+                if let Some(digits) = other.strip_prefix('F').filter(|d| d.parse::<u8>().is_ok()) {
+                    return FunctionKey::from_dom_number(digits).map(Self::F);
                 }
                 // Single printable character (letters arrive as "a"/"A").
                 let mut chars = other.chars();
@@ -258,7 +366,7 @@ impl core::fmt::Display for KeyBinding {
             f.write_str("Shift+")?;
         }
         match self.key {
-            Key::Char(c) => write!(f, "{}", c.to_ascii_uppercase()),
+            Key::Char(c) => write!(f, "{}", c.get().to_ascii_uppercase()),
             Key::Enter => f.write_str("Enter"),
             Key::Escape => f.write_str("Esc"),
             Key::Tab => f.write_str("Tab"),
@@ -274,7 +382,7 @@ impl core::fmt::Display for KeyBinding {
             Key::End => f.write_str("End"),
             Key::PageUp => f.write_str("PageUp"),
             Key::PageDown => f.write_str("PageDown"),
-            Key::F(n) => write!(f, "F{n}"),
+            Key::F(n) => n.fmt(f),
             Key::ContextMenu => f.write_str("Menu"),
         }
     }
@@ -286,10 +394,10 @@ mod tests {
 
     #[test]
     fn char_key_lowercases_ascii_letters() {
-        assert_eq!(Key::char('B'), Key::Char('b'));
-        assert_eq!(Key::char('b'), Key::Char('b'));
-        // Non-letters are untouched.
-        assert_eq!(Key::char('/'), Key::Char('/'));
+        assert_eq!(Key::char('B'), Key::Char(KeyChar::B));
+        assert_eq!(Key::char('b'), Key::Char(KeyChar::B));
+        assert_eq!(KeyChar::new('/').get(), '/');
+        assert_eq!(Key::char('/'), Key::Char(KeyChar::new('/')));
     }
 
     #[test]
@@ -354,7 +462,7 @@ mod tests {
             "Esc"
         );
         assert_eq!(
-            KeyBinding::new(Modifiers::NONE, Key::F(5)).to_string(),
+            KeyBinding::new(Modifiers::NONE, Key::F(FunctionKey::F5)).to_string(),
             "F5"
         );
     }
@@ -375,8 +483,8 @@ mod tests {
 
     #[test]
     fn function_keys_in_range() {
-        assert_eq!(Key::from_dom("F1"), Some(Key::F(1)));
-        assert_eq!(Key::from_dom("F24"), Some(Key::F(24)));
+        assert_eq!(Key::from_dom("F1"), Some(Key::F(FunctionKey::F1)));
+        assert_eq!(Key::from_dom("F24"), Some(Key::F(FunctionKey::F24)));
     }
 
     #[test]

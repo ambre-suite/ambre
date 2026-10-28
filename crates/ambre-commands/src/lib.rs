@@ -15,7 +15,7 @@
 mod keybinding;
 mod mode;
 
-pub use keybinding::{Key, KeyBinding, KeyState, Modifiers};
+pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, Modifiers};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
 use std::collections::HashMap;

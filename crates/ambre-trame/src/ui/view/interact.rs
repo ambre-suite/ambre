@@ -5,7 +5,7 @@ use super::*;
 use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
-use ambre_commands::Key;
+use ambre_commands::{Key, KeyChar};
 use ambre_core::{DocPoint, DocPx, ViewPoint};
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
@@ -737,7 +737,7 @@ impl TrameView {
                         self.edit_dirty = true;
                         return true;
                     }
-                    if *key == Key::Char('a') {
+                    if *key == Key::Char(KeyChar::A) {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.select_all();
                         }

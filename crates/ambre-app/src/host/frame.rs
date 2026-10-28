@@ -704,7 +704,7 @@ mod tests {
     use ambre_bus::app::toile::ElementId;
     use ambre_bus::{DocType, DocumentId};
     use ambre_canvas::InputEvent;
-    use ambre_chrome::commands::{Key, Modifiers};
+    use ambre_chrome::commands::{Key, KeyChar, Modifiers};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
     use ambre_toile::ui::embed::VisibleEmbed;
@@ -784,7 +784,7 @@ mod tests {
         assert!(matches!(
             remap_with(&key, |_| None),
             Some(InputEvent::Key {
-                key: Key::Char('a'),
+                key: Key::Char(KeyChar::A),
                 mods: Modifiers::PRIMARY_SHIFT
             })
         ));

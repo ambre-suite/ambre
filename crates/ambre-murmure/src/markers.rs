@@ -7,7 +7,7 @@
 //! mentions do (`MURMURE-553`).
 
 use ambre_bus::{StyleMark, TextStyle};
-use ambre_commands::Key;
+use ambre_commands::{Key, KeyChar};
 use ambre_core::{
     ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, ViewPoint, byte_to_char, char_len,
 };
@@ -17,10 +17,10 @@ use crate::style::linkable;
 
 /// The chord of each style, `Ctrl` with this key, the one Prose binds to the
 /// same mark (`MURMURE-431`).
-pub const MARK_CHORDS: [(char, TextStyle); 3] = [
-    ('b', TextStyle::Bold),
-    ('i', TextStyle::Italic),
-    ('e', TextStyle::Code),
+pub const MARK_CHORDS: [(KeyChar, TextStyle); 3] = [
+    (KeyChar::B, TextStyle::Bold),
+    (KeyChar::I, TextStyle::Italic),
+    (KeyChar::E, TextStyle::Code),
 ];
 
 /// The controls of the format bar, in the order Prose shows the same marks,
@@ -631,7 +631,12 @@ mod tests {
         assert_eq!(chord_style(Key::char('b')), Some(TextStyle::Bold));
         assert_eq!(chord_style(Key::char('I')), Some(TextStyle::Italic));
         assert_eq!(chord_style(Key::char('e')), Some(TextStyle::Code));
-        for key in [Key::char('x'), Key::Space, Key::Enter, Key::F(2)] {
+        for key in [
+            Key::char('x'),
+            Key::Space,
+            Key::Enter,
+            Key::F(ambre_commands::FunctionKey::F2),
+        ] {
             assert_eq!(chord_style(key), None, "{key:?}");
         }
         for key in ["*", "_", "`", ")"] {
