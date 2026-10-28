@@ -270,6 +270,57 @@ pub enum WsServerMsg {
 // Wire encoding (postcard + version byte)
 // ---------------------------------------------------------------------------
 
+/// One socket frame: the version byte, then a postcard message. The encoders
+/// write one and the decoders read one, so a byte string from elsewhere does
+/// not reach a decoder untyped. It holds sealed envelopes, so `Debug` prints
+/// the length alone (`ZK-006`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct WireFrame(Vec<u8>);
+
+impl WireFrame {
+    /// The frame a socket delivered.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes the socket carries.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The bytes, owned, for the socket that sends them.
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    /// The length in bytes.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether the frame holds no byte, not even the version.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<Vec<u8>> for WireFrame {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl std::fmt::Debug for WireFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WireFrame({} bytes)", self.0.len())
+    }
+}
+
 /// Encode a client message for the wire.
 ///
 /// # Panics
@@ -280,9 +331,9 @@ pub enum WsServerMsg {
     clippy::expect_used,
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
-pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
+pub fn encode_client_msg(msg: &WsClientMsg) -> WireFrame {
     let buf = vec![CURRENT_VERSION.as_u8()];
-    postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg")
+    WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg"))
 }
 
 /// Decode a client message from the wire.
@@ -293,8 +344,8 @@ pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
 /// * [`WireDecodeError::UnsupportedVersion`] when the first byte is not the
 ///   wire version.
 /// * [`WireDecodeError::Postcard`] when the body does not decode.
-pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
-    let Some((&version, body)) = data.split_first() else {
+pub fn decode_client_msg(frame: &WireFrame) -> Result<WsClientMsg, WireDecodeError> {
+    let Some((&version, body)) = frame.0.split_first() else {
         return Err(WireDecodeError::Empty);
     };
     match version {
@@ -313,9 +364,9 @@ pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
     clippy::expect_used,
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
-pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
+pub fn encode_server_msg(msg: &WsServerMsg) -> WireFrame {
     let buf = vec![CURRENT_VERSION.as_u8()];
-    postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg")
+    WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg"))
 }
 
 /// Decode a server message from the wire.
@@ -323,8 +374,8 @@ pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
 /// # Errors
 ///
 /// The three errors [`decode_client_msg`] raises, on the same three inputs.
-pub fn decode_server_msg(data: &[u8]) -> Result<WsServerMsg, WireDecodeError> {
-    let Some((&version, body)) = data.split_first() else {
+pub fn decode_server_msg(frame: &WireFrame) -> Result<WsServerMsg, WireDecodeError> {
+    let Some((&version, body)) = frame.0.split_first() else {
         return Err(WireDecodeError::Empty);
     };
     match version {

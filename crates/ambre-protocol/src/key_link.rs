@@ -4,7 +4,7 @@
 //! the rotator (`SYNC-116`). The relay stores the link and indexes it by the two
 //! identifiers it names, and opens nothing: the sealed key is a client object.
 
-use ambre_core::{DocumentId, KeyId};
+use ambre_core::{DocumentId, EncodedKeyLink, KeyId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{SerializationError, ValidationError};
@@ -54,8 +54,8 @@ impl KeyLink {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn encode(&self) -> Result<Vec<u8>, SerializationError> {
-        Ok(postcard::to_allocvec(self)?)
+    pub fn encode(&self) -> Result<EncodedKeyLink, SerializationError> {
+        Ok(EncodedKeyLink::new(postcard::to_allocvec(self)?))
     }
 
     /// Reads back what [`Self::encode`] wrote.
@@ -63,8 +63,8 @@ impl KeyLink {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] for bytes that are not a link.
-    pub fn decode(bytes: &[u8]) -> Result<Self, SerializationError> {
-        Ok(postcard::from_bytes(bytes)?)
+    pub fn decode(encoded: &EncodedKeyLink) -> Result<Self, SerializationError> {
+        Ok(postcard::from_bytes(encoded.as_bytes())?)
     }
 }
 
@@ -100,7 +100,8 @@ mod tests {
     /// its length as a varint, then the bytes.
     #[test]
     fn a_link_encodes_its_seal_as_a_plain_byte_string() {
-        let encoded = link(220, 3).encode().unwrap();
+        let link = link(220, 3).encode().unwrap();
+        let encoded = link.as_bytes();
         let seal = [[0xdc, 0x01].as_slice(), &[7; 220]].concat();
         assert!(
             encoded.ends_with(&seal),

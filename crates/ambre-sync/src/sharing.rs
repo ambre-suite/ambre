@@ -2180,7 +2180,7 @@ mod tests {
     fn posted_link(body: &serde_json::Value) -> ambre_protocol::KeyLink {
         let link: ambre_core::EncodedKeyLink =
             serde_json::from_value(body["link"].clone()).expect("the request carries a link");
-        ambre_protocol::KeyLink::decode(link.as_bytes()).unwrap()
+        ambre_protocol::KeyLink::decode(&link).unwrap()
     }
 
     /// A members row, for the revoke and the debt tests.

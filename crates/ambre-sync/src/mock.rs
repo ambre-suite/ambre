@@ -23,9 +23,9 @@ use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_clien
 /// ```
 pub struct MockWsTransport {
     /// Client -> Server: the Sync state pushes encoded `WsClientMsg` bytes here.
-    pub client_tx: ambre_bus::conduit::UnboundedSender<Vec<u8>>,
+    pub client_tx: ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
     /// Client -> Server: drained by the test harness.
-    pub server_rx: ambre_bus::conduit::Receiver<Vec<u8>>,
+    pub server_rx: ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
     /// Server -> Client: the test harness pushes `WsServerMsg` here.
     pub server_tx: ambre_bus::conduit::UnboundedSender<WsServerMsg>,
     /// Server -> Client: drained by the Sync state (via `receive_server_msg`).

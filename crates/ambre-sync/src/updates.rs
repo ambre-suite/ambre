@@ -358,7 +358,8 @@ impl SyncState {
                     snapshot_id,
                     &check.author,
                 );
-                let signature = ed25519_dalek::Signer::sign(signing_key, &transcript).to_bytes();
+                let signature =
+                    ed25519_dalek::Signer::sign(signing_key, transcript.as_bytes()).to_bytes();
                 tracing::warn!(
                     "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
                      deltas, reporting it"
@@ -2373,7 +2374,7 @@ mod tests {
     // -- Snapshot lifecycle (upload adoption + cold-start seq gating) ----------
 
     /// Drain the WsClientMsg this state sent to its mock WS, decoded.
-    fn drain_ws(rx: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+    fn drain_ws(rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>) -> Vec<WsClientMsg> {
         rx.try_iter()
             .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
             .collect()
@@ -3173,7 +3174,7 @@ mod tests {
                 assert!(
                     reporter
                         .verifying_key()
-                        .verify_strict(&transcript, &signature)
+                        .verify_strict(transcript.as_bytes(), &signature)
                         .is_ok()
                 );
                 let sent = transport.sent.borrow();
@@ -3305,7 +3306,7 @@ mod tests {
                 make_update(doc, parent, Clock(clock), b"x", &key, &sk),
             );
         }
-        let asks = |rx: &ambre_bus::conduit::Receiver<Vec<u8>>| {
+        let asks = |rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>| {
             drain_ws(rx)
                 .iter()
                 .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
@@ -3326,7 +3327,7 @@ mod tests {
 
     /// Each update sent, as its clock, the key it names and its plaintext.
     fn sent_updates(
-        rx: &ambre_bus::conduit::Receiver<Vec<u8>>,
+        rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
         keys: &[&DocumentKey],
     ) -> Vec<(u64, KeyId, Vec<u8>)> {
         opened_updates(drain_ws(rx), keys)
@@ -4280,7 +4281,7 @@ mod tests {
 
     /// Each update sent, as the nonce and the delta its body carries.
     fn sent_bodies(
-        rx: &ambre_bus::conduit::Receiver<Vec<u8>>,
+        rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
         key: &DocumentKey,
     ) -> Vec<(SessionNonce, Vec<u8>)> {
         drain_ws(rx)

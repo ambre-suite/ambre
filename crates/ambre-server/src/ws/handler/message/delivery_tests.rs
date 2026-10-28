@@ -63,7 +63,7 @@ async fn forget(state: &AppState, doc_id: DocumentId) {
 fn replayed(frames: &[Vec<u8>]) -> Vec<ambre_protocol::SeqUpdate> {
     match frames
         .iter()
-        .map(|f| decode_server_msg(f).unwrap())
+        .map(|f| decode_server_msg(&ambre_protocol::WireFrame::new(f.clone())).unwrap())
         .collect::<Vec<_>>()
         .as_slice()
     {
@@ -202,7 +202,7 @@ async fn a_replay_over_a_broken_index_is_still_answered(pool: sqlx::PgPool) {
     let frames = replay(&state, &mut conn, doc_id).await;
     let sent: Vec<_> = frames
         .iter()
-        .map(|f| decode_server_msg(f).unwrap())
+        .map(|f| decode_server_msg(&ambre_protocol::WireFrame::new(f.clone())).unwrap())
         .collect();
     assert!(
         matches!(
@@ -247,7 +247,7 @@ async fn a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered(pool: sql
     let frames = replay(&state, &mut conn, doc_id).await;
     let sent: Vec<_> = frames
         .iter()
-        .map(|f| decode_server_msg(f).unwrap())
+        .map(|f| decode_server_msg(&ambre_protocol::WireFrame::new(f.clone())).unwrap())
         .collect();
     match sent.as_slice() {
         [

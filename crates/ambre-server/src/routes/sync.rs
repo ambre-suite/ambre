@@ -160,7 +160,7 @@ pub async fn report_snapshot(
         .ok_or(AppError::InvalidSignature)?;
     let transcript = ambre_protocol::snapshot_report::report_transcript(doc_id, snap_id, &author);
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
-        .and_then(|key| key.verify_strict(&transcript, &signature))
+        .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
         .map_err(|_| AppError::InvalidSignature)?;
     if snap.status != db::SnapshotStatus::Pending {
         return Ok(axum::http::StatusCode::NO_CONTENT);

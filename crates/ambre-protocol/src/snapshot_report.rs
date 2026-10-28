@@ -7,6 +7,8 @@
 
 use ambre_core::{DocumentId, PublicKey, SnapshotId};
 
+use crate::transcript::SignedTranscript;
+
 /// The domain the transcript opens with, so the signature serves no other use.
 pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
 
@@ -17,13 +19,13 @@ pub fn report_transcript(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
     author: &PublicKey,
-) -> Vec<u8> {
+) -> SignedTranscript {
     let mut transcript = Vec::with_capacity(REPORT_DOMAIN.len() + 16 + 16 + 32);
     transcript.extend_from_slice(REPORT_DOMAIN);
     transcript.extend_from_slice(document_id.as_uuid().as_bytes());
     transcript.extend_from_slice(snapshot_id.as_uuid().as_bytes());
     transcript.extend_from_slice(author.as_array());
-    transcript
+    SignedTranscript::new(transcript)
 }
 
 #[cfg(test)]
@@ -37,7 +39,7 @@ mod tests {
         let doc = DocumentId::new();
         let snap = SnapshotId::new();
         let base = report_transcript(doc, snap, &PublicKey::from_array([1; 32]));
-        assert!(base.starts_with(REPORT_DOMAIN));
+        assert!(base.as_bytes().starts_with(REPORT_DOMAIN));
         assert_ne!(
             base,
             report_transcript(DocumentId::new(), snap, &PublicKey::from_array([1; 32]))

@@ -53,10 +53,10 @@ impl MockBlindRelay {
         &mut self,
         user_id: UserId,
     ) -> (
-        ambre_bus::conduit::UnboundedSender<Vec<u8>>,
+        ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
         ambre_bus::conduit::Receiver<WsServerMsg>,
     ) {
-        let (client_tx, _relay_rx) = ambre_bus::conduit::unbounded::<Vec<u8>>();
+        let (client_tx, _relay_rx) = ambre_bus::conduit::unbounded::<ambre_protocol::WireFrame>();
         let (relay_tx, client_rx) = ambre_bus::conduit::unbounded::<WsServerMsg>();
         self.clients.insert(user_id, relay_tx);
         (client_tx, client_rx)
@@ -69,7 +69,7 @@ impl MockBlindRelay {
     ///
     /// When the document entry it just inserted is absent, which no execution
     /// reaches.
-    pub fn handle_message(&mut self, wire: &[u8]) -> bool {
+    pub fn handle_message(&mut self, wire: &ambre_protocol::WireFrame) -> bool {
         let msg = match ambre_protocol::ws::decode_client_msg(wire) {
             Ok(m) => m,
             Err(_) => return false,
@@ -153,7 +153,10 @@ impl MockBlindRelay {
     }
 
     /// Drain all pending client messages and process them through the relay.
-    pub fn drain_client(&mut self, client_rx: &ambre_bus::conduit::Receiver<Vec<u8>>) -> usize {
+    pub fn drain_client(
+        &mut self,
+        client_rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+    ) -> usize {
         let mut count = 0;
         while let Ok(wire) = client_rx.try_recv() {
             if self.handle_message(&wire) {

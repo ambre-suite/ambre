@@ -1036,9 +1036,11 @@ mod handler_tests {
         key: &ed25519_dalek::SigningKey,
     ) -> String {
         use ed25519_dalek::Signer;
-        entry.signature =
-            ambre_protocol::Signature(key.sign(&entry.signed_bytes().unwrap()).to_bytes());
-        base64_encode(&entry.encode().unwrap())
+        entry.signature = ambre_protocol::Signature(
+            key.sign(entry.signed_bytes().unwrap().as_bytes())
+                .to_bytes(),
+        );
+        base64_encode(entry.encode().unwrap().as_bytes())
     }
 
     /// An unsigned entry of `doc` at `position`. The relay walks no digest,
@@ -1511,7 +1513,7 @@ mod handler_tests {
             previous: ambre_core::KeyId::from_array([previous; 16]),
             sealed: ambre_core::SealedPreviousKey::new(vec![key; 200]),
         };
-        base64_encode(&link.encode().unwrap())
+        base64_encode(link.encode().unwrap().as_bytes())
     }
 
     async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
@@ -2084,7 +2086,9 @@ mod handler_tests {
             document_id: ambre_core::DocumentId::new(),
         };
         socket
-            .send(Message::Binary(encode_client_msg(&subscribe).into()))
+            .send(Message::Binary(
+                encode_client_msg(&subscribe).into_bytes().into(),
+            ))
             .await
             .unwrap();
         let reply = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
@@ -2095,7 +2099,9 @@ mod handler_tests {
         let Message::Binary(bytes) = reply else {
             panic!("expected an answer, got {reply:?}");
         };
-        let answer = ambre_protocol::ws::decode_server_msg(&bytes).unwrap();
+        let answer =
+            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(bytes.to_vec()))
+                .unwrap();
         assert!(
             matches!(
                 answer,
@@ -2127,7 +2133,8 @@ mod handler_tests {
             .unwrap();
         let mut garbage = encode_client_msg(&WsClientMsg::Subscribe {
             document_id: ambre_core::DocumentId::new(),
-        });
+        })
+        .into_bytes();
         garbage[1] = 0xff;
         socket.send(Message::Binary(garbage.into())).await.unwrap();
         let answer = next_server_msg(&mut socket).await;
@@ -2172,7 +2179,9 @@ mod handler_tests {
             document_id: crate::ws::PANIC_DOCUMENT,
         };
         victim
-            .send(Message::Binary(encode_client_msg(&panic_frame).into()))
+            .send(Message::Binary(
+                encode_client_msg(&panic_frame).into_bytes().into(),
+            ))
             .await
             .unwrap();
         let ended = tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -2305,7 +2314,9 @@ mod handler_tests {
             .unwrap();
         let subscribe = WsClientMsg::Subscribe { document_id };
         socket
-            .send(Message::Binary(encode_client_msg(&subscribe).into()))
+            .send(Message::Binary(
+                encode_client_msg(&subscribe).into_bytes().into(),
+            ))
             .await
             .unwrap();
         assert!(matches!(
@@ -2338,7 +2349,9 @@ mod handler_tests {
             document_id: ambre_core::DocumentId::new(),
         };
         socket
-            .send(Message::Binary(encode_client_msg(&probe).into()))
+            .send(Message::Binary(
+                encode_client_msg(&probe).into_bytes().into(),
+            ))
             .await
             .unwrap();
         let answer = loop {
@@ -2376,7 +2389,10 @@ mod handler_tests {
                 .ok()?;
             match frame {
                 Message::Binary(bytes) => {
-                    return ambre_protocol::ws::decode_server_msg(&bytes).ok();
+                    return ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+                        bytes.to_vec(),
+                    ))
+                    .ok();
                 }
                 Message::Close(_) => return None,
                 _ => continue,
@@ -2389,6 +2405,7 @@ mod handler_tests {
         encode_client_msg(&WsClientMsg::Authenticate {
             token: ambre_protocol::ws::AccessToken::new(token.to_owned()),
         })
+        .into_bytes()
     }
 
     /// Serves the router on a loopback port and opens the socket at the address
@@ -2418,7 +2435,9 @@ mod handler_tests {
 
         let mut socket = open_socket(state, query).await;
         socket
-            .send(Message::Binary(encode_client_msg(first).into()))
+            .send(Message::Binary(
+                encode_client_msg(first).into_bytes().into(),
+            ))
             .await
             .unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
@@ -3275,7 +3294,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            decode_server_msg(heard.payload()).unwrap(),
+            decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec())).unwrap(),
             WsServerMsg::SnapshotAvailable { snapshot_id, .. } if snapshot_id.to_string() == snap
         ));
         assert!(served_snapshot(&app, &owner, &doc_id).await.is_none());
@@ -3349,7 +3368,7 @@ mod handler_tests {
                 snapshot,
                 &ambre_core::PublicKey::from_array(author),
             );
-            serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) })
+            serde_json::json!({ "signature": hex::encode(key.sign(transcript.as_bytes()).to_bytes()) })
         };
 
         // Signed over another author: refused, and the snapshot stays.
@@ -3383,7 +3402,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            decode_server_msg(heard.payload()).unwrap(),
+            decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec())).unwrap(),
             WsServerMsg::SnapshotRequired { .. }
         ));
 
@@ -3397,8 +3416,7 @@ mod handler_tests {
             kept_id,
             &ambre_core::PublicKey::from_array([3u8; 32]),
         );
-        let body =
-            serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) });
+        let body = serde_json::json!({ "signature": hex::encode(key.sign(transcript.as_bytes()).to_bytes()) });
         let report = format!("/api/documents/{doc_id}/snapshots/{kept}/report");
         assert_eq!(
             post_json(&app, &reporter, report, body).await,
@@ -3519,10 +3537,9 @@ mod handler_tests {
                 continue;
             }
             let topic = m.channel_str().unwrap().to_owned();
-            heard
-                .entry(topic)
-                .or_default()
-                .push(decode_server_msg(m.payload()).unwrap());
+            heard.entry(topic).or_default().push(
+                decode_server_msg(&ambre_protocol::WireFrame::new(m.payload().to_vec())).unwrap(),
+            );
         }
 
         assert!(matches!(
@@ -3906,7 +3923,9 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(heard.expose_bytes()),
+            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+                heard.expose_bytes().to_vec()
+            )),
             Ok(WsServerMsg::KeyRotationRequired { .. })
         ));
         let read = list_members(&app, &stayer, &doc_id).await;
@@ -4038,7 +4057,10 @@ mod handler_tests {
             .expect("a broadcast within a second")
             .expect("an open stream")
             .expect("a message");
-        ambre_protocol::ws::decode_server_msg(msg.payload()).expect("a server message")
+        ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            msg.payload().to_vec(),
+        ))
+        .expect("a server message")
     }
 
     /// SRV-177: an invitation, a change of role and a removal each tell the

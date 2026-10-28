@@ -95,8 +95,8 @@ struct Held {
 /// The digest of one entry, as the next entry names it. `None` for an entry
 /// that does not encode, which no decoded entry is.
 pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
-    let bytes = entry.encode().ok()?;
-    Some(ambre_crypto::hash::entry_digest(&bytes))
+    let encoded = entry.encode().ok()?;
+    Some(ambre_crypto::hash::entry_digest(encoded.as_bytes()))
 }
 
 /// The place and the previous digest the next entry of a log takes.
@@ -319,7 +319,7 @@ impl Log {
 /// Whether `key` signed `entry`.
 fn signed_by(entry: &MembershipEntry, key: &PublicKey) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
-        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature).is_ok()
+        ambre_crypto::signature::verify_message(key, bytes.as_bytes(), &entry.signature).is_ok()
     })
 }
 
@@ -357,7 +357,7 @@ pub(crate) fn sign(
         signature: Signature([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
-    entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes);
+    entry.signature = ambre_crypto::signature::sign_message(signing_key, bytes.as_bytes());
     Ok(entry)
 }
 
@@ -369,8 +369,7 @@ pub(crate) fn sign(
 pub(crate) fn encode(
     entry: &MembershipEntry,
 ) -> Result<ambre_core::EncodedLogEntry, SerializationError> {
-    let bytes = entry.encode()?;
-    Ok(ambre_core::EncodedLogEntry::new(bytes.to_vec()))
+    entry.encode()
 }
 
 /// The entries a members answer carries, up to the first that does not
@@ -378,10 +377,7 @@ pub(crate) fn encode(
 pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEntry> {
     texts
         .iter()
-        .map_while(|text| {
-            let bytes = text.as_bytes();
-            MembershipEntry::decode(bytes).ok()
-        })
+        .map_while(|text| MembershipEntry::decode(text).ok())
         .collect()
 }
 

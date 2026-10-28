@@ -17,6 +17,7 @@ pub mod messages;
 pub mod public_data;
 pub mod signaling;
 pub mod snapshot_report;
+pub mod transcript;
 pub mod version;
 pub mod ws;
 
@@ -26,9 +27,10 @@ pub use key_link::KeyLink;
 pub use membership::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, ownerless_log};
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-pub use signaling::{SignalingClientMsg, SignalingServerMsg};
+pub use signaling::{IceCandidate, SessionDescription, SignalingClientMsg, SignalingServerMsg};
+pub use transcript::SignedTranscript;
 pub use version::{CURRENT_VERSION, check_version};
-pub use ws::{WsClientMsg, WsServerMsg};
+pub use ws::{WireFrame, WsClientMsg, WsServerMsg};
 
 #[cfg(test)]
 mod tests;

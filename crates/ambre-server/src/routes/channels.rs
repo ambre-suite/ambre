@@ -1033,10 +1033,10 @@ mod tests {
             signature: ambre_protocol::Signature([0; 64]),
         };
         entry.signature = ambre_protocol::Signature(
-            key.sign(&entry.signed_bytes().expect("signed bytes"))
+            key.sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
         );
-        ambre_core::EncodedLogEntry::new(entry.encode().expect("encode"))
+        entry.encode().expect("encode")
     }
 
     /// The length of `document`'s log.
@@ -1530,7 +1530,7 @@ mod tests {
             .expect("an open stream")
             .expect("a message");
         assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(msg.payload()),
+            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(msg.payload().to_vec())),
             Ok(ambre_protocol::ws::WsServerMsg::MembersChanged { document_id }) if document_id == meta
         ));
 
@@ -2352,7 +2352,8 @@ mod tests {
             .expect("the notice arrives")
             .expect("a message")
             .expect("readable");
-        let notice = decode_server_msg(heard.payload()).expect("decodes");
+        let notice = decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
+            .expect("decodes");
         assert!(
             matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
             "heard {notice:?}"
@@ -2405,7 +2406,9 @@ mod tests {
                 .expect("the notice arrives")
                 .expect("a message")
                 .expect("readable");
-            let notice = decode_server_msg(heard.payload()).expect("decodes");
+            let notice =
+                decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
+                    .expect("decodes");
             assert!(
                 matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
                 "heard {notice:?}"
@@ -2569,10 +2572,10 @@ mod tests {
         };
         entry.signature = ambre_protocol::Signature(
             signing
-                .sign(&entry.signed_bytes().expect("signed bytes"))
+                .sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
         );
-        ambre_core::EncodedLogEntry::new(entry.encode().expect("encode"))
+        entry.encode().expect("encode")
     }
 
     async fn open_direct(
@@ -2846,7 +2849,12 @@ mod tests {
             .ok()?
             .expect("a message")
             .expect("readable");
-        Some(ambre_protocol::ws::decode_server_msg(heard.payload()).expect("decodes"))
+        Some(
+            ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+                heard.payload().to_vec(),
+            ))
+            .expect("decodes"),
+        )
     }
 
     /// `SRV-192`: a new direct message reaches the topic of each of its
@@ -3123,7 +3131,7 @@ mod tests {
                     doc_key_enc: ambre_core::WrappedDocKey::new([4u8; 48].to_vec()),
                 }],
                 members: vec![alice],
-                link: ambre_core::EncodedKeyLink::new(link.encode().expect("encode")),
+                link: link.encode().expect("encode"),
                 entry: None,
             }),
         )
@@ -3253,7 +3261,8 @@ mod tests {
             .expect("the notice arrives")
             .expect("a message")
             .expect("readable");
-        let notice = decode_server_msg(heard.payload()).expect("decodes");
+        let notice = decode_server_msg(&ambre_protocol::WireFrame::new(heard.payload().to_vec()))
+            .expect("decodes");
         assert!(
             matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == gone.document_id()),
             "heard {notice:?}"
@@ -3323,7 +3332,7 @@ mod tests {
                 Json(crate::routes::share::RotateKeyRequest {
                     keys,
                     members,
-                    link: ambre_core::EncodedKeyLink::new(link.encode().expect("encode")),
+                    link: link.encode().expect("encode"),
                 }),
             )
             .await,

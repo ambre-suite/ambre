@@ -911,8 +911,8 @@ mod postcard_tests {
     };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::{
-        WsClientMsg, WsServerMsg, decode_client_msg, decode_server_msg, encode_client_msg,
-        encode_server_msg,
+        WireFrame, WsClientMsg, WsServerMsg, decode_client_msg, decode_server_msg,
+        encode_client_msg, encode_server_msg,
     };
 
     fn make_update() -> Update {
@@ -952,7 +952,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], ambre_protocol::CURRENT_VERSION.as_u8());
+        assert_eq!(bytes.as_bytes()[0], ambre_protocol::CURRENT_VERSION.as_u8());
         let decoded = decode_client_msg(&bytes).unwrap();
         assert!(matches!(decoded, WsClientMsg::Subscribe { .. }));
     }
@@ -1089,23 +1089,23 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x01);
+        assert_eq!(bytes.as_bytes()[0], 0x01);
     }
 
     #[test]
     fn empty_frame_is_error() {
-        assert!(decode_client_msg(&[]).is_err());
+        assert!(decode_client_msg(&WireFrame::new(Vec::new())).is_err());
     }
 
     #[test]
     fn wrong_version_byte_is_error() {
-        let msg = vec![0x02, 0x00];
+        let msg = WireFrame::new(vec![0x02, 0x00]);
         assert!(decode_client_msg(&msg).is_err());
     }
 
     #[test]
     fn garbage_data_returns_error_not_panics() {
-        let result = decode_client_msg(&[0x01, 0xFF, 0xFE, 0xFD]);
+        let result = decode_client_msg(&WireFrame::new(vec![0x01, 0xFF, 0xFE, 0xFD]));
         assert!(result.is_err());
     }
 }
@@ -1420,7 +1420,10 @@ mod ephemeral_binding_tests {
             .await
             .unwrap()
             .unwrap();
-        let msg = ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).unwrap();
+        let msg = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            frame.expose_bytes().to_vec(),
+        ))
+        .unwrap();
         assert!(matches!(msg, WsServerMsg::PeerLeft { pub_key, .. } if pub_key == key));
         let more = tokio::time::timeout(Duration::from_millis(300), rx.recv()).await;
         assert!(more.is_err(), "the first close announced nothing");
@@ -1535,7 +1538,10 @@ mod delta_size_cap_tests {
             let (tx, mut rx) = mpsc::channel::<Payload>(8);
             handle_update(&state, &mut conn, update, &tx).await;
             let reply = rx.try_recv().expect("a refusal");
-            let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+            let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+                reply.expose_bytes().to_vec(),
+            ))
+            .unwrap();
             assert!(
                 matches!(
                     decoded,
@@ -1572,7 +1578,10 @@ mod delta_size_cap_tests {
         );
         // The client is told why (413), so it can move the blob to the media path.
         let reply = rx.try_recv().expect("a 413 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            reply.expose_bytes().to_vec(),
+        ))
+        .unwrap();
         assert!(matches!(
             decoded,
             ambre_protocol::ws::WsServerMsg::DeltaRefused {
@@ -1616,7 +1625,10 @@ mod delta_size_cap_tests {
             "a viewer's delta must not be pushed to the pending list"
         );
         let reply = rx.try_recv().expect("a 403 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            reply.expose_bytes().to_vec(),
+        ))
+        .unwrap();
         assert!(matches!(
             decoded,
             ambre_protocol::ws::WsServerMsg::DeltaRefused {
@@ -1677,7 +1689,10 @@ mod delta_size_cap_tests {
         let reply = rx
             .try_recv()
             .expect("an empty replay must still send a MissingUpdates to release the client");
-        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            reply.expose_bytes().to_vec(),
+        ))
+        .unwrap();
         match decoded {
             ambre_protocol::ws::WsServerMsg::MissingUpdates { updates, .. } => {
                 assert!(updates.is_empty(), "no deltas to replay for a fresh doc");
@@ -1761,7 +1776,12 @@ mod access_tests {
 
     fn replies(rx: &mut mpsc::Receiver<Payload>) -> Vec<WsServerMsg> {
         std::iter::from_fn(|| rx.try_recv().ok())
-            .map(|wire| decode_server_msg(wire.expose_bytes()).unwrap())
+            .map(|wire| {
+                decode_server_msg(&ambre_protocol::WireFrame::new(
+                    wire.expose_bytes().to_vec(),
+                ))
+                .unwrap()
+            })
             .collect()
     }
 
@@ -2594,9 +2614,10 @@ mod hot_tail_tests {
         let lost = signed_update(&key, doc_id, 1, 20);
         let lost_signature = lost.signature;
         handle_update(&state, &mut second, lost, &second_tx).await;
-        let refusal =
-            ambre_protocol::ws::decode_server_msg(second_rx.try_recv().unwrap().expose_bytes())
-                .unwrap();
+        let refusal = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            second_rx.try_recv().unwrap().expose_bytes().to_vec(),
+        ))
+        .unwrap();
         let WsServerMsg::ClockRefused {
             clock,
             expected,
@@ -2769,7 +2790,11 @@ mod channel_gate_tests {
 
     /// The code of a refusal, of a wire message or of a delta.
     fn error_code(frame: &Payload) -> Option<RefusalCode> {
-        match ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).ok()? {
+        match ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            frame.expose_bytes().to_vec(),
+        ))
+        .ok()?
+        {
             WsServerMsg::Error { code, .. } | WsServerMsg::DeltaRefused { code, .. } => Some(code),
             _ => None,
         }
@@ -2817,7 +2842,9 @@ mod channel_gate_tests {
         handle_subscribe(&state, &mut conn, segment, &tx).await;
 
         let reply = rx.try_recv().expect("a reply");
-        let ack = ambre_protocol::ws::decode_server_msg(reply.expose_bytes());
+        let ack = ambre_protocol::ws::decode_server_msg(&ambre_protocol::WireFrame::new(
+            reply.expose_bytes().to_vec(),
+        ));
         assert!(
             matches!(ack, Ok(WsServerMsg::Subscribed { document_id }) if document_id == segment)
         );
@@ -2905,7 +2932,7 @@ mod channel_gate_tests {
         let alone = ambre_protocol::ws::encode_server_msg(&WsServerMsg::ThreadActivity {
             document_id: thread,
         });
-        assert_eq!(msg.payload(), alone.as_slice());
+        assert_eq!(msg.payload(), alone.as_bytes());
 
         let update = super::hot_tail_tests::signed_update(&key, segment, 1, 16);
         handle_update(&state, &mut conn, update, &tx).await;

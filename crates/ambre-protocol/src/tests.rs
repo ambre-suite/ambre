@@ -163,7 +163,7 @@ fn ws_messages_roundtrip() {
 fn signaling_messages_roundtrip() {
     let client_msg = SignalingClientMsg::Offer {
         target_user_id: UserId::new(),
-        sdp: "test sdp".to_string(),
+        sdp: SessionDescription::new("test sdp".to_owned()),
     };
     let bytes = postcard::to_allocvec(&client_msg).unwrap();
     let decoded: SignalingClientMsg = postcard::from_bytes(&bytes).unwrap();
@@ -172,7 +172,7 @@ fn signaling_messages_roundtrip() {
             target_user_id: _,
             sdp,
         } => {
-            assert_eq!(sdp, "test sdp");
+            assert_eq!(sdp.as_str(), "test sdp");
         }
         _ => panic!("wrong variant"),
     }
@@ -202,26 +202,29 @@ fn version_check() {
 #[test]
 fn a_wire_message_that_does_not_decode_is_a_typed_error() {
     use crate::ws::{
-        WireDecodeError, WsClientMsg, decode_client_msg, decode_server_msg, encode_client_msg,
+        WireDecodeError, WireFrame, WsClientMsg, decode_client_msg, decode_server_msg,
+        encode_client_msg,
     };
+    let frame = |bytes: &[u8]| WireFrame::new(bytes.to_vec());
     assert!(matches!(
-        decode_client_msg(&[]),
+        decode_client_msg(&frame(&[])),
         Err(WireDecodeError::Empty)
     ));
     assert!(matches!(
-        decode_server_msg(&[]),
+        decode_server_msg(&frame(&[])),
         Err(WireDecodeError::Empty)
     ));
     assert!(matches!(
-        decode_client_msg(&[0x02, 0x00]),
+        decode_client_msg(&frame(&[0x02, 0x00])),
         Err(WireDecodeError::UnsupportedVersion(0x02))
     ));
     let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: DocumentId::new(),
     });
     for cut in 1..wire.len() {
-        assert!(decode_client_msg(&wire[..cut]).is_err(), "cut at {cut}");
-        let _ = decode_server_msg(&wire[..cut]);
+        let cut_frame = frame(&wire.as_bytes()[..cut]);
+        assert!(decode_client_msg(&cut_frame).is_err(), "cut at {cut}");
+        let _ = decode_server_msg(&cut_frame);
     }
 }
 
@@ -229,10 +232,10 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
 /// older one is the relay's lag, and the user cannot cure it.
 #[test]
 fn only_a_newer_wire_version_calls_for_an_update() {
-    use crate::ws::{WireDecodeError, decode_server_msg};
+    use crate::ws::{WireDecodeError, WireFrame, decode_server_msg};
     let current = CURRENT_VERSION.as_u8();
-    let newer = decode_server_msg(&[current + 1, 0x00]).unwrap_err();
-    let older = decode_server_msg(&[current - 1, 0x00]).unwrap_err();
+    let newer = decode_server_msg(&WireFrame::new(vec![current + 1, 0x00])).unwrap_err();
+    let older = decode_server_msg(&WireFrame::new(vec![current - 1, 0x00])).unwrap_err();
     assert!(newer.is_from_newer_peer());
     assert!(!older.is_from_newer_peer());
     assert!(!WireDecodeError::Empty.is_from_newer_peer());
@@ -400,8 +403,14 @@ fn assert_one_per_variant<T: serde::de::DeserializeOwned>(frames: &[Vec<u8>]) {
 fn the_wire_layout_is_frozen_under_its_version() {
     use crate::ws::{WsClientMsg, WsServerMsg, encode_client_msg, encode_server_msg};
     use blake2::{Blake2b512, Digest};
-    let client: Vec<Vec<u8>> = client_samples().iter().map(encode_client_msg).collect();
-    let server: Vec<Vec<u8>> = server_samples().iter().map(encode_server_msg).collect();
+    let client: Vec<Vec<u8>> = client_samples()
+        .iter()
+        .map(|msg| encode_client_msg(msg).into_bytes())
+        .collect();
+    let server: Vec<Vec<u8>> = server_samples()
+        .iter()
+        .map(|msg| encode_server_msg(msg).into_bytes())
+        .collect();
     assert_one_per_variant::<WsClientMsg>(&client);
     assert_one_per_variant::<WsServerMsg>(&server);
     let mut hasher = Blake2b512::new();
@@ -592,29 +601,29 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     let client = [
         SignalingClientMsg::Offer {
             target_user_id: peer,
-            sdp: "v=0 offer".to_owned(),
+            sdp: SessionDescription::new("v=0 offer".to_owned()),
         },
         SignalingClientMsg::Answer {
             target_user_id: peer,
-            sdp: "v=0 answer".to_owned(),
+            sdp: SessionDescription::new("v=0 answer".to_owned()),
         },
         SignalingClientMsg::Ice {
             target_user_id: peer,
-            candidate: "candidate:1 1 udp".to_owned(),
+            candidate: IceCandidate::new("candidate:1 1 udp".to_owned()),
         },
     ];
     let server = [
         SignalingServerMsg::Offer {
             from_user_id: peer,
-            sdp: "v=0 offer".to_owned(),
+            sdp: SessionDescription::new("v=0 offer".to_owned()),
         },
         SignalingServerMsg::Answer {
             from_user_id: peer,
-            sdp: "v=0 answer".to_owned(),
+            sdp: SessionDescription::new("v=0 answer".to_owned()),
         },
         SignalingServerMsg::Ice {
             from_user_id: peer,
-            candidate: "candidate:1 1 udp".to_owned(),
+            candidate: IceCandidate::new("candidate:1 1 udp".to_owned()),
         },
         SignalingServerMsg::ParticipantJoined { user_id: peer },
         SignalingServerMsg::ParticipantLeft { user_id: peer },
@@ -627,13 +636,23 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         signaling.extend(postcard::to_allocvec(msg).expect("a frame encodes"));
     }
     let frames = [
-        ("key link", link.encode().expect("a link encodes")),
-        ("entry", entry.encode().expect("an entry encodes")),
+        (
+            "key link",
+            link.encode().expect("a link encodes").into_bytes(),
+        ),
+        (
+            "entry",
+            entry.encode().expect("an entry encodes").into_bytes(),
+        ),
         (
             "entry signed",
-            entry.signed_bytes().expect("an entry encodes"),
+            entry
+                .signed_bytes()
+                .expect("an entry encodes")
+                .as_bytes()
+                .to_vec(),
         ),
-        ("report", transcript),
+        ("report", transcript.as_bytes().to_vec()),
         ("signaling", signaling),
     ];
     let digests: Vec<(&str, String)> = frames

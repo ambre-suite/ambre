@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg};
+use ambre_protocol::ws::{WireDecodeError, WireFrame, WsClientMsg, WsServerMsg};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{Stream, StreamExt};
@@ -35,7 +35,7 @@ impl Payload {
 
     /// A message to a client, encoded for the socket.
     pub fn server_msg(msg: &WsServerMsg) -> Self {
-        Self(ambre_protocol::ws::encode_server_msg(msg))
+        Self(ambre_protocol::ws::encode_server_msg(msg).into_bytes())
     }
 
     /// `value` sealed in its stored encoding, as the relay keeps a delta.
@@ -48,9 +48,10 @@ impl Payload {
         postcard::from_bytes(&self.0)
     }
 
-    /// The client message a socket frame carries.
-    pub fn client_msg(&self) -> Result<WsClientMsg, WireDecodeError> {
-        ambre_protocol::ws::decode_client_msg(&self.0)
+    /// The client message a socket frame carries. The bytes move into the
+    /// frame the decoder reads, with no copy.
+    pub fn client_msg(self) -> Result<WsClientMsg, WireDecodeError> {
+        ambre_protocol::ws::decode_client_msg(&WireFrame::new(self.0))
     }
 
     /// The length in bytes, the one reading a log may carry.

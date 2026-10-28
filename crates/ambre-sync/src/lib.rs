@@ -53,9 +53,9 @@ use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-#[cfg(target_arch = "wasm32")]
-use ambre_protocol::ws::decode_server_msg;
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
+#[cfg(target_arch = "wasm32")]
+use ambre_protocol::ws::{WireFrame, decode_server_msg};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
@@ -1089,7 +1089,7 @@ pub struct SyncState {
     inbound_held: bool,
     /// Updates sealed while the socket is held closed, as wire frames in order.
     /// Sent once it reopens, so a hold loses no edit of this user.
-    held_outbox: RefCell<Vec<Vec<u8>>>,
+    held_outbox: RefCell<Vec<ambre_protocol::WireFrame>>,
     /// The stops of each document's replay since the socket last opened.
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
     replay_stops: HashMap<DocumentId, websocket::ReplayStops>,
@@ -1116,7 +1116,7 @@ pub struct SyncState {
     new_spaces: HashSet<DocumentId>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
-    mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
+    mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>>,
 
     // -- Internal event queue (carries WS frames + HTTP results into the     --
     // -- non-blocking select loop; producer and consumer are the same worker)  --
@@ -1266,7 +1266,10 @@ impl SyncState {
     /// Hook the in-memory mock transport onto this SyncState. In test mode the
     /// mock captures every WS message that would be sent, without touching
     /// JS / WASM APIs.
-    pub fn set_mock_ws(&mut self, tx: ambre_bus::conduit::UnboundedSender<Vec<u8>>) {
+    pub fn set_mock_ws(
+        &mut self,
+        tx: ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
+    ) {
         self.mock_ws_tx = Some(tx);
     }
 
@@ -1351,13 +1354,13 @@ impl SyncState {
     }
 
     /// Pushes one encoded frame onto the socket.
-    fn send_wire(&self, ws: &WebSocket, wire: Vec<u8>) {
+    fn send_wire(&self, ws: &WebSocket, wire: ambre_protocol::WireFrame) {
         // `wire` lives in the wasm heap, which is a SharedArrayBuffer under the
         // shared-memory threading model. Browsers reject `WebSocket.send` on a
         // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
         // ArrayBuffer first.
         let buf = js_sys::Uint8Array::new_with_length(wire.len() as u32);
-        buf.copy_from(&wire);
+        buf.copy_from(wire.as_bytes());
         if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
             tracing::warn!("[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry");
         }
@@ -1982,7 +1985,11 @@ mod seal_tests {
 
     /// A worker with one open document and a socket that records what it is
     /// handed.
-    fn with_socket() -> (SyncState, DocumentId, ambre_bus::conduit::Receiver<Vec<u8>>) {
+    fn with_socket() -> (
+        SyncState,
+        DocumentId,
+        ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
+    ) {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
@@ -2001,7 +2008,7 @@ mod seal_tests {
     }
 
     /// The frames the socket was handed, decoded.
-    fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+    fn sent(wire: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>) -> Vec<WsClientMsg> {
         wire.try_iter()
             .map(|bytes| decode_client_msg(&bytes).expect("decode"))
             .collect()

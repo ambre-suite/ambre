@@ -1822,8 +1822,7 @@ pub(crate) struct KeyLinksResponse {
 pub(crate) fn encode_link(
     link: &ambre_protocol::KeyLink,
 ) -> Result<ambre_core::EncodedKeyLink, ambre_protocol::error::SerializationError> {
-    let bytes = link.encode()?;
-    Ok(ambre_core::EncodedKeyLink::new(bytes.to_vec()))
+    link.encode()
 }
 
 /// The links a response carries. One that does not decode is dropped: the
@@ -1831,10 +1830,7 @@ pub(crate) fn encode_link(
 pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLink> {
     resp.links
         .iter()
-        .filter_map(|text| {
-            let bytes = text.as_bytes();
-            ambre_protocol::KeyLink::decode(bytes).ok()
-        })
+        .filter_map(|text| ambre_protocol::KeyLink::decode(text).ok())
         .collect()
 }
 

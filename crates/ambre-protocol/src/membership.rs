@@ -7,11 +7,12 @@
 //! what the relay serves (`SYNC-103`). The relay stores the entries and checks
 //! the signature, and computes no digest.
 
-use ambre_core::{DocumentId, KeyId, PublicKey, Role, UserId};
+use ambre_core::{DocumentId, EncodedLogEntry, KeyId, PublicKey, Role, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
 use crate::messages::Signature;
+use crate::transcript::SignedTranscript;
 
 /// The domain the signed bytes open with, so an entry's signature serves no
 /// other use.
@@ -166,7 +167,7 @@ impl MembershipEntry {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn signed_bytes(&self) -> Result<Vec<u8>, SerializationError> {
+    pub fn signed_bytes(&self) -> Result<SignedTranscript, SerializationError> {
         let signed = Signed {
             document: &self.document,
             position: self.position,
@@ -180,7 +181,7 @@ impl MembershipEntry {
         };
         let mut bytes = ENTRY_DOMAIN.to_vec();
         bytes.extend(postcard::to_allocvec(&signed)?);
-        Ok(bytes)
+        Ok(SignedTranscript::new(bytes))
     }
 
     /// Whether the entry's shape is one a log can hold: the first entry alone
@@ -196,8 +197,8 @@ impl MembershipEntry {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn encode(&self) -> Result<Vec<u8>, SerializationError> {
-        Ok(postcard::to_allocvec(self)?)
+    pub fn encode(&self) -> Result<EncodedLogEntry, SerializationError> {
+        Ok(EncodedLogEntry::new(postcard::to_allocvec(self)?))
     }
 
     /// Reads back what [`Self::encode`] wrote, and nothing else. The relay
@@ -210,9 +211,9 @@ impl MembershipEntry {
     /// * [`SerializationError::Postcard`] for bytes that are not an entry.
     /// * [`SerializationError::NotCanonical`] for bytes past the entry, or a
     ///   field written in a longer form than its encoding.
-    pub fn decode(bytes: &[u8]) -> Result<Self, SerializationError> {
-        let entry: Self = postcard::from_bytes(bytes)?;
-        if entry.encode()? != bytes {
+    pub fn decode(encoded: &EncodedLogEntry) -> Result<Self, SerializationError> {
+        let entry: Self = postcard::from_bytes(encoded.as_bytes())?;
+        if entry.encode()? != *encoded {
             return Err(SerializationError::NotCanonical);
         }
         Ok(entry)
@@ -245,7 +246,7 @@ mod tests {
     fn every_field_but_the_signature_is_signed() {
         let base = entry();
         let signed = base.signed_bytes().unwrap();
-        assert!(signed.starts_with(ENTRY_DOMAIN));
+        assert!(signed.as_bytes().starts_with(ENTRY_DOMAIN));
         let changes: [fn(&mut MembershipEntry); 9] = [
             |e| e.document = DocumentId::from_bytes([9; 16]),
             |e| e.position = LogPosition::new(2),
@@ -289,25 +290,25 @@ mod tests {
     /// signature of another length does not decode.
     #[test]
     fn the_signature_keeps_its_length_prefixed_encoding() {
-        let sent = entry().encode().unwrap();
+        let sent = entry().encode().unwrap().into_bytes();
         let tail = sent.len() - ENTRY_SIGNATURE_LEN - 1;
         assert_eq!(sent[tail], ENTRY_SIGNATURE_LEN as u8);
         assert_eq!(sent[tail + 1..], [7; ENTRY_SIGNATURE_LEN]);
         let mut short = sent[..tail].to_vec();
         short.push(ENTRY_SIGNATURE_LEN as u8 - 1);
         short.extend([7; ENTRY_SIGNATURE_LEN - 1]);
-        assert!(MembershipEntry::decode(&short).is_err());
+        assert!(MembershipEntry::decode(&EncodedLogEntry::new(short)).is_err());
     }
 
     /// `SRV-227`: an entry reads from its own encoding alone. A byte past its
     /// end, and a position written in a longer varint, are refused.
     #[test]
     fn an_entry_reads_from_its_own_encoding_alone() {
-        let sent = entry().encode().unwrap();
+        let sent = entry().encode().unwrap().into_bytes();
         let mut trailing = sent.clone();
         trailing.push(0);
         assert_eq!(
-            MembershipEntry::decode(&trailing),
+            MembershipEntry::decode(&EncodedLogEntry::new(trailing)),
             Err(SerializationError::NotCanonical)
         );
         // The position follows the 16 bytes of the document id. Position 1 is
@@ -316,7 +317,7 @@ mod tests {
         let mut longer = sent[..16].to_vec();
         longer.extend([0x81, 0x00]);
         longer.extend(&sent[17..]);
-        assert!(MembershipEntry::decode(&longer).is_err());
+        assert!(MembershipEntry::decode(&EncodedLogEntry::new(longer)).is_err());
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and

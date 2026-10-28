@@ -147,8 +147,8 @@ impl SyncState {
                     Ok(a) => a,
                     Err(_) => return,
                 };
-                let bytes = js_sys::Uint8Array::new(&array_buf).to_vec();
-                match decode_server_msg(&bytes) {
+                let frame = WireFrame::new(js_sys::Uint8Array::new(&array_buf).to_vec());
+                match decode_server_msg(&frame) {
                     Ok(server_msg) => {
                         let _ = tx.send(SyncEvent::WsMessage(server_msg));
                     }
@@ -2031,7 +2031,7 @@ mod tests {
     fn with_relay_document() -> (
         SyncState,
         ambre_bus::conduit::Receiver<LogicEvent>,
-        ambre_bus::conduit::Receiver<Vec<u8>>,
+        ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
         DocumentId,
     ) {
         let (mut state, rx) = with_open_document();
@@ -2072,7 +2072,7 @@ mod tests {
         state.replay_stops[&id].count
     }
 
-    fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+    fn sent(wire: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>) -> Vec<WsClientMsg> {
         wire.try_iter()
             .map(|bytes| decode_client_msg(&bytes).expect("decode"))
             .collect()

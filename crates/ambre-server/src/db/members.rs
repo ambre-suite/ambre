@@ -526,7 +526,7 @@ async fn append_link(
     .bind(document_id)
     .bind(link.key.as_array().as_slice())
     .bind(link.previous.as_array().as_slice())
-    .bind(bytes)
+    .bind(bytes.as_bytes())
     .execute(&mut **tx)
     .await?;
     if stored.rows_affected() == 0 {

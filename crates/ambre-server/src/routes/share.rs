@@ -38,8 +38,7 @@ pub(crate) async fn checked_entry(
     let Some(sent) = entry else {
         return Ok(None);
     };
-    let bytes = sent.as_bytes();
-    let entry = ambre_protocol::MembershipEntry::decode(bytes)
+    let entry = ambre_protocol::MembershipEntry::decode(sent)
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
     let member_key = db::get_user(&state.db, &expected.member)
         .await?
@@ -65,7 +64,7 @@ pub(crate) async fn checked_entry(
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
     let signature = Signature::from_bytes(&entry.signature.0);
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
-        .and_then(|key| key.verify_strict(&signed, &signature))
+        .and_then(|key| key.verify_strict(signed.as_bytes(), &signature))
         .map_err(|_| AppError::InvalidSignature)?;
     Ok(Some(db::LogEntry {
         position: entry.position,
@@ -552,7 +551,7 @@ fn decode_link(
     sent: &ambre_core::EncodedKeyLink,
     doc_id: ambre_core::DocumentId,
 ) -> Result<ambre_protocol::KeyLink, AppError> {
-    let link = ambre_protocol::KeyLink::decode(sent.as_bytes())
+    let link = ambre_protocol::KeyLink::decode(sent)
         .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
     link.validate()
         .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
