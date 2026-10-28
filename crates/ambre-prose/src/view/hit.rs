@@ -199,7 +199,7 @@ impl ProseUiState {
     /// geometry the painter and the hit-test both read.
     pub(crate) fn band_slots(&self, page: PageIndex) -> Vec<BandSlot> {
         let layout = &self.shaped.layout;
-        let first = page == PageIndex::ZERO && layout.bands.different_first_page;
+        let first = page == PageIndex::ZERO && layout.bands.different_first_page.has_own();
         let (header_height, footer_height) = if first {
             (layout.header_first_height, layout.footer_first_height)
         } else {

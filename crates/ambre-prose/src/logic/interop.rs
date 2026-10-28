@@ -375,7 +375,7 @@ impl ProseState {
             meta: IrMeta {
                 title: (!title.is_empty()).then_some(title),
                 paged: true,
-                bands: bands.header_enabled || bands.footer_enabled,
+                bands: bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
             },
             blocks: self.walk_children(&tree, None, &notes),
             footnotes,

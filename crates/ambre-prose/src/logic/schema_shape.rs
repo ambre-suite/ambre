@@ -356,8 +356,8 @@ pub(super) fn document_of_every_key() -> ProseState {
             space_before: Some(ambre_core::Pt::new(4.0)),
             space_after: Some(ambre_core::Pt::new(5.0)),
             line_height: Some(LineHeight::Multiple(LineSpacingMultiple::ONE_AND_HALF)),
-            keep_together: Some(true),
-            keep_with_next: Some(true),
+            keep_together: Some(crate::events::KeepTogether::Together),
+            keep_with_next: Some(crate::events::KeepWithNext::WithNext),
         },
     });
     for init in [

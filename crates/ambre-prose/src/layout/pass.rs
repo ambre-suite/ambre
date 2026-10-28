@@ -323,11 +323,13 @@ impl BandHeights {
             }
             _ => DocPx::ZERO,
         };
-        let first = bands.different_first_page;
-        let header_height = height(bands.header, bands.header_enabled);
-        let header_first_height = height(bands.header_first, bands.header_enabled && first);
-        let footer_height = height(bands.footer, bands.footer_enabled);
-        let footer_first_height = height(bands.footer_first, bands.footer_enabled && first);
+        let first = bands.different_first_page.has_own();
+        let (header_shown, footer_shown) =
+            (bands.header_enabled.is_on(), bands.footer_enabled.is_on());
+        let header_height = height(bands.header, header_shown);
+        let header_first_height = height(bands.header_first, header_shown && first);
+        let footer_height = height(bands.footer, footer_shown);
+        let footer_first_height = height(bands.footer_first, footer_shown && first);
         Self {
             bands,
             header_height,

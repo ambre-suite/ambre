@@ -52,9 +52,9 @@ impl ProseState {
             footer: bands.footer.block.map(block_id),
             header_first: bands.header_first.block.map(block_id),
             footer_first: bands.footer_first.block.map(block_id),
-            header_shown: BandState::on_if(bands.header_enabled),
-            footer_shown: BandState::on_if(bands.footer_enabled),
-            first_page: FirstPage::own_if(bands.different_first_page),
+            header_shown: bands.header_enabled,
+            footer_shown: bands.footer_enabled,
+            first_page: bands.different_first_page,
         }
     }
 
@@ -99,7 +99,7 @@ impl ProseState {
         pos: DocOffset,
     ) -> ProseOutcome {
         let bands = doc::read_bands(&self.doc);
-        if target == HfTarget::FirstPage && !bands.different_first_page {
+        if target == HfTarget::FirstPage && bands.different_first_page == FirstPage::SameAsRest {
             return ProseOutcome::refused(ProseRefusal::FirstPageBandOff);
         }
         let block = match self.ensure_side(side) {

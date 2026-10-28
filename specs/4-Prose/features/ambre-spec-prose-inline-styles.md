@@ -157,8 +157,9 @@ pub struct ParagraphStyle {
     pub line_height:    Option<LineHeight>,
     /// Read by pagination: a block that must not be split, and one that must not be
     /// parted from the next (`features/ambre-spec-prose-pagination.md`).
-    pub keep_together:  Option<bool>,
-    pub keep_with_next: Option<bool>,
+    /// Each one a flag of `define_flag!`, which the store writes as a `bool`.
+    pub keep_together:  Option<KeepTogether>,   // Splittable, Together
+    pub keep_with_next: Option<KeepWithNext>,   // Free, WithNext
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

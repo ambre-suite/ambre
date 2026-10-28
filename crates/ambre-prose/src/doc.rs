@@ -19,8 +19,9 @@ use loro::{
 };
 
 use ambre_bus::app::prose::{
-    Align, BlockType, DocCount, DocOffset, DocSpan, HeadingLevel, LineHeight, LineHeightMode,
-    LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle, StyleId, TocNumbering,
+    Align, BandState, BlockType, DocCount, DocOffset, DocSpan, FirstPage, HeadingLevel,
+    KeepTogether, KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle,
+    OrderedStyle, ParagraphStyle, StyleId, TocNumbering,
 };
 
 // -----------------------------------------------------------------------------
@@ -1028,13 +1029,12 @@ pub(crate) fn write_paragraph_style(
             node.insert(key, f64::from(points.get()))?;
         }
     }
-    for (key, value) in [
-        (NodeKey::KeepTogether, style.keep_together),
-        (NodeKey::KeepWithNext, style.keep_with_next),
-    ] {
-        if let Some(flag) = value {
-            node.insert(key, flag)?;
-        }
+    // The store keeps a `bool` per key (`PROSE-030`).
+    if let Some(keep) = style.keep_together {
+        node.insert(NodeKey::KeepTogether, keep.as_bool())?;
+    }
+    if let Some(keep) = style.keep_with_next {
+        node.insert(NodeKey::KeepWithNext, keep.as_bool())?;
     }
     if let Some(line_height) = style.line_height {
         let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::of) else {
@@ -1094,8 +1094,8 @@ pub fn read_paragraph_style(tree: &LoroTree, id: &TreeID) -> ParagraphStyle {
         space_before: read_pt(&node, NodeKey::SpaceBefore),
         space_after: read_pt(&node, NodeKey::SpaceAfter),
         line_height: read_line_height(&node),
-        keep_together: read_bool(&node, NodeKey::KeepTogether),
-        keep_with_next: read_bool(&node, NodeKey::KeepWithNext),
+        keep_together: read_bool(&node, NodeKey::KeepTogether).map(KeepTogether::from_bool),
+        keep_with_next: read_bool(&node, NodeKey::KeepWithNext).map(KeepWithNext::from_bool),
     }
 }
 
@@ -1426,9 +1426,9 @@ pub struct Bands {
     pub footer: Band,
     pub header_first: Band,
     pub footer_first: Band,
-    pub header_enabled: bool,
-    pub footer_enabled: bool,
-    pub different_first_page: bool,
+    pub header_enabled: BandState,
+    pub footer_enabled: BandState,
+    pub different_first_page: FirstPage,
 }
 
 impl Bands {
@@ -1450,13 +1450,14 @@ impl Bands {
     /// (`PROSE-FEAT-169`, `PROSE-UI-133`). A hidden side draws nothing.
     #[must_use]
     pub fn on_page(&self, page: crate::events::PageIndex) -> (Option<Band>, Option<Band>) {
-        let first = page == crate::events::PageIndex::ZERO && self.different_first_page;
+        let first = page == crate::events::PageIndex::ZERO && self.different_first_page.has_own();
         let (header, footer) = if first {
             (self.header_first, self.footer_first)
         } else {
             (self.header, self.footer)
         };
-        let drawn = |band: Band, shown: bool| (shown && band.block.is_some()).then_some(band);
+        let drawn =
+            |band: Band, shown: BandState| (shown.is_on() && band.block.is_some()).then_some(band);
         (
             drawn(header, self.header_enabled),
             drawn(footer, self.footer_enabled),
@@ -1531,8 +1532,10 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
         return Bands::default();
     };
     let enabled = |key: MetaKey| {
-        map_read(&meta, key)
-            .is_some_and(|map| read_bool(&Fields::of(map), BandKey::Enabled) == Some(true))
+        BandState::on_if(
+            map_read(&meta, key)
+                .is_some_and(|map| read_bool(&Fields::of(map), BandKey::Enabled) == Some(true)),
+        )
     };
     let tree = blocks_read(doc);
     let live = |band: Band| Band {
@@ -1549,7 +1552,9 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
         footer_first: live(read_band(&meta, MetaKey::FooterFirst)),
         header_enabled: enabled(MetaKey::Header),
         footer_enabled: enabled(MetaKey::Footer),
-        different_first_page: read_bool(&meta, MetaKey::DifferentFirstPage) == Some(true),
+        different_first_page: FirstPage::own_if(
+            read_bool(&meta, MetaKey::DifferentFirstPage) == Some(true),
+        ),
     }
 }
 

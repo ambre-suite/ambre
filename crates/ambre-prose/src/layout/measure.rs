@@ -148,8 +148,8 @@ impl EffectiveStyle {
             indent_right: paragraph.indent_right.unwrap_or(Pt::ZERO).to_doc_px(),
             space_before: paragraph.space_before.unwrap_or(Pt::ZERO).to_doc_px(),
             space_after: paragraph.space_after.unwrap_or(Pt::ZERO).to_doc_px(),
-            keep_together: paragraph.keep_together.unwrap_or(false),
-            keep_with_next: paragraph.keep_with_next.unwrap_or(false),
+            keep_together: paragraph.keep_together.unwrap_or_default().as_bool(),
+            keep_with_next: paragraph.keep_with_next.unwrap_or_default().as_bool(),
         }
     }
 

@@ -702,6 +702,26 @@ impl LineHeight {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether a paragraph may split across a page break
+    /// (`features/ambre-spec-prose-pagination.md`).
+    pub enum KeepTogether {
+        /// The paragraph may split across a page break.
+        Splittable,
+        /// The paragraph moves whole to the next page rather than split.
+        Together,
+    }
+
+    /// Whether a paragraph stays on the page of the next one
+    /// (`features/ambre-spec-prose-pagination.md`).
+    pub enum KeepWithNext {
+        /// A page break may fall between the paragraph and the next one.
+        Free,
+        /// The paragraph moves with the next one to its page.
+        WithNext,
+    }
+}
+
 /// The nine paragraph properties, each one optional.
 ///
 /// `None` is "leave this property alone", never "clear it". The command is
@@ -717,8 +737,8 @@ pub struct ParagraphStyle {
     pub space_before: Option<Pt>,
     pub space_after: Option<Pt>,
     pub line_height: Option<LineHeight>,
-    pub keep_together: Option<bool>,
-    pub keep_with_next: Option<bool>,
+    pub keep_together: Option<KeepTogether>,
+    pub keep_with_next: Option<KeepWithNext>,
 }
 
 impl ParagraphStyle {

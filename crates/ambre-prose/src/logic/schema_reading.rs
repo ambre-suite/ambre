@@ -351,7 +351,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         }
         doc::MetaKey::DifferentFirstPage => Some(format!(
             "first page has its own bands {}",
-            doc::read_bands(document).different_first_page
+            doc::read_bands(document).different_first_page.has_own()
         )),
         doc::MetaKey::Header
         | doc::MetaKey::Footer
@@ -366,7 +366,7 @@ fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             };
             let key = key.as_str();
             match doc::BandKey::parse(stored.key(1)?)? {
-                doc::BandKey::Enabled => Some(format!("{key} shown {}", enabled?)),
+                doc::BandKey::Enabled => Some(format!("{key} shown {}", enabled?.is_on())),
                 doc::BandKey::Block => Some(format!(
                     "{key} drawn from {}",
                     block_name(reader, &band.block?)
