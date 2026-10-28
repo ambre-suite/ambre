@@ -54,8 +54,8 @@ fn style_applied(
     style: CellStyle,
     bold: ambre_bus::Weight,
     italic: ambre_bus::Slant,
-    merged: bool,
-    numeric: bool,
+    merged: ambre_bus::Merge,
+    numeric: ambre_bus::CellValueKind,
 ) -> UiEvent {
     UiEvent::Viewport {
         document_id: DocumentId::new(),
@@ -96,8 +96,8 @@ fn style_applied_mirrors_into_style_state() {
             style,
             ambre_bus::Weight::Bold,
             ambre_bus::Slant::Upright,
-            true,
-            true,
+            ambre_bus::Merge::Merged,
+            ambre_bus::CellValueKind::Number,
         ),
     );
 

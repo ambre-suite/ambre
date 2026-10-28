@@ -438,7 +438,7 @@ impl TrameState {
                 underline: style.underline,
                 strikethrough: style.strikethrough,
                 h_align: style.h_align,
-                numeric: !is_covered && self.cell_is_numeric(at),
+                numeric: CellValueKind::from_bool(!is_covered && self.cell_is_numeric(at)),
                 v_align: style.v_align,
                 wrap: style.wrap,
                 fg: style.fg,
@@ -446,9 +446,9 @@ impl TrameState {
                 font: style.font.clone(),
                 size: style.size,
                 borders: style.borders,
-                is_merged: merge_span.is_some() || is_covered,
+                is_merged: Merge::from_bool(merge_span.is_some() || is_covered),
                 merge_span,
-                is_filtered: self.hidden_rows.contains(&row),
+                is_filtered: RowFilter::from_bool(self.hidden_rows.contains(&row)),
             });
         }
         cells

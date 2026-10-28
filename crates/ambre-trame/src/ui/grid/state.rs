@@ -496,7 +496,7 @@ impl TrameUiState {
                     underline: cell.underline.as_bool(),
                     strikethrough: cell.strikethrough.as_bool(),
                     h_align: cell.h_align,
-                    numeric: cell.numeric,
+                    numeric: cell.numeric.as_bool(),
                     v_align: cell.v_align,
                     wrap: cell.wrap.as_bool(),
                     fg: cell.fg,
@@ -505,7 +505,7 @@ impl TrameUiState {
                     size: cell.size,
                     borders: cell.borders,
                     merge_span: cell.merge_span,
-                    is_filtered: cell.is_filtered,
+                    is_filtered: cell.is_filtered.as_bool(),
                 },
             );
         }

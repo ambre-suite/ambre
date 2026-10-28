@@ -1088,7 +1088,7 @@ fn a_merged_fill_previews_whole_blocks() {
     let merged = |row, span| crate::DisplayCell {
         row,
         col: Col::new(0),
-        is_merged: true,
+        is_merged: ambre_bus::Merge::Merged,
         merge_span: span,
         ..Default::default()
     };

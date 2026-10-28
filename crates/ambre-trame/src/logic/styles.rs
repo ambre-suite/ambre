@@ -233,9 +233,11 @@ impl TrameState {
             style: self.styles.get(&shown).cloned().unwrap_or_default(),
             bold: Weight::from_bool(self.bold.contains(&shown)),
             italic: Slant::from_bool(self.italic.contains(&shown)),
-            merged: self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
+            merged: Merge::from_bool(
+                self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
+            ),
             // The test the viewport pack hands the renderer (`TRAME-UI-094`).
-            numeric: self.cell_is_numeric(shown),
+            numeric: CellValueKind::from_bool(self.cell_is_numeric(shown)),
         }
     }
 

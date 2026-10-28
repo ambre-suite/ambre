@@ -936,14 +936,25 @@ fn a_formatted_number_aligns_as_a_number_everywhere() {
             "{format:?} prints {:?}, which is not a bare number",
             a1.text
         );
-        assert!(a1.numeric, "{format:?}: the grid aligns it as a number");
+        assert_eq!(
+            a1.numeric,
+            ambre_bus::CellValueKind::Number,
+            "{format:?}: the grid aligns it as a number"
+        );
         let TrameEvent::StyleApplied { numeric, .. } = state.style_state_event() else {
             panic!("expected StyleApplied")
         };
-        assert!(numeric, "{format:?}: the toolbar agrees with the grid");
+        assert_eq!(
+            numeric,
+            ambre_bus::CellValueKind::Number,
+            "{format:?}: the toolbar agrees with the grid"
+        );
     }
     let mut state = formatted_a1("label", CellFormat::Currency);
-    assert!(!read_display(&mut state, 0, 0).numeric);
+    assert_eq!(
+        read_display(&mut state, 0, 0).numeric,
+        ambre_bus::CellValueKind::Text
+    );
 }
 
 /// The decimal buttons step the count a cell carries (`TRAME-105`). The count
@@ -1040,7 +1051,7 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
     else {
         panic!("expected StyleApplied")
     };
-    assert!(merged);
+    assert_eq!(merged, ambre_bus::Merge::Merged);
     assert_eq!(bold, ambre_bus::Weight::Bold, "the block is bold");
     assert_eq!(style.format, CellFormat::Currency);
 }

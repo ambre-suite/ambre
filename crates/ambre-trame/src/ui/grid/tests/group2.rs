@@ -44,7 +44,7 @@ fn snap_keeps_multi_block_fill_selection() {
         col,
         text: String::new(),
         raw: String::new(),
-        is_merged: true,
+        is_merged: ambre_bus::Merge::Merged,
         merge_span: span,
         ..Default::default()
     };
@@ -98,14 +98,14 @@ fn snap_keeps_multi_block_fill_selection() {
 #[test]
 fn filtered_rows_collapse_geometry_and_nav() {
     let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
-    let cell = |row: u32, filtered: bool| DisplayCell {
+    let cell = |row: u32, filtered: ambre_bus::RowFilter| DisplayCell {
         row: Row::new(row),
         col: Col::new(0),
         text: format!("v{row}"),
         raw: format!("v{row}"),
         bold: ambre_bus::Weight::Regular,
         italic: ambre_bus::Slant::Upright,
-        is_merged: false,
+        is_merged: ambre_bus::Merge::Single,
         merge_span: None,
         is_filtered: filtered,
         ..Default::default()
@@ -118,11 +118,11 @@ fn filtered_rows_collapse_geometry_and_nav() {
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(0, false),
-            cell(1, false),
-            cell(2, true),
-            cell(3, true),
-            cell(4, false),
+            cell(0, ambre_bus::RowFilter::Shown),
+            cell(1, ambre_bus::RowFilter::Shown),
+            cell(2, ambre_bus::RowFilter::Filtered),
+            cell(3, ambre_bus::RowFilter::Filtered),
+            cell(4, ambre_bus::RowFilter::Shown),
         ],
     });
 
@@ -222,9 +222,9 @@ fn move_to_and_content_scans() {
                 raw: "x".into(),
                 bold: ambre_bus::Weight::Regular,
                 italic: ambre_bus::Slant::Upright,
-                is_merged: false,
+                is_merged: ambre_bus::Merge::Single,
                 merge_span: None,
-                is_filtered: false,
+                is_filtered: ambre_bus::RowFilter::Shown,
                 ..Default::default()
             },
             DisplayCell {
@@ -234,9 +234,9 @@ fn move_to_and_content_scans() {
                 raw: "y".into(),
                 bold: ambre_bus::Weight::Regular,
                 italic: ambre_bus::Slant::Upright,
-                is_merged: false,
+                is_merged: ambre_bus::Merge::Single,
                 merge_span: None,
-                is_filtered: false,
+                is_filtered: ambre_bus::RowFilter::Shown,
                 ..Default::default()
             },
             DisplayCell {
@@ -246,9 +246,9 @@ fn move_to_and_content_scans() {
                 raw: "".into(),
                 bold: ambre_bus::Weight::Regular,
                 italic: ambre_bus::Slant::Upright,
-                is_merged: false,
+                is_merged: ambre_bus::Merge::Single,
                 merge_span: None,
-                is_filtered: false,
+                is_filtered: ambre_bus::RowFilter::Shown,
                 ..Default::default()
             },
         ],
@@ -280,9 +280,9 @@ fn viewport_data_preserves_formula_raw_for_editing() {
             raw: "=SUM(A1:B1)".to_owned(),
             bold: ambre_bus::Weight::Regular,
             italic: ambre_bus::Slant::Upright,
-            is_merged: false,
+            is_merged: ambre_bus::Merge::Single,
             merge_span: None,
-            is_filtered: false,
+            is_filtered: ambre_bus::RowFilter::Shown,
             ..Default::default()
         }],
     });
@@ -352,9 +352,9 @@ fn dirty_and_error_lifecycle() {
             raw: "=A2".to_owned(),
             bold: ambre_bus::Weight::Regular,
             italic: ambre_bus::Slant::Upright,
-            is_merged: false,
+            is_merged: ambre_bus::Merge::Single,
             merge_span: None,
-            is_filtered: false,
+            is_filtered: ambre_bus::RowFilter::Shown,
             ..Default::default()
         }],
     });

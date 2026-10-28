@@ -55,12 +55,12 @@ pub enum TrameEvent {
         italic: super::Slant,
         /// Whether the active cell is part of a merge (a master or a covered
         /// cell), driving the toolbar's merge/unmerge toggle pressed state.
-        merged: bool,
+        merged: Merge,
         /// Whether the active cell's display value parses as a number. Lets the toolbar
         /// resolve [`HAlign::Auto`](super::HAlign::Auto) the same way the renderer does,
         /// numbers right and text left. The alignment control then reflects the de-facto
         /// alignment of an `Auto` cell.
-        numeric: bool,
+        numeric: CellValueKind,
     },
 
     /// The document's content was replaced wholesale (local snapshot restore at
@@ -473,7 +473,7 @@ pub struct DisplayCell {
     /// `HAlign::Auto` aligns such a cell right. The Logic thread decides it
     /// once, and the toolbar reads the same test (`TRAME-UI-093`, `TRAME-186`).
     /// The formatted `text` of a currency or a fraction no longer parses as one.
-    pub numeric: bool,
+    pub numeric: CellValueKind,
     /// Vertical text alignment.
     pub v_align: super::VAlign,
     /// Wrap long text onto multiple lines inside the cell.
@@ -491,7 +491,7 @@ pub struct DisplayCell {
     /// Part of a merged range (`trame-cell-merges`). `true` for both
     /// the master cell and the cells it covers; the UI distinguishes them via
     /// [`merge_span`](DisplayCell::merge_span).
-    pub is_merged: bool,
+    pub is_merged: Merge,
     /// `Some(span)` on the master (top-left) cell of a merge, giving how many
     /// rows and columns it spans. `None` on a covered cell (rendered
     /// blank, swallowed by the master) and on any non-merged cell.
@@ -500,5 +500,34 @@ pub struct DisplayCell {
     /// (`trame-shared-filter`). The UI Thread collapses such
     /// rows; the value is still present, and the aggregates such as `=SUM` still
     /// count it.
-    pub is_filtered: bool,
+    pub is_filtered: RowFilter,
+}
+
+ambre_core::define_flag! {
+    /// Whether a cell is part of a merged range (`trame-cell-merges`): the
+    /// master cell or a cell it covers.
+    pub enum Merge {
+        /// A cell of its own.
+        Single,
+        /// The master of a merge, or a cell it covers.
+        Merged,
+    }
+
+    /// Whether the active shared filter hides a cell's row
+    /// (`trame-shared-filter`).
+    pub enum RowFilter {
+        /// The row is drawn.
+        Shown,
+        /// The row is collapsed; its values still count in an aggregate.
+        Filtered,
+    }
+
+    /// What a cell's computed value is, before any format renders it.
+    /// `HAlign::Auto` aligns a number right and text left (`TRAME-UI-093`).
+    pub enum CellValueKind {
+        /// Text, an error, an empty value or a number that is not finite.
+        Text,
+        /// A number.
+        Number,
+    }
 }

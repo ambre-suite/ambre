@@ -60,13 +60,14 @@ pub use event::{
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, CivilDate, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
-    ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter, DateSerial,
-    DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSessionId, FillMode,
-    FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, MergeSpan, Percent, Row, RowCount,
-    RowDelta, RowSpan, RowVec, SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal,
-    SheetTab, SheetTabPos, Slant, SortKey, SortOrder, Strikethrough, StylePatch, TrameCommand,
-    TrameEvent, Underline, VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak,
+    CellStyle, CellValueKind, CivilDate, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta,
+    ColSpan, ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter,
+    DateSerial, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell, EditSessionId,
+    FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan, Percent,
+    Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec, SelectionKind, SheetId, SheetName,
+    SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, Slant, SortKey, SortOrder,
+    Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline, VAlign, ValidationKind,
+    ValidationOnInvalid, Weight, WordBreak,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};

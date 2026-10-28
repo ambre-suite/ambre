@@ -123,7 +123,11 @@ fn a_merge_leaves_its_neighbours() {
             }
             let cell = read_display(&mut state, r, c);
             assert_eq!(cell.text, format!("{r}{c}"), "({r},{c}) changed");
-            assert!(!cell.is_merged, "({r},{c}) joined the merge");
+            assert_eq!(
+                cell.is_merged,
+                ambre_bus::Merge::Single,
+                "({r},{c}) joined the merge"
+            );
         }
     }
 }
@@ -149,7 +153,10 @@ fn a_one_cell_merge_from_a_peer_is_no_merge() {
     let update = b.flush_delta().expect("the entry is a delta");
     a.apply_remote(&update);
     let a1 = read_display(&mut a, 0, 0);
-    assert_eq!((a1.merge_span, a1.is_merged), (None, false));
+    assert_eq!(
+        (a1.merge_span, a1.is_merged),
+        (None, ambre_bus::Merge::Single)
+    );
     assert!(a.merges.is_empty() && a.covered.is_empty());
 }
 
@@ -239,13 +246,16 @@ fn a_merged_fill_clears_its_tiles_and_keeps_its_source() {
     for row in [3, 5] {
         let cell = read_display(&mut state, row, 0);
         assert_eq!(cell.raw, "", "row {row} kept a value under a tile");
-        assert!(cell.is_merged);
+        assert_eq!(cell.is_merged, ambre_bus::Merge::Merged);
     }
     assert!(state.masked_cells.is_empty(), "a tile masks a value");
     let a1 = read_display(&mut state, 0, 0);
     assert_eq!((a1.text.as_str(), a1.merge_span), ("x", Some(span(2, 1))));
     let a2 = read_display(&mut state, 1, 0);
-    assert_eq!((a2.raw.as_str(), a2.is_merged), ("", true));
+    assert_eq!(
+        (a2.raw.as_str(), a2.is_merged),
+        ("", ambre_bus::Merge::Merged)
+    );
 }
 
 /// Each tile master takes the style of the source master, and a formula
@@ -293,8 +303,9 @@ fn a_source_of_unequal_blocks_fills_cell_by_cell() {
     let column: Vec<String> = (5..10).map(|r| read_cell(&mut state, r, 0)).collect();
     assert_eq!(column, ["a", "", "b", "", ""]);
     for row in 5..10 {
-        assert!(
-            !read_display(&mut state, row, 0).is_merged,
+        assert_eq!(
+            read_display(&mut state, row, 0).is_merged,
+            ambre_bus::Merge::Single,
             "row {row} merged"
         );
     }

@@ -324,9 +324,9 @@ type Snapshot = Vec<(
     CellPos,
     String,
     ambre_bus::Weight,
-    bool,
+    ambre_bus::Merge,
     Option<MergeSpan>,
-    bool,
+    ambre_bus::RowFilter,
 )>;
 
 fn read_window(state: &mut TrameState) -> Snapshot {

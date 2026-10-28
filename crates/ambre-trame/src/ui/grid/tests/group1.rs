@@ -407,9 +407,9 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
         raw: String::new(),
         bold: ambre_bus::Weight::Regular,
         italic: ambre_bus::Slant::Upright,
-        is_merged: true,
+        is_merged: ambre_bus::Merge::Merged,
         merge_span: span,
-        is_filtered: false,
+        is_filtered: ambre_bus::RowFilter::Shown,
         ..Default::default()
     };
     state.on_viewport_data(TrameEvent::ViewportData {
@@ -566,7 +566,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
         col,
         text: String::new(),
         raw: String::new(),
-        is_merged: span.is_some(),
+        is_merged: ambre_bus::Merge::from_bool(span.is_some()),
         merge_span: span,
         ..Default::default()
     };

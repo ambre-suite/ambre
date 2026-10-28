@@ -119,7 +119,7 @@ fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec
 
 /// Whether grid `row` is hidden by the active filter (read through a viewport).
 fn is_filtered(state: &mut TrameState, row: u32, col: u32) -> bool {
-    read_display(state, row, col).is_filtered
+    read_display(state, row, col).is_filtered == ambre_bus::RowFilter::Filtered
 }
 
 /// Seed column A (col 0) with one value per row, top to bottom.

@@ -7,7 +7,7 @@ use crate::TrameCommand;
 use ambre_core::SurfacePx;
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
-fn cell(row: u32, col: u32, filtered: bool) -> DisplayCell {
+fn cell(row: u32, col: u32, filtered: ambre_bus::RowFilter) -> DisplayCell {
     DisplayCell {
         row: Row::new(row),
         col: Col::new(col),
@@ -53,7 +53,12 @@ fn window(cmd: TrameCommand) -> (u32, u32, u32, u32) {
 #[test]
 fn a_scroll_requests_the_screen_and_a_bounded_padding() {
     let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
-    state.on_viewport_data(answer(0, (0..300).map(|row| cell(row, 0, true)).collect()));
+    state.on_viewport_data(answer(
+        0,
+        (0..300)
+            .map(|row| cell(row, 0, ambre_bus::RowFilter::Filtered))
+            .collect(),
+    ));
     assert!(state.scroll_by(RowDelta::new(1_000), ColDelta::new(0)));
     let (row_start, row_end, col_start, col_end) = window(state.scroll_viewport_cmd());
     let pad = state.viewport_rows.max(PADDING_ROWS);
@@ -78,8 +83,14 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
 #[test]
 fn a_scroll_evicts_every_cell_outside_the_window() {
     let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
-    state.on_viewport_data(answer(0, vec![cell(0, 0, false), cell(0, 200, false)]));
-    state.on_viewport_data(answer(1, vec![cell(5_000, 0, false)]));
+    state.on_viewport_data(answer(
+        0,
+        vec![
+            cell(0, 0, ambre_bus::RowFilter::Shown),
+            cell(0, 200, ambre_bus::RowFilter::Shown),
+        ],
+    ));
+    state.on_viewport_data(answer(1, vec![cell(5_000, 0, ambre_bus::RowFilter::Shown)]));
     assert!(state.scroll_by(RowDelta::new(5_000), ColDelta::new(0)));
     let (row_start, row_end, col_start, col_end) = window(state.scroll_viewport_cmd());
     assert!(
@@ -151,7 +162,9 @@ fn an_answer_does_not_move_the_scroll_origin() {
     let origin = (state.top_row, state.left_col);
     state.on_viewport_data(answer(
         0,
-        (0..400).map(|row| cell(row, 0, row % 2 == 0)).collect(),
+        (0..400)
+            .map(|row| cell(row, 0, ambre_bus::RowFilter::from_bool(row % 2 == 0)))
+            .collect(),
     ));
     assert_eq!((state.top_row, state.left_col), origin);
 }

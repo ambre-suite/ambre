@@ -242,7 +242,7 @@ pub struct DisplayCell {
     pub underline: Underline,
     pub strikethrough: Strikethrough,
     pub h_align: HAlign,
-    pub numeric: bool,                   // the value is a number: what `Auto` resolves on
+    pub numeric: CellValueKind,          // Text | Number: what `Auto` resolves on
     pub v_align: VAlign,
     pub wrap: WordBreak,
     pub fg: Option<Rgb>,                 // None = the theme's colour
@@ -250,9 +250,9 @@ pub struct DisplayCell {
     pub font: Option<FontFamily>,
     pub size: Option<FontSize>,         // points
     pub borders: Borders,
-    pub is_merged: bool,                 // a master, or a cell it covers
+    pub is_merged: Merge,                // Merged: a master, or a cell it covers
     pub merge_span: Option<MergeSpan>,   // the rows and columns it covers, on the master
-    pub is_filtered: bool,               // hidden by the active shared filter
+    pub is_filtered: RowFilter,          // Filtered: hidden by the active shared filter
 }
 ```
 

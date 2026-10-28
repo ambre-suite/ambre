@@ -123,13 +123,13 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
     {
         s.bold.set(bold.as_bool());
         s.italic.set(italic.as_bool());
-        s.merged.set(*merged);
+        s.merged.set(merged.as_bool());
         s.underline.set(style.underline.as_bool());
         s.strikethrough.set(style.strikethrough.as_bool());
         s.wrap.set(style.wrap.as_bool());
         s.h_align.set(style.h_align);
         s.v_align.set(style.v_align);
-        s.numeric.set(*numeric);
+        s.numeric.set(numeric.as_bool());
         s.format.set(style.format.clone());
         // The borders pen (line style + colour) is user-owned and sticky: it is
         // NOT reseeded from the selected cell. Seeding it here would clobber an

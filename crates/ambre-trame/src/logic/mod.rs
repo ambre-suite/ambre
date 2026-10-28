@@ -28,10 +28,10 @@ use crate::formula::{
 use crate::model::{CellKey, Line, SheetIndex, Uid, parse_cell_key};
 use crate::{DefinedName, DisplayCell, TrameCommand, TrameEvent};
 use ambre_bus::{
-    BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, ClipboardCell,
-    ClipboardPayload, Col, ColCount, Decimals, FilterKind, FilterOp, MergeSpan, Row, RowCount,
-    RowSpan, SelectionKind, SheetId, SheetName, SheetNameKey, SheetTab, SheetTabPos, Slant,
-    SortKey, StylePatch, Weight,
+    BorderPreset, CellBorder, CellFormat, CellPos, CellRect, CellStyle, CellValueKind,
+    ClipboardCell, ClipboardPayload, Col, ColCount, Decimals, FilterKind, FilterOp, Merge,
+    MergeSpan, Row, RowCount, RowFilter, RowSpan, SelectionKind, SheetId, SheetName, SheetNameKey,
+    SheetTab, SheetTabPos, Slant, SortKey, StylePatch, Weight,
 };
 pub(crate) use ambre_bus::{HeaderRow, SortOrder};
 pub use find::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
