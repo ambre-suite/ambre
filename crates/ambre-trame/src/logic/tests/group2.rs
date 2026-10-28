@@ -101,8 +101,8 @@ fn mutating_command_reports_undo_state() {
         matches!(
             evts.display.last(),
             Some(TrameEvent::UndoState {
-                can_undo: true,
-                can_redo: false
+                undo: ambre_core::Availability::Enabled,
+                redo: ambre_core::Availability::Disabled
             }),
         ),
         "an edit enables Undo"

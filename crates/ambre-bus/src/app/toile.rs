@@ -2336,8 +2336,8 @@ pub enum ToileEvent {
     /// Local undo/redo stack availability, driving the chrome affordances
     /// (`toile-undo`).
     UndoState {
-        can_undo: bool,
-        can_redo: bool,
+        undo: ambre_core::Availability,
+        redo: ambre_core::Availability,
     },
     /// The local playback cursor moved to a new slide
     /// (`toile-presentation`). Carries the enriched [`SlideChange`] the

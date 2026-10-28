@@ -3,7 +3,7 @@
 // titled from the command table (`PROSE-UI-227`). Built here so the shell only
 // renders it (`ARCH-018`).
 
-use ambre_chrome::MenuEntry;
+use ambre_chrome::{Availability, MenuEntry};
 use ambre_commands::Locale;
 
 use super::History;
@@ -20,8 +20,8 @@ pub fn context_entries(history: History) -> Vec<MenuEntry> {
         .filter_map(|id| ambre_commands::find(COMMANDS, id))
     {
         let entry = MenuEntry::command(command, &Locale::En);
-        let inert =
-            (command.id == UNDO && !history.can_undo) || (command.id == REDO && !history.can_redo);
+        let inert = (command.id == UNDO && history.undo == Availability::Disabled)
+            || (command.id == REDO && history.redo == Availability::Disabled);
         entries.push(if inert { entry.disabled() } else { entry });
         if command.id == REDO {
             entries.push(MenuEntry::separator());

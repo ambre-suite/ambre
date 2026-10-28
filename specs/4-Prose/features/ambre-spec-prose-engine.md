@@ -580,7 +580,7 @@ pub enum ProseEvent {
     /// Bring a block into view, from its first page (`PROSE-UI-085`).
     RevealBlock   { block: BlockId, page: PageIndex },
     /// What the local history holds after a command that wrote (`UNDO-006`, `UNDO-009`).
-    UndoState     { can_undo: bool, can_redo: bool },
+    UndoState     { undo: Availability, redo: Availability },
 
     // -- Features --
     TocUpdated         { block_id: BlockId, toc: TableOfContents },

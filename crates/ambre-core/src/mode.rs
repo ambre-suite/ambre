@@ -167,3 +167,23 @@ impl ThreadState {
         self == ThreadState::Resolved
     }
 }
+
+crate::define_flag! {
+    /// Whether a toggle command is on, as the Logic thread reports it.
+    pub enum Toggle {
+        /// The command's effect is off.
+        Off,
+        /// The command's effect is on.
+        On,
+    }
+
+    /// Whether a command can run now, as the Logic thread reports it. The
+    /// default is `Disabled`, the value that was `false`: a store that must
+    /// start a command as actionable writes `Enabled`.
+    pub enum Availability {
+        /// The command cannot run now.
+        Disabled,
+        /// The command can run now.
+        Enabled,
+    }
+}

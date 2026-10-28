@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | Shape | Direction | Carries |
 |---|---|---|
 | `ToileCommand::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
-| `ToileEvent::UndoState { can_undo, can_redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
+| `ToileEvent::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
 The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 

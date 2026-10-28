@@ -51,9 +51,16 @@ fn command_states_defaults() {
     let owner = Owner::new();
     owner.set();
     let store = CommandStates::new([A, B]);
-    // Toggles start `false`, enabled starts `true` (actionable until told else).
-    assert!(!store.toggled_signal(A).unwrap().get_untracked());
-    assert!(store.enabled_signal(A).unwrap().get_untracked());
+    // Toggles start `Off`, availability starts `Enabled` (actionable until
+    // told else).
+    assert_eq!(
+        store.toggled_signal(A).unwrap().get_untracked(),
+        ambre_chrome::Toggle::Off
+    );
+    assert_eq!(
+        store.enabled_signal(A).unwrap().get_untracked(),
+        ambre_chrome::Availability::Enabled
+    );
 }
 
 #[wasm_bindgen_test]
@@ -64,14 +71,22 @@ fn command_states_single_writer_propagates() {
 
     store.set_toggled(A, ambre_chrome::Toggle::On);
     store.set_enabled(B, ambre_chrome::Availability::Disabled);
-    assert!(store.toggled_signal(A).unwrap().get_untracked());
-    assert!(
-        !store.toggled_signal(B).unwrap().get_untracked(),
+    assert_eq!(
+        store.toggled_signal(A).unwrap().get_untracked(),
+        ambre_chrome::Toggle::On
+    );
+    assert_eq!(
+        store.toggled_signal(B).unwrap().get_untracked(),
+        ambre_chrome::Toggle::Off,
         "B toggle untouched"
     );
-    assert!(!store.enabled_signal(B).unwrap().get_untracked());
-    assert!(
+    assert_eq!(
+        store.enabled_signal(B).unwrap().get_untracked(),
+        ambre_chrome::Availability::Disabled
+    );
+    assert_eq!(
         store.enabled_signal(A).unwrap().get_untracked(),
+        ambre_chrome::Availability::Enabled,
         "A enabled untouched"
     );
 }

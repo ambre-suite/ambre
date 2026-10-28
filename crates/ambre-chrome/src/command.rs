@@ -23,32 +23,7 @@ use std::rc::Rc;
 use ambre_commands::{Key, KeyBinding, KeyState, Modifiers};
 use leptos::prelude::*;
 
-/// Whether a toggle command is on, as the Logic thread reports it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Toggle {
-    #[default]
-    Off,
-    On,
-}
-
-/// Whether a command can run now, as the Logic thread reports it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Availability {
-    Disabled,
-    #[default]
-    Enabled,
-}
-
-impl Availability {
-    /// [`Availability::Enabled`] when `can` holds.
-    pub fn enabled_if(can: bool) -> Self {
-        if can {
-            Availability::Enabled
-        } else {
-            Availability::Disabled
-        }
-    }
-}
+pub use ambre_core::{Availability, Toggle};
 
 /// Reactive store of command toggle state, keyed by `CommandId`.
 ///
@@ -61,16 +36,16 @@ impl Availability {
 /// [`toggled_signal`]: CommandStates::toggled_signal
 #[derive(Clone)]
 pub struct CommandStates {
-    toggled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
-    /// Per-command enabled state (for example Undo/Redo availability), keyed like
-    /// `toggled`. Initially `true`: a command is actionable until the Logic
+    toggled: Rc<HashMap<ambre_commands::CommandId, RwSignal<Toggle>>>,
+    /// Per-command availability (for example Undo/Redo), keyed like
+    /// `toggled`. Initially `Enabled`: a command is actionable until the Logic
     /// thread reports otherwise (`TrameEvent::UndoState`, ...).
-    enabled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
+    enabled: Rc<HashMap<ambre_commands::CommandId, RwSignal<Availability>>>,
 }
 
 impl CommandStates {
-    /// Create a store with a toggle signal (initially `false`) and an enabled
-    /// signal (initially `true`) for each id. Must run inside a Leptos reactive
+    /// Create a store with a toggle signal (initially `Off`) and an
+    /// availability signal (initially `Enabled`) for each id. Must run inside a Leptos reactive
     /// owner (for example the mount closure).
     ///
     /// Takes identities rather than a slice so an app passes them straight from
@@ -78,8 +53,14 @@ impl CommandStates {
     /// building a second list beside it.
     pub fn new(ids: impl IntoIterator<Item = ambre_commands::CommandId>) -> Self {
         let ids: Vec<_> = ids.into_iter().collect();
-        let toggled = ids.iter().map(|&id| (id, RwSignal::new(false))).collect();
-        let enabled = ids.iter().map(|&id| (id, RwSignal::new(true))).collect();
+        let toggled = ids
+            .iter()
+            .map(|&id| (id, RwSignal::new(Toggle::Off)))
+            .collect();
+        let enabled = ids
+            .iter()
+            .map(|&id| (id, RwSignal::new(Availability::Enabled)))
+            .collect();
         Self {
             toggled: Rc::new(toggled),
             enabled: Rc::new(enabled),
@@ -88,7 +69,7 @@ impl CommandStates {
 
     /// The reactive toggle signal for `id`, for a chrome view to subscribe to
     /// (for example a button's `aria-pressed`). `None` if the id was not registered.
-    pub fn toggled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<bool>> {
+    pub fn toggled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<Toggle>> {
         self.toggled.get(&id).copied()
     }
 
@@ -96,14 +77,14 @@ impl CommandStates {
     /// from the inbound `UiEvent` stream -- the single writer.
     pub fn set_toggled(&self, id: ambre_commands::CommandId, toggle: Toggle) {
         if let Some(sig) = self.toggled.get(&id) {
-            sig.set(toggle == Toggle::On);
+            sig.set(toggle);
         }
     }
 
     /// The reactive enabled signal for `id`, for a chrome view to subscribe to
     /// (for example a button's `disabled` / `aria-disabled`). `None` if the id was not
     /// registered.
-    pub fn enabled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<bool>> {
+    pub fn enabled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<Availability>> {
         self.enabled.get(&id).copied()
     }
 
@@ -111,7 +92,7 @@ impl CommandStates {
     /// from the inbound `UiEvent` stream -- the single writer.
     pub fn set_enabled(&self, id: ambre_commands::CommandId, availability: Availability) {
         if let Some(sig) = self.enabled.get(&id) {
-            sig.set(availability == Availability::Enabled);
+            sig.set(availability);
         }
     }
 }

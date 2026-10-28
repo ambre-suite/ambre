@@ -151,19 +151,31 @@ fn undo_state_mirrors_into_command_store() {
     let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
     chrome::init_command_states(&store);
     // A fresh document starts with an empty history.
-    assert!(!store.enabled_signal(UNDO).unwrap().get());
-    assert!(!store.enabled_signal(REDO).unwrap().get());
+    assert_eq!(
+        store.enabled_signal(UNDO).unwrap().get(),
+        ambre_chrome::Availability::Disabled
+    );
+    assert_eq!(
+        store.enabled_signal(REDO).unwrap().get(),
+        ambre_chrome::Availability::Disabled
+    );
 
     let ev = UiEvent::Viewport {
         document_id: DocumentId::new(),
         event: AppEvent::Trame(TrameEvent::UndoState {
-            can_undo: true,
-            can_redo: false,
+            undo: ambre_core::Availability::Enabled,
+            redo: ambre_core::Availability::Disabled,
         }),
     };
     chrome::mirror_event(&store, &ev);
-    assert!(store.enabled_signal(UNDO).unwrap().get());
-    assert!(!store.enabled_signal(REDO).unwrap().get());
+    assert_eq!(
+        store.enabled_signal(UNDO).unwrap().get(),
+        ambre_chrome::Availability::Enabled
+    );
+    assert_eq!(
+        store.enabled_signal(REDO).unwrap().get(),
+        ambre_chrome::Availability::Disabled
+    );
 }
 
 /// The `CommandId -> AppCommand` mapping: structural intents become a concrete

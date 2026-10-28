@@ -77,8 +77,8 @@ pub struct ProseSignals {
 /// fresh document holds neither step.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct History {
-    pub can_undo: bool,
-    pub can_redo: bool,
+    pub undo: ambre_core::Availability,
+    pub redo: ambre_core::Availability,
 }
 
 impl Default for ProseSignals {
@@ -113,14 +113,13 @@ impl ProseSignals {
     /// leaves it as it was (`UNDO-006`).
     pub fn mirror_event(&self, ev: &ambre_bus::UiEvent) {
         if let ambre_bus::UiEvent::Viewport {
-            event:
-                ambre_bus::AppEvent::Prose(crate::events::ProseEvent::UndoState { can_undo, can_redo }),
+            event: ambre_bus::AppEvent::Prose(crate::events::ProseEvent::UndoState { undo, redo }),
             ..
         } = ev
         {
             self.history.set(History {
-                can_undo: *can_undo,
-                can_redo: *can_redo,
+                undo: *undo,
+                redo: *redo,
             });
         }
     }

@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_chrome::{ContextMenu, MenuEntry, ZoomFactor};
+use ambre_chrome::{Availability, ContextMenu, MenuEntry, ZoomFactor};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
@@ -54,8 +54,9 @@ fn entries_for(id: MenuId, toggles: Toggles) -> Vec<MenuEntry> {
                 };
                 // The Undo/Redo affordances are disabled from the Logic thread's
                 // `UndoState` alone; the chrome counts nothing (`UNDO-006`).
-                let disabled = (command == UNDO && !toggles.undo_enabled.get())
-                    || (command == REDO && !toggles.redo_enabled.get());
+                let disabled = (command == UNDO
+                    && toggles.undo_enabled.get() == Availability::Disabled)
+                    || (command == REDO && toggles.redo_enabled.get() == Availability::Disabled);
                 Some(if disabled { entry.disabled() } else { entry })
             }
         })

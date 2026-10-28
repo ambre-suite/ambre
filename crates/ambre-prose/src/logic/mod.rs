@@ -553,8 +553,8 @@ impl ProseState {
     fn report_history(&self, outcome: &mut ProseOutcome) {
         if outcome.update.is_some() {
             outcome.display.push(ProseEvent::UndoState {
-                can_undo: self.undo.can_undo(),
-                can_redo: self.undo.can_redo(),
+                undo: ambre_core::Availability::from_bool(self.undo.can_undo()),
+                redo: ambre_core::Availability::from_bool(self.undo.can_redo()),
             });
         }
     }
@@ -1775,12 +1775,14 @@ mod tests {
     }
 
     /// The history state each command reports, if any.
-    fn history_of(outcome: &ProseOutcome) -> Vec<(bool, bool)> {
+    fn history_of(
+        outcome: &ProseOutcome,
+    ) -> Vec<(ambre_core::Availability, ambre_core::Availability)> {
         outcome
             .display
             .iter()
             .filter_map(|event| match event {
-                ProseEvent::UndoState { can_undo, can_redo } => Some((*can_undo, *can_redo)),
+                ProseEvent::UndoState { undo, redo } => Some((*undo, *redo)),
                 _ => None,
             })
             .collect()
@@ -1791,6 +1793,7 @@ mod tests {
     /// so the menu is not refreshed for it.
     #[test]
     fn a_write_reports_the_history_and_a_no_op_reports_none() {
+        use ambre_core::Availability::{Disabled, Enabled};
         let mut state = ProseState::with_peer(ambre_core::PeerId(13)).expect("a document is built");
         let block = state.root_blocks()[0];
         let insert = ProseCommand::InsertText {
@@ -1798,14 +1801,17 @@ mod tests {
             pos: DocOffset::ZERO,
             text: "text".to_owned(),
         };
-        assert_eq!(history_of(&state.handle_command(insert)), [(true, false)]);
+        assert_eq!(
+            history_of(&state.handle_command(insert)),
+            [(Enabled, Disabled)]
+        );
         assert_eq!(
             history_of(&state.handle_command(ProseCommand::Undo)),
-            [(false, true)]
+            [(Disabled, Enabled)]
         );
         assert_eq!(
             history_of(&state.handle_command(ProseCommand::Redo)),
-            [(true, false)]
+            [(Enabled, Disabled)]
         );
 
         // Nothing to redo, a move of the caret, and an empty deletion.

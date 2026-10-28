@@ -52,9 +52,9 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
         match te {
             // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
             // enabled state. The Logic thread is the single source of truth.
-            TrameEvent::UndoState { can_undo, can_redo } => {
-                store.set_enabled(UNDO, ambre_chrome::Availability::enabled_if(*can_undo));
-                store.set_enabled(REDO, ambre_chrome::Availability::enabled_if(*can_redo));
+            TrameEvent::UndoState { undo, redo } => {
+                store.set_enabled(UNDO, *undo);
+                store.set_enabled(REDO, *redo);
             }
             // Every other variant carries no command-toggle state. Listed
             // explicitly so a future variant is a compile error here, not a

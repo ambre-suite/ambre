@@ -9,7 +9,7 @@
 
 use ambre_bus::app::toile::ToileEvent;
 use ambre_bus::{AppEvent, UiEvent};
-use ambre_chrome::CommandStates;
+use ambre_chrome::{Availability, CommandStates};
 use leptos::prelude::*;
 
 use crate::ui::menu_bar::{REDO, UNDO};
@@ -25,8 +25,8 @@ pub struct Toggles {
     /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching
     /// menu rows' `disabled` state. Fed by [`ToileEvent::UndoState`] via
     /// [`mirror_event`].
-    pub undo_enabled: RwSignal<bool>,
-    pub redo_enabled: RwSignal<bool>,
+    pub undo_enabled: RwSignal<Availability>,
+    pub redo_enabled: RwSignal<Availability>,
 }
 
 impl Toggles {
@@ -36,7 +36,7 @@ impl Toggles {
         let enabled = |id| {
             store
                 .enabled_signal(id)
-                .unwrap_or_else(|| RwSignal::new(false))
+                .unwrap_or_else(|| RwSignal::new(Availability::Disabled))
         };
         Self {
             undo_enabled: enabled(UNDO),
@@ -51,12 +51,12 @@ impl Toggles {
 /// launcher calls this for every event it relays, naming no Toile variant.
 pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
     if let UiEvent::Viewport {
-        event: AppEvent::Toile(ToileEvent::UndoState { can_undo, can_redo }),
+        event: AppEvent::Toile(ToileEvent::UndoState { undo, redo }),
         ..
     } = ev
     {
-        store.set_enabled(UNDO, ambre_chrome::Availability::enabled_if(*can_undo));
-        store.set_enabled(REDO, ambre_chrome::Availability::enabled_if(*can_redo));
+        store.set_enabled(UNDO, *undo);
+        store.set_enabled(REDO, *redo);
     }
 }
 

@@ -7,7 +7,7 @@
 // ============================================================================
 
 use ambre_bus::{AppEvent, BorderStyle, CellFormat, HAlign, TrameEvent, UiEvent, VAlign};
-use ambre_chrome::CommandStates;
+use ambre_chrome::{Availability, CommandStates};
 use ambre_core::Rgb;
 use leptos::prelude::*;
 
@@ -22,8 +22,8 @@ pub struct Toggles {
     /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching
     /// buttons' `disabled` state. Fed by [`TrameEvent::UndoState`] via
     /// [`super::mirror_event`].
-    pub undo_enabled: RwSignal<bool>,
-    pub redo_enabled: RwSignal<bool>,
+    pub undo_enabled: RwSignal<Availability>,
+    pub redo_enabled: RwSignal<Availability>,
 }
 
 impl Toggles {
@@ -35,7 +35,7 @@ impl Toggles {
         let enabled = |id| {
             store
                 .enabled_signal(id)
-                .unwrap_or_else(|| RwSignal::new(false))
+                .unwrap_or_else(|| RwSignal::new(Availability::Disabled))
         };
         Self {
             undo_enabled: enabled(UNDO),

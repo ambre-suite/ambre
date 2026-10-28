@@ -324,8 +324,8 @@ async fn the_history_rows_follow_the_reported_state() {
     );
 
     report(ProseEvent::UndoState {
-        can_undo: true,
-        can_redo: false,
+        undo: ambre_core::Availability::Enabled,
+        redo: ambre_core::Availability::Disabled,
     });
     leptos::task::tick().await;
     let rows = disabled_rows(&root);
@@ -339,8 +339,8 @@ async fn the_history_rows_follow_the_reported_state() {
     assert_eq!(disabled_rows(&root), rows);
 
     report(ProseEvent::UndoState {
-        can_undo: false,
-        can_redo: true,
+        undo: ambre_core::Availability::Disabled,
+        redo: ambre_core::Availability::Enabled,
     });
     leptos::task::tick().await;
     let rows = disabled_rows(&root);

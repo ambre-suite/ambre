@@ -7,7 +7,7 @@
 
 use ambre_bus::{DecimalsStep, StylePatch};
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_chrome::{FontSizeSelect, FormatToggle};
+use ambre_chrome::{Availability, FontSizeSelect, FormatToggle};
 use ambre_core::{FontSize, Rgb};
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -268,7 +268,7 @@ pub fn FormatBar(
 
         <button
             aria-label=label(UNDO)
-            disabled=move || !toggles.undo_enabled.get()
+            disabled=move || toggles.undo_enabled.get() == Availability::Disabled
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(UNDO)
         >
@@ -276,7 +276,7 @@ pub fn FormatBar(
         </button>
         <button
             aria-label=label(REDO)
-            disabled=move || !toggles.redo_enabled.get()
+            disabled=move || toggles.redo_enabled.get() == Availability::Disabled
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(REDO)
         >

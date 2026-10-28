@@ -97,7 +97,10 @@ pub enum TrameEvent {
     /// [`Redo`](super::TrameCommand::Redo). Drives the enabled state of the
     /// chrome's Undo/Redo affordances. Reflects Loro's `UndoManager` stacks, whose
     /// scope is the current document session.
-    UndoState { can_undo: bool, can_redo: bool },
+    UndoState {
+        undo: ambre_core::Availability,
+        redo: ambre_core::Availability,
+    },
 
     /// The workbook's sheets, in tab-strip order.
     /// Emitted after any sheet-lifecycle command

@@ -83,7 +83,7 @@ which is why one undo item is one commit rather than one container write.
 | Shape | Direction | Carries |
 |---|---|---|
 | `<App>Command::Undo` / `Redo` | UI to Logic | nothing: the history is the Logic thread's |
-| `<App>Event::UndoState { can_undo, can_redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
+| `<App>Event::UndoState { undo, redo }` | Logic to UI | what the two affordances may offer (`UNDO-006`) |
 
 **Engine state.** One field of each application's engine, the same shape everywhere:
 

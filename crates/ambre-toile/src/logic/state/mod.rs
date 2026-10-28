@@ -960,8 +960,8 @@ impl ToileState {
 
     pub(super) fn undo_state_event(&self) -> ToileEvent {
         ToileEvent::UndoState {
-            can_undo: self.undo.can_undo(),
-            can_redo: self.undo.can_redo(),
+            undo: ambre_core::Availability::from_bool(self.undo.can_undo()),
+            redo: ambre_core::Availability::from_bool(self.undo.can_redo()),
         }
     }
 
@@ -1560,8 +1560,8 @@ mod undo_state_tests {
             matches!(
                 evts.display.last(),
                 Some(ToileEvent::UndoState {
-                    can_undo: true,
-                    can_redo: false
+                    undo: ambre_core::Availability::Enabled,
+                    redo: ambre_core::Availability::Disabled
                 }),
             ),
             "an edit enables Undo: {:?}",

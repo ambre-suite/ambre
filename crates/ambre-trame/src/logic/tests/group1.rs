@@ -825,8 +825,8 @@ fn undo_then_redo_round_trips_a_cell_edit() {
     assert!(matches!(
         evts.display.last(),
         Some(TrameEvent::UndoState {
-            can_undo: false,
-            can_redo: true
+            undo: ambre_core::Availability::Disabled,
+            redo: ambre_core::Availability::Enabled
         })
     ));
     assert_eq!(read_cell(&mut state, 0, 0), "", "value gone, cell blank");
@@ -835,8 +835,8 @@ fn undo_then_redo_round_trips_a_cell_edit() {
     assert!(matches!(
         evts.display.last(),
         Some(TrameEvent::UndoState {
-            can_undo: true,
-            can_redo: false
+            undo: ambre_core::Availability::Enabled,
+            redo: ambre_core::Availability::Disabled
         })
     ));
     assert_eq!(

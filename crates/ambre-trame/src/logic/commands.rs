@@ -385,8 +385,8 @@ impl TrameState {
     /// Current undo/redo availability, for the chrome's Undo/Redo affordances.
     pub(super) fn undo_state_event(&self) -> TrameEvent {
         TrameEvent::UndoState {
-            can_undo: self.undo_manager.can_undo(),
-            can_redo: self.undo_manager.can_redo(),
+            undo: ambre_core::Availability::from_bool(self.undo_manager.can_undo()),
+            redo: ambre_core::Availability::from_bool(self.undo_manager.can_redo()),
         }
     }
 }
