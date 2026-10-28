@@ -214,7 +214,12 @@ impl TrameState {
             }
             TrameCommand::Undo => self.apply_history(HistoryStep::Undo),
             TrameCommand::Redo => self.apply_history(HistoryStep::Redo),
-            TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
+            TrameCommand::DefineName { name, reference } => {
+                match self.name_target(&name, &reference) {
+                    Ok(target) => self.define_name(&name, &target),
+                    Err(refusal) => refusal,
+                }
+            }
             TrameCommand::DeleteName { name } => self.delete_name(&name),
             TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id),
             TrameCommand::CreateSheet { name } => self.create_sheet(&name),

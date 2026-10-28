@@ -205,13 +205,13 @@ keyed by the two corners of the range it covers:
 ```rust
 pub enum ValidationKind {
     List(Vec<String>),                                   // a fixed value set
-    ListRange(String),                                   // the values of a range, as an A1 reference
-    NumberRange { min: f64, max: f64, bounds: RangeBounds },
+    ListRange { sheet: SheetId, range: CellRect },      // the values of a range, resolved at input
+    NumberRange { limits: NumberBounds, bounds: RangeBounds }, // finite, `min` at most `max`
     NumberInteger,
     DateRange { min: Option<DateSerial>, max: Option<DateSerial> },
     TextLength { min: Option<CharCount>, max: Option<CharCount> },
     Regex(String),
-    Formula(String),                                     // must return TRUE
+    Formula(FormulaSource),                              // must return TRUE
 }
 
 pub enum RangeBounds { Exclusive, Inclusive }            // `Exclusive` by default

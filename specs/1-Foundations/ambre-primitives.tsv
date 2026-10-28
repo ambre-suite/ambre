@@ -343,19 +343,22 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Vali
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.1 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Equal.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Formula.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::GreaterThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::LessThan.0 | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::StartsWith.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Formula.0 | field | String	free-text	user-entered rule operand, pattern or formula text
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.max | field | f64	math	validation bound, echoed in the refusal
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidNumberBounds.min | field | f64	math	validation bound, echoed in the refusal
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds.max | field | f64	math	validation bound of a checked number range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds.min | field | f64	math	validation bound of a checked number range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds::max() | ret | f64	math	validation bound of a checked number range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds::min() | ret | f64	math	validation bound of a checked number range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds::new(max) | param | f64	math	validation bound of a checked number range
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | NumberBounds::new(min) | param | f64	math	validation bound of a checked number range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::List.0 | field | Vec<String>	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::ListRange.0 | field | String	free-text	user-entered rule operand, pattern or formula text
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::NumberRange.max | field | f64	math	validation bound
-ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::NumberRange.min | field | f64	math	validation bound
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | ValidationKind::Regex.0 | field | String	free-text	the pattern text the user typed; the workspace holds no regex engine, so nothing parses it yet
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::contains() | ret | bool	generic	predicate result
 ambre-bus | src/app/grid.rs | crate::app::grid | CellRect::is_single_cell() | ret | bool	generic	predicate result
@@ -3548,8 +3551,8 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through() | ret | Result<Cow<'a,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through(payload) | param | &'a[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
-ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::define_name(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sort.rs | crate::logic::sort | TrameState::after_reorder(rewritten) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::after_line_removal(filter_dropped) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::purge_axis() | ret | bool	generic	predicate or did-it-change return

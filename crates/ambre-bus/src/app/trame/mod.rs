@@ -10,6 +10,7 @@
 //! - `style` / `clipboard` / `features` / `find` -- the shared value types both
 //!   directions reference (cell styles, filters, clipboard payloads, deferred
 //!   feature payloads, find options).
+//! - `text` -- the three forms a cell's text takes: source, stored, display.
 //!
 //! Re-globbed so every `crate::app::trame::*` path (and the crate-root
 //! re-export) resolves flat, and so a submodule's `super::CellStyle` reaches its
@@ -22,6 +23,7 @@ mod event;
 mod features;
 mod find;
 mod style;
+mod text;
 
 pub use super::grid::*;
 pub use calendar::*;
@@ -31,3 +33,4 @@ pub use event::*;
 pub use features::*;
 pub use find::*;
 pub use style::*;
+pub use text::*;

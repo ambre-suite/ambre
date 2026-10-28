@@ -8,6 +8,12 @@
 use super::*;
 use crate::formula::types::SheetQualifier;
 
+/// The target a defined name stores: a cell or range reference qualified by
+/// the id of a live sheet (`TRAME-062`). Only
+/// [`TrameState::name_target`] builds one, from the text a `DefineName`
+/// carries.
+pub(super) struct StoredNameTarget(Expr);
+
 impl TrameState {
     /// Reset the positional formula engine and re-feed it from the active
     /// sheet's cells at their current grid positions (resolved through the
@@ -184,35 +190,50 @@ impl TrameState {
         SheetIndex::build(&rows, &cols)
     }
 
-    /// Define or redefine a named range, persist it to the CRDT, and reseed so
-    /// formulas using the name pick it up immediately.
+    /// The target `reference` names for the name `name`, both checked, or
+    /// the refusal said.
     ///
     /// A name no formula can read is refused (`TRAME-155`). So is a definition
-    /// that is not a cell or range reference (`TRAME-069`). A refusal is said,
-    /// and writes nothing. The reference is stored in canonical form: see
-    /// [`canonical_name_reference`](Self::canonical_name_reference).
-    pub(super) fn define_name(&mut self, name: &DefinedName, reference: &str) -> TrameOutcome {
+    /// that is not a cell or range reference (`TRAME-069`). The name is
+    /// checked first.
+    pub(super) fn name_target(
+        &self,
+        name: &DefinedName,
+        reference: &str,
+    ) -> Result<StoredNameTarget, TrameOutcome> {
         // The grammar tries a bareword as a name last, after a function call, a
         // reference and a boolean. `A1` or `TRUE` have a name's shape and parse
         // as something else. The parse is the one rule that decides.
         let readable =
             matches!(parse_formula(name.as_str()), Ok(Expr::Name(parsed)) if parsed == *name);
         if !readable {
-            return TrameOutcome::display_only(vec![TrameEvent::Error {
+            return Err(TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: format!(
                     "\"{name}\" cannot be used as a name: a formula would not read it"
                 ),
-            }]);
+            }]));
         }
-        let Some(stored) = self.canonical_name_reference(reference) else {
-            return TrameOutcome::display_only(vec![TrameEvent::Error {
+        self.canonical_name_reference(reference).ok_or_else(|| {
+            TrameOutcome::display_only(vec![TrameEvent::Error {
                 message: format!("\"{reference}\" is not a cell or range reference"),
-            }]);
-        };
+            }])
+        })
+    }
+
+    /// Define or redefine a named range, persist it to the CRDT, and reseed so
+    /// formulas using the name pick it up immediately. The target is stored in
+    /// canonical form: see
+    /// [`canonical_name_reference`](Self::canonical_name_reference).
+    pub(super) fn define_name(
+        &mut self,
+        name: &DefinedName,
+        target: &StoredNameTarget,
+    ) -> TrameOutcome {
+        let stored = &target.0;
         let _ = self
             .doc
             .get_map(Root::NamedRanges.as_str())
-            .insert(name.as_str(), render::render(&stored).as_str());
+            .insert(name.as_str(), render::render(stored).as_str());
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
@@ -230,7 +251,7 @@ impl TrameState {
     /// when defining it, so every reader resolves one target (`TRAME-062`). A
     /// display name becomes its id, so a rename leaves the name resolving
     /// (`TRAME-067`).
-    fn canonical_name_reference(&self, reference: &str) -> Option<Expr> {
+    fn canonical_name_reference(&self, reference: &str) -> Option<StoredNameTarget> {
         let body = reference.trim().trim_start_matches('=');
         let qualified = match parse_formula(body).ok()? {
             bare @ (Expr::CellRef(_) | Expr::Range(_)) => Expr::SheetRef {
@@ -262,7 +283,7 @@ impl TrameState {
         resolve_refs(qualified.clone(), EngineSheet::ACTIVE, &ctx)
             .ok()
             .and_then(expr_to_name_target)?;
-        Some(qualified)
+        Some(StoredNameTarget(qualified))
     }
 
     /// Remove a named range and reseed. A no-op if the name is undefined.

@@ -11,7 +11,7 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{ColCount, DateSerial};
+use super::{CellRect, ColCount, DateSerial, FormulaSource, SheetId};
 use ambre_core::Rgb;
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
@@ -98,13 +98,17 @@ impl Percent {
 pub enum CondFormatKind {
     GreaterThan(String),
     LessThan(String),
-    Between(String, String),
+    /// Between two operands, `low` and `high`.
+    Between {
+        low: String,
+        high: String,
+    },
     Equal(String),
     Contains(String),
     StartsWith(String),
     /// Custom formula, for example `"=A1>AVERAGE(A:A)"` (relative refs resolved from
-    /// the target cell).
-    Formula(String),
+    /// the target cell), as the user typed it. The Logic thread parses it.
+    Formula(FormulaSource),
     IsEmpty,
     IsNotEmpty,
     IsError,
@@ -151,6 +155,48 @@ pub enum RangeBounds {
     Inclusive,
 }
 
+/// A pair of number limits refused: one is not finite, or `min` exceeds `max`.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("{min} to {max} is not a range of finite numbers, lowest first")]
+pub struct InvalidNumberBounds {
+    pub min: f64,
+    pub max: f64,
+}
+
+/// The two limits of a number range: both finite, `min` at most `max`
+/// (`trame-cell-editing`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NumberBounds {
+    min: f64,
+    max: f64,
+}
+
+impl NumberBounds {
+    /// The range from `min` to `max`.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidNumberBounds`] when either limit is NaN or infinite, or
+    /// when `min` exceeds `max`.
+    pub fn new(min: f64, max: f64) -> Result<Self, InvalidNumberBounds> {
+        if min.is_finite() && max.is_finite() && min <= max {
+            Ok(Self { min, max })
+        } else {
+            Err(InvalidNumberBounds { min, max })
+        }
+    }
+
+    /// The lower limit.
+    pub const fn min(self) -> f64 {
+        self.min
+    }
+
+    /// The upper limit.
+    pub const fn max(self) -> f64 {
+        self.max
+    }
+}
+
 /// A data-validation predicate (`trame-cell-editing`). `List` /
 /// `NumberRange` / `TextLength` are Phase 2; `ListRange` / `DateRange` / `Regex`
 /// are Phase 3.
@@ -158,12 +204,16 @@ pub enum RangeBounds {
 pub enum ValidationKind {
     /// Dropdown over a fixed value set.
     List(Vec<String>),
-    /// Dropdown over the values of a range, given as an A1 reference (the
-    /// engine-level `RangeDep` is not visible from the bus).
-    ListRange(String),
+    /// Dropdown over the values of a range on a sheet. The view resolves the
+    /// A1 reference once, at input (the engine-level `RangeDep` is not
+    /// visible from the bus).
+    ListRange {
+        sheet: SheetId,
+        range: CellRect,
+    },
+    /// Numbers between two limits, each end admitted or refused by `bounds`.
     NumberRange {
-        min: f64,
-        max: f64,
+        limits: NumberBounds,
         bounds: RangeBounds,
     },
     NumberInteger,
@@ -178,8 +228,9 @@ pub enum ValidationKind {
         max: Option<ambre_core::CharCount>,
     },
     Regex(String),
-    /// Custom formula that must return `TRUE`.
-    Formula(String),
+    /// Custom formula that must return `TRUE`, as the user typed it. The Logic
+    /// thread parses it.
+    Formula(FormulaSource),
 }
 
 /// What happens when a [`ValidationKind`] rejects an input (`trame-cell-editing`).
@@ -195,7 +246,27 @@ pub enum ValidationOnInvalid {
 
 #[cfg(test)]
 mod tests {
-    use super::Percent;
+    use super::{NumberBounds, Percent};
+
+    /// A number range keeps its two finite limits, lowest first, and
+    /// refuses a reversed pair or a limit that is not finite.
+    #[test]
+    fn a_number_range_runs_between_two_finite_limits_lowest_first() {
+        let bounds = NumberBounds::new(-1.5, 2.0).expect("ordered finite limits");
+        assert_eq!((bounds.min(), bounds.max()), (-1.5, 2.0));
+        assert!(NumberBounds::new(3.0, 3.0).is_ok(), "one value is a range");
+        for (min, max) in [
+            (2.0, 1.0),
+            (f64::NAN, 1.0),
+            (0.0, f64::INFINITY),
+            (f64::NEG_INFINITY, 0.0),
+        ] {
+            assert!(
+                NumberBounds::new(min, max).is_err(),
+                "{min} to {max} is refused"
+            );
+        }
+    }
 
     /// `TRAME-239`: the range is closed. `TRAME-240`: a value inside it is
     /// kept as given, with no rounding.
