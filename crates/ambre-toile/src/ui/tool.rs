@@ -1102,7 +1102,7 @@ pub fn selection_bounds(selection: &[ElementId], display: &DisplayViewport) -> O
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
             && selection.contains(&e.id)
-            && !e.locked
+            && e.locked == ambre_bus::app::toile::LockState::Unlocked
         {
             acc = Some(match acc {
                 Some(r) => r.union(e.bounds),
@@ -1380,7 +1380,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link: None,
@@ -1396,7 +1396,7 @@ mod tests {
             kind: ElementKind::Frame,
             transform: Affine::IDENTITY,
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Frame(title.to_owned()),
             link: None,
@@ -1420,7 +1420,7 @@ mod tests {
             kind: ElementKind::Group,
             transform: Affine::IDENTITY,
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Group,
             link: None,
@@ -2501,7 +2501,7 @@ mod tests {
             rect_elem("b", Rect::new(40.0, 0.0, 50.0, 10.0)),
         ]);
         if let DisplayNode::Element(e) = &mut disp.nodes[0] {
-            e.locked = true;
+            e.locked = ambre_bus::app::toile::LockState::Locked;
         }
 
         // A locked-only selection wears no box.

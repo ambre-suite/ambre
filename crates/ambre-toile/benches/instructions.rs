@@ -169,7 +169,7 @@ fn busy_node(i: usize) -> DisplayNode {
         kind,
         transform: Affine::IDENTITY,
         bounds: Rect::new(x, y, x + 20.0, y + 20.0),
-        locked: false,
+        locked: ambre_bus::app::toile::LockState::Unlocked,
         style: ElementStyle::default(),
         geom,
         link: None,

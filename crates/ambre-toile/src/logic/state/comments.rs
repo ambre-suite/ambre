@@ -261,7 +261,7 @@ impl ToileState {
         Some(CommentThread {
             id: id.clone(),
             anchor,
-            resolved,
+            resolved: ambre_core::ThreadState::resolved_if(resolved),
             messages,
         })
     }

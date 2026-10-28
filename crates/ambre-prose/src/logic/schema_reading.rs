@@ -505,7 +505,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
             doc::AnnotKey::AnchorBlock => format!("on {}", block_name(reader, &anchor?)),
             doc::AnnotKey::AnchorStart => format!("from character {}", thread.anchor_start.get()),
             doc::AnnotKey::AnchorEnd => format!("to character {}", thread.anchor_end.get()),
-            doc::AnnotKey::Resolved => format!("resolved {}", thread.resolved),
+            doc::AnnotKey::Resolved => format!("resolved {}", thread.resolved.is_resolved()),
             doc::AnnotKey::Replies => {
                 let at = stored.at(2)?;
                 let reply = thread.replies.get(at)?;

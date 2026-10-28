@@ -12,7 +12,7 @@
 
 pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
-    ActiveMarks, Align, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
+    ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
     ChangeOrigin, CommentReply, CommentThread, CrossRefKind, CursorPosition, DateFieldFormat,
     EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry, FootnoteOrdinal,
     GraphemeCount, HeaderField, HeadingLevel, HfTarget, LineHeight, LineHeightMode,

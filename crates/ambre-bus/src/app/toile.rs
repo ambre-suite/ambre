@@ -1244,7 +1244,7 @@ pub struct CommentMessage {
 pub struct CommentThread {
     pub id: ThreadId,
     pub anchor: CommentAnchor,
-    pub resolved: bool,
+    pub resolved: ambre_core::ThreadState,
     pub messages: Vec<CommentMessage>,
 }
 
@@ -1260,7 +1260,7 @@ pub struct CommentPin {
     pub thread: ThreadId,
     pub at: Point,
     pub messages: ThreadMessageCount,
-    pub resolved: bool,
+    pub resolved: ambre_core::ThreadState,
 }
 
 /// One row of the board-wide thread list (`toile-comments`). The panel shows
@@ -1273,7 +1273,7 @@ pub struct CommentPin {
 pub struct CommentSummary {
     pub id: ThreadId,
     pub anchor: CommentAnchor,
-    pub resolved: bool,
+    pub resolved: ambre_core::ThreadState,
     pub messages: ThreadMessageCount,
     pub preview: String,
 }
@@ -2492,7 +2492,7 @@ pub struct DisplayElement {
     pub bounds: Rect,
     /// Top-level element flag (`toile-elements`), NOT from
     /// `ElementStyle`.
-    pub locked: bool,
+    pub locked: LockState,
     pub style: ElementStyle,
     pub geom: DisplayGeom,
     /// The element's link, when it carries one (`toile-links`). The painted

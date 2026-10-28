@@ -366,9 +366,14 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         }
         (ElementKey::Style, _) => Some(style_reading(&shown.style)),
         (ElementKey::Link, _) => Some(link_reading(shown.link.as_ref()?)),
-        (ElementKey::Locked, _) => {
-            Some(if shown.locked { "locked" } else { "unlocked" }.to_owned())
-        }
+        (ElementKey::Locked, _) => Some(
+            if shown.locked == ambre_bus::app::toile::LockState::Locked {
+                "locked"
+            } else {
+                "unlocked"
+            }
+            .to_owned(),
+        ),
         (ElementKey::Body, DisplayGeom::Sticky(body) | DisplayGeom::Text(body)) => {
             Some(format!("shows {body:?}"))
         }
@@ -452,7 +457,14 @@ fn comment_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             CommentAnchor::Element(element) => format!("pinned to element {}", element.as_str()),
             CommentAnchor::Point(at) => format!("pinned at ({}, {}) px", at.x, at.y),
         }),
-        ThreadKey::Resolved => Some(if thread.resolved { "resolved" } else { "open" }.to_owned()),
+        ThreadKey::Resolved => Some(
+            if thread.resolved == ambre_core::ThreadState::Resolved {
+                "resolved"
+            } else {
+                "open"
+            }
+            .to_owned(),
+        ),
         ThreadKey::Messages => {
             let at = stored.at(2)?;
             let message = thread.messages.get(at)?;

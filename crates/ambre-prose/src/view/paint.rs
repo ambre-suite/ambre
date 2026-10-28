@@ -1974,8 +1974,8 @@ mod tests {
             anchor_block: Some(block),
             anchor_start: DocOffset::new(start),
             anchor_end: DocOffset::new(end),
-            orphaned: false,
-            resolved: false,
+            orphaned: crate::events::AnchorState::Anchored,
+            resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
         }
     }

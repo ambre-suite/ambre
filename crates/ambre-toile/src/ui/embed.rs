@@ -580,7 +580,10 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
             }
             _ => None,
         })
-        .find(|e| !e.locked && e.bounds.contains(e.transform.inverse() * world))
+        .find(|e| {
+            e.locked == ambre_bus::app::toile::LockState::Unlocked
+                && e.bounds.contains(e.transform.inverse() * world)
+        })
 }
 
 // -- Tests (host tier) -------------------------------------------------------
@@ -611,7 +614,7 @@ mod tests {
                 * Affine::rotate(rot)
                 * Affine::translate(-bounds.center().to_vec2()),
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::DocEmbed {
                 document_id,
@@ -799,7 +802,7 @@ mod tests {
         let (a, b) = (DocumentId::new(), DocumentId::new());
         let over = Rect::new(0.0, 0.0, 50.0, 50.0);
         let mut locked = doc_embed("e3", DocumentId::new(), over, 0.0);
-        locked.locked = true;
+        locked.locked = ambre_bus::app::toile::LockState::Locked;
 
         // Two overlapping embeds: the later node is on top (`derive.rs` walks
         // z-order back to front).

@@ -5187,7 +5187,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     assert_eq!(thread.messages.len(), 1);
     assert_eq!(thread.messages[0].author, me);
     assert_eq!(thread.messages[0].ts, ambre_bus::Timestamp(7));
-    assert!(!thread.resolved);
+    assert_eq!(thread.resolved, ambre_core::ThreadState::Open);
 }
 
 #[test]
@@ -5386,7 +5386,11 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     let ra = a.comment_thread(&t).expect("A still holds the thread");
     let rb = b.comment_thread(&t).expect("B still holds the thread");
     assert_eq!(ra, rb, "concurrent resolves diverged");
-    assert!(ra.resolved, "the thread reads resolved on both peers");
+    assert_eq!(
+        ra.resolved,
+        ambre_core::ThreadState::Resolved,
+        "the thread reads resolved on both peers"
+    );
     assert_eq!(ra.messages.len(), 1, "resolving keeps the messages");
 
     // Idempotent: resolving an already-resolved thread writes nothing.
@@ -5402,7 +5406,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
         state: ambre_core::ThreadState::Open,
     });
     let reopened = a.comment_thread(&t).expect("the thread survives a reopen");
-    assert!(!reopened.resolved);
+    assert_eq!(reopened.resolved, ambre_core::ThreadState::Open);
     assert_eq!(reopened.messages.len(), 1);
 }
 
@@ -5514,7 +5518,11 @@ fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
     );
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
-    assert!(!thread.resolved, "a dropped thread is open");
+    assert_eq!(
+        thread.resolved,
+        ambre_core::ThreadState::Open,
+        "a dropped thread is open"
+    );
     assert_eq!(thread.anchor, CommentAnchor::Element(e));
     assert_eq!(
         thread
@@ -5612,7 +5620,11 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
     assert_eq!(thread.anchor, anchor, "a reply does not move the pin");
-    assert!(thread.resolved, "a reply does not reopen the thread");
+    assert_eq!(
+        thread.resolved,
+        ambre_core::ThreadState::Resolved,
+        "a reply does not reopen the thread"
+    );
 }
 
 #[test]
@@ -5713,7 +5725,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
         .find(|p| p.thread == on_element)
         .expect("the anchored thread has a pin");
     assert_eq!(element_pin.messages.get(), 2);
-    assert!(!element_pin.resolved);
+    assert_eq!(element_pin.resolved, ambre_core::ThreadState::Open);
     // The pin sits on the element it is about: its top-right corner.
     assert_eq!(element_pin.at, Point::new(90.0, 20.0));
 
@@ -5722,7 +5734,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
         .find(|p| p.thread == on_board)
         .expect("the free-point thread has a pin");
     assert_eq!(board_pin.at, Point::new(5.0, 6.0));
-    assert!(board_pin.resolved);
+    assert_eq!(board_pin.resolved, ambre_core::ThreadState::Resolved);
 }
 
 #[test]

@@ -217,8 +217,8 @@ impl ProseUiState {
         };
         for thread in &self.comments {
             if let Some(block) = thread.anchor_block
-                && !thread.orphaned
-                && !thread.resolved
+                && thread.orphaned == crate::events::AnchorState::Anchored
+                && thread.resolved == ambre_core::ThreadState::Open
             {
                 push(
                     block,

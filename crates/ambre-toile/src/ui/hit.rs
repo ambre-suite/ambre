@@ -41,7 +41,7 @@ pub fn pick_floor(cam: &ViewportTransform) -> BoardLength {
 /// floor of a stroke's reach, in world units (see [`pick_floor`]). `false`
 /// for a `Group` (it paints nothing; selection resolves through membership,).
 pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: BoardLength) -> bool {
-    if elem.locked {
+    if elem.locked == ambre_bus::app::toile::LockState::Locked {
         return false;
     }
     // Undo the element's rotation: geometry below is in the unrotated frame.
@@ -211,7 +211,10 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
             DisplayNode::Element(e) => Some(e),
             DisplayNode::Connector(_) => None,
         })
-        .filter(|e| !e.locked && !matches!(e.geom, DisplayGeom::Group))
+        .filter(|e| {
+            e.locked == ambre_bus::app::toile::LockState::Unlocked
+                && !matches!(e.geom, DisplayGeom::Group)
+        })
         .filter(|e| {
             let b = rotated_aabb(e);
             if rect.union(b) == rect {
@@ -249,7 +252,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform,
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom,
             link: None,
@@ -373,7 +376,7 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 50.0),
             Affine::IDENTITY,
         );
-        e.locked = true;
+        e.locked = ambre_bus::app::toile::LockState::Locked;
         assert!(!hit(&e, Point::new(50.0, 25.0)));
     }
 
@@ -437,16 +440,28 @@ mod tests {
     /// still taken.
     #[test]
     fn a_marquee_skips_a_locked_element_and_a_group_node() {
-        let node = |id: &str, geom: DisplayGeom, locked: bool| {
+        let node = |id: &str, geom: DisplayGeom, locked: ambre_bus::app::toile::LockState| {
             let mut e = elem(geom, Rect::new(10.0, 10.0, 40.0, 40.0), Affine::IDENTITY);
             e.id = ElementId(id.to_owned());
             e.locked = locked;
             DisplayNode::Element(e)
         };
         let nodes = [
-            node("locked", DisplayGeom::Rect, true),
-            node("group", DisplayGeom::Group, false),
-            node("free", DisplayGeom::Rect, false),
+            node(
+                "locked",
+                DisplayGeom::Rect,
+                ambre_bus::app::toile::LockState::Locked,
+            ),
+            node(
+                "group",
+                DisplayGeom::Group,
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            node(
+                "free",
+                DisplayGeom::Rect,
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ];
         let hits = marquee_hits(&nodes, Rect::new(0.0, 0.0, 100.0, 100.0));
         assert_eq!(hits, vec![ElementId("free".to_owned())]);

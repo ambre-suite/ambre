@@ -1081,7 +1081,7 @@ fn summary(id: &str, preview: &str) -> CommentSummary {
     CommentSummary {
         id: ElementId(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
-        resolved: false,
+        resolved: ambre_core::ThreadState::Open,
         messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
         preview: preview.to_owned(),
     }
@@ -1116,7 +1116,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
     open.set(Some(CommentThread {
         id: ElementId("t3".to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
-        resolved: false,
+        resolved: ambre_core::ThreadState::Open,
         messages: vec![CommentMessage {
             author: UserId::new(),
             ts: ambre_core::Timestamp(0),

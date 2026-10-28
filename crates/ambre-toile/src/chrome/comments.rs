@@ -86,7 +86,7 @@ pub fn CommentsPanel(
                             let f = filter.get();
                             list.get()
                                 .into_iter()
-                                .filter(|t| f.keeps(crate::ui::comments::ThreadState::resolved_if(t.resolved)))
+                                .filter(|t| f.keeps(t.resolved))
                                 .map(|t| {
                                     let anchor = t.anchor.clone();
                                     let id = t.id.clone();
@@ -101,7 +101,7 @@ pub fn CommentsPanel(
                                             >
                                                 <span class="ambre-comments-preview">{t.preview.clone()}</span>
                                                 <span class="ambre-comments-count">{t.messages.get().to_string()}</span>
-                                                {t.resolved.then(|| view! {
+                                                {(t.resolved == crate::ui::comments::ThreadState::Resolved).then(|| view! {
                                                     <span class="ambre-comments-resolved">"resolved"</span>
                                                 })}
                                             </button>
@@ -147,10 +147,13 @@ pub fn CommentsPanel(
                                         class="ambre-comments-resolve"
                                         on:click=move |_| on_intent.run(CommentIntent::Resolve {
                                             thread: id.clone(),
-                                            state: crate::ui::comments::ThreadState::resolved_if(!resolved),
+                                            state: match resolved {
+                                                crate::ui::comments::ThreadState::Open => crate::ui::comments::ThreadState::Resolved,
+                                                crate::ui::comments::ThreadState::Resolved => crate::ui::comments::ThreadState::Open,
+                                            },
                                         })
                                     >
-                                        {if resolved { "Reopen" } else { "Resolve" }}
+                                        {if resolved == crate::ui::comments::ThreadState::Resolved { "Reopen" } else { "Resolve" }}
                                     </button>
                                 </div>
                             </div>

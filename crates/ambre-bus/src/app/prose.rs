@@ -1076,18 +1076,31 @@ pub struct CommentReply {
     pub text: String,
 }
 
+ambre_core::define_flag! {
+    /// Whether a comment's mark still spans text (`PROSE-FEAT-202`,
+    /// `PROSE-FEAT-203`).
+    pub enum AnchorState {
+        /// The mark spans text, so the anchor is its live span.
+        Anchored,
+        /// The text under the mark is gone, so the anchor is the last span
+        /// the mark held.
+        Orphaned,
+    }
+}
+
 /// One comment thread as the view lists it.
 ///
 /// The anchor is the live mark's span, or the last one it held when
-/// `orphaned` is set (`PROSE-FEAT-202`, `PROSE-FEAT-203`).
+/// `orphaned` reads [`AnchorState::Orphaned`] (`PROSE-FEAT-202`,
+/// `PROSE-FEAT-203`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentThread {
     pub comment_id: CommentId,
     pub anchor_block: Option<BlockId>,
     pub anchor_start: DocOffset,
     pub anchor_end: DocOffset,
-    pub orphaned: bool,
-    pub resolved: bool,
+    pub orphaned: AnchorState,
+    pub resolved: ambre_core::ThreadState,
     pub replies: Vec<CommentReply>,
 }
 

@@ -184,7 +184,7 @@ impl ToileState {
             kind,
             transform,
             bounds,
-            locked,
+            locked: ambre_bus::app::toile::LockState::locked_if(locked),
             style,
             geom,
             // The link register, absent on an element that carries none

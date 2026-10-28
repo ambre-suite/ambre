@@ -205,7 +205,7 @@ fn sticky(id: &str, bounds: Rect) -> DisplayElement {
         kind: ElementKind::Sticky,
         transform: kurbo::Affine::IDENTITY,
         bounds,
-        locked: false,
+        locked: ambre_bus::app::toile::LockState::Unlocked,
         style: Default::default(),
         geom: ambre_bus::app::toile::DisplayGeom::Text("hi".to_owned()),
         link: None,
@@ -2461,7 +2461,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let mut rig = Rig::new();
     let a = sticky("a", A);
     let b = DisplayElement {
-        locked: true,
+        locked: ambre_bus::app::toile::LockState::Locked,
         style: ElementStyle {
             stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
             ..ElementStyle::default()
@@ -2580,7 +2580,7 @@ fn a_shared_board(peer: UserId) -> Rig {
             thread: eid("t"),
             at: kurbo::Point::new(50.0, 50.0),
             messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
-            resolved: false,
+            resolved: ambre_core::ThreadState::Open,
         }],
         reactions,
         viewport: Viewport::default(),

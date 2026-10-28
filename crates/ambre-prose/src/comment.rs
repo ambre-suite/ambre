@@ -13,7 +13,9 @@ use ambre_core::{CommentId, ReplyId, UserId};
 use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
 use crate::doc::{self, AnnotKey, Fields, ReplyKey};
-use crate::events::{CommentReply, CommentThread, block_id};
+use ambre_core::ThreadState;
+
+use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
 use ambre_bus::app::prose::MarkKey;
 
@@ -215,8 +217,10 @@ pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
                 anchor_block: anchor.map(|span| block_id(span.block)),
                 anchor_start: anchor.map_or(DocOffset::ZERO, |span| span.start),
                 anchor_end: anchor.map_or(DocOffset::ZERO, |span| span.end),
-                orphaned: live.is_none(),
-                resolved: doc::read_bool(&entry, AnnotKey::Resolved) == Some(true),
+                orphaned: AnchorState::from_bool(live.is_none()),
+                resolved: ThreadState::resolved_if(
+                    doc::read_bool(&entry, AnnotKey::Resolved) == Some(true),
+                ),
                 replies: replies(&entry),
             })
         })

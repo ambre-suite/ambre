@@ -173,7 +173,7 @@ pub fn build_floatbar(
         if e.kind == ElementKind::Group {
             has_group = true;
         }
-        if e.locked {
+        if e.locked == ambre_bus::app::toile::LockState::Locked {
             any_locked = true;
         } else {
             any_unlocked = true;
@@ -240,7 +240,7 @@ mod tests {
         id: &str,
         kind: ElementKind,
         bounds: Rect,
-        locked: bool,
+        locked: ambre_bus::app::toile::LockState,
         fill: Option<Rgba>,
     ) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
@@ -269,7 +269,7 @@ mod tests {
             kind: ElementKind::Sticky,
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style,
             geom: DisplayGeom::Rect,
             link: None,
@@ -315,7 +315,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
             None,
         )]);
         assert_eq!(
@@ -330,7 +330,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
             None,
         )]);
         assert_eq!(
@@ -348,7 +348,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(10.0, 20.0, 30.0, 60.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
             Some(Rgba::from_bits(0x00ff_00ff)),
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), CssPoint::default()).expect("bar");
@@ -365,7 +365,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             Rect::new(10.0, 20.0, 30.0, 60.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
             None,
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), page(40.0, 96.0)).expect("bar");
@@ -381,14 +381,14 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 Rect::new(0.0, 10.0, 20.0, 30.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 None,
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 Rect::new(60.0, 40.0, 80.0, 70.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 None,
             ),
         ]);
@@ -410,14 +410,14 @@ mod tests {
                 "g",
                 ElementKind::Group,
                 Rect::new(0.0, 0.0, 10.0, 10.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 None,
             ),
             elem(
                 "l",
                 ElementKind::Sticky,
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                true,
+                ambre_bus::app::toile::LockState::Locked,
                 None,
             ),
         ]);
@@ -441,14 +441,14 @@ mod tests {
                 "a",
                 ElementKind::Sticky,
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 Some(Rgba::from_bits(0xff00_00ff)),
             ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 Rect::new(6.0, 0.0, 10.0, 5.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 Some(Rgba::from_bits(0x0000_ffff)),
             ),
         ]);
@@ -469,14 +469,14 @@ mod tests {
                 "a",
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(0.0, 0.0, 5.0, 5.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 Some(Rgba::from_bits(0x1122_33ff)),
             ),
             elem(
                 "b",
                 ElementKind::Shape(ShapeKind::Rect),
                 Rect::new(6.0, 0.0, 10.0, 5.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
                 Some(Rgba::from_bits(0x1122_33ff)),
             ),
         ]);

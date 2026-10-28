@@ -42,7 +42,7 @@ const PIN_OFFSET: f64 = 10.0;
 /// A count over 9 reads `9+`: the marker is a constant 22 logical pixels across,
 /// and three digits do not fit in it.
 pub fn pin_badge(pin: &CommentPin) -> String {
-    if pin.resolved {
+    if pin.resolved == ambre_core::ThreadState::Resolved {
         return "v".to_string();
     }
     match pin.messages.get() {
@@ -136,7 +136,7 @@ fn paint_pin<S: DrawSurface>(
     let path = circle.to_path(0.1);
     // A resolved thread reads as background, an open one as an accent. The
     // board therefore says which is which at a glance (`TOILE-UI-024`).
-    let fill = if pin.resolved {
+    let fill = if pin.resolved == ambre_core::ThreadState::Resolved {
         palette.header_bg
     } else {
         palette.selection
@@ -174,8 +174,8 @@ fn paint_pin<S: DrawSurface>(
 }
 
 /// The badge colour over each of the two pin fills.
-fn badge_color(palette: &Palette, resolved: bool) -> Color {
-    if resolved {
+fn badge_color(palette: &Palette, state: ambre_core::ThreadState) -> Color {
+    if state == ambre_core::ThreadState::Resolved {
         palette.cell_text
     } else {
         // The open fill is the accent, so the badge takes the content ground
@@ -286,7 +286,7 @@ mod tests {
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
-    fn pin(id: &str, at: Point, messages: u32, resolved: bool) -> CommentPin {
+    fn pin(id: &str, at: Point, messages: u32, resolved: ambre_core::ThreadState) -> CommentPin {
         CommentPin {
             thread: ElementId(id.to_owned()),
             at,
@@ -328,7 +328,12 @@ mod tests {
     #[test]
     fn a_click_on_a_pin_names_its_thread_and_a_miss_names_none() {
         let w2s = Affine::IDENTITY;
-        let pins = vec![pin("t1", Point::new(100.0, 100.0), 2, false)];
+        let pins = vec![pin(
+            "t1",
+            Point::new(100.0, 100.0),
+            2,
+            ambre_core::ThreadState::Open,
+        )];
         let centre = pin_circle(pins[0].at, &w2s).center;
         assert_eq!(
             hit_pin(&pins, &w2s, centre),
@@ -344,7 +349,10 @@ mod tests {
     fn overlapping_pins_pick_the_topmost() {
         let w2s = Affine::IDENTITY;
         let at = Point::new(10.0, 10.0);
-        let pins = vec![pin("under", at, 1, false), pin("over", at, 1, false)];
+        let pins = vec![
+            pin("under", at, 1, ambre_core::ThreadState::Open),
+            pin("over", at, 1, ambre_core::ThreadState::Open),
+        ];
         assert_eq!(
             hit_pin(&pins, &w2s, pin_circle(at, &w2s).center),
             Some(ElementId("over".to_owned()))
@@ -356,9 +364,23 @@ mod tests {
     /// digits (`TOILE-UI-024`).
     #[test]
     fn the_badge_reads_the_count_and_the_resolved_state() {
-        assert_eq!(pin_badge(&pin("t", Point::ZERO, 3, false)), "3");
-        assert_eq!(pin_badge(&pin("t", Point::ZERO, 42, false)), "9+");
-        assert_eq!(pin_badge(&pin("t", Point::ZERO, 42, true)), "v");
+        assert_eq!(
+            pin_badge(&pin("t", Point::ZERO, 3, ambre_core::ThreadState::Open)),
+            "3"
+        );
+        assert_eq!(
+            pin_badge(&pin("t", Point::ZERO, 42, ambre_core::ThreadState::Open)),
+            "9+"
+        );
+        assert_eq!(
+            pin_badge(&pin(
+                "t",
+                Point::ZERO,
+                42,
+                ambre_core::ThreadState::Resolved
+            )),
+            "v"
+        );
     }
 
     /// Every pin of the frame paints a disc and its badge glyphs.
@@ -368,8 +390,13 @@ mod tests {
         let mut text_cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         let vp = viewport(vec![
-            pin("t1", Point::new(0.0, 0.0), 1, false),
-            pin("t2", Point::new(60.0, 0.0), 2, true),
+            pin("t1", Point::new(0.0, 0.0), 1, ambre_core::ThreadState::Open),
+            pin(
+                "t2",
+                Point::new(60.0, 0.0),
+                2,
+                ambre_core::ThreadState::Resolved,
+            ),
         ]);
         paint_pins(
             &mut surface,
@@ -400,7 +427,7 @@ mod tests {
     fn a_pin_takes_the_press_before_the_board_does() {
         let w2s = Affine::IDENTITY;
         let at = Point::new(50.0, 50.0);
-        let pins = vec![pin("t1", at, 1, false)];
+        let pins = vec![pin("t1", at, 1, ambre_core::ThreadState::Open)];
         let on_pin = pin_circle(at, &w2s).center;
         assert_eq!(
             press_target(Tool::Select, PointerButton::Primary, &pins, &w2s, on_pin),

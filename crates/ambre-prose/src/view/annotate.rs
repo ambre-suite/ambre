@@ -286,8 +286,12 @@ impl ProseUiState {
             .filter_map(|(id, text)| {
                 let why = match self.comments.iter().find(|t| t.comment_id == *id) {
                     None => LostReply::Deleted,
-                    Some(thread) if thread.resolved => LostReply::Resolved,
-                    Some(thread) if thread.orphaned => LostReply::Orphaned,
+                    Some(thread) if thread.resolved == ambre_core::ThreadState::Resolved => {
+                        LostReply::Resolved
+                    }
+                    Some(thread) if thread.orphaned == crate::events::AnchorState::Orphaned => {
+                        LostReply::Orphaned
+                    }
                     Some(_) => return None,
                 };
                 Some((*id, (!text.trim().is_empty()).then_some(why)))
@@ -338,7 +342,10 @@ impl ProseUiState {
     pub fn thread_anchors(&self) -> Vec<ThreadAnchor> {
         self.comments
             .iter()
-            .filter(|thread| !thread.orphaned && !thread.resolved)
+            .filter(|thread| {
+                thread.orphaned == crate::events::AnchorState::Anchored
+                    && thread.resolved == ambre_core::ThreadState::Open
+            })
             .filter_map(|thread| {
                 let block = thread.anchor_block?;
                 let index = self.flow_index(&tree_id(block))?;
@@ -469,11 +476,15 @@ mod tests {
             anchor_block: Some(block),
             anchor_start: DocOffset::new(4),
             anchor_end: DocOffset::new(9),
-            orphaned: false,
+            orphaned: crate::events::AnchorState::Anchored,
             resolved,
             replies: Vec::new(),
         };
-        let (first, last, done) = (thread(a, false), thread(c, false), thread(a, true));
+        let (first, last, done) = (
+            thread(a, ambre_core::ThreadState::Open),
+            thread(c, ambre_core::ThreadState::Open),
+            thread(a, ambre_core::ThreadState::Resolved),
+        );
         ui.apply_event(&ProseEvent::CommentsUpdated {
             threads: vec![first.clone(), done, last.clone()],
         });
@@ -506,8 +517,8 @@ mod tests {
             anchor_block: Some(block),
             anchor_start: DocOffset::ZERO,
             anchor_end: DocOffset::new(3),
-            orphaned: false,
-            resolved: false,
+            orphaned: crate::events::AnchorState::Anchored,
+            resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
         };
         let (low, high) = (thread(c), thread(a));
@@ -535,8 +546,8 @@ mod tests {
                 anchor_block: Some(far),
                 anchor_start: DocOffset::ZERO,
                 anchor_end: DocOffset::new(3),
-                orphaned: false,
-                resolved: false,
+                orphaned: crate::events::AnchorState::Anchored,
+                resolved: ambre_core::ThreadState::Open,
                 replies: Vec::new(),
             }],
         });
@@ -607,8 +618,8 @@ mod tests {
             anchor_block: Some(a),
             anchor_start: DocOffset::new(4),
             anchor_end: DocOffset::new(9),
-            orphaned: false,
-            resolved: false,
+            orphaned: crate::events::AnchorState::Anchored,
+            resolved: ambre_core::ThreadState::Open,
             replies: Vec::new(),
         };
         let (moved, gone, closed, cut, blank) = (thread(), thread(), thread(), thread(), thread());
@@ -641,8 +652,8 @@ mod tests {
 
         // A peer deletes one, resolves one and cuts the text of another.
         let mut after = vec![moved.clone(), closed, cut];
-        after[1].resolved = true;
-        after[2].orphaned = true;
+        after[1].resolved = ambre_core::ThreadState::Resolved;
+        after[2].orphaned = crate::events::AnchorState::Orphaned;
         ui.apply_event(&ProseEvent::CommentsUpdated { threads: after });
         let mut lost = ui.lost_drafts(&drafts);
         lost.sort_by_key(|(id, _)| *id.as_bytes());

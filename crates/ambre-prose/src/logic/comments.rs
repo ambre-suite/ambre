@@ -462,7 +462,13 @@ mod tests {
         assert_eq!(comment::all(&state.doc), vec![id]);
         let t = thread(&state, id);
         assert_eq!(t.anchor_block, Some(block));
-        assert!(!t.orphaned && !t.resolved);
+        assert_eq!(
+            (t.orphaned, t.resolved),
+            (
+                crate::events::AnchorState::Anchored,
+                ambre_core::ThreadState::Open
+            )
+        );
         assert_eq!(texts(&state, id), vec!["Why brave?".to_owned()]);
     }
 
@@ -555,9 +561,12 @@ mod tests {
         let (mut state, block) = document(ambre_core::PeerId(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
         state.handle_command(ProseCommand::ResolveComment { comment_id: id });
-        assert!(thread(&state, id).resolved);
+        assert_eq!(
+            thread(&state, id).resolved,
+            ambre_core::ThreadState::Resolved
+        );
         reply(&mut state, id, "Two.", ambre_core::Timestamp(11));
-        assert!(!thread(&state, id).resolved);
+        assert_eq!(thread(&state, id).resolved, ambre_core::ThreadState::Open);
     }
 
     /// A reply moves no mark, rewrites no earlier reply and touches no other
@@ -584,10 +593,13 @@ mod tests {
         let other = open(&mut state, block, (3, 11), "Other.");
         let before = thread(&state, other);
         state.handle_command(ProseCommand::ResolveComment { comment_id: id });
-        assert!(thread(&state, id).resolved);
+        assert_eq!(
+            thread(&state, id).resolved,
+            ambre_core::ThreadState::Resolved
+        );
         state.handle_command(ProseCommand::ReopenComment { comment_id: id });
         let t = thread(&state, id);
-        assert!(!t.resolved);
+        assert_eq!(t.resolved, ambre_core::ThreadState::Open);
         assert_eq!(texts(&state, id), vec!["One."]);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
@@ -637,7 +649,7 @@ mod tests {
         alice.handle_command(edit("Deux."));
         let t = thread(&alice, id);
         assert_eq!(texts(&alice, id), vec!["One.", "Deux."]);
-        assert!(t.resolved);
+        assert_eq!(t.resolved, ambre_core::ThreadState::Resolved);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
             (DocOffset::ZERO, DocOffset::new(5))
@@ -670,7 +682,7 @@ mod tests {
         alice.handle_command(delete);
         let t = thread(&alice, id);
         assert_eq!(texts(&alice, id), vec!["One.", "Three."]);
-        assert!(t.resolved);
+        assert_eq!(t.resolved, ambre_core::ThreadState::Resolved);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
             (DocOffset::ZERO, DocOffset::new(5))
@@ -703,7 +715,10 @@ mod tests {
         state.handle_command(ProseCommand::DeleteComment { comment_id: gone });
         assert_eq!(comment::all(&state.doc), vec![kept]);
         assert_eq!(span(&state, kept), (6, 17));
-        assert!(!thread(&state, kept).orphaned);
+        assert_eq!(
+            thread(&state, kept).orphaned,
+            crate::events::AnchorState::Anchored
+        );
         assert_eq!(state.text_of(&block).as_deref(), Some("Hello brave world"));
         assert!(
             comment::runs(&state.doc, &comment::text_blocks(&state.doc))
@@ -753,8 +768,8 @@ mod tests {
             range: DocSpan::from_usize_range(5..11),
         });
         let t = thread(&state, id);
-        assert!(t.orphaned);
-        assert!(t.resolved);
+        assert_eq!(t.orphaned, crate::events::AnchorState::Orphaned);
+        assert_eq!(t.resolved, ambre_core::ThreadState::Resolved);
         assert_eq!(texts(&state, id), vec!["Brave?"]);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
@@ -852,7 +867,11 @@ mod tests {
         state.handle_command(ProseCommand::Undo);
         assert_eq!(texts(&state, id), vec!["One.", "Two."]);
         assert_eq!(state.text_of(&block).as_deref(), Some(""));
-        assert!(thread(&state, id).orphaned, "the undone text took the mark");
+        assert_eq!(
+            thread(&state, id).orphaned,
+            crate::events::AnchorState::Orphaned,
+            "the undone text took the mark"
+        );
     }
 
     /// A reply that races the deletion of its thread is lost, on both peers
@@ -916,8 +935,8 @@ mod tests {
             prop_assert_eq!(here.orphaned, there.orphaned);
             // A thread is orphaned only once its text is gone. It may outlive
             // every `b` when a peer typed inside the passage meanwhile.
-            prop_assert!(!here.orphaned || left == 0);
-            if !here.orphaned {
+            prop_assert!(here.orphaned == crate::events::AnchorState::Anchored || left == 0);
+            if here.orphaned == crate::events::AnchorState::Anchored {
                 prop_assert_eq!(span(&alice, id), span(&bob, id));
                 let text: String = whole.chars()
                     .skip(here.anchor_start.to_usize())

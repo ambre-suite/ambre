@@ -3694,7 +3694,9 @@ impl ToileView {
                         // (`TOILE-UI-209`): the screen keeps the committed body.
                         // The base lets Logic keep a peer's edit that landed
                         // while the editor was open (`TOILE-UI-381`).
-                        let locked = self.find_element(&id).is_some_and(|e| e.locked);
+                        let locked = self
+                            .find_element(&id)
+                            .is_some_and(|e| e.locked == ambre_bus::app::toile::LockState::Locked);
                         if !locked {
                             self.patch_element_text(&id, &base, &text);
                         }

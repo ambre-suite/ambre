@@ -36,7 +36,7 @@ fn element_announcement(element: &DisplayElement) -> String {
         out.push_str(", ");
         out.extend(text.trim().chars().take(TEXT_LIMIT));
     }
-    if element.locked {
+    if element.locked == ambre_bus::app::toile::LockState::Locked {
         out.push_str(", locked");
     }
     out
@@ -86,7 +86,12 @@ mod tests {
     use ambre_bus::app::toile::ElementStyle;
     use ambre_draw::{Affine, Rect};
 
-    fn element(n: u32, kind: ElementKind, geom: DisplayGeom, locked: bool) -> DisplayElement {
+    fn element(
+        n: u32,
+        kind: ElementKind,
+        geom: DisplayGeom,
+        locked: ambre_bus::app::toile::LockState,
+    ) -> DisplayElement {
         DisplayElement {
             id: ElementId::mint(ambre_core::PeerId(1), n),
             kind,
@@ -108,13 +113,13 @@ mod tests {
             1,
             ElementKind::Sticky,
             DisplayGeom::Sticky(" Buy milk ".into()),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         );
         let shape = element(
             2,
             ElementKind::Shape(ShapeKind::Ellipse),
             DisplayGeom::Ellipse,
-            true,
+            ambre_bus::app::toile::LockState::Locked,
         );
         let (a, b) = (note.id.clone(), shape.id.clone());
         let data = vec![note, shape];
@@ -145,7 +150,7 @@ mod tests {
             1,
             ElementKind::Text,
             DisplayGeom::Text("x".repeat(500)),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         );
         let id = long.id.clone();
         assert_eq!(selection_announcement(std::slice::from_ref(&id), &[]), None);

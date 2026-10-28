@@ -137,7 +137,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style,
             geom: DisplayGeom::Rect,
             link: None,

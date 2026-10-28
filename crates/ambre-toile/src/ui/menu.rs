@@ -224,7 +224,7 @@ pub fn ctx_scope_for(
         if elem.kind == ElementKind::Group {
             has_group = true;
         }
-        if elem.locked {
+        if elem.locked == ambre_bus::app::toile::LockState::Locked {
             any_locked = true;
         } else {
             any_unlocked = true;
@@ -554,7 +554,12 @@ mod tests {
         ElementId(s.to_owned())
     }
 
-    fn elem(id: &str, kind: ElementKind, bounds: Rect, locked: bool) -> DisplayElement {
+    fn elem(
+        id: &str,
+        kind: ElementKind,
+        bounds: Rect,
+        locked: ambre_bus::app::toile::LockState,
+    ) -> DisplayElement {
         DisplayElement {
             id: eid(id),
             kind,
@@ -609,7 +614,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
@@ -635,9 +640,24 @@ mod tests {
     #[test]
     fn overlapping_frames_resolve_to_the_front_most() {
         let dv = viewport(vec![
-            elem("back", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
-            elem("front", ElementKind::Frame, r(5.0, 5.0, 50.0, 50.0), false),
-            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+            elem(
+                "back",
+                ElementKind::Frame,
+                r(0.0, 0.0, 100.0, 100.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "front",
+                ElementKind::Frame,
+                r(5.0, 5.0, 50.0, 50.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(10.0, 10.0, 20.0, 20.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.containing_frame, Some(eid("front")));
@@ -646,8 +666,18 @@ mod tests {
     #[test]
     fn react_emoji_resolves_to_one_react_per_target() {
         let dv = viewport(vec![
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("b", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "b",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let cmds =
             resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &els(&dv), &dv)
@@ -676,7 +706,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert_eq!(cmds.len(), 1);
@@ -700,7 +730,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert!(scope.over_selection);
@@ -714,8 +744,18 @@ mod tests {
     #[test]
     fn multi_selection_enables_group() {
         let dv = viewport(vec![
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("b", ElementKind::Sticky, r(20.0, 0.0, 30.0, 10.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "b",
+                ElementKind::Sticky,
+                r(20.0, 0.0, 30.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &[], &dv);
         assert!(scope.multi);
@@ -725,8 +765,18 @@ mod tests {
     #[test]
     fn group_and_locked_flags() {
         let dv = viewport(vec![
-            elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("l", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), true),
+            elem(
+                "g",
+                ElementKind::Group,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "l",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 5.0, 5.0),
+                ambre_bus::app::toile::LockState::Locked,
+            ),
         ]);
         let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &[], &dv);
         assert!(scope.has_group);
@@ -737,8 +787,18 @@ mod tests {
     #[test]
     fn containing_frame_detected() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
-            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 100.0, 100.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(10.0, 10.0, 20.0, 20.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.containing_frame, Some(eid("f")));
@@ -747,12 +807,17 @@ mod tests {
     #[test]
     fn no_frame_when_selection_outside() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 30.0, 30.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 30.0, 30.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(100.0, 100.0, 110.0, 110.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
@@ -765,12 +830,17 @@ mod tests {
     #[test]
     fn a_framed_element_outside_every_box_is_offered_removal() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 30.0, 30.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 30.0, 30.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
             elem(
                 "a",
                 ElementKind::Sticky,
                 r(100.0, 100.0, 110.0, 110.0),
-                false,
+                ambre_bus::app::toile::LockState::Unlocked,
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[eid("a")], &dv);
@@ -788,8 +858,18 @@ mod tests {
     #[test]
     fn an_unframed_element_inside_a_box_is_offered_add_only() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
-            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 100.0, 100.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(10.0, 10.0, 20.0, 20.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
@@ -806,15 +886,20 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let selected = vec![
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
             elem(
                 "b",
                 ElementKind::Sticky,
                 r(1000.0, 1000.0, 1010.0, 1010.0),
-                true,
+                ambre_bus::app::toile::LockState::Locked,
             ),
         ];
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &[], &dv);
@@ -830,7 +915,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let sel = vec![eid("a")];
         assert!(matches!(
@@ -858,7 +943,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
@@ -871,8 +956,18 @@ mod tests {
     #[test]
     fn group_ungroup_resolve() {
         let dv = viewport(vec![
-            elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
+            elem(
+                "g",
+                ElementKind::Group,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 5.0, 5.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         assert!(matches!(
             resolve_menu_command(GROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv)
@@ -894,9 +989,24 @@ mod tests {
     #[test]
     fn ungrouping_a_selection_sends_one_command() {
         let dv = viewport(vec![
-            elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("h", ElementKind::Group, r(20.0, 0.0, 30.0, 10.0), false),
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
+            elem(
+                "g",
+                ElementKind::Group,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "h",
+                ElementKind::Group,
+                r(20.0, 0.0, 30.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 5.0, 5.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let sel = [eid("g"), eid("a"), eid("h")];
         let out = resolve_menu_command(UNGROUP, &sel, None, &els(&dv), &dv).unwrap();
@@ -914,8 +1024,18 @@ mod tests {
     #[test]
     fn reorder_one_per_element() {
         let dv = viewport(vec![
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
-            elem("b", ElementKind::Sticky, r(6.0, 0.0, 10.0, 5.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 5.0, 5.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "b",
+                ElementKind::Sticky,
+                r(6.0, 0.0, 10.0, 5.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let out =
             resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &els(&dv), &dv).unwrap();
@@ -935,7 +1055,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         assert!(matches!(
             resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv)
@@ -960,8 +1080,18 @@ mod tests {
     #[test]
     fn add_to_frame_targets_container() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
-            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 100.0, 100.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(10.0, 10.0, 20.0, 20.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
@@ -977,8 +1107,18 @@ mod tests {
     #[test]
     fn remove_from_frame_names_no_frame() {
         let dv = viewport(vec![
-            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
-            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+            elem(
+                "f",
+                ElementKind::Frame,
+                r(0.0, 0.0, 100.0, 100.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(10.0, 10.0, 20.0, 20.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let out =
             resolve_menu_command(REMOVE_FROM_FRAME, &[eid("a")], None, &els(&dv), &dv).unwrap();
@@ -1019,8 +1159,18 @@ mod tests {
     #[test]
     fn an_align_id_resolves_to_one_batch_over_the_selection() {
         let dv = viewport(vec![
-            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
-            elem("b", ElementKind::Sticky, r(40.0, 0.0, 10.0, 10.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(0.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
+            elem(
+                "b",
+                ElementKind::Sticky,
+                r(40.0, 0.0, 10.0, 10.0),
+                ambre_bus::app::toile::LockState::Unlocked,
+            ),
         ]);
         let sel = [eid("a"), eid("b")];
         for (id, want) in [
@@ -1054,7 +1204,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            true,
+            ambre_bus::app::toile::LockState::Locked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
@@ -1084,7 +1234,7 @@ mod tests {
             "a",
             ElementKind::Sticky,
             r(0.0, 0.0, 10.0, 10.0),
-            false,
+            ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();

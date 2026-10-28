@@ -155,7 +155,7 @@ mod tests {
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
             link,

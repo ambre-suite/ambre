@@ -50,8 +50,8 @@ fn thread(id: CommentId, replies: &[&str]) -> CommentThread {
         anchor_block: None,
         anchor_start: DocOffset::ZERO,
         anchor_end: DocOffset::new(3),
-        orphaned: false,
-        resolved: false,
+        orphaned: ambre_bus::app::prose::AnchorState::Anchored,
+        resolved: ambre_core::ThreadState::Open,
         replies: replies
             .iter()
             .map(|text| CommentReply {

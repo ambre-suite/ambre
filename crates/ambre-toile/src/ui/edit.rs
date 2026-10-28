@@ -247,7 +247,7 @@ mod tests {
             kind,
             transform: Affine::IDENTITY,
             bounds: kurbo::Rect::new(0.0, 0.0, 120.0, 80.0),
-            locked: false,
+            locked: ambre_bus::app::toile::LockState::Unlocked,
             style,
             geom: DisplayGeom::Text("hi".to_owned()),
             link: None,
