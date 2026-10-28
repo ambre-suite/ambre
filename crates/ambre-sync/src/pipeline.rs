@@ -12,10 +12,9 @@
 use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
-use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
+use ambre_core::authorship::SessionNonce;
 use ambre_core::{
-    Aad, ByteSize, EphemeralBytes, KEY_ID_LEN, KeyId, MediaBytes, PublicKey, SecretBytes,
-    SnapshotBytes,
+    Aad, ByteSize, EphemeralBytes, KeyId, MediaBytes, PublicKey, SecretBytes, SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -206,7 +205,7 @@ pub fn update_body(
 ) -> Result<UpdateFrame, PipelineError> {
     let summary = summary.map(ActivitySummary::encode).transpose()?;
     let summary_len = summary.as_ref().map_or(0, Vec::len);
-    let mut body = Vec::with_capacity(SESSION_NONCE_LEN + 1 + summary_len + delta.len());
+    let mut body = Vec::with_capacity(SessionNonce::SIZE.as_len() + 1 + summary_len + delta.len());
     body.extend_from_slice(&nonce.0);
     match summary {
         Some(summary) => {
@@ -228,11 +227,7 @@ pub fn update_body(
 /// [`PipelineError::ShortBody`], [`PipelineError::UnknownSummary`] and
 /// [`PipelineError::Summary`].
 pub fn split_update_body(body: UpdateFrame) -> Result<UpdateBody, PipelineError> {
-    let (nonce, rest) = body
-        .0
-        .split_first_chunk::<SESSION_NONCE_LEN>()
-        .ok_or(PipelineError::ShortBody)?;
-    let nonce = SessionNonce(*nonce);
+    let (nonce, rest) = SessionNonce::split_from(&body.0).ok_or(PipelineError::ShortBody)?;
     let (&marker, rest) = rest.split_first().ok_or(PipelineError::ShortBody)?;
     let (summary, delta) = match SummaryMarker::from_byte(marker)? {
         SummaryMarker::Absent => (None, rest),
@@ -723,17 +718,14 @@ ambre_core::define_layout_version! {
     current = V1;
 }
 
-/// Bytes of the layout byte.
-const LAYOUT_LEN: usize = std::mem::size_of::<ObjectLayout>();
-/// Bytes of the author key that opens a standalone object.
-const AUTHOR_KEY_LEN: usize = std::mem::size_of::<PublicKey>();
-/// Bytes before the ciphertext of a standalone object.
-const OBJECT_HEADER_LEN: usize = LAYOUT_LEN
-    + KEY_ID_LEN
-    + AUTHOR_KEY_LEN
-    + ambre_crypto::signature::SIGNATURE_LEN
-    + ambre_crypto::commitment::TAG_LEN
-    + ambre_crypto::aead::NONCE_LEN;
+/// Bytes before the ciphertext of a standalone object, each part at the size
+/// its own type states.
+const OBJECT_HEADER: ByteSize = ObjectLayout::SIZE
+    .saturating_add(KeyId::SIZE)
+    .saturating_add(PublicKey::SIZE)
+    .saturating_add(Signature::SIZE)
+    .saturating_add(CommitmentTag::SIZE)
+    .saturating_add(Nonce::SIZE);
 
 /// Domain of a sealed document name. The document id follows it in the
 /// additional data, so a name opens under its own document only (`SYNC-068`).
@@ -802,7 +794,11 @@ pub fn seal_object(
 /// Lays out a sealed object: `layout || key id || author key || signature ||
 /// commitment tag || nonce || ciphertext`.
 fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> SealedBlob {
-    let mut out = Vec::with_capacity(OBJECT_HEADER_LEN + sealed.ciphertext.len());
+    let mut out = Vec::with_capacity(
+        OBJECT_HEADER
+            .saturating_add(ByteSize::of_len(sealed.ciphertext.len()))
+            .as_len(),
+    );
     out.push(ObjectLayout::CURRENT.byte());
     out.extend_from_slice(key_id.as_array());
     out.extend_from_slice(signing_key.verifying_key().as_bytes());
@@ -821,29 +817,20 @@ fn object_parts(
 ) -> Result<(KeyId, PublicKey, Sealed), PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
-    if bytes.len() < OBJECT_HEADER_LEN {
-        return Err(PipelineError::ShortObject);
-    }
-    let key_id = object_key(object)?;
+    let (_, rest) = bytes.split_first().ok_or(PipelineError::ShortObject)?;
+    let (key_id, rest) = KeyId::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (author, rest) = PublicKey::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (signature, rest) = Signature::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (commitment_tag, rest) =
+        CommitmentTag::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (nonce, ciphertext) = Nonce::split_from(rest).ok_or(PipelineError::ShortObject)?;
     check_key(key_id, doc_key)?;
-    let (author, rest) = bytes
-        .get(LAYOUT_LEN + KEY_ID_LEN..)
-        .ok_or(PipelineError::ShortObject)?
-        .split_at(AUTHOR_KEY_LEN);
-    let (signature, rest) = rest.split_at(ambre_crypto::signature::SIGNATURE_LEN);
-    let (tag, rest) = rest.split_at(ambre_crypto::commitment::TAG_LEN);
-    let (nonce, ciphertext) = rest.split_at(ambre_crypto::aead::NONCE_LEN);
     let sealed = Sealed {
-        nonce: Nonce(nonce.try_into().map_err(|_| PipelineError::ShortObject)?),
+        nonce,
         ciphertext: Ciphertext(ciphertext.to_vec()),
-        commitment_tag: CommitmentTag(tag.try_into().map_err(|_| PipelineError::ShortObject)?),
-        signature: Signature(
-            signature
-                .try_into()
-                .map_err(|_| PipelineError::ShortObject)?,
-        ),
+        commitment_tag,
+        signature,
     };
-    let author = PublicKey::from_slice(author).map_err(|_| PipelineError::ShortObject)?;
     Ok((key_id, author, sealed))
 }
 
@@ -952,9 +939,9 @@ pub fn object_key(object: &impl StoredObject) -> Result<KeyId, PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
     bytes
-        .get(LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN)
-        .and_then(|id| id.try_into().ok())
-        .map(KeyId::from_array)
+        .split_first()
+        .and_then(|(_, rest)| KeyId::split_from(rest))
+        .map(|(key_id, _)| key_id)
         .ok_or(PipelineError::ShortObject)
 }
 
@@ -969,10 +956,11 @@ pub fn object_key(object: &impl StoredObject) -> Result<KeyId, PipelineError> {
 pub fn object_author(object: &impl StoredObject) -> Result<PublicKey, PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
-    let start = LAYOUT_LEN + KEY_ID_LEN;
     bytes
-        .get(start..start + AUTHOR_KEY_LEN)
-        .and_then(|author| PublicKey::from_slice(author).ok())
+        .split_first()
+        .and_then(|(_, rest)| KeyId::split_from(rest))
+        .and_then(|(_, rest)| PublicKey::split_from(rest))
+        .map(|(author, _)| author)
         .ok_or(PipelineError::ShortObject)
 }
 
@@ -980,6 +968,7 @@ pub fn object_author(object: &impl StoredObject) -> Result<PublicKey, PipelineEr
 mod tests {
     use super::*;
     use ambre_core::activity::ActivityKind;
+    use ambre_core::authorship::SESSION_NONCE_LEN;
     use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
     use ambre_crypto::MasterSeed;
     use ambre_protocol::messages::{Clock, Counter};
@@ -1208,14 +1197,14 @@ mod tests {
         )
         .unwrap()
         .into_bytes();
-        if let Some(marker) = body.get_mut(SESSION_NONCE_LEN) {
+        if let Some(marker) = body.get_mut(SessionNonce::SIZE.as_len()) {
             *marker = 2;
         }
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(body)),
             Err(PipelineError::UnknownSummary)
         ));
-        let mut cut = vec![1; SESSION_NONCE_LEN];
+        let mut cut = vec![1; SessionNonce::SIZE.as_len()];
         cut.extend_from_slice(&[SummaryMarker::Present.byte(), 0, 0]);
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(cut)),
@@ -1352,7 +1341,8 @@ mod tests {
         )
         .unwrap()
         .into_bytes();
-        renamed[LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN].copy_from_slice(doc_key.id().as_array());
+        let key_at = ObjectLayout::SIZE.as_len();
+        renamed[key_at..key_at + KeyId::SIZE.as_len()].copy_from_slice(doc_key.id().as_array());
         assert!(open_object(&fetched(&renamed), &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
     }
 
@@ -1463,7 +1453,7 @@ mod tests {
     /// tag, and each is checked on the open (`SYNC-018`).
     #[test]
     fn a_sealed_object_carries_the_signature_and_the_tag() {
-        use ambre_crypto::{commitment, signature};
+        use ambre_crypto::signature;
 
         let (doc_key, signing, _) = keys();
         let aad = &ambre_core::Aad::of(b"ambre-media");
@@ -1475,7 +1465,10 @@ mod tests {
         let sealed = sealed.into_bytes();
 
         // The signature: one flipped byte, and the author no longer signed it.
-        let signature_at = LAYOUT_LEN + KEY_ID_LEN + AUTHOR_KEY_LEN;
+        let signature_at = ObjectLayout::SIZE
+            .saturating_add(KeyId::SIZE)
+            .saturating_add(PublicKey::SIZE)
+            .as_len();
         let mut forged = sealed.clone();
         forged[signature_at] ^= 1;
         assert!(matches!(
@@ -1484,13 +1477,14 @@ mod tests {
         ));
 
         // The tag: a wrong one, re-signed so the signature passes, still fails.
-        let tag_at = signature_at + signature::SIGNATURE_LEN;
-        let nonce_at = tag_at + commitment::TAG_LEN;
+        let tag_at = signature_at + Signature::SIZE.as_len();
+        let nonce_at = tag_at + CommitmentTag::SIZE.as_len();
+        let header_len = OBJECT_HEADER.as_len();
         let mut moved = sealed.clone();
         moved[tag_at] ^= 1;
         let tag = ambre_core::CommitmentTag(moved[tag_at..nonce_at].try_into().unwrap());
-        let nonce = ambre_core::Nonce(moved[nonce_at..OBJECT_HEADER_LEN].try_into().unwrap());
-        let body = ambre_core::Ciphertext(moved[OBJECT_HEADER_LEN..].to_vec());
+        let nonce = ambre_core::Nonce(moved[nonce_at..header_len].try_into().unwrap());
+        let body = ambre_core::Ciphertext(moved[header_len..].to_vec());
         let bound = object_aad(doc_key.id(), aad);
         let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
         moved[signature_at..tag_at].copy_from_slice(&resigned.0);
@@ -1501,7 +1495,7 @@ mod tests {
 
         // Too short to hold the header.
         assert!(matches!(
-            open_object(&fetched(&sealed[..OBJECT_HEADER_LEN - 1]), aad, &doc_key),
+            open_object(&fetched(&sealed[..header_len - 1]), aad, &doc_key),
             Err(PipelineError::ShortObject)
         ));
     }

@@ -813,7 +813,7 @@ ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::new(bytes) 
 ambre-core | src/authorship.rs | crate::authorship | PeerId.0 | field | u64	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	newtype-inner	the registry key newtype, built from a PeerId alone
 ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
-ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; sync reads it as a const generic and a slice offset, both usize, and no size is stored
+ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; other crates read it only as an array length (an array literal, a const generic) and frame the nonce with SessionNonce::SIZE and SessionNonce::split_from
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::into_bytes() | ret | Vec<u8>	newtype-inner	The bytes of a PeerEntryBytes, handed to the LoroMap insert of a document registry.
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId.0 | field | &'static str	newtype-inner	CanvasId newtype
@@ -959,7 +959,7 @@ ambre-core | src/font.rs | crate::font | FontWeight::get() | ret | u16	newtype-i
 ambre-core | src/font.rs | crate::font | FontWeight::is_bold() | ret | bool	generic	predicate result
 ambre-core | src/font.rs | crate::font | FontWeight::new(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | InvalidFontWeight.0 | field | u16	newtype-inner	the refused value an error reports
-ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array; sync and the server read it as a const generic and a slice offset, both usize, and no size is stored
+ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
 ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::from_array(bytes) | param | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
@@ -1122,7 +1122,7 @@ ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::positive(z) | param | f64	n
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(hi) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	length of the [u8;N] nonce array; sync reads it as a const generic and a slice offset, both usize, and no size is stored
+ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	crate-internal length of the [u8;N] nonce array, for the layouts ambre-crypto writes and reads itself; other crates frame a nonce with Nonce::SIZE, and a const assert holds the two equal
 ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(key) | param | &[u8;32]	foreign-api	the raw key XChaCha20Poly1305::new takes; each public entry point names its own key type
@@ -1130,7 +1130,7 @@ ambre-crypto | src/aead.rs | crate::aead | seal(plaintext) | param | &[u8]	gener
 ambre-crypto | src/aead.rs | crate::aead | seal_under(key) | param | &[u8;32]	foreign-api	the raw key XChaCha20Poly1305::new takes; each public entry point names its own key type
 ambre-crypto | src/aead.rs | crate::aead | seal_under(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/commitment.rs | crate::commitment | MEDIA_ADDRESS_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/commitment.rs | crate::commitment | TAG_LEN | const | usize	generic	length of the [u8;N] commitment tag array; sync reads it as a slice offset, a usize, and no size is stored
+ambre-crypto | src/commitment.rs | crate::commitment | TAG_LEN | const | usize	local	module-private array length of the HMAC subkey that commitment.rs derives; other crates frame a tag with CommitmentTag::SIZE, and a const assert holds the two equal
 ambre-crypto | src/commitment.rs | crate::commitment | keyed(key) | param | &[u8]	foreign-api	the key slice Hmac::new_from_slice takes; mac and media_address pass a typed key's bytes
 ambre-crypto | src/ecdh.rs | crate::ecdh | KEK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -1160,7 +1160,6 @@ ambre-crypto | src/peer.rs | crate::peer | entry_resolves() | ret | bool	generic
 ambre-crypto | src/peer.rs | crate::peer | entry_transcript() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/random.rs | crate::random | bytes() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/random.rs | crate::random | fill(buf) | param | &mut[u8]	generic	generic byte/text API or codec
-ambre-crypto | src/signature.rs | crate::signature | SIGNATURE_LEN | const | usize	generic	length of the [u8;N] signature array; sync reads it as a slice offset, a usize, and no size is stored
 ambre-crypto | src/signature.rs | crate::signature | message() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
@@ -2640,17 +2639,14 @@ ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret |
 ambre-sync | src/membership_log.rs | crate::membership_log | LogHead::is_empty() | ret | bool	generic	named predicate of the log head
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_message() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/pipeline.rs | crate::pipeline | AUTHOR_KEY_LEN | const | usize	generic	array length of the author key in the object header, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | COMPRESS_THRESHOLD | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob.0 | field | Vec<u8>	newtype-inner	newtype inner
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::as_bytes() | ret | &[u8]	newtype-inner	enum/newtype own accessor or constructor
 ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::new(bytes) | param | Vec<u8>	newtype-inner	enum/newtype own accessor or constructor
-ambre-sync | src/pipeline.rs | crate::pipeline | LAYOUT_LEN | const | usize	generic	array length of the layout byte in the object header, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	decompressed bytes allowed per compressed byte, a factor of the bomb bound
 ambre-sync | src/pipeline.rs | crate::pipeline | MEDIA_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/pipeline.rs | crate::pipeline | OBJECT_HEADER_LEN | const | usize	generic	sum of the header array lengths, a slice offset; no size is stored
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor

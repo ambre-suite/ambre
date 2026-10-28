@@ -48,7 +48,7 @@ pub fn derive_peer_id(signing_pub: &PublicKey, nonce: &SessionNonce) -> PeerId {
 /// The bytes a registry entry signs: the document, the PeerID and the nonce,
 /// behind their own domain. Every field has a fixed length.
 fn entry_transcript(document: DocumentId, peer: PeerId, nonce: &SessionNonce) -> Vec<u8> {
-    let mut msg = Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + SESSION_NONCE_LEN);
+    let mut msg = Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + SessionNonce::SIZE.as_len());
     msg.extend_from_slice(ENTRY_DOMAIN);
     msg.extend_from_slice(document.as_bytes());
     msg.extend_from_slice(&peer.0.to_le_bytes());

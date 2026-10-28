@@ -56,6 +56,8 @@ pub struct OpCounter(pub i32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);
 
+crate::envelope::fixed_bytes!(SessionNonce, SESSION_NONCE_LEN);
+
 /// One row of the peer registry: who wrote under a PeerID, and with which
 /// nonce. It carries that user's signature over the document, the PeerID and
 /// the nonce (`AUTHOR-019`).

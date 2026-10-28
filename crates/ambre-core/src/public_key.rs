@@ -62,6 +62,8 @@ macro_rules! define_public_key {
             }
         }
 
+        crate::envelope::fixed_bytes!($name, 32);
+
         impl AsRef<[u8]> for $name {
             fn as_ref(&self) -> &[u8] {
                 &self.0

@@ -45,6 +45,8 @@ impl KeyId {
     }
 }
 
+crate::envelope::fixed_bytes!(KeyId, KEY_ID_LEN);
+
 /// A text that is not the hex form of a key identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("not a key identifier: {KEY_ID_LEN} bytes in hex")]

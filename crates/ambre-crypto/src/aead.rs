@@ -12,8 +12,11 @@ use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use crate::error::CryptoError;
 use crate::keys::{DocumentKey, FileKey, StoreKey};
 
-/// Length of the XChaCha20 nonce, in bytes.
-pub const NONCE_LEN: usize = 24;
+/// Length of the XChaCha20 nonce, in bytes: the array length of this crate's
+/// own layouts. A crate that frames a nonce reads [`ambre_core::Nonce::SIZE`].
+pub(crate) const NONCE_LEN: usize = 24;
+
+const _: () = assert!(ambre_core::Nonce::SIZE.0 == NONCE_LEN as u64);
 
 /// Encrypts `plaintext` under `key` with the given `aad`, returning a freshly
 /// generated nonce and the ciphertext (Poly1305 tag appended).

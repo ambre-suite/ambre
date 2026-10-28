@@ -13,8 +13,12 @@ use sha2::Sha256;
 use crate::error::CryptoError;
 use crate::keys::DocumentKey;
 
-/// Length of the commitment tag, in bytes.
-pub const TAG_LEN: usize = 32;
+/// Length of the commitment tag, in bytes: the array length of the subkey
+/// this module derives. A crate that frames a tag reads
+/// [`ambre_core::CommitmentTag::SIZE`].
+const TAG_LEN: usize = 32;
+
+const _: () = assert!(ambre_core::CommitmentTag::SIZE.0 == TAG_LEN as u64);
 
 type HmacSha256 = Hmac<Sha256>;
 

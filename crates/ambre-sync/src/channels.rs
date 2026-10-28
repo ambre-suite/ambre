@@ -4,7 +4,6 @@ use ambre_bus::{
     MemberChannel, MetaId, SealedChannelKey, SegmentId, SpaceId,
 };
 use ambre_core::DocType;
-use ambre_crypto::aead::NONCE_LEN;
 
 use crate::error::{Part, SyncError};
 
@@ -998,10 +997,7 @@ pub(crate) fn seal_channel_key(
 /// The id of the space key a catalogue entry was sealed under. `None` for
 /// bytes too short to name one.
 pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<KeyId> {
-    sealed
-        .as_bytes()
-        .first_chunk::<{ ambre_core::KEY_ID_LEN }>()
-        .map(|id| KeyId::from_array(*id))
+    KeyId::split_from(sealed.as_bytes()).map(|(key_id, _)| key_id)
 }
 
 /// Unseal a channel key the catalogue holds, with the anchor sealed beside it.
@@ -1013,19 +1009,13 @@ pub(crate) fn unseal_channel_key(
     keys: &crate::chain::Keyring,
 ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), SyncError> {
     let short = SyncError::Malformed(Part::SealedChannelKey);
-    let (key_id, rest) = sealed
-        .as_bytes()
-        .split_first_chunk::<{ ambre_core::KEY_ID_LEN }>()
-        .ok_or(short)?;
-    let space_key = keys
-        .find(KeyId::from_array(*key_id))
-        .ok_or(SyncError::KeyOutOfReach)?;
+    let (key_id, rest) = KeyId::split_from(sealed.as_bytes()).ok_or(short)?;
+    let space_key = keys.find(key_id).ok_or(SyncError::KeyOutOfReach)?;
     let space_key = &space_key;
-    let (nonce, ciphertext) = rest
-        .split_first_chunk::<NONCE_LEN>()
-        .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
+    let (nonce, ciphertext) =
+        ambre_core::Nonce::split_from(rest).ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
-        &ambre_core::Nonce(*nonce),
+        &nonce,
         &ambre_core::Ciphertext(ciphertext.to_vec()),
         &channel_key_aad(channel_id),
         space_key,
@@ -1316,9 +1306,9 @@ pub(crate) mod tests {
         doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Option<DocumentKey> {
         let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
+        let (nonce, ciphertext) = ambre_core::Nonce::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce: ambre_core::Nonce(*nonce),
+            nonce,
             ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
         };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
@@ -1394,7 +1384,7 @@ pub(crate) mod tests {
         let keys = ring(&space_key, &[]);
         assert_eq!(
             sealed.as_bytes().len(),
-            ambre_core::KEY_ID_LEN + NONCE_LEN + 32 + 32 + 16
+            KeyId::SIZE.as_len() + ambre_core::Nonce::SIZE.as_len() + 32 + 32 + 16
         );
         let (_, anchor) = unseal_channel_key(channel_id, &sealed, &keys).expect("open");
         assert_eq!(anchor, Some(ANCHOR));
@@ -1958,9 +1948,9 @@ pub(crate) mod tests {
         doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Option<(DocumentKey, Option<ambre_protocol::EntryDigest>)> {
         let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
+        let (nonce, ciphertext) = ambre_core::Nonce::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
-            nonce: ambre_core::Nonce(*nonce),
+            nonce,
             ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
         };
         let sender_pub = crate::sharing::own_exchange_key(sender);

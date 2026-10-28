@@ -18,9 +18,6 @@ use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
 
-/// Length of an Ed25519 signature, in bytes.
-pub const SIGNATURE_LEN: usize = 64;
-
 /// Appends `len(field) as u32 LE || field` to `msg`.
 #[expect(
     clippy::expect_used,
@@ -258,7 +255,7 @@ mod tests {
         // The identity point, and the signature (R = identity, S = 0).
         let mut identity = [0u8; 32];
         identity[0] = 1;
-        let mut forged = Signature([0u8; SIGNATURE_LEN]);
+        let mut forged = Signature([0u8; 64]);
         forged.0[..32].copy_from_slice(&identity);
         let identity_key = PublicKey::from_array(identity);
         assert!(

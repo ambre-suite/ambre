@@ -84,9 +84,10 @@ pub(crate) fn decode_key(bytes: Vec<u8>) -> Result<ambre_core::PublicKey, sqlx::
 /// A stored document key identifier. Any length but its own is a decode
 /// error.
 fn decode_key_id(bytes: Vec<u8>) -> Result<ambre_core::KeyId, sqlx::Error> {
-    <[u8; ambre_core::KEY_ID_LEN]>::try_from(bytes.as_slice())
-        .map(ambre_core::KeyId::from_array)
-        .map_err(|_| sqlx::Error::Decode(format!("a key id of {} bytes", bytes.len()).into()))
+    ambre_core::KeyId::split_from(&bytes)
+        .filter(|(_, rest)| rest.is_empty())
+        .map(|(key_id, _)| key_id)
+        .ok_or_else(|| sqlx::Error::Decode(format!("a key id of {} bytes", bytes.len()).into()))
 }
 
 /// A stored sealed value that may be `NULL`, read with

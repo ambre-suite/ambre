@@ -556,7 +556,7 @@ fn a_key_id_is_derived_from_the_key() {
     assert_ne!(key.id(), DocumentKey::from_array([0x12; 32]).id());
     assert_ne!(
         key.id().as_array()[..],
-        [0x11; 32][..ambre_core::KEY_ID_LEN]
+        [0x11; 32][..ambre_core::KeyId::SIZE.as_len()]
     );
 }
 
