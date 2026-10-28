@@ -224,7 +224,7 @@ pub struct CreateDirectMessageRequest {
 pub struct DirectMessageJson {
     #[serde(with = "ambre_core::serde_id::channel_id")]
     pub channel_id: ambre_core::ChannelId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// The body of a self-join: the channel key wrapped for the caller. It also
@@ -268,7 +268,7 @@ pub struct CloseSegmentRequest {
 pub struct ClosedSegmentJson {
     #[serde(with = "ambre_core::serde_id::segment_id")]
     pub active: ambre_core::SegmentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// A Murmure document outside every channel but `channel`, or a 403.
@@ -364,8 +364,8 @@ pub async fn close_segment(
     }
     let active = db::close_segment(&state.db, &channel_id, req.closing, req.successor).await?;
     lock_retired_segments(&state, &req.closing.document_id()).await;
-    let created = active == req.successor;
-    tracing::info!(channel_id = %channel_id, closing = %req.closing, active = %active, created, "segment closed");
+    let created = ambre_core::Creation::from_bool(active == req.successor);
+    tracing::info!(channel_id = %channel_id, closing = %req.closing, active = %active, created = created.as_bool(), "segment closed");
     Ok(axum::Json(ClosedSegmentJson { active, created }))
 }
 
@@ -650,7 +650,7 @@ pub struct RegisterAmendmentsRequest {
 pub struct AmendmentsJson {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub amendments: ambre_core::DocumentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/amendments`: register the
@@ -675,8 +675,8 @@ pub async fn register_amendments(
         return Err(AppError::Forbidden);
     }
     let held = db::register_amendments(&state.db, &channel_id, segment, req.amendments).await?;
-    let created = held == req.amendments;
-    tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %held, created, "amendments registered");
+    let created = ambre_core::Creation::from_bool(held == req.amendments);
+    tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %held, created = created.as_bool(), "amendments registered");
     Ok(axum::Json(AmendmentsJson {
         amendments: held,
         created,
@@ -699,7 +699,7 @@ pub struct RegisterThreadRequest {
 pub struct ThreadJson {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub thread: ambre_core::DocumentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/threads`: register the caller's document as the
@@ -728,8 +728,8 @@ pub async fn register_thread(
         return Err(AppError::Forbidden);
     }
     let held = db::register_thread(&state.db, &channel_id, req.root, req.thread).await?;
-    let created = held == req.thread;
-    tracing::info!(channel_id = %channel_id, thread = %held, created, "thread registered");
+    let created = ambre_core::Creation::from_bool(held == req.thread);
+    tracing::info!(channel_id = %channel_id, thread = %held, created = created.as_bool(), "thread registered");
     Ok(axum::Json(ThreadJson {
         thread: held,
         created,
@@ -812,13 +812,13 @@ pub async fn create_direct_message(
     )
     .await?;
     let (channel_id, created) = match found {
-        db::DirectMessage::Created => (req.channel_id, true),
-        db::DirectMessage::Existing(channel_id) => (channel_id, false),
+        db::DirectMessage::Created => (req.channel_id, ambre_core::Creation::Created),
+        db::DirectMessage::Existing(channel_id) => (channel_id, ambre_core::Creation::Existing),
     };
-    tracing::info!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created, "direct message");
+    tracing::info!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created = created.as_bool(), "direct message");
     // Each member's clients learn of the new channel as the share of its
     // `meta`, the creator's other clients included (`SRV-192`).
-    if created {
+    if created == ambre_core::Creation::Created {
         for (member, _) in &keys {
             share_notice(&state, member, meta).await;
         }
@@ -991,12 +991,50 @@ fn joined_role(space_role: Role) -> Option<Role> {
 mod tests {
     use super::*;
     use crate::extract::PathId;
-    use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, SpaceId, UserId};
+    use ambre_core::{ChannelId, Creation, DocumentId, MetaId, SegmentId, SpaceId, UserId};
 
     /// The signing key every test user registers, so an entry one signs
     /// checks against the row and the session alike.
     fn signing_key() -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(&[7; 32])
+    }
+
+    /// A [`Creation`] answers as the JSON `bool` the field was: the four
+    /// answers keep their shape for every client that reads them.
+    #[test]
+    fn a_creation_answers_as_the_bool_it_was() {
+        let segment = SegmentId::from_document(DocumentId::from_bytes([1; 16]));
+        let document = DocumentId::from_bytes([2; 16]);
+        let channel = ChannelId::from_bytes([3; 16]);
+        let json = |value: serde_json::Result<String>| value.expect("json");
+        assert_eq!(
+            json(serde_json::to_string(&ClosedSegmentJson {
+                active: segment,
+                created: Creation::Created,
+            })),
+            format!(r#"{{"active":"{segment}","created":true}}"#)
+        );
+        assert_eq!(
+            json(serde_json::to_string(&AmendmentsJson {
+                amendments: document,
+                created: Creation::Existing,
+            })),
+            format!(r#"{{"amendments":"{document}","created":false}}"#)
+        );
+        assert_eq!(
+            json(serde_json::to_string(&ThreadJson {
+                thread: document,
+                created: Creation::Created,
+            })),
+            format!(r#"{{"thread":"{document}","created":true}}"#)
+        );
+        assert_eq!(
+            json(serde_json::to_string(&DirectMessageJson {
+                channel_id: channel,
+                created: Creation::Existing,
+            })),
+            format!(r#"{{"channel_id":"{channel}","created":false}}"#)
+        );
     }
 
     fn session(user_id: UserId) -> auth::AuthSession {
@@ -2609,7 +2647,10 @@ mod tests {
         let (channel_id, meta) = (req.channel_id, req.meta_id.document_id());
 
         let answer = open_direct(&state, alice, req).await.expect("create");
-        assert_eq!((answer.channel_id, answer.created), (channel_id, true));
+        assert_eq!(
+            (answer.channel_id, answer.created),
+            (channel_id, Creation::Created)
+        );
 
         let channel = db::get_channel(&state.db, &channel_id)
             .await
@@ -2930,7 +2971,10 @@ mod tests {
         let again = direct_request(bob, &[alice]);
         let (other_id, other_meta) = (again.channel_id, again.meta_id.document_id());
         let answer = open_direct(&state, bob, again).await.expect("open");
-        assert_eq!((answer.channel_id, answer.created), (channel_id, false));
+        assert_eq!(
+            (answer.channel_id, answer.created),
+            (channel_id, Creation::Existing)
+        );
         assert!(
             db::get_channel(&state.db, &other_id)
                 .await
@@ -2950,7 +2994,11 @@ mod tests {
 
         let wider = direct_request(alice, &[bob, user(&state, "carol@test.dev").await]);
         let answer = open_direct(&state, alice, wider).await.expect("create");
-        assert!(answer.created, "one more member is another set");
+        assert_eq!(
+            answer.created,
+            Creation::Created,
+            "one more member is another set"
+        );
         assert_eq!(direct_messages(&state).await, 2);
     }
 
@@ -3433,12 +3481,16 @@ mod tests {
         let mine = document(&state, alice).await;
         let first = close(&state, alice, &channel, mine).await.expect("close");
         assert_eq!(first.active, SegmentId::from_document(mine));
-        assert!(first.created);
+        assert_eq!(first.created, Creation::Created);
 
         let theirs = document(&state, bob).await;
         let late = close(&state, bob, &channel, theirs).await.expect("close");
         assert_eq!(late.active, SegmentId::from_document(mine));
-        assert!(!late.created, "the late close registered nothing");
+        assert_eq!(
+            late.created,
+            Creation::Existing,
+            "the late close registered nothing"
+        );
         assert_eq!(
             db::channel_document_kind(&state.db, &theirs)
                 .await
@@ -3531,10 +3583,10 @@ mod tests {
         );
 
         let first = amend(&state, alice, &channel, mine).await.expect("amend");
-        assert_eq!((first.amendments, first.created), (mine, true));
+        assert_eq!((first.amendments, first.created), (mine, Creation::Created));
         let theirs = document(&state, bob).await;
         let late = amend(&state, bob, &channel, theirs).await.expect("amend");
-        assert_eq!((late.amendments, late.created), (mine, false));
+        assert_eq!((late.amendments, late.created), (mine, Creation::Existing));
         assert_eq!(
             db::channel_document_kind(&state.db, &mine)
                 .await
@@ -3600,12 +3652,12 @@ mod tests {
         let first = thread(&state, alice, &channel, root, mine)
             .await
             .expect("thread");
-        assert_eq!((first.thread, first.created), (mine, true));
+        assert_eq!((first.thread, first.created), (mine, Creation::Created));
         let theirs = document(&state, bob).await;
         let late = thread(&state, bob, &channel, root, theirs)
             .await
             .expect("thread");
-        assert_eq!((late.thread, late.created), (mine, false));
+        assert_eq!((late.thread, late.created), (mine, Creation::Existing));
         assert_eq!(
             db::channel_document_kind(&state.db, &mine)
                 .await

@@ -32,7 +32,7 @@ pub struct ActivityJson {
     #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
     pub kind: ambre_core::ChannelDocumentKind,
     /// The document's last number is past the caller's cursor.
-    pub active: bool,
+    pub active: ambre_core::activity::Activity,
     /// The caller's own cursor. The client counts its new messages against
     /// it; the relay still states no count (`SRV-110`).
     pub read: ambre_core::Seq,
@@ -87,7 +87,7 @@ pub async fn get_activity(
                 channel_id,
                 document_id,
                 kind: row.kind,
-                active: last > row.cursor,
+                active: ambre_core::activity::Activity::from_bool(last > row.cursor),
                 read: row.cursor,
                 last,
             }

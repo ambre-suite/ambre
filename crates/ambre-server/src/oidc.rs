@@ -67,6 +67,16 @@ pub struct CallbackRequest {
     pub state: ambre_core::OidcState,
 }
 
+ambre_core::define_flag! {
+    /// Whether a sign-in is a returning user's or a new user's.
+    pub enum SignIn {
+        /// The user has a master key.
+        Returning,
+        /// The user has no master key yet.
+        NewUser,
+    }
+}
+
 /// Returned by `POST /auth/{provider}/callback` after successful authentication.
 #[derive(serde::Serialize)]
 pub struct CallbackResponse {
@@ -74,9 +84,10 @@ pub struct CallbackResponse {
     pub user_id: ambre_core::UserId,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
-    /// True when the user row was just created (no master key yet).
-    /// The client should prompt the user to set up their master key.
-    pub is_new_user: bool,
+    /// [`SignIn::NewUser`] when the user row holds no master key yet. The
+    /// client then prompts the user to set one up. The wire keeps the name
+    /// and the `bool` of the field.
+    pub is_new_user: SignIn,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: ambre_protocol::ws::AccessToken,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.

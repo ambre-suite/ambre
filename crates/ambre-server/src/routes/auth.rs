@@ -257,7 +257,7 @@ pub async fn oidc_callback(
         user_id,
         email,
         display_name,
-        is_new_user: user.master_key_enc.is_none(),
+        is_new_user: oidc::SignIn::from_bool(user.master_key_enc.is_none()),
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,

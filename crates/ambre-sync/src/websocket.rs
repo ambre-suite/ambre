@@ -825,7 +825,7 @@ impl SyncState {
                             channel_id,
                             closing,
                             active,
-                            successor: if created {
+                            successor: if created == ambre_core::Creation::Created {
                                 ambre_bus::Successor::Created
                             } else {
                                 ambre_bus::Successor::Fetched

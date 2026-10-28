@@ -1056,7 +1056,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
     let closed = http
         .post_json::<_, http::ClosedSegmentResponse>(&url, &body)
         .await?;
-    if !closed.created {
+    if closed.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{successor}"));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the successor of a lost close stays on the relay: {e}");
@@ -1113,7 +1113,7 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
     let linked = http
         .post_json::<_, http::AmendmentsResponse>(&url, &body)
         .await?;
-    if !linked.created {
+    if linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.amendments));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the amendments of a lost registration stay on the relay: {e}");
@@ -1167,7 +1167,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
     let linked = http
         .post_json::<_, http::ThreadResponse>(&url, &body)
         .await?;
-    if !linked.created {
+    if linked.created == ambre_core::Creation::Existing {
         let url = base.route(format!("/documents/{}", p.thread));
         if let Err(e) = http.delete(&url, &()).await {
             tracing::warn!("[Sync] the thread of a lost registration stays on the relay: {e}");
@@ -2534,7 +2534,7 @@ mod tests {
             won,
             Ok(http::ClosedSegmentResponse {
                 active: mine,
-                created: true
+                created: ambre_core::Creation::Created
             })
         );
         {
@@ -2558,7 +2558,7 @@ mod tests {
             lost,
             Ok(http::ClosedSegmentResponse {
                 active: winner,
-                created: false
+                created: ambre_core::Creation::Existing
             })
         );
         {
@@ -2591,7 +2591,7 @@ mod tests {
             again,
             Ok(http::ClosedSegmentResponse {
                 active: mine,
-                created: true
+                created: ambre_core::Creation::Created
             })
         );
         let calls = http.calls();

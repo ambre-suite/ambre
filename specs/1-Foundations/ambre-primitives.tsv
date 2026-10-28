@@ -2519,7 +2519,6 @@ ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Ra
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | check_sliding_window(max_requests) | param | u64	math	count
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
-ambre-server | src/oidc.rs | crate::oidc | CallbackResponse.is_new_user | field | bool	generic	named state or style flag, local
 ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
@@ -2562,15 +2561,10 @@ ambre-server | src/routes/auth.rs | crate::routes::auth | provider_client(word) 
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(given_name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(subject) | param | &str	foreign-api	claims of the identity provider, read as text
-ambre-server | src/routes/channels.rs | crate::routes::channels | AmendmentsJson.created | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/channels.rs | crate::routes::channels | ClosedSegmentJson.created | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/channels.rs | crate::routes::channels | DirectMessageJson.created | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/channels.rs | crate::routes::channels | ThreadJson.created | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	echo of a validated OrgName
-ambre-server | src/routes/read_cursors.rs | crate::routes::read_cursors | ActivityJson.active | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
@@ -2614,12 +2608,8 @@ ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot() | ret | Result<V
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | <HttpError as From<&str>>::from(message) | param | &str	trait	signature fixed by the trait
 ambre-sync | src/http.rs | crate::http | <HttpError as From<String>>::from(message) | param | String	trait	signature fixed by the trait
-ambre-sync | src/http.rs | crate::http | ActivityEntry.active | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | AmendmentsResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | ClosedSegmentResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | DirectMessageResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
@@ -2641,7 +2631,6 @@ ambre-sync | src/http.rs | crate::http | RelayUrl::as_str() | ret | &str	newtype
 ambre-sync | src/http.rs | crate::http | RelayUrl::join(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::query(value) | param | &str	free-text	the text a query parameter carries, a user's search among them, percent-encoded whole before it joins the address
 ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-text	error message text
-ambre-sync | src/http.rs | crate::http | ThreadResponse.created | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
 ambre-sync | src/http.rs | crate::http | SocketUrl.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | SocketUrl::as_str() | ret | &str	newtype-inner	newtype field, constructor or accessor

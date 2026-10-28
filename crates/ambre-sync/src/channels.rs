@@ -1180,7 +1180,7 @@ pub(crate) fn activity_of(entries: &[http::ActivityEntry]) -> Vec<DocumentActivi
             channel_id: e.channel_id,
             document_id: e.document_id,
             kind: e.kind,
-            active: ambre_bus::Activity::from_bool(e.active),
+            active: e.active,
             read: e.read,
             last: e.last,
         })

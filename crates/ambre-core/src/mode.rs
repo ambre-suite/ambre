@@ -186,4 +186,14 @@ crate::define_flag! {
         /// The command can run now.
         Enabled,
     }
+
+    /// Whether a request made the record it answers, or found one an earlier
+    /// request made. A race that lost answers `Existing`, with the winner's
+    /// record.
+    pub enum Creation {
+        /// An earlier request made the record.
+        Existing,
+        /// This request made the record.
+        Created,
+    }
 }

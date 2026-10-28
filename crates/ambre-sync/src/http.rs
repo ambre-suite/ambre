@@ -1304,7 +1304,7 @@ pub(crate) struct ActivityEntry {
     pub document_id: ambre_core::DocumentId,
     #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
     pub kind: ambre_core::ChannelDocumentKind,
-    pub active: bool,
+    pub active: ambre_core::activity::Activity,
     /// The caller's own cursor. A relay that predates it answers none, which
     /// reads as nothing read.
     #[serde(default)]
@@ -1417,7 +1417,7 @@ pub(crate) struct CloseSegmentRequest {
 pub(crate) struct ClosedSegmentResponse {
     #[serde(with = "ambre_core::serde_id::segment_id")]
     pub active: ambre_core::SegmentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/amendments`: the caller's new
@@ -1434,7 +1434,7 @@ pub(crate) struct RegisterAmendmentsRequest {
 pub(crate) struct AmendmentsResponse {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub amendments: ambre_core::DocumentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/threads`: the caller's new document, to register
@@ -1453,7 +1453,7 @@ pub(crate) struct RegisterThreadRequest {
 pub(crate) struct ThreadResponse {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub thread: ambre_core::DocumentId,
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
@@ -1568,7 +1568,7 @@ pub(crate) struct DirectMessageResponse {
     #[serde(with = "ambre_core::serde_id::channel_id")]
     pub channel_id: ambre_core::ChannelId,
     #[allow(dead_code)]
-    pub created: bool,
+    pub created: ambre_core::Creation,
 }
 
 /// `POST /api/channels/{id}/join`: the channel key, wrapped for the caller.
@@ -2062,6 +2062,42 @@ mod tests {
             Method::Post
         };
         HttpError::refused(method, &Target::relay(url), HttpStatus(status), code)
+    }
+
+    /// The relay's JSON `bool` reads as a [`ambre_core::Creation`] and an
+    /// [`ambre_core::activity::Activity`]: the answers keep the shape the relay writes.
+    #[test]
+    fn a_relay_bool_reads_as_its_flag() {
+        use ambre_core::{Creation, activity::Activity};
+        let segment = ambre_core::SegmentId::new();
+        let document = ambre_core::DocumentId::new();
+        let channel = ambre_core::ChannelId::new();
+        let closed: ClosedSegmentResponse = serde_json::from_value(serde_json::json!({
+            "active": segment.to_string(), "created": true,
+        }))
+        .expect("a close answer");
+        assert_eq!(closed.created, Creation::Created);
+        let amended: AmendmentsResponse = serde_json::from_value(serde_json::json!({
+            "amendments": document.to_string(), "created": false,
+        }))
+        .expect("an amendments answer");
+        assert_eq!(amended.created, Creation::Existing);
+        let thread: ThreadResponse = serde_json::from_value(serde_json::json!({
+            "thread": document.to_string(), "created": true,
+        }))
+        .expect("a thread answer");
+        assert_eq!(thread.created, Creation::Created);
+        let direct: DirectMessageResponse = serde_json::from_value(serde_json::json!({
+            "channel_id": channel.to_string(), "created": false,
+        }))
+        .expect("a direct message answer");
+        assert_eq!(direct.created, Creation::Existing);
+        let entry: ActivityEntry = serde_json::from_value(serde_json::json!({
+            "channel_id": channel.to_string(), "document_id": document.to_string(),
+            "kind": "segment", "active": true,
+        }))
+        .expect("an activity entry");
+        assert_eq!(entry.active, Activity::Active);
     }
 
     /// `SYNC-179`: a query value reaches the relay as the text it was, each
