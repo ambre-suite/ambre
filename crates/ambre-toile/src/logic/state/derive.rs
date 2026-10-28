@@ -248,7 +248,7 @@ impl ToileState {
                 str_of(em, ElementKey::Hash).unwrap_or_default(),
             )),
             // A peer may have written any text here, so the stored address
-            // passes the same check as a typed one (`TOILE-268`).
+            // passes the same check as a typed one (`TOILE-267`).
             ElementKind::Embed => DisplayGeom::Embed(
                 str_of(em, ElementKey::Url)
                     .and_then(|url| ambre_bus::app::toile::WebAddress::parse(&url).ok()),
