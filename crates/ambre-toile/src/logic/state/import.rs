@@ -493,7 +493,7 @@ impl ToileState {
             let _ = entry.insert(MediaKey::Mime, blob.mime.as_str());
             let _ = entry.insert(
                 MediaKey::Thumb,
-                LoroValue::Binary(blob.thumb.clone().into()),
+                LoroValue::Binary(blob.thumb.as_bytes().to_vec().into()),
             );
             created += 1;
         }
@@ -653,7 +653,7 @@ mod tests {
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
             size: ambre_core::ImageSize::new(w, h),
-            thumb: vec![1, 2, 3],
+            thumb: ambre_core::ThumbnailPng::new(vec![1, 2, 3]),
         }
     }
 

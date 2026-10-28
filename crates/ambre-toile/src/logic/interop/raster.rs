@@ -102,7 +102,7 @@ pub(super) fn decode_media(
         plaintext: ambre_core::MediaBytes::new(bytes.to_vec()),
         mime: mime_of(format),
         size,
-        thumb,
+        thumb: ambre_core::ThumbnailPng::new(thumb),
     })
 }
 
@@ -221,7 +221,7 @@ mod tests {
         )
         .unwrap();
         // The thumbnail decodes back to something within the max edge.
-        let thumb = image::load_from_memory(&blob.thumb).unwrap();
+        let thumb = image::load_from_memory(blob.thumb.as_bytes()).unwrap();
         assert!(thumb.width() <= THUMB_MAX_EDGE && thumb.height() <= THUMB_MAX_EDGE);
     }
 
@@ -235,7 +235,7 @@ mod tests {
             MediaRef::Pending(ImportSlot::ZERO),
         )
         .unwrap();
-        let thumb = image::load_from_memory(&blob.thumb).unwrap();
+        let thumb = image::load_from_memory(blob.thumb.as_bytes()).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (8, 4));
     }
 

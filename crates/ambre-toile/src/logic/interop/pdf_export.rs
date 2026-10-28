@@ -107,7 +107,7 @@ pub fn export_pdf(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     images: &ImageStore,
-) -> Result<Vec<u8>, PdfExportError> {
+) -> Result<ambre_core::FileBytes, PdfExportError> {
     if pages.is_empty() {
         return Err(PdfExportError::Empty);
     }
@@ -129,6 +129,7 @@ pub fn export_pdf(
     }
 
     doc.finish()
+        .map(ambre_core::FileBytes::new)
         .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
 }
 
@@ -230,8 +231,11 @@ mod tests {
             &ImageStore::new(),
         )
         .expect("export must succeed");
-        assert!(bytes.starts_with(b"%PDF"), "output must be a PDF");
-        assert!(bytes.len() > 400, "content stream should be non-trivial");
+        assert!(
+            bytes.as_bytes().starts_with(b"%PDF"),
+            "output must be a PDF"
+        );
+        assert!(bytes.size().0 > 400, "content stream should be non-trivial");
     }
 
     /// Export is deterministic: two runs of the same pages produce identical
@@ -358,7 +362,7 @@ mod tests {
             &ImageStore::new(),
         )
         .expect("export must succeed");
-        assert!(bytes.starts_with(b"%PDF"));
+        assert!(bytes.as_bytes().starts_with(b"%PDF"));
     }
 
     /// Covers `CANVAS-029`: a page is the screen's walk, unchanged, over the

@@ -223,7 +223,7 @@ fn bench_deck_pdf(c: &mut Criterion) {
         b.iter(|| {
             state
                 .export_pdf_document(Default::default(), &mut font_cx)
-                .map(|bytes| bytes.len())
+                .map(|bytes| bytes.size())
         });
     });
     group.finish();

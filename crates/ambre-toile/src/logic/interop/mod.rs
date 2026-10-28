@@ -156,7 +156,7 @@ pub struct MediaBlob {
     pub plaintext: ambre_core::MediaBytes,
     pub mime: ambre_core::MediaType,
     pub size: ambre_core::ImageSize,
-    pub thumb: Vec<u8>,
+    pub thumb: ambre_core::ThumbnailPng,
 }
 
 /// A converter / limit failure. Any variant aborts the import atomically:

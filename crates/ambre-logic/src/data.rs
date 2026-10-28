@@ -39,7 +39,7 @@ impl LogicState {
                     PDF_STEM,
                     ambre_core::ExportExtension::Pdf,
                 ),
-                data: ambre_core::FileBytes::new(data),
+                data,
                 // The deck walk draws every element through the shared surface,
                 // so a page holds what the slide holds.
                 skipped: Vec::new(),
@@ -1137,7 +1137,7 @@ const PDF_STEM: &str = "deck";
 fn export_pdf_of(
     state: &ToileState,
     font_cx: Option<&mut parley::FontContext>,
-) -> Result<Vec<u8>, String> {
+) -> Result<ambre_core::FileBytes, String> {
     let Some(font_cx) = font_cx else {
         // The faces are fetched once at boot and never re-requested, so this is
         // a race with startup, not a dead end: the next attempt succeeds.
@@ -1152,6 +1152,6 @@ fn export_pdf_of(
 fn export_pdf_of(
     _state: &ToileState,
     _font_cx: Option<&mut parley::FontContext>,
-) -> Result<Vec<u8>, String> {
+) -> Result<ambre_core::FileBytes, String> {
     Err("PDF export is not compiled into this build".to_owned())
 }

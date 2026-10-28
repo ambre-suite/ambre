@@ -175,6 +175,13 @@ define_payload! {
     ClipboardBytes
 }
 
+define_payload! {
+    /// A small PNG a board stores beside a picture, painted before the full
+    /// picture is fetched. An import encodes it, and the board's media map
+    /// stores its bytes as they are.
+    ThumbnailPng
+}
+
 /// The four bytes that open an encoding of Ambre's own, so bytes another
 /// encoding wrote under the same type never decode as this one. Transparent
 /// to serde, so the bytes are those of the bare array it replaced.

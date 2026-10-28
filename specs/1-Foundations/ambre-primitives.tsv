@@ -1221,8 +1221,6 @@ ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret |
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::route_service_error(reason) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
-ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<Vec<u8>,String>	generic	generic byte/text API or codec
 ambre-logic | src/direct.rs | crate::direct | LogicState::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/direct.rs | crate::direct | LogicState::direct_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/direct.rs | crate::direct | LogicState::refuse_invite(message) | param | String	free-text	free text: message, label, name or report
@@ -2782,9 +2780,7 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Grou
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Slot.0 | field | usize	newtype-inner	ImportRef variant carries its own index space
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport.skipped | field | Vec<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | MediaBlob.thumb | field | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | PdfExportError::Serialize.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | export_pdf() | ret | Result<Vec<u8>,PdfExportError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUMB_MAX_EDGE | const | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | import_raster(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2845,7 +2841,6 @@ ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | Toil
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::restyle_merge_inner() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::set_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::export_pdf_document() | ret | Result<Vec<u8>,crate::logic::interop::PdfExportError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/export.rs | crate::logic::state::export | ToileState::thumbnail_png() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | ToileState::element_matches(query) | param | &str	free-text	label, message or user text
@@ -4116,3 +4111,5 @@ ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::byte() | ret | u8
 ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::from_byte(byte) | param | u8	generic	byte codec of the private tag of a channel sample; an unknown byte reads as None
 ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	newtype-inner	FormatMagic newtype
 ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor
+ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
+ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it

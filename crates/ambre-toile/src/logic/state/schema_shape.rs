@@ -659,7 +659,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
         size: ambre_core::ImageSize::new(1, 2),
-        thumb,
+        thumb: ambre_core::ThumbnailPng::new(thumb),
     }]);
     st.doc.commit();
     st

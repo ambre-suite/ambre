@@ -180,7 +180,7 @@ impl ToileState {
         &self,
         page: crate::logic::interop::PageSize,
         font_cx: &mut ambre_draw::FontContext,
-    ) -> Result<Vec<u8>, crate::logic::interop::PdfExportError> {
+    ) -> Result<ambre_core::FileBytes, crate::logic::interop::PdfExportError> {
         let pages = self.pdf_pages(page);
         // The page camera maps world units onto PDF points 1:1, so the text
         // cache runs at unit scale like the export walk itself.
@@ -358,6 +358,7 @@ mod tests {
         let pdf = st
             .export_pdf_document(Default::default(), &mut fonts)
             .expect("a board with content renders");
+        let pdf = pdf.as_bytes();
         assert!(pdf.starts_with(b"%PDF-"), "a PDF header: {:?}", &pdf[..8]);
     }
 
@@ -424,7 +425,7 @@ mod media_request_tests {
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from("image/png"),
             size: ambre_core::ImageSize::new(w, h),
-            thumb,
+            thumb: ambre_core::ThumbnailPng::new(thumb),
         }
     }
 
