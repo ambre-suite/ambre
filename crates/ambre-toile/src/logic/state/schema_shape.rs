@@ -277,9 +277,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
         sizing: Sizing::Fill,
     };
     let points = vec![StrokePoint {
-        x: 1.5,
-        y: 2.5,
-        pressure: 0.5,
+        x: ambre_core::StrokeCoord::new(1.5),
+        y: ambre_core::StrokeCoord::new(2.5),
+        pressure: ambre_bus::app::toile::UnitFraction::HALF,
     }];
     vec![
         // `to_bytes` prefixes the style with its own version byte, so the frozen
@@ -579,16 +579,14 @@ pub(super) fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::CommitStroke {
         points: vec![
-            StrokePoint {
-                x: 0.0,
-                y: 0.0,
-                pressure: 1.0,
-            },
-            StrokePoint {
-                x: 1.0,
-                y: 1.0,
-                pressure: 1.0,
-            },
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StrokeCoord::new(0.0),
+            ),
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(1.0),
+                ambre_core::StrokeCoord::new(1.0),
+            ),
         ],
         style: ElementStyle::default(),
     });

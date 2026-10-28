@@ -711,16 +711,14 @@ fn commit_stroke_creates_drawing() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
-            StrokePoint {
-                x: 0.0,
-                y: 0.0,
-                pressure: 1.0,
-            },
-            StrokePoint {
-                x: 10.0,
-                y: 5.0,
-                pressure: 1.0,
-            },
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StrokeCoord::new(0.0),
+            ),
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(10.0),
+                ambre_core::StrokeCoord::new(5.0),
+            ),
         ],
         style: ElementStyle::default(),
     });
@@ -1413,14 +1411,15 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let mut drawer = ToileState::new();
     let tail = vec![
         StrokePoint {
-            x: 10.0,
-            y: 10.0,
-            pressure: 0.5,
+            x: ambre_core::StrokeCoord::new(10.0),
+            y: ambre_core::StrokeCoord::new(10.0),
+            pressure: ambre_bus::app::toile::UnitFraction::HALF,
         },
         StrokePoint {
-            x: 12.0,
-            y: 14.0,
-            pressure: 0.6,
+            x: ambre_core::StrokeCoord::new(12.0),
+            y: ambre_core::StrokeCoord::new(14.0),
+            pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
+                .expect("a pressure inside 0 ..= 1"),
         },
     ];
     let out = drawer.handle_command(ToileCommand::Presence {
@@ -1631,11 +1630,10 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         name: None,
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
-        live_stroke: Some(vec![StrokePoint {
-            x: 1.0,
-            y: 2.0,
-            pressure: 1.0,
-        }]),
+        live_stroke: Some(vec![StrokePoint::full_pressure(
+            ambre_core::StrokeCoord::new(1.0),
+            ambre_core::StrokeCoord::new(2.0),
+        )]),
         laser: None,
         present_slide: None,
     };
@@ -6136,16 +6134,14 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
         },
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
-                StrokePoint {
-                    x: *x as f32,
-                    y: *y as f32,
-                    pressure: 1.0,
-                },
-                StrokePoint {
-                    x: *x as f32 + 10.0,
-                    y: *y as f32 + 5.0,
-                    pressure: 1.0,
-                },
+                StrokePoint::full_pressure(
+                    ambre_core::StrokeCoord::new(*x as f32),
+                    ambre_core::StrokeCoord::new(*y as f32),
+                ),
+                StrokePoint::full_pressure(
+                    ambre_core::StrokeCoord::new(*x as f32 + 10.0),
+                    ambre_core::StrokeCoord::new(*y as f32 + 5.0),
+                ),
             ],
             style: ElementStyle::default(),
         }),
@@ -6819,11 +6815,10 @@ fn an_empty_combine_is_refused() {
 }
 
 fn sample(x: f32, y: f32) -> StrokePoint {
-    StrokePoint {
-        x,
-        y,
-        pressure: 1.0,
-    }
+    StrokePoint::full_pressure(
+        ambre_core::StrokeCoord::new(x),
+        ambre_core::StrokeCoord::new(y),
+    )
 }
 
 /// `TOILE-041`: a stroke's box runs from its lowest to its highest sample on

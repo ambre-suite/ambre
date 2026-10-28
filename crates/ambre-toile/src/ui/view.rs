@@ -752,7 +752,7 @@ impl ToileView {
             )),
             display: DisplayViewport {
                 version: ambre_bus::ViewportVersion(0),
-                grid_unit: super::grid::BASE_GRID,
+                grid_unit: ambre_core::BoardLength::new(super::grid::BASE_GRID),
                 reactions: Default::default(),
                 pins: Vec::new(),
                 viewport: Viewport::default(),
@@ -4371,7 +4371,7 @@ impl ToileView {
         self.document_id = document_id;
         self.display = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: super::grid::BASE_GRID,
+            grid_unit: ambre_core::BoardLength::new(super::grid::BASE_GRID),
             reactions: Default::default(),
             pins: Vec::new(),
             viewport: Viewport::default(),

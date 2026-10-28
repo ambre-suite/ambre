@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use ambre_core::BoardLength;
 use kurbo::{BezPath, Point, Rect};
 
 use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, PathType};
@@ -30,7 +31,12 @@ pub fn anchor_point(r: &Rect, anchor: Anchor) -> Point {
         Anchor::Left => Point::new(r.x0, r.y0 + r.height() / 2.0),
         Anchor::Right => Point::new(r.x1, r.y0 + r.height() / 2.0),
         Anchor::Center => Point::new(r.x0 + r.width() / 2.0, r.y0 + r.height() / 2.0),
-        Anchor::Free { u, v } => Point::new(u.along(r.x0, r.x1), v.along(r.y0, r.y1)),
+        Anchor::Free { u, v } => Point::new(
+            u.along(BoardLength::new(r.x0), BoardLength::new(r.x1))
+                .get(),
+            v.along(BoardLength::new(r.y0), BoardLength::new(r.y1))
+                .get(),
+        ),
     }
 }
 

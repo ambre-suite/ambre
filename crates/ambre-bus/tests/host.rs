@@ -28,6 +28,7 @@ use ambre_bus::{
     Timestamp, TrameCommand, UserId,
 };
 use ambre_bus::{Col, ColCount, Decimals, DecimalsStep, Row, RowCount};
+use ambre_core::BoardLength;
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -165,7 +166,10 @@ fn a_fraction_of_a_side_lies_between_zero_and_one() {
     for refused in [-0.1, 1.1, f32::NAN] {
         assert_eq!(UnitFraction::new(refused), None);
     }
-    assert_eq!(UnitFraction::HALF.along(10.0, 30.0), 20.0);
+    assert_eq!(
+        UnitFraction::HALF.along(BoardLength::new(10.0), BoardLength::new(30.0)),
+        BoardLength::new(20.0)
+    );
     let past: Result<UnitFraction, _> =
         postcard::from_bytes(&postcard::to_allocvec(&2.0_f32).unwrap());
     assert!(past.is_err(), "a decoded fraction past one is refused");

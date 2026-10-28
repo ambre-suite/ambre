@@ -243,7 +243,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | DisplayConnector.label | fiel
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Frame.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | DisplayViewport.grid_unit | field | f64	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::mint(counter) | param | u32	newtype-inner	ElementId/ConnectorId newtype and its mint
@@ -261,9 +260,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | PresentMode::is_presenting() 
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | SlideChange.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.pressure | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.x | field | f32	math	board geometry, style metric, opacity or pressure
-ambre-bus | src/app/toile.rs | crate::app::toile | StrokePoint.y | field | f32	math	board geometry, style metric, opacity or pressure
 ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength.0 | field | f32	newtype-inner	StyleLength newtype: the board length a style stores
 ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::get() | ret | f32	newtype-inner	StyleLength newtype: the board length a style stores
 ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::new(units) | param | f32	newtype-inner	StyleLength newtype: the board length a style stores
@@ -295,9 +291,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | split_scheme(s) | param | &st
 ambre-bus | src/app/toile.rs | crate::app::toile | <UnitFraction as TryFrom<f32>>::try_from(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | InvalidUnitFraction.0 | field | f32	newtype-inner	the refused value an error reports
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along() | ret | f64	math	kurbo world coordinate the fraction lands on
-ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(end) | param | f64	math	kurbo world coordinates of the box edges the fraction runs between
-ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::along(start) | param | f64	math	kurbo world coordinates of the box edges the fraction runs between
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | UnitFraction::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker

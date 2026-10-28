@@ -763,10 +763,11 @@ fn every_id_the_board_writes_has_the_minted_width() {
     });
     st.handle_command(ToileCommand::CommitStroke {
         points: [0.0f32, 10.0]
-            .map(|x| StrokePoint {
-                x,
-                y: x,
-                pressure: 1.0,
+            .map(|x| {
+                StrokePoint::full_pressure(
+                    ambre_core::StrokeCoord::new(x),
+                    ambre_core::StrokeCoord::new(x),
+                )
             })
             .to_vec(),
         style: ElementStyle::default(),

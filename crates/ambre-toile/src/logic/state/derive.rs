@@ -103,7 +103,9 @@ impl ToileState {
             // One map lookup per frame: the register is board scaffolding,
             // and a peer can rewrite it at any time (`TOILE-UI-279`).
             // A board that holds none sends zero, which the view replaces.
-            grid_unit: f64_of(&board(&self.doc), BoardKey::GridSize).unwrap_or(0.0),
+            grid_unit: ambre_core::BoardLength::new(
+                f64_of(&board(&self.doc), BoardKey::GridSize).unwrap_or(0.0),
+            ),
             reactions: self.reaction_tallies(&visible),
             pins: self.comment_pins(&visible, &vp),
             nodes,
@@ -385,9 +387,17 @@ mod tests {
     #[test]
     fn a_frame_carries_the_boards_grid_unit() {
         let st = ToileState::new();
-        assert_eq!(st.derive_viewport().grid_unit, 32.0, "the scaffold's unit");
+        assert_eq!(
+            st.derive_viewport().grid_unit.get(),
+            32.0,
+            "the scaffold's unit"
+        );
         let _ = crate::logic::state::board(&st.doc).insert(BoardKey::GridSize, 50.0);
-        assert_eq!(st.derive_viewport().grid_unit, 50.0, "a rewritten unit");
+        assert_eq!(
+            st.derive_viewport().grid_unit.get(),
+            50.0,
+            "a rewritten unit"
+        );
     }
 
     /// `TOILE-058` / `TOILE-121`: an element the document holds but the order

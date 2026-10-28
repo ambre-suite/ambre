@@ -215,7 +215,11 @@ fn paint_peer<S: DrawSurface>(
     if let Some(pts) = &p.live_stroke
         && pts.len() >= 2
     {
-        let path = screen_polyline(pts.iter().map(|s| Point::new(s.x as f64, s.y as f64)), w2s);
+        let path = screen_polyline(
+            pts.iter()
+                .map(|s| Point::new(s.x.widened().get(), s.y.widened().get())),
+            w2s,
+        );
         surface.stroke_path(&path, &Brush::Solid(*color), &Stroke::new(2.0));
     }
 
@@ -402,7 +406,7 @@ mod tests {
     fn vp_with(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: 20.0,
+            grid_unit: ambre_core::BoardLength::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -548,10 +552,11 @@ mod tests {
     #[test]
     fn live_stroke_draws_a_polyline() {
         let mut cursors = PeerCursors::default();
-        let sp = |x: f32, y: f32| StrokePoint {
-            x,
-            y,
-            pressure: 1.0,
+        let sp = |x: f32, y: f32| {
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(x),
+                ambre_core::StrokeCoord::new(y),
+            )
         };
         adopt_one(
             &mut cursors,

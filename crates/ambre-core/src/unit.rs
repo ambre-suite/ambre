@@ -18,6 +18,7 @@
 //! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
 //! | [`BoardLength`] | a world unit of a board, before the camera's zoom | a frame's padding, a hit reach |
+//! | [`StrokeCoord`] | a world unit of a board, held in the `f32` a stroke stores | a freehand sample |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
@@ -241,6 +242,23 @@ define_length! {
     /// camera's named conversion stands between the two. The `f64` is the one
     /// kurbo measures a board in.
     BoardLength(f64)
+}
+
+define_length! {
+    /// A coordinate of a freehand sample on a board, in world units, held in
+    /// the `f32` a stroke stores so a sample stays twelve bytes.
+    /// [`StrokeCoord::widened`] reads it as the [`BoardLength`] the board
+    /// computes in.
+    StrokeCoord(f32)
+}
+
+impl StrokeCoord {
+    /// The coordinate in the `f64` a board is measured in. Every `f32` has an
+    /// exact `f64`, so nothing is lost.
+    #[must_use]
+    pub fn widened(self) -> BoardLength {
+        BoardLength(f64::from(self.0))
+    }
 }
 
 impl DocPx {

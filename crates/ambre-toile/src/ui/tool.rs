@@ -16,7 +16,7 @@ use ambre_bus::app::toile::{
     Anchor, CommentAnchor, ConnectorId, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
     ElementKind, EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
-use ambre_core::Rgba;
+use ambre_core::{BoardLength, Rgba, StrokeCoord};
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
 
@@ -917,7 +917,7 @@ impl ToolMachine {
                 Draft::Draw { points } => Some(Preview::Stroke(
                     points
                         .iter()
-                        .map(|p| Point::new(p.x as f64, p.y as f64))
+                        .map(|p| Point::new(p.x.widened().get(), p.y.widened().get()))
                         .collect(),
                 )),
                 Draft::Place { .. } | Draft::Comment { .. } => None,
@@ -982,11 +982,10 @@ fn map_select(out: SelectOutcome) -> ToolOutcome {
 
 /// A world point as a full-pressure stroke sample.
 fn stroke_point(world: Point) -> StrokePoint {
-    StrokePoint {
-        x: world.x as f32,
-        y: world.y as f32,
-        pressure: 1.0,
-    }
+    StrokePoint::full_pressure(
+        StrokeCoord::new(world.x as f32),
+        StrokeCoord::new(world.y as f32),
+    )
 }
 
 /// Default freehand style: a solid stroke, no fill.
@@ -1060,7 +1059,12 @@ fn anchor_point(b: Rect, a: Anchor) -> Point {
         Anchor::Left => Point::new(b.x0, c.y),
         Anchor::Right => Point::new(b.x1, c.y),
         Anchor::Center => c,
-        Anchor::Free { u, v } => Point::new(u.along(b.x0, b.x1), v.along(b.y0, b.y1)),
+        Anchor::Free { u, v } => Point::new(
+            u.along(BoardLength::new(b.x0), BoardLength::new(b.x1))
+                .get(),
+            v.along(BoardLength::new(b.y0), BoardLength::new(b.y1))
+                .get(),
+        ),
     }
 }
 
@@ -1431,7 +1435,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: 20.0,
+            grid_unit: ambre_core::BoardLength::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

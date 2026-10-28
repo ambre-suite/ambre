@@ -19,7 +19,7 @@ const SEGMENTS_PER_SPAN: usize = 8;
 /// dot or an empty stroke), so a degenerate stroke still renders.
 pub fn smooth_stroke(points: &[StrokePoint], out: &mut Vec<Point>) {
     out.clear();
-    let point = |s: &StrokePoint| Point::new(s.x as f64, s.y as f64);
+    let point = |s: &StrokePoint| Point::new(s.x.widened().get(), s.y.widened().get());
     match points {
         [] => {}
         [only] => out.push(point(only)),
@@ -64,11 +64,10 @@ mod tests {
     use super::*;
 
     fn sp(x: f32, y: f32) -> StrokePoint {
-        StrokePoint {
-            x,
-            y,
-            pressure: 1.0,
-        }
+        StrokePoint::full_pressure(
+            ambre_core::StrokeCoord::new(x),
+            ambre_core::StrokeCoord::new(y),
+        )
     }
 
     #[test]
@@ -107,7 +106,7 @@ mod tests {
         assert_eq!(out.len(), 1 + (pts.len() - 1) * SEGMENTS_PER_SPAN);
         for (i, s) in pts.iter().enumerate() {
             let at = out[i * SEGMENTS_PER_SPAN];
-            let want = Point::new(s.x as f64, s.y as f64);
+            let want = Point::new(s.x.widened().get(), s.y.widened().get());
             assert!(
                 at.distance(want) < 1e-9,
                 "sample {i}: {at:?} is not {want:?}"

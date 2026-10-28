@@ -78,7 +78,7 @@ impl Rig {
     fn show(&mut self, nodes: Vec<DisplayNode>) {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: 20.0,
+            grid_unit: ambre_core::BoardLength::new(20.0),
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
@@ -511,7 +511,7 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.sent();
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_bus::ViewportVersion(0),
-        grid_unit: 20.0,
+        grid_unit: ambre_core::BoardLength::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -1051,7 +1051,7 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
 fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
     ToileEvent::ViewportData(DisplayViewport {
         version: ambre_bus::ViewportVersion(version),
-        grid_unit: 20.0,
+        grid_unit: ambre_core::BoardLength::new(20.0),
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -2575,7 +2575,7 @@ fn a_shared_board(peer: UserId) -> Rig {
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: ambre_bus::ViewportVersion(0),
-        grid_unit: 20.0,
+        grid_unit: ambre_core::BoardLength::new(20.0),
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: eid("t"),
             at: kurbo::Point::new(50.0, 50.0),

@@ -298,9 +298,12 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
                 verdict(version, SCHEMA_VERSION)
             ))
         }
-        Root::Board if BoardKey::parse(stored.key(0)?) == Some(BoardKey::GridSize) => Some(
-            format!("grid unit {} world px", reader.debug_viewport().grid_unit),
-        ),
+        Root::Board if BoardKey::parse(stored.key(0)?) == Some(BoardKey::GridSize) => {
+            Some(format!(
+                "grid unit {} world px",
+                reader.debug_viewport().grid_unit.get()
+            ))
+        }
         Root::PresentationConfig
             if ConfigKey::parse(stored.key(0)?) == Some(ConfigKey::TransitionMs) =>
         {

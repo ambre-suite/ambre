@@ -739,20 +739,37 @@ impl std::fmt::Display for WebAddress {
 // Freehand stroke sample (`toile-freehand`)
 // =============================================================================
 
-/// One sampled point of a freehand stroke. 12 bytes, fixed layout.
+/// One sampled point of a freehand stroke. 12 bytes, fixed layout: three
+/// `f32`s, the coordinates in board units then the pressure.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
-    pub x: f32,
-    pub y: f32,
-    pub pressure: f32, // 0.0 ..= 1.0, 1.0 when the input device reports none
+    pub x: ambre_core::StrokeCoord,
+    pub y: ambre_core::StrokeCoord,
+    /// How hard the pen pressed, [`UnitFraction::ONE`] when the input device
+    /// reports none. A stored sample outside `0 ..= 1` does not decode.
+    pub pressure: UnitFraction,
+}
+
+impl StrokePoint {
+    /// A sample at `(x, y)` on the board, pressed as hard as a device that
+    /// reports no pressure reads.
+    #[must_use]
+    pub const fn full_pressure(x: ambre_core::StrokeCoord, y: ambre_core::StrokeCoord) -> Self {
+        Self {
+            x,
+            y,
+            pressure: UnitFraction::ONE,
+        }
+    }
 }
 
 // =============================================================================
 // Connector anchoring (`toile-connectors`)
 // =============================================================================
 
-/// A fraction of a box's side, from 0 at its top or left edge to 1 at the
-/// other. Anything else, NaN included, is refused.
+/// A fraction from 0 to 1: of a box's side, from its top or left edge to the
+/// other, or of a pen's full pressure. Anything else, NaN included, is
+/// refused.
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Serialize, Deserialize)]
 #[serde(try_from = "f32", into = "f32")]
 pub struct UnitFraction(f32);
@@ -760,6 +777,9 @@ pub struct UnitFraction(f32);
 impl UnitFraction {
     /// The middle of the side.
     pub const HALF: Self = Self(0.5);
+
+    /// The whole of it: the far edge of a side, a full pressure.
+    pub const ONE: Self = Self(1.0);
 
     /// The fraction `value`, `None` outside `0.0 ..= 1.0`.
     #[must_use]
@@ -773,10 +793,14 @@ impl UnitFraction {
         self.0
     }
 
-    /// The point this fraction of the way from `start` to `end`.
+    /// The point this fraction of the way from `start` to `end`, on a board.
     #[must_use]
-    pub fn along(self, start: f64, end: f64) -> f64 {
-        start + f64::from(self.0) * (end - start)
+    pub fn along(
+        self,
+        start: ambre_core::BoardLength,
+        end: ambre_core::BoardLength,
+    ) -> ambre_core::BoardLength {
+        start + (end - start) * f64::from(self.0)
     }
 }
 
@@ -2612,7 +2636,7 @@ pub struct DisplayViewport {
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The
     /// value rides each frame as written: the view replaces a unit that is
     /// not finite and positive.
-    pub grid_unit: f64,
+    pub grid_unit: ambre_core::BoardLength,
     /// Back-to-front sequence mirroring the `layers` walk
     /// (`toile-z-order`): elements and connectors interleaved by
     /// z-order, painted in one pass.
@@ -2733,6 +2757,28 @@ mod tests {
         assert_eq!(encoded, expected, "variant index 3, then the bare bytes");
         assert_eq!(postcard::from_bytes::<ClipValue>(&encoded), Ok(field));
         assert_eq!(format!("{:?}", ClipBytes::new(bytes)), "ClipBytes(4 bytes)");
+    }
+
+    /// A stroke sample keeps the twelve bytes of three bare `f32`s, and a
+    /// stored one pressed harder than full does not decode.
+    #[test]
+    fn a_stroke_sample_keeps_three_floats_and_refuses_a_pressure_past_one() {
+        let sample = StrokePoint {
+            x: ambre_core::StrokeCoord::new(1.5),
+            y: ambre_core::StrokeCoord::new(-2.0),
+            pressure: UnitFraction::HALF,
+        };
+        let encoded = postcard::to_allocvec(&sample).expect("a sample encodes");
+        let bare = postcard::to_allocvec(&(1.5_f32, -2.0_f32, 0.5_f32)).expect("floats encode");
+        assert_eq!(encoded, bare);
+        assert_eq!(postcard::from_bytes::<StrokePoint>(&encoded), Ok(sample));
+        for pressure in [2.0_f32, -0.5, f32::NAN] {
+            let stored = postcard::to_allocvec(&(1.5_f32, -2.0_f32, pressure)).expect("encodes");
+            assert!(
+                postcard::from_bytes::<StrokePoint>(&stored).is_err(),
+                "pressure {pressure} is refused"
+            );
+        }
     }
 
     /// A copied element's field keys encode as the words the board stores,

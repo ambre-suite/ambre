@@ -53,10 +53,10 @@ pub(super) fn stroke_aabb(points: &[StrokePoint]) -> Rect {
     let mut min = Point::new(f64::INFINITY, f64::INFINITY);
     let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     for p in points {
-        min.x = min.x.min(p.x as f64);
-        min.y = min.y.min(p.y as f64);
-        max.x = max.x.max(p.x as f64);
-        max.y = max.y.max(p.y as f64);
+        min.x = min.x.min(p.x.widened().get());
+        min.y = min.y.min(p.y.widened().get());
+        max.x = max.x.max(p.x.widened().get());
+        max.y = max.y.max(p.y.widened().get());
     }
     Rect::new(
         min.x,

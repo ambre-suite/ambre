@@ -72,12 +72,15 @@ drawing kind, carrying its samples in one binary field
 **One sample** is a world point plus a pressure reading, twelve bytes with a fixed layout:
 
 ```rust
-/// One sampled point of a freehand stroke. 12 bytes, fixed layout.
+/// One sampled point of a freehand stroke. 12 bytes, fixed layout: three
+/// `f32`s, the coordinates in board units then the pressure.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
-    pub x: f32,
-    pub y: f32,
-    pub pressure: f32, // 0.0 ..= 1.0, 1.0 when the input device reports none
+    pub x:        StrokeCoord,
+    pub y:        StrokeCoord,
+    /// `UnitFraction::ONE` when the input device reports none. A stored
+    /// sample outside `0 ..= 1` does not decode.
+    pub pressure: UnitFraction,
 }
 ```
 
