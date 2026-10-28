@@ -34,6 +34,9 @@ use ambre_core::{CommentId, FootnoteId, Pt, ReplyId, Rgb, SuggestionId, UserId};
 
 use super::grid::{CellPos, Col, ColCount, RowCount};
 
+pub mod mark;
+pub use mark::MarkValue;
+
 ambre_core::define_index! {
     /// A code-point offset into the body of one block, as the CRDT counts it
     /// (`PROSE-FEAT-006`). Every offset this plane carries is one. The view
@@ -1351,15 +1354,16 @@ pub enum ProseCommand {
     },
 
     // -- Inline marks (`features/ambre-spec-prose-inline-styles.md`) --
-    /// `value` is the mark's payload, always a String: the key, its value
-    /// grammar and its canonical form are the registry of
-    /// `ambre-spec-prose-schema.md section 3` (`PROSE-008`). `None` is the
-    /// value of a key whose presence alone is meaningful.
+    /// `value` is the mark's payload, checked by the grammar of the
+    /// registry of `ambre-spec-prose-schema.md section 3` (`PROSE-008`).
+    /// `None` is the value of a key whose presence alone is meaningful. The
+    /// Logic thread checks the value again under `key`, since a sender may
+    /// have checked it under another key.
     ApplyMark {
         block_id: BlockId,
         range: DocSpan,
         key: MarkKey,
-        value: Option<String>,
+        value: Option<MarkValue>,
     },
     RemoveMark {
         block_id: BlockId,

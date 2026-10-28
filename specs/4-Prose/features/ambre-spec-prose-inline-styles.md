@@ -179,7 +179,7 @@ paragraph at once (`PROSE-FEAT-176`).
 
 | Shape | Carries |
 |---|---|
-| `ApplyMark { block_id, range, key, value }` | one key of the registry, and its value as a string (`PROSE-FEAT-178`) |
+| `ApplyMark { block_id, range, key, value }` | one key of the registry, and its value checked by the grammar (`PROSE-FEAT-178`) |
 | `RemoveMark { block_id, range, key }` | one key, over a range (`PROSE-FEAT-180`) |
 | `ClearInlineMarks { block_id, range }` | nothing but the range (`PROSE-FEAT-024`) |
 | `SetParagraphStyle { block_id, style }` | the whole set, diffed by the handler (`PROSE-FEAT-025`) |
@@ -217,8 +217,8 @@ carries an identity or a binding that a formatting reset must not destroy (`PROS
 Removing one of them is its own command.
 
 **Code:** `crates/ambre-prose/src/style.rs` for the cascade, `crates/ambre-prose/src/mark.rs` for
-the registry and the value grammars, and `crates/ambre-prose/src/logic/marks.rs` for the write
-path.
+the registry, `crates/ambre-bus/src/app/prose/mark.rs` for the value grammars, and
+`crates/ambre-prose/src/logic/marks.rs` for the write path.
 
 ---
 

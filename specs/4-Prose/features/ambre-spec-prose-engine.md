@@ -346,11 +346,11 @@ pub enum ProseCommand {
     SplitBlock    { block_id: BlockId, pos: DocOffset },
 
     // -- Inline marks (`features/ambre-spec-prose-inline-styles.md`) --
-    /// `value` is the mark's payload, always a String: the key, its value grammar and its
-    /// canonical form are the registry of `ambre-spec-prose-schema.md section 3` (`PROSE-008`),
-    /// which interop parses and emits unchanged. `None` clears the value for a key whose
-    /// presence alone is meaningful.
-    ApplyMark     { block_id: BlockId, range: DocSpan, key: MarkKey, value: Option<String> },
+    /// `value` is the mark's payload, a `MarkValue` checked by the value grammar of the registry
+    /// of `ambre-spec-prose-schema.md section 3` (`PROSE-008`), which interop parses and emits
+    /// unchanged. `None` is the value of a key whose presence alone is meaningful. The handler
+    /// checks the value again under `key`.
+    ApplyMark     { block_id: BlockId, range: DocSpan, key: MarkKey, value: Option<MarkValue> },
     RemoveMark    { block_id: BlockId, range: DocSpan, key: MarkKey },
     ClearInlineMarks { block_id: BlockId, range: DocSpan },
     /// Reading the styles of a selection for the format bar. It writes nothing; the answer is

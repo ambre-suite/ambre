@@ -193,7 +193,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | <OrderedStyle as TryFrom<u8>>
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidOrderedStyle.0 | field | u8	newtype-inner	the refused code an OrderedStyle decode reports
 ambre-bus | src/app/prose.rs | crate::app::prose | ParagraphStyle::is_empty() | ret | bool	generic	predicate
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::AddComment.text | field | String	free-text	user content
-ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::ApplyMark.value | field | Option<String>	free-text	the raw value the UI sends, checked in Logic by validate_value, which lives in ambre-prose; the bus carries the text before its check
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | ProseCommand::InsertFootnote.note_text | field | String	free-text	user content
@@ -219,6 +218,17 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.section_number | fie
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue.0 | field | String	newtype-inner	the inside of MarkValue; validate_value and canonical_value are the only ways in
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	newtype-inner	newtype inner field
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	newtype-inner	newtype inner field
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(value) | param | f32	math	layout geometry local to algorithm
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipConnector.fields | field | Vec<(String,ClipValue)>	generic	generic Loro field dump of a copied element, keyed by its own field names
@@ -2287,19 +2297,8 @@ ambre-prose | src/logic/text.rs | crate::logic::text | whole_graphemes(text) | p
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::only_typed() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched::take_structural() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/touched.rs | crate::logic::touched | plain_text() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/mark.rs | crate::mark | MarkValue.0 | field | String	newtype-inner	the inside of MarkValue; validate_value and canonical_value are the only ways in
-ambre-prose | src/mark.rs | crate::mark | MarkValue::as_str() | ret | &str	newtype-inner	MarkValue accessor, for the Loro mark call and the clipboard payload that carry text
-ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadColor.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/mark.rs | crate::mark | MarkValueError::BadFontSize.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/mark.rs | crate::mark | canonical_color() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | canonical_number(value) | param | f32	math	layout geometry local to algorithm
-ambre-prose | src/mark.rs | crate::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic	predicate result
 ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
-ambre-prose | src/mark.rs | crate::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/mark.rs | crate::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | Counters::bump() | ret | Vec<u32>	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	math	count, size or local index

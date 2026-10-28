@@ -466,7 +466,7 @@ pub(crate) mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
             key: "fs".into(),
-            value: Some("11.0".to_owned()),
+            value: Some(crate::mark::test_value("11.0")),
         });
         let rendered = format!("{:?}", state.marks_of(&block));
         assert!(rendered.contains("\"11\""), "{rendered}");
@@ -577,7 +577,7 @@ pub(crate) mod tests {
             range: DocSpan::from_usize_range(0..5),
             key: "fg".into(),
             // The opaque eight-digit spelling of the same colour.
-            value: Some("#3366CCFF".to_owned()),
+            value: Some(crate::mark::test_value("#3366CCFF")),
         });
         let rendered = format!("{:?}", state.marks_of(&block));
         assert!(rendered.contains("#3366cc\""), "{rendered}");
@@ -620,7 +620,7 @@ pub(crate) mod tests {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
                 key: key.into(),
-                value: value.map(str::to_owned),
+                value: value.map(crate::mark::test_value),
             });
             assert!(refused(&outcome), "{key} took {value:?}");
             assert!(outcome.update.is_none(), "{key} took {value:?}");
@@ -640,7 +640,7 @@ pub(crate) mod tests {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
                 key: key.into(),
-                value: Some("x".to_owned()),
+                value: Some(crate::mark::test_value("x")),
             });
             assert!(
                 matches!(
@@ -655,7 +655,7 @@ pub(crate) mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
             key: "a".into(),
-            value: Some("https://example.org".to_owned()),
+            value: Some(crate::mark::test_value("https://example.org")),
         });
         assert!(link.update.is_some(), "the link is a style command's");
     }
@@ -767,7 +767,7 @@ pub(crate) mod tests {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..5),
                 key: key.into(),
-                value: value.map(str::to_owned),
+                value: value.map(crate::mark::test_value),
             });
         }
 
@@ -852,7 +852,7 @@ pub(crate) mod tests {
                 block_id: block,
                 range: DocSpan::from_usize_range(0..3),
                 key: key.into(),
-                value: value.map(str::to_owned),
+                value: value.map(crate::mark::test_value),
             });
             state.handle_command(ProseCommand::InsertText {
                 block_id: block,

@@ -769,7 +769,7 @@ mod tests {
                 block_id: body,
                 range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
                 key: key.into(),
-                value: value.map(str::to_owned),
+                value: value.map(crate::mark::test_value),
             });
         }
         append(

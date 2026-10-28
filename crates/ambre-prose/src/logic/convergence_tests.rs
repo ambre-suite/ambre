@@ -130,7 +130,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
             key: "fs".into(),
-            value: Some("11.0".to_owned()),
+            value: Some(crate::mark::test_value("11.0")),
         })
         .update
         .expect("a delta");
@@ -139,7 +139,7 @@ fn two_peers_writing_one_size_merge_to_one_value() {
             block_id: block,
             range: DocSpan::from_usize_range(0..5),
             key: "fs".into(),
-            value: Some("11".to_owned()),
+            value: Some(crate::mark::test_value("11")),
         })
         .update
         .expect("a delta");
@@ -584,7 +584,7 @@ fn mark(
             block_id: block,
             range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
             key: key.into(),
-            value: value.map(str::to_owned),
+            value: value.map(crate::mark::test_value),
         })
         .update
         .expect("a delta")

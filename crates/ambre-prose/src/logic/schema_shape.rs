@@ -413,8 +413,9 @@ pub(super) fn document_of_every_key() -> ProseState {
         // it lays those marks on the body directly.
         if crate::mark::is_owned_anchor(&key) {
             let body = doc::get_block_text(&state.doc, &crate::events::tree_id(root));
-            let value = mark_value_for(key.as_str()).unwrap_or_default();
-            if body.mark(0..3, key.as_str(), value.as_str()).is_err() {
+            let value = mark_value_for(key.as_str());
+            let text = value.as_ref().map_or("", crate::mark::MarkValue::as_str);
+            if body.mark(0..3, key.as_str(), text).is_err() {
                 panic!("the scenario could not lay the {key} mark");
             }
             state.doc.commit();
@@ -579,12 +580,12 @@ fn mark_roots_to_apply() -> Vec<MarkKey> {
 ///
 /// A flag key takes none, a colour takes a hexadecimal record and a size takes
 /// a number. Every other key takes any text.
-fn mark_value_for(key: &str) -> Option<String> {
+fn mark_value_for(key: &str) -> Option<crate::mark::MarkValue> {
     match key {
         "b" | "i" | "u" | "s" | "sup" | "sub" | "c" => None,
-        "fg" | "bg" => Some("#ff8800".to_owned()),
-        "fs" => Some("11".to_owned()),
-        _ => Some("x".to_owned()),
+        "fg" | "bg" => Some(crate::mark::test_value("#ff8800")),
+        "fs" => Some(crate::mark::test_value("11")),
+        _ => Some(crate::mark::test_value("x")),
     }
 }
 

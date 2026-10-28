@@ -127,7 +127,7 @@ mod tests {
                 block_id: block,
                 range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
                 key: key.into(),
-                value: Some(value.to_owned()),
+                value: Some(crate::mark::test_value(value)),
             })
             .display
     }

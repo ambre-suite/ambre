@@ -1098,7 +1098,7 @@ fn linked() -> (Rig, BlockId) {
         block_id: block,
         range: DocSpan::from_usize_range(6..10),
         key: "a".into(),
-        value: Some(TARGET.to_owned()),
+        value: Some(crate::mark::test_value(TARGET)),
     });
     rig.deliver();
     rig.lay();
@@ -1184,7 +1184,7 @@ fn a_target_that_could_run_code_is_held_back() {
         block_id: block,
         range: DocSpan::from_usize_range(6..10),
         key: "a".into(),
-        value: Some("javascript:alert(1)".to_owned()),
+        value: Some(crate::mark::test_value("javascript:alert(1)")),
     });
     rig.deliver();
     rig.lay();

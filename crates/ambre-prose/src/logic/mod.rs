@@ -623,7 +623,12 @@ impl ProseState {
                 range,
                 key,
                 value,
-            } => self.apply_mark(&tree_id(block_id), range, &key, value.as_deref()),
+            } => self.apply_mark(
+                &tree_id(block_id),
+                range,
+                &key,
+                value.as_ref().map(mark::MarkValue::as_str),
+            ),
             ProseCommand::RemoveMark {
                 block_id,
                 range,
@@ -1439,7 +1444,7 @@ mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..4),
             key: "fs".into(),
-            value: Some("huge".to_owned()),
+            value: Some(crate::mark::test_value("huge")),
         });
         let error = refusal(&outcome);
         assert_eq!(error.refused, RefusedAction::Command("applying the style"));
