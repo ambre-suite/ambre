@@ -682,19 +682,21 @@ impl MurmureRelay {
     /// A query with no word asks nothing. The last answer shows until the
     /// new one arrives.
     pub fn search_for(&self, query: String) -> Option<LogicCommand> {
-        let blank = query.trim().is_empty();
+        let wanted = ambre_core::SearchQuery::new(query.clone());
         let changed = self
             .search
             .try_update(|s| {
                 let changed = s.query != query;
                 s.query.clone_from(&query);
-                if blank {
+                if wanted.is_none() {
                     s.channels.clear();
                 }
                 changed
             })
             .unwrap_or(false);
-        (changed && !blank).then_some(LogicCommand::SearchMessages { query })
+        wanted
+            .filter(|_| changed)
+            .map(|query| LogicCommand::SearchMessages { query })
     }
 
     /// The matches of the last answer, one group per channel with a match, in
@@ -1011,7 +1013,7 @@ impl MurmureRelay {
             // to a box closed since, is dropped: typing outruns the answers.
             UiEvent::MessageSearch { query, channels } => {
                 self.search.update(|s| {
-                    if s.open && s.query == *query {
+                    if s.open && s.query == query.as_str() {
                         s.channels.clone_from(channels);
                     }
                 });

@@ -298,7 +298,7 @@ pub enum RestCommand {
 
     // -- Users -------------------------------------------------------------------
     /// Search users by email prefix. -> `UserSearchResults`.
-    SearchUsers { query: String },
+    SearchUsers { query: ambre_core::UserSearch },
 
     // -- Media -------------------------------------------------------------------
     /// Upload a media file. -> `MediaUploaded`.

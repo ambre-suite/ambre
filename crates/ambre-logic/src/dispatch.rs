@@ -2016,7 +2016,7 @@ mod tests {
                 role: Role::Viewer,
             },
             RestCommand::SearchUsers {
-                query: "a".to_owned(),
+                query: ambre_core::UserSearch::new("ab").expect("two characters"),
             },
             RestCommand::UploadMedia {
                 document_id: doc,

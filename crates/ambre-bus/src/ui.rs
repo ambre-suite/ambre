@@ -148,7 +148,7 @@ pub enum UiEvent {
     /// open channel, each stating the segments it covered. A query with no
     /// word answers no channel.
     MessageSearch {
-        query: String,
+        query: ambre_core::SearchQuery,
         channels: Vec<ChannelMatches>,
     },
 

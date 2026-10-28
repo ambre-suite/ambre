@@ -1276,7 +1276,7 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
         also_in_thread: None,
     };
     UiEvent::MessageSearch {
-        query: query.to_owned(),
+        query: ambre_core::SearchQuery::new(query.to_owned()).expect("a word"),
         channels: vec![
             ChannelMatches {
                 channel_id: budget,
@@ -1311,7 +1311,9 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     assert!(sent.get_untracked().is_empty(), "opening asks nothing");
 
     let asked = relay.search_for("bud".to_owned());
-    assert!(matches!(asked, Some(LogicCommand::SearchMessages { ref query }) if query == "bud"));
+    assert!(
+        matches!(asked, Some(LogicCommand::SearchMessages { ref query }) if query.as_str() == "bud")
+    );
     assert!(
         relay.search_for("bud".to_owned()).is_none(),
         "the same words ask once"

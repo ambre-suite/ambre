@@ -2059,8 +2059,8 @@ impl LogicState {
     /// Search every open channel for `query` (the Murmure search spec). Each
     /// engine reads the segments it holds, and nothing reaches the Sync
     /// worker: the query never leaves the client, and no segment loads.
-    pub(crate) fn search_messages(&self, query: String) {
-        let mut channels: Vec<ChannelMatches> = match Query::parse(&query) {
+    pub(crate) fn search_messages(&self, query: ambre_core::SearchQuery) {
+        let mut channels: Vec<ChannelMatches> = match Query::parse(query.as_str()) {
             Some(parsed) => self
                 .channels
                 .values()
@@ -3546,14 +3546,14 @@ mod tests {
         drain(&ui);
 
         state.handle_logic_command(LogicCommand::SearchMessages {
-            query: "Budget".to_owned(),
+            query: ambre_core::SearchQuery::new("Budget".to_owned()).expect("a word"),
         });
         assert!(drain(&sync).is_empty(), "the query never leaves the client");
         let shown = drain(&ui);
         let [UiEvent::MessageSearch { query, channels }] = shown.as_slice() else {
             panic!("one answer, got {shown:?}");
         };
-        assert_eq!(query, "Budget");
+        assert_eq!(query.as_str(), "Budget");
         let mut answered: Vec<(ChannelId, Vec<SegmentId>, u32, Vec<String>)> = channels
             .iter()
             .map(|c| {
@@ -3571,7 +3571,7 @@ mod tests {
         );
 
         state.handle_logic_command(LogicCommand::SearchMessages {
-            query: " ? ".to_owned(),
+            query: ambre_core::SearchQuery::new(" ? ".to_owned()).expect("not blank"),
         });
         assert!(matches!(
             drain(&ui).as_slice(),

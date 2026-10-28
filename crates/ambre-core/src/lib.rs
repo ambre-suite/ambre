@@ -77,6 +77,7 @@ pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).
 pub mod schema;
+pub mod search;
 pub mod secret;
 pub mod seq;
 /// Serde adapters for enum serialization as lowercase strings.
@@ -156,6 +157,7 @@ pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
 };
+pub use search::{SearchQuery, UserSearch};
 pub use secret::{
     AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret, SecretBytes,
     SecretString,

@@ -1270,7 +1270,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
     frame.type_search("budget").await;
     let asked = frame.sent.get_untracked();
     assert!(
-        matches!(asked[..], [LogicCommand::SearchMessages { ref query }] if query == "budget"),
+        matches!(asked[..], [LogicCommand::SearchMessages { ref query }] if query.as_str() == "budget"),
         "{asked:?}"
     );
     let segment = SegmentId::new();
@@ -1290,7 +1290,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         also_in_thread: None,
     };
     let answer = UiEvent::MessageSearch {
-        query: "budget".to_owned(),
+        query: ambre_core::SearchQuery::new("budget".to_owned()).expect("a word"),
         channels: vec![ChannelMatches {
             channel_id: acme.general,
             covered: vec![segment],

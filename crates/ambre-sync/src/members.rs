@@ -367,7 +367,7 @@ impl SyncState {
     /// response into [`UserInfo`] values, and replies with
     /// [`RestEvent::UserSearchResults`]. The query is percent-encoded whole
     /// before it is placed in the URL (`SYNC-179`).
-    pub(crate) fn handle_search_users(&self, id: RequestId, query: String) {
+    pub(crate) fn handle_search_users(&self, id: RequestId, query: ambre_core::UserSearch) {
         let event_tx = self.event_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -377,7 +377,7 @@ impl SyncState {
             wasm_bindgen_futures::spawn_local(async move {
                 let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                     .route("/users/search")
-                    .query(http::QueryKey::Query, &query);
+                    .query(http::QueryKey::Query, query.as_str());
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {
                     Ok(resp) => {
                         // Each id was parsed when the answer was read, so none
@@ -399,7 +399,7 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!("Sync: SearchUsers '{query}'");
+            tracing::info!("Sync: SearchUsers '{}'", query.as_str());
             self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
         }
     }
