@@ -381,7 +381,6 @@ ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	gen
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
-ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::get() | ret | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
@@ -3308,7 +3307,6 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | shift_month(months) | param | i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
@@ -4149,3 +4147,4 @@ ambre-protocol | src/signaling.rs | crate::signaling | SessionDescription::new(t
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
+ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | bool	generic	predicate result: a const comparison, which Marks::new runs at compile time

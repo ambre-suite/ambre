@@ -72,9 +72,6 @@ fn canvas_origin() -> CssPoint {
         })
 }
 
-/// A canvas point as the view takes it. The canvas reports its pointer in
-/// pixels from its own corner, which are the view's pixels.
-
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: DocumentId,

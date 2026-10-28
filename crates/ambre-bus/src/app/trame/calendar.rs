@@ -123,6 +123,12 @@ impl MonthCount {
     pub const fn get(self) -> i64 {
         self.0
     }
+
+    /// The two counts together, held at either end of `i64`.
+    #[must_use]
+    pub const fn plus(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
 }
 
 /// A day of a month, counted from 1 on the first.

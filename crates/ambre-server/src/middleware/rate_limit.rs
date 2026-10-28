@@ -363,7 +363,7 @@ async fn check_sliding_window(
     let count = RequestCount::new(u32::try_from(count.max(0)).unwrap_or(u32::MAX));
     Ok(if count <= max_requests {
         Verdict::Allowed {
-            remaining: RequestCount::new(max_requests.get().saturating_sub(count.get())),
+            remaining: max_requests.minus(count),
         }
     } else {
         Verdict::Refused

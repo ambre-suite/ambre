@@ -486,7 +486,7 @@ impl Marks {
     /// released.
     #[must_use]
     pub const fn new(high: BacklogLength, low: BacklogLength) -> Option<Self> {
-        if low.0 < high.0 {
+        if low.is_below(high) {
             Some(Self { high, low })
         } else {
             None
@@ -507,7 +507,7 @@ impl Marks {
 }
 
 /// How many values a [`Backlog`] holds, as a [`Marks`] pair names a length.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BacklogLength(usize);
 
 impl BacklogLength {
@@ -517,10 +517,11 @@ impl BacklogLength {
         Self(values)
     }
 
-    /// The number of values.
+    /// Whether this length sits below `other`. A `const fn`, so a pair of
+    /// [`Marks`] checks at compile time, where `<` is not yet callable.
     #[must_use]
-    pub const fn get(self) -> usize {
-        self.0
+    pub const fn is_below(self, other: Self) -> bool {
+        self.0 < other.0
     }
 }
 
@@ -576,11 +577,11 @@ impl<T> Backlog<T> {
     /// nothing changed since the last call, or when the backlog has no marks.
     pub fn pressure(&mut self) -> Option<Pressure> {
         let marks = self.marks?;
-        let len = self.held.len();
-        if !self.holding && len >= marks.high.get() {
+        let len = BacklogLength::new(self.held.len());
+        if !self.holding && len >= marks.high {
             self.holding = true;
             Some(Pressure::Hold)
-        } else if self.holding && len <= marks.low.get() {
+        } else if self.holding && len <= marks.low {
             self.holding = false;
             Some(Pressure::Release)
         } else {
@@ -756,7 +757,10 @@ mod tests {
         );
         let marks =
             Marks::new(BacklogLength::new(3), BacklogLength::new(1)).expect("1 sits below 3");
-        assert_eq!((marks.high().get(), marks.low().get()), (3, 1));
+        assert_eq!(
+            (marks.high(), marks.low()),
+            (BacklogLength::new(3), BacklogLength::new(1))
+        );
     }
 
     /// `ARCH-024`: the last sender gone reads as a disconnection, once the

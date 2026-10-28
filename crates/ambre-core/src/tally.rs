@@ -49,6 +49,12 @@ macro_rules! define_tally {
                 Self(self.0.saturating_add(other.0))
             }
 
+            /// What is left of this tally past `other`, held at zero.
+            #[must_use]
+            pub const fn minus(self, other: Self) -> Self {
+                Self(self.0.saturating_sub(other.0))
+            }
+
             /// A tally of `len` things, held at the top past 32 bits.
             pub fn of_len(len: usize) -> Self {
                 Self(u32::try_from(len).unwrap_or(u32::MAX))
@@ -75,6 +81,8 @@ mod tests {
         assert_eq!(Seen::ZERO.incremented().get(), 1);
         assert_eq!(Seen::new(u32::MAX).incremented().get(), u32::MAX);
         assert_eq!(Seen::new(2).plus(Seen::new(3)).to_string(), "5");
+        assert_eq!(Seen::new(5).minus(Seen::new(3)), Seen::new(2));
+        assert_eq!(Seen::new(3).minus(Seen::new(5)), Seen::ZERO);
         assert_eq!(Seen::of_len(usize::MAX).get(), u32::MAX);
         let bytes = postcard::to_allocvec(&Seen::new(7)).expect("a tally encodes");
         assert_eq!(
