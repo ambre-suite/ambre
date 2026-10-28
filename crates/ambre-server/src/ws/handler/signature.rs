@@ -35,12 +35,13 @@ pub(crate) fn verify_update_signature(
     pubkey: &ambre_core::PublicKey,
     update: &ambre_protocol::Update,
 ) -> Result<(), AppError> {
-    let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
+    let public_data =
+        ambre_core::Aad::new(postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?);
     verify_sealed_signature(
         pubkey,
         &update.nonce,
         &update.ciphertext,
-        &public_data_bytes,
+        &public_data,
         &update.commitment_tag,
         &update.signature,
     )
@@ -58,13 +59,14 @@ pub(crate) fn verify_ephemeral_signature(
     pubkey: &ambre_core::PublicKey,
     ephemeral: &ambre_protocol::Ephemeral,
 ) -> Result<(), AppError> {
-    let public_data_bytes =
-        postcard::to_allocvec(&ephemeral.public_data).map_err(AppError::Decode)?;
+    let public_data = ambre_core::Aad::new(
+        postcard::to_allocvec(&ephemeral.public_data).map_err(AppError::Decode)?,
+    );
     verify_sealed_signature(
         pubkey,
         &ephemeral.nonce,
         &ephemeral.ciphertext,
-        &public_data_bytes,
+        &public_data,
         &ephemeral.commitment_tag,
         &ephemeral.signature,
     )
@@ -79,7 +81,7 @@ pub(crate) fn verify_sealed_signature(
     pubkey: &ambre_core::PublicKey,
     nonce: &Nonce,
     ciphertext: &Ciphertext,
-    public_data_bytes: &[u8],
+    public_data: &ambre_core::Aad,
     commitment_tag: &CommitmentTag,
     signature: &Signature,
 ) -> Result<(), AppError> {
@@ -88,7 +90,7 @@ pub(crate) fn verify_sealed_signature(
     let mut signed_data = Vec::new();
     push_framed(&mut signed_data, &nonce.0);
     push_framed(&mut signed_data, &ciphertext.0);
-    push_framed(&mut signed_data, public_data_bytes);
+    push_framed(&mut signed_data, public_data.as_bytes());
     push_framed(&mut signed_data, &commitment_tag.0);
 
     let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;

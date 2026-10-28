@@ -293,7 +293,9 @@ impl MediaHttp for GlooHttp {
         &self,
         url: &ambre_core::PresignedUrl,
     ) -> Result<Vec<u8>, http::HttpError> {
-        http::fetch_bytes(url).await
+        http::fetch_bytes(url)
+            .await
+            .map(pipeline::FetchedBlob::into_bytes)
     }
     async fn delete(
         &self,

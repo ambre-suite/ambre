@@ -83,10 +83,33 @@ impl ApiRoot {
         Self(format!("{scheme}://{host}/api"))
     }
 
-    /// The URL of the route at `path` under this root. `path` starts with a
-    /// slash, as `/documents` does.
-    pub(crate) fn route(&self, path: impl AsRef<str>) -> RelayUrl {
-        RelayUrl(format!("{}{}", self.0, path.as_ref()))
+    /// The URL of the route at `path` under this root.
+    pub(crate) fn route(&self, path: impl Into<RoutePath>) -> RelayUrl {
+        RelayUrl(format!("{}{}", self.0, path.into().as_str()))
+    }
+}
+
+/// The path of a relay route under the API root, starting with a slash, as
+/// `/documents` does. A call site writes the path as a literal or a
+/// `format!`, and the route reads it from this type alone.
+pub(crate) struct RoutePath(String);
+
+impl RoutePath {
+    /// The path, as the URL spells it.
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for RoutePath {
+    fn from(path: &str) -> Self {
+        Self(path.to_owned())
+    }
+}
+
+impl From<String> for RoutePath {
+    fn from(path: String) -> Self {
+        Self(path)
     }
 }
 
@@ -138,8 +161,8 @@ pub(crate) struct RelayUrl(String);
 impl RelayUrl {
     /// The route at `path` below this one, such as `/media` below a
     /// document's route.
-    pub(crate) fn join(&self, path: impl AsRef<str>) -> Self {
-        Self(format!("{}{}", self.0, path.as_ref()))
+    pub(crate) fn join(&self, path: impl Into<RoutePath>) -> Self {
+        Self(format!("{}{}", self.0, path.into().as_str()))
     }
 
     /// This route with the one query parameter `key` set to `value`. The
@@ -395,6 +418,34 @@ pub(crate) enum ContentType {
     Octets,
 }
 
+/// The bytes of a request or an answer body: JSON, or a sealed blob. `Debug`
+/// prints the length and none of the bytes, as the body may carry a token.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct HttpBody(Vec<u8>);
+
+impl HttpBody {
+    /// The body made of `bytes`.
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes, as the transport sends them or a reader parses them.
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The bytes, moved out.
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for HttpBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HttpBody({} bytes)", self.0.len())
+    }
+}
+
 /// One request as the transport sends it. The policy below builds it, and
 /// the transport only moves it.
 #[derive(Clone)]
@@ -407,7 +458,7 @@ pub(crate) struct Outgoing {
     /// the relay that needs one. The transport spells the header at send time.
     pub bearer: Option<SecretToken>,
     /// The content type and the bytes of the body, if any.
-    pub body: Option<(ContentType, Vec<u8>)>,
+    pub body: Option<(ContentType, HttpBody)>,
     /// How long the transport waits before it aborts the request.
     pub timeout: ambre_core::Millis,
 }
@@ -431,7 +482,7 @@ impl Outgoing {
             HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
         })?;
         Ok(Self {
-            body: Some((ContentType::Json, bytes)),
+            body: Some((ContentType::Json, HttpBody::new(bytes))),
             ..Self::new(method, url)
         })
     }
@@ -442,7 +493,7 @@ pub(crate) struct Incoming {
     /// The HTTP status.
     pub status: HttpStatus,
     /// The body, empty when there is none.
-    pub body: Vec<u8>,
+    pub body: HttpBody,
 }
 
 /// What moves a request and brings its answer back. The renewal, the replay
@@ -523,7 +574,7 @@ impl Transport for Fetch {
                 };
                 builder
                     .header("Content-Type", content_type)
-                    .body(bytes.clone())
+                    .body(bytes.as_bytes().to_vec())
                     .map_err(|e| TransportError::Body(e.to_string()))?
                     .send()
                     .await
@@ -537,7 +588,7 @@ impl Transport for Fetch {
             .map_err(|e| TransportError::Truncated(e.to_string()))?;
         Ok(Incoming {
             status: HttpStatus(resp.status()),
-            body,
+            body: HttpBody::new(body),
         })
     }
 
@@ -792,7 +843,7 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
         return Ok(());
     }
     let code = if matches!(resp.status, HttpStatus(403 | 409)) {
-        serde_json::from_slice::<RefusalBody>(&resp.body)
+        serde_json::from_slice::<RefusalBody>(resp.body.as_bytes())
             .ok()
             .map(|body| body.error)
     } else {
@@ -812,7 +863,7 @@ fn read_json<R: serde::de::DeserializeOwned>(
     resp: &Incoming,
 ) -> Result<R, HttpError> {
     expect_ok(request, resp)?;
-    serde_json::from_slice(&resp.body).map_err(|e| HttpError::Unreadable {
+    serde_json::from_slice(resp.body.as_bytes()).map_err(|e| HttpError::Unreadable {
         method: request.method,
         url: request.url.shown(),
         // A word of a closed set this build does not know means the relay is
@@ -981,10 +1032,7 @@ pub(crate) async fn download_snapshot(
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
-    fetch_bytes(&resp.download_url)
-        .await
-        .ok()
-        .map(crate::pipeline::FetchedBlob::new)
+    fetch_bytes(&resp.download_url).await.ok()
 }
 
 pub(crate) async fn delete_auth(url: &RelayUrl, auth: AuthContext) -> Result<(), HttpError> {
@@ -1024,7 +1072,7 @@ pub(crate) async fn put_sealed_via(
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     let request = Outgoing {
-        body: Some((ContentType::Octets, blob.as_bytes().to_vec())),
+        body: Some((ContentType::Octets, HttpBody::new(blob.as_bytes().to_vec()))),
         ..Outgoing::new(Method::Put, url.into())
     };
     let resp = exchange(transport, &request).await?;
@@ -1067,11 +1115,13 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
     send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
 }
 
-pub(crate) async fn fetch_bytes(url: &ambre_core::PresignedUrl) -> Result<Vec<u8>, HttpError> {
+pub(crate) async fn fetch_bytes(
+    url: &ambre_core::PresignedUrl,
+) -> Result<crate::pipeline::FetchedBlob, HttpError> {
     let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
-    Ok(resp.body)
+    Ok(crate::pipeline::FetchedBlob::new(resp.body.into_bytes()))
 }
 
 /// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
@@ -1984,7 +2034,7 @@ pub(crate) mod scripted {
                 .map(|answer| {
                     answer.map(|(status, body)| Incoming {
                         status: HttpStatus(status),
-                        body: serde_json::to_vec(&body).unwrap(),
+                        body: HttpBody::new(serde_json::to_vec(&body).unwrap()),
                     })
                 })
                 .collect();
@@ -2237,7 +2287,7 @@ mod tests {
             "the renewal carries no access token"
         );
         let asked: serde_json::Value =
-            serde_json::from_slice(&renewal.body.as_ref().unwrap().1).unwrap();
+            serde_json::from_slice(renewal.body.as_ref().unwrap().1.as_bytes()).unwrap();
         assert_eq!(asked, serde_json::json!({ "refresh_token": "refresh-1" }));
         assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
         assert_eq!(
@@ -2253,7 +2303,7 @@ mod tests {
     #[tokio::test]
     async fn a_sign_out_revokes_the_refresh_token_it_holds() {
         let body_of = |request: &Outgoing| -> serde_json::Value {
-            serde_json::from_slice(&request.body.as_ref().unwrap().1).unwrap()
+            serde_json::from_slice(request.body.as_ref().unwrap().1.as_bytes()).unwrap()
         };
         let logout = "https://relay.test/api/auth/logout";
 

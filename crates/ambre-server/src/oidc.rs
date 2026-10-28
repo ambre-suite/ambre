@@ -52,7 +52,7 @@ pub type OidcClients = Arc<HashMap<ambre_core::OidcProvider, OidcProviderState>>
 /// authorization code flow at the OIDC provider.
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
-    pub url: String,
+    pub url: ambre_core::ProviderUrl,
     pub state: ambre_core::OidcState,
 }
 
@@ -225,7 +225,7 @@ pub async fn login_url(
 
     Ok((
         LoginResponse {
-            url: auth_url.to_string(),
+            url: ambre_core::ProviderUrl::new(auth_url.to_string()),
             state: ambre_core::OidcState::new(csrf_secret),
         },
         oidc_state,
@@ -514,7 +514,7 @@ mod tests {
         let (login, kept) = login_url(&clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();
-        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
+        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
         let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], &code, &kept)
             .await
             .unwrap();
@@ -542,7 +542,7 @@ mod tests {
             pkce_verifier_secret: kept.pkce_verifier_secret.clone(),
             nonce: Nonce::new("another".into()),
         };
-        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
+        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &other_nonce).await,
             "id token verification failed",
@@ -555,7 +555,7 @@ mod tests {
             ),
             nonce: kept.nonce.clone(),
         };
-        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
+        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &other_verifier).await,
             "token exchange failed",
@@ -563,7 +563,7 @@ mod tests {
 
         stub.forge();
         let (login, kept) = login_url(provider).await.unwrap();
-        let code = ambre_core::OidcCode::new(stub.authorize(&login.url));
+        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &kept).await,
             "id token verification failed",
@@ -592,10 +592,17 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            login.url.starts_with(&format!("{issuer}/authorize?")),
+            login
+                .url
+                .as_str()
+                .starts_with(&format!("{issuer}/authorize?")),
             "{}",
-            login.url
+            login.url.as_str()
         );
-        assert!(login.url.contains("client_id=client"), "{}", login.url);
+        assert!(
+            login.url.as_str().contains("client_id=client"),
+            "{}",
+            login.url.as_str()
+        );
     }
 }

@@ -166,6 +166,21 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
     }
 }
 
+ambre_core::define_tally! {
+    /// A number of requests in one sliding window: a limit, a count or what
+    /// is left of the limit.
+    pub struct RequestCount;
+}
+
+/// The limit of one category: at most `max_requests` in each `window`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RateLimit {
+    /// The most requests one bucket makes in a window.
+    max_requests: RequestCount,
+    /// The span of the sliding window.
+    window: ambre_core::Seconds,
+}
+
 /// Rate-limiting categories with different limits.
 enum RateLimitCategory {
     /// Authentication endpoints (login, callback, setup).
@@ -178,13 +193,15 @@ enum RateLimitCategory {
 }
 
 impl RateLimitCategory {
-    /// Returns (max_requests_per_window, window_duration_secs).
-    fn limits(&self) -> (u64, ambre_core::Seconds) {
-        use ambre_core::Seconds;
-        match self {
-            RateLimitCategory::Auth => (10, Seconds(60)),
-            RateLimitCategory::Api => (300, Seconds(60)),
-            RateLimitCategory::WebSocket => (10, Seconds(60)),
+    /// The limit of the category.
+    fn limits(&self) -> RateLimit {
+        let max_requests = RequestCount::new(match self {
+            RateLimitCategory::Auth | RateLimitCategory::WebSocket => 10,
+            RateLimitCategory::Api => 300,
+        });
+        RateLimit {
+            max_requests,
+            window: ambre_core::Seconds(60),
         }
     }
 
@@ -237,7 +254,10 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         .to_string();
     let method = req.method().clone();
     let category = RateLimitCategory::classify(&path, &method);
-    let (max_req, window) = category.limits();
+    let RateLimit {
+        max_requests: max_req,
+        window,
+    } = category.limits();
 
     let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
 
@@ -305,7 +325,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Verdict {
     /// The request fits, with `remaining` more allowed in the window.
-    Allowed { remaining: u64 },
+    Allowed { remaining: RequestCount },
     /// The window is full.
     Refused,
 }
@@ -321,7 +341,7 @@ async fn check_sliding_window(
     bucket: &RateBucket,
     now: ambre_core::UnixMillis,
     window: ambre_core::Millis,
-    max_requests: u64,
+    max_requests: RequestCount,
 ) -> Result<Verdict, AppError> {
     // No window bucket in the key: the sorted set is the sliding window.
     let key = format!("rate:{}:{bucket}", category.prefix());
@@ -340,10 +360,10 @@ async fn check_sliding_window(
         .await
         .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
 
-    let count_u64 = count.max(0) as u64;
-    Ok(if count_u64 <= max_requests {
+    let count = RequestCount::new(u32::try_from(count.max(0)).unwrap_or(u32::MAX));
+    Ok(if count <= max_requests {
         Verdict::Allowed {
-            remaining: max_requests.saturating_sub(count_u64),
+            remaining: RequestCount::new(max_requests.get().saturating_sub(count.get())),
         }
     } else {
         Verdict::Refused
@@ -624,19 +644,37 @@ mod tests {
     #[test]
     fn auth_limits() {
         let category = RateLimitCategory::Auth;
-        assert_eq!(category.limits(), (10, ambre_core::Seconds(60)));
+        assert_eq!(
+            category.limits(),
+            RateLimit {
+                max_requests: RequestCount::new(10),
+                window: ambre_core::Seconds(60),
+            }
+        );
     }
 
     #[test]
     fn api_limits() {
         let category = RateLimitCategory::Api;
-        assert_eq!(category.limits(), (300, ambre_core::Seconds(60)));
+        assert_eq!(
+            category.limits(),
+            RateLimit {
+                max_requests: RequestCount::new(300),
+                window: ambre_core::Seconds(60),
+            }
+        );
     }
 
     #[test]
     fn ws_limits() {
         let category = RateLimitCategory::WebSocket;
-        assert_eq!(category.limits(), (10, ambre_core::Seconds(60)));
+        assert_eq!(
+            category.limits(),
+            RateLimit {
+                max_requests: RequestCount::new(10),
+                window: ambre_core::Seconds(60),
+            }
+        );
     }
 
     #[test]

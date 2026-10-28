@@ -510,9 +510,16 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
     };
     let processed = drain_front(pending_key, &entries, &mut sink).await;
 
-    if processed > 0 {
-        let _: Result<(), _> = state.redis.ltrim(pending_key.as_str(), processed, -1).await;
+    if processed > ProcessedCount::ZERO {
+        let start = isize::try_from(processed.get()).unwrap_or(isize::MAX);
+        let _: Result<(), _> = state.redis.ltrim(pending_key.as_str(), start, -1).await;
     }
+}
+
+ambre_core::define_tally! {
+    /// The pending entries one drain stored or dead-lettered, from the front
+    /// of the list: the start index of its trim.
+    pub struct ProcessedCount;
 }
 
 /// Where a drain sends each pending entry: the store, or the dead letters.
@@ -562,8 +569,8 @@ async fn drain_front(
     pending_key: &PendingKey,
     entries: &[Payload],
     sink: &mut impl DrainSink,
-) -> isize {
-    let mut processed: isize = 0;
+) -> ProcessedCount {
+    let mut processed = ProcessedCount::ZERO;
     for entry in entries {
         // An entry carries `update_b64`, the E2EE ciphertext, and a `Payload`
         // cannot be logged. Only routing metadata (redis key, byte length, and
@@ -581,14 +588,14 @@ async fn drain_front(
                 "flush: dead-lettering poison entry"
             );
             sink.dead_letter(entry).await;
-            processed += 1;
+            processed = processed.incremented();
             continue;
         };
 
         match sink.store(&s3_key, update_wire).await {
             Ok(()) => {
                 tracing::debug!(s3_key = %s3_key, seq = seq.0, "flushed delta to S3");
-                processed += 1;
+                processed = processed.incremented();
             }
             Err(e) => {
                 // Transient (retryable) failure: stop here so the front trim
@@ -667,11 +674,11 @@ mod tests {
         .await;
 
         // Stored, dead-lettered, stored: the failure at the fourth stops it.
-        assert_eq!(processed, 3);
+        assert_eq!(processed, ProcessedCount::new(3));
         assert_eq!(sink.stored, ["d/1", "d/3"]);
         assert_eq!(sink.dead, [b"not json".to_vec()]);
         // The fifth entry was never tried, and the trim keeps it with the fourth.
-        let kept: Vec<&[u8]> = entries[processed as usize..]
+        let kept: Vec<&[u8]> = entries[processed.get() as usize..]
             .iter()
             .map(Payload::expose_bytes)
             .collect();

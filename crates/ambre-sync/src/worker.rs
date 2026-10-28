@@ -21,18 +21,20 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
+use ambre_bus::start::WorkerPost;
 use ambre_bus::{LogicEvent, SyncCommand};
 
 use crate::{LogicSink, run_wasm};
 
-/// Copy a JS `ArrayBuffer` (the `postMessage` payload) into a `Vec<u8>`.
-fn array_buffer_to_vec(data: &JsValue) -> Vec<u8> {
-    js_sys::Uint8Array::new(data).to_vec()
+/// Copy a JS `ArrayBuffer` (the `postMessage` payload) into a [`WorkerPost`].
+fn array_buffer_to_post(data: &JsValue) -> WorkerPost {
+    WorkerPost::new(js_sys::Uint8Array::new(data).to_vec())
 }
 
-/// Encode `bytes` into a fresh `Uint8Array` and `postMessage` its backing
+/// Copy `post` into a fresh `Uint8Array` and `postMessage` its backing
 /// `ArrayBuffer` to Main, transferring it (zero-copy move, no structured clone).
-fn post_bytes(scope: &DedicatedWorkerGlobalScope, bytes: &[u8]) {
+fn post_bytes(scope: &DedicatedWorkerGlobalScope, post: &WorkerPost) {
+    let bytes = post.as_bytes();
     let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
     array.copy_from(bytes);
     let buffer = array.buffer();
@@ -64,7 +66,7 @@ pub fn start() {
     let sink_scope = scope.clone();
     let logic_sink = LogicSink::new(
         move |event: LogicEvent| match postcard::to_allocvec(&event) {
-            Ok(bytes) => post_bytes(&sink_scope, &bytes),
+            Ok(bytes) => post_bytes(&sink_scope, &WorkerPost::new(bytes)),
             Err(e) => tracing::error!("[Sync] failed to encode LogicEvent: {e}"),
         },
     );
@@ -72,8 +74,8 @@ pub fn start() {
     // Inbound: onmessage decodes SyncCommand bytes and feeds the select loop.
     let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
-        let bytes = array_buffer_to_vec(&e.data());
-        match postcard::from_bytes::<SyncCommand>(&bytes) {
+        let post = array_buffer_to_post(&e.data());
+        match postcard::from_bytes::<SyncCommand>(post.as_bytes()) {
             Ok(cmd) => {
                 let _ = cmd_tx.send(cmd);
             }
@@ -91,7 +93,7 @@ pub fn start() {
     // (before `onmessage` existed) was silently dropped. The boot `DevLogin` was
     // the notable one: its loss left the session key unset and every
     // `OpenDocument` queued forever behind the loading overlay (`SYNC-057`).
-    post_bytes(&scope, ambre_bus::start::ANNOUNCEMENT);
+    post_bytes(&scope, &ambre_bus::start::ANNOUNCEMENT);
 
     wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
 }

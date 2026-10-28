@@ -560,6 +560,11 @@ impl FetchedBlob {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
+
+    /// The bytes, moved out, for a reader that opens them in place.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
 }
 
 impl std::fmt::Debug for FetchedBlob {

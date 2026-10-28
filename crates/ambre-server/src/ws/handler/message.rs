@@ -2070,7 +2070,7 @@ mod ed25519_tests {
                 key,
                 &nonce,
                 &ciphertext,
-                b"p",
+                &ambre_core::Aad::of(b"p"),
                 &tag,
                 &ambre_protocol::messages::Signature(signature),
             )

@@ -90,7 +90,6 @@ ambre-app | src/platform.rs | crate::platform | fetch_dev_mode() | ret | bool	ge
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(placed) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
-ambre-app | src/platform.rs | crate::platform | post_to_worker(bytes) | param | &[u8]	generic	bytes
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | read_container(bytes) | param | &[u8]	generic	container bytes parser
 ambre-app | src/platform.rs | crate::platform | stored_dev_user() | ret | Option<String>	free-text	the dev username as the URL or the storage holds it, before DisplayName::new reads it
@@ -439,11 +438,11 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inne
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
-ambre-bus | src/start.rs | crate::start | ANNOUNCEMENT | const | &[u8]	generic	start announcement bytes
 ambre-bus | src/start.rs | crate::start | StartGate.open | field | bool	generic	gate state flag
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
-ambre-bus | src/start.rs | crate::start | StartGate::read() | ret | Option<&'a[u8]>	generic	start announcement bytes
-ambre-bus | src/start.rs | crate::start | StartGate::read(bytes) | param | &'a[u8]	generic	start announcement bytes
+ambre-bus | src/start.rs | crate::start | WorkerPost.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes one postMessage carries
+ambre-bus | src/start.rs | crate::start | WorkerPost::as_bytes() | ret | &[u8]	newtype-inner	the newtype's own accessor, for the decoder or the postMessage buffer
+ambre-bus | src/start.rs | crate::start | WorkerPost::new(bytes) | param | Vec<u8>	newtype-inner	the newtype's own constructor, from an encoder or a message event
 ambre-bus | src/ui.rs | crate::ui | UiEvent::ApiError.message | field | String	free-text	user-facing or log message
 ambre-bus | src/ui.rs | crate::ui | UiEvent::AuthError.message | field | String	free-text	user-facing or log message
 ambre-bus | src/ui.rs | crate::ui | UiEvent::DocumentOpenFailed.message | field | String	free-text	user-facing or log message
@@ -2514,12 +2513,9 @@ ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	free-text	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::classify(path) | param | &str	generic	path classifier
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::limits() | ret | (u64,ambre_core::Seconds)	math	already typed Seconds; count
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	free-text	key prefix label of a closed enum
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | check_sliding_window(max_requests) | param | u64	math	count
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
-ambre-server | src/oidc.rs | crate::oidc | LoginResponse.url | field | String	free-text	provider authorization URL echoed to the client
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::expose_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/payload.rs | crate::payload | Payload::len() | ret | usize	newtype-inner	newtype inner, accessor or constructor
@@ -2564,13 +2560,12 @@ ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(
 ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	echo of a validated OrgName
+ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	the row's name text, echoed whole: a legacy row may hold a name OrgName refuses (SRV-233)
 ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
-ambre-server | src/s3.rs | crate::s3 | drain_front() | ret | isize	math	ltrim index, count of processed entries
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
@@ -2583,7 +2578,6 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_i
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
-ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | verify_sealed_signature(public_data_bytes) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.tokens | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of Topic, lent through Borrow
@@ -2608,30 +2602,33 @@ ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot() | ret | Result<V
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | <HttpError as From<&str>>::from(message) | param | &str	trait	signature fixed by the trait
 ambre-sync | src/http.rs | crate::http | <HttpError as From<String>>::from(message) | param | String	trait	signature fixed by the trait
+ambre-sync | src/http.rs | crate::http | <RoutePath as From<&str>>::from(path) | param | &str	newtype-inner	the &str the constructor of RoutePath copies into its text
+ambre-sync | src/http.rs | crate::http | <RoutePath as From<String>>::from(path) | param | String	newtype-inner	the String the constructor of RoutePath wraps
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | ApiRoot::route(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
+ambre-sync | src/http.rs | crate::http | HttpBody.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes of a request or an answer body
+ambre-sync | src/http.rs | crate::http | HttpBody::as_bytes() | ret | &[u8]	newtype-inner	the newtype's own accessor
+ambre-sync | src/http.rs | crate::http | HttpBody::into_bytes() | ret | Vec<u8>	newtype-inner	the newtype's own accessor, moving the bytes out
+ambre-sync | src/http.rs | crate::http | HttpBody::new(bytes) | param | Vec<u8>	newtype-inner	the newtype's own constructor
 ambre-sync | src/http.rs | crate::http | HttpError::Local.0 | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
-ambre-sync | src/http.rs | crate::http | Incoming.body | field | Vec<u8>	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	generic	generic byte/text API or codec
 ambre-sync | src/http.rs | crate::http | QueryKey::as_str() | ret | &'static str	generic	the parameter name of a closed-set key, as the query string spells it
-ambre-sync | src/http.rs | crate::http | Outgoing.body | field | Option<(ContentType,Vec<u8>)>	generic	HTTP body bytes, content type typed
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayHost::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | RelayHost::new(host) | param | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl.0 | field | String	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::as_str() | ret | &str	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | RelayUrl::join(path) | param | impl AsRef<str>	newtype-inner	RelayUrl or ApiRoot field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayUrl::query(value) | param | &str	free-text	the text a query parameter carries, a user's search among them, percent-encoded whole before it joins the address
 ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-text	error message text
-ambre-sync | src/http.rs | crate::http | fetch_bytes() | ret | Result<Vec<u8>,HttpError>	generic	bytes of a codec or a transport
+ambre-sync | src/http.rs | crate::http | RoutePath.0 | field | String	newtype-inner	the newtype's own inside: a route path under the API root
+ambre-sync | src/http.rs | crate::http | RoutePath::as_str() | ret | &str	newtype-inner	the newtype's own accessor, as the URL spells it
 ambre-sync | src/http.rs | crate::http | SocketUrl.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | SocketUrl::as_str() | ret | &str	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | TransportError::Body.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
@@ -2722,6 +2719,7 @@ ambre-sync | src/pipeline.rs | crate::pipeline | seal_object(plaintext) | param 
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
+ambre-sync | src/pipeline.rs | crate::pipeline | FetchedBlob::into_bytes() | ret | Vec<u8>	newtype-inner	enum/newtype own accessor or constructor
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (CompressionVersion,Vec<u8>)	generic	bytes of a codec: the plaintext body after its scheme
@@ -2750,7 +2748,6 @@ ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
-ambre-sync | src/updates.rs | crate::updates | Vouch::Report.0 | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | members_failure_message() | ret | String	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | resend_retry_delay(failure) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
@@ -2760,8 +2757,6 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconne
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/worker.rs | crate::worker | array_buffer_to_vec() | ret | Vec<u8>	generic	generic byte/text API or codec
-ambre-sync | src/worker.rs | crate::worker | post_bytes(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | DocChoice.name | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(open) | param | RwSignal<bool>	local	private: the open signal of the one dialog the helper closes; the only bool signal in the call
@@ -3810,8 +3805,7 @@ ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LE
 ambre-crypto | src/hash.rs | crate::hash | Head.0 | field | &'a[u8]	newtype-inner	the length-bounded input of length_prefixed, typed apart from Tail so a swap does not compile
 ambre-crypto | src/hash.rs | crate::hash | Tail.0 | field | &'a[u8]	newtype-inner	the input after the bounded field of length_prefixed, typed apart from Head so a swap does not compile
 ambre-crypto | src/ecdh.rs | crate::ecdh | SharedSecret::as_bytes() | ret | &[u8;32]	newtype-inner	SharedSecret newtype
-ambre-server | src/jwt.rs | crate::jwt | JwtSeedRefusal::Length.0 | field | usize	math	the decoded byte count a refusal reports
-ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	math	the parsed environment value a refusal reports
+ambre-server | src/state.rs | crate::state | LimitRefusal::TooLarge.0 | field | u64	generic	the refused environment value the error echoes
 ambre-core | src/envelope.rs | crate::envelope | Aad.0 | field | Vec<u8>	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::as_bytes() | ret | &[u8]	newtype-inner	Aad newtype
 ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u8>	newtype-inner	Aad newtype
@@ -3831,7 +3825,7 @@ ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param |
 ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
 ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | String	newtype-inner	secret newtype
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once
-ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	generic	generic codec/parser/bytes API
+ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
 ambre-canvas | src/fonts.rs | crate::fonts | BASE_FONTS | const | [&str;6]	free-text	same-origin font paths the boot fetches
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
@@ -3842,7 +3836,6 @@ ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	gene
 ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	generic	predicate result
 ambre-murmure | src/paint.rs | crate::paint | painter_px(at) | param | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
 ambre-murmure | src/paint.rs | crate::paint | surface_px() | ret | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Verdict::Allowed.remaining | field | u64	math	count: the requests left in the sliding window
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.start | field | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series::at() | ret | f64	math	start and step of the linear fill series, a cell value

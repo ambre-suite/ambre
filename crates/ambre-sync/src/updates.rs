@@ -233,10 +233,7 @@ impl SyncState {
             )
             .await
             {
-                Ok(resp) => http::fetch_bytes(&resp.download_url)
-                    .await
-                    .ok()
-                    .map(pipeline::FetchedBlob::new),
+                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
                 Err(_) => None,
             };
             let _ = tx.send(SyncEvent::SnapshotFetched {
@@ -364,7 +361,7 @@ impl SyncState {
                     "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
                      deltas, reporting it"
                 );
-                Some(Vouch::Report(hex::encode(signature)))
+                Some(Vouch::Report(ambre_core::SignatureHex::encode(signature)))
             }
             SnapshotPurpose::Confirm => {
                 tracing::info!("Sync: snapshot {snapshot_id:?} left unchecked");
@@ -1558,7 +1555,7 @@ pub(crate) enum Vouch {
     /// The snapshot matches the deltas it covers (`SRV-126`).
     Confirm,
     /// It contradicts them: the hex signature of the report (`SRV-133`).
-    Report(String),
+    Report(ambre_core::SignatureHex),
 }
 
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
@@ -1583,7 +1580,7 @@ pub(crate) async fn send_vouch(
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
-                signature: ambre_core::SignatureHex(signature.clone()),
+                signature: signature.clone(),
             };
             http::send_json_auth_via(transport, post, &url.join("/report"), &body, auth).await?;
             Ok(None)
@@ -3169,7 +3166,7 @@ mod tests {
                     pending,
                     &PublicKey::from_array(author.verifying_key().to_bytes()),
                 );
-                let bytes: [u8; 64] = hex::decode(&signature).unwrap().try_into().unwrap();
+                let bytes: [u8; 64] = hex::decode(signature.as_str()).unwrap().try_into().unwrap();
                 let signature = ed25519_dalek::Signature::from_bytes(&bytes);
                 assert!(
                     reporter
@@ -3179,7 +3176,7 @@ mod tests {
                 );
                 let sent = transport.sent.borrow();
                 let body: serde_json::Value =
-                    serde_json::from_slice(&sent[0].body.as_ref().unwrap().1).unwrap();
+                    serde_json::from_slice(sent[0].body.as_ref().unwrap().1.as_bytes()).unwrap();
                 assert_eq!(body, serde_json::json!({ "signature": hex::encode(bytes) }));
             }
         }

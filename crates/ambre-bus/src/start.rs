@@ -7,9 +7,36 @@
 
 use crate::conduit::Receiver;
 
+/// One payload a `postMessage` carries between Main and a worker: an encoded
+/// command or event, or the [`ANNOUNCEMENT`]. It may carry document content,
+/// so `Debug` prints the length and none of the bytes.
+#[derive(Clone, PartialEq, Eq)]
+pub struct WorkerPost(Vec<u8>);
+
+impl WorkerPost {
+    /// The payload made of `bytes`, as an encoder wrote them or a message
+    /// event carried them.
+    #[must_use]
+    pub const fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The bytes, for the decoder or the `postMessage` buffer.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for WorkerPost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WorkerPost({} bytes)", self.0.len())
+    }
+}
+
 /// What a worker posts once its inbound handler is installed: an empty
 /// payload. An encoded event is never empty, so the two cannot be confused.
-pub const ANNOUNCEMENT: &[u8] = &[];
+pub const ANNOUNCEMENT: WorkerPost = WorkerPost(Vec::new());
 
 /// Holds the commands bound for one worker until that worker announces it
 /// is listening.
@@ -28,12 +55,12 @@ impl StartGate {
 
     /// Reads one payload from the worker. The announcement opens the gate and
     /// yields nothing; any other payload is an event, handed back.
-    pub fn read<'a>(&mut self, bytes: &'a [u8]) -> Option<&'a [u8]> {
-        if bytes == ANNOUNCEMENT {
+    pub fn read<'a>(&mut self, post: &'a WorkerPost) -> Option<&'a WorkerPost> {
+        if *post == ANNOUNCEMENT {
             self.open = true;
             return None;
         }
-        Some(bytes)
+        Some(post)
     }
 
     /// Whether the worker has announced itself.
@@ -76,12 +103,20 @@ mod tests {
         }
         assert!(posted.is_empty(), "the worker is not listening yet");
 
-        let event = postcard::to_allocvec(&LogicEvent::SetupRequired).unwrap();
-        assert_eq!(gate.read(&event), Some(event.as_slice()));
+        let event = WorkerPost::new(postcard::to_allocvec(&LogicEvent::SetupRequired).unwrap());
+        assert_eq!(gate.read(&event), Some(&event));
         assert!(!gate.is_open(), "an event is not the announcement");
-        assert!(!event.is_empty(), "an encoded event is never empty");
+        assert!(
+            !event.as_bytes().is_empty(),
+            "an encoded event is never empty"
+        );
+        assert_eq!(
+            format!("{event:?}"),
+            format!("WorkerPost({} bytes)", event.as_bytes().len()),
+            "no byte is printed"
+        );
 
-        assert_eq!(gate.read(ANNOUNCEMENT), None);
+        assert_eq!(gate.read(&ANNOUNCEMENT), None);
         tx.send(3).unwrap();
         gate.drain(&rx, |command| posted.push(command));
         assert_eq!(posted, [1, 2, 3]);

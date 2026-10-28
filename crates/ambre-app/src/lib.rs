@@ -1242,7 +1242,9 @@ pub fn main() {
         sync_start
             .borrow()
             .drain(&logic_to_sync_rx, |cmd| match postcard::to_allocvec(&cmd) {
-                Ok(bytes) => post_to_worker(&sync_worker, &bytes),
+                Ok(bytes) => {
+                    post_to_worker(&sync_worker, &ambre_bus::start::WorkerPost::new(bytes))
+                }
                 Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
             });
 

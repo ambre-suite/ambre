@@ -64,8 +64,8 @@ impl std::fmt::Debug for JwtSeed {
 pub enum JwtSeedRefusal {
     #[error("JWT_SIGNING_SEED is not valid hex")]
     NotHex,
-    #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {0}")]
-    Length(usize),
+    #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {}", .0.0)]
+    Length(ambre_core::ByteSize),
 }
 
 /// Builds a signing key from a seed `fill` writes. The seed is written into a
@@ -233,7 +233,11 @@ mod tests {
         assert_eq!(format!("{seed:?}"), "JwtSeed([REDACTED])");
         assert_eq!(
             read("ab".repeat(31)).err(),
-            Some(JwtSeedRefusal::Length(31))
+            Some(JwtSeedRefusal::Length(ambre_core::ByteSize(31)))
+        );
+        assert_eq!(
+            JwtSeedRefusal::Length(ambre_core::ByteSize(31)).to_string(),
+            "JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not 31"
         );
         assert_eq!(read("zz".to_owned()).err(), Some(JwtSeedRefusal::NotHex));
         assert_eq!(read("abc".to_owned()).err(), Some(JwtSeedRefusal::NotHex));

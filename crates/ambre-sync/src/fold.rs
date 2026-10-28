@@ -260,7 +260,8 @@ mod tests {
         assert_eq!(committed, Ok(()));
         let sent = transport.sent.borrow();
         let json = |at: usize| -> serde_json::Value {
-            serde_json::from_slice(&sent[at].body.as_ref().expect("a body").1).expect("json")
+            serde_json::from_slice(sent[at].body.as_ref().expect("a body").1.as_bytes())
+                .expect("json")
         };
         assert_eq!(json(2)["covered_seq"], 41, "the fold covers the horizon");
         let commit = sent.len() - 1;
