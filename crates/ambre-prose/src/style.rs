@@ -51,11 +51,20 @@ pub struct ResolvedStyle {
     pub link: Option<ambre_core::LinkUrl>,
 }
 
-/// How much larger than the body a heading of each level is drawn.
+/// How much larger than the body a heading of `level` is drawn.
 ///
 /// The built-in level of the cascade, and the one a named style would sit above
 /// once one can be written (section 6 of the feature).
-const HEADING_SCALE: [f32; 6] = [2.0, 1.5, 1.25, 1.1, 1.0, 0.9];
+const fn heading_scale(level: HeadingLevel) -> f32 {
+    match level {
+        HeadingLevel::H1 => 2.0,
+        HeadingLevel::H2 => 1.5,
+        HeadingLevel::H3 => 1.25,
+        HeadingLevel::H4 => 1.1,
+        HeadingLevel::H5 => 1.0,
+        HeadingLevel::H6 => 0.9,
+    }
+}
 
 /// The family a code block and an inline code run are drawn in.
 const MONOSPACE: ambre_core::FontFamily = ambre_core::FontFamily::Mono;
@@ -81,10 +90,8 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
         BlockType::Heading => {
             resolved.bold = true;
             let level = context.heading_level.unwrap_or(HeadingLevel::H1);
-            if let Some(scale) = HEADING_SCALE.get(level.depth()) {
-                resolved.font_size = FontSize::new(defaults.font_size.points() * scale)
-                    .unwrap_or(defaults.font_size);
-            }
+            resolved.font_size = FontSize::new(defaults.font_size.points() * heading_scale(level))
+                .unwrap_or(defaults.font_size);
         }
         BlockType::CodeBlock => {
             resolved.code_inline = true;

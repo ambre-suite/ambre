@@ -2190,7 +2190,7 @@ ambre-prose | src/probe.rs | crate::probe | KeyProbe.unconfirmed | field | Vec<(
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
-ambre-prose | src/style.rs | crate::style | HEADING_SCALE | const | [f32;6]	math	layout geometry local to algorithm
+ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	the mark values a run carries as read back from the document, never checked: a peer on another build may have written any text, and resolve parses each one and drops what fails
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.bold | field | bool	generic	independent flag or predicate
 ambre-prose | src/style.rs | crate::style | ResolvedStyle.code_inline | field | bool	generic	independent flag or predicate
@@ -3499,7 +3499,6 @@ ambre-prose | src/layout/run.rs | crate::layout::run | page_offset() | ret | Opt
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,PageSpan)>	math	the usize is the number of faces the layout was shaped on, compared for equality
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::depth() | ret | usize	newtype-inner	HeadingLevel field, constructor or accessor: the row of a table indexed by level
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel.0 | field | u8	newtype-inner	HeadingLevel field, constructor or accessor

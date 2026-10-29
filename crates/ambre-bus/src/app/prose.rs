@@ -457,13 +457,6 @@ impl HeadingLevel {
     pub const fn get(self) -> u8 {
         self as u8
     }
-
-    /// How many levels sit above this one: zero for a level one. A table
-    /// indexed by level reads its row here.
-    #[must_use]
-    pub const fn depth(self) -> usize {
-        self as usize - 1
-    }
 }
 
 /// The error of a decoded heading level outside one to six.

@@ -44,7 +44,7 @@ impl Counters {
     /// A stored level outside one to six is brought inside before it gets
     /// here (`PROSE-FEAT-029`): it would index the counters outside them.
     fn bump(&mut self, level: HeadingLevel) -> Option<HeadingNumber> {
-        let depth = level.depth();
+        let depth = HeadingLevel::ALL.iter().position(|each| *each == level)?;
         if let Some(counter) = self.0.get_mut(depth) {
             *counter = counter.saturating_add(1);
         }
