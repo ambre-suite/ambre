@@ -40,14 +40,15 @@
     length, a position, a count, an index or a size is never a multiplier.
   * A formula number is `math` inside the formula engine. It is a `CellNumber` once it crosses a
     public struct or the bus.
-  * A closed set stays an `enum` on every path up to its display label. A site that spells the
-    `enum` as a primitive takes the one category its reader sets (`ARCH-035`):
+  * A closed set stays an `enum` on every path up to its display label. A site that spells an
+    `enum`, or a struct that is no newtype, as a primitive takes the one category its reader
+    sets (`ARCH-035`):
     * A reader that decodes or matches the spelling back sets `newtype-inner` for a fieldless
       `enum`, its own representation. That covers the wire, the store, a DOM attribute, a CSS
       word and the name a foreign API knows it by.
     * The same reader sets `generic` for an `enum` that carries data. The site is its codec.
-      A struct that is no newtype takes `generic` too. That covers a CSS class it derives from
-      its fields, or the CSS variable name of each field.
+      For the same reader, a struct that is no newtype takes `generic` too. That covers a CSS
+      class it derives from its fields, or the CSS variable name of each field.
     * A person sets `free-text`: a display label, or the words of an error message.
     * A trait method that is a type's own spelling takes the spelling's category, not `trait`:
       the `FromStr` or `TryFrom` of a fieldless `enum` is `newtype-inner`.
