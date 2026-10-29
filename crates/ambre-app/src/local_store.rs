@@ -194,10 +194,15 @@ impl LocalStore {
             }
             let opened_by = this.clone();
             this.inner.vault.open(rows, move |opened| {
+                // Each row moves out of its wrapper with no copy, once every
+                // row opened. A row that did not open leaves the others under
+                // their wrappers, which wipe them.
                 let copy = opened.map(|rows| {
-                    rows.into_iter()
-                        .map(|row| row.map(|bytes| bytes.to_plaintext()))
-                        .collect::<Option<Vec<_>>>()
+                    rows.into_iter().collect::<Option<Vec<_>>>().map(|rows| {
+                        rows.into_iter()
+                            .map(ambre_core::SecretBytes::into_plaintext)
+                            .collect::<Vec<_>>()
+                    })
                 });
                 let (snapshot, deltas, sessions) = match copy {
                     Some(Some(mut rows)) => {

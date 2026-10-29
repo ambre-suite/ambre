@@ -1474,18 +1474,6 @@ pub fn main() {
                         let _ = window.location().set_href("/");
                     }
                 }
-                // A sealed file came back open (`DOCFILE-014`): what it holds
-                // is a whole plaintext container, so the ordinary open path
-                // takes it from here. Version recovery, the type check and the
-                // local store are the same steps a plaintext file walks.
-                UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
-                    ..
-                } => platform::open_plaintext_container(
-                    ambre_core::PlaintextContainer::new(plaintext.to_plaintext()),
-                    toasts,
-                    vault_frame.clone(),
-                ),
                 // One message for two causes, and that is the contract rather
                 // than laziness. The tag cannot tell a wrong passphrase from a
                 // modified file, and a message that named one would be a guess
@@ -1643,8 +1631,27 @@ pub fn main() {
                 UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
                 _ => {}
             }
-            // Content (and everything else) still flows to the view unchanged.
-            let _ = view_tx.try_send(ev);
+            match ev {
+                // A sealed file came back open (`DOCFILE-014`): what it holds
+                // is a whole plaintext container, so the ordinary open path
+                // takes it from here. Version recovery, the type check and the
+                // local store are the same steps a plaintext file walks. The
+                // event is taken by value, so the bytes move into the
+                // container with no copy. The view reads nothing of it.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
+                    ..
+                } => platform::open_plaintext_container(
+                    ambre_core::PlaintextContainer::new(plaintext.into_plaintext()),
+                    toasts,
+                    vault_frame.clone(),
+                ),
+                // Content (and everything else) still flows to the view
+                // unchanged.
+                ev => {
+                    let _ = view_tx.try_send(ev);
+                }
+            }
         }
 
         // Mirror the view's published selection anchor into the chrome signal,

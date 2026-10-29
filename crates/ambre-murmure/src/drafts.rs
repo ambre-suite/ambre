@@ -50,8 +50,12 @@ impl DraftRow {
     }
 
     /// The row an opened seal holds, `None` for bytes that are not text.
+    /// Refused bytes are a plaintext too, so they are wiped as they drop.
     pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
-        String::from_utf8(bytes).ok().map(Self)
+        String::from_utf8(bytes)
+            .map_err(|refused| ambre_core::Secret::wipe(refused.into_bytes()))
+            .ok()
+            .map(Self)
     }
 }
 
@@ -425,6 +429,15 @@ mod tests {
         };
         assert_eq!(decode(&encode(&full)), Some(full));
         assert_eq!(decode(&DraftRow("not a row".to_owned())), None);
+    }
+
+    /// The bytes of an opened row are its text, and bytes that are no text
+    /// are no row.
+    #[test]
+    fn an_opened_row_is_its_text_and_other_bytes_are_none() {
+        let row = encode(&draft("hi"));
+        assert_eq!(DraftRow::from_bytes(row.clone().into_bytes()), Some(row));
+        assert_eq!(DraftRow::from_bytes(vec![0xff, 0xfe]), None);
     }
 
     /// A row read back from a reload is the draft of its channel or thread,
